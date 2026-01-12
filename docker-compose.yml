@@ -1,0 +1,120 @@
+# AI Agent Docker Compose Configuration
+# 开发环境配置
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Backend Service
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: ai-agent-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ai_agent
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=dev-secret-key-change-in-production
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  # ============================================
+  # Frontend Service
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    container_name: ai-agent-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  db:
+    image: postgres:15-alpine
+    container_name: ai-agent-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ai_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: ai-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Qdrant Vector Database
+  # ============================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ai-agent-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+networks:
+  ai-agent-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  backend_data:

@@ -1,0 +1,59 @@
+# ==============================================================================
+# Docker Compose - SonarQube 本地开发环境
+# ==============================================================================
+# 使用方式:
+#   docker-compose -f docker-compose.sonar.yml up -d
+#
+# 访问: http://localhost:9000
+# 默认账号: admin / admin (首次登录需修改密码)
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: ai-agent-sonarqube
+    depends_on:
+      - sonar-db
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - sonar-network
+    restart: unless-stopped
+    # 增加内存限制，避免 ES 启动问题
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  sonar-db:
+    image: postgres:15-alpine
+    container_name: ai-agent-sonar-db
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar_postgres_data:/var/lib/postgresql/data
+    networks:
+      - sonar-network
+    restart: unless-stopped
+
+networks:
+  sonar-network:
+    driver: bridge
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  sonar_postgres_data:
