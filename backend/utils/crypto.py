@@ -6,7 +6,6 @@ import hashlib
 import secrets
 import uuid
 from base64 import b64decode, b64encode
-from typing import Any
 
 
 def generate_id() -> str:

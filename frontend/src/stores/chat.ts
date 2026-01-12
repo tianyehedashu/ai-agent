@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+
 import type { Message, Session } from '@/types'
 
 interface ChatState {
@@ -29,31 +30,42 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set) => ({
   // Current session
   currentSession: null,
-  setCurrentSession: (session) => set({ currentSession: session }),
+  setCurrentSession: (session) => {
+    set({ currentSession: session })
+  },
 
   // Messages
   messages: [],
-  addMessage: (message) =>
-    set((state) => ({ messages: [...state.messages, message] })),
-  updateMessage: (id, updates) =>
+  addMessage: (message) => {
+    set((state) => ({ messages: [...state.messages, message] }))
+  },
+  updateMessage: (id, updates) => {
     set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, ...updates } : m
-      ),
-    })),
-  clearMessages: () => set({ messages: [] }),
+      messages: state.messages.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+    }))
+  },
+  clearMessages: () => {
+    set({ messages: [] })
+  },
 
   // Loading state
   isLoading: false,
-  setIsLoading: (loading) => set({ isLoading: loading }),
+  setIsLoading: (loading) => {
+    set({ isLoading: loading })
+  },
 
   // Streaming
   streamingContent: '',
-  setStreamingContent: (content) => set({ streamingContent: content }),
-  appendStreamingContent: (content) =>
-    set((state) => ({ streamingContent: state.streamingContent + content })),
+  setStreamingContent: (content) => {
+    set({ streamingContent: content })
+  },
+  appendStreamingContent: (content) => {
+    set((state) => ({ streamingContent: state.streamingContent + content }))
+  },
 
   // Input
   input: '',
-  setInput: (input) => set({ input }),
+  setInput: (input) => {
+    set({ input })
+  },
 }))

@@ -1,0 +1,152 @@
+# 工具调用准确率测试用例
+
+test_cases:
+  # =====================================
+  # 文件操作工具
+  # =====================================
+  - id: "tool_file_001"
+    category: "file_operations"
+    input: "Read the file /tmp/test.txt"
+    expected_tools: ["read_file"]
+    expected_sequence: ["read_file"]
+    tool_expectations:
+      read_file:
+        params:
+          path: "/tmp/test.txt"
+    setup:
+      - action: "create_file"
+        path: "/tmp/test.txt"
+        content: "Test content"
+    timeout: 30
+
+  - id: "tool_file_002"
+    category: "file_operations"
+    input: "Write 'Hello World' to /tmp/output.txt"
+    expected_tools: ["write_file"]
+    tool_expectations:
+      write_file:
+        params:
+          path: "/tmp/output.txt"
+          content: "Hello World"
+    timeout: 30
+
+  - id: "tool_file_003"
+    category: "file_operations"
+    input: "Read /tmp/data.json and extract the 'name' field, then write it to /tmp/name.txt"
+    expected_tools: ["read_file", "write_file"]
+    expected_sequence: ["read_file", "write_file"]
+    tool_expectations:
+      read_file:
+        params:
+          path: "/tmp/data.json"
+      write_file:
+        params:
+          path: "/tmp/name.txt"
+    setup:
+      - action: "create_file"
+        path: "/tmp/data.json"
+        content: '{"name": "Alice", "age": 30}'
+    timeout: 60
+
+  # =====================================
+  # 代码执行工具
+  # =====================================
+  - id: "tool_code_001"
+    category: "code_execution"
+    input: "Run Python code to calculate 2 + 2"
+    expected_tools: ["run_code"]
+    tool_expectations:
+      run_code:
+        params:
+          language: "python"
+    timeout: 30
+
+  - id: "tool_code_002"
+    category: "code_execution"
+    input: "Execute: print('Hello, World!')"
+    expected_tools: ["run_code"]
+    tool_expectations:
+      run_code:
+        params:
+          code: "print('Hello, World!')"
+          language: "python"
+    timeout: 30
+
+  # =====================================
+  # 搜索工具
+  # =====================================
+  - id: "tool_search_001"
+    category: "search"
+    input: "Search the web for information about Python"
+    expected_tools: ["web_search"]
+    tool_expectations:
+      web_search:
+        params:
+          query: "Python"
+    timeout: 60
+
+  - id: "tool_search_002"
+    category: "search"
+    input: "Find files in /tmp directory containing 'test'"
+    expected_tools: ["search_files"]
+    tool_expectations:
+      search_files:
+        params:
+          directory: "/tmp"
+          pattern: "test"
+    timeout: 30
+
+  # =====================================
+  # 多工具组合
+  # =====================================
+  - id: "tool_multi_001"
+    category: "multi_tool"
+    input: |
+      1. Read /tmp/input.txt
+      2. Process the content
+      3. Write result to /tmp/output.txt
+    required_tools: ["read_file", "write_file"]
+    expected_sequence: ["read_file", "write_file"]
+    tool_expectations:
+      read_file:
+        params:
+          path: "/tmp/input.txt"
+      write_file:
+        params:
+          path: "/tmp/output.txt"
+    setup:
+      - action: "create_file"
+        path: "/tmp/input.txt"
+        content: "Input data"
+    timeout: 60
+
+  - id: "tool_multi_002"
+    category: "multi_tool"
+    input: "Search for Python tutorials, read the first result, and save key points to a file"
+    expected_tools: ["web_search", "read_file", "write_file"]
+    tool_expectations:
+      web_search:
+        params:
+          query: "Python tutorials"
+    timeout: 90
+
+  # =====================================
+  # 工具调用错误场景
+  # =====================================
+  - id: "tool_error_001"
+    category: "error_handling"
+    input: "Read a non-existent file /tmp/nonexistent.txt"
+    expected_tools: ["read_file"]
+    tool_expectations:
+      read_file:
+        params:
+          path: "/tmp/nonexistent.txt"
+    # 应该正确处理错误，不崩溃
+    timeout: 30
+
+  - id: "tool_error_002"
+    category: "error_handling"
+    input: "Write to a read-only location /etc/test.txt"
+    expected_tools: ["write_file"]
+    # 应该检测权限错误
+    timeout: 30

@@ -4,7 +4,7 @@ API v1 Router - 路由汇总
 
 from fastapi import APIRouter
 
-from api.v1 import agent, chat, memory, quality, session, studio, system, tool, user
+from api.v1 import agent, chat, evaluation, memory, quality, session, studio, system, tool, user
 
 api_router = APIRouter()
 
@@ -34,3 +34,6 @@ api_router.include_router(quality.router, tags=["Quality"])
 
 # 系统接口
 api_router.include_router(system.router, prefix="/system", tags=["System"])
+
+# 评估接口
+api_router.include_router(evaluation.router, tags=["Evaluation"])

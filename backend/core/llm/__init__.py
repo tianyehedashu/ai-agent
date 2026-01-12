@@ -11,7 +11,7 @@ from core.llm.gateway import LLMGateway
 from core.llm.providers import AnthropicProvider, OpenAIProvider
 
 __all__ = [
+    "AnthropicProvider",
     "LLMGateway",
     "OpenAIProvider",
-    "AnthropicProvider",
 ]

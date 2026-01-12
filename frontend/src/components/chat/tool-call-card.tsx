@@ -5,10 +5,12 @@
  */
 
 import { useState } from 'react'
+
 import { ChevronDown, ChevronRight, Terminal, Code, FileText, Search } from 'lucide-react'
-import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import type { ToolCall } from '@/types'
 
 interface ToolCallCardProps {
@@ -31,10 +33,14 @@ const toolIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   grep: Search,
 }
 
-export function ToolCallCard({ toolCall, result, isPending }: ToolCallCardProps) {
+export function ToolCallCard({
+  toolCall,
+  result,
+  isPending,
+}: Readonly<ToolCallCardProps>): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const Icon = toolIcons[toolCall.name] || Terminal
+  const Icon = toolIcons[toolCall.name] ?? Terminal
 
   return (
     <Card
@@ -46,15 +52,21 @@ export function ToolCallCard({ toolCall, result, isPending }: ToolCallCardProps)
       )}
     >
       <div
-        className="flex items-center gap-2 cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
+        role="button"
+        tabIndex={0}
+        className="flex cursor-pointer items-center gap-2"
+        onClick={() => {
+          setIsExpanded(!isExpanded)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsExpanded(!isExpanded)
+          }
+        }}
       >
         <Button variant="ghost" size="icon" className="h-5 w-5 p-0">
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
+          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </Button>
 
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -62,17 +74,12 @@ export function ToolCallCard({ toolCall, result, isPending }: ToolCallCardProps)
         <span className="font-mono text-sm font-medium">{toolCall.name}</span>
 
         {isPending && (
-          <span className="ml-auto text-xs text-yellow-500 animate-pulse">
-            执行中...
-          </span>
+          <span className="ml-auto animate-pulse text-xs text-yellow-500">执行中...</span>
         )}
 
         {result && (
           <span
-            className={cn(
-              'ml-auto text-xs',
-              result.success ? 'text-green-500' : 'text-red-500'
-            )}
+            className={cn('ml-auto text-xs', result.success ? 'text-green-500' : 'text-red-500')}
           >
             {result.success ? '成功' : '失败'}
           </span>
@@ -83,8 +90,8 @@ export function ToolCallCard({ toolCall, result, isPending }: ToolCallCardProps)
         <div className="mt-3 space-y-2">
           {/* 参数 */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1">参数:</p>
-            <pre className="text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+            <p className="mb-1 text-xs text-muted-foreground">参数:</p>
+            <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs">
               {JSON.stringify(toolCall.arguments, null, 2)}
             </pre>
           </div>
@@ -92,12 +99,12 @@ export function ToolCallCard({ toolCall, result, isPending }: ToolCallCardProps)
           {/* 结果 */}
           {result && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1">
+              <p className="mb-1 text-xs text-muted-foreground">
                 {result.success ? '输出:' : '错误:'}
               </p>
               <pre
                 className={cn(
-                  'text-xs p-2 rounded overflow-x-auto max-h-40',
+                  'max-h-40 overflow-x-auto rounded p-2 text-xs',
                   result.success ? 'bg-muted/50' : 'bg-red-500/10'
                 )}
               >

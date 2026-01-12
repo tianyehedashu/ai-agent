@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.deps import get_current_user
+from api.errors import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND
 from core.studio.workflow import WorkflowService
 
 router = APIRouter(prefix="/studio", tags=["Studio"])
@@ -131,7 +132,7 @@ async def get_workflow(
     workflow = await service.get(workflow_id)
 
     if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
 
     return {
         "id": str(workflow.id),
@@ -162,7 +163,7 @@ async def update_workflow(
     )
 
     if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
 
     return {
         "id": str(workflow.id),
@@ -183,7 +184,7 @@ async def delete_workflow(
     success = await service.delete(workflow_id)
 
     if not success:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
 
     return {"status": "deleted"}
 
@@ -232,7 +233,7 @@ async def save_version(
     version = await service.save_version(workflow_id, request.message)
 
     if not version:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
 
     return {
         "id": str(version.id),
@@ -273,7 +274,7 @@ async def restore_version(
     workflow = await service.restore_version(workflow_id, version)
 
     if not workflow:
-        raise HTTPException(status_code=404, detail="Version not found")
+        raise HTTPException(status_code=404, detail=VERSION_NOT_FOUND)
 
     return {
         "id": str(workflow.id),

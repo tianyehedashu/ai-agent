@@ -5,9 +5,10 @@
  */
 
 import { useState, useCallback, useRef } from 'react'
+
 import { chatApi } from '@/api/chat'
-import type { ChatEvent, Message, ToolCall } from '@/types'
 import { generateId } from '@/lib/utils'
+import type { ChatEvent, Message, ToolCall } from '@/types'
 
 interface UseChatOptions {
   sessionId?: string
@@ -22,7 +23,10 @@ interface UseChatReturn {
   pendingToolCalls: ToolCall[]
   interrupt: InterruptState | null
   sendMessage: (content: string) => Promise<void>
-  resumeExecution: (action: 'approve' | 'reject' | 'modify', modifiedArgs?: Record<string, unknown>) => Promise<void>
+  resumeExecution: (
+    action: 'approve' | 'reject' | 'modify',
+    modifiedArgs?: Record<string, unknown>
+  ) => Promise<void>
   clearMessages: () => void
 }
 
@@ -44,142 +48,158 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const sessionIdRef = useRef<string | undefined>(initialSessionId)
   const currentToolCallsRef = useRef<ToolCall[]>([])
 
-  const handleEvent = useCallback((event: ChatEvent) => {
-    switch (event.type) {
-      case 'thinking':
-        // 显示思考状态
-        break
+  const handleEvent = useCallback(
+    (event: ChatEvent) => {
+      switch (event.type) {
+        case 'thinking': {
+          // 显示思考状态
+          break
+        }
 
-      case 'text':
-        const textData = event.data as { content: string }
-        setStreamingContent((prev) => prev + (textData.content || ''))
-        break
-
-      case 'tool_call':
-        const toolCallData = event.data as ToolCall
-        currentToolCallsRef.current.push(toolCallData)
-        setPendingToolCalls([...currentToolCallsRef.current])
-        break
-
-      case 'tool_result':
-        // 工具执行完成，清除对应的 pending
-        const resultData = event.data as { toolCallId: string }
-        currentToolCallsRef.current = currentToolCallsRef.current.filter(
-          (tc) => tc.id !== resultData.toolCallId
-        )
-        setPendingToolCalls([...currentToolCallsRef.current])
-        break
-
-      case 'interrupt':
-        const interruptData = event.data as InterruptState
-        setInterrupt(interruptData)
-        setIsLoading(false)
-        break
-
-      case 'done':
-        const doneData = event.data as { final_message?: { content?: string } }
-        const finalContent = doneData.final_message?.content || ''
-
-        // 添加助手消息
-        if (finalContent) {
-          const assistantMessage: Message = {
-            id: generateId(),
-            role: 'assistant',
-            content: finalContent,
-            createdAt: new Date().toISOString(),
+        case 'text': {
+          const textData = event.data as { content?: string }
+          if (textData.content) {
+            setStreamingContent((prev) => prev + (textData.content ?? ''))
           }
-          setMessages((prev) => [...prev, assistantMessage])
+          break
         }
 
-        setStreamingContent('')
-        setPendingToolCalls([])
-        currentToolCallsRef.current = []
-        setIsLoading(false)
-        break
-
-      case 'error':
-        const errorData = event.data as { error: string }
-        onError?.(new Error(errorData.error))
-        setIsLoading(false)
-        break
-
-      case 'terminated':
-        setIsLoading(false)
-        break
-    }
-  }, [onError])
-
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || isLoading) return
-
-    // 添加用户消息
-    const userMessage: Message = {
-      id: generateId(),
-      role: 'user',
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-    }
-    setMessages((prev) => [...prev, userMessage])
-
-    // 重置状态
-    setIsLoading(true)
-    setStreamingContent('')
-    setInterrupt(null)
-    currentToolCallsRef.current = []
-
-    try {
-      await chatApi.sendMessage(
-        {
-          message: content,
-          sessionId: sessionIdRef.current,
-          agentId,
-        },
-        handleEvent,
-        (error) => {
-          onError?.(error)
-          setIsLoading(false)
-        },
-        () => {
-          setIsLoading(false)
+        case 'tool_call': {
+          const toolCallData = event.data as unknown as ToolCall
+          currentToolCallsRef.current.push(toolCallData)
+          setPendingToolCalls([...currentToolCallsRef.current])
+          break
         }
-      )
-    } catch (error) {
-      onError?.(error as Error)
-      setIsLoading(false)
-    }
-  }, [isLoading, agentId, handleEvent, onError])
 
-  const resumeExecution = useCallback(async (
-    action: 'approve' | 'reject' | 'modify',
-    modifiedArgs?: Record<string, unknown>
-  ) => {
-    if (!interrupt || !sessionIdRef.current) return
-
-    setIsLoading(true)
-    setInterrupt(null)
-
-    try {
-      await chatApi.resume(
-        sessionIdRef.current,
-        {
-          checkpointId: interrupt.checkpointId,
-          action,
-          modifiedArgs,
-        },
-        handleEvent,
-        (error) => {
-          onError?.(error)
-          setIsLoading(false)
-        },
-        () => {
-          setIsLoading(false)
+        case 'tool_result': {
+          // 工具执行完成，清除对应的 pending
+          const resultData = event.data as { toolCallId: string }
+          currentToolCallsRef.current = currentToolCallsRef.current.filter(
+            (tc) => tc.id !== resultData.toolCallId
+          )
+          setPendingToolCalls([...currentToolCallsRef.current])
+          break
         }
-      )
-    } catch (error) {
-      onError?.(error as Error)
-      setIsLoading(false)
-    }
-  }, [interrupt, handleEvent, onError])
+
+        case 'interrupt': {
+          const interruptData = event.data as unknown as InterruptState
+          setInterrupt(interruptData)
+          setIsLoading(false)
+          break
+        }
+
+        case 'done': {
+          const doneData = event.data as { final_message?: { content?: string } }
+          const finalContent = doneData.final_message?.content ?? ''
+
+          // 添加助手消息
+          if (finalContent) {
+            const assistantMessage: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: finalContent,
+              createdAt: new Date().toISOString(),
+            }
+            setMessages((prev) => [...prev, assistantMessage])
+          }
+
+          setStreamingContent('')
+          setPendingToolCalls([])
+          currentToolCallsRef.current = []
+          setIsLoading(false)
+          break
+        }
+
+        case 'error': {
+          const errorData = event.data as { error: string }
+          onError?.(new Error(errorData.error))
+          setIsLoading(false)
+          break
+        }
+
+        case 'terminated': {
+          setIsLoading(false)
+          break
+        }
+      }
+    },
+    [onError]
+  )
+
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!content.trim() || isLoading) return
+
+      // 添加用户消息
+      const userMessage: Message = {
+        id: generateId(),
+        role: 'user',
+        content: content.trim(),
+        createdAt: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, userMessage])
+
+      // 重置状态
+      setIsLoading(true)
+      setStreamingContent('')
+      setInterrupt(null)
+      currentToolCallsRef.current = []
+
+      try {
+        await chatApi.sendMessage(
+          {
+            message: content,
+            sessionId: sessionIdRef.current,
+            agentId,
+          },
+          handleEvent,
+          (error) => {
+            onError?.(error)
+            setIsLoading(false)
+          },
+          () => {
+            setIsLoading(false)
+          }
+        )
+      } catch (error) {
+        onError?.(error as Error)
+        setIsLoading(false)
+      }
+    },
+    [isLoading, agentId, handleEvent, onError]
+  )
+
+  const resumeExecution = useCallback(
+    async (action: 'approve' | 'reject' | 'modify', modifiedArgs?: Record<string, unknown>) => {
+      if (!interrupt || !sessionIdRef.current) return
+
+      setIsLoading(true)
+      setInterrupt(null)
+
+      try {
+        await chatApi.resume(
+          sessionIdRef.current,
+          {
+            checkpointId: interrupt.checkpointId,
+            action,
+            modifiedArgs,
+          },
+          handleEvent,
+          (error) => {
+            onError?.(error)
+            setIsLoading(false)
+          },
+          () => {
+            setIsLoading(false)
+          }
+        )
+      } catch (error) {
+        onError?.(error as Error)
+        setIsLoading(false)
+      }
+    },
+    [interrupt, handleEvent, onError]
+  )
 
   const clearMessages = useCallback(() => {
     setMessages([])

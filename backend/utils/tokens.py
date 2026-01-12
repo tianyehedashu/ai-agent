@@ -34,7 +34,7 @@ def count_messages_tokens(messages: list[dict[str, Any]], model: str = "gpt-4") 
         # 每条消息有 4 个额外的 Token
         total += 4
 
-        for key, value in message.items():
+        for _key, value in message.items():
             if isinstance(value, str):
                 total += count_tokens(value, model)
             elif isinstance(value, list):

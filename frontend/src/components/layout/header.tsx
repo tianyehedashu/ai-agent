@@ -1,5 +1,8 @@
-import { useLocation } from 'react-router-dom'
 import { Moon, Sun, User } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+
+import { useTheme } from '@/components/theme-provider'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -8,8 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { useTheme } from '@/components/theme-provider'
 
 const pageTitles: Record<string, string> = {
   '/': '对话',
@@ -19,7 +20,7 @@ const pageTitles: Record<string, string> = {
   '/settings': '设置',
 }
 
-export default function Header() {
+export default function Header(): React.JSX.Element {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
 
@@ -36,13 +37,11 @@ export default function Header() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={() => {
+            setTheme(theme === 'dark' ? 'light' : 'dark')
+          }}
         >
-          {theme === 'dark' ? (
-            <Sun className="h-5 w-5" />
-          ) : (
-            <Moon className="h-5 w-5" />
-          )}
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
 
         {/* User Menu */}
@@ -61,18 +60,14 @@ export default function Header() {
             <div className="flex items-center justify-start gap-2 p-2">
               <div className="flex flex-col space-y-1 leading-none">
                 <p className="font-medium">用户</p>
-                <p className="text-xs text-muted-foreground">
-                  user@example.com
-                </p>
+                <p className="text-xs text-muted-foreground">user@example.com</p>
               </div>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem>个人资料</DropdownMenuItem>
             <DropdownMenuItem>API 密钥</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
-              退出登录
-            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive">退出登录</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

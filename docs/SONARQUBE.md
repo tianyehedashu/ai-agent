@@ -1,6 +1,6 @@
-# 🔍 SonarQube 代码质量检测配置
+# 🔍 SonarQube & SonarCloud 代码质量检测配置
 
-> **版本**: 1.0.0
+> **版本**: 2.0.0  
 > **更新日期**: 2026-01-12
 
 ---
@@ -8,37 +8,139 @@
 ## 📋 目录
 
 1. [概述](#概述)
-2. [本地 SonarQube 环境](#本地-sonarqube-环境)
-3. [后端配置 (Python)](#后端配置-python)
-4. [前端配置 (TypeScript)](#前端配置-typescript)
-5. [CI/CD 集成](#cicd-集成)
-6. [质量门禁](#质量门禁)
-7. [常见问题](#常见问题)
+2. [SonarCloud 配置（推荐）](#sonarcloud-配置推荐)
+3. [GitHub 集成配置](#github-集成配置)
+4. [本地 SonarQube 环境](#本地-sonarqube-环境)
+5. [后端配置 (Python)](#后端配置-python)
+6. [前端配置 (TypeScript)](#前端配置-typescript)
+7. [质量门禁](#质量门禁)
+8. [常见问题](#常见问题)
 
 ---
 
 ## 概述
 
-本项目使用 SonarQube 进行代码质量检测，分别为前端和后端配置了独立的项目。
+本项目支持 **SonarCloud**（云端服务）和 **SonarQube**（自托管）两种代码质量检测方案。
+
+| 方案 | 适用场景 | 优势 |
+|------|----------|------|
+| **SonarCloud** | 公开仓库、团队协作 | 免费（公开项目）、无需维护服务器、自动 PR 检查 |
+| **SonarQube** | 私有部署、离线环境 | 完全控制、可定制规则 |
+
+### 项目配置
 
 | 项目 | 语言 | 项目 Key |
 |------|------|----------|
 | Backend | Python 3.11 | `ai-agent-backend` |
 | Frontend | TypeScript/React | `ai-agent-frontend` |
+| Monorepo | Full Stack | `ai-agent` |
 
 ### 检测内容
 
 - 🐛 **Bug 检测** - 潜在的代码缺陷
-- 🔓 **安全漏洞** - 安全问题扫描
+- 🔓 **安全漏洞** - 安全问题扫描 (OWASP Top 10)
 - 🧹 **代码异味** - 可维护性问题
 - 📊 **重复代码** - 代码重复率分析
 - 📈 **测试覆盖率** - 单元测试覆盖情况
 
 ---
 
+## SonarCloud 配置（推荐）
+
+### 步骤 1: 注册 SonarCloud
+
+1. 访问 [sonarcloud.io](https://sonarcloud.io)
+2. 使用 **GitHub** 账号登录
+3. 授权 SonarCloud 访问你的仓库
+
+### 步骤 2: 创建项目
+
+1. 点击 **"+"** → **"Analyze new project"**
+2. 选择 **GitHub** 仓库 `ai-agent`
+3. 选择组织（Organization）
+4. 完成项目创建
+
+### 步骤 3: 生成访问令牌
+
+1. 进入 **My Account** → **Security**
+2. 点击 **"Generate Tokens"**
+3. 输入令牌名称（如 `ai-agent-ci`）
+4. 复制生成的令牌（只显示一次！）
+
+### 步骤 4: 配置 GitHub Secrets
+
+在 GitHub 仓库中配置 Secrets：
+
+1. 进入仓库 → **Settings** → **Secrets and variables** → **Actions**
+2. 点击 **"New repository secret"**
+3. 添加以下 Secret：
+
+| Name | Value | 说明 |
+|------|-------|------|
+| `SONAR_TOKEN` | `c0305abfab1c7692b74afa207e4dfe2235330407` | SonarCloud 访问令牌 |
+
+> ⚠️ **安全提示**: 令牌应保密，不要提交到代码仓库中！
+
+---
+
+## GitHub 集成配置
+
+### 自动分析工作流
+
+项目已配置 `.github/workflows/sonarcloud.yml`，会在以下情况自动运行：
+
+| 触发事件 | 分析范围 |
+|----------|----------|
+| Push 到 `main`/`master`/`develop` | 完整分析 + Monorepo 分析 |
+| Pull Request | 增量分析（仅变更代码） |
+
+### 工作流文件结构
+
+```
+.github/workflows/
+├── sonar.yml        # 本地 SonarQube 分析（可选）
+└── sonarcloud.yml   # SonarCloud 分析（推荐）
+```
+
+### 配置 GitHub Secrets
+
+**必需的 Secrets:**
+
+```
+Repository → Settings → Secrets and variables → Actions
+```
+
+| Secret 名称 | 描述 | 示例值 |
+|-------------|------|--------|
+| `SONAR_TOKEN` | SonarCloud 访问令牌 | `c0305abfab1c7692b74afa207e4dfe2235330407` |
+
+**可选的 Secrets（用于本地 SonarQube）:**
+
+| Secret 名称 | 描述 | 示例值 |
+|-------------|------|--------|
+| `SONAR_HOST_URL` | SonarQube 服务器地址 | `http://your-server:9000` |
+
+### PR 检查集成
+
+配置后，每次 Pull Request 都会：
+
+1. ✅ 运行代码质量分析
+2. ✅ 在 PR 中显示检查结果
+3. ✅ 自动添加代码注释（问题标注）
+4. ✅ 显示质量门禁状态
+
+### 查看分析结果
+
+- **SonarCloud Dashboard**: https://sonarcloud.io/project/overview?id=YOUR_ORG_ai-agent
+- **GitHub Checks**: PR 页面的 "Checks" 标签页
+
+---
+
 ## 本地 SonarQube 环境
 
-### 使用 Docker 启动 SonarQube
+如果需要本地部署 SonarQube：
+
+### 使用 Docker 启动
 
 ```bash
 # 启动 SonarQube 服务
@@ -57,25 +159,18 @@ docker-compose -f docker-compose.sonar.yml down
 - **默认账号**: admin
 - **默认密码**: admin (首次登录需修改)
 
-### 创建项目令牌
-
-1. 登录 SonarQube
-2. 进入 **My Account** > **Security**
-3. 生成新令牌 (Token)
-4. 保存令牌用于后续配置
-
 ### 配置环境变量
-
-**Linux/Mac:**
-```bash
-export SONAR_HOST_URL=http://localhost:9000
-export SONAR_TOKEN=your-generated-token
-```
 
 **Windows PowerShell:**
 ```powershell
 $env:SONAR_HOST_URL = "http://localhost:9000"
 $env:SONAR_TOKEN = "your-generated-token"
+```
+
+**Linux/Mac:**
+```bash
+export SONAR_HOST_URL=http://localhost:9000
+export SONAR_TOKEN=your-generated-token
 ```
 
 ---
@@ -87,26 +182,15 @@ $env:SONAR_TOKEN = "your-generated-token"
 `backend/sonar-project.properties`:
 
 ```properties
-# 项目标识
 sonar.projectKey=ai-agent-backend
 sonar.projectName=AI Agent Backend
-
-# Python 配置
-sonar.language=py
-sonar.python.version=3.11
-
-# 源代码目录
 sonar.sources=api,app,core,db,models,schemas,services,tools,utils
 sonar.tests=tests
-
-# 覆盖率报告
+sonar.python.version=3.11
 sonar.python.coverage.reportPaths=coverage.xml
-
-# 测试报告
-sonar.python.xunit.reportPath=test-results.xml
 ```
 
-### 运行扫描
+### 运行本地扫描
 
 ```bash
 cd backend
@@ -135,23 +219,14 @@ sonar-scanner
 `frontend/sonar-project.properties`:
 
 ```properties
-# 项目标识
 sonar.projectKey=ai-agent-frontend
 sonar.projectName=AI Agent Frontend
-
-# TypeScript 配置
-sonar.typescript.tsconfigPath=tsconfig.json
-
-# 源代码目录
 sonar.sources=src
-sonar.tests=src
-sonar.test.inclusions=**/*.test.ts,**/*.test.tsx
-
-# 覆盖率报告
+sonar.typescript.tsconfigPath=tsconfig.json
 sonar.javascript.lcov.reportPaths=coverage/lcov.info
 ```
 
-### 运行扫描
+### 运行本地扫描
 
 ```bash
 cd frontend
@@ -162,47 +237,6 @@ npm run sonar
 # 方法 2: 手动执行
 npm run test:coverage
 sonar-scanner
-```
-
-### 生成的报告
-
-| 文件 | 说明 | 生成命令 |
-|------|------|----------|
-| `coverage/lcov.info` | 代码覆盖率 (LCOV) | `npm run test:coverage` |
-| `eslint-report.json` | ESLint 报告 (可选) | `npm run lint -- -f json -o eslint-report.json` |
-
----
-
-## CI/CD 集成
-
-### GitHub Actions
-
-项目已配置 `.github/workflows/sonar.yml`，会在以下情况自动运行扫描：
-
-- Push 到 `main` 或 `develop` 分支
-- 创建 Pull Request
-
-### 配置 Secrets
-
-在 GitHub 仓库设置中添加以下 Secrets：
-
-| Secret | 说明 |
-|--------|------|
-| `SONAR_HOST_URL` | SonarQube 服务器地址 |
-| `SONAR_TOKEN` | 访问令牌 |
-
-### 使用 SonarCloud
-
-如果使用 SonarCloud (免费的公共项目)：
-
-1. 在 [sonarcloud.io](https://sonarcloud.io) 注册
-2. 导入 GitHub 仓库
-3. 获取令牌并添加到 GitHub Secrets
-4. 修改 `sonar-project.properties`:
-
-```properties
-sonar.organization=your-org
-sonar.host.url=https://sonarcloud.io
 ```
 
 ---
@@ -219,12 +253,11 @@ sonar.host.url=https://sonarcloud.io
 | 可靠性评级 | A | Bug 评级 |
 | 安全评级 | A | 安全漏洞评级 |
 
-### 在 SonarQube 中配置
+### 在 SonarCloud 中配置
 
-1. 进入 **Quality Gates**
-2. 创建或编辑门禁规则
+1. 进入项目 → **Administration** → **Quality Gates**
+2. 选择或创建质量门禁
 3. 添加上述条件
-4. 将门禁应用到项目
 
 ---
 
@@ -232,53 +265,44 @@ sonar.host.url=https://sonarcloud.io
 
 ### 1. sonar-scanner 未找到
 
-**安装 sonar-scanner:**
+**安装方法:**
 
 ```bash
 # macOS
 brew install sonar-scanner
 
-# Linux (手动安装)
-wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-unzip sonar-scanner-cli-*.zip
-export PATH=$PATH:$(pwd)/sonar-scanner-*/bin
+# Windows - 使用 Chocolatey
+choco install sonarscanner-msbuild-net46
 
-# Windows
-# 下载并安装: https://docs.sonarqube.org/latest/analysis/scan/sonarscanner/
+# 或下载安装: https://docs.sonarqube.org/latest/analysis/scan/sonarscanner/
 ```
 
-### 2. ES 内存不足 (Docker)
+### 2. SonarCloud 分析失败
 
-如果 SonarQube 启动失败，可能是 Elasticsearch 内存限制：
+检查以下配置：
 
-```bash
-# Linux
-sudo sysctl -w vm.max_map_count=262144
-
-# 永久设置
-echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
-```
+1. **SONAR_TOKEN** Secret 是否正确配置
+2. 项目 Key 是否与 SonarCloud 上的一致
+3. 组织名称是否正确
 
 ### 3. 覆盖率报告未识别
 
 确保报告路径正确：
 
 ```bash
-# 后端 - 检查文件存在
+# 后端
 ls backend/coverage.xml
 
-# 前端 - 检查文件存在
+# 前端
 ls frontend/coverage/lcov.info
 ```
 
-### 4. 扫描超时
+### 4. PR 检查不显示
 
-对于大型项目，增加扫描超时：
-
-```properties
-# sonar-project.properties
-sonar.ws.timeout=300
-```
+确保：
+1. GitHub App 已安装并授权
+2. SonarCloud 项目已绑定 GitHub 仓库
+3. 工作流文件位于 `.github/workflows/` 目录
 
 ---
 
@@ -287,11 +311,11 @@ sonar.ws.timeout=300
 ### 本地扫描命令
 
 ```bash
-# 扫描全部 (Linux/Mac)
-./scripts/sonar-scan.sh all
-
-# 扫描全部 (Windows)
+# Windows
 .\scripts\sonar-scan.ps1 -Target all
+
+# Linux/Mac
+./scripts/sonar-scan.sh all
 
 # 只扫描后端
 ./scripts/sonar-scan.sh backend
@@ -300,19 +324,25 @@ sonar.ws.timeout=300
 ./scripts/sonar-scan.sh frontend
 ```
 
-### 后端快速扫描
+### 查看 SonarCloud 报告
 
-```bash
-cd backend
-make sonar
+```
+https://sonarcloud.io/project/overview?id=YOUR_ORG_ai-agent-backend
+https://sonarcloud.io/project/overview?id=YOUR_ORG_ai-agent-frontend
 ```
 
-### 前端快速扫描
+---
 
-```bash
-cd frontend
-npm run sonar
-```
+## 配置清单 ✅
+
+完成以下步骤以启用 SonarCloud + GitHub 集成：
+
+- [ ] 在 SonarCloud 创建账号并导入项目
+- [ ] 生成 SonarCloud 访问令牌
+- [ ] 在 GitHub 仓库添加 `SONAR_TOKEN` Secret
+- [ ] 推送代码触发首次分析
+- [ ] 在 SonarCloud 查看分析结果
+- [ ] 配置质量门禁（可选）
 
 ---
 
@@ -320,6 +350,8 @@ npm run sonar
 
 **代码质量可视化 · 持续改进**
 
-*文档版本: v1.0.0 | 最后更新: 2026-01-12*
+*SonarCloud Dashboard: [sonarcloud.io](https://sonarcloud.io)*
+
+*文档版本: v2.0.0 | 最后更新: 2026-01-12*
 
 </div>

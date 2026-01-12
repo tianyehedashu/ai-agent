@@ -1,0 +1,154 @@
+# 基准测试集配置
+benchmark:
+  name: "AI Agent Core Tasks"
+  version: "1.0"
+  categories:
+    - name: "simple_qa"
+      weight: 0.2
+    - name: "tool_usage"
+      weight: 0.3
+    - name: "multi_step"
+      weight: 0.3
+    - name: "code_generation"
+      weight: 0.2
+
+test_cases:
+  # =====================================
+  # 简单问答
+  # =====================================
+  - id: "qa_001"
+    category: "simple_qa"
+    input: "What is 2 + 2?"
+    expected_output: "4"
+    criteria:
+      exact_match: true
+    timeout: 10
+
+  - id: "qa_002"
+    category: "simple_qa"
+    input: "Summarize the benefits of TDD in one sentence."
+    expected_output: null  # 使用 LLM-as-Judge
+    criteria:
+      contains_keywords: ["test", "quality", "design"]
+      max_length: 100
+    timeout: 30
+
+  - id: "qa_003"
+    category: "simple_qa"
+    input: "What is the capital of France?"
+    expected_output: "Paris"
+    criteria:
+      exact_match: false
+      contains_keywords: ["Paris"]
+    timeout: 10
+
+  # =====================================
+  # 工具使用
+  # =====================================
+  - id: "tool_001"
+    category: "tool_usage"
+    input: "Read the file /tmp/test.txt and tell me its contents."
+    setup:
+      - action: "create_file"
+        path: "/tmp/test.txt"
+        content: "Hello, World!"
+    expected_output: "Hello, World!"
+    criteria:
+      must_use_tools: ["read_file"]
+      contains_keywords: ["Hello", "World"]
+    timeout: 30
+
+  - id: "tool_002"
+    category: "tool_usage"
+    input: "Search the web for the current weather in Beijing."
+    expected_output: null
+    criteria:
+      must_use_tools: ["web_search"]
+      response_contains: ["Beijing", "weather"]
+    timeout: 60
+
+  - id: "tool_003"
+    category: "tool_usage"
+    input: "List all files in the /tmp directory."
+    expected_output: null
+    criteria:
+      must_use_tools: ["list_files"]
+    timeout: 30
+
+  # =====================================
+  # 多步骤任务
+  # =====================================
+  - id: "multi_001"
+    category: "multi_step"
+    input: |
+      1. Read the file /tmp/data.json
+      2. Extract the 'name' field
+      3. Write it to /tmp/output.txt
+    setup:
+      - action: "create_file"
+        path: "/tmp/data.json"
+        content: '{"name": "Alice", "age": 30}'
+    expected_output: null
+    criteria:
+      must_use_tools: ["read_file", "write_file"]
+      verify_file:
+        path: "/tmp/output.txt"
+        contains: "Alice"
+    timeout: 60
+
+  - id: "multi_002"
+    category: "multi_step"
+    input: |
+      Calculate the factorial of 5 and write the result to a file.
+    expected_output: null
+    criteria:
+      must_use_tools: ["write_file"]
+      verify_file:
+        path: null  # 由 Agent 决定
+        contains: "120"
+    timeout: 60
+
+  # =====================================
+  # 代码生成
+  # =====================================
+  - id: "code_001"
+    category: "code_generation"
+    input: "Write a Python function that calculates factorial."
+    expected_output: null
+    criteria:
+      code_quality:
+        syntax_valid: true
+        has_docstring: true
+        passes_tests:
+          - input: [5]
+            expected: 120
+          - input: [0]
+            expected: 1
+    timeout: 60
+
+  - id: "code_002"
+    category: "code_generation"
+    input: "Write a Python function to check if a number is prime."
+    expected_output: null
+    criteria:
+      code_quality:
+        syntax_valid: true
+        has_docstring: true
+        passes_tests:
+          - input: [7]
+            expected: true
+          - input: [4]
+            expected: false
+    timeout: 60
+
+  - id: "code_003"
+    category: "code_generation"
+    input: "Create a Python class for a simple calculator with add, subtract, multiply, and divide methods."
+    expected_output: null
+    criteria:
+      code_quality:
+        syntax_valid: true
+        has_docstring: true
+        has_class: true
+        has_methods: ["add", "subtract", "multiply", "divide"]
+    timeout: 90

@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
-import { cn } from '@/lib/utils'
+
 import { User, Bot } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import type { Message } from '@/types'
 import ReactMarkdown from 'react-markdown'
 
-import type { ToolCall } from '@/types'
 import { ToolCallCard } from '@/components/chat/tool-call-card'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
+import type { Message, ToolCall } from '@/types'
 
 interface ChatMessagesProps {
   messages: Message[]
@@ -21,7 +21,7 @@ export default function ChatMessages({
   streamingContent,
   isLoading,
   pendingToolCalls = [],
-}: ChatMessagesProps) {
+}: ChatMessagesProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,9 +31,9 @@ export default function ChatMessages({
   if (messages.length === 0 && !isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-8">
-        <Bot className="h-16 w-16 text-muted-foreground/50 mb-4" />
-        <h2 className="text-xl font-semibold mb-2">开始新对话</h2>
-        <p className="text-muted-foreground text-center max-w-md">
+        <Bot className="mb-4 h-16 w-16 text-muted-foreground/50" />
+        <h2 className="mb-2 text-xl font-semibold">开始新对话</h2>
+        <p className="max-w-md text-center text-muted-foreground">
           输入您的问题或任务，AI Agent 将帮助您完成。
         </p>
       </div>
@@ -90,20 +90,12 @@ export default function ChatMessages({
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message }: { message: Message }): React.JSX.Element {
   const isUser = message.role === 'user'
 
   return (
-    <div
-      className={cn(
-        "flex items-start gap-4 animate-in",
-        isUser && "flex-row-reverse"
-      )}
-    >
-      <Avatar className={cn(
-        "h-8 w-8",
-        isUser ? "bg-primary" : "bg-primary/10"
-      )}>
+    <div className={cn('flex items-start gap-4 animate-in', isUser && 'flex-row-reverse')}>
+      <Avatar className={cn('h-8 w-8', isUser ? 'bg-primary' : 'bg-primary/10')}>
         <AvatarFallback>
           {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
         </AvatarFallback>
@@ -111,10 +103,8 @@ function MessageBubble({ message }: { message: Message }) {
 
       <div
         className={cn(
-          "flex-1 rounded-lg px-4 py-3",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted"
+          'flex-1 rounded-lg px-4 py-3',
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
         )}
       >
         {message.content && (
@@ -128,7 +118,7 @@ function MessageBubble({ message }: { message: Message }) {
             {message.toolCalls.map((toolCall) => (
               <div
                 key={toolCall.id}
-                className="rounded border bg-background/50 p-2 text-xs font-mono"
+                className="rounded border bg-background/50 p-2 font-mono text-xs"
               >
                 <span className="text-muted-foreground">调用工具: </span>
                 <span className="text-primary">{toolCall.name}</span>

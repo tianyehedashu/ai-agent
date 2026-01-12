@@ -1,14 +1,15 @@
 import { Routes, Route } from 'react-router-dom'
-import { Toaster } from '@/components/ui/toaster'
-import { ThemeProvider } from '@/components/theme-provider'
-import Layout from '@/components/layout'
-import ChatPage from '@/pages/chat'
-import AgentsPage from '@/pages/agents'
-import StudioPage from '@/pages/studio'
-import SettingsPage from '@/pages/settings'
-import NotFoundPage from '@/pages/not-found'
 
-function App() {
+import Layout from '@/components/layout'
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/toaster'
+import AgentsPage from '@/pages/agents'
+import ChatPage from '@/pages/chat'
+import NotFoundPage from '@/pages/not-found'
+import SettingsPage from '@/pages/settings'
+import StudioPage from '@/pages/studio'
+
+function App(): React.JSX.Element {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="ai-agent-theme">
       <Layout>

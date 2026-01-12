@@ -1,15 +1,12 @@
 import { useState } from 'react'
+
+import { Eye, EyeOff } from 'lucide-react'
+
 import { useTheme } from '@/components/theme-provider'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -19,14 +16,13 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Eye, EyeOff } from 'lucide-react'
 
-export default function SettingsPage() {
+export default function SettingsPage(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">设置</h1>
+    <div className="mx-auto max-w-4xl p-6">
+      <h1 className="mb-6 text-2xl font-bold">设置</h1>
 
       <Tabs defaultValue="general">
         <TabsList className="mb-6">
@@ -45,11 +41,14 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>主题</Label>
-                  <p className="text-sm text-muted-foreground">
-                    选择您喜欢的主题
-                  </p>
+                  <p className="text-sm text-muted-foreground">选择您喜欢的主题</p>
                 </div>
-                <Select value={theme} onValueChange={(v) => setTheme(v as 'light' | 'dark' | 'system')}>
+                <Select
+                  value={theme}
+                  onValueChange={(v) => {
+                    setTheme(v as 'light' | 'dark' | 'system')
+                  }}
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
@@ -64,9 +63,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>通知</Label>
-                  <p className="text-sm text-muted-foreground">
-                    接收桌面通知
-                  </p>
+                  <p className="text-sm text-muted-foreground">接收桌面通知</p>
                 </div>
                 <Switch />
               </div>
@@ -74,9 +71,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>声音</Label>
-                  <p className="text-sm text-muted-foreground">
-                    播放通知声音
-                  </p>
+                  <p className="text-sm text-muted-foreground">播放通知声音</p>
                 </div>
                 <Switch />
               </div>
@@ -116,10 +111,8 @@ export default function SettingsPage() {
 
               <Button>保存更改</Button>
 
-              <div className="pt-6 border-t">
-                <h4 className="text-sm font-medium text-destructive mb-2">
-                  危险区域
-                </h4>
+              <div className="border-t pt-6">
+                <h4 className="mb-2 text-sm font-medium text-destructive">危险区域</h4>
                 <Button variant="destructive" size="sm">
                   删除账户
                 </Button>
@@ -132,7 +125,7 @@ export default function SettingsPage() {
   )
 }
 
-function ApiKeyInput({ label, name }: { label: string; name: string }) {
+function ApiKeyInput({ label, name: _name }: { label: string; name: string }): React.JSX.Element {
   const [showKey, setShowKey] = useState(false)
   const [value, setValue] = useState('')
 
@@ -144,21 +137,21 @@ function ApiKeyInput({ label, name }: { label: string; name: string }) {
           <Input
             type={showKey ? 'text' : 'password'}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value)
+            }}
             placeholder={`输入您的 ${label}`}
           />
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-            onClick={() => setShowKey(!showKey)}
+            className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
+            onClick={() => {
+              setShowKey(!showKey)
+            }}
           >
-            {showKey ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
+            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
         </div>
         <Button>保存</Button>

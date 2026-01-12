@@ -1,25 +1,27 @@
 /**
  * Studio Page - 工作台页面
  *
- * 实现 Code-First 可视化编排
+ * 实现 Code-First 可视化编排 + Monaco LSP 集成
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
+
+import Editor, { type OnMount } from '@monaco-editor/react'
 import {
   ReactFlow,
   Controls,
   Background,
   MiniMap,
-  Node,
-  Edge,
-  Connection,
+  type Node,
+  type Edge,
+  type Connection,
   addEdge,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
+  type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import Editor from '@monaco-editor/react'
 import {
   Play,
   Save,
@@ -30,11 +32,21 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  CheckCircle,
 } from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useMonacoLSP, type DiagnosticItem } from '@/hooks/use-monaco-lsp'
 import { cn } from '@/lib/utils'
-import { LLMNode, ToolNode, ConditionNode, CustomNode } from './components/nodes'
+
+import { LLMNode, ToolNode, ConditionNode, CustomNode, type NodeData } from './components/nodes'
+
+import type * as Monaco from 'monaco-editor'
 
 // 节点类型映射
 const nodeTypes = {
@@ -42,10 +54,10 @@ const nodeTypes = {
   tool: ToolNode,
   condition: ConditionNode,
   custom: CustomNode,
-}
+} satisfies NodeTypes
 
 // 初始节点和边 (示例)
-const initialNodes: Node[] = [
+const initialNodes: Node<NodeData>[] = [
   {
     id: 'process_input',
     type: 'custom',
@@ -125,13 +137,43 @@ graph.set_entry_point("process_input")
 app = graph.compile()
 `
 
-export default function StudioPage() {
+export default function StudioPage(): React.JSX.Element {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [code, setCode] = useState(defaultCode)
   const [activeView, setActiveView] = useState<'split' | 'code' | 'canvas'>('split')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Monaco Editor ref
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+
+  // LSP Integration
+  const { diagnostics, isValidating, initializeLSP } = useMonacoLSP(editorRef, {
+    language: 'python',
+    enableDiagnostics: true,
+    enableCompletion: true,
+    enableHover: true,
+    debounceMs: 800,
+  })
+
+  // Monaco Editor 挂载回调
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor
+    initializeLSP(monaco)
+  }
+
+  // 统计诊断信息
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length
+  const warningCount = diagnostics.filter((d) => d.severity === 'warning').length
+
+  // 跳转到诊断位置
+  const goToDiagnostic = useCallback((item: DiagnosticItem) => {
+    if (!editorRef.current) return
+    editorRef.current.revealLineInCenter(item.line)
+    editorRef.current.setPosition({ lineNumber: item.line, column: item.column })
+    editorRef.current.focus()
+  }, [])
 
   // 连接边
   const onConnect = useCallback(
@@ -150,7 +192,10 @@ export default function StudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       })
-      const data = await response.json()
+      const data = (await response.json()) as {
+        nodes?: Array<Node<NodeData>>
+        edges?: Edge[]
+      }
 
       if (data.nodes && data.edges) {
         setNodes(data.nodes)
@@ -172,7 +217,7 @@ export default function StudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nodes, edges }),
       })
-      const data = await response.json()
+      const data = (await response.json()) as { code?: string }
 
       if (data.code) {
         setCode(data.code)
@@ -185,11 +230,11 @@ export default function StudioPage() {
   }, [nodes, edges])
 
   // 运行测试
-  const runTest = useCallback(async () => {
+  const runTest = useCallback(() => {
     setIsLoading(true)
     try {
       // TODO: 实现测试运行
-      console.log('Running test...')
+      // console.log('Running test...')
     } finally {
       setIsLoading(false)
     }
@@ -238,7 +283,9 @@ export default function StudioPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              onClick={() => {
+                setIsSidebarOpen(!isSidebarOpen)
+              }}
             >
               {isSidebarOpen ? (
                 <ChevronLeft className="h-4 w-4" />
@@ -254,7 +301,9 @@ export default function StudioPage() {
               <Button
                 variant={activeView === 'split' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setActiveView('split')}
+                onClick={() => {
+                  setActiveView('split')
+                }}
               >
                 <LayoutGrid className="mr-1 h-4 w-4" />
                 分屏
@@ -262,7 +311,9 @@ export default function StudioPage() {
               <Button
                 variant={activeView === 'code' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setActiveView('code')}
+                onClick={() => {
+                  setActiveView('code')
+                }}
               >
                 <Code className="mr-1 h-4 w-4" />
                 代码
@@ -270,7 +321,9 @@ export default function StudioPage() {
               <Button
                 variant={activeView === 'canvas' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setActiveView('canvas')}
+                onClick={() => {
+                  setActiveView('canvas')
+                }}
               >
                 <LayoutGrid className="mr-1 h-4 w-4" />
                 画布
@@ -279,12 +332,7 @@ export default function StudioPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={parseCode}
-              disabled={isLoading}
-            >
+            <Button variant="outline" size="sm" onClick={parseCode} disabled={isLoading}>
               <RefreshCw className={cn('mr-1 h-4 w-4', isLoading && 'animate-spin')} />
               同步到画布
             </Button>
@@ -317,15 +365,27 @@ export default function StudioPage() {
                 height="100%"
                 defaultLanguage="python"
                 value={code}
-                onChange={(value) => setCode(value || '')}
+                onChange={(value) => {
+                  setCode(value ?? '')
+                }}
                 theme="vs-dark"
+                onMount={handleEditorMount}
                 options={{
-                  minimap: { enabled: false },
+                  minimap: { enabled: true },
                   fontSize: 14,
                   lineNumbers: 'on',
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
                   tabSize: 4,
+                  renderValidationDecorations: 'on',
+                  quickSuggestions: {
+                    other: true,
+                    comments: true,
+                    strings: true,
+                  },
+                  suggestOnTriggerCharacters: true,
+                  acceptSuggestionOnEnter: 'on',
+                  wordBasedSuggestions: 'currentDocument',
                 }}
               />
             </div>
@@ -333,12 +393,7 @@ export default function StudioPage() {
 
           {/* React Flow 画布 */}
           {(activeView === 'split' || activeView === 'canvas') && (
-            <div
-              className={cn(
-                'flex flex-col',
-                activeView === 'split' ? 'w-1/2' : 'w-full'
-              )}
-            >
+            <div className={cn('flex flex-col', activeView === 'split' ? 'w-1/2' : 'w-full')}>
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -356,22 +411,93 @@ export default function StudioPage() {
           )}
         </div>
 
-        {/* 底部面板 - 测试输出 */}
+        {/* 底部面板 - 测试输出 & 诊断 */}
         <div className="h-48 border-t bg-muted/30">
-          <Tabs defaultValue="output" className="h-full">
+          <Tabs defaultValue="problems" className="h-full">
             <div className="flex items-center justify-between border-b px-4">
               <TabsList className="h-10">
+                <TabsTrigger value="problems" className="flex items-center gap-1">
+                  问题
+                  {(errorCount > 0 || warningCount > 0) && (
+                    <span className="flex items-center gap-1 text-xs">
+                      {errorCount > 0 && (
+                        <Badge variant="destructive" className="h-4 px-1">
+                          {errorCount}
+                        </Badge>
+                      )}
+                      {warningCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="h-4 bg-yellow-500/20 px-1 text-yellow-600"
+                        >
+                          {warningCount}
+                        </Badge>
+                      )}
+                    </span>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="output">输出</TabsTrigger>
                 <TabsTrigger value="logs">日志</TabsTrigger>
                 <TabsTrigger value="variables">变量</TabsTrigger>
               </TabsList>
-              <Button variant="ghost" size="sm">
-                <Settings className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                {isValidating && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    验证中...
+                  </span>
+                )}
+                <Button variant="ghost" size="sm">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+            <TabsContent value="problems" className="h-[calc(100%-40px)] overflow-auto">
+              {diagnostics.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                  没有检测到问题
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {diagnostics.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex cursor-pointer items-start gap-2 px-4 py-2 hover:bg-muted/50"
+                      onClick={() => {
+                        goToDiagnostic(item)
+                      }}
+                    >
+                      {item.severity === 'error' && (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                      )}
+                      {item.severity === 'warning' && (
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+                      )}
+                      {item.severity === 'info' && (
+                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                      )}
+                      <div className="flex-1 text-sm">
+                        <span className="text-foreground">{item.message}</span>
+                        {item.code && (
+                          <span className="ml-2 text-muted-foreground">({item.code})</span>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        [{item.line}:{item.column}]
+                      </span>
+                      {item.source && (
+                        <Badge variant="outline" className="shrink-0 text-xs">
+                          {item.source}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
             <TabsContent value="output" className="h-[calc(100%-40px)] p-4">
               <pre className="h-full overflow-auto rounded bg-muted p-2 font-mono text-sm">
-                {/* 输出内容 */}
                 准备就绪。点击"运行"开始测试。
               </pre>
             </TabsContent>
@@ -381,9 +507,7 @@ export default function StudioPage() {
               </pre>
             </TabsContent>
             <TabsContent value="variables" className="h-[calc(100%-40px)] p-4">
-              <div className="text-sm text-muted-foreground">
-                执行后将显示状态变量
-              </div>
+              <div className="text-sm text-muted-foreground">执行后将显示状态变量</div>
             </TabsContent>
           </Tabs>
         </div>

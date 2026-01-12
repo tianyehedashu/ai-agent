@@ -7,9 +7,10 @@ RBAC - 基于角色的访问控制
 - 资源访问控制
 """
 
+from collections.abc import Callable
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import HTTPException, status
 

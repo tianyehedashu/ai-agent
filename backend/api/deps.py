@@ -54,6 +54,31 @@ async def get_current_user(
     }
 
 
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, Any] | None:
+    """
+    获取当前用户（可选）
+
+    如果没有认证则返回 None
+    """
+    if not credentials:
+        return None
+
+    token = credentials.credentials
+    user_service = UserService()
+
+    user = await user_service.get_user_from_token(token)
+    if not user:
+        return None
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.name,
+    }
+
+
 async def require_auth(
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:

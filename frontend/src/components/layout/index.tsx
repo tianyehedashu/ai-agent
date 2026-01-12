@@ -1,12 +1,13 @@
-import { ReactNode } from 'react'
-import Sidebar from './sidebar'
+import type { ReactNode } from 'react'
+
 import Header from './header'
+import Sidebar from './sidebar'
 
 interface LayoutProps {
   children: ReactNode
 }
 
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children }: LayoutProps): React.JSX.Element {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
@@ -18,9 +19,7 @@ export default function Layout({ children }: LayoutProps) {
         <Header />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
   )

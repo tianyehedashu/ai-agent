@@ -2,7 +2,8 @@
 Search Tools - 搜索工具
 """
 
-import json
+import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -127,9 +128,6 @@ class GrepTool(BaseTool):
     parameters_model = GrepSearchParams
 
     async def execute(self, **kwargs: Any) -> ToolResult:
-        import subprocess
-        from pathlib import Path
-
         params = GrepSearchParams(**kwargs)
 
         try:
@@ -154,14 +152,27 @@ class GrepTool(BaseTool):
 
             cmd.extend([params.pattern, str(search_path)])
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if result.returncode == 1 and not result.stdout:
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=30,
+                )
+            except TimeoutError:
+                process.kill()
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error="Search timed out",
+                )
+
+            if process.returncode == 1 and not stdout:
                 return ToolResult(
                     tool_call_id="",
                     success=True,
@@ -169,19 +180,19 @@ class GrepTool(BaseTool):
                 )
 
             # 限制输出行数
-            lines = result.stdout.strip().split("\n")
+            lines = stdout.decode().strip().split("\n")
             if len(lines) > 100:
                 output = "\n".join(lines[:100])
                 output += f"\n\n... ({len(lines) - 100} more lines)"
             else:
-                output = result.stdout.strip()
+                output = stdout.decode().strip()
 
             return ToolResult(
                 tool_call_id="",
                 success=True,
                 output=output,
             )
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             return ToolResult(
                 tool_call_id="",
                 success=False,

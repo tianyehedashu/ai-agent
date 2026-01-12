@@ -2,8 +2,9 @@
  * Chat API
  */
 
-import { apiClient } from './client'
 import type { ChatEvent, Checkpoint, CheckpointDiff } from '@/types'
+
+import { apiClient } from './client'
 
 export interface ChatRequest {
   message: string
@@ -30,7 +31,9 @@ export const chatApi = {
     return apiClient.stream(
       '/api/v1/chat',
       request,
-      (event) => onEvent(event as unknown as ChatEvent),
+      (event) => {
+        onEvent(event as unknown as ChatEvent)
+      },
       onError,
       onComplete
     )
@@ -49,7 +52,9 @@ export const chatApi = {
     return apiClient.stream(
       '/api/v1/chat/resume',
       { sessionId, ...request },
-      (event) => onEvent(event as unknown as ChatEvent),
+      (event) => {
+        onEvent(event as unknown as ChatEvent)
+      },
       onError,
       onComplete
     )

@@ -9,11 +9,9 @@ Memory Retriever - 记忆检索器
 """
 
 import uuid
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_async_session
 from db.vector import VectorStore
@@ -95,11 +93,11 @@ class MemoryRetriever:
 
         # 3. 计算最终分数
         scored_memories = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for memory, base_score in candidates:
             # 过滤条件
-            if memory_types and memory.memory_type not in memory_types:
+            if memory_types and memory.type not in memory_types:
                 continue
             if memory.importance < min_importance:
                 continue
@@ -139,7 +137,7 @@ class MemoryRetriever:
                 collection="memories",
                 query=query,
                 limit=limit,
-                filter={"user_id": user_id},
+                query_filter={"user_id": user_id},
             )
 
             memories = []
@@ -158,8 +156,22 @@ class MemoryRetriever:
 
             return memories
 
-        except Exception as e:
-            logger.error(f"Vector recall error: {e}")
+        except (ValueError, TypeError, AttributeError) as e:
+            # ValueError: UUID 解析错误
+            # TypeError: 类型错误
+            # AttributeError: 属性访问错误
+            logger.error("Vector recall error: %s", e)
+            return []
+        except (OSError, ConnectionError, RuntimeError) as e:
+            # OSError: 向量存储连接错误
+            # ConnectionError: 网络连接错误
+            # RuntimeError: 运行时错误
+            logger.error("Vector store connection error: %s", e)
+            return []
+        except Exception as e:  # noqa: BLE001
+            # 向量存储和数据库可能抛出各种未知异常（网络、连接、自定义异常等）
+            # 为了系统稳定性，需要捕获所有异常并返回空列表
+            logger.exception("Unexpected error in vector recall: %s", e)
             return []
 
     async def _keyword_recall(
@@ -215,7 +227,7 @@ class MemoryRetriever:
         limit: int = 10,
     ) -> list[Memory]:
         """获取最近的记忆"""
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         async with get_async_session() as session:
             result = await session.execute(

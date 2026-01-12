@@ -7,16 +7,15 @@ Alembic Environment Configuration
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from app.config import settings
-from models.base import Base
 
 # 导入所有模型以确保它们被注册
-from models import agent, memory, message, session, user
+from models.base import Base
 
 # this is the Alembic Config object
 config = context.config

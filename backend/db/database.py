@@ -99,6 +99,11 @@ async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+# 别名，用于兼容性
+get_async_session = get_session_context
+get_db_session = get_session_context
+
+
 async def create_tables() -> None:
     """创建所有表 (仅用于开发/测试)"""
     engine = get_engine()

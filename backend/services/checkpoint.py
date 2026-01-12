@@ -4,9 +4,8 @@ Checkpoint Service - 检查点服务
 实现检查点的存储、加载和管理
 """
 
-import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from core.types import AgentState, Checkpoint
@@ -34,7 +33,7 @@ class CheckpointService:
             session_id=session_id,
             step=step,
             state=state,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             parent_id=parent_id,
         )
 

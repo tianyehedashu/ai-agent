@@ -6,7 +6,6 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from db.database import get_session_context
 from models.message import Message

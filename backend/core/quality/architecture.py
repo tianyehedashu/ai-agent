@@ -11,7 +11,6 @@ Architecture Validator - 架构规范检查器
 
 import ast
 from dataclasses import dataclass
-from typing import Any
 
 from core.quality.validator import Severity, ValidationIssue
 from utils.logging import get_logger
@@ -113,28 +112,30 @@ class ArchitectureValidator:
         issues = []
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                # 检查类名是否包含 Agent
-                if "Agent" in node.name and node.name != "BaseAgent":
-                    # 检查是否继承 BaseAgent
-                    base_names = []
-                    for base in node.bases:
-                        if isinstance(base, ast.Name):
-                            base_names.append(base.id)
-                        elif isinstance(base, ast.Attribute):
-                            base_names.append(base.attr)
+            if (
+                isinstance(node, ast.ClassDef)
+                and "Agent" in node.name
+                and node.name != "BaseAgent"
+            ):
+                # 检查是否继承 BaseAgent
+                base_names = []
+                for base in node.bases:
+                    if isinstance(base, ast.Name):
+                        base_names.append(base.id)
+                    elif isinstance(base, ast.Attribute):
+                        base_names.append(base.attr)
 
-                    if "BaseAgent" not in base_names and "AgentEngine" not in base_names:
-                        issues.append(
-                            ValidationIssue(
-                                line=node.lineno,
-                                column=node.col_offset,
-                                severity=RULES["ARCH001"].severity,
-                                message=f"类 '{node.name}' 应该继承 BaseAgent",
-                                code="ARCH001",
-                                source="architecture",
-                            )
+                if "BaseAgent" not in base_names and "AgentEngine" not in base_names:
+                    issues.append(
+                        ValidationIssue(
+                            line=node.lineno,
+                            column=node.col_offset,
+                            severity=RULES["ARCH001"].severity,
+                            message=f"类 '{node.name}' 应该继承 BaseAgent",
+                            code="ARCH001",
+                            source="architecture",
                         )
+                    )
 
         return issues
 
@@ -143,28 +144,30 @@ class ArchitectureValidator:
         issues = []
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                # 检查类名是否包含 Tool
-                if "Tool" in node.name and node.name not in ("BaseTool", "ToolProtocol"):
-                    # 检查是否继承 BaseTool
-                    base_names = []
-                    for base in node.bases:
-                        if isinstance(base, ast.Name):
-                            base_names.append(base.id)
-                        elif isinstance(base, ast.Attribute):
-                            base_names.append(base.attr)
+            if (
+                isinstance(node, ast.ClassDef)
+                and "Tool" in node.name
+                and node.name not in ("BaseTool", "ToolProtocol")
+            ):
+                # 检查是否继承 BaseTool
+                base_names = []
+                for base in node.bases:
+                    if isinstance(base, ast.Name):
+                        base_names.append(base.id)
+                    elif isinstance(base, ast.Attribute):
+                        base_names.append(base.attr)
 
-                    if "BaseTool" not in base_names:
-                        issues.append(
-                            ValidationIssue(
-                                line=node.lineno,
-                                column=node.col_offset,
-                                severity=RULES["ARCH002"].severity,
-                                message=f"类 '{node.name}' 应该继承 BaseTool",
-                                code="ARCH002",
-                                source="architecture",
-                            )
+                if "BaseTool" not in base_names:
+                    issues.append(
+                        ValidationIssue(
+                            line=node.lineno,
+                            column=node.col_offset,
+                            severity=RULES["ARCH002"].severity,
+                            message=f"类 '{node.name}' 应该继承 BaseTool",
+                            code="ARCH002",
+                            source="architecture",
                         )
+                    )
 
         return issues
 
@@ -217,21 +220,22 @@ class ArchitectureValidator:
                         # 检查变量名是否包含敏感关键词
                         for keyword in sensitive_keywords:
                             if keyword in var_name:
-                                # 检查是否直接赋值字符串
-                                if isinstance(node.value, ast.Constant) and isinstance(
-                                    node.value.value, str
+                                # 检查是否直接赋值字符串 (排除空字符串)
+                                if (
+                                    isinstance(node.value, ast.Constant)
+                                    and isinstance(node.value.value, str)
+                                    and len(node.value.value) > 5
                                 ):
-                                    if len(node.value.value) > 5:  # 排除空字符串
-                                        issues.append(
-                                            ValidationIssue(
-                                                line=node.lineno,
-                                                column=node.col_offset,
-                                                severity=RULES["SEC002"].severity,
-                                                message=f"变量 '{target.id}' 可能包含硬编码的敏感信息，请使用环境变量",
-                                                code="SEC002",
-                                                source="architecture",
-                                            )
+                                    issues.append(
+                                        ValidationIssue(
+                                            line=node.lineno,
+                                            column=node.col_offset,
+                                            severity=RULES["SEC002"].severity,
+                                            message=f"变量 '{target.id}' 可能包含硬编码的敏感信息，请使用环境变量",
+                                            code="SEC002",
+                                            source="architecture",
                                         )
+                                    )
                                 break
 
         return issues

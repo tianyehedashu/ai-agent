@@ -1,0 +1,104 @@
+[MAIN]
+# Python 版本
+py-version=3.11
+
+# 忽略的目录
+ignore=migrations,alembic,__pycache__,.venv
+
+# 并行作业数
+jobs=0
+
+[MESSAGES CONTROL]
+# 禁用的检查
+disable=
+    # 文档相关
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    
+    # 代码风格 (使用 ruff 处理)
+    C0301,  # line-too-long
+    C0103,  # invalid-name (常量命名)
+    
+    # 设计相关 (这些是可接受的)
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    R0917,  # too-many-positional-arguments
+    R0914,  # too-many-locals
+    R0902,  # too-many-instance-attributes
+    R1702,  # too-many-nested-blocks
+    R0801,  # duplicate-code
+    
+    # 导入错误不再忽略，确保依赖完整性
+    
+    # 异常处理 (有时需要捕获通用异常)
+    W0718,  # broad-exception-caught
+    
+    # 日志格式化 (f-string 更易读)
+    W1203,  # logging-fstring-interpolation
+    
+    # 未使用参数 (接口定义常见)
+    W0613,  # unused-argument
+    
+    # 全局语句 (某些场景需要)
+    W0603,  # global-statement
+    
+    # TODO 注释
+    W0511,  # fixme
+    
+    # 抽象方法中的省略号
+    W2301,  # unnecessary-ellipsis
+    
+    # SQLAlchemy func 误报
+    E1102,  # not-callable
+    E1101,  # no-member
+    
+    # 重定义内置名 (某些场景可接受)
+    W0622,  # redefined-builtin
+    
+    # 不必要的 pass
+    W0107,  # unnecessary-pass
+    
+    # 不必要的 else (风格偏好)
+    R1705,  # no-else-return
+    
+    # 无效语句 (某些场景是有意的)
+    W0104,  # pointless-statement
+    
+    # 异步上下文管理器误报
+    E1701,  # not-async-context-manager
+    
+    # 重新导入/重定义 (任务函数中的延迟导入)
+    W0621,  # redefined-outer-name
+    W0404,  # reimported
+    
+    # 循环导入 (有时是必要的)
+    R0401,  # cyclic-import
+    
+    # 文件末尾换行 (编辑器会自动处理)
+    C0304,  # missing-final-newline
+
+[FORMAT]
+# 最大行长度
+max-line-length=100
+
+[DESIGN]
+# 最大参数数 (放宽限制)
+max-args=10
+
+# 最大局部变量数
+max-locals=20
+
+[SIMILARITIES]
+# 忽略导入行
+ignore-imports=yes
+
+[TYPECHECK]
+# 忽略的模块 (动态导入)
+ignored-modules=
+    litellm,
+    celery,
+    kombu,
+    redis.asyncio,
+    qdrant_client,
+    chromadb

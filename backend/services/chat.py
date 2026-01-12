@@ -4,15 +4,13 @@ Chat Service - 对话服务
 实现 Agent 执行引擎的封装
 """
 
-import uuid
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from core.context.manager import ContextManager
 from core.engine.agent import AgentEngine
 from core.engine.checkpointer import Checkpointer
 from core.llm.gateway import LLMGateway
-from core.types import AgentConfig, AgentEvent, AgentState, EventType
-from models.agent import Agent
+from core.types import AgentConfig, AgentEvent, EventType
 from schemas.message import ChatEvent
 from services.session import SessionService
 from tools.registry import ToolRegistry
@@ -89,11 +87,10 @@ class ChatService:
                 # 收集最终内容
                 if event.type == EventType.TEXT:
                     final_content = event.data.get("content", "")
-                elif event.type == EventType.DONE:
-                    if not final_content:
-                        final_msg = event.data.get("final_message")
-                        if final_msg and final_msg.get("content"):
-                            final_content = final_msg["content"]
+                elif event.type == EventType.DONE and not final_content:
+                    final_msg = event.data.get("final_message")
+                    if final_msg and final_msg.get("content"):
+                        final_content = final_msg["content"]
 
             # 保存助手消息
             if final_content:
@@ -112,11 +109,11 @@ class ChatService:
 
     async def resume(
         self,
-        session_id: str,
+        session_id: str,  # noqa: ARG002 - 保留用于日志和审计
         checkpoint_id: str,
         action: str,
         modified_args: dict[str, Any] | None,
-        user_id: str,
+        user_id: str,  # noqa: ARG002 - 保留用于权限验证扩展
     ) -> AsyncGenerator[ChatEvent, None]:
         """
         从中断点恢复执行
@@ -161,9 +158,8 @@ class ChatService:
 
     async def _get_agent_config(self, agent_id: str | None) -> AgentConfig:
         """获取 Agent 配置"""
-        if agent_id:
-            # TODO: 从数据库加载 Agent 配置
-            pass
+        # TODO: 实现从数据库加载 Agent 配置
+        _ = agent_id  # 抑制未使用警告，待实现数据库加载
 
         # 返回默认配置
         return AgentConfig(

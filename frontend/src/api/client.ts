@@ -18,7 +18,7 @@ class ApiClient {
     this.token = localStorage.getItem('auth_token')
   }
 
-  setToken(token: string | null) {
+  setToken(token: string | null): void {
     this.token = token
     if (token) {
       localStorage.setItem('auth_token', token)
@@ -27,7 +27,10 @@ class ApiClient {
     }
   }
 
-  private buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+  private buildUrl(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>
+  ): string {
     const url = new URL(path, this.baseUrl)
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -44,13 +47,16 @@ class ApiClient {
 
     const url = this.buildUrl(path, params)
 
-    const headers: HeadersInit = {
+    const defaultHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
     }
+    const customHeaders = options.headers as Record<string, string> | undefined
+    const headers: Record<string, string> = customHeaders
+      ? { ...defaultHeaders, ...customHeaders }
+      : defaultHeaders
 
     if (this.token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`
+      headers['Authorization'] = `Bearer ${this.token}`
     }
 
     const response = await fetch(url, {
@@ -59,14 +65,20 @@ class ApiClient {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }))
-      throw new Error(error.detail || error.message || `HTTP ${response.status}`)
+      const error = (await response.json().catch(() => ({ message: 'Unknown error' }))) as {
+        detail?: string
+        message?: string
+      }
+      throw new Error(error.detail ?? error.message ?? `HTTP ${String(response.status)}`)
     }
 
-    return response.json()
+    return (await response.json()) as T
   }
 
-  async get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
+  async get<T>(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>
+  ): Promise<T> {
     return this.request<T>(path, { method: 'GET', params })
   }
 
@@ -98,13 +110,13 @@ class ApiClient {
   ): Promise<void> {
     const url = this.buildUrl(path)
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     }
 
     if (this.token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`
+      headers['Authorization'] = `Bearer ${this.token}`
     }
 
     try {
@@ -115,7 +127,7 @@ class ApiClient {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        throw new Error(`HTTP ${String(response.status)}`)
       }
 
       const reader = response.body?.getReader()
@@ -126,6 +138,7 @@ class ApiClient {
       const decoder = new TextDecoder()
       let buffer = ''
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       while (true) {
         const { done, value } = await reader.read()
 
@@ -134,9 +147,11 @@ class ApiClient {
           break
         }
 
+        // When done is false, value is guaranteed to be defined
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        const lastLine = lines.pop()
+        buffer = lastLine ?? ''
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -146,7 +161,7 @@ class ApiClient {
               return
             }
             try {
-              const event = JSON.parse(jsonStr)
+              const event = JSON.parse(jsonStr) as { type: string; data: unknown }
               onEvent(event)
             } catch {
               // Ignore JSON parse errors

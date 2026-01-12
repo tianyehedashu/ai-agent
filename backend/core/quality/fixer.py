@@ -10,9 +10,9 @@ Code Fixer - 代码自动修复器
 
 from typing import Any
 
+from app.config import settings
 from core.llm.gateway import LLMGateway
 from core.quality.validator import CodeValidator, ValidationResult
-from app.config import settings
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

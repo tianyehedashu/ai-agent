@@ -6,7 +6,6 @@ Pytest Configuration - 测试配置
 
 import asyncio
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -19,7 +18,6 @@ from app.config import settings
 from app.main import app
 from db.database import Base, get_session
 from models.user import User
-
 
 # 测试数据库 URL
 TEST_DATABASE_URL = settings.database_url.replace(

@@ -103,7 +103,7 @@ class LangGraphParser:
             self._visit(tree)
         except SyntaxError as e:
             logger.error(f"Syntax error in code: {e}")
-            raise ValueError(f"Invalid Python syntax: {e}")
+            raise ValueError(f"Invalid Python syntax: {e}") from e
 
         # 计算节点位置
         self._calculate_positions()
@@ -131,17 +131,16 @@ class LangGraphParser:
     def _handle_assign(self, node: ast.Assign) -> None:
         """处理赋值语句"""
         # 检测 StateGraph 创建
-        if isinstance(node.value, ast.Call):
-            if self._is_state_graph_call(node.value):
-                # 提取图变量名
-                if node.targets and isinstance(node.targets[0], ast.Name):
-                    self.graph_var = node.targets[0].id
+        if isinstance(node.value, ast.Call) and self._is_state_graph_call(node.value):
+            # 提取图变量名
+            if node.targets and isinstance(node.targets[0], ast.Name):
+                self.graph_var = node.targets[0].id
 
-                # 提取状态类
-                if node.value.args:
-                    arg = node.value.args[0]
-                    if isinstance(arg, ast.Name):
-                        self.state_class = arg.id
+            # 提取状态类
+            if node.value.args:
+                arg = node.value.args[0]
+                if isinstance(arg, ast.Name):
+                    self.state_class = arg.id
 
     def _handle_call(self, node: ast.Call, line_no: int = 0) -> None:
         """处理函数调用"""
@@ -233,7 +232,7 @@ class LangGraphParser:
         # 路径映射
         path_map: dict[str, str] = {}
         if len(node.args) >= 3 and isinstance(node.args[2], ast.Dict):
-            for key, value in zip(node.args[2].keys, node.args[2].values):
+            for key, value in zip(node.args[2].keys, node.args[2].values, strict=False):
                 k = self._get_string_value(key) if key else None
                 v = self._get_string_value(value)
                 if k and v:

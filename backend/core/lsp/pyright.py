@@ -17,6 +17,15 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 尝试导入 jedi (可选依赖)
+try:
+    import jedi
+    JEDI_AVAILABLE = True
+except ImportError:
+    jedi = None  # type: ignore[assignment]
+    JEDI_AVAILABLE = False
+    logger.warning("jedi not installed, completions and hover unavailable")
+
 
 class PyrightService:
     """
@@ -52,19 +61,19 @@ class PyrightService:
             )
             stdout, _ = await process.communicate()
             version = stdout.decode().strip()
-            logger.info(f"Pyright initialized: {version}")
+            logger.info("Pyright initialized: %s", version)
             return {"status": "ok", "version": version}
-        except Exception as e:
-            logger.warning(f"Pyright not available: {e}")
+        except (FileNotFoundError, OSError, Exception) as e:
+            logger.warning("Pyright not available: %s", e)
             return {"status": "error", "message": str(e)}
 
-    async def shutdown(self) -> None:
+    async def shutdown(self) -> None:  # noqa: PLR6301
         """关闭服务"""
         self._initialized = False
 
     async def get_diagnostics(
         self,
-        file_path: str,
+        _file_path: str,
         content: str,
     ) -> list[dict[str, Any]]:
         """
@@ -80,14 +89,17 @@ class PyrightService:
         if not self._initialized:
             return []
 
-        # 写入临时文件
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(content)
-            temp_path = f.name
+        # 写入临时文件 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(content)
+                return f.name
+
+        temp_path = await asyncio.to_thread(create_temp_file)
 
         try:
             # 运行 Pyright
@@ -124,11 +136,11 @@ class PyrightService:
 
             return diagnostics
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Pyright timeout")
             return []
-        except Exception as e:
-            logger.error(f"Pyright error: {e}")
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("Pyright error: %s", e)
             return []
         finally:
             Path(temp_path).unlink(missing_ok=True)
@@ -143,11 +155,29 @@ class PyrightService:
         """
         获取代码补全
 
-        注意: 命令行 Pyright 不支持补全，这里返回空列表
-        完整的补全功能需要使用 LSP 协议
+        使用 jedi 库提供 Python 代码补全
         """
-        # TODO: 实现 LSP 客户端以获取补全
-        return []
+        if not JEDI_AVAILABLE:
+            return []
+
+        try:
+            script = jedi.Script(content, path=file_path)
+            # jedi 使用 1-based 行号
+            completions = script.complete(line, column)
+
+            return [
+                {
+                    "label": c.name,
+                    "kind": self._convert_completion_type(c.type),
+                    "detail": c.description,
+                    "documentation": c.docstring() if hasattr(c, "docstring") else None,
+                    "insertText": c.name,
+                }
+                for c in completions[:50]  # 限制最多 50 个补全
+            ]
+        except (AttributeError, ValueError, TypeError) as e:
+            logger.error("Completion error: %s", e)
+            return []
 
     async def get_hover(
         self,
@@ -159,11 +189,61 @@ class PyrightService:
         """
         获取悬停信息
 
-        注意: 命令行 Pyright 不支持悬停，这里返回 None
-        完整的悬停功能需要使用 LSP 协议
+        使用 jedi 库提供悬停信息
         """
-        # TODO: 实现 LSP 客户端以获取悬停
-        return None
+        if not JEDI_AVAILABLE:
+            return None
+
+        try:
+            script = jedi.Script(content, path=file_path)
+            # jedi 使用 1-based 行号
+            names = script.goto(line, column)
+
+            if not names:
+                # 尝试获取引用
+                names = script.infer(line, column)
+
+            if not names:
+                return None
+
+            name = names[0]
+            docstring = name.docstring() if hasattr(name, "docstring") else ""
+            type_hint = name.description if hasattr(name, "description") else ""
+
+            # 构建悬停内容 (Markdown 格式)
+            contents = []
+            if type_hint:
+                contents.append(f"```python\n{type_hint}\n```")
+            if docstring:
+                contents.append(docstring)
+
+            return {
+                "contents": "\n\n".join(contents) if contents else "No information available",
+                "range": {
+                    "startLine": line,
+                    "startColumn": column,
+                    "endLine": line,
+                    "endColumn": column + len(name.name) if hasattr(name, "name") else column,
+                },
+            }
+        except (AttributeError, ValueError, TypeError) as e:
+            logger.error("Hover error: %s", e)
+            return None
+
+    def _convert_completion_type(self, jedi_type: str) -> str:
+        """转换 jedi 补全类型到 Monaco 类型"""
+        mapping = {
+            "module": "module",
+            "class": "class",
+            "instance": "variable",
+            "function": "function",
+            "param": "variable",
+            "path": "file",
+            "keyword": "keyword",
+            "property": "property",
+            "statement": "snippet",
+        }
+        return mapping.get(jedi_type.lower(), "text")
 
     def _convert_severity(self, severity: str) -> str:
         """转换严重性级别"""

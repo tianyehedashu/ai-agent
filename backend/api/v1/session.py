@@ -8,8 +8,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
+from api.deps import get_current_user, get_session_service
+from api.errors import ACCESS_DENIED, SESSION_NOT_FOUND
 from models.user import User
+from services.session import SessionService
 
 router = APIRouter()
 
@@ -58,14 +60,12 @@ class MessageResponse(BaseModel):
 @router.get("/", response_model=list[SessionResponse])
 async def list_sessions(
     current_user: User = Depends(get_current_user),
+    session_service: SessionService = Depends(get_session_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     agent_id: str | None = None,
 ) -> list[SessionResponse]:
     """获取用户的会话列表"""
-    from services.session import SessionService
-
-    session_service = SessionService()
     sessions = await session_service.list_by_user(
         user_id=str(current_user.id),
         skip=skip,
@@ -79,11 +79,9 @@ async def list_sessions(
 async def create_session(
     data: SessionCreate,
     current_user: User = Depends(get_current_user),
+    session_service: SessionService = Depends(get_session_service),
 ) -> SessionResponse:
     """创建新会话"""
-    from services.session import SessionService
-
-    session_service = SessionService()
     session = await session_service.create(
         user_id=str(current_user.id),
         agent_id=data.agent_id,
@@ -96,23 +94,21 @@ async def create_session(
 async def get_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
+    session_service: SessionService = Depends(get_session_service),
 ) -> SessionResponse:
     """获取会话详情"""
-    from services.session import SessionService
-
-    session_service = SessionService()
     session = await session_service.get_by_id(session_id)
 
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=SESSION_NOT_FOUND,
         )
 
     if str(session.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     return SessionResponse.model_validate(session)
@@ -122,23 +118,21 @@ async def get_session(
 async def delete_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
+    session_service: SessionService = Depends(get_session_service),
 ) -> None:
     """删除会话"""
-    from services.session import SessionService
-
-    session_service = SessionService()
     session = await session_service.get_by_id(session_id)
 
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=SESSION_NOT_FOUND,
         )
 
     if str(session.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     await session_service.delete(session_id)
@@ -148,25 +142,23 @@ async def delete_session(
 async def get_session_messages(
     session_id: str,
     current_user: User = Depends(get_current_user),
+    session_service: SessionService = Depends(get_session_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[MessageResponse]:
     """获取会话的消息历史"""
-    from services.session import SessionService
-
-    session_service = SessionService()
     session = await session_service.get_by_id(session_id)
 
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=SESSION_NOT_FOUND,
         )
 
     if str(session.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     messages = await session_service.get_messages(session_id, skip=skip, limit=limit)

@@ -4,7 +4,6 @@ Logging Utilities - 日志工具
 
 import logging
 import sys
-from typing import Any
 
 from app.config import settings
 

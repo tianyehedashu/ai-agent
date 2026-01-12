@@ -12,27 +12,20 @@ Core Types - Agent 架构核心类型定义
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import (
-    TYPE_CHECKING,
     Any,
-    Awaitable,
-    Callable,
     Generic,
     Literal,
     Protocol,
-    Sequence,
     TypedDict,
     TypeVar,
 )
 
 from pydantic import BaseModel, ConfigDict, Field
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
 
 # ============================================================================
 # 基础枚举类型
@@ -396,17 +389,17 @@ class Result(Generic[T]):
     def unwrap_or(self, default: T) -> T:
         return self._value if self.is_ok and self._value is not None else default
 
-    def map(self, func: Callable[[T], T]) -> "Result[T]":
+    def map(self, func: Callable[[T], T]) -> Result[T]:
         if self.is_ok and self._value is not None:
             return Result.ok(func(self._value))
         return Result.err(self._error or "Unknown error")
 
     @classmethod
-    def ok(cls, value: T) -> "Result[T]":
+    def ok(cls, value: T) -> Result[T]:
         return cls(_value=value)
 
     @classmethod
-    def err(cls, error: str) -> "Result[T]":
+    def err(cls, error: str) -> Result[T]:
         return cls(_error=error)
 
 

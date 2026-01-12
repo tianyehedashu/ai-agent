@@ -1,0 +1,92 @@
+# GAIA 评估基准示例
+# 这是一个简化的 GAIA 格式示例
+# 完整的 GAIA 基准可以从官方仓库获取
+
+benchmark:
+  name: "GAIA (General AI Assistant)"
+  version: "1.0"
+  description: "Real-world AI assistant evaluation benchmark"
+  source: "https://github.com/gaia-benchmark/GAIA"
+
+questions:
+  # =====================================
+  # Simple 难度
+  # =====================================
+  - task_id: "gaia_001"
+    difficulty: "simple"
+    question: "What is the capital of France?"
+    final_answer: "Paris"
+    annotations:
+      requires_knowledge: true
+      requires_tools: false
+
+  - task_id: "gaia_002"
+    difficulty: "simple"
+    question: "Calculate 15 * 23"
+    final_answer: "345"
+    annotations:
+      requires_knowledge: false
+      requires_tools: false
+
+  # =====================================
+  # Medium 难度
+  # =====================================
+  - task_id: "gaia_003"
+    difficulty: "medium"
+    question: "What is the current population of Tokyo? Search online and provide the answer."
+    final_answer: null  # 动态答案，需要在线搜索
+    annotations:
+      requires_knowledge: false
+      requires_tools: true
+      required_tools: ["web_search"]
+
+  - task_id: "gaia_004"
+    difficulty: "medium"
+    question: |
+      I have a file at /tmp/data.csv with the following content:
+      name,age,city
+      Alice,30,New York
+      Bob,25,London
+      Charlie,35,Paris
+      
+      What is the average age of these people?
+    final_answer: "30"
+    file_paths:
+      - "/tmp/data.csv"
+    annotations:
+      requires_knowledge: false
+      requires_tools: true
+      required_tools: ["read_file"]
+
+  # =====================================
+  # Hard 难度
+  # =====================================
+  - task_id: "gaia_005"
+    difficulty: "hard"
+    question: |
+      I need to analyze a dataset. The file is at /tmp/sales.csv.
+      Please:
+      1. Read the file
+      2. Calculate the total sales
+      3. Find the product with the highest sales
+      4. Write a summary report to /tmp/report.txt
+    final_answer: null  # 需要验证输出文件
+    file_paths:
+      - "/tmp/sales.csv"
+    annotations:
+      requires_knowledge: false
+      requires_tools: true
+      required_tools: ["read_file", "write_file"]
+      multi_step: true
+
+  - task_id: "gaia_006"
+    difficulty: "hard"
+    question: |
+      Research the latest developments in quantum computing from 2024.
+      Summarize the top 3 breakthroughs and write them to a file.
+    final_answer: null  # 需要验证输出文件内容
+    annotations:
+      requires_knowledge: false
+      requires_tools: true
+      required_tools: ["web_search", "write_file"]
+      multi_step: true

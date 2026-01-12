@@ -8,7 +8,6 @@ LSP Proxy - LSP 代理服务
 """
 
 import asyncio
-import json
 from typing import Any
 
 from core.lsp.pyright import PyrightService

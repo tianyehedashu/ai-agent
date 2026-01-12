@@ -2,14 +2,15 @@
 System API - 系统接口
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.deps import get_current_user_optional
+from api.deps import get_current_user_optional, get_stats_service
 from app.config import settings
 from models.user import User
+from services.stats import StatsService
 
 router = APIRouter()
 
@@ -52,18 +53,16 @@ async def health_check() -> HealthResponse:
         service=settings.app_name,
         version=__import__("app").__version__,
         environment=settings.app_env,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
     current_user: User | None = Depends(get_current_user_optional),
+    stats_service: StatsService = Depends(get_stats_service),
 ) -> StatsResponse:
     """获取系统统计信息"""
-    from services.stats import StatsService
-
-    stats_service = StatsService()
     stats = await stats_service.get_system_stats()
     return StatsResponse(**stats)
 

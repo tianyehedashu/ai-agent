@@ -10,7 +10,7 @@ from services.user import UserService
 @pytest.mark.asyncio
 async def test_create_user() -> None:
     """测试创建用户"""
-    service = UserService()
+    UserService()
 
     # TODO: 添加数据库 mock
     # user = await service.create(

@@ -7,8 +7,8 @@ Code Quality - 代码质量保证系统
 - 自动修复
 """
 
-from core.quality.validator import CodeValidator
 from core.quality.architecture import ArchitectureValidator
 from core.quality.fixer import CodeFixer
+from core.quality.validator import CodeValidator
 
-__all__ = ["CodeValidator", "ArchitectureValidator", "CodeFixer"]
+__all__ = ["ArchitectureValidator", "CodeFixer", "CodeValidator"]

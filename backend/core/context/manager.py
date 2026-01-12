@@ -9,10 +9,9 @@ Context Manager - 上下文管理器实现
 
 from typing import Any
 
-from app.config import settings
-from core.types import AgentConfig, Message, MessageRole
+from core.types import AgentConfig, Message
 from utils.logging import get_logger
-from utils.tokens import count_messages_tokens, count_tokens, truncate_to_token_limit
+from utils.tokens import count_tokens, truncate_to_token_limit
 
 logger = get_logger(__name__)
 

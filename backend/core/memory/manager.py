@@ -7,12 +7,12 @@ Memory Manager - 记忆管理器
 - 记忆更新和删除
 """
 
+import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from core.llm.gateway import LLMGateway
@@ -92,8 +92,6 @@ class MemoryManager:
             )
 
             # 解析响应
-            import json
-
             content = response.content or "[]"
             # 提取 JSON 部分
             if "```json" in content:
@@ -116,17 +114,17 @@ class MemoryManager:
                     user_id=user_id,
                     content=item.get("content", ""),
                     memory_type=item.get("type", "fact"),
-                    importance=item.get("importance", 5),
+                    importance=float(item.get("importance", 5)),
                     source_session_id=session_id,
                     metadata={"extracted": True},
                 )
                 memories.append(memory)
 
-            logger.info(f"Extracted {len(memories)} memories from session {session_id}")
+            logger.info("Extracted %d memories from session %s", len(memories), session_id)
             return memories
 
-        except Exception as e:
-            logger.error(f"Memory extraction error: {e}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.error("Memory extraction error: %s", e, exc_info=True)
             return []
 
     async def create(
@@ -134,7 +132,7 @@ class MemoryManager:
         user_id: str,
         content: str,
         memory_type: str = "fact",
-        importance: int = 5,
+        importance: float = 5.0,
         source_session_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Memory:
@@ -159,8 +157,8 @@ class MemoryManager:
                 id=memory_id,
                 user_id=uuid.UUID(user_id),
                 content=content,
-                memory_type=memory_type,
-                importance=importance,
+                type=memory_type,
+                importance=float(importance),
                 source_session_id=uuid.UUID(source_session_id) if source_session_id else None,
                 metadata=metadata or {},
             )
@@ -173,7 +171,7 @@ class MemoryManager:
         if self.vector_store:
             await self.vector_store.upsert(
                 collection="memories",
-                id=str(memory_id),
+                point_id=str(memory_id),
                 text=content,
                 metadata={
                     "user_id": user_id,
@@ -188,7 +186,7 @@ class MemoryManager:
         self,
         memory_id: str,
         content: str | None = None,
-        importance: int | None = None,
+        importance: float | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Memory | None:
         """更新记忆"""
@@ -204,11 +202,11 @@ class MemoryManager:
             if content is not None:
                 memory.content = content
             if importance is not None:
-                memory.importance = importance
+                memory.importance = float(importance)
             if metadata is not None:
                 memory.metadata = {**memory.metadata, **metadata}
 
-            memory.updated_at = datetime.utcnow()
+            memory.updated_at = datetime.now(timezone.utc)
             memory.access_count += 1
 
             await session.commit()
@@ -218,11 +216,11 @@ class MemoryManager:
             if self.vector_store and content:
                 await self.vector_store.upsert(
                     collection="memories",
-                    id=str(memory_id),
+                    point_id=str(memory_id),
                     text=content,
                     metadata={
                         "user_id": str(memory.user_id),
-                        "memory_type": memory.memory_type,
+                        "memory_type": memory.type,
                         "importance": memory.importance,
                     },
                 )
@@ -247,7 +245,7 @@ class MemoryManager:
             if self.vector_store:
                 await self.vector_store.delete(
                     collection="memories",
-                    ids=[memory_id],
+                    point_ids=[memory_id],
                 )
 
             return True
@@ -271,7 +269,7 @@ class MemoryManager:
             query = select(Memory).where(Memory.user_id == uuid.UUID(user_id))
 
             if memory_type:
-                query = query.where(Memory.memory_type == memory_type)
+                query = query.where(Memory.type == memory_type)
 
             query = query.order_by(Memory.importance.desc(), Memory.updated_at.desc())
             query = query.limit(limit)

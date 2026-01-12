@@ -14,6 +14,47 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 尝试导入可选依赖
+try:
+    import openai  # type: ignore[reportMissingImports]
+    OPENAI_AVAILABLE = True
+except ImportError:
+    openai = None  # type: ignore[assignment]
+    OPENAI_AVAILABLE = False
+    logger.warning("openai not installed, embeddings will not work")
+
+try:
+    from qdrant_client import AsyncQdrantClient  # type: ignore[reportMissingImports]
+    from qdrant_client.models import (  # type: ignore[reportMissingImports]
+        Distance,
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PointIdsList,
+        PointStruct,
+        VectorParams,
+    )
+    QDRANT_AVAILABLE = True
+except ImportError:
+    AsyncQdrantClient = None  # type: ignore[misc, assignment]
+    Distance = None  # type: ignore[misc, assignment]
+    FieldCondition = None  # type: ignore[misc, assignment]
+    Filter = None  # type: ignore[misc, assignment]
+    MatchValue = None  # type: ignore[misc, assignment]
+    PointIdsList = None  # type: ignore[misc, assignment]
+    PointStruct = None  # type: ignore[misc, assignment]
+    VectorParams = None  # type: ignore[misc, assignment]
+    QDRANT_AVAILABLE = False
+    logger.warning("qdrant-client not installed, QdrantStore will not work")
+
+try:
+    import chromadb  # type: ignore[reportMissingImports]
+    CHROMADB_AVAILABLE = True
+except ImportError:
+    chromadb = None  # type: ignore[assignment]
+    CHROMADB_AVAILABLE = False
+    logger.warning("chromadb not installed, ChromaStore will not work")
+
 
 class VectorStore(ABC):
     """向量存储抽象基类"""
@@ -25,24 +66,24 @@ class VectorStore(ABC):
         dimension: int = 1536,
     ) -> None:
         """创建集合"""
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def delete_collection(self, name: str) -> None:
         """删除集合"""
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def upsert(
         self,
         collection: str,
-        id: str,
+        point_id: str,
         text: str,
         metadata: dict[str, Any] | None = None,
         vector: list[float] | None = None,
     ) -> None:
         """插入或更新向量"""
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def search(
@@ -50,19 +91,19 @@ class VectorStore(ABC):
         collection: str,
         query: str,
         limit: int = 10,
-        filter: dict[str, Any] | None = None,
+        query_filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """搜索相似向量"""
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def delete(
         self,
         collection: str,
-        ids: list[str],
+        point_ids: list[str],
     ) -> None:
         """删除向量"""
-        ...
+        raise NotImplementedError
 
 
 class QdrantStore(VectorStore):
@@ -73,6 +114,8 @@ class QdrantStore(VectorStore):
         url: str | None = None,
         api_key: str | None = None,
     ) -> None:
+        if not QDRANT_AVAILABLE:
+            raise ImportError("qdrant-client is required for QdrantStore")
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self._client = None
@@ -80,8 +123,6 @@ class QdrantStore(VectorStore):
     async def _get_client(self):
         """获取 Qdrant 客户端"""
         if self._client is None:
-            from qdrant_client import AsyncQdrantClient
-
             self._client = AsyncQdrantClient(
                 url=self.url,
                 api_key=self.api_key,
@@ -94,8 +135,6 @@ class QdrantStore(VectorStore):
         dimension: int = 1536,
     ) -> None:
         """创建集合"""
-        from qdrant_client.models import Distance, VectorParams
-
         client = await self._get_client()
 
         # 检查集合是否存在
@@ -110,25 +149,23 @@ class QdrantStore(VectorStore):
                 distance=Distance.COSINE,
             ),
         )
-        logger.info(f"Created collection: {name}")
+        logger.info("Created collection: %s", name)
 
     async def delete_collection(self, name: str) -> None:
         """删除集合"""
         client = await self._get_client()
         await client.delete_collection(collection_name=name)
-        logger.info(f"Deleted collection: {name}")
+        logger.info("Deleted collection: %s", name)
 
     async def upsert(
         self,
         collection: str,
-        id: str,
+        point_id: str,
         text: str,
         metadata: dict[str, Any] | None = None,
         vector: list[float] | None = None,
     ) -> None:
         """插入或更新向量"""
-        from qdrant_client.models import PointStruct
-
         client = await self._get_client()
 
         # 生成向量
@@ -142,7 +179,7 @@ class QdrantStore(VectorStore):
             collection_name=collection,
             points=[
                 PointStruct(
-                    id=id,
+                    id=point_id,
                     vector=vector,
                     payload=payload,
                 )
@@ -154,11 +191,9 @@ class QdrantStore(VectorStore):
         collection: str,
         query: str,
         limit: int = 10,
-        filter: dict[str, Any] | None = None,
+        query_filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """搜索相似向量"""
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-
         client = await self._get_client()
 
         # 生成查询向量
@@ -166,10 +201,10 @@ class QdrantStore(VectorStore):
 
         # 构建过滤条件
         qdrant_filter = None
-        if filter:
+        if query_filter:
             conditions = [
                 FieldCondition(key=k, match=MatchValue(value=v))
-                for k, v in filter.items()
+                for k, v in query_filter.items()
             ]
             qdrant_filter = Filter(must=conditions)
 
@@ -194,21 +229,19 @@ class QdrantStore(VectorStore):
     async def delete(
         self,
         collection: str,
-        ids: list[str],
+        point_ids: list[str],
     ) -> None:
         """删除向量"""
-        from qdrant_client.models import PointIdsList
-
         client = await self._get_client()
         await client.delete(
             collection_name=collection,
-            points_selector=PointIdsList(points=ids),
+            points_selector=PointIdsList(points=point_ids),
         )
 
     async def _get_embedding(self, text: str) -> list[float]:
         """获取文本嵌入"""
-        import openai
-
+        if not OPENAI_AVAILABLE:
+            raise ImportError("openai is required for embeddings")
         client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
         response = await client.embeddings.create(
             model="text-embedding-3-small",
@@ -221,6 +254,8 @@ class ChromaStore(VectorStore):
     """Chroma 向量存储 (开发环境)"""
 
     def __init__(self, persist_directory: str | None = None) -> None:
+        if not CHROMADB_AVAILABLE:
+            raise ImportError("chromadb is required for ChromaStore")
         self.persist_directory = persist_directory or "./chroma_data"
         self._client = None
         self._collections: dict[str, Any] = {}
@@ -228,8 +263,6 @@ class ChromaStore(VectorStore):
     def _get_client(self):
         """获取 Chroma 客户端"""
         if self._client is None:
-            import chromadb
-
             self._client = chromadb.PersistentClient(path=self.persist_directory)
         return self._client
 
@@ -241,7 +274,7 @@ class ChromaStore(VectorStore):
         """创建集合"""
         client = self._get_client()
         self._collections[name] = client.get_or_create_collection(name=name)
-        logger.info(f"Created collection: {name}")
+        logger.info("Created collection: %s", name)
 
     async def delete_collection(self, name: str) -> None:
         """删除集合"""
@@ -249,12 +282,12 @@ class ChromaStore(VectorStore):
         client.delete_collection(name=name)
         if name in self._collections:
             del self._collections[name]
-        logger.info(f"Deleted collection: {name}")
+        logger.info("Deleted collection: %s", name)
 
     async def upsert(
         self,
         collection: str,
-        id: str,
+        point_id: str,
         text: str,
         metadata: dict[str, Any] | None = None,
         vector: list[float] | None = None,
@@ -267,7 +300,7 @@ class ChromaStore(VectorStore):
 
         # Chroma 会自动生成嵌入
         coll.upsert(
-            ids=[id],
+            ids=[point_id],
             documents=[text],
             metadatas=[metadata] if metadata else None,
             embeddings=[vector] if vector else None,
@@ -278,7 +311,7 @@ class ChromaStore(VectorStore):
         collection: str,
         query: str,
         limit: int = 10,
-        filter: dict[str, Any] | None = None,
+        query_filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """搜索相似向量"""
         if collection not in self._collections:
@@ -289,14 +322,14 @@ class ChromaStore(VectorStore):
         results = coll.query(
             query_texts=[query],
             n_results=limit,
-            where=filter,
+            where=query_filter,
         )
 
         items = []
         if results["ids"] and results["ids"][0]:
-            for i, id in enumerate(results["ids"][0]):
+            for i, point_id in enumerate(results["ids"][0]):
                 items.append({
-                    "id": id,
+                    "id": point_id,
                     "score": 1 - results["distances"][0][i] if results["distances"] else 0,
                     "text": results["documents"][0][i] if results["documents"] else "",
                     **(results["metadatas"][0][i] if results["metadatas"] else {}),
@@ -307,14 +340,14 @@ class ChromaStore(VectorStore):
     async def delete(
         self,
         collection: str,
-        ids: list[str],
+        point_ids: list[str],
     ) -> None:
         """删除向量"""
         if collection not in self._collections:
             return
 
         coll = self._collections[collection]
-        coll.delete(ids=ids)
+        coll.delete(ids=point_ids)
 
 
 def get_vector_store() -> VectorStore:
@@ -322,3 +355,7 @@ def get_vector_store() -> VectorStore:
     if settings.debug:
         return ChromaStore()
     return QdrantStore()
+
+
+# 别名，用于兼容性
+get_vector_client = get_vector_store

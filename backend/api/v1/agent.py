@@ -8,8 +8,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
+from api.deps import get_agent_service, get_current_user
+from api.errors import ACCESS_DENIED, AGENT_NOT_FOUND
 from models.user import User
+from services.agent import AgentService
 
 router = APIRouter()
 
@@ -63,13 +65,11 @@ class AgentResponse(BaseModel):
 @router.get("/", response_model=list[AgentResponse])
 async def list_agents(
     current_user: User = Depends(get_current_user),
+    agent_service: AgentService = Depends(get_agent_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[AgentResponse]:
     """获取用户的 Agent 列表"""
-    from services.agent import AgentService
-
-    agent_service = AgentService()
     agents = await agent_service.list_by_user(str(current_user.id), skip=skip, limit=limit)
     return [AgentResponse.model_validate(agent) for agent in agents]
 
@@ -78,11 +78,9 @@ async def list_agents(
 async def create_agent(
     data: AgentCreate,
     current_user: User = Depends(get_current_user),
+    agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """创建新 Agent"""
-    from services.agent import AgentService
-
-    agent_service = AgentService()
     agent = await agent_service.create(
         user_id=str(current_user.id),
         **data.model_dump(),
@@ -94,24 +92,22 @@ async def create_agent(
 async def get_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
+    agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """获取 Agent 详情"""
-    from services.agent import AgentService
-
-    agent_service = AgentService()
     agent = await agent_service.get_by_id(agent_id)
 
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found",
+            detail=AGENT_NOT_FOUND,
         )
 
     # 检查权限
     if str(agent.user_id) != str(current_user.id) and not agent.is_public:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     return AgentResponse.model_validate(agent)
@@ -122,24 +118,22 @@ async def update_agent(
     agent_id: str,
     data: AgentUpdate,
     current_user: User = Depends(get_current_user),
+    agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """更新 Agent"""
-    from services.agent import AgentService
-
-    agent_service = AgentService()
     agent = await agent_service.get_by_id(agent_id)
 
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found",
+            detail=AGENT_NOT_FOUND,
         )
 
     # 检查权限
     if str(agent.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     # 更新
@@ -153,24 +147,22 @@ async def update_agent(
 async def delete_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user),
+    agent_service: AgentService = Depends(get_agent_service),
 ) -> None:
     """删除 Agent"""
-    from services.agent import AgentService
-
-    agent_service = AgentService()
     agent = await agent_service.get_by_id(agent_id)
 
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found",
+            detail=AGENT_NOT_FOUND,
         )
 
     # 检查权限
     if str(agent.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=ACCESS_DENIED,
         )
 
     await agent_service.delete(agent_id)

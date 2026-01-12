@@ -8,8 +8,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
+from api.deps import get_current_user, get_memory_service
 from models.user import User
+from services.memory import MemoryService
 
 router = APIRouter()
 
@@ -50,14 +51,12 @@ class MemoryCreate(BaseModel):
 @router.get("/", response_model=list[MemoryItem])
 async def list_memories(
     current_user: User = Depends(get_current_user),
+    memory_service: MemoryService = Depends(get_memory_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     type_filter: str | None = None,
 ) -> list[MemoryItem]:
     """获取记忆列表"""
-    from services.memory import MemoryService
-
-    memory_service = MemoryService()
     memories = await memory_service.list_by_user(
         user_id=str(current_user.id),
         skip=skip,
@@ -71,11 +70,9 @@ async def list_memories(
 async def search_memories(
     request: MemorySearch,
     current_user: User = Depends(get_current_user),
+    memory_service: MemoryService = Depends(get_memory_service),
 ) -> list[MemoryItem]:
     """搜索记忆"""
-    from services.memory import MemoryService
-
-    memory_service = MemoryService()
     memories = await memory_service.search(
         user_id=str(current_user.id),
         query=request.query,
@@ -89,11 +86,9 @@ async def search_memories(
 async def create_memory(
     data: MemoryCreate,
     current_user: User = Depends(get_current_user),
+    memory_service: MemoryService = Depends(get_memory_service),
 ) -> MemoryItem:
     """手动创建记忆"""
-    from services.memory import MemoryService
-
-    memory_service = MemoryService()
     memory = await memory_service.create(
         user_id=str(current_user.id),
         **data.model_dump(),
@@ -105,11 +100,9 @@ async def create_memory(
 async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
+    memory_service: MemoryService = Depends(get_memory_service),
 ) -> None:
     """删除记忆"""
-    from services.memory import MemoryService
-
-    memory_service = MemoryService()
     memory = await memory_service.get_by_id(memory_id)
 
     if not memory:
@@ -139,12 +132,9 @@ class ImportKnowledge(BaseModel):
 async def import_knowledge(
     data: ImportKnowledge,
     current_user: User = Depends(get_current_user),
+    memory_service: MemoryService = Depends(get_memory_service),
 ) -> dict:
     """导入知识到记忆库"""
-    from services.memory import MemoryService
-
-    memory_service = MemoryService()
-
     # 异步处理
     task_id = await memory_service.import_knowledge(
         user_id=str(current_user.id),

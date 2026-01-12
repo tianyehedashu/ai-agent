@@ -13,6 +13,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.deps import get_current_user
+
+# 默认文件路径常量
+DEFAULT_FILE_PATH = "code.py"
 from core.lsp.proxy import LSPProxy
 from core.quality.fixer import CodeFixer
 from core.quality.validator import CodeValidator
@@ -24,7 +27,7 @@ class ValidateRequest(BaseModel):
     """验证请求"""
 
     code: str
-    file_path: str = "code.py"
+    file_path: str = DEFAULT_FILE_PATH
     check_syntax: bool = True
     check_types: bool = True
     check_lint: bool = True
@@ -42,14 +45,14 @@ class FormatRequest(BaseModel):
     """格式化请求"""
 
     code: str
-    file_path: str = "code.py"
+    file_path: str = DEFAULT_FILE_PATH
 
 
 class DiagnosticsRequest(BaseModel):
     """诊断请求"""
 
     code: str
-    file_path: str = "code.py"
+    file_path: str = DEFAULT_FILE_PATH
 
 
 @router.post("/validate")
@@ -143,3 +146,69 @@ async def get_diagnostics(
     diagnostics = await lsp.get_diagnostics(request.file_path, request.code)
 
     return diagnostics
+
+
+class CompletionRequest(BaseModel):
+    """代码补全请求"""
+
+    code: str
+    language: str = "python"
+    line: int
+    column: int
+    file_path: str = DEFAULT_FILE_PATH
+
+
+class HoverRequest(BaseModel):
+    """悬停信息请求"""
+
+    code: str
+    language: str = "python"
+    line: int
+    column: int
+    file_path: str = DEFAULT_FILE_PATH
+
+
+@router.post("/completion")
+async def get_completion(
+    request: CompletionRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    获取代码补全建议
+
+    返回基于当前位置的补全列表
+    """
+    lsp = LSPProxy()
+    completions = await lsp.get_completions(
+        file_path=request.file_path,
+        content=request.code,
+        line=request.line,
+        column=request.column,
+    )
+
+    return {
+        "data": completions,
+    }
+
+
+@router.post("/hover")
+async def get_hover(
+    request: HoverRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    获取悬停信息
+
+    返回光标位置的类型信息和文档
+    """
+    lsp = LSPProxy()
+    hover_info = await lsp.get_hover(
+        file_path=request.file_path,
+        content=request.code,
+        line=request.line,
+        column=request.column,
+    )
+
+    return {
+        "data": hover_info,
+    }

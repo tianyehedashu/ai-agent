@@ -1,5 +1,7 @@
-import { KeyboardEvent, useRef } from 'react'
+import { type KeyboardEvent, useRef } from 'react'
+
 import { Send, Paperclip, Mic } from 'lucide-react'
+
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -16,10 +18,10 @@ export default function ChatInput({
   onChange,
   onSend,
   isLoading,
-}: ChatInputProps) {
+}: ChatInputProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()
@@ -39,10 +41,12 @@ export default function ChatInput({
           <Textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              onChange(e.target.value)
+            }}
             onKeyDown={handleKeyDown}
             placeholder="输入消息..."
-            className="min-h-[40px] max-h-[200px] flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="max-h-[200px] min-h-[40px] flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
             rows={1}
             disabled={isLoading}
           />
@@ -57,10 +61,7 @@ export default function ChatInput({
             size="icon"
             onClick={onSend}
             disabled={!value.trim() || isLoading}
-            className={cn(
-              "flex-shrink-0",
-              value.trim() && !isLoading && "animate-pulse-glow"
-            )}
+            className={cn('flex-shrink-0', value.trim() && !isLoading && 'animate-pulse-glow')}
           >
             <Send className="h-5 w-5" />
           </Button>

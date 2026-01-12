@@ -157,8 +157,8 @@ async def get_checkpoint_state(
     try:
         state = await checkpoint_service.load(checkpoint_id)
         return state.model_dump(mode="json")
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Checkpoint not found")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail="Checkpoint not found") from e
 
 
 @router.post("/checkpoints/diff")
@@ -174,4 +174,4 @@ async def diff_checkpoints(
             request.checkpoint_id_2,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e

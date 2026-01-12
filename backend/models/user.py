@@ -2,14 +2,16 @@
 User Model - 用户模型
 """
 
-import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import BaseModel
+
+# SQLAlchemy relationship 常量
+CASCADE_DELETE_ORPHAN = "all, delete-orphan"
 
 if TYPE_CHECKING:
     from models.agent import Agent
@@ -55,17 +57,17 @@ class User(BaseModel):
     agents: Mapped[list["Agent"]] = relationship(
         "Agent",
         back_populates="user",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
     sessions: Mapped[list["Session"]] = relationship(
         "Session",
         back_populates="user",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
     memories: Mapped[list["Memory"]] = relationship(
         "Memory",
         back_populates="user",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
 
     def __repr__(self) -> str:

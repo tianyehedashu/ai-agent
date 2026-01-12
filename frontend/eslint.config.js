@@ -100,5 +100,12 @@ export default tseslint.config(
       'prefer-const': 'error',
       'no-var': 'error',
     },
+  },
+  // UI 组件库例外规则
+  {
+    files: ['src/components/ui/**/*.tsx', 'src/components/theme-provider.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   }
 )

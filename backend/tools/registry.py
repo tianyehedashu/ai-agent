@@ -76,5 +76,5 @@ class ToolRegistry:
                 tool_call_id="",
                 success=False,
                 output="",
-                error=f"Tool execution error: {str(e)}",
+                error=f"Tool execution error: {e!s}",
             )

@@ -10,10 +10,9 @@ Agent Engine - Agent 执行引擎实现
 6. 循环或结束
 """
 
-import asyncio
 import time
-import uuid
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from core.context.manager import ContextManager
 from core.engine.checkpointer import Checkpointer

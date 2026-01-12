@@ -1,8 +1,12 @@
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+
+import { agentApi } from '@/api/agent'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -21,8 +25,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -31,7 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { agentApi } from '@/api/agent'
+import { Textarea } from '@/components/ui/textarea'
 import type { Agent, AgentCreateInput } from '@/types'
 
 const formSchema = z.object({
@@ -64,7 +66,7 @@ export default function AgentDialog({
   open,
   onOpenChange,
   agent,
-}: AgentDialogProps) {
+}: AgentDialogProps): React.JSX.Element {
   const queryClient = useQueryClient()
   const isEditing = !!agent
 
@@ -85,7 +87,7 @@ export default function AgentDialog({
     if (agent) {
       form.reset({
         name: agent.name,
-        description: agent.description || '',
+        description: agent.description ?? '',
         systemPrompt: agent.systemPrompt,
         model: agent.model,
         temperature: agent.temperature,
@@ -108,21 +110,23 @@ export default function AgentDialog({
   const createMutation = useMutation({
     mutationFn: (data: AgentCreateInput) => agentApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      void queryClient.invalidateQueries({ queryKey: ['agents'] })
       onOpenChange(false)
     },
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<AgentCreateInput>) =>
-      agentApi.update(agent!.id, data),
+    mutationFn: (data: Partial<AgentCreateInput>) => {
+      if (!agent) throw new Error('Agent is required')
+      return agentApi.update(agent.id, data)
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      void queryClient.invalidateQueries({ queryKey: ['agents'] })
       onOpenChange(false)
     },
   })
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = (values: FormValues): void => {
     if (isEditing) {
       updateMutation.mutate(values)
     } else {
@@ -134,12 +138,10 @@ export default function AgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditing ? '编辑 Agent' : '创建 Agent'}</DialogTitle>
-          <DialogDescription>
-            配置您的 AI Agent 的基本信息和参数
-          </DialogDescription>
+          <DialogDescription>配置您的 AI Agent 的基本信息和参数</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -165,10 +167,7 @@ export default function AgentDialog({
                 <FormItem>
                   <FormLabel>描述</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder="描述这个 Agent 的用途..."
-                      {...field}
-                    />
+                    <Textarea placeholder="描述这个 Agent 的用途..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -188,9 +187,7 @@ export default function AgentDialog({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    定义 Agent 的行为和角色
-                  </FormDescription>
+                  <FormDescription>定义 Agent 的行为和角色</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -233,12 +230,12 @@ export default function AgentDialog({
                       max={2}
                       step={0.1}
                       value={[field.value]}
-                      onValueChange={([value]) => field.onChange(value)}
+                      onValueChange={([value]) => {
+                        field.onChange(value)
+                      }}
                     />
                   </FormControl>
-                  <FormDescription>
-                    控制输出的随机性，0 最确定，2 最随机
-                  </FormDescription>
+                  <FormDescription>控制输出的随机性，0 最确定，2 最随机</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -255,7 +252,9 @@ export default function AgentDialog({
                       <Input
                         type="number"
                         {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        onChange={(e) => {
+                          field.onChange(Number(e.target.value))
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -273,7 +272,9 @@ export default function AgentDialog({
                       <Input
                         type="number"
                         {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        onChange={(e) => {
+                          field.onChange(Number(e.target.value))
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -286,7 +287,9 @@ export default function AgentDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  onOpenChange(false)
+                }}
               >
                 取消
               </Button>

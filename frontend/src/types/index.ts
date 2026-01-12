@@ -92,6 +92,7 @@ export type ChatEventType =
   | 'interrupt'
   | 'done'
   | 'error'
+  | 'terminated'
 
 export interface ChatEvent {
   type: ChatEventType
@@ -146,6 +147,9 @@ export interface Checkpoint {
   sessionId: string
   step: number
   createdAt: string
+  iteration?: number
+  totalTokens?: number
+  completed?: boolean
 }
 
 export interface CheckpointDiff {

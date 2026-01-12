@@ -2,11 +2,10 @@
 File Tools - 文件操作工具
 """
 
-import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.config import settings
 from core.types import ToolCategory, ToolResult

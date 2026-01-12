@@ -4,8 +4,8 @@ AI Agent Backend - Main Application
 FastAPI 应用入口点
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

@@ -10,7 +10,6 @@ User API - 用户认证 API
 - POST /auth/change-password: 修改密码
 """
 
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
@@ -169,11 +168,11 @@ async def refresh_token(
     """刷新 Token"""
     try:
         return await user_service.refresh_token(request.refresh_token)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
-        )
+        ) from e
 
 
 @router.get("/me", response_model=UserResponse)

@@ -1,0 +1,175 @@
+# ==============================================================================
+# GitHub Actions - SonarCloud Analysis
+# ==============================================================================
+# 使用 SonarCloud 进行代码质量检测
+# 
+# GitHub Secrets 配置:
+#   - SONAR_TOKEN: SonarCloud 访问令牌
+# ==============================================================================
+
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches: [main, develop, master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+jobs:
+  # ============================================================================
+  # Backend Analysis (Python)
+  # ============================================================================
+  backend-sonarcloud:
+    name: Backend - SonarCloud Analysis
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整 git 历史以进行准确分析
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=. --cov-report=xml:coverage.xml --junitxml=test-results.xml -q
+        continue-on-error: true
+
+      - name: Fix coverage paths for SonarCloud
+        run: |
+          # 修复覆盖率报告中的路径，确保 SonarCloud 能正确识别
+          sed -i 's|<source>.*</source>|<source>/github/workspace/backend</source>|g' coverage.xml || true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: backend
+          args: >
+            -Dsonar.organization=${{ github.repository_owner }}
+            -Dsonar.projectKey=${{ github.repository_owner }}_ai-agent-backend
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ============================================================================
+  # Frontend Analysis (TypeScript/React)
+  # ============================================================================
+  frontend-sonarcloud:
+    name: Frontend - SonarCloud Analysis
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        continue-on-error: true
+
+      - name: Run ESLint
+        run: npm run lint -- -f json -o eslint-report.json || true
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: frontend
+          args: >
+            -Dsonar.organization=${{ github.repository_owner }}
+            -Dsonar.projectKey=${{ github.repository_owner }}_ai-agent-frontend
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ============================================================================
+  # Monorepo Analysis (Optional - 分析整个项目)
+  # ============================================================================
+  full-project-sonarcloud:
+    name: Full Project - SonarCloud Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest --cov=. --cov-report=xml:coverage.xml -q || true
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test:coverage || true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          args: >
+            -Dsonar.organization=${{ github.repository_owner }}
+            -Dsonar.projectKey=${{ github.repository_owner }}_ai-agent
+            -Dsonar.sources=backend,frontend/src
+            -Dsonar.tests=backend/tests,frontend/src
+            -Dsonar.test.inclusions=**/*test*.py,**/*.test.ts,**/*.test.tsx
+            -Dsonar.python.coverage.reportPaths=backend/coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

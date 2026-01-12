@@ -2,7 +2,7 @@
 Stats Service - 统计服务
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -33,7 +33,7 @@ class StatsService:
             total_messages = await session.scalar(select(func.count(Message.id)))
 
             # 今日活跃会话数
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             active_sessions_today = await session.scalar(
                 select(func.count(Session.id)).where(
                     func.date(Session.updated_at) == today

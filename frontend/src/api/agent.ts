@@ -2,8 +2,9 @@
  * Agent API
  */
 
-import { apiClient } from './client'
 import type { Agent, AgentCreateInput, PaginatedResponse } from '@/types'
+
+import { apiClient } from './client'
 
 export const agentApi = {
   /**
@@ -40,7 +41,7 @@ export const agentApi = {
   /**
    * 删除 Agent
    */
-  delete(id: string): Promise<void> {
-    return apiClient.delete<void>(`/api/v1/agents/${id}`)
+  async delete(id: string): Promise<void> {
+    await apiClient.delete<Record<string, never>>(`/api/v1/agents/${id}`)
   },
 }

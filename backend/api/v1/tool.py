@@ -2,13 +2,15 @@
 Tool API - 工具管理接口
 """
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_user
-from models.user import User
+from core.types import ToolCategory
+from tools.registry import ToolRegistry
 
 router = APIRouter()
 
@@ -38,21 +40,34 @@ class ToolTestResponse(BaseModel):
     duration_ms: int
 
 
+def _get_registry() -> ToolRegistry:
+    """获取工具注册表"""
+    return ToolRegistry()
+
+
 @router.get("/", response_model=list[ToolDefinition])
 async def list_tools(
-    current_user: User = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
     category: str | None = None,
 ) -> list[ToolDefinition]:
     """获取可用工具列表"""
-    from core.tool.registry import tool_registry
+    registry = _get_registry()
 
-    tools = tool_registry.list_tools(category=category)
+    if category:
+        try:
+            cat = ToolCategory(category)
+            tools = registry.list_by_category(cat)
+        except ValueError:
+            tools = []
+    else:
+        tools = registry.list_all()
+
     return [
         ToolDefinition(
             name=t.name,
             description=t.description,
             parameters=t.parameters,
-            category=t.category,
+            category=t.category.value if hasattr(t.category, "value") else str(t.category),
             requires_confirmation=t.requires_confirmation,
         )
         for t in tools
@@ -62,12 +77,12 @@ async def list_tools(
 @router.get("/{tool_name}", response_model=ToolDefinition)
 async def get_tool(
     tool_name: str,
-    current_user: User = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> ToolDefinition:
     """获取工具详情"""
-    from core.tool.registry import tool_registry
+    registry = _get_registry()
+    tool = registry.get(tool_name)
 
-    tool = tool_registry.get(tool_name)
     if not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -78,7 +93,7 @@ async def get_tool(
         name=tool.name,
         description=tool.description,
         parameters=tool.parameters,
-        category=tool.category,
+        category=tool.category.value if hasattr(tool.category, "value") else str(tool.category),
         requires_confirmation=tool.requires_confirmation,
     )
 
@@ -87,28 +102,22 @@ async def get_tool(
 async def test_tool(
     tool_name: str,
     request: ToolTestRequest,
-    current_user: User = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> ToolTestResponse:
     """测试工具执行"""
-    import time
+    registry = _get_registry()
+    tool = registry.get(tool_name)
 
-    from core.tool.executor import ToolExecutor
-    from core.tool.registry import tool_registry
-
-    tool = tool_registry.get(tool_name)
     if not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tool '{tool_name}' not found",
         )
 
-    executor = ToolExecutor(registry=tool_registry)
-
     start_time = time.time()
-    result = await executor.execute(
+    result = await registry.execute(
         name=tool_name,
-        arguments=request.arguments,
-        session_id=f"test_{current_user.id}",
+        **request.arguments,
     )
     duration_ms = int((time.time() - start_time) * 1000)
 

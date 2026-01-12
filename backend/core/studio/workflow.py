@@ -5,14 +5,14 @@ Workflow Service - 工作流服务
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.studio.codegen import LangGraphCodeGen
-from core.studio.parser import LangGraphParser, WorkflowDefinition
+from core.studio.parser import LangGraphParser
 from db.database import get_async_session
 from models.workflow import Workflow, WorkflowVersion
 from utils.logging import get_logger
@@ -130,7 +130,7 @@ class WorkflowService:
             if config is not None:
                 workflow.config = config
 
-            workflow.updated_at = datetime.utcnow()
+            workflow.updated_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(workflow)
@@ -267,7 +267,7 @@ class WorkflowService:
             # 恢复代码和配置
             workflow.code = wf_version.code
             workflow.config = wf_version.config
-            workflow.updated_at = datetime.utcnow()
+            workflow.updated_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(workflow)

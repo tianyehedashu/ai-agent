@@ -2,8 +2,9 @@
  * Session API
  */
 
-import { apiClient } from './client'
 import type { Session, Message, PaginatedResponse } from '@/types'
+
+import { apiClient } from './client'
 
 export const sessionApi = {
   /**
@@ -40,8 +41,8 @@ export const sessionApi = {
   /**
    * 删除会话
    */
-  delete(id: string): Promise<void> {
-    return apiClient.delete<void>(`/api/v1/sessions/${id}`)
+  async delete(id: string): Promise<void> {
+    await apiClient.delete<Record<string, never>>(`/api/v1/sessions/${id}`)
   },
 
   /**

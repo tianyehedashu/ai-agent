@@ -9,10 +9,10 @@ Sandbox Executor - 沙箱执行器
 
 import asyncio
 import tempfile
+import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -97,20 +97,23 @@ class DockerExecutor(SandboxExecutor):
         """
         config = config or SandboxConfig()
 
-        # 创建临时文件存放代码
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(code)
-            code_file = f.name
+        # 创建临时文件存放代码 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(code)
+                return f.name
+
+        code_file = await asyncio.to_thread(create_temp_file)
 
         try:
             # 构建 Docker 命令
             cmd = self._build_docker_command(
                 image=self.python_image,
-                command=f"python /code/script.py",
+                command="python /code/script.py",
                 volumes={code_file: "/code/script.py"},
                 config=config,
             )
@@ -191,11 +194,9 @@ class DockerExecutor(SandboxExecutor):
     async def _run_container(
         self,
         cmd: list[str],
-        timeout: int,
+        timeout: int,  # noqa: ASYNC109 - 使用 asyncio.wait_for 实现超时
     ) -> ExecutionResult:
         """运行 Docker 容器"""
-        import time
-
         start_time = time.time()
 
         try:
@@ -210,7 +211,7 @@ class DockerExecutor(SandboxExecutor):
                     process.communicate(),
                     timeout=timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
                 return ExecutionResult(
@@ -257,18 +258,20 @@ class LocalExecutor(SandboxExecutor):
         config: SandboxConfig | None = None,
     ) -> ExecutionResult:
         """执行 Python 代码 (本地)"""
-        import time
-
         config = config or SandboxConfig()
         start_time = time.time()
 
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(code)
-            code_file = f.name
+        # 创建临时文件 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(code)
+                return f.name
+
+        code_file = await asyncio.to_thread(create_temp_file)
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -283,7 +286,7 @@ class LocalExecutor(SandboxExecutor):
                     process.communicate(),
                     timeout=config.timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
                 return ExecutionResult(
@@ -312,8 +315,6 @@ class LocalExecutor(SandboxExecutor):
         config: SandboxConfig | None = None,
     ) -> ExecutionResult:
         """执行 Shell 命令 (本地)"""
-        import time
-
         config = config or SandboxConfig()
         start_time = time.time()
 
@@ -330,7 +331,7 @@ class LocalExecutor(SandboxExecutor):
                     process.communicate(),
                     timeout=config.timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
                 return ExecutionResult(

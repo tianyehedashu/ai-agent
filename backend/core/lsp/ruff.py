@@ -64,7 +64,7 @@ class RuffService:
 
     async def get_diagnostics(
         self,
-        file_path: str,
+        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
         content: str,
     ) -> list[dict[str, Any]]:
         """
@@ -80,14 +80,17 @@ class RuffService:
         if not self._initialized:
             return []
 
-        # 写入临时文件
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(content)
-            temp_path = f.name
+        # 写入临时文件 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(content)
+                return f.name
+
+        temp_path = await asyncio.to_thread(create_temp_file)
 
         try:
             # 运行 Ruff check
@@ -126,7 +129,7 @@ class RuffService:
 
             return diagnostics
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Ruff timeout")
             return []
         except Exception as e:
@@ -137,7 +140,7 @@ class RuffService:
 
     async def format_code(
         self,
-        file_path: str,
+        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
         content: str,
     ) -> str:
         """
@@ -153,14 +156,17 @@ class RuffService:
         if not self._initialized:
             return content
 
-        # 写入临时文件
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(content)
-            temp_path = f.name
+        # 写入临时文件 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(content)
+                return f.name
+
+        temp_path = await asyncio.to_thread(create_temp_file)
 
         try:
             # 运行 Ruff format
@@ -178,9 +184,9 @@ class RuffService:
             )
 
             # 读取格式化后的内容
-            return Path(temp_path).read_text()
+            return Path(temp_path).read_text(encoding="utf-8")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Ruff format timeout")
             return content
         except Exception as e:
@@ -191,7 +197,7 @@ class RuffService:
 
     async def fix_all(
         self,
-        file_path: str,
+        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
         content: str,
     ) -> str:
         """
@@ -207,14 +213,17 @@ class RuffService:
         if not self._initialized:
             return content
 
-        # 写入临时文件
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-        ) as f:
-            f.write(content)
-            temp_path = f.name
+        # 写入临时文件 (使用 asyncio.to_thread 包装同步操作)
+        def create_temp_file() -> str:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".py",
+                delete=False,
+            ) as f:
+                f.write(content)
+                return f.name
+
+        temp_path = await asyncio.to_thread(create_temp_file)
 
         try:
             # 运行 Ruff check --fix
@@ -233,9 +242,9 @@ class RuffService:
             )
 
             # 读取修复后的内容
-            return Path(temp_path).read_text()
+            return Path(temp_path).read_text(encoding="utf-8")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Ruff fix timeout")
             return content
         except Exception as e:

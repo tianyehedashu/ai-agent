@@ -1,0 +1,1532 @@
+{
+  "timestamp": "2026-01-12 21:24:21",
+  "organization": "tianyehedashu",
+  "projects": [
+    {
+      "name": "Backend (Python)",
+      "key": "tianyehedashu_ai-agent-backend",
+      "language": "python",
+      "metrics": {
+        "bugs": 11,
+        "vulnerabilities": 1,
+        "code_smells": 55,
+        "coverage": 0.0,
+        "duplicated_lines_density": 0.8,
+        "ncloc": 6804,
+        "reliability_rating": "C",
+        "security_rating": "D",
+        "sqale_rating": "A",
+        "alert_status": "N/A"
+      },
+      "issues": [
+        {
+          "key": "AZuyXdnpVbfxDd8-PNaI",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "api/deps.py",
+          "line": 82,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdjrVbfxDd8-PNZ9",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/agent.py",
+          "line": 102,
+          "message": "Define a constant instead of duplicating this literal \"Agent not found\" 3 times.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdjrVbfxDd8-PNZ-",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/agent.py",
+          "line": 109,
+          "message": "Define a constant instead of duplicating this literal \"Access denied\" 3 times.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdj9VbfxDd8-PNaB",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "api/v1/evaluation.py",
+          "line": 69,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdj9VbfxDd8-PNaC",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "api/v1/evaluation.py",
+          "line": 75,
+          "message": "Remove this commented out code.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdj9VbfxDd8-PNaD",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "api/v1/evaluation.py",
+          "line": 75,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdj9VbfxDd8-PNaE",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "api/v1/evaluation.py",
+          "line": 120,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdj9VbfxDd8-PNaF",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "api/v1/evaluation.py",
+          "line": 123,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdjZVbfxDd8-PNZ8",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/quality.py",
+          "line": 27,
+          "message": "Define a constant instead of duplicating this literal \"code.py\" 5 times.",
+          "status": "OPEN",
+          "effort": "10min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdjzVbfxDd8-PNZ_",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/session.py",
+          "line": 104,
+          "message": "Define a constant instead of duplicating this literal \"Session not found\" 3 times.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdjzVbfxDd8-PNaA",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/session.py",
+          "line": 110,
+          "message": "Define a constant instead of duplicating this literal \"Access denied\" 3 times.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdkHVbfxDd8-PNaG",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/system.py",
+          "line": 56,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdo7VbfxDd8-PNaV",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/engine/agent.py",
+          "line": 67,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 30 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "20min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdqxVbfxDd8-PNa2",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/llm/gateway.py",
+          "line": 143,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 31 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "21min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdqxVbfxDd8-PNa3",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/llm/gateway.py",
+          "line": 232,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpQVbfxDd8-PNad",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/pyright.py",
+          "line": 66,
+          "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+          "status": "OPEN",
+          "effort": "1min",
+          "tags": [
+            "bad-practice",
+            "error-handling",
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdpQVbfxDd8-PNae",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/pyright.py",
+          "line": 70,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpQVbfxDd8-PNaf",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/lsp/pyright.py",
+          "line": 93,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdpQVbfxDd8-PNag",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/pyright.py",
+          "line": 145,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpQVbfxDd8-PNah",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/pyright.py",
+          "line": 179,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNaW",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/ruff.py",
+          "line": 61,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNaX",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/ruff.py",
+          "line": 67,
+          "message": "Remove the unused function parameter \"file_path\".",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNaY",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/lsp/ruff.py",
+          "line": 84,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNaZ",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/ruff.py",
+          "line": 140,
+          "message": "Remove the unused function parameter \"file_path\".",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNaa",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/lsp/ruff.py",
+          "line": 157,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNab",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/lsp/ruff.py",
+          "line": 194,
+          "message": "Remove the unused function parameter \"file_path\".",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdpFVbfxDd8-PNac",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/lsp/ruff.py",
+          "line": 211,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdqVVbfxDd8-PNax",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/memory/manager.py",
+          "line": 126,
+          "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+          "status": "OPEN",
+          "effort": "1min",
+          "tags": [
+            "bad-practice",
+            "error-handling",
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdqAVbfxDd8-PNas",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/quality/architecture.py",
+          "line": 110,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdqAVbfxDd8-PNat",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/quality/architecture.py",
+          "line": 200,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 29 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "19min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdqfVbfxDd8-PNay",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/sandbox/executor.py",
+          "line": 101,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdqfVbfxDd8-PNaz",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/sandbox/executor.py",
+          "line": 194,
+          "message": "Remove this \"timeout\" parameter and use a timeout context manager instead.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdqfVbfxDd8-PNa0",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "core/sandbox/executor.py",
+          "line": 261,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdpsVbfxDd8-PNao",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/studio/codegen.py",
+          "line": 181,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "8min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdpsVbfxDd8-PNap",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/studio/codegen.py",
+          "line": 348,
+          "message": "Extract this nested conditional expression into an independent statement.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "confusing"
+          ]
+        },
+        {
+          "key": "AZuyXdpjVbfxDd8-PNam",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/studio/parser.py",
+          "line": 220,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdpjVbfxDd8-PNan",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/studio/parser.py",
+          "line": 301,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 21 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "11min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdpZVbfxDd8-PNai",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/studio/workflow.py",
+          "line": 133,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdpZVbfxDd8-PNaj",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/studio/workflow.py",
+          "line": 156,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpZVbfxDd8-PNak",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/studio/workflow.py",
+          "line": 172,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdpZVbfxDd8-PNal",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/studio/workflow.py",
+          "line": 270,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdrHVbfxDd8-PNa5",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "db/database.py",
+          "line": 32,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdn0VbfxDd8-PNaJ",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "models/user.py",
+          "line": 57,
+          "message": "Define a constant instead of duplicating this literal \"all, delete-orphan\" 3 times.",
+          "status": "OPEN",
+          "effort": "6min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdoHVbfxDd8-PNaL",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "services/chat.py",
+          "line": 112,
+          "message": "Remove the unused function parameter \"session_id\".",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdoHVbfxDd8-PNaM",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "services/chat.py",
+          "line": 116,
+          "message": "Remove the unused function parameter \"user_id\".",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdoHVbfxDd8-PNaN",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "services/chat.py",
+          "line": 159,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdoHVbfxDd8-PNaO",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "services/chat.py",
+          "line": 162,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdodVbfxDd8-PNaR",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "services/stats.py",
+          "line": 36,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdrZVbfxDd8-PNa7",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "tools/code_tools.py",
+          "line": 56,
+          "message": "Use an async subprocess call in this async function instead of a synchronous one.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdrZVbfxDd8-PNa8",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "tools/code_tools.py",
+          "line": 107,
+          "message": "Use an asynchronous file API instead of synchronous tempfile.NamedTemporaryFile() in this async function.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdrZVbfxDd8-PNa9",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "tools/code_tools.py",
+          "line": 116,
+          "message": "Use an async subprocess call in this async function instead of a synchronous one.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdrZVbfxDd8-PNa-",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "tools/code_tools.py",
+          "line": 190,
+          "message": "Use an async subprocess call in this async function instead of a synchronous one.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdrRVbfxDd8-PNa6",
+          "severity": "MAJOR",
+          "type": "BUG",
+          "component": "tools/search_tools.py",
+          "line": 155,
+          "message": "Use an async subprocess call in this async function instead of a synchronous one.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "anyio",
+            "async",
+            "asyncio",
+            "trio"
+          ]
+        },
+        {
+          "key": "AZuyXdkRVbfxDd8-PNaH",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "api/v1/studio.py",
+          "line": 134,
+          "message": "Define a constant instead of duplicating this literal \"Workflow not found\" 4 times.",
+          "status": "OPEN",
+          "effort": "8min",
+          "tags": [
+            "design"
+          ]
+        },
+        {
+          "key": "AZuyXdqKVbfxDd8-PNau",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/auth/jwt.py",
+          "line": 49,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdqKVbfxDd8-PNav",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/auth/jwt.py",
+          "line": 86,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdqKVbfxDd8-PNaw",
+          "severity": "CRITICAL",
+          "type": "VULNERABILITY",
+          "component": "core/auth/jwt.py",
+          "line": 159,
+          "message": "Don't use a JWT token without verifying its signature.",
+          "status": "OPEN",
+          "effort": "30min",
+          "tags": [
+            "cwe",
+            "privacy"
+          ]
+        },
+        {
+          "key": "AZuyXdowVbfxDd8-PNaU",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/engine/checkpointer.py",
+          "line": 152,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdp2VbfxDd8-PNaq",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "core/quality/validator.py",
+          "line": 79,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "12min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyXdp2VbfxDd8-PNar",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "core/quality/validator.py",
+          "line": 179,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdqnVbfxDd8-PNa1",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "core/sandbox/__init__.py",
+          "line": 1,
+          "message": "Remove this commented out code.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdq8VbfxDd8-PNa4",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "db/redis.py",
+          "line": 47,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdn-VbfxDd8-PNaK",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "services/checkpoint.py",
+          "line": 36,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        },
+        {
+          "key": "AZuyXdolVbfxDd8-PNaS",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "services/memory.py",
+          "line": 121,
+          "message": "Remove this commented out code.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "unused"
+          ]
+        },
+        {
+          "key": "AZuyXdomVbfxDd8-PNaT",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "services/memory.py",
+          "line": 121,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyXdoUVbfxDd8-PNaP",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "services/user.py",
+          "line": 107,
+          "message": "Use asynchronous features in this function or remove the `async` keyword.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "async"
+          ]
+        },
+        {
+          "key": "AZuyXdoUVbfxDd8-PNaQ",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "services/user.py",
+          "line": 109,
+          "message": "Don't use `datetime.datetime.utcnow` to create this datetime object.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "datetime",
+            "pitfall"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Frontend (TypeScript)",
+      "key": "tianyehedashu_ai-agent-frontend",
+      "language": "typescript",
+      "metrics": {
+        "bugs": 4,
+        "vulnerabilities": 0,
+        "code_smells": 37,
+        "coverage": 0.0,
+        "duplicated_lines_density": 0.0,
+        "ncloc": 4989,
+        "reliability_rating": "B",
+        "security_rating": "A",
+        "sqale_rating": "A",
+        "alert_status": "N/A"
+      },
+      "issues": [
+        {
+          "key": "AZuyYNniqJ_OtHwteFYk",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/api/client.ts",
+          "line": 8,
+          "message": "Replace this union type with a type alias.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "proficiency"
+          ]
+        },
+        {
+          "key": "AZuyYNniqJ_OtHwteFYl",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/api/client.ts",
+          "line": 12,
+          "message": "Member 'baseUrl' is never reassigned; mark it as `readonly`.",
+          "status": "OPEN",
+          "effort": "2min",
+          "tags": [
+            "confusing",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNniqJ_OtHwteFYm",
+          "severity": "CRITICAL",
+          "type": "CODE_SMELL",
+          "component": "src/api/client.ts",
+          "line": 104,
+          "message": "Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.",
+          "status": "OPEN",
+          "effort": "10min",
+          "tags": [
+            "brain-overload"
+          ]
+        },
+        {
+          "key": "AZuyYNnEqJ_OtHwteFYV",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/interrupt-dialog.tsx",
+          "line": 33,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYW",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 48,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYX",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 185,
+          "message": "Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYY",
+          "severity": "MINOR",
+          "type": "BUG",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 185,
+          "message": "Visible, non-interactive elements with click handlers must have at least one keyboard listener.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYZ",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 288,
+          "message": "A fragment with only one child is redundant.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYa",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 293,
+          "message": "Extract this nested ternary operation into an independent statement.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "confusing"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYb",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 294,
+          "message": "A fragment with only one child is redundant.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYc",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 303,
+          "message": "A fragment with only one child is redundant.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYd",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 354,
+          "message": "Do not use Array index in keys",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "jsx",
+            "performance",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYe",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 370,
+          "message": "Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYf",
+          "severity": "MINOR",
+          "type": "BUG",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 370,
+          "message": "Visible, non-interactive elements with click handlers must have at least one keyboard listener.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnOqJ_OtHwteFYg",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/time-travel-debugger.tsx",
+          "line": 378,
+          "message": "Extract this nested ternary operation into an independent statement.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "confusing"
+          ]
+        },
+        {
+          "key": "AZuyYNnVqJ_OtHwteFYh",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/tool-call-card.tsx",
+          "line": 36,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNnVqJ_OtHwteFYi",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/chat/tool-call-card.tsx",
+          "line": 54,
+          "message": "Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNnVqJ_OtHwteFYj",
+          "severity": "MINOR",
+          "type": "BUG",
+          "component": "src/components/chat/tool-call-card.tsx",
+          "line": 54,
+          "message": "Visible, non-interactive elements with click handlers must have at least one keyboard listener.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmzqJ_OtHwteFYQ",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/layout/index.tsx",
+          "line": 10,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNm7qJ_OtHwteFYR",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/theme-provider.tsx",
+          "line": 23,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNm7qJ_OtHwteFYS",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/theme-provider.tsx",
+          "line": 34,
+          "message": "Prefer `globalThis` over `window`.",
+          "status": "OPEN",
+          "effort": "2min",
+          "tags": [
+            "es2020",
+            "portability"
+          ]
+        },
+        {
+          "key": "AZuyYNm7qJ_OtHwteFYT",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/theme-provider.tsx",
+          "line": 39,
+          "message": "Prefer `globalThis` over `window`.",
+          "status": "OPEN",
+          "effort": "2min",
+          "tags": [
+            "es2020",
+            "portability"
+          ]
+        },
+        {
+          "key": "AZuyYNm7qJ_OtHwteFYU",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/theme-provider.tsx",
+          "line": 50,
+          "message": "The 'value' object passed as the value prop to the Context provider changes every render. To fix this consider wrapping it in a useMemo hook.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "jsx",
+            "performance",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmqqJ_OtHwteFYP",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/ui/card.tsx",
+          "line": 25,
+          "message": "Headings must have content and the content must be accessible by a screen reader.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmhqJ_OtHwteFYM",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/ui/form.tsx",
+          "line": 38,
+          "message": "The object passed as the value prop to the Context provider changes every render. To fix this consider wrapping it in a useMemo hook.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "jsx",
+            "performance",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmhqJ_OtHwteFYN",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/ui/form.tsx",
+          "line": 100,
+          "message": "The object passed as the value prop to the Context provider changes every render. To fix this consider wrapping it in a useMemo hook.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "jsx",
+            "performance",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmhqJ_OtHwteFYO",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/components/ui/form.tsx",
+          "line": 135,
+          "message": "Unexpected negated condition.",
+          "status": "OPEN",
+          "effort": "2min",
+          "tags": [
+            "readability"
+          ]
+        },
+        {
+          "key": "AZuyYNmCqJ_OtHwteFYF",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/agents/components/agent-dialog.tsx",
+          "line": 65,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNmCqJ_OtHwteFYG",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/agents/components/agent-dialog.tsx",
+          "line": 297,
+          "message": "Extract this nested ternary operation into an independent statement.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "confusing"
+          ]
+        },
+        {
+          "key": "AZuyYNl4qJ_OtHwteFYD",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/agents/index.tsx",
+          "line": 86,
+          "message": "Extract this nested ternary operation into an independent statement.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "confusing"
+          ]
+        },
+        {
+          "key": "AZuyYNl4qJ_OtHwteFYE",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/agents/index.tsx",
+          "line": 124,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNlPqJ_OtHwteFX-",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/chat/components/chat-input.tsx",
+          "line": 16,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNlmqJ_OtHwteFX_",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/chat/components/chat-messages.tsx",
+          "line": 19,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNlmqJ_OtHwteFYA",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/chat/components/chat-messages.tsx",
+          "line": 93,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNluqJ_OtHwteFYB",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/chat/components/chat-sidebar.tsx",
+          "line": 57,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNluqJ_OtHwteFYC",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "src/pages/chat/components/chat-sidebar.tsx",
+          "line": 70,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyYNmXqJ_OtHwteFYL",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/settings/index.tsx",
+          "line": 128,
+          "message": "Mark the props of the component as read-only.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "react",
+            "type-dependent"
+          ]
+        },
+        {
+          "key": "AZuyYNmOqJ_OtHwteFYH",
+          "severity": "INFO",
+          "type": "CODE_SMELL",
+          "component": "src/pages/studio/index.tsx",
+          "line": 236,
+          "message": "Complete the task associated to this \"TODO\" comment.",
+          "status": "OPEN",
+          "effort": "0min",
+          "tags": [
+            "cwe"
+          ]
+        },
+        {
+          "key": "AZuyYNmOqJ_OtHwteFYI",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/studio/index.tsx",
+          "line": 464,
+          "message": "Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmOqJ_OtHwteFYJ",
+          "severity": "MINOR",
+          "type": "BUG",
+          "component": "src/pages/studio/index.tsx",
+          "line": 464,
+          "message": "Visible, non-interactive elements with click handlers must have at least one keyboard listener.",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "accessibility",
+            "react"
+          ]
+        },
+        {
+          "key": "AZuyYNmOqJ_OtHwteFYK",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "component": "src/pages/studio/index.tsx",
+          "line": 465,
+          "message": "Do not use Array index in keys",
+          "status": "OPEN",
+          "effort": "5min",
+          "tags": [
+            "jsx",
+            "performance",
+            "react"
+          ]
+        }
+      ]
+    }
+  ]
+}

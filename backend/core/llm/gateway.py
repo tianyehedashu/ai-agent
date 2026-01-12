@@ -4,15 +4,17 @@ LLM Gateway - LLM 网关实现
 使用 LiteLLM 统一多模型接口
 """
 
-import asyncio
-from typing import Any, AsyncGenerator
+import json
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import litellm
+import tiktoken
 from litellm import acompletion
 from pydantic import BaseModel
 
 from app.config import settings
-from core.types import Message, MessageRole, ToolCall
+from core.types import Message, ToolCall
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -186,16 +188,13 @@ class LLMGateway:
         if "claude" in model.lower():
             if settings.anthropic_api_key:
                 return {"api_key": settings.anthropic_api_key.get_secret_value()}
-        elif "gpt" in model.lower():
-            if settings.openai_api_key:
-                return {"api_key": settings.openai_api_key.get_secret_value()}
+        elif "gpt" in model.lower() and settings.openai_api_key:
+            return {"api_key": settings.openai_api_key.get_secret_value()}
 
         return {}
 
     def _parse_arguments(self, arguments: str) -> dict[str, Any]:
         """解析工具参数"""
-        import json
-
         try:
             return json.loads(arguments)
         except json.JSONDecodeError:
@@ -232,8 +231,6 @@ class LLMGateway:
 
     async def count_tokens(self, text: str, model: str | None = None) -> int:
         """计算 token 数量"""
-        import tiktoken
-
         model = model or settings.default_model
 
         try:

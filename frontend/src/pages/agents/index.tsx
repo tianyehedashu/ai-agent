@@ -1,6 +1,10 @@
 import { useState } from 'react'
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Bot, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+
+import { agentApi } from '@/api/agent'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -9,12 +13,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
-import { agentApi } from '@/api/agent'
 import type { Agent } from '@/types'
+
 import AgentDialog from './components/agent-dialog'
 
-export default function AgentsPage() {
+export default function AgentsPage(): React.JSX.Element {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const queryClient = useQueryClient()
@@ -27,38 +30,40 @@ export default function AgentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => agentApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      void queryClient.invalidateQueries({ queryKey: ['agents'] })
     },
   })
 
-  const agents = agentsData?.items || []
+  const agents = agentsData?.items ?? []
 
-  const handleEdit = (agent: Agent) => {
+  const handleEdit = (agent: Agent): void => {
     setEditingAgent(agent)
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async (agent: Agent) => {
+  const handleDelete = (agent: Agent): void => {
     if (confirm(`确定要删除 Agent "${agent.name}" 吗？`)) {
-      deleteMutation.mutate(agent.id)
+      void deleteMutation.mutateAsync(agent.id)
     }
   }
 
-  const handleDialogClose = () => {
+  const handleDialogClose = (): void => {
     setIsDialogOpen(false)
     setEditingAgent(null)
   }
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Agents</h1>
-          <p className="text-muted-foreground">
-            管理您的 AI Agents
-          </p>
+          <p className="text-muted-foreground">管理您的 AI Agents</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button
+          onClick={() => {
+            setIsDialogOpen(true)
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           创建 Agent
         </Button>
@@ -69,11 +74,11 @@ export default function AgentsPage() {
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardHeader>
-                <div className="h-6 bg-muted rounded w-1/2" />
-                <div className="h-4 bg-muted rounded w-3/4 mt-2" />
+                <div className="h-6 w-1/2 rounded bg-muted" />
+                <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
               </CardHeader>
               <CardContent>
-                <div className="h-4 bg-muted rounded w-full" />
+                <div className="h-4 w-full rounded bg-muted" />
               </CardContent>
             </Card>
           ))}
@@ -81,12 +86,14 @@ export default function AgentsPage() {
       ) : agents.length === 0 ? (
         <Card className="p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <Bot className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">暂无 Agent</h3>
-            <p className="text-muted-foreground mb-4">
-              创建您的第一个 AI Agent 来开始使用
-            </p>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Bot className="mb-4 h-16 w-16 text-muted-foreground/50" />
+            <h3 className="mb-2 text-lg font-semibold">暂无 Agent</h3>
+            <p className="mb-4 text-muted-foreground">创建您的第一个 AI Agent 来开始使用</p>
+            <Button
+              onClick={() => {
+                setIsDialogOpen(true)
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               创建 Agent
             </Button>
@@ -98,18 +105,18 @@ export default function AgentsPage() {
             <AgentCard
               key={agent.id}
               agent={agent}
-              onEdit={() => handleEdit(agent)}
-              onDelete={() => handleDelete(agent)}
+              onEdit={() => {
+                handleEdit(agent)
+              }}
+              onDelete={() => {
+                handleDelete(agent)
+              }}
             />
           ))}
         </div>
       )}
 
-      <AgentDialog
-        open={isDialogOpen}
-        onOpenChange={handleDialogClose}
-        agent={editingAgent}
-      />
+      <AgentDialog open={isDialogOpen} onOpenChange={handleDialogClose} agent={editingAgent} />
     </div>
   )
 }
@@ -122,7 +129,7 @@ function AgentCard({
   agent: Agent
   onEdit: () => void
   onDelete: () => void
-}) {
+}): React.JSX.Element {
   return (
     <Card className="group relative">
       <CardHeader>
@@ -133,9 +140,7 @@ function AgentCard({
             </div>
             <div>
               <CardTitle className="text-lg">{agent.name}</CardTitle>
-              <CardDescription className="text-xs">
-                {agent.model}
-              </CardDescription>
+              <CardDescription className="text-xs">{agent.model}</CardDescription>
             </div>
           </div>
           <DropdownMenu>
@@ -158,8 +163,8 @@ function AgentCard({
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-          {agent.description || '暂无描述'}
+        <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
+          {agent.description ?? '暂无描述'}
         </p>
         <div className="flex flex-wrap gap-1">
           {agent.tools.slice(0, 3).map((tool) => (

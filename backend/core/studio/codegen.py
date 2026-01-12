@@ -7,7 +7,6 @@ LangGraph Code Generator - 代码生成器
 from typing import Any
 
 from core.studio.parser import (
-    ConditionalEdge,
     EdgeDefinition,
     NodeDefinition,
     WorkflowDefinition,
@@ -155,7 +154,7 @@ class LangGraphCodeGen:
         # 条件边
         for cond in workflow.conditional_edges:
             lines.append("")
-            lines.append(f"graph.add_conditional_edges(")
+            lines.append("graph.add_conditional_edges(")
             lines.append(f'{self.indent}"{cond.source}",')
             lines.append(f"{self.indent}{cond.condition_func},")
             lines.append(f"{self.indent}{{")
@@ -344,7 +343,7 @@ class LangGraphCodeGen:
 
         # 找入口点 (没有入边的节点)
         targets = {e.target for e in edge_defs}
-        sources = {e.source for e in edge_defs}
+        {e.source for e in edge_defs}
         entry_points = [n.id for n in node_defs if n.id not in targets]
         entry_point = entry_points[0] if entry_points else (node_defs[0].id if node_defs else None)
 

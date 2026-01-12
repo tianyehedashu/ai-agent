@@ -2,7 +2,7 @@
 Code Tools - 代码操作工具
 """
 
-import subprocess
+import asyncio
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -53,33 +53,38 @@ class RunShellTool(BaseTool):
         try:
             cwd = params.cwd or settings.work_dir
 
-            result = subprocess.run(
+            process = await asyncio.create_subprocess_shell(
                 params.command,
-                shell=True,
                 cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=params.timeout,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            output = result.stdout
-            if result.stderr:
-                output += f"\nSTDERR:\n{result.stderr}"
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=params.timeout,
+                )
+            except TimeoutError:
+                process.kill()
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error=f"Command timed out after {params.timeout} seconds",
+                )
+
+            output = stdout.decode()
+            if stderr:
+                output += f"\nSTDERR:\n{stderr.decode()}"
 
             return ToolResult(
                 tool_call_id="",
-                success=result.returncode == 0,
+                success=process.returncode == 0,
                 output=output.strip(),
-                error=f"Exit code: {result.returncode}" if result.returncode != 0 else None,
+                error=f"Exit code: {process.returncode}" if process.returncode != 0 else None,
             )
-        except subprocess.TimeoutExpired:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=f"Command timed out after {params.timeout} seconds",
-            )
-        except Exception as e:
+        except (OSError, ValueError, TypeError) as e:
             return ToolResult(
                 tool_call_id="",
                 success=False,
@@ -102,45 +107,55 @@ class RunPythonTool(BaseTool):
         params = RunPythonParams(**kwargs)
 
         try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".py",
-                delete=False,
-            ) as f:
-                f.write(params.code)
-                temp_path = f.name
+            # 创建临时文件 (使用 asyncio.to_thread 包装同步操作)
+            def create_temp_file() -> str:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".py",
+                    delete=False,
+                ) as f:
+                    f.write(params.code)
+                    return f.name
+
+            temp_path = await asyncio.to_thread(create_temp_file)
 
             try:
-                result = subprocess.run(
-                    ["python", temp_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=params.timeout,
+                process = await asyncio.create_subprocess_exec(
+                    "python",
+                    temp_path,
                     cwd=settings.work_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
 
-                output = result.stdout
-                if result.stderr:
-                    output += f"\nSTDERR:\n{result.stderr}"
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=params.timeout,
+                    )
+                except TimeoutError:
+                    process.kill()
+                    return ToolResult(
+                        tool_call_id="",
+                        success=False,
+                        output="",
+                        error=f"Execution timed out after {params.timeout} seconds",
+                    )
+
+                output = stdout.decode()
+                if stderr:
+                    output += f"\nSTDERR:\n{stderr.decode()}"
 
                 return ToolResult(
                     tool_call_id="",
-                    success=result.returncode == 0,
+                    success=process.returncode == 0,
                     output=output.strip(),
-                    error=f"Exit code: {result.returncode}" if result.returncode != 0 else None,
+                    error=f"Exit code: {process.returncode}" if process.returncode != 0 else None,
                 )
             finally:
-                Path(temp_path).unlink()
+                await asyncio.to_thread(Path(temp_path).unlink)
 
-        except subprocess.TimeoutExpired:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=f"Execution timed out after {params.timeout} seconds",
-            )
-        except Exception as e:
+        except (OSError, ValueError, TypeError, FileNotFoundError) as e:
             return ToolResult(
                 tool_call_id="",
                 success=False,
@@ -185,14 +200,27 @@ class SearchCodeTool(BaseTool):
                 str(search_path),
             ]
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if result.returncode == 1 and not result.stdout:
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=30,
+                )
+            except TimeoutError:
+                process.kill()
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error="Search timed out",
+                )
+
+            if process.returncode == 1 and not stdout:
                 return ToolResult(
                     tool_call_id="",
                     success=True,
@@ -202,16 +230,16 @@ class SearchCodeTool(BaseTool):
             return ToolResult(
                 tool_call_id="",
                 success=True,
-                output=result.stdout.strip(),
+                output=stdout.decode().strip(),
             )
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
                 error="Search timed out",
             )
-        except Exception as e:
+        except (OSError, ValueError, TypeError, FileNotFoundError) as e:
             return ToolResult(
                 tool_call_id="",
                 success=False,

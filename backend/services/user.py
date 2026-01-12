@@ -3,7 +3,7 @@ User Service - 用户服务
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
@@ -106,7 +106,7 @@ class UserService:
 
     async def create_token(self, user: User) -> TokenPair:
         """创建 Token"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=settings.jwt_expire_hours)
 
         payload = {
