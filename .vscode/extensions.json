@@ -1,0 +1,25 @@
+{
+  // ============================================================================
+  // 推荐扩展 - 确保编辑器与项目 lint 配置一致
+  // ============================================================================
+  "recommendations": [
+    // Python 核心扩展
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+
+    // Ruff - 快速 linting 和格式化（与项目 Makefile 一致）
+    "charliermarsh.ruff",
+
+    // Pylint - 深度代码分析（与项目 Makefile 一致）
+    "ms-python.pylint",
+
+    // 其他有用的扩展
+    "ms-python.black-formatter",
+    "ms-python.isort"
+  ],
+  "unwantedRecommendations": [
+    // 避免使用冲突的 linter
+    "ms-python.flake8",
+    "ms-python.mypy-type-checker"
+  ]
+}

@@ -2,8 +2,8 @@
 Agent Model - Agent 模型
 """
 
-import uuid
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID

@@ -139,15 +139,15 @@ class ToolAccuracyEvaluator:
             return 1.0
 
         # 类型匹配但值不同
-        if type(expected) == type(actual):
+        if type(expected) is type(actual):
             # 字符串相似度
             if isinstance(expected, str):
                 return self._string_similarity(expected, actual)
             # 数值接近度
-            if isinstance(expected, (int, float)):
+            if isinstance(expected, int | float):
                 return self._numeric_similarity(expected, actual)
             # 列表/字典相似度
-            if isinstance(expected, (list, dict)):
+            if isinstance(expected, list | dict):
                 return 0.5  # 部分匹配
 
         return 0.0

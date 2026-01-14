@@ -4,9 +4,10 @@
 从 YAML 文件加载基准测试用例
 """
 
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 def load_benchmark(file_path: str | Path) -> dict[str, Any]:
@@ -23,7 +24,7 @@ def load_benchmark(file_path: str | Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Benchmark file not found: {file_path}")
 
-    with open(path, "r", encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return data

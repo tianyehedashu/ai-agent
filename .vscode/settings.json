@@ -1,0 +1,78 @@
+{
+  // ============================================================================
+  // Python Linting 配置 - 与项目 Makefile 保持一致
+  // ============================================================================
+
+  // Python 文件格式化配置
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Ruff 配置 - 使用项目 pyproject.toml
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
+  "ruff.fixAll": true,
+  "ruff.lint.enable": true,
+  "ruff.configuration": "${workspaceFolder}/backend/pyproject.toml",
+
+  // Pylint 配置 - 使用项目 .pylintrc
+  "pylint.enable": true,
+  "pylint.args": [
+    "--rcfile=${workspaceFolder}/backend/.pylintrc",
+    "--output-format=json"
+  ],
+  "pylint.path": [
+    "${workspaceFolder}/backend"
+  ],
+
+  // 同时启用 Ruff 和 Pylint（与 make check 命令一致）
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.linting.pylintEnabled": true,
+
+  // 禁用其他 linter 以避免冲突
+  "python.linting.flake8Enabled": false,
+  "python.linting.mypyEnabled": false,
+  "python.linting.pycodestyleEnabled": false,
+  "python.linting.pydocstyleEnabled": false,
+
+  // Python 解释器配置
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/backend"
+  ],
+
+  // 类型检查配置 - 使用项目 pyproject.toml
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.diagnosticMode": "workspace",
+
+  // 文件关联
+  "files.associations": {
+    "*.py": "python"
+  },
+
+  // 排除文件（与 pyproject.toml 保持一致）
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.venv": true
+  },
+
+  // 搜索排除（与 pyproject.toml 保持一致）
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.venv": true,
+    "**/node_modules": true
+  }
+}

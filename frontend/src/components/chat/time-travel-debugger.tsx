@@ -182,24 +182,17 @@ export function TimeTravelDebugger({
                 <div className="absolute bottom-0 left-3 top-0 w-0.5 bg-border" />
 
                 {checkpoints.map((checkpoint) => (
-                  <div
+                  <button
+                    type="button"
                     key={checkpoint.id}
-                    role="button"
-                    tabIndex={0}
                     className={cn(
-                      'relative cursor-pointer rounded py-2 pl-8 pr-2 transition-colors',
+                      'relative w-full cursor-pointer rounded py-2 pl-8 pr-2 text-left transition-colors',
                       selectedCheckpoint?.id === checkpoint.id
                         ? 'bg-primary/10'
                         : 'hover:bg-muted/50'
                     )}
                     onClick={() => {
                       setSelectedCheckpoint(checkpoint)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        setSelectedCheckpoint(checkpoint)
-                      }
                     }}
                   >
                     {/* 时间线节点 */}
@@ -241,7 +234,7 @@ export function TimeTravelDebugger({
                         />
                       </Button>
                     </div>
-                  </div>
+                  </button>
                 ))}
 
                 {checkpoints.length === 0 && !isLoading && (
@@ -374,22 +367,15 @@ export function TimeTravelDebugger({
                               #{String(index + 1)}
                             </span>
                           </div>
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="cursor-pointer whitespace-pre-wrap text-sm"
+                          <button
+                            type="button"
+                            className="w-full cursor-pointer whitespace-pre-wrap text-left text-sm"
                             onClick={() => {
                               toggleExpanded(messageId)
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                toggleExpanded(messageId)
-                              }
-                            }}
                           >
                             {isExpanded ? msg.content : truncatedContent}
-                          </div>
+                          </button>
                         </div>
                       )
                     })}

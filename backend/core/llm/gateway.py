@@ -4,14 +4,14 @@ LLM Gateway - LLM 网关实现
 使用 LiteLLM 统一多模型接口
 """
 
-import json
 from collections.abc import AsyncGenerator
+import json
 from typing import Any
 
-import litellm
-import tiktoken
-from litellm import acompletion
+import litellm  # pylint: disable=import-error
+from litellm import acompletion  # pylint: disable=import-error
 from pydantic import BaseModel
+import tiktoken
 
 from app.config import settings
 from core.types import Message, ToolCall
@@ -137,7 +137,7 @@ class LLMGateway:
                 },
             )
         except Exception as e:
-            logger.error(f"LLM call failed: {e}")
+            logger.error("LLM call failed: %s", e)
             raise
 
     async def _stream_chat(self, **kwargs: Any) -> AsyncGenerator[StreamChunk, None]:
@@ -180,16 +180,65 @@ class LLMGateway:
                 )
 
         except Exception as e:
-            logger.error(f"LLM stream failed: {e}")
+            logger.error("LLM stream failed: %s", e)
             raise
 
     def _get_api_key(self, model: str) -> dict[str, Any]:
-        """获取对应模型的 API Key"""
-        if "claude" in model.lower():
+        """
+        获取对应模型的 API Key 和配置
+
+        支持的提供商:
+        - Anthropic (Claude): claude-*
+        - OpenAI (GPT): gpt-*, o1-*
+        - 阿里云 DashScope (通义千问): qwen-*
+        - DeepSeek: deepseek-*
+        - 火山引擎 (豆包): doubao-*
+        """
+        model_lower = model.lower()
+
+        # Anthropic (Claude)
+        if "claude" in model_lower:
             if settings.anthropic_api_key:
                 return {"api_key": settings.anthropic_api_key.get_secret_value()}
-        elif "gpt" in model.lower() and settings.openai_api_key:
-            return {"api_key": settings.openai_api_key.get_secret_value()}
+
+        # OpenAI (GPT, o1)
+        elif "gpt" in model_lower or model_lower.startswith("o1"):
+            if settings.openai_api_key:
+                return {
+                    "api_key": settings.openai_api_key.get_secret_value(),
+                    "api_base": settings.openai_api_base,
+                }
+
+        # 阿里云 DashScope (通义千问 Qwen)
+        elif "qwen" in model_lower:
+            if settings.dashscope_api_key:
+                return {
+                    "api_key": settings.dashscope_api_key.get_secret_value(),
+                    "api_base": settings.dashscope_api_base,
+                }
+
+        # DeepSeek
+        elif "deepseek" in model_lower:
+            if settings.deepseek_api_key:
+                return {
+                    "api_key": settings.deepseek_api_key.get_secret_value(),
+                    "api_base": settings.deepseek_api_base,
+                }
+
+        # 火山引擎 (豆包)
+        elif (
+            "doubao" in model_lower or "volcengine" in model_lower
+        ) and settings.volcengine_api_key:
+            config: dict[str, Any] = {
+                "api_key": settings.volcengine_api_key.get_secret_value(),
+                "api_base": settings.volcengine_api_base,
+            }
+            # 根据模型类型选择合适的 endpoint_id
+            # 优先使用专用配置，然后是通用配置
+            endpoint_id = settings.volcengine_chat_endpoint_id or settings.volcengine_endpoint_id
+            if endpoint_id:
+                config["endpoint_id"] = endpoint_id
+            return config
 
         return {}
 

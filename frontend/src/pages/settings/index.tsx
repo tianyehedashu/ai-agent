@@ -125,7 +125,7 @@ export default function SettingsPage(): React.JSX.Element {
   )
 }
 
-function ApiKeyInput({ label, name: _name }: { label: string; name: string }): React.JSX.Element {
+function ApiKeyInput({ label, name: _name }: Readonly<{ label: string; name: string }>): React.JSX.Element {
   const [showKey, setShowKey] = useState(false)
   const [value, setValue] = useState('')
 

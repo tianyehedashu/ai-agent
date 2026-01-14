@@ -18,7 +18,7 @@ export default function ChatInput({
   onChange,
   onSend,
   isLoading,
-}: ChatInputProps): React.JSX.Element {
+}: Readonly<ChatInputProps>): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {

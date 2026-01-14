@@ -10,36 +10,13 @@ Code Validator - 代码验证器
 
 import ast
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
 
 from core.lsp.proxy import LSPProxy
 from core.quality.architecture import ArchitectureValidator
+from core.quality.types import Severity, ValidationIssue
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-class Severity(str, Enum):
-    """严重性级别"""
-
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
-    HINT = "hint"
-
-
-@dataclass
-class ValidationIssue:
-    """验证问题"""
-
-    line: int
-    column: int
-    severity: Severity
-    message: str
-    code: str
-    source: str  # syntax, type, lint, architecture
-    fix: dict[str, Any] | None = None
 
 
 @dataclass
@@ -136,7 +113,7 @@ class CodeValidator:
                         )
                     )
             except Exception as e:
-                logger.warning(f"LSP diagnostics failed: {e}")
+                logger.warning("LSP diagnostics failed: %s", e)
 
         # 3. 架构规范检查
         if check_architecture:

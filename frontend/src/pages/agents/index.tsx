@@ -69,7 +69,7 @@ export default function AgentsPage(): React.JSX.Element {
         </Button>
       </div>
 
-      {isLoading ? (
+      {isLoading && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
@@ -83,7 +83,9 @@ export default function AgentsPage(): React.JSX.Element {
             </Card>
           ))}
         </div>
-      ) : agents.length === 0 ? (
+      )}
+
+      {!isLoading && agents.length === 0 && (
         <Card className="p-12">
           <div className="flex flex-col items-center justify-center text-center">
             <Bot className="mb-4 h-16 w-16 text-muted-foreground/50" />
@@ -99,7 +101,9 @@ export default function AgentsPage(): React.JSX.Element {
             </Button>
           </div>
         </Card>
-      ) : (
+      )}
+
+      {!isLoading && agents.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {agents.map((agent) => (
             <AgentCard
@@ -125,11 +129,11 @@ function AgentCard({
   agent,
   onEdit,
   onDelete,
-}: {
+}: Readonly<{
   agent: Agent
   onEdit: () => void
   onDelete: () => void
-}): React.JSX.Element {
+}>): React.JSX.Element {
   return (
     <Card className="group relative">
       <CardHeader>

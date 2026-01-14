@@ -60,10 +60,12 @@ class ContextManager:
             memories=memories,
             tools_context=tools_context,
         )
-        context.append({
-            "role": "system",
-            "content": system_content,
-        })
+        context.append(
+            {
+                "role": "system",
+                "content": system_content,
+            }
+        )
 
         # 2. 对话历史 (需要裁剪)
         history = self._trim_history(messages)
@@ -137,7 +139,7 @@ class ContextManager:
             trimmed.insert(0, msg)
             total_tokens += msg_tokens
 
-        logger.debug(f"Trimmed history: {len(messages)} -> {len(trimmed)} messages")
+        logger.debug("Trimmed history: %d -> %d messages", len(messages), len(trimmed))
         return trimmed
 
     def _estimate_message_tokens(self, message: Message) -> int:
@@ -200,10 +202,7 @@ class ContextManager:
         当历史过长时使用
         """
         # 构建摘要请求
-        history_text = "\n".join(
-            f"{m.role.value}: {m.content or '[tool call]'}"
-            for m in messages
-        )
+        history_text = "\n".join(f"{m.role.value}: {m.content or '[tool call]'}" for m in messages)
 
         response = await llm_gateway.chat(
             messages=[

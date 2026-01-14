@@ -2,9 +2,9 @@
 Memory Model - 记忆模型
 """
 
-import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -47,8 +47,9 @@ class Memory(BaseModel):
         default=0,
         nullable=False,
     )
-    metadata: Mapped[dict] = mapped_column(
+    extra_data: Mapped[dict] = mapped_column(
         JSONB,
+        name="metadata",
         default=dict,
         nullable=False,
     )

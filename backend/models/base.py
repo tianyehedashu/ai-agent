@@ -2,9 +2,9 @@
 Base Model - 模型基类
 """
 
-import uuid
 from datetime import datetime
 from typing import Any
+import uuid
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -47,7 +47,4 @@ class BaseModel(Base, TimestampMixin):
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
-        return {
-            column.name: getattr(self, column.name)
-            for column in self.__table__.columns
-        }
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}

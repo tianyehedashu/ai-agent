@@ -2,10 +2,10 @@
 Crypto Utilities - 加密工具
 """
 
+from base64 import b64decode, b64encode
 import hashlib
 import secrets
 import uuid
-from base64 import b64decode, b64encode
 
 
 def generate_id() -> str:

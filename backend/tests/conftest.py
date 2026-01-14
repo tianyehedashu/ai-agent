@@ -7,9 +7,9 @@ Pytest Configuration - 测试配置
 import asyncio
 from collections.abc import AsyncGenerator, Generator
 
+from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -96,10 +96,10 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def auth_headers(test_user: User) -> dict[str, str]:
+async def auth_headers(test_user: User, db_session: AsyncSession) -> dict[str, str]:
     """认证头 fixture"""
     from services.user import UserService
 
-    user_service = UserService()
+    user_service = UserService(db_session)
     token_pair = await user_service.create_token(test_user)
     return {"Authorization": f"Bearer {token_pair.access_token}"}

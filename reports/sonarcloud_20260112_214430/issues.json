@@ -1,0 +1,976 @@
+{
+  "issues": [
+    {
+      "key": "AZuyasHEvgzXF1S00p0a",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "api/v1/evaluation.py",
+      "line": 116,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasL-vgzXF1S00p0e",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/pyright.py",
+      "line": 66,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasLgvgzXF1S00p0c",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/ruff.py",
+      "line": 143,
+      "message": "Remove the unused function parameter \"file_path\".",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasLgvgzXF1S00p0d",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/ruff.py",
+      "line": 200,
+      "message": "Remove the unused function parameter \"file_path\".",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasQevgzXF1S00p0f",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/memory/retriever.py",
+      "line": 165,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasQevgzXF1S00p0g",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/memory/retriever.py",
+      "line": 166,
+      "message": "Remove this commented out code.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasQevgzXF1S00p0h",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/memory/retriever.py",
+      "line": 172,
+      "message": "Remove this commented out code.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasQ7vgzXF1S00p0i",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/sandbox/executor.py",
+      "line": 197,
+      "message": "Remove this \"timeout\" parameter and use a timeout context manager instead.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "anyio",
+        "async",
+        "asyncio",
+        "trio"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasSnvgzXF1S00p0j",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "db/vector.py",
+      "line": 123,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasJ7vgzXF1S00p0b",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "services/chat.py",
+      "line": 161,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasTTvgzXF1S00p0k",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "tools/code_tools.py",
+      "line": 158,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyasTTvgzXF1S00p0l",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "tools/code_tools.py",
+      "line": 242,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdnpVbfxDd8-PNaI",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "api/deps.py",
+      "line": 82,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdj9VbfxDd8-PNaB",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "api/v1/evaluation.py",
+      "line": 69,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdo7VbfxDd8-PNaV",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/engine/agent.py",
+      "line": 67,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 30 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "20min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqxVbfxDd8-PNa2",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/llm/gateway.py",
+      "line": 143,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 31 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "21min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqxVbfxDd8-PNa3",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/llm/gateway.py",
+      "line": 232,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpQVbfxDd8-PNad",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/pyright.py",
+      "line": 66,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpQVbfxDd8-PNae",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/pyright.py",
+      "line": 70,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpQVbfxDd8-PNag",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/pyright.py",
+      "line": 148,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpQVbfxDd8-PNah",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/pyright.py",
+      "line": 182,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpFVbfxDd8-PNaW",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/ruff.py",
+      "line": 61,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpFVbfxDd8-PNaX",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/lsp/ruff.py",
+      "line": 67,
+      "message": "Remove the unused function parameter \"file_path\".",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqVVbfxDd8-PNax",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/memory/manager.py",
+      "line": 126,
+      "message": "Remove this redundant Exception class; it derives from another which is already caught.",
+      "status": "OPEN",
+      "effort": "1min",
+      "tags": [
+        "bad-practice",
+        "error-handling",
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqAVbfxDd8-PNas",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/quality/architecture.py",
+      "line": 110,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "6min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqAVbfxDd8-PNat",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/quality/architecture.py",
+      "line": 200,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 29 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "19min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpsVbfxDd8-PNao",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/studio/codegen.py",
+      "line": 181,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "8min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpsVbfxDd8-PNap",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/studio/codegen.py",
+      "line": 348,
+      "message": "Extract this nested conditional expression into an independent statement.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "confusing"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpjVbfxDd8-PNam",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/studio/parser.py",
+      "line": 220,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "6min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpjVbfxDd8-PNan",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/studio/parser.py",
+      "line": 301,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 21 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "11min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpZVbfxDd8-PNaj",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/studio/workflow.py",
+      "line": 156,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdpZVbfxDd8-PNak",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/studio/workflow.py",
+      "line": 172,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdrHVbfxDd8-PNa5",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "db/database.py",
+      "line": 32,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdoHVbfxDd8-PNaL",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "services/chat.py",
+      "line": 112,
+      "message": "Remove the unused function parameter \"session_id\".",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdoHVbfxDd8-PNaM",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "services/chat.py",
+      "line": 116,
+      "message": "Remove the unused function parameter \"user_id\".",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdoHVbfxDd8-PNaN",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "services/chat.py",
+      "line": 159,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqKVbfxDd8-PNaw",
+      "severity": "CRITICAL",
+      "type": "VULNERABILITY",
+      "component": "core/auth/jwt.py",
+      "line": 162,
+      "message": "Don't use a JWT token without verifying its signature.",
+      "status": "OPEN",
+      "effort": "30min",
+      "tags": [
+        "cwe",
+        "privacy"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdp2VbfxDd8-PNaq",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "core/quality/validator.py",
+      "line": 79,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "12min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdp2VbfxDd8-PNar",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "core/quality/validator.py",
+      "line": 179,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdqnVbfxDd8-PNa1",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "core/sandbox/__init__.py",
+      "line": 1,
+      "message": "Remove this commented out code.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdq8VbfxDd8-PNa4",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "db/redis.py",
+      "line": 47,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdolVbfxDd8-PNaS",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "services/memory.py",
+      "line": 121,
+      "message": "Remove this commented out code.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "unused"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdomVbfxDd8-PNaT",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "services/memory.py",
+      "line": 121,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuyXdoUVbfxDd8-PNaP",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "services/user.py",
+      "line": 107,
+      "message": "Use asynchronous features in this function or remove the `async` keyword.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "async"
+      ],
+      "project": "Backend (Python)"
+    },
+    {
+      "key": "AZuya6IQRc2LJ_mL9BJZ",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/chat/time-travel-debugger.tsx",
+      "line": 185,
+      "message": "Use <input type=\"button\">, <input type=\"image\">, <input type=\"reset\">, <input type=\"submit\">, or <button> instead of the \"button\" role to ensure accessibility across all devices.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuya6IQRc2LJ_mL9BJa",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/chat/time-travel-debugger.tsx",
+      "line": 381,
+      "message": "Use <input type=\"button\">, <input type=\"image\">, <input type=\"reset\">, <input type=\"submit\">, or <button> instead of the \"button\" role to ensure accessibility across all devices.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuya6I0Rc2LJ_mL9BJb",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/chat/tool-call-card.tsx",
+      "line": 54,
+      "message": "Use <input type=\"button\">, <input type=\"image\">, <input type=\"reset\">, <input type=\"submit\">, or <button> instead of the \"button\" role to ensure accessibility across all devices.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNniqJ_OtHwteFYk",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/api/client.ts",
+      "line": 8,
+      "message": "Replace this union type with a type alias.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "proficiency"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNniqJ_OtHwteFYl",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/api/client.ts",
+      "line": 12,
+      "message": "Member 'baseUrl' is never reassigned; mark it as `readonly`.",
+      "status": "OPEN",
+      "effort": "2min",
+      "tags": [
+        "confusing",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNniqJ_OtHwteFYm",
+      "severity": "CRITICAL",
+      "type": "CODE_SMELL",
+      "component": "src/api/client.ts",
+      "line": 104,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.",
+      "status": "OPEN",
+      "effort": "10min",
+      "tags": [
+        "brain-overload"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNnEqJ_OtHwteFYV",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/chat/interrupt-dialog.tsx",
+      "line": 33,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmzqJ_OtHwteFYQ",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/layout/index.tsx",
+      "line": 10,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmqqJ_OtHwteFYP",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/components/ui/card.tsx",
+      "line": 25,
+      "message": "Headings must have content and the content must be accessible by a screen reader.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmCqJ_OtHwteFYF",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/agents/components/agent-dialog.tsx",
+      "line": 65,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmCqJ_OtHwteFYG",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/agents/components/agent-dialog.tsx",
+      "line": 297,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "confusing"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNl4qJ_OtHwteFYD",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/agents/index.tsx",
+      "line": 86,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "confusing"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNl4qJ_OtHwteFYE",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/agents/index.tsx",
+      "line": 124,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNlPqJ_OtHwteFX-",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/chat/components/chat-input.tsx",
+      "line": 16,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNlmqJ_OtHwteFX_",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/chat/components/chat-messages.tsx",
+      "line": 19,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNlmqJ_OtHwteFYA",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/chat/components/chat-messages.tsx",
+      "line": 93,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNluqJ_OtHwteFYB",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/chat/components/chat-sidebar.tsx",
+      "line": 57,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNluqJ_OtHwteFYC",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "src/pages/chat/components/chat-sidebar.tsx",
+      "line": 70,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmXqJ_OtHwteFYL",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/settings/index.tsx",
+      "line": 128,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "react",
+        "type-dependent"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmOqJ_OtHwteFYH",
+      "severity": "INFO",
+      "type": "CODE_SMELL",
+      "component": "src/pages/studio/index.tsx",
+      "line": 236,
+      "message": "Complete the task associated to this \"TODO\" comment.",
+      "status": "OPEN",
+      "effort": "0min",
+      "tags": [
+        "cwe"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmOqJ_OtHwteFYI",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/studio/index.tsx",
+      "line": 464,
+      "message": "Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmOqJ_OtHwteFYJ",
+      "severity": "MINOR",
+      "type": "BUG",
+      "component": "src/pages/studio/index.tsx",
+      "line": 464,
+      "message": "Visible, non-interactive elements with click handlers must have at least one keyboard listener.",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    },
+    {
+      "key": "AZuyYNmOqJ_OtHwteFYK",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "component": "src/pages/studio/index.tsx",
+      "line": 465,
+      "message": "Do not use Array index in keys",
+      "status": "OPEN",
+      "effort": "5min",
+      "tags": [
+        "jsx",
+        "performance",
+        "react"
+      ],
+      "project": "Frontend (TypeScript)"
+    }
+  ]
+}

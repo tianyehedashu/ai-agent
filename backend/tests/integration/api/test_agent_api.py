@@ -4,9 +4,9 @@ Agent API 集成测试
 测试 Agent API 端点的完整功能
 """
 
-import pytest
 from fastapi import status
 from httpx import AsyncClient
+import pytest
 
 # Fixtures 从 conftest.py 自动导入
 
@@ -32,7 +32,7 @@ class TestAgentAPI:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert isinstance(data, (list, dict))
+        assert isinstance(data, list | dict)
         # 如果是列表
         if isinstance(data, list):
             assert all("id" in item for item in data)

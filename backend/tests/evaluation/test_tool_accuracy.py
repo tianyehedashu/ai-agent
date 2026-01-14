@@ -2,7 +2,6 @@
 工具调用准确率评估测试
 """
 
-from unittest.mock import AsyncMock
 
 import pytest
 

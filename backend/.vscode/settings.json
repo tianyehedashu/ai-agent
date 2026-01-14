@@ -1,0 +1,60 @@
+{
+  // ============================================================================
+  // Backend Python Linting 配置 - 与 Makefile 保持一致
+  // ============================================================================
+
+  // Ruff 配置 - 使用项目 pyproject.toml
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Ruff 扩展配置
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
+  "ruff.fixAll": true,
+  "ruff.lint.enable": true,
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+
+  // Pylint 配置 - 使用项目 .pylintrc
+  "pylint.enable": true,
+  "pylint.args": [
+    "--rcfile=${workspaceFolder}/.pylintrc",
+    "--output-format=json"
+  ],
+
+  // 同时启用 Ruff 和 Pylint
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.linting.pylintEnabled": true,
+
+  // 禁用其他 linter 以避免冲突
+  "python.linting.flake8Enabled": false,
+  "python.linting.mypyEnabled": false,
+  "python.linting.pycodestyleEnabled": false,
+  "python.linting.pydocstyleEnabled": false,
+
+  // Python 解释器配置
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ],
+
+  // 类型检查配置
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.diagnosticMode": "workspace",
+
+  // 排除文件（与 pyproject.toml 保持一致）
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.venv": true
+  }
+}

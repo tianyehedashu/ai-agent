@@ -9,8 +9,8 @@ Ruff Service - Ruff Lint 服务
 
 import asyncio
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from utils.logging import get_logger
@@ -52,10 +52,10 @@ class RuffService:
             )
             stdout, _ = await process.communicate()
             version = stdout.decode().strip()
-            logger.info(f"Ruff initialized: {version}")
+            logger.info("Ruff initialized: %s", version)
             return {"status": "ok", "version": version}
         except Exception as e:
-            logger.warning(f"Ruff not available: {e}")
+            logger.warning("Ruff not available: %s", e)
             return {"status": "error", "message": str(e)}
 
     async def shutdown(self) -> None:
@@ -64,7 +64,7 @@ class RuffService:
 
     async def get_diagnostics(
         self,
-        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
+        file_path: str,
         content: str,
     ) -> list[dict[str, Any]]:
         """
@@ -116,16 +116,18 @@ class RuffService:
 
             diagnostics = []
             for item in results:
-                diagnostics.append({
-                    "line": item.get("location", {}).get("row", 1) - 1,  # 转为 0-based
-                    "column": item.get("location", {}).get("column", 1) - 1,
-                    "end_line": item.get("end_location", {}).get("row", 1) - 1,
-                    "end_column": item.get("end_location", {}).get("column", 1) - 1,
-                    "severity": "warning",
-                    "message": item.get("message", ""),
-                    "code": item.get("code", ""),
-                    "fix": item.get("fix"),
-                })
+                diagnostics.append(
+                    {
+                        "line": item.get("location", {}).get("row", 1) - 1,  # 转为 0-based
+                        "column": item.get("location", {}).get("column", 1) - 1,
+                        "end_line": item.get("end_location", {}).get("row", 1) - 1,
+                        "end_column": item.get("end_location", {}).get("column", 1) - 1,
+                        "severity": "warning",
+                        "message": item.get("message", ""),
+                        "code": item.get("code", ""),
+                        "fix": item.get("fix"),
+                    }
+                )
 
             return diagnostics
 
@@ -133,14 +135,14 @@ class RuffService:
             logger.warning("Ruff timeout")
             return []
         except Exception as e:
-            logger.error(f"Ruff error: {e}")
+            logger.error("Ruff error: %s", e)
             return []
         finally:
             Path(temp_path).unlink(missing_ok=True)
 
     async def format_code(
         self,
-        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
+        file_path: str,
         content: str,
     ) -> str:
         """
@@ -190,14 +192,14 @@ class RuffService:
             logger.warning("Ruff format timeout")
             return content
         except Exception as e:
-            logger.error(f"Ruff format error: {e}")
+            logger.error("Ruff format error: %s", e)
             return content
         finally:
             Path(temp_path).unlink(missing_ok=True)
 
     async def fix_all(
         self,
-        file_path: str,  # noqa: ARG002 - 保留用于未来扩展
+        file_path: str,
         content: str,
     ) -> str:
         """
@@ -248,7 +250,7 @@ class RuffService:
             logger.warning("Ruff fix timeout")
             return content
         except Exception as e:
-            logger.error(f"Ruff fix error: {e}")
+            logger.error("Ruff fix error: %s", e)
             return content
         finally:
             Path(temp_path).unlink(missing_ok=True)

@@ -10,14 +10,20 @@
 
 ### 1. 安装依赖
 
-```bash
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+项目使用 [uv](https://github.com/astral-sh/uv) 管理依赖，提供极快的安装速度。
 
-# 安装开发依赖
-make install-dev
+```bash
+# 安装 uv (如果未安装)
+# Windows PowerShell:
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# 或者: winget install astral-sh.uv
+
+# Linux/macOS:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建虚拟环境并安装开发依赖
+make install-all
+# 这会执行: uv venv && uv pip install -e ".[dev]"
 ```
 
 ### 2. 配置环境变量
@@ -35,7 +41,14 @@ make dev
 
 ## 常用命令
 
+所有命令都通过 `uv` 在虚拟环境中执行，无需手动激活虚拟环境。
+
 ```bash
+# 依赖管理
+make install-all    # 创建虚拟环境并安装所有依赖
+make sync           # 同步依赖 (从 pyproject.toml 和 uv.lock)
+make lock           # 生成/更新 uv.lock 文件
+
 # 代码检查
 make check          # 运行所有检查 (格式 + Lint + 类型)
 make lint           # 只运行 Ruff 检查
@@ -55,6 +68,20 @@ make db-downgrade   # 回滚一个版本
 
 # 清理
 make clean          # 清理临时文件
+```
+
+### 直接使用 uv 命令
+
+如果需要直接使用 `uv` 命令：
+
+```bash
+# 运行任意命令
+uv run <command>    # 在虚拟环境中运行命令
+
+# 示例
+uv run pytest
+uv run ruff check .
+uv run uvicorn app.main:app --reload
 ```
 
 ## 提交代码

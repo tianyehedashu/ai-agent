@@ -2,8 +2,8 @@
 Message Model - 消息模型
 """
 
-import uuid
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -42,8 +42,9 @@ class Message(BaseModel):
         String(100),
         nullable=True,
     )
-    metadata: Mapped[dict] = mapped_column(
+    extra_data: Mapped[dict] = mapped_column(
         JSONB,
+        name="metadata",
         default=dict,
         nullable=False,
     )

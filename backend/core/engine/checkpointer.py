@@ -6,11 +6,11 @@ Checkpointer - 检查点管理器
 - PostgreSQL 存储 (持久，用于历史)
 """
 
-import json
-import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+import json
 from typing import Any
+import uuid
 
 from core.types import AgentState, Checkpoint
 from db.redis import get_redis_client
@@ -149,7 +149,7 @@ class Checkpointer:
             session_id=session_id,
             step=step,
             state=state,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             parent_id=parent_id,
         )
 
@@ -159,7 +159,7 @@ class Checkpointer:
             self.ttl,
         )
 
-        logger.info(f"Saved checkpoint: {checkpoint_id} (step={step})")
+        logger.info("Saved checkpoint: %s (step=%d)", checkpoint_id, step)
         return checkpoint_id
 
     async def load(self, checkpoint_id: str) -> AgentState:

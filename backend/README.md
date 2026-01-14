@@ -43,15 +43,22 @@ backend/
 
 ### 安装依赖
 
-```bash
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-.\venv\Scripts\activate   # Windows
+项目使用 [uv](https://github.com/astral-sh/uv) 管理依赖，速度比 pip 快 10-100 倍。
 
-# 安装依赖
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # 开发依赖
+```bash
+# 安装 uv (如果未安装)
+# Windows PowerShell:
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# 或者: winget install astral-sh.uv
+
+# Linux/macOS:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建虚拟环境并安装依赖
+make install-all
+# 或者手动执行:
+# uv venv
+# uv pip install -e ".[dev]"
 ```
 
 ### 配置环境变量
@@ -65,23 +72,29 @@ cp ../env.example .env
 
 ```bash
 # 生成迁移
-alembic revision --autogenerate -m "initial"
+make db-migrate msg="initial"
+# 或者: uv run alembic revision --autogenerate -m "initial"
 
 # 执行迁移
-alembic upgrade head
+make db-upgrade
+# 或者: uv run alembic upgrade head
 ```
 
 ### 运行开发服务器
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+make dev
+# 或者使用 uv:
+# uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 运行测试
 
 ```bash
-pytest
-pytest --cov=.  # 带覆盖率
+make test
+make test-cov  # 带覆盖率
+# 或者使用 uv:
+# uv run pytest
 ```
 
 ## API 文档

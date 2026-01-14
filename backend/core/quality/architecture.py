@@ -12,7 +12,7 @@ Architecture Validator - 架构规范检查器
 import ast
 from dataclasses import dataclass
 
-from core.quality.validator import Severity, ValidationIssue
+from core.quality.types import Severity, ValidationIssue
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -112,11 +112,7 @@ class ArchitectureValidator:
         issues = []
 
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.ClassDef)
-                and "Agent" in node.name
-                and node.name != "BaseAgent"
-            ):
+            if isinstance(node, ast.ClassDef) and "Agent" in node.name and node.name != "BaseAgent":
                 # 检查是否继承 BaseAgent
                 base_names = []
                 for base in node.bases:

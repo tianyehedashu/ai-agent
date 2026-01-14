@@ -6,7 +6,7 @@ JWT Token Management - JWT 令牌管理
 - Refresh Token 生成与验证
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -46,7 +46,7 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + expires_delta
 
     payload = {
@@ -83,7 +83,7 @@ def create_refresh_token(
     if expires_delta is None:
         expires_delta = timedelta(days=settings.refresh_token_expire_days)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + expires_delta
 
     payload = {
@@ -123,7 +123,11 @@ def verify_token(
 
         # 检查 token 类型
         if payload.get("type") != token_type:
-            logger.warning(f"Invalid token type: expected {token_type}, got {payload.get('type')}")
+            logger.warning(
+                "Invalid token type: expected %s, got %s",
+                token_type,
+                payload.get("type"),
+            )
             return None
 
         return TokenPayload(
@@ -137,29 +141,5 @@ def verify_token(
         logger.debug("Token expired")
         return None
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid token: {e}")
-        return None
-
-
-def decode_token_without_verification(token: str) -> dict[str, Any] | None:
-    """
-    解码 Token (不验证签名)
-
-    ⚠️ 安全警告: 此函数仅用于调试和日志记录场景。
-    不要将此函数的返回值用于认证或授权判断!
-
-    Args:
-        token: JWT Token
-
-    Returns:
-        Token 载荷 (未验证, 不可信)
-    """
-    try:
-        # nosec B105 - 此函数仅用于调试，不用于认证
-        return jwt.decode(
-            token,
-            algorithms=["HS256"],  # 明确指定算法防止算法混淆攻击
-            options={"verify_signature": False},
-        )
-    except Exception:
+        logger.warning("Invalid token: %s", e)
         return None

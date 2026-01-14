@@ -7,7 +7,7 @@ interface LayoutProps {
   children: ReactNode
 }
 
-export default function Layout({ children }: LayoutProps): React.JSX.Element {
+export default function Layout({ children }: Readonly<LayoutProps>): React.JSX.Element {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}

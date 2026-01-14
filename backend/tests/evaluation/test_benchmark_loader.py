@@ -3,7 +3,7 @@
 """
 
 import pytest
-from pathlib import Path
+import yaml
 
 from evaluation.benchmark_loader import (
     get_benchmark_info,
@@ -32,10 +32,8 @@ class TestBenchmarkLoader:
             ],
         }
 
-        import yaml
-
         file_path = tmp_path / "test_benchmark.yaml"
-        with open(file_path, "w", encoding="utf-8") as f:
+        with file_path.open("w", encoding="utf-8") as f:
             yaml.dump(benchmark_data, f)
 
         return file_path

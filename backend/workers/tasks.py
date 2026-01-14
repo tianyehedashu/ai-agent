@@ -3,8 +3,8 @@ Celery Tasks - 异步任务定义
 """
 
 import asyncio
-import json
 from datetime import datetime, timedelta
+import json
 from typing import Any
 
 from celery import shared_task
@@ -39,6 +39,7 @@ def run_async(coro):
 # ============================================
 # Memory Tasks - 记忆处理任务
 # ============================================
+
 
 @shared_task(
     base=BaseTask,
@@ -113,6 +114,7 @@ def generate_embeddings(
 # Sandbox Tasks - 沙箱执行任务
 # ============================================
 
+
 @shared_task(
     base=BaseTask,
     bind=True,
@@ -155,6 +157,7 @@ def execute_code_in_sandbox(
 # ============================================
 # Quality Tasks - 代码质量任务
 # ============================================
+
 
 @shared_task(
     base=BaseTask,
@@ -229,6 +232,7 @@ def auto_fix_code(
 # Maintenance Tasks - 维护任务
 # ============================================
 
+
 @shared_task(
     base=BaseTask,
     bind=True,
@@ -301,16 +305,12 @@ def cleanup_old_sessions(
         async with get_db_session() as db:
             # 查找过期会话
             result = await db.execute(
-                select(Session.id)
-                .where(Session.updated_at < cutoff)
-                .limit(max_sessions_to_delete)
+                select(Session.id).where(Session.updated_at < cutoff).limit(max_sessions_to_delete)
             )
             session_ids = [row[0] for row in result.fetchall()]
 
             if session_ids:
-                await db.execute(
-                    delete(Session).where(Session.id.in_(session_ids))
-                )
+                await db.execute(delete(Session).where(Session.id.in_(session_ids)))
                 await db.commit()
 
             return {
@@ -324,6 +324,7 @@ def cleanup_old_sessions(
 # ============================================
 # Notification Tasks - 通知任务
 # ============================================
+
 
 @shared_task(
     base=BaseTask,
@@ -356,6 +357,7 @@ def send_notification(
 # Analytics Tasks - 分析任务
 # ============================================
 
+
 @shared_task(
     base=BaseTask,
     bind=True,
@@ -365,22 +367,21 @@ def send_notification(
 def calculate_usage_stats(
     self,
     user_id: str,
-    start_date: str,
-    end_date: str,
+    start_date: str,  # pylint: disable=unused-argument
+    end_date: str,  # pylint: disable=unused-argument
 ) -> dict[str, Any]:
     """
     计算用户使用统计
+
+    注意: start_date 和 end_date 参数目前未使用，保留以备将来实现日期范围过滤
     """
     logger.info("Calculating usage stats for user %s", user_id)
 
     async def _calculate():
         async with get_db_session() as db:
             stats_service = StatsService(db)
-            stats = await stats_service.get_user_stats(
-                user_id=user_id,
-                start_date=datetime.fromisoformat(start_date),
-                end_date=datetime.fromisoformat(end_date),
-            )
+            # TODO: 实现日期范围过滤功能
+            stats = await stats_service.get_user_stats(user_id=user_id)
             return stats
 
     return run_async(_calculate())

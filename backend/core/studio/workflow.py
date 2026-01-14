@@ -4,9 +4,9 @@ Workflow Service - 工作流服务
 管理 Agent 工作流的 CRUD 操作
 """
 
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -130,7 +130,7 @@ class WorkflowService:
             if config is not None:
                 workflow.config = config
 
-            workflow.updated_at = datetime.now(timezone.utc)
+            workflow.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(workflow)
@@ -267,7 +267,7 @@ class WorkflowService:
             # 恢复代码和配置
             workflow.code = wf_version.code
             workflow.config = wf_version.config
-            workflow.updated_at = datetime.now(timezone.utc)
+            workflow.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(workflow)

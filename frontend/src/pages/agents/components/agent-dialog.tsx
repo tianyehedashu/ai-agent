@@ -66,7 +66,7 @@ export default function AgentDialog({
   open,
   onOpenChange,
   agent,
-}: AgentDialogProps): React.JSX.Element {
+}: Readonly<AgentDialogProps>): React.JSX.Element {
   const queryClient = useQueryClient()
   const isEditing = !!agent
 

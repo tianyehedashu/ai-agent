@@ -37,7 +37,7 @@ export function InterruptDialog({
   onApprove,
   onReject,
   onModify,
-}: InterruptDialogProps): React.JSX.Element {
+}: Readonly<InterruptDialogProps>): React.JSX.Element {
   const [isEditing, setIsEditing] = useState(false)
   const [editedArgs, setEditedArgs] = useState(JSON.stringify(pendingAction.arguments, null, 2))
 

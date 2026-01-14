@@ -2,7 +2,6 @@
 GAIA 评估测试
 """
 
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest

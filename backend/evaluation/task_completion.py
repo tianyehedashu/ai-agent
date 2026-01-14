@@ -4,9 +4,9 @@
 评估 Agent 完成指定任务的能力
 """
 
-import time
 from dataclasses import dataclass
 from enum import Enum
+import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -166,9 +166,8 @@ class TaskEvaluator:
         score = 1.0
 
         # 检查长度限制
-        if max_length := criteria.get("max_length"):
-            if len(actual) > max_length:
-                score *= 0.8
+        if (max_length := criteria.get("max_length")) and len(actual) > max_length:
+            score *= 0.8
 
         # 检查必须包含的关键词
         if keywords := criteria.get("contains_keywords"):

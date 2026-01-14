@@ -2,8 +2,8 @@
 Health Check Tests - 健康检查测试
 """
 
-import pytest
 from httpx import AsyncClient
+import pytest
 
 
 @pytest.mark.asyncio

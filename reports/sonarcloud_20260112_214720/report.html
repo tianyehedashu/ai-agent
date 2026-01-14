@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonarCloud 代码质量报告 - AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --border: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            color: var(--accent);
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .timestamp {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .project {
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .project h2 {
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+        }
+
+        .project-key {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .project h3 {
+            color: var(--text-secondary);
+            margin: 1.5rem 0 1rem;
+            font-size: 1.1rem;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .metric-label {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .rating-A .metric-value { color: var(--success); }
+        .rating-B .metric-value { color: #7ee787; }
+        .rating-C .metric-value { color: var(--warning); }
+        .rating-D .metric-value { color: #f0883e; }
+        .rating-E .metric-value { color: var(--error); }
+
+        .issues-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .issues-table th,
+        .issues-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .issues-table th {
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        .issues-table tr:hover {
+            background: rgba(56, 139, 253, 0.1);
+        }
+
+        .component {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .severity-BLOCKER, .severity-CRITICAL { color: var(--error); font-weight: bold; }
+        .severity-MAJOR { color: #f0883e; }
+        .severity-MINOR { color: var(--warning); }
+        .severity-INFO { color: var(--text-secondary); }
+
+        .type-BUG {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--error);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .type-VULNERABILITY {
+            background: rgba(240, 136, 62, 0.2);
+            color: #f0883e;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .type-CODE_SMELL {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--warning);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        footer {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .project { padding: 1rem; }
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+            .issues-table { font-size: 0.8rem; }
+            .issues-table th, .issues-table td { padding: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 SonarCloud 代码质量报告</h1>
+            <p class="timestamp">生成时间: 2026-01-12 21:47:17 | 组织: tianyehedashu</p>
+        </header>
+
+
+            <section class="project">
+                <h2>📦 Backend (Python)</h2>
+                <p class="project-key">tianyehedashu_ai-agent-backend</p>
+
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">🐛 Bugs</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">🔓 漏洞</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">43</div>
+                    <div class="metric-label">🧹 代码异味</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">0.0%</div>
+                    <div class="metric-label">📊 覆盖率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">1.3%</div>
+                    <div class="metric-label">📋 重复率</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">可靠性</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">安全性</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">可维护性</div>
+                </div>
+            </div>
+
+                <h3>问题列表 (43 个)</h3>
+                <table class="issues-table">
+                    <thead>
+                        <tr>
+                            <th>严重程度</th>
+                            <th>类型</th>
+                            <th>文件</th>
+                            <th>行号</th>
+                            <th>描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">api/v1/evaluation.py</td>
+                    <td>116</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/pyright.py</td>
+                    <td>66</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/ruff.py</td>
+                    <td>143</td>
+                    <td>Remove the unused function parameter &quot;file_path&quot;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/ruff.py</td>
+                    <td>200</td>
+                    <td>Remove the unused function parameter &quot;file_path&quot;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/memory/retriever.py</td>
+                    <td>165</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/memory/retriever.py</td>
+                    <td>166</td>
+                    <td>Remove this commented out code.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/memory/retriever.py</td>
+                    <td>172</td>
+                    <td>Remove this commented out code.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/sandbox/executor.py</td>
+                    <td>197</td>
+                    <td>Remove this &quot;timeout&quot; parameter and use a timeout context manager instead.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">db/vector.py</td>
+                    <td>123</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/chat.py</td>
+                    <td>161</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">tools/code_tools.py</td>
+                    <td>158</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">tools/code_tools.py</td>
+                    <td>242</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">api/deps.py</td>
+                    <td>82</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">api/v1/evaluation.py</td>
+                    <td>69</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/engine/agent.py</td>
+                    <td>67</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 30 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/llm/gateway.py</td>
+                    <td>143</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 31 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/llm/gateway.py</td>
+                    <td>232</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/pyright.py</td>
+                    <td>66</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/pyright.py</td>
+                    <td>70</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/pyright.py</td>
+                    <td>148</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/pyright.py</td>
+                    <td>182</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/ruff.py</td>
+                    <td>61</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/lsp/ruff.py</td>
+                    <td>67</td>
+                    <td>Remove the unused function parameter &quot;file_path&quot;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/memory/manager.py</td>
+                    <td>126</td>
+                    <td>Remove this redundant Exception class; it derives from another which is already caught.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/quality/architecture.py</td>
+                    <td>110</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/quality/architecture.py</td>
+                    <td>200</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 29 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/codegen.py</td>
+                    <td>181</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/codegen.py</td>
+                    <td>348</td>
+                    <td>Extract this nested conditional expression into an independent statement.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/parser.py</td>
+                    <td>220</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/parser.py</td>
+                    <td>301</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 21 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/workflow.py</td>
+                    <td>156</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/studio/workflow.py</td>
+                    <td>172</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">db/database.py</td>
+                    <td>32</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/chat.py</td>
+                    <td>112</td>
+                    <td>Remove the unused function parameter &quot;session_id&quot;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/chat.py</td>
+                    <td>116</td>
+                    <td>Remove the unused function parameter &quot;user_id&quot;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/chat.py</td>
+                    <td>159</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/quality/validator.py</td>
+                    <td>79</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/quality/validator.py</td>
+                    <td>179</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">core/sandbox/__init__.py</td>
+                    <td>1</td>
+                    <td>Remove this commented out code.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">db/redis.py</td>
+                    <td>47</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/memory.py</td>
+                    <td>121</td>
+                    <td>Remove this commented out code.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/memory.py</td>
+                    <td>121</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">services/user.py</td>
+                    <td>107</td>
+                    <td>Use asynchronous features in this function or remove the `async` keyword.</td>
+                </tr>
+
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="project">
+                <h2>📦 Frontend (TypeScript)</h2>
+                <p class="project-key">tianyehedashu_ai-agent-frontend</p>
+
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">🐛 Bugs</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">🔓 漏洞</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">16</div>
+                    <div class="metric-label">🧹 代码异味</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">0.0%</div>
+                    <div class="metric-label">📊 覆盖率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">0.0%</div>
+                    <div class="metric-label">📋 重复率</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">可靠性</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">安全性</div>
+                </div>
+                <div class="metric-card rating-A">
+                    <div class="metric-value">A</div>
+                    <div class="metric-label">可维护性</div>
+                </div>
+            </div>
+
+                <h3>问题列表 (16 个)</h3>
+                <table class="issues-table">
+                    <thead>
+                        <tr>
+                            <th>严重程度</th>
+                            <th>类型</th>
+                            <th>文件</th>
+                            <th>行号</th>
+                            <th>描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>24</td>
+                    <td>Unexpected empty method &#39;observe&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>25</td>
+                    <td>Unexpected empty method &#39;unobserve&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>26</td>
+                    <td>Unexpected empty method &#39;disconnect&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>34</td>
+                    <td>Unexpected empty method &#39;observe&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>35</td>
+                    <td>Unexpected empty method &#39;unobserve&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>36</td>
+                    <td>Unexpected empty method &#39;disconnect&#39;.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/api/client.ts</td>
+                    <td>8</td>
+                    <td>Replace this union type with a type alias.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/api/client.ts</td>
+                    <td>12</td>
+                    <td>Member &#39;baseUrl&#39; is never reassigned; mark it as `readonly`.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-CRITICAL">CRITICAL</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/api/client.ts</td>
+                    <td>104</td>
+                    <td>Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/components/ui/card.tsx</td>
+                    <td>25</td>
+                    <td>Headings must have content and the content must be accessible by a screen reader.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MAJOR">MAJOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/pages/agents/components/agent-dialog.tsx</td>
+                    <td>297</td>
+                    <td>Extract this nested ternary operation into an independent statement.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/pages/chat/components/chat-sidebar.tsx</td>
+                    <td>70</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-INFO">INFO</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/pages/studio/index.tsx</td>
+                    <td>236</td>
+                    <td>Complete the task associated to this &quot;TODO&quot; comment.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>8</td>
+                    <td>Prefer `globalThis` over `window`.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>23</td>
+                    <td>Prefer `globalThis` over `global`.</td>
+                </tr>
+
+                <tr>
+                    <td class="severity-MINOR">MINOR</td>
+                    <td><span class="type-CODE_SMELL">CODE_SMELL</span></td>
+                    <td class="component">src/test/setup.ts</td>
+                    <td>30</td>
+                    <td>Prefer `globalThis` over `global`.</td>
+                </tr>
+
+                    </tbody>
+                </table>
+            </section>
+
+
+        <footer>
+            <p>由 <a href="https://sonarcloud.io" target="_blank">SonarCloud</a> 提供代码分析服务</p>
+            <p>AI Agent Platform - 代码质量持续改进</p>
+        </footer>
+    </div>
+</body>
+</html>

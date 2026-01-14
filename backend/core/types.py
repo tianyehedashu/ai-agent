@@ -48,6 +48,7 @@ class ToolCategory(str, Enum):
     DATABASE = "database"
     NETWORK = "network"
     SYSTEM = "system"
+    EXTERNAL = "external"  # 外部工具 (MCP等)
 
 
 class MessageRole(str, Enum):

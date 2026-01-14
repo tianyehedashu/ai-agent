@@ -13,39 +13,44 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "python-multipart>=0.0.6",
     "sse-starlette>=1.8.0",
-    
+
     # Data Validation
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-    
+    "email-validator>=2.0.0",  # Email validation for Pydantic
+
     # Database
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
-    
+
     # Cache & Queue
     "redis>=5.0.0",
     "celery>=5.3.0",
-    
+
     # LLM
     "litellm>=1.20.0",
     "tiktoken>=0.5.0",
     "openai>=1.10.0",
     "anthropic>=0.18.0",
-    
+
+    # Agent Framework
+    "langgraph>=1.0.0",
+    "langchain-openai>=1.0.0",  # 用于代码生成器生成的 LLM 节点
+
     # Vector Database
     "qdrant-client>=1.7.0",
-    "chromadb>=0.4.0",
-    
+    "chromadb>=1.0.0",
+
     # Utilities
     "httpx>=0.26.0",
     "pyjwt>=2.8.0",
     "bcrypt>=4.1.0",
     "python-dotenv>=1.0.0",
-    
+
     # Code Analysis (for Code-First)
     "libcst>=1.1.0",
-    
+
     # Evaluation
     "pyyaml>=6.0.0",
 ]
@@ -55,17 +60,18 @@ dev = [
     # Type Checking
     "pyright>=1.1.350",
     "mypy>=1.8.0",
-    
+
     # Linting & Formatting
     "ruff>=0.2.0",
-    
+    "pylint>=3.0.0",
+
     # Testing
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "httpx>=0.26.0",
     "faker>=22.0.0",
-    
+
     # Development
     "pre-commit>=3.6.0",
     "ipython>=8.20.0",
@@ -145,10 +151,10 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-    "E",      # pycodestyle errors
+    "E",      # pycodestyle errors (includes E402: module level import not at top)
     "W",      # pycodestyle warnings
     "F",      # Pyflakes
-    "I",      # isort
+    "I",      # isort (import sorting and organization)
     "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
     "UP",     # pyupgrade
@@ -168,9 +174,15 @@ ignore = [
     "ARG002",    # unused-method-argument (common in interfaces)
     "BLE001",    # broad-exception-caught (necessary for error handling in some cases)
 ]
+# Note: E402 detects module-level imports not at top of file.
+# Function-level imports should be moved to top per PEP 8, but may be acceptable
+# in cases like avoiding circular imports. Use with discretion.
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "api", "core", "models", "schemas", "services", "db", "utils", "workers"]
+force-single-line = false
+force-sort-within-sections = true
+# isort will organize imports at top of file and flag misplaced imports
 
 # ============================================================================
 # Testing - Pytest

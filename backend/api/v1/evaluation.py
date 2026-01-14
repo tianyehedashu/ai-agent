@@ -14,8 +14,8 @@ from api.deps import get_current_user
 from core.llm.gateway import LLMGateway
 from core.types import ToolCall
 from evaluation.gaia import GAIAEvaluator, GAIAReport
-from evaluation.llm_judge import LLMJudge, JudgeScore
-from evaluation.task_completion import EvaluationReport, TaskEvaluator
+from evaluation.llm_judge import JudgeScore, LLMJudge
+from evaluation.task_completion import EvaluationReport
 from evaluation.tool_accuracy import ToolAccuracyEvaluator, ToolAccuracyReport
 from models.user import User
 
@@ -104,7 +104,9 @@ async def evaluate_gaia(
         evaluator.load_benchmark(benchmark_path)
     else:
         # 使用默认的 GAIA 基准
-        default_path = Path(__file__).parent.parent.parent / "evaluation" / "benchmarks" / "gaia_sample.yaml"
+        default_path = (
+            Path(__file__).parent.parent.parent / "evaluation" / "benchmarks" / "gaia_sample.yaml"
+        )
         if default_path.exists():
             evaluator.load_benchmark(default_path)
         else:
@@ -180,16 +182,20 @@ async def list_benchmarks(
     benchmarks = []
     if benchmarks_dir.exists():
         for file_path in benchmarks_dir.glob("*.yaml"):
-            benchmarks.append({
-                "name": file_path.stem,
-                "path": str(file_path.relative_to(benchmarks_dir.parent.parent)),
-                "type": "yaml",
-            })
+            benchmarks.append(
+                {
+                    "name": file_path.stem,
+                    "path": str(file_path.relative_to(benchmarks_dir.parent.parent)),
+                    "type": "yaml",
+                }
+            )
         for file_path in benchmarks_dir.glob("*.json"):
-            benchmarks.append({
-                "name": file_path.stem,
-                "path": str(file_path.relative_to(benchmarks_dir.parent.parent)),
-                "type": "json",
-            })
+            benchmarks.append(
+                {
+                    "name": file_path.stem,
+                    "path": str(file_path.relative_to(benchmarks_dir.parent.parent)),
+                    "type": "json",
+                }
+            )
 
     return {"benchmarks": benchmarks}

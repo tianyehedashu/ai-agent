@@ -10,8 +10,8 @@ Agent Engine - Agent 执行引擎实现
 6. 循环或结束
 """
 
-import time
 from collections.abc import AsyncGenerator
+import time
 from typing import Any
 
 from core.context.manager import ContextManager
@@ -194,7 +194,7 @@ class AgentEngine:
                         # 添加工具结果消息
                         tool_msg = Message(
                             role=MessageRole.TOOL,
-                            content=result.output if result.success else f"Error: {result.error}",
+                            content=(result.output if result.success else f"Error: {result.error}"),
                             tool_call_id=tool_call.id,
                         )
                         state.messages.append(tool_msg.model_dump())
@@ -233,7 +233,7 @@ class AgentEngine:
             )
 
         except Exception as e:
-            logger.error(f"Agent execution error: {e}")
+            logger.exception("Agent execution error: %s", e)
             yield AgentEvent(
                 type=EventType.ERROR,
                 data={"error": str(e)},
@@ -346,6 +346,7 @@ class AgentEngine:
             result.duration_ms = int((time.time() - start_time) * 1000)
             return result
         except Exception as e:
+            logger.exception("Tool execution failed: %s - %s", tool_call.name, e)
             return ToolResult(
                 tool_call_id=tool_call.id,
                 success=False,

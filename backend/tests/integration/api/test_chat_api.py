@@ -4,9 +4,9 @@ Chat API 集成测试
 测试聊天 API 端点的完整功能
 """
 
-import pytest
 from fastapi import status
 from httpx import AsyncClient
+import pytest
 
 # Fixtures 从 conftest.py 自动导入
 
@@ -72,9 +72,7 @@ class TestChatAPI:
         ]
 
     @pytest.mark.asyncio
-    async def test_chat_returns_sse_stream(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_chat_returns_sse_stream(self, client: AsyncClient, auth_headers: dict):
         """测试: 返回 SSE 流（如果支持）"""
         # Act
         async with client.stream(

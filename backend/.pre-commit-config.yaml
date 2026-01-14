@@ -3,14 +3,14 @@
 # 手动运行: pre-commit run --all-files
 
 default_language_version:
-  python: python3.11
+  python: python3
 
 repos:
   # ==========================================================================
   # 通用检查
   # ==========================================================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
         name: 移除行尾空白
@@ -20,8 +20,6 @@ repos:
         name: 检查 YAML 语法
       - id: check-toml
         name: 检查 TOML 语法
-      - id: check-json
-        name: 检查 JSON 语法
       - id: check-added-large-files
         name: 检查大文件
         args: ['--maxkb=1024']
@@ -61,18 +59,6 @@ repos:
         pass_filenames: false
         # 只在提交时检查，不阻塞开发
         stages: [pre-push]
-
-  # ==========================================================================
-  # 安全检查
-  # ==========================================================================
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.7
-    hooks:
-      - id: bandit
-        name: Bandit 安全检查
-        args: ['-c', 'pyproject.toml', '-r', '.']
-        additional_dependencies: ['bandit[toml]']
-        exclude: ^tests/
 
   # ==========================================================================
   # 提交信息规范

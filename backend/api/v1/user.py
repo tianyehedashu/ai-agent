@@ -10,31 +10,38 @@ User API - 用户认证 API
 - POST /auth/change-password: 修改密码
 """
 
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from api.deps import get_current_user, get_user_service, require_auth
-from services.user import TokenPair, UserService
+from api.deps import AuthUser, RequiredAuthUser, get_user_service
+from exceptions import ConflictError
+from schemas.user import TokenResponse
+from services.user import UserService
 
 router = APIRouter()
 
 
-# ============================================================================
-# 请求/响应模型
-# ============================================================================
+# =============================================================================
+# Request/Response Schemas
+# =============================================================================
 
 
 class RegisterRequest(BaseModel):
     """注册请求"""
 
+    model_config = ConfigDict(strict=True)
+
     email: EmailStr
-    password: str
-    name: str
+    password: str = Field(..., min_length=8, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100)
 
 
 class LoginRequest(BaseModel):
     """登录请求"""
+
+    model_config = ConfigDict(strict=True)
 
     email: EmailStr
     password: str
@@ -49,41 +56,47 @@ class RefreshRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     """更新用户请求"""
 
-    name: str | None = None
-    avatar: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    avatar_url: str | None = Field(default=None, max_length=500)
 
 
 class ChangePasswordRequest(BaseModel):
     """修改密码请求"""
 
-    current_password: str
-    new_password: str
+    model_config = ConfigDict(strict=True)
+
+    current_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8, max_length=100)
 
 
 class UserResponse(BaseModel):
     """用户响应"""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     email: str
-    name: str
-    avatar: str | None
-    role: str
-    created_at: str
+    name: str | None
+    avatar_url: str | None
+    status: str
+    created_at: datetime
 
 
 class AuthResponse(BaseModel):
     """认证响应"""
 
     user: UserResponse
-    token: TokenPair
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
 
 
-# ============================================================================
+# =============================================================================
 # 认证 API
-# ============================================================================
+# =============================================================================
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
     user_service: UserService = Depends(get_user_service),
@@ -92,9 +105,9 @@ async def register(
     # 检查邮箱是否已存在
     existing = await user_service.get_by_email(request.email)
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+        raise ConflictError(
+            message="Email already registered",
+            resource="User",
         )
 
     # 创建用户
@@ -112,11 +125,12 @@ async def register(
             id=str(user.id),
             email=user.email,
             name=user.name,
-            avatar=user.avatar,
-            role=user.role,
-            created_at=user.created_at.isoformat(),
+            avatar_url=user.avatar_url,
+            status=user.status,
+            created_at=user.created_at,
         ),
-        token=token,
+        access_token=token.access_token,
+        expires_in=token.expires_in,
     )
 
 
@@ -126,23 +140,11 @@ async def login(
     user_service: UserService = Depends(get_user_service),
 ) -> AuthResponse:
     """用户登录"""
+    # authenticate 会在失败时抛出 AuthenticationError
     user = await user_service.authenticate(
         email=request.email,
         password=request.password,
     )
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-
-    # 检查用户状态
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is disabled",
-        )
 
     # 生成 Token
     token = await user_service.create_token(user)
@@ -152,105 +154,90 @@ async def login(
             id=str(user.id),
             email=user.email,
             name=user.name,
-            avatar=user.avatar,
-            role=user.role,
-            created_at=user.created_at.isoformat(),
+            avatar_url=user.avatar_url,
+            status=user.status,
+            created_at=user.created_at,
         ),
-        token=token,
+        access_token=token.access_token,
+        expires_in=token.expires_in,
     )
 
 
-@router.post("/refresh", response_model=TokenPair)
+@router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     request: RefreshRequest,
     user_service: UserService = Depends(get_user_service),
-) -> TokenPair:
+) -> TokenResponse:
     """刷新 Token"""
-    try:
-        return await user_service.refresh_token(request.refresh_token)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-        ) from e
+    # refresh_token 会在失败时抛出 TokenError
+    token = await user_service.refresh_token(request.refresh_token)
+
+    return TokenResponse(
+        access_token=token.access_token,
+        expires_in=token.expires_in,
+    )
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
-    current_user: dict = Depends(require_auth),
+    current_user: RequiredAuthUser,
     user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
     """获取当前用户"""
-    user = await user_service.get_by_id(current_user["id"])
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+    # get_by_id_or_raise 会在用户不存在时抛出 NotFoundError
+    user = await user_service.get_by_id_or_raise(current_user.id)
 
     return UserResponse(
         id=str(user.id),
         email=user.email,
         name=user.name,
-        avatar=user.avatar,
-        role=user.role,
-        created_at=user.created_at.isoformat(),
+        avatar_url=user.avatar_url,
+        status=user.status,
+        created_at=user.created_at,
     )
 
 
 @router.put("/me", response_model=UserResponse)
 async def update_me(
     request: UpdateUserRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: RequiredAuthUser,
     user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
     """更新当前用户"""
-    update_data = {}
-    if request.name is not None:
-        update_data["name"] = request.name
-    if request.avatar is not None:
-        update_data["avatar"] = request.avatar
-
-    user = await user_service.update(current_user["id"], update_data)
+    user = await user_service.update(
+        user_id=current_user.id,
+        name=request.name,
+        avatar_url=request.avatar_url,
+    )
 
     return UserResponse(
         id=str(user.id),
         email=user.email,
         name=user.name,
-        avatar=user.avatar,
-        role=user.role,
-        created_at=user.created_at.isoformat(),
+        avatar_url=user.avatar_url,
+        status=user.status,
+        created_at=user.created_at,
     )
 
 
-@router.post("/change-password")
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
     request: ChangePasswordRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: RequiredAuthUser,
     user_service: UserService = Depends(get_user_service),
-) -> dict[str, str]:
+) -> None:
     """修改密码"""
-    # 验证当前密码
-    is_valid = await user_service.verify_password(
-        current_user["id"],
-        request.current_password,
+    # change_password 会在验证失败时抛出 AuthenticationError
+    await user_service.change_password(
+        user_id=current_user.id,
+        old_password=request.current_password,
+        new_password=request.new_password,
     )
-
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect",
-        )
-
-    # 修改密码
-    await user_service.change_password(current_user["id"], request.new_password)
-
-    return {"message": "Password changed successfully"}
 
 
 @router.post("/logout")
 async def logout(
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, str]:
     """
     用户登出

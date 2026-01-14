@@ -8,8 +8,8 @@ Memory Retriever - 记忆检索器
 - 重要性加权
 """
 
+from datetime import UTC, datetime, timedelta
 import uuid
-from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_, select
 
@@ -93,7 +93,7 @@ class MemoryRetriever:
 
         # 3. 计算最终分数
         scored_memories = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for memory, base_score in candidates:
             # 过滤条件
@@ -168,7 +168,7 @@ class MemoryRetriever:
             # RuntimeError: 运行时错误
             logger.error("Vector store connection error: %s", e)
             return []
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # pylint: disable=broad-exception-caught
             # 向量存储和数据库可能抛出各种未知异常（网络、连接、自定义异常等）
             # 为了系统稳定性，需要捕获所有异常并返回空列表
             logger.exception("Unexpected error in vector recall: %s", e)
@@ -227,7 +227,7 @@ class MemoryRetriever:
         limit: int = 10,
     ) -> list[Memory]:
         """获取最近的记忆"""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         async with get_async_session() as session:
             result = await session.execute(

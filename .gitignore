@@ -40,10 +40,21 @@ venv.bak/
 Pipfile.lock
 
 # ============================================
+# uv (Python Package Manager)
+# ============================================
+# Note: uv.lock should be committed for reproducible builds
+# .uv/  # uv cache (optional, can be committed)
+
+# ============================================
 # IDE & Editors
 # ============================================
 .idea/
-.vscode/
+# 保留 .vscode 配置文件以确保团队一致性
+# .vscode/settings.json 和 .vscode/extensions.json 应该被提交
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/README.md
 *.swp
 *.swo
 *~

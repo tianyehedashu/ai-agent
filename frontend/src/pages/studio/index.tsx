@@ -460,39 +460,43 @@ export default function StudioPage(): React.JSX.Element {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {diagnostics.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex cursor-pointer items-start gap-2 px-4 py-2 hover:bg-muted/50"
-                      onClick={() => {
-                        goToDiagnostic(item)
-                      }}
-                    >
-                      {item.severity === 'error' && (
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                      )}
-                      {item.severity === 'warning' && (
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
-                      )}
-                      {item.severity === 'info' && (
-                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-                      )}
-                      <div className="flex-1 text-sm">
-                        <span className="text-foreground">{item.message}</span>
-                        {item.code && (
-                          <span className="ml-2 text-muted-foreground">({item.code})</span>
+                  {diagnostics.map((item) => {
+                    const itemKey = `${item.line}-${item.column}-${item.code ?? item.message.slice(0, 20)}`
+                    return (
+                      <button
+                        type="button"
+                        key={itemKey}
+                        className="flex w-full cursor-pointer items-start gap-2 px-4 py-2 text-left hover:bg-muted/50"
+                        onClick={() => {
+                          goToDiagnostic(item)
+                        }}
+                      >
+                        {item.severity === 'error' && (
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
                         )}
-                      </div>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        [{item.line}:{item.column}]
-                      </span>
-                      {item.source && (
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                          {item.source}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
+                        {item.severity === 'warning' && (
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+                        )}
+                        {item.severity === 'info' && (
+                          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                        )}
+                        <div className="flex-1 text-sm">
+                          <span className="text-foreground">{item.message}</span>
+                          {item.code && (
+                            <span className="ml-2 text-muted-foreground">({item.code})</span>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          [{item.line}:{item.column}]
+                        </span>
+                        {item.source && (
+                          <Badge variant="outline" className="shrink-0 text-xs">
+                            {item.source}
+                          </Badge>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </TabsContent>

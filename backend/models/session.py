@@ -2,8 +2,8 @@
 Session Model - 会话模型
 """
 
-import uuid
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID

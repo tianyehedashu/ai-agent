@@ -102,7 +102,7 @@ class LangGraphParser:
             tree = ast.parse(code)
             self._visit(tree)
         except SyntaxError as e:
-            logger.error(f"Syntax error in code: {e}")
+            logger.error("Syntax error in code: %s", e)
             raise ValueError(f"Invalid Python syntax: {e}") from e
 
         # 计算节点位置
@@ -366,34 +366,38 @@ class LangGraphParser:
 
         for node in workflow.nodes:
             style = type_styles.get(node.node_type, type_styles["custom"])
-            nodes.append({
-                "id": node.id,
-                "type": node.node_type,
-                "position": {"x": node.position[0], "y": node.position[1]},
-                "data": {
-                    "label": node.name,
-                    "function": node.function_name,
-                    "nodeType": node.node_type,
-                },
-                "style": {
-                    "background": style["background"],
-                    "border": f"2px solid {style['border']}",
-                    "borderRadius": "8px",
-                    "padding": "10px",
-                },
-            })
+            nodes.append(
+                {
+                    "id": node.id,
+                    "type": node.node_type,
+                    "position": {"x": node.position[0], "y": node.position[1]},
+                    "data": {
+                        "label": node.name,
+                        "function": node.function_name,
+                        "nodeType": node.node_type,
+                    },
+                    "style": {
+                        "background": style["background"],
+                        "border": f"2px solid {style['border']}",
+                        "borderRadius": "8px",
+                        "padding": "10px",
+                    },
+                }
+            )
 
         for i, edge in enumerate(workflow.edges):
-            edges.append({
-                "id": f"e{i}",
-                "source": edge.source,
-                "target": edge.target,
-                "type": "smoothstep",
-                "animated": edge.edge_type == "conditional",
-                "label": edge.condition or "",
-                "style": {
-                    "stroke": "#94a3b8" if edge.edge_type == "default" else "#a855f7",
-                },
-            })
+            edges.append(
+                {
+                    "id": f"e{i}",
+                    "source": edge.source,
+                    "target": edge.target,
+                    "type": "smoothstep",
+                    "animated": edge.edge_type == "conditional",
+                    "label": edge.condition or "",
+                    "style": {
+                        "stroke": "#94a3b8" if edge.edge_type == "default" else "#a855f7",
+                    },
+                }
+            )
 
         return {"nodes": nodes, "edges": edges}

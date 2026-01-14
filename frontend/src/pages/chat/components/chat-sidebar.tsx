@@ -57,10 +57,10 @@ export default function ChatSidebar(): React.JSX.Element {
 function SessionItem({
   session,
   isActive,
-}: {
+}: Readonly<{
   session: Session
   isActive: boolean
-}): React.JSX.Element {
+}>): React.JSX.Element {
   const [isHovered, setIsHovered] = useState(false)
 
   const handleDelete = async (): Promise<void> => {

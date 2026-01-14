@@ -7,12 +7,12 @@ Sandbox Executor - 沙箱执行器
 - 超时控制
 """
 
+from abc import ABC, abstractmethod
 import asyncio
+from pathlib import Path
 import tempfile
 import time
 import uuid
-from abc import ABC, abstractmethod
-from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -194,7 +194,7 @@ class DockerExecutor(SandboxExecutor):
     async def _run_container(
         self,
         cmd: list[str],
-        timeout: int,  # noqa: ASYNC109 - 使用 asyncio.wait_for 实现超时
+        timeout: int,
     ) -> ExecutionResult:
         """运行 Docker 容器"""
         start_time = time.time()
@@ -234,7 +234,7 @@ class DockerExecutor(SandboxExecutor):
             )
 
         except Exception as e:
-            logger.error(f"Docker execution error: {e}")
+            logger.error("Docker execution error: %s", e)
             return ExecutionResult(
                 success=False,
                 stdout="",

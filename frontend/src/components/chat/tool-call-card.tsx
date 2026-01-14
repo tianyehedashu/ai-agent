@@ -51,18 +51,11 @@ export function ToolCallCard({
         result?.success === true && 'border-green-500/50 bg-green-500/5'
       )}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        className="flex cursor-pointer items-center gap-2"
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-2 text-left"
         onClick={() => {
           setIsExpanded(!isExpanded)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setIsExpanded(!isExpanded)
-          }
         }}
       >
         <Button variant="ghost" size="icon" className="h-5 w-5 p-0">
@@ -84,7 +77,7 @@ export function ToolCallCard({
             {result.success ? '成功' : '失败'}
           </span>
         )}
-      </div>
+      </button>
 
       {isExpanded && (
         <div className="mt-3 space-y-2">

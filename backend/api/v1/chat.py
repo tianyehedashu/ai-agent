@@ -10,47 +10,82 @@ Chat API - 对话 API
 """
 
 import json
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
-from api.deps import get_chat_service, get_checkpoint_service, get_current_user
+from api.deps import AuthUser, get_chat_service, get_checkpoint_service
 from services.chat import ChatService
 from services.checkpoint import CheckpointService
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+# =============================================================================
+# Request/Response Schemas
+# =============================================================================
+
+
 class ChatRequest(BaseModel):
     """对话请求"""
 
-    message: str
-    session_id: str | None = None
-    agent_id: str | None = None
+    model_config = ConfigDict(strict=True)
+
+    message: str = Field(..., min_length=1, description="用户消息")
+    session_id: str | None = Field(default=None, description="会话 ID（可选）")
+    agent_id: str | None = Field(default=None, description="Agent ID（可选）")
 
 
 class ResumeRequest(BaseModel):
     """恢复执行请求"""
 
+    model_config = ConfigDict(strict=True)
+
     session_id: str
     checkpoint_id: str
-    action: str  # approve, reject, modify
+    action: str = Field(..., pattern="^(approve|reject|modify)$")
     modified_args: dict[str, Any] | None = None
 
 
 class DiffRequest(BaseModel):
     """检查点对比请求"""
 
+    model_config = ConfigDict(strict=True)
+
     checkpoint_id_1: str
     checkpoint_id_2: str
+
+
+class CheckpointItem(BaseModel):
+    """检查点列表项"""
+
+    id: str
+    session_id: str
+    step: int
+    created_at: str
+    parent_id: str | None
+
+
+class DiffResponse(BaseModel):
+    """检查点对比响应"""
+
+    messages_added: int
+    tokens_delta: int
+    iteration_delta: int
+    new_messages: list[dict[str, Any]]
+
+
+# =============================================================================
+# API Endpoints
+# =============================================================================
 
 
 @router.post("")
 async def chat(
     request: ChatRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
     chat_service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
@@ -65,7 +100,7 @@ async def chat(
                 session_id=request.session_id,
                 message=request.message,
                 agent_id=request.agent_id,
-                user_id=current_user.get("id", "anonymous"),
+                user_id=current_user.id,
             ):
                 data = event.model_dump(mode="json")
                 yield f"data: {json.dumps(data)}\n\n"
@@ -89,7 +124,7 @@ async def chat(
 @router.post("/resume")
 async def resume_execution(
     request: ResumeRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
     chat_service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
@@ -105,7 +140,7 @@ async def resume_execution(
                 checkpoint_id=request.checkpoint_id,
                 action=request.action,
                 modified_args=request.modified_args,
-                user_id=current_user.get("id", "anonymous"),
+                user_id=current_user.id,
             ):
                 data = event.model_dump(mode="json")
                 yield f"data: {json.dumps(data)}\n\n"
@@ -126,23 +161,23 @@ async def resume_execution(
     )
 
 
-@router.get("/checkpoints/{session_id}")
+@router.get("/checkpoints/{session_id}", response_model=list[CheckpointItem])
 async def list_checkpoints(
     session_id: str,
-    limit: int = 50,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
-) -> list[dict[str, Any]]:
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[CheckpointItem]:
     """获取会话的检查点列表"""
     checkpoints = await checkpoint_service.list_history(session_id, limit)
     return [
-        {
-            "id": cp.id,
-            "session_id": cp.session_id,
-            "step": cp.step,
-            "created_at": cp.created_at.isoformat(),
-            "parent_id": cp.parent_id,
-        }
+        CheckpointItem(
+            id=cp.id,
+            session_id=cp.session_id,
+            step=cp.step,
+            created_at=cp.created_at.isoformat(),
+            parent_id=cp.parent_id,
+        )
         for cp in checkpoints
     ]
 
@@ -150,28 +185,25 @@ async def list_checkpoints(
 @router.get("/checkpoints/{checkpoint_id}/state")
 async def get_checkpoint_state(
     checkpoint_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> dict[str, Any]:
     """获取检查点状态"""
-    try:
-        state = await checkpoint_service.load(checkpoint_id)
-        return state.model_dump(mode="json")
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail="Checkpoint not found") from e
+    # get_or_raise 会在检查点不存在时抛出 CheckpointError
+    checkpoint = await checkpoint_service.get_or_raise(checkpoint_id)
+    return checkpoint.state.model_dump(mode="json")
 
 
-@router.post("/checkpoints/diff")
+@router.post("/checkpoints/diff", response_model=DiffResponse)
 async def diff_checkpoints(
     request: DiffRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
-) -> dict[str, Any]:
+) -> DiffResponse:
     """对比两个检查点"""
-    try:
-        return await checkpoint_service.diff(
-            request.checkpoint_id_1,
-            request.checkpoint_id_2,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    # diff 会在检查点不存在时抛出 CheckpointError
+    result = await checkpoint_service.diff(
+        request.checkpoint_id_1,
+        request.checkpoint_id_2,
+    )
+    return DiffResponse(**result)

@@ -65,11 +65,32 @@ class Settings(BaseSettings):
     # ========================================================================
     # LLM 配置
     # ========================================================================
+    # OpenAI
     openai_api_key: SecretStr | None = None
     openai_api_base: str = "https://api.openai.com/v1"
+
+    # Anthropic (Claude)
     anthropic_api_key: SecretStr | None = None
+
+    # 阿里云通义千问 (DashScope)
+    dashscope_api_key: SecretStr | None = None
+    dashscope_api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    # DeepSeek
+    deepseek_api_key: SecretStr | None = None
+    deepseek_api_base: str = "https://api.deepseek.com"
+
+    # 火山引擎 (字节跳动豆包)
+    volcengine_api_key: SecretStr | None = None
+    volcengine_api_base: str = "https://ark.cn-beijing.volces.com/api/v3"
+    volcengine_endpoint_id: str | None = None  # 通用接入点 (兼容旧配置)
+    volcengine_chat_endpoint_id: str | None = None  # 对话模型接入点 (Doubao-pro/lite)
+    volcengine_image_endpoint_id: str | None = None  # 图像生成接入点 (Seedream)
+
+    # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"
 
+    # 默认模型配置
     default_model: str = "claude-3-5-sonnet-20241022"
     embedding_model: str = "text-embedding-3-small"
 

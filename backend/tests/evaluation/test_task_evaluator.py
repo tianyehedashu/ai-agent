@@ -4,7 +4,6 @@
 测试任务完成率评估功能
 """
 
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -21,7 +20,9 @@ class MockAgent:
     async def run(self, prompt: str, timeout: int = 60):
         """模拟 Agent 运行"""
         self.call_count += 1
-        response = self.responses.get(prompt, {"content": "Default response", "iterations": 1, "total_tokens": 100})
+        response = self.responses.get(
+            prompt, {"content": "Default response", "iterations": 1, "total_tokens": 100}
+        )
         return type("Response", (), response)()
 
 
@@ -123,11 +124,15 @@ class TestTaskEvaluator:
     @pytest.mark.asyncio
     async def test_evaluate_timeout(self, mock_agent):
         """测试: 超时处理"""
+
         # Arrange
         async def slow_run(prompt: str, timeout: int = 60):
             import asyncio
+
             await asyncio.sleep(timeout + 1)
-            return type("Response", (), {"content": "Too late", "iterations": 0, "total_tokens": 0})()
+            return type(
+                "Response", (), {"content": "Too late", "iterations": 0, "total_tokens": 0}
+            )()
 
         mock_agent.run = slow_run
         test_cases = [
@@ -152,6 +157,7 @@ class TestTaskEvaluator:
     @pytest.mark.asyncio
     async def test_evaluate_error_handling(self, mock_agent):
         """测试: 错误处理"""
+
         # Arrange
         async def failing_run(prompt: str, timeout: int = 60):
             raise Exception("Agent execution failed")

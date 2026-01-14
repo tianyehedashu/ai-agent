@@ -9,8 +9,8 @@ Pyright Service - Pyright 类型检查服务
 
 import asyncio
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from utils.logging import get_logger
@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 # 尝试导入 jedi (可选依赖)
 try:
     import jedi
+
     JEDI_AVAILABLE = True
 except ImportError:
     jedi = None  # type: ignore[assignment]
@@ -63,11 +64,11 @@ class PyrightService:
             version = stdout.decode().strip()
             logger.info("Pyright initialized: %s", version)
             return {"status": "ok", "version": version}
-        except (FileNotFoundError, OSError, Exception) as e:
+        except OSError as e:
             logger.warning("Pyright not available: %s", e)
             return {"status": "error", "message": str(e)}
 
-    async def shutdown(self) -> None:  # noqa: PLR6301
+    async def shutdown(self) -> None:
         """关闭服务"""
         self._initialized = False
 
@@ -124,15 +125,17 @@ class PyrightService:
 
             diagnostics = []
             for diag in result.get("generalDiagnostics", []):
-                diagnostics.append({
-                    "line": diag.get("range", {}).get("start", {}).get("line", 0),
-                    "column": diag.get("range", {}).get("start", {}).get("character", 0),
-                    "end_line": diag.get("range", {}).get("end", {}).get("line", 0),
-                    "end_column": diag.get("range", {}).get("end", {}).get("character", 0),
-                    "severity": self._convert_severity(diag.get("severity", "error")),
-                    "message": diag.get("message", ""),
-                    "code": diag.get("rule", ""),
-                })
+                diagnostics.append(
+                    {
+                        "line": diag.get("range", {}).get("start", {}).get("line", 0),
+                        "column": diag.get("range", {}).get("start", {}).get("character", 0),
+                        "end_line": diag.get("range", {}).get("end", {}).get("line", 0),
+                        "end_column": diag.get("range", {}).get("end", {}).get("character", 0),
+                        "severity": self._convert_severity(diag.get("severity", "error")),
+                        "message": diag.get("message", ""),
+                        "code": diag.get("rule", ""),
+                    }
+                )
 
             return diagnostics
 

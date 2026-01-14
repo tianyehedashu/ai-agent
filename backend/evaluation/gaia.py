@@ -6,15 +6,12 @@ GAIA (General AI Assistant) 是一个真实世界的 AI Agent 评估基准
 """
 
 import json
-import time
-from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Any
 
-import yaml
 from pydantic import BaseModel
-
-from evaluation.task_completion import TaskEvaluator, TaskEvalResult, TaskStatus
+import yaml
 
 
 class GAIAQuestion(BaseModel):
@@ -75,10 +72,10 @@ class GAIAEvaluator:
 
         # 支持 JSON 和 YAML 格式
         if path.suffix == ".json":
-            with open(path, "r", encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 data = json.load(f)
         elif path.suffix in [".yaml", ".yml"]:
-            with open(path, "r", encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 data = yaml.safe_load(f)
         else:
             raise ValueError(f"Unsupported file format: {path.suffix}")
@@ -173,10 +170,7 @@ class GAIAEvaluator:
 
     def _extract_answer(self, response: Any) -> str:
         """从响应中提取答案"""
-        if hasattr(response, "content"):
-            content = response.content
-        else:
-            content = str(response)
+        content = response.content if hasattr(response, "content") else str(response)
 
         # 尝试提取最终答案（通常在最后）
         # GAIA 答案通常是简洁的

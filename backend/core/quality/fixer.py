@@ -78,7 +78,7 @@ class CodeFixer:
 
         while attempt < self.max_attempts:
             attempt += 1
-            logger.info(f"Fix attempt {attempt}/{self.max_attempts}")
+            logger.info("Fix attempt %d/%d", attempt, self.max_attempts)
 
             # 构建问题描述
             issues_text = self._format_issues(validation_result)
@@ -114,12 +114,16 @@ class CodeFixer:
                 if new_result.errors < validation_result.errors:
                     current_code = fixed_code
                     validation_result = new_result
-                    logger.info(f"Errors reduced: {validation_result.errors} -> {new_result.errors}")
+                    logger.info(
+                        "Errors reduced: %d -> %d",
+                        validation_result.errors,
+                        new_result.errors,
+                    )
                 else:
                     logger.warning("Fix attempt did not reduce errors")
 
             except Exception as e:
-                logger.error(f"Fix attempt failed: {e}")
+                logger.error("Fix attempt failed: %s", e)
 
         # 返回最后的代码（可能部分修复）
         return current_code, validation_result.is_valid
@@ -164,7 +168,7 @@ class CodeFixer:
             return fixed_code if fixed_code else code
 
         except Exception as e:
-            logger.error(f"Single fix failed: {e}")
+            logger.error("Single fix failed: %s", e)
             return code
 
     def _format_issues(self, result: ValidationResult) -> str:

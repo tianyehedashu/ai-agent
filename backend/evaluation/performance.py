@@ -5,12 +5,10 @@
 """
 
 import asyncio
+from dataclasses import dataclass
 import statistics
 import time
-from dataclasses import dataclass
 from typing import Any
-
-from pydantic import BaseModel
 
 
 @dataclass
@@ -142,7 +140,6 @@ class LoadTestRunner:
         """
         import random
 
-        results: list[dict[str, Any]] = []
         start_time = time.time()
         request_interval = 1.0 / target_rps
 

@@ -7,10 +7,10 @@ Memory Manager - 记忆管理器
 - 记忆更新和删除
 """
 
+from datetime import UTC, datetime
 import json
-import uuid
-from datetime import datetime, timezone
 from typing import Any
+import uuid
 
 from sqlalchemy import select
 
@@ -191,9 +191,7 @@ class MemoryManager:
     ) -> Memory | None:
         """更新记忆"""
         async with get_async_session() as session:
-            result = await session.execute(
-                select(Memory).where(Memory.id == uuid.UUID(memory_id))
-            )
+            result = await session.execute(select(Memory).where(Memory.id == uuid.UUID(memory_id)))
             memory = result.scalar_one_or_none()
 
             if not memory:
@@ -204,9 +202,9 @@ class MemoryManager:
             if importance is not None:
                 memory.importance = float(importance)
             if metadata is not None:
-                memory.metadata = {**memory.metadata, **metadata}
+                memory.extra_data = {**memory.extra_data, **metadata}
 
-            memory.updated_at = datetime.now(timezone.utc)
+            memory.updated_at = datetime.now(UTC)
             memory.access_count += 1
 
             await session.commit()
@@ -230,9 +228,7 @@ class MemoryManager:
     async def delete(self, memory_id: str) -> bool:
         """删除记忆"""
         async with get_async_session() as session:
-            result = await session.execute(
-                select(Memory).where(Memory.id == uuid.UUID(memory_id))
-            )
+            result = await session.execute(select(Memory).where(Memory.id == uuid.UUID(memory_id)))
             memory = result.scalar_one_or_none()
 
             if not memory:
@@ -253,9 +249,7 @@ class MemoryManager:
     async def get(self, memory_id: str) -> Memory | None:
         """获取记忆"""
         async with get_async_session() as session:
-            result = await session.execute(
-                select(Memory).where(Memory.id == uuid.UUID(memory_id))
-            )
+            result = await session.execute(select(Memory).where(Memory.id == uuid.UUID(memory_id)))
             return result.scalar_one_or_none()
 
     async def list_by_user(

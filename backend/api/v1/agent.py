@@ -5,19 +5,29 @@ Agent API - Agent 管理接口
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, ConfigDict, Field
 
-from api.deps import get_agent_service, get_current_user
-from api.errors import ACCESS_DENIED, AGENT_NOT_FOUND
-from models.user import User
+from api.deps import (
+    AuthUser,
+    check_ownership,
+    check_ownership_or_public,
+    get_agent_service,
+)
 from services.agent import AgentService
 
 router = APIRouter()
 
 
+# =============================================================================
+# Request/Response Schemas
+# =============================================================================
+
+
 class AgentCreate(BaseModel):
     """创建 Agent 请求"""
+
+    model_config = ConfigDict(strict=True)
 
     name: str = Field(..., min_length=1, max_length=100, description="Agent 名称")
     description: str | None = Field(default=None, max_length=500, description="描述")
@@ -45,6 +55,8 @@ class AgentUpdate(BaseModel):
 class AgentResponse(BaseModel):
     """Agent 响应"""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     description: str | None
@@ -58,32 +70,41 @@ class AgentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+
+# =============================================================================
+# API Endpoints
+# =============================================================================
 
 
 @router.get("/", response_model=list[AgentResponse])
 async def list_agents(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser,
     agent_service: AgentService = Depends(get_agent_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[AgentResponse]:
     """获取用户的 Agent 列表"""
-    agents = await agent_service.list_by_user(str(current_user.id), skip=skip, limit=limit)
+    agents = await agent_service.list_by_user(current_user.id, skip=skip, limit=limit)
     return [AgentResponse.model_validate(agent) for agent in agents]
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     data: AgentCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """创建新 Agent"""
     agent = await agent_service.create(
-        user_id=str(current_user.id),
-        **data.model_dump(),
+        user_id=current_user.id,
+        name=data.name,
+        description=data.description,
+        system_prompt=data.system_prompt,
+        model=data.model,
+        tools=data.tools,
+        temperature=data.temperature,
+        max_tokens=data.max_tokens,
+        max_iterations=data.max_iterations,
     )
     return AgentResponse.model_validate(agent)
 
@@ -91,24 +112,19 @@ async def create_agent(
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """获取 Agent 详情"""
-    agent = await agent_service.get_by_id(agent_id)
+    agent = await agent_service.get_by_id_or_raise(agent_id)
 
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=AGENT_NOT_FOUND,
-        )
-
-    # 检查权限
-    if str(agent.user_id) != str(current_user.id) and not agent.is_public:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ACCESS_DENIED,
-        )
+    # 检查权限（所有者或公开）
+    check_ownership_or_public(
+        str(agent.user_id),
+        current_user.id,
+        agent.is_public,
+        "Agent",
+    )
 
     return AgentResponse.model_validate(agent)
 
@@ -117,28 +133,27 @@ async def get_agent(
 async def update_agent(
     agent_id: str,
     data: AgentUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """更新 Agent"""
-    agent = await agent_service.get_by_id(agent_id)
+    agent = await agent_service.get_by_id_or_raise(agent_id)
 
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=AGENT_NOT_FOUND,
-        )
-
-    # 检查权限
-    if str(agent.user_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ACCESS_DENIED,
-        )
+    # 检查权限（仅所有者）
+    check_ownership(str(agent.user_id), current_user.id, "Agent")
 
     # 更新
-    update_data = data.model_dump(exclude_unset=True)
-    updated_agent = await agent_service.update(agent_id, update_data)
+    updated_agent = await agent_service.update(
+        agent_id=agent_id,
+        name=data.name,
+        description=data.description,
+        system_prompt=data.system_prompt,
+        model=data.model,
+        tools=data.tools,
+        temperature=data.temperature,
+        max_tokens=data.max_tokens,
+        max_iterations=data.max_iterations,
+    )
 
     return AgentResponse.model_validate(updated_agent)
 
@@ -146,23 +161,13 @@ async def update_agent(
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> None:
     """删除 Agent"""
-    agent = await agent_service.get_by_id(agent_id)
+    agent = await agent_service.get_by_id_or_raise(agent_id)
 
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=AGENT_NOT_FOUND,
-        )
-
-    # 检查权限
-    if str(agent.user_id) != str(current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ACCESS_DENIED,
-        )
+    # 检查权限（仅所有者）
+    check_ownership(str(agent.user_id), current_user.id, "Agent")
 
     await agent_service.delete(agent_id)

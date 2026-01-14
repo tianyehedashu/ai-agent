@@ -1,17 +1,20 @@
 """
 Chat Service - 对话服务
 
-实现 Agent 执行引擎的封装
+实现 Agent 执行引擎的封装。
 """
 
 from collections.abc import AsyncGenerator
-from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.engine.agent import AgentEngine
 from core.engine.checkpointer import Checkpointer
 from core.llm.gateway import LLMGateway
-from core.types import AgentConfig, AgentEvent, EventType
+from core.types import AgentConfig, AgentEvent, EventType, MessageRole
+from exceptions import CheckpointError, NotFoundError
 from schemas.message import ChatEvent
+from services.agent import AgentService
 from services.session import SessionService
 from tools.registry import ToolRegistry
 from utils.logging import get_logger
@@ -20,13 +23,26 @@ logger = get_logger(__name__)
 
 
 class ChatService:
-    """对话服务"""
+    """对话服务
 
-    def __init__(self) -> None:
+    封装 Agent 执行引擎，提供对话接口。
+
+    Attributes:
+        db: 数据库会话
+        llm_gateway: LLM 网关
+        tool_registry: 工具注册表
+        checkpointer: 检查点管理器
+        session_service: 会话服务
+        agent_service: Agent 服务
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
         self.llm_gateway = LLMGateway()
         self.tool_registry = ToolRegistry()
         self.checkpointer = Checkpointer()
-        self.session_service = SessionService()
+        self.session_service = SessionService(db)
+        self.agent_service = AgentService(db)
 
     async def chat(
         self,
@@ -35,8 +51,7 @@ class ChatService:
         agent_id: str | None,
         user_id: str,
     ) -> AsyncGenerator[ChatEvent, None]:
-        """
-        处理对话请求
+        """处理对话请求
 
         Args:
             session_id: 会话 ID (可选，不提供则创建新会话)
@@ -58,11 +73,11 @@ class ChatService:
         # 保存用户消息
         await self.session_service.add_message(
             session_id=session_id,
-            role="user",
+            role=MessageRole.USER,
             content=message,
         )
 
-        # 创建 Agent 配置
+        # 获取 Agent 配置
         config = await self._get_agent_config(agent_id)
 
         # 创建执行引擎
@@ -96,12 +111,12 @@ class ChatService:
             if final_content:
                 await self.session_service.add_message(
                     session_id=session_id,
-                    role="assistant",
+                    role=MessageRole.ASSISTANT,
                     content=final_content,
                 )
 
         except Exception as e:
-            logger.error(f"Chat error: {e}")
+            logger.error("Chat error: %s", e)
             yield ChatEvent(
                 type="error",
                 data={"error": str(e)},
@@ -109,14 +124,13 @@ class ChatService:
 
     async def resume(
         self,
-        session_id: str,  # noqa: ARG002 - 保留用于日志和审计
+        session_id: str,
         checkpoint_id: str,
         action: str,
-        modified_args: dict[str, Any] | None,
-        user_id: str,  # noqa: ARG002 - 保留用于权限验证扩展
+        modified_args: dict | None,
+        user_id: str,
     ) -> AsyncGenerator[ChatEvent, None]:
-        """
-        从中断点恢复执行
+        """从中断点恢复执行
 
         Args:
             session_id: 会话 ID
@@ -127,18 +141,29 @@ class ChatService:
 
         Yields:
             ChatEvent: 聊天事件流
+
+        Raises:
+            CheckpointError: 检查点不存在时
         """
+        # 验证会话属于当前用户
+        session = await self.session_service.get_by_id(session_id)
+        if not session:
+            raise NotFoundError("Session", session_id)
+
+        if str(session.user_id) != user_id:
+            raise NotFoundError("Session", session_id)  # 不泄露权限信息
+
         # 获取检查点信息
-        checkpoint = await self.checkpointer.get(checkpoint_id)
-        if not checkpoint:
-            yield ChatEvent(
-                type="error",
-                data={"error": "Checkpoint not found"},
+        checkpoint_data = await self.checkpointer.get(checkpoint_id)
+        if not checkpoint_data:
+            raise CheckpointError(
+                f"Checkpoint not found: {checkpoint_id}",
+                checkpoint_id=checkpoint_id,
             )
-            return
 
         # 获取 Agent 配置
-        config = await self._get_agent_config(None)
+        agent_id = str(session.agent_id) if session.agent_id else None
+        config = await self._get_agent_config(agent_id)
 
         # 创建执行引擎
         engine = AgentEngine(
@@ -157,9 +182,32 @@ class ChatService:
             yield self._convert_event(event)
 
     async def _get_agent_config(self, agent_id: str | None) -> AgentConfig:
-        """获取 Agent 配置"""
-        # TODO: 实现从数据库加载 Agent 配置
-        _ = agent_id  # 抑制未使用警告，待实现数据库加载
+        """获取 Agent 配置
+
+        从数据库加载 Agent 配置，如果没有指定 agent_id 则返回默认配置。
+
+        Args:
+            agent_id: Agent ID（可选）
+
+        Returns:
+            Agent 配置对象
+        """
+        if agent_id:
+            agent = await self.agent_service.get_by_id(agent_id)
+            if agent:
+                return AgentConfig(
+                    name=agent.name,
+                    model=agent.model,
+                    max_iterations=agent.max_iterations,
+                    temperature=agent.temperature,
+                    max_tokens=agent.max_tokens,
+                    tools=agent.tools,
+                    system_prompt=agent.system_prompt,
+                    checkpoint_enabled=True,
+                    checkpoint_interval=5,
+                    hitl_enabled=True,
+                    hitl_operations=["run_shell", "write_file", "delete_file"],
+                )
 
         # 返回默认配置
         return AgentConfig(
@@ -176,7 +224,14 @@ class ChatService:
         )
 
     def _convert_event(self, event: AgentEvent) -> ChatEvent:
-        """转换 AgentEvent 为 ChatEvent"""
+        """转换 AgentEvent 为 ChatEvent
+
+        Args:
+            event: Agent 事件
+
+        Returns:
+            聊天事件
+        """
         type_mapping = {
             EventType.THINKING: "thinking",
             EventType.TEXT: "text",

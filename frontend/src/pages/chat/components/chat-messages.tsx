@@ -21,7 +21,7 @@ export default function ChatMessages({
   streamingContent,
   isLoading,
   pendingToolCalls = [],
-}: ChatMessagesProps): React.JSX.Element {
+}: Readonly<ChatMessagesProps>): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -90,7 +90,7 @@ export default function ChatMessages({
   )
 }
 
-function MessageBubble({ message }: { message: Message }): React.JSX.Element {
+function MessageBubble({ message }: Readonly<{ message: Message }>): React.JSX.Element {
   const isUser = message.role === 'user'
 
   return (

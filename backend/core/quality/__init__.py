@@ -9,6 +9,13 @@ Code Quality - 代码质量保证系统
 
 from core.quality.architecture import ArchitectureValidator
 from core.quality.fixer import CodeFixer
+from core.quality.types import Severity, ValidationIssue
 from core.quality.validator import CodeValidator
 
-__all__ = ["ArchitectureValidator", "CodeFixer", "CodeValidator"]
+__all__ = [
+    "ArchitectureValidator",
+    "CodeFixer",
+    "CodeValidator",
+    "Severity",
+    "ValidationIssue",
+]

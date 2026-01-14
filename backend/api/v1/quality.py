@@ -13,12 +13,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.deps import get_current_user
-
-# 默认文件路径常量
-DEFAULT_FILE_PATH = "code.py"
 from core.lsp.proxy import LSPProxy
 from core.quality.fixer import CodeFixer
 from core.quality.validator import CodeValidator
+
+# 默认文件路径常量
+DEFAULT_FILE_PATH = "code.py"
 
 router = APIRouter(prefix="/quality", tags=["Quality"])
 
@@ -58,7 +58,7 @@ class DiagnosticsRequest(BaseModel):
 @router.post("/validate")
 async def validate_code(
     request: ValidateRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     验证代码
@@ -96,7 +96,7 @@ async def validate_code(
 @router.post("/fix")
 async def fix_code(
     request: FixRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     修复代码
@@ -116,7 +116,7 @@ async def fix_code(
 @router.post("/format")
 async def format_code(
     request: FormatRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict[str, str]:
     """
     格式化代码
@@ -135,7 +135,7 @@ async def format_code(
 @router.post("/diagnostics")
 async def get_diagnostics(
     request: DiagnosticsRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """
     获取诊断信息
@@ -171,7 +171,7 @@ class HoverRequest(BaseModel):
 @router.post("/completion")
 async def get_completion(
     request: CompletionRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     获取代码补全建议
@@ -194,7 +194,7 @@ async def get_completion(
 @router.post("/hover")
 async def get_hover(
     request: HoverRequest,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     获取悬停信息
