@@ -7,6 +7,7 @@ Database Connection Management
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -75,25 +76,49 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话 (用于依赖注入)"""
+    """
+    获取数据库会话 (用于 FastAPI 依赖注入)
+
+    SQLAlchemy 的异步会话上下文管理器会自动处理：
+    - 异常时自动回滚
+    - 正常结束时自动提交
+    - 会话关闭和资源清理
+    """
     factory = get_session_factory()
     async with factory() as session:
         try:
             yield session
-            await session.commit()
+            try:
+                await session.commit()
+            except sa_exc.PendingRollbackError as e:
+                await session.rollback()
+                if e.__cause__ is not None:
+                    raise e.__cause__ from None  # pylint: disable=raising-non-exception
+                raise
         except Exception:
             await session.rollback()
             raise
+        # 上下文管理器会自动关闭会话，无需手动处理
 
 
 @asynccontextmanager
 async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话上下文管理器"""
+    """
+    获取数据库会话上下文管理器
+
+    用于非 FastAPI 依赖注入的场景（如后台任务、脚本等）
+    """
     factory = get_session_factory()
     async with factory() as session:
         try:
             yield session
-            await session.commit()
+            try:
+                await session.commit()
+            except sa_exc.PendingRollbackError as e:
+                await session.rollback()
+                if e.__cause__ is not None:
+                    raise e.__cause__ from None  # pylint: disable=raising-non-exception
+                raise
         except Exception:
             await session.rollback()
             raise

@@ -12,12 +12,15 @@ import asyncio
 from pathlib import Path
 import tempfile
 import time
+from typing import TYPE_CHECKING
 import uuid
 
 from pydantic import BaseModel
 
-from app.config import settings
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from core.config import SandboxConfig as SandboxConfigProtocol
 
 logger = get_logger(__name__)
 
@@ -252,6 +255,15 @@ class LocalExecutor(SandboxExecutor):
     警告: 不安全，仅用于开发测试
     """
 
+    def __init__(self, config: "SandboxConfigProtocol | None" = None) -> None:
+        """
+        初始化本地执行器
+
+        Args:
+            config: 沙箱配置（可选，用于获取 work_dir）
+        """
+        self.config = config
+
     async def execute_python(
         self,
         code: str,
@@ -318,12 +330,14 @@ class LocalExecutor(SandboxExecutor):
         config = config or SandboxConfig()
         start_time = time.time()
 
+        work_dir = self.config.work_dir if self.config else "./workspace"
+
         try:
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=settings.work_dir,
+                cwd=work_dir,
             )
 
             try:

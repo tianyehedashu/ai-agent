@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import (
-    AuthUser,
+    RequiredAuthUser,
     check_ownership,
     check_ownership_or_public,
     get_agent_service,
@@ -78,20 +78,22 @@ class AgentResponse(BaseModel):
 
 @router.get("/", response_model=list[AgentResponse])
 async def list_agents(
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     agent_service: AgentService = Depends(get_agent_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[AgentResponse]:
     """获取用户的 Agent 列表"""
     agents = await agent_service.list_by_user(current_user.id, skip=skip, limit=limit)
-    return [AgentResponse.model_validate(agent) for agent in agents]
+    return [
+        AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)}) for agent in agents
+    ]
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     data: AgentCreate,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """创建新 Agent"""
@@ -106,13 +108,13 @@ async def create_agent(
         max_tokens=data.max_tokens,
         max_iterations=data.max_iterations,
     )
-    return AgentResponse.model_validate(agent)
+    return AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)})
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """获取 Agent 详情"""
@@ -126,14 +128,14 @@ async def get_agent(
         "Agent",
     )
 
-    return AgentResponse.model_validate(agent)
+    return AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)})
 
 
 @router.put("/{agent_id}", response_model=AgentResponse)
 async def update_agent(
     agent_id: str,
     data: AgentUpdate,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentResponse:
     """更新 Agent"""
@@ -155,13 +157,13 @@ async def update_agent(
         max_iterations=data.max_iterations,
     )
 
-    return AgentResponse.model_validate(updated_agent)
+    return AgentResponse.model_validate({**updated_agent.__dict__, "id": str(updated_agent.id)})
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: str,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     agent_service: AgentService = Depends(get_agent_service),
 ) -> None:
     """删除 Agent"""

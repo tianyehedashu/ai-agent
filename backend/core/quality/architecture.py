@@ -227,7 +227,10 @@ class ArchitectureValidator:
                                             line=node.lineno,
                                             column=node.col_offset,
                                             severity=RULES["SEC002"].severity,
-                                            message=f"变量 '{target.id}' 可能包含硬编码的敏感信息，请使用环境变量",
+                                            message=(
+                                                f"变量 '{target.id}' 可能包含硬编码的敏感信息，"
+                                                "请使用环境变量"
+                                            ),
                                             code="SEC002",
                                             source="architecture",
                                         )

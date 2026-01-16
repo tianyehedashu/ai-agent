@@ -4,7 +4,6 @@
 测试任务完成率评估功能
 """
 
-
 import pytest
 
 from evaluation.task_completion import TaskEvaluator, TaskStatus

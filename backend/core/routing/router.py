@@ -57,7 +57,7 @@ class StateRouter:
         # 优先级3: 检查是否有待执行的工具调用
         # 注意: AgentState 使用 pending_tool_call (单数)，这里检查消息中的工具调用
         if state.messages and any(
-            msg.get("role") == "assistant" and msg.get("tool_calls") for msg in state.messages
+            msg.role.value == "assistant" and msg.tool_calls for msg in state.messages
         ):
             return RouteDecision.EXECUTE_TOOLS
 

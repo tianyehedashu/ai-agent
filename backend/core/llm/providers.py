@@ -9,6 +9,7 @@ LLM Providers - 模型提供商
 - 阿里云 DashScope (通义千问 Qwen 系列)
 - DeepSeek
 - 火山引擎 (字节豆包)
+- 智谱AI (GLM 系列)
 """
 
 from typing import Any, ClassVar
@@ -204,6 +205,44 @@ class VolcEngineProvider(BaseProvider):
         ]
 
 
+class ZhipuAIProvider(BaseProvider):
+    """
+    智谱AI提供商 (GLM 系列)
+
+    支持的模型:
+    - GLM-4.7: 最新版本，支持代码生成和工具调用
+    - GLM-4: 通用对话模型
+    - GLM-4-Plus: 增强版
+    - GLM-4-Air: 轻量版
+    - GLM-4-Flash: 快速版
+
+    文档: https://open.bigmodel.cn/
+    """
+
+    name: ClassVar[str] = "zhipuai"
+    models: ClassVar[list[str]] = [
+        "glm-4.7",
+        "glm-4",
+        "glm-4-plus",
+        "glm-4-air",
+        "glm-4-flash",
+    ]
+
+    def format_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """智谱AI使用 OpenAI 兼容格式"""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool.get("parameters", {"type": "object", "properties": {}}),
+                },
+            }
+            for tool in tools
+        ]
+
+
 # 提供商注册表
 PROVIDERS: dict[str, BaseProvider] = {
     "openai": OpenAIProvider(),
@@ -211,6 +250,7 @@ PROVIDERS: dict[str, BaseProvider] = {
     "dashscope": DashScopeProvider(),
     "deepseek": DeepSeekProvider(),
     "volcengine": VolcEngineProvider(),
+    "zhipuai": ZhipuAIProvider(),
 }
 
 
@@ -218,25 +258,24 @@ def get_provider(model: str) -> BaseProvider:
     """根据模型获取提供商"""
     model_lower = model.lower()
 
-    # Anthropic (Claude)
-    if "claude" in model_lower:
-        return PROVIDERS["anthropic"]
-
-    # OpenAI (GPT, o1)
-    if "gpt" in model_lower or model_lower.startswith("o1"):
+    # 模型模式到提供商的映射（按优先级排序）
+    # 特殊处理：o1 需要检查前缀
+    if model_lower.startswith("o1"):
         return PROVIDERS["openai"]
 
-    # 阿里云通义千问 (Qwen)
-    if "qwen" in model_lower:
-        return PROVIDERS["dashscope"]
+    # 其他模式检查
+    model_patterns = [
+        ("claude", "anthropic"),
+        ("gpt", "openai"),
+        ("qwen", "dashscope"),
+        ("deepseek", "deepseek"),
+        ("doubao", "volcengine"),
+        ("glm", "zhipuai"),
+    ]
 
-    # DeepSeek
-    if "deepseek" in model_lower:
-        return PROVIDERS["deepseek"]
-
-    # 火山引擎豆包
-    if "doubao" in model_lower:
-        return PROVIDERS["volcengine"]
+    for pattern, provider_key in model_patterns:
+        if pattern in model_lower:
+            return PROVIDERS[provider_key]
 
     # 默认返回 OpenAI 格式 (大多数兼容)
     return PROVIDERS["openai"]

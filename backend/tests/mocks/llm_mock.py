@@ -41,10 +41,12 @@ class LLMMockBuilder:
     ) -> "LLMMockBuilder":
         """添加工具调用"""
         tool_call = ToolCall(id=call_id, name=name, arguments=arguments)
-        self.responses.append({
-            "type": "tool_call",
-            "tool_call": tool_call,
-        })
+        self.responses.append(
+            {
+                "type": "tool_call",
+                "tool_call": tool_call,
+            }
+        )
         return self
 
     def with_stream(self, chunks: list[str]) -> "LLMMockBuilder":
@@ -74,11 +76,7 @@ class LLMMockBuilder:
                 tool_calls=None,
             )
         else:
-            tool_calls = [
-                r["tool_call"]
-                for r in self.responses
-                if r["type"] == "tool_call"
-            ]
+            tool_calls = [r["tool_call"] for r in self.responses if r["type"] == "tool_call"]
             return LLMResponse(
                 content="",
                 tool_calls=tool_calls if tool_calls else None,
@@ -93,17 +91,9 @@ class LLMMockBuilder:
 
 def create_simple_response_mock(content: str) -> AsyncMock:
     """创建简单文本响应 Mock"""
-    return (
-        LLMMockBuilder()
-        .with_text_response(content)
-        .build()
-    )
+    return LLMMockBuilder().with_text_response(content).build()
 
 
 def create_tool_call_mock(tool_name: str, arguments: dict) -> AsyncMock:
     """创建工具调用 Mock"""
-    return (
-        LLMMockBuilder()
-        .with_tool_call(tool_name, arguments)
-        .build()
-    )
+    return LLMMockBuilder().with_tool_call(tool_name, arguments).build()

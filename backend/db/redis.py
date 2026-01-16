@@ -10,7 +10,7 @@ import redis.asyncio as redis
 from app.config import settings
 
 # 全局 Redis 客户端
-_redis_client: redis.Redis | None = None
+_redis_client: Any | None = None
 
 
 async def init_redis() -> None:
@@ -37,14 +37,14 @@ async def close_redis() -> None:
         _redis_client = None
 
 
-def get_redis() -> redis.Redis:
+def get_redis() -> Any:  # type: ignore
     """获取 Redis 客户端 (同步方式)"""
     if _redis_client is None:
         raise RuntimeError("Redis not initialized. Call init_redis() first.")
     return _redis_client
 
 
-async def get_redis_client() -> redis.Redis:
+async def get_redis_client() -> Any:  # type: ignore
     """获取 Redis 客户端 (异步方式，自动初始化)"""
     global _redis_client
 

@@ -14,6 +14,23 @@ from exceptions import NotFoundError
 from models.memory import Memory
 
 
+def safe_uuid(value: str | None) -> uuid.UUID | None:
+    """安全地将字符串转换为 UUID
+
+    Args:
+        value: 要转换的字符串
+
+    Returns:
+        UUID 对象或 None（如果值无效）
+    """
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 class MemoryService:
     """记忆服务
 
@@ -48,13 +65,17 @@ class MemoryService:
         Returns:
             创建的记忆对象
         """
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            raise ValueError(f"Invalid user_id format: {user_id}")
+
         memory = Memory(
-            user_id=uuid.UUID(user_id),
+            user_id=user_uuid,
             type=type,
             content=content,
             importance=importance,
             extra_data=metadata or {},
-            source_session_id=uuid.UUID(source_session_id) if source_session_id else None,
+            source_session_id=safe_uuid(source_session_id),
         )
         self.db.add(memory)
         await self.db.flush()
@@ -108,7 +129,12 @@ class MemoryService:
         Returns:
             记忆列表
         """
-        query = select(Memory).where(Memory.user_id == uuid.UUID(user_id))
+        # 检查 user_id 是否为有效的 UUID（匿名用户会返回空列表）
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            return []
+
+        query = select(Memory).where(Memory.user_id == user_uuid)
 
         if type_filter:
             query = query.where(Memory.type == type_filter)
@@ -153,9 +179,14 @@ class MemoryService:
         Note:
             TODO: 实现向量搜索以提供更好的语义匹配
         """
+        # 检查 user_id 是否为有效的 UUID（匿名用户会返回空列表）
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            return []
+
         stmt = (
             select(Memory)
-            .where(Memory.user_id == uuid.UUID(user_id))
+            .where(Memory.user_id == user_uuid)
             .where(Memory.content.ilike(f"%{query}%"))
         )
 

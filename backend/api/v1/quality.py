@@ -13,6 +13,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.deps import get_current_user
+from app.config import settings
+from core.llm.gateway import LLMGateway
 from core.lsp.proxy import LSPProxy
 from core.quality.fixer import CodeFixer
 from core.quality.validator import CodeValidator
@@ -103,7 +105,8 @@ async def fix_code(
 
     使用 LLM 自动修复代码问题
     """
-    fixer = CodeFixer(max_attempts=request.max_attempts)
+    llm_gateway = LLMGateway(config=settings)
+    fixer = CodeFixer(llm=llm_gateway, max_attempts=request.max_attempts)
     fixed_code, success = await fixer.fix(request.code)
 
     return {

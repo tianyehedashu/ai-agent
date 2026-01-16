@@ -5,12 +5,15 @@ API Dependencies - API 依赖注入
 """
 
 from collections.abc import AsyncGenerator
+import sys
+import traceback
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from db.database import get_session
 from exceptions import PermissionDeniedError
 from schemas.user import CurrentUser
@@ -21,6 +24,7 @@ from services.memory import MemoryService
 from services.session import SessionService
 from services.stats import StatsService
 from services.user import UserService
+from utils.logging import get_logger
 
 security = HTTPBearer(auto_error=False)
 
@@ -54,13 +58,72 @@ async def get_current_user(
     在开发模式下返回匿名用户，生产模式下需要有效 Token。
     """
     if not credentials:
-        # 开发模式：返回匿名用户
-        return CurrentUser(
-            id="anonymous",
-            email="anonymous@local",
-            name="Anonymous User",
-            is_anonymous=True,
-        )
+        if settings.is_development:
+            # 开发模式：自动创建或获取匿名用户
+            logger = get_logger(__name__)
+            anonymous_email = "anonymous@local"
+            user_service = UserService(db)
+
+            try:
+                # 先尝试通过邮箱查找匿名用户
+                user = await user_service.get_by_email(anonymous_email)
+
+                if not user:
+                    # 如果不存在，创建匿名用户
+                    # 使用一个固定的密码哈希（不会用于登录，只是满足数据库约束）
+                    try:
+                        user = await user_service.create(
+                            email=anonymous_email,
+                            password="anonymous",  # 匿名用户密码（不会用于登录）
+                            name="Anonymous User",
+                        )
+                    except Exception as e:
+                        # 如果创建失败（可能因为并发创建），再次尝试获取
+                        logger.exception("Failed to create anonymous user, will retry: %s", e)
+                        # 开发环境下也直接输出
+                        if settings.is_development:
+                            print("=" * 80, file=sys.stderr)
+                            print(
+                                f"ERROR creating anonymous user: {type(e).__name__}: {e}",
+                                file=sys.stderr,
+                            )
+                            traceback.print_exc(file=sys.stderr)
+                            print("=" * 80, file=sys.stderr)
+                        # 不手动回滚，让 get_session() 统一处理
+                        # 再次尝试获取用户（可能其他请求已经创建了）
+                        user = await user_service.get_by_email(anonymous_email)
+            except Exception as e:
+                # 捕获所有异常并记录
+                logger.exception("Error in get_current_user (anonymous mode): %s", e)
+                # 开发环境下也直接输出到 stderr，确保能看到
+                if settings.is_development:
+                    print("=" * 80, file=sys.stderr)
+                    print(f"ERROR in get_current_user: {type(e).__name__}: {e}", file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
+                    print("=" * 80, file=sys.stderr)
+                # 不手动回滚，让 get_session() 统一处理异常和回滚
+                raise
+
+            if user:
+                return CurrentUser(
+                    id=str(user.id),
+                    email=user.email,
+                    name=user.name or "Anonymous User",
+                    is_anonymous=True,
+                )
+            else:
+                # 如果无法创建或获取用户，抛出错误
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create anonymous user",
+                )
+        else:
+            # 生产模式下不允许匿名用户
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     token = credentials.credentials
     user_service = UserService(db)
@@ -111,7 +174,15 @@ async def get_current_user_optional(
 async def require_auth(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """要求必须认证（非匿名）"""
+    """要求必须认证（非匿名）
+
+    在开发模式下允许匿名用户，生产模式下要求真实认证。
+    """
+    # 开发模式下允许匿名用户
+    if settings.is_development:
+        return current_user
+
+    # 生产模式下要求真实认证
     if current_user.is_anonymous:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -199,9 +270,14 @@ async def get_session_service(db: DbSession) -> SessionService:
     return SessionService(db)
 
 
-async def get_chat_service(db: DbSession) -> ChatService:
+async def get_chat_service(
+    db: DbSession,
+    request: Request,
+) -> ChatService:
     """获取对话服务"""
-    return ChatService(db)
+    # 从应用状态获取全局 checkpointer（在应用启动时初始化）
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    return ChatService(db, checkpointer=checkpointer)
 
 
 async def get_checkpoint_service(db: DbSession) -> CheckpointService:

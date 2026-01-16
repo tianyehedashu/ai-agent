@@ -20,6 +20,9 @@
 PYTHON := python
 UV := uv
 
+# 设置 uv 链接模式为 copy，避免硬链接警告（Windows 文件系统兼容性）
+export UV_LINK_MODE := copy
+
 # ==============================================================================
 # 帮助
 # ==============================================================================
@@ -36,7 +39,10 @@ help: ## 显示帮助信息
 	@echo   install-all     同步所有依赖
 	@echo   sync            同步依赖
 	@echo   dev             启动开发服务器
-	@echo   test            运行测试
+	@echo   test            运行测试（不含 E2E）
+	@echo   test-e2e        运行 E2E 测试（需要启动环境）
+	@echo   test-all        运行所有测试（包含 E2E）
+	@echo   test-llm-providers  测试所有 LLM 提供商实际访问
 	@echo   lint            运行代码检查
 	@echo   format          格式化代码
 	@echo   typecheck       运行类型检查
@@ -146,25 +152,61 @@ fix: lint-fix format ## 自动修复所有问题
 # 测试
 # ==============================================================================
 
-test: ## 运行测试
-	@echo 运行测试...
+test: ## 运行测试（不含 E2E）
+	@echo 运行测试（排除 E2E）...
+	$(UV) run pytest -m "not e2e"
+
+test-all: ## 运行所有测试（包含 E2E，需要启动环境）
+	@echo 运行所有测试...
 	$(UV) run pytest
 
-test-cov: ## 运行测试并生成覆盖率报告
+test-cov: ## 运行测试并生成覆盖率报告（不含 E2E）
 	@echo 运行测试 (带覆盖率)...
-	$(UV) run pytest --cov --cov-report=html --cov-report=term-missing
+	$(UV) run pytest -m "not e2e" --cov --cov-report=html --cov-report=term-missing
 
 test-unit: ## 只运行单元测试
 	@echo 运行单元测试...
 	$(UV) run pytest -m unit
 
-test-integration: ## 只运行集成测试
+test-integration: ## 只运行集成测试（使用 TestClient，不需要启动服务）
 	@echo 运行集成测试...
 	$(UV) run pytest -m integration
 
+test-e2e: ## 运行 E2E 测试（需要启动 docker-compose 和后端服务）
+	@echo ==========================================
+	@echo   运行 E2E 测试（API 端到端测试）
+	@echo ==========================================
+	@echo 前提条件:
+	@echo   1. docker-compose up -d（数据库、Redis）
+	@echo   2. make dev（后端服务）
+	@echo ==========================================
+	$(UV) run pytest -m e2e -v -s
+	@echo ==========================================
+	@echo ✓ E2E 测试完成
+	@echo ==========================================
+
 test-watch: ## 监视模式运行测试
 	@echo 监视模式测试...
-	$(UV) run ptw -- -v
+	$(UV) run ptw -- -v -m "not e2e"
+
+test-performance: ## 运行性能测试
+	@echo 运行性能测试...
+	$(UV) run pytest tests/performance/ -v --benchmark-only
+
+# ==============================================================================
+# LLM 提供商测试
+# ==============================================================================
+
+test-llm-providers: ## 测试所有 LLM 提供商实际访问 (DeepSeek, 火山引擎, 智谱AI, 阿里云DashScope)
+	@echo ==========================================
+	@echo   测试 LLM 提供商实际访问
+	@echo ==========================================
+	@echo 注意: 未配置的提供商将自动跳过
+	@echo 运行 LLM 提供商实际访问测试...
+	$(UV) run pytest tests/integration/test_llm_providers.py -v -s
+	@echo ==========================================
+	@echo ✓ LLM 提供商测试完成
+	@echo ==========================================
 
 # ==============================================================================
 # 数据库

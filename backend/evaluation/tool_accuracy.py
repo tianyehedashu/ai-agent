@@ -208,7 +208,12 @@ class ToolAccuracyEvaluator:
         score += args_weight * args_accuracy
 
         # 执行得分
-        score += execution_weight * (1.0 if execution_success else 0.0)
+        # 如果执行失败，即使工具和参数都正确，也应该显著降低分数
+        if execution_success:
+            score += execution_weight * 1.0
+        else:
+            # 执行失败时，执行得分降为0，并且对总分进行惩罚
+            score *= 0.8  # 执行失败时总分打8折
 
         return score
 

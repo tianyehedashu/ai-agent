@@ -307,7 +307,10 @@ async def test_run(
             {"type": "node_enter", "data": {"node": "process_input"}},
             {"type": "node_exit", "data": {"node": "process_input", "output": {}}},
             {"type": "node_enter", "data": {"node": "generate_response"}},
-            {"type": "node_exit", "data": {"node": "generate_response", "output": {"response": "Hello!"}}},
+            {
+                "type": "node_exit",
+                "data": {"node": "generate_response", "output": {"response": "Hello!"}},
+            },
             {"type": "completed", "data": {"result": {"response": "Hello!"}}},
         ]
 

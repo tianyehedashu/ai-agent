@@ -65,7 +65,10 @@ class UserService:
             email=email,
             password_hash=password_hash,
             name=name,
+            role="user",
+            is_active=True,
         )
+        # created_at 和 updated_at 由 BaseModel 的 TimestampMixin 自动处理
         self.db.add(user)
         await self.db.flush()
         await self.db.refresh(user)
@@ -211,20 +214,37 @@ class UserService:
             user: 用户对象
 
         Returns:
-            包含 access_token 和 expires_in 的 TokenPair
+            包含 access_token 和 refresh_token 的 TokenPair
         """
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=settings.jwt_expire_hours)
+        # Refresh token 有更长的过期时间（30天）
+        refresh_expires_at = now + timedelta(days=30)
 
-        payload = {
+        access_payload = {
             "sub": str(user.id),
             "email": user.email,
             "iat": now,
             "exp": expires_at,
+            "type": "access",
+        }
+
+        refresh_payload = {
+            "sub": str(user.id),
+            "email": user.email,
+            "iat": now,
+            "exp": refresh_expires_at,
+            "type": "refresh",
         }
 
         access_token = jwt.encode(
-            payload,
+            access_payload,
+            settings.jwt_secret.get_secret_value(),
+            algorithm=settings.jwt_algorithm,
+        )
+
+        refresh_token = jwt.encode(
+            refresh_payload,
             settings.jwt_secret.get_secret_value(),
             algorithm=settings.jwt_algorithm,
         )
@@ -232,13 +252,14 @@ class UserService:
         return TokenPair(
             access_token=access_token,
             expires_in=settings.jwt_expire_hours * 3600,
+            refresh_token=refresh_token,
         )
 
     async def get_user_from_token(self, token: str) -> User | None:
         """从 Token 获取用户
 
         Args:
-            token: JWT Token
+            token: JWT Token (access_token 或 refresh_token)
 
         Returns:
             用户对象或 None

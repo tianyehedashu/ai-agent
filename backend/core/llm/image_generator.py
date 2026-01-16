@@ -9,13 +9,15 @@ Image Generator - 图像生成服务
 - 火山引擎: https://www.volcengine.com/docs/6791/1361741
 """
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 from pydantic import BaseModel
 
-from app.config import settings
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from core.config import ImageGeneratorConfig
 
 logger = get_logger(__name__)
 
@@ -36,7 +38,14 @@ class ImageGenerator:
     统一多个图像生成提供商的接口
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: "ImageGeneratorConfig") -> None:
+        """
+        初始化图像生成服务
+
+        Args:
+            config: 图像生成配置（通过依赖注入传入，避免依赖应用层）
+        """
+        self.config = config
         self.timeout = 120.0  # 图像生成可能较慢
 
     async def generate(
@@ -101,9 +110,9 @@ class ImageGenerator:
         使用 OpenAI 兼容的 API 格式
         文档: https://www.volcengine.com/docs/6791/1361741
         """
-        api_key = settings.volcengine_api_key
+        api_key = self.config.volcengine_api_key
         # 优先使用图像专用端点，然后是通用端点
-        endpoint_id = settings.volcengine_image_endpoint_id or settings.volcengine_endpoint_id
+        endpoint_id = self.config.volcengine_image_endpoint_id or self.config.volcengine_endpoint_id
 
         if not api_key:
             return ImageGenerationResult(success=False, error="VOLCENGINE_API_KEY 未配置")
@@ -118,7 +127,7 @@ class ImageGenerator:
             _width, _height = map(int, size.split("x"))
 
             # 构建请求
-            url = f"{settings.volcengine_api_base}/images/generations"
+            url = f"{self.config.volcengine_api_base}/images/generations"
             headers = {
                 "Authorization": f"Bearer {api_key.get_secret_value()}",
                 "Content-Type": "application/json",
@@ -176,13 +185,13 @@ class ImageGenerator:
         """
         OpenAI DALL-E 图像生成
         """
-        api_key = settings.openai_api_key
+        api_key = self.config.openai_api_key
 
         if not api_key:
             return ImageGenerationResult(success=False, error="OPENAI_API_KEY 未配置")
 
         try:
-            url = f"{settings.openai_api_base}/images/generations"
+            url = f"{self.config.openai_api_base}/images/generations"
             headers = {
                 "Authorization": f"Bearer {api_key.get_secret_value()}",
                 "Content-Type": "application/json",

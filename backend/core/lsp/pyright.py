@@ -13,19 +13,11 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
+import jedi
+
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# 尝试导入 jedi (可选依赖)
-try:
-    import jedi
-
-    JEDI_AVAILABLE = True
-except ImportError:
-    jedi = None  # type: ignore[assignment]
-    JEDI_AVAILABLE = False
-    logger.warning("jedi not installed, completions and hover unavailable")
 
 
 class PyrightService:
@@ -160,9 +152,6 @@ class PyrightService:
 
         使用 jedi 库提供 Python 代码补全
         """
-        if not JEDI_AVAILABLE:
-            return []
-
         try:
             script = jedi.Script(content, path=file_path)
             # jedi 使用 1-based 行号
@@ -194,9 +183,6 @@ class PyrightService:
 
         使用 jedi 库提供悬停信息
         """
-        if not JEDI_AVAILABLE:
-            return None
-
         try:
             script = jedi.Script(content, path=file_path)
             # jedi 使用 1-based 行号

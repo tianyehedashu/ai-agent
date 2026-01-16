@@ -7,17 +7,17 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from api.deps import get_current_user
+from api.deps import RequiredAuthUser
+from app.config import settings
 from core.llm.gateway import LLMGateway
 from core.types import ToolCall
 from evaluation.gaia import GAIAEvaluator, GAIAReport
 from evaluation.llm_judge import JudgeScore, LLMJudge
 from evaluation.task_completion import EvaluationReport
 from evaluation.tool_accuracy import ToolAccuracyEvaluator, ToolAccuracyReport
-from models.user import User
 
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 
@@ -51,7 +51,7 @@ class LLMJudgeRequest(BaseModel):
 @router.post("/task", response_model=EvaluationReport)
 async def evaluate_task_completion(
     request: EvaluationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: RequiredAuthUser,
 ):
     """任务完成率评估"""
     if request.benchmark_type != "task":
@@ -81,7 +81,7 @@ async def evaluate_task_completion(
 @router.post("/gaia", response_model=GAIAReport)
 async def evaluate_gaia(
     request: EvaluationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: RequiredAuthUser,
 ):
     """GAIA 基准评估"""
     if request.benchmark_type != "gaia":
@@ -130,7 +130,7 @@ async def evaluate_gaia(
 @router.post("/tool-accuracy", response_model=ToolAccuracyReport)
 async def evaluate_tool_accuracy(
     request: ToolAccuracyRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: RequiredAuthUser,
 ):
     """工具调用准确率评估"""
     evaluator = ToolAccuracyEvaluator()
@@ -157,10 +157,10 @@ async def evaluate_tool_accuracy(
 @router.post("/llm-judge", response_model=JudgeScore)
 async def evaluate_with_llm_judge(
     request: LLMJudgeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: RequiredAuthUser,
 ):
     """使用 LLM-as-Judge 评估响应质量"""
-    llm_gateway = LLMGateway()
+    llm_gateway = LLMGateway(config=settings)
     judge = LLMJudge(llm_gateway=llm_gateway, judge_model=request.judge_model)
 
     score = await judge.evaluate(
@@ -174,7 +174,7 @@ async def evaluate_with_llm_judge(
 
 @router.get("/benchmarks")
 async def list_benchmarks(
-    current_user: User = Depends(get_current_user),
+    current_user: RequiredAuthUser,
 ):
     """列出可用的基准测试集"""
     benchmarks_dir = Path(__file__).parent.parent.parent / "evaluation" / "benchmarks"

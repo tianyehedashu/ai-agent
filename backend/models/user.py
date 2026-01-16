@@ -4,7 +4,7 @@ User Model - 用户模型
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,6 +50,18 @@ class User(BaseModel):
     status: Mapped[str] = mapped_column(
         String(20),
         default="active",
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(
+        String(50),
+        default="user",
+        server_default="user",
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
         nullable=False,
     )
 

@@ -14,6 +14,8 @@ LLM Gateway - 大语言模型网关
 - OpenAI DALL-E
 """
 
+from typing import TYPE_CHECKING
+
 from core.llm.gateway import LLMGateway
 from core.llm.image_generator import ImageGenerationResult, ImageGenerator
 from core.llm.providers import (
@@ -22,9 +24,13 @@ from core.llm.providers import (
     DeepSeekProvider,
     OpenAIProvider,
     VolcEngineProvider,
+    ZhipuAIProvider,
     get_all_models,
     get_provider,
 )
+
+if TYPE_CHECKING:
+    from core.config import ImageGeneratorConfig, LLMConfig
 
 __all__ = [
     "AnthropicProvider",
@@ -35,6 +41,41 @@ __all__ = [
     "LLMGateway",
     "OpenAIProvider",
     "VolcEngineProvider",
+    "ZhipuAIProvider",
+    "create_image_generator",
+    "create_llm_gateway",
     "get_all_models",
     "get_provider",
 ]
+
+
+def create_llm_gateway(config: "LLMConfig") -> LLMGateway:
+    """
+    创建 LLM Gateway 实例
+
+    这是一个工厂函数，用于在应用层创建 LLMGateway，
+    避免 Core 层直接依赖应用层配置。
+
+    Args:
+        config: LLM 配置
+
+    Returns:
+        LLMGateway 实例
+    """
+    return LLMGateway(config=config)
+
+
+def create_image_generator(config: "ImageGeneratorConfig") -> ImageGenerator:
+    """
+    创建 Image Generator 实例
+
+    这是一个工厂函数，用于在应用层创建 ImageGenerator，
+    避免 Core 层直接依赖应用层配置。
+
+    Args:
+        config: 图像生成配置
+
+    Returns:
+        ImageGenerator 实例
+    """
+    return ImageGenerator(config=config)

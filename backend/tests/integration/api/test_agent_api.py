@@ -18,7 +18,7 @@ class TestAgentAPI:
     async def test_list_agents_requires_auth(self, client: AsyncClient):
         """测试: 列出 Agents 需要认证"""
         # Act
-        response = await client.get("/api/v1/agents")
+        response = await client.get("/api/v1/agents/", follow_redirects=False)
 
         # Assert
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -27,7 +27,7 @@ class TestAgentAPI:
     async def test_list_agents(self, client: AsyncClient, auth_headers: dict):
         """测试: 列出 Agents"""
         # Act
-        response = await client.get("/api/v1/agents", headers=auth_headers)
+        response = await client.get("/api/v1/agents/", headers=auth_headers, follow_redirects=False)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -49,9 +49,10 @@ class TestAgentAPI:
 
         # Act
         response = await client.post(
-            "/api/v1/agents",
+            "/api/v1/agents/",
             json=agent_data,
             headers=auth_headers,
+            follow_redirects=False,
         )
 
         # Assert
@@ -67,9 +68,10 @@ class TestAgentAPI:
         """测试: 根据 ID 获取 Agent"""
         # Arrange - 先创建一个 Agent
         create_response = await client.post(
-            "/api/v1/agents",
+            "/api/v1/agents/",
             json={"name": "Test Agent", "system_prompt": "Test"},
             headers=auth_headers,
+            follow_redirects=False,
         )
         agent_id = create_response.json()["id"]
 
@@ -89,9 +91,10 @@ class TestAgentAPI:
         """测试: 更新 Agent"""
         # Arrange - 先创建一个 Agent
         create_response = await client.post(
-            "/api/v1/agents",
+            "/api/v1/agents/",
             json={"name": "Test Agent", "system_prompt": "Test"},
             headers=auth_headers,
+            follow_redirects=False,
         )
         agent_id = create_response.json()["id"]
 
@@ -112,9 +115,10 @@ class TestAgentAPI:
         """测试: 删除 Agent"""
         # Arrange - 先创建一个 Agent
         create_response = await client.post(
-            "/api/v1/agents",
+            "/api/v1/agents/",
             json={"name": "Test Agent", "system_prompt": "Test"},
             headers=auth_headers,
+            follow_redirects=False,
         )
         agent_id = create_response.json()["id"]
 

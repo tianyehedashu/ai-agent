@@ -9,51 +9,23 @@ Vector Store - 向量数据库封装
 from abc import ABC, abstractmethod
 from typing import Any
 
+import chromadb
+import openai
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointIdsList,
+    PointStruct,
+    VectorParams,
+)
+
 from app.config import settings
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# 尝试导入可选依赖
-try:
-    import openai  # type: ignore[reportMissingImports]
-    OPENAI_AVAILABLE = True
-except ImportError:
-    openai = None  # type: ignore[assignment]
-    OPENAI_AVAILABLE = False
-    logger.warning("openai not installed, embeddings will not work")
-
-try:
-    from qdrant_client import AsyncQdrantClient  # type: ignore[reportMissingImports]
-    from qdrant_client.models import (  # type: ignore[reportMissingImports]
-        Distance,
-        FieldCondition,
-        Filter,
-        MatchValue,
-        PointIdsList,
-        PointStruct,
-        VectorParams,
-    )
-    QDRANT_AVAILABLE = True
-except ImportError:
-    AsyncQdrantClient = None  # type: ignore[misc, assignment]
-    Distance = None  # type: ignore[misc, assignment]
-    FieldCondition = None  # type: ignore[misc, assignment]
-    Filter = None  # type: ignore[misc, assignment]
-    MatchValue = None  # type: ignore[misc, assignment]
-    PointIdsList = None  # type: ignore[misc, assignment]
-    PointStruct = None  # type: ignore[misc, assignment]
-    VectorParams = None  # type: ignore[misc, assignment]
-    QDRANT_AVAILABLE = False
-    logger.warning("qdrant-client not installed, QdrantStore will not work")
-
-try:
-    import chromadb  # type: ignore[reportMissingImports]
-    CHROMADB_AVAILABLE = True
-except ImportError:
-    chromadb = None  # type: ignore[assignment]
-    CHROMADB_AVAILABLE = False
-    logger.warning("chromadb not installed, ChromaStore will not work")
 
 
 class VectorStore(ABC):
@@ -114,8 +86,6 @@ class QdrantStore(VectorStore):
         url: str | None = None,
         api_key: str | None = None,
     ) -> None:
-        if not QDRANT_AVAILABLE:
-            raise ImportError("qdrant-client is required for QdrantStore")
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self._client = None
@@ -203,8 +173,7 @@ class QdrantStore(VectorStore):
         qdrant_filter = None
         if query_filter:
             conditions = [
-                FieldCondition(key=k, match=MatchValue(value=v))
-                for k, v in query_filter.items()
+                FieldCondition(key=k, match=MatchValue(value=v)) for k, v in query_filter.items()
             ]
             qdrant_filter = Filter(must=conditions)
 
@@ -240,8 +209,6 @@ class QdrantStore(VectorStore):
 
     async def _get_embedding(self, text: str) -> list[float]:
         """获取文本嵌入"""
-        if not OPENAI_AVAILABLE:
-            raise ImportError("openai is required for embeddings")
         client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
         response = await client.embeddings.create(
             model="text-embedding-3-small",
@@ -254,8 +221,6 @@ class ChromaStore(VectorStore):
     """Chroma 向量存储 (开发环境)"""
 
     def __init__(self, persist_directory: str | None = None) -> None:
-        if not CHROMADB_AVAILABLE:
-            raise ImportError("chromadb is required for ChromaStore")
         self.persist_directory = persist_directory or "./chroma_data"
         self._client = None
         self._collections: dict[str, Any] = {}
@@ -328,12 +293,14 @@ class ChromaStore(VectorStore):
         items = []
         if results["ids"] and results["ids"][0]:
             for i, point_id in enumerate(results["ids"][0]):
-                items.append({
-                    "id": point_id,
-                    "score": 1 - results["distances"][0][i] if results["distances"] else 0,
-                    "text": results["documents"][0][i] if results["documents"] else "",
-                    **(results["metadatas"][0][i] if results["metadatas"] else {}),
-                })
+                items.append(
+                    {
+                        "id": point_id,
+                        "score": 1 - results["distances"][0][i] if results["distances"] else 0,
+                        "text": results["documents"][0][i] if results["documents"] else "",
+                        **(results["metadatas"][0][i] if results["metadatas"] else {}),
+                    }
+                )
 
         return items
 

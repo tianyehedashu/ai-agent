@@ -42,9 +42,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 验证 Token
         try:
             payload = verify_token(token)
+            if payload is None:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Invalid token"},
+                )
             # 将用户信息添加到请求状态
-            request.state.user_id = payload.get("sub")
-            request.state.user_role = payload.get("role", "user")
+            request.state.user_id = payload.sub
+            # TokenPayload 中没有 role 字段，如果需要可以从 extra_claims 中获取
+            # 这里暂时使用默认值
+            request.state.user_role = "user"
         except Exception as e:
             logger.warning("Token verification failed: %s", e)
             return JSONResponse(

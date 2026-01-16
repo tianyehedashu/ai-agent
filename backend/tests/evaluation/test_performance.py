@@ -68,6 +68,7 @@ class TestPerformanceEvaluator:
     @pytest.mark.asyncio
     async def test_handle_failures(self):
         """测试: 处理失败请求"""
+
         # Arrange
         async def failing_agent(prompt: str):
             raise Exception("Agent failed")

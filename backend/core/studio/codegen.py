@@ -89,13 +89,15 @@ class LangGraphCodeGen:
         lines = ["# ========== 节点函数 =========="]
 
         for node in workflow.nodes:
-            lines.extend([
-                "",
-                f"def {node.function_name}(state: {workflow.state_class or 'AgentState'}):",
-                f'{self.indent}"""节点: {node.name}"""',
-                f"{self.indent}# TODO: 实现节点逻辑",
-                f"{self.indent}return state",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"def {node.function_name}(state: {workflow.state_class or 'AgentState'}):",
+                    f'{self.indent}"""节点: {node.name}"""',
+                    f"{self.indent}# TODO: 实现节点逻辑",
+                    f"{self.indent}return state",
+                ]
+            )
 
         return lines
 
@@ -111,13 +113,18 @@ class LangGraphCodeGen:
                 continue
 
             paths = list(cond.path_map.keys())
-            lines.extend([
-                "",
-                f"def {cond.condition_func}(state: {workflow.state_class or 'AgentState'}) -> str:",
-                f'{self.indent}"""条件路由"""',
-                f"{self.indent}# TODO: 实现路由逻辑",
-                f'{self.indent}return "{paths[0] if paths else "default"}"',
-            ])
+            lines.extend(
+                [
+                    "",
+                    (
+                        f"def {cond.condition_func}"
+                        f"(state: {workflow.state_class or 'AgentState'}) -> str:"
+                    ),
+                    f'{self.indent}"""条件路由"""',
+                    f"{self.indent}# TODO: 实现路由逻辑",
+                    f'{self.indent}return "{paths[0] if paths else "default"}"',
+                ]
+            )
 
         return lines
 
@@ -170,11 +177,13 @@ class LangGraphCodeGen:
             lines.append(f'graph.set_entry_point("{workflow.entry_point}")')
 
         # 编译
-        lines.extend([
-            "",
-            "# 编译图",
-            "app = graph.compile()",
-        ])
+        lines.extend(
+            [
+                "",
+                "# 编译图",
+                "app = graph.compile()",
+            ]
+        )
 
         return lines
 

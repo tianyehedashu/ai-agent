@@ -18,7 +18,9 @@ class TestLLMGateway:
     @pytest.fixture
     def gateway(self):
         """创建被测对象"""
-        return LLMGateway()
+        from app.config import settings
+
+        return LLMGateway(config=settings)
 
     @pytest.mark.asyncio
     async def test_chat_returns_text_response(self, gateway):
@@ -69,9 +71,7 @@ class TestLLMGateway:
     async def test_chat_handles_api_error(self, gateway):
         """测试: API 错误处理"""
         # Arrange
-        with patch.object(
-            gateway, "_chat", side_effect=Exception("API Error")
-        ):
+        with patch.object(gateway, "_chat", side_effect=Exception("API Error")):
             # Act & Assert
             with pytest.raises(Exception) as exc_info:
                 await gateway.chat(
@@ -87,7 +87,7 @@ class TestLLMGateway:
         # Arrange
         from core.llm.gateway import StreamChunk
 
-        async def mock_stream():
+        async def mock_stream(**kwargs):
             chunks = [
                 StreamChunk(content="Hello"),
                 StreamChunk(content=" world"),
@@ -96,14 +96,17 @@ class TestLLMGateway:
             for chunk in chunks:
                 yield chunk
 
+        # side_effect 应该返回异步生成器，而不是函数
         with patch.object(gateway, "_stream_chat", return_value=mock_stream()):
             # Act
-            full_content = ""
-            async for chunk in gateway.chat(
+            # chat() 在 stream=True 时返回协程，需要先 await 得到异步生成器
+            stream_generator = await gateway.chat(
                 messages=[{"role": "user", "content": "Hi"}],
                 model="gpt-4",
                 stream=True,
-            ):
+            )
+            full_content = ""
+            async for chunk in stream_generator:
                 full_content += chunk.content or ""
 
             # Assert
@@ -138,3 +141,268 @@ class TestLLMGateway:
 
             # Assert
             gateway._chat.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_glm(self, gateway, monkeypatch):
+        """测试: 获取 GLM 模型的 API Key"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "zhipuai_api_key", SecretStr("test-key"))
+        monkeypatch.setattr(settings, "zhipuai_api_base", "https://open.bigmodel.cn/api/paas/v4")
+
+        # Act
+        api_config = gateway._get_api_key("glm-4.7")
+
+        # Assert
+        assert "api_key" in api_config
+        assert "api_base" in api_config
+        assert api_config["api_base"] == "https://open.bigmodel.cn/api/paas/v4"
+        assert api_config["api_key"] == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_glm_case_insensitive(self, gateway, monkeypatch):
+        """测试: GLM 模型名称大小写不敏感"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "zhipuai_api_key", SecretStr("test-key"))
+        monkeypatch.setattr(settings, "zhipuai_api_base", "https://open.bigmodel.cn/api/paas/v4")
+
+        # Act - 测试不同大小写
+        api_config1 = gateway._get_api_key("GLM-4.7")
+        api_config2 = gateway._get_api_key("glm-4.7")
+        api_config3 = gateway._get_api_key("Glm-4.7")
+
+        # Assert - 都应该返回相同的配置
+        assert api_config1 == api_config2 == api_config3
+        assert "api_key" in api_config1
+        assert api_config1["api_key"] == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_glm_no_key(self, gateway, monkeypatch):
+        """测试: GLM 模型未配置 API Key 时返回空配置"""
+        from app.config import settings
+
+        # Mock settings - 没有API Key
+        monkeypatch.setattr(settings, "zhipuai_api_key", None)
+
+        # Act
+        api_config = gateway._get_api_key("glm-4.7")
+
+        # Assert
+        assert api_config == {}
+
+    # ========================================================================
+    # DeepSeek 测试
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_deepseek(self, gateway, monkeypatch):
+        """测试: 获取 DeepSeek 模型的 API Key"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "deepseek_api_key", SecretStr("test-deepseek-key"))
+        monkeypatch.setattr(settings, "deepseek_api_base", "https://api.deepseek.com")
+
+        # Act
+        api_config = gateway._get_api_key("deepseek-chat")
+
+        # Assert
+        assert "api_key" in api_config
+        assert "api_base" in api_config
+        assert api_config["api_base"] == "https://api.deepseek.com"
+        assert api_config["api_key"] == "test-deepseek-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_deepseek_case_insensitive(self, gateway, monkeypatch):
+        """测试: DeepSeek 模型名称大小写不敏感"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "deepseek_api_key", SecretStr("test-deepseek-key"))
+        monkeypatch.setattr(settings, "deepseek_api_base", "https://api.deepseek.com")
+
+        # Act - 测试不同大小写
+        api_config1 = gateway._get_api_key("DEEPSEEK-chat")
+        api_config2 = gateway._get_api_key("deepseek-chat")
+        api_config3 = gateway._get_api_key("DeepSeek-chat")
+
+        # Assert - 都应该返回相同的配置
+        assert api_config1 == api_config2 == api_config3
+        assert "api_key" in api_config1
+        assert api_config1["api_key"] == "test-deepseek-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_deepseek_no_key(self, gateway, monkeypatch):
+        """测试: DeepSeek 模型未配置 API Key 时返回空配置"""
+        from app.config import settings
+
+        # Mock settings - 没有API Key
+        monkeypatch.setattr(settings, "deepseek_api_key", None)
+
+        # Act
+        api_config = gateway._get_api_key("deepseek-chat")
+
+        # Assert
+        assert api_config == {}
+
+    # ========================================================================
+    # 火山引擎 (豆包) 测试
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_volcengine_doubao(self, gateway, monkeypatch):
+        """测试: 获取火山引擎豆包模型的 API Key"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
+        monkeypatch.setattr(
+            settings, "volcengine_api_base", "https://ark.cn-beijing.volces.com/api/v3"
+        )
+        monkeypatch.setattr(settings, "volcengine_chat_endpoint_id", "ep-test-chat")
+
+        # Act
+        api_config = gateway._get_api_key("doubao-pro")
+
+        # Assert
+        assert "api_key" in api_config
+        assert "api_base" in api_config
+        assert "endpoint_id" in api_config
+        assert api_config["api_base"] == "https://ark.cn-beijing.volces.com/api/v3"
+        assert api_config["api_key"] == "test-volcengine-key"
+        assert api_config["endpoint_id"] == "ep-test-chat"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_volcengine_with_fallback_endpoint(self, gateway, monkeypatch):
+        """测试: 火山引擎使用通用 endpoint_id 作为回退"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings - 只有通用 endpoint_id
+        monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
+        monkeypatch.setattr(
+            settings, "volcengine_api_base", "https://ark.cn-beijing.volces.com/api/v3"
+        )
+        monkeypatch.setattr(settings, "volcengine_chat_endpoint_id", None)
+        monkeypatch.setattr(settings, "volcengine_endpoint_id", "ep-test-general")
+
+        # Act
+        api_config = gateway._get_api_key("doubao-lite")
+
+        # Assert
+        assert "endpoint_id" in api_config
+        assert api_config["endpoint_id"] == "ep-test-general"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_volcengine_case_insensitive(self, gateway, monkeypatch):
+        """测试: 火山引擎模型名称大小写不敏感"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
+        monkeypatch.setattr(
+            settings, "volcengine_api_base", "https://ark.cn-beijing.volces.com/api/v3"
+        )
+
+        # Act - 测试不同大小写和别名
+        api_config1 = gateway._get_api_key("DOUBAO-pro")
+        api_config2 = gateway._get_api_key("doubao-pro")
+        api_config3 = gateway._get_api_key("volcengine-chat")
+
+        # Assert - 都应该返回相同的配置
+        assert api_config1 == api_config2 == api_config3
+        assert "api_key" in api_config1
+        assert api_config1["api_key"] == "test-volcengine-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_volcengine_no_key(self, gateway, monkeypatch):
+        """测试: 火山引擎模型未配置 API Key 时返回空配置"""
+        from app.config import settings
+
+        # Mock settings - 没有API Key
+        monkeypatch.setattr(settings, "volcengine_api_key", None)
+
+        # Act
+        api_config = gateway._get_api_key("doubao-pro")
+
+        # Assert
+        assert api_config == {}
+
+    # ========================================================================
+    # 阿里云 DashScope (通义千问) 测试
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_dashscope_qwen(self, gateway, monkeypatch):
+        """测试: 获取阿里云 DashScope 通义千问模型的 API Key"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "dashscope_api_key", SecretStr("test-dashscope-key"))
+        monkeypatch.setattr(
+            settings, "dashscope_api_base", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+
+        # Act
+        api_config = gateway._get_api_key("qwen-turbo")
+
+        # Assert
+        assert "api_key" in api_config
+        assert "api_base" in api_config
+        assert api_config["api_base"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        assert api_config["api_key"] == "test-dashscope-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_dashscope_qwen_case_insensitive(self, gateway, monkeypatch):
+        """测试: 通义千问模型名称大小写不敏感"""
+        from pydantic import SecretStr
+
+        from app.config import settings
+
+        # Mock settings
+        monkeypatch.setattr(settings, "dashscope_api_key", SecretStr("test-dashscope-key"))
+        monkeypatch.setattr(
+            settings, "dashscope_api_base", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+
+        # Act - 测试不同大小写
+        api_config1 = gateway._get_api_key("QWEN-turbo")
+        api_config2 = gateway._get_api_key("qwen-turbo")
+        api_config3 = gateway._get_api_key("Qwen-turbo")
+
+        # Assert - 都应该返回相同的配置
+        assert api_config1 == api_config2 == api_config3
+        assert "api_key" in api_config1
+        assert api_config1["api_key"] == "test-dashscope-key"
+
+    @pytest.mark.asyncio
+    async def test_get_api_key_dashscope_qwen_no_key(self, gateway, monkeypatch):
+        """测试: 通义千问模型未配置 API Key 时返回空配置"""
+        from app.config import settings
+
+        # Mock settings - 没有API Key
+        monkeypatch.setattr(settings, "dashscope_api_key", None)
+
+        # Act
+        api_config = gateway._get_api_key("qwen-turbo")
+
+        # Assert
+        assert api_config == {}

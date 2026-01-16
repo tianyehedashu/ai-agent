@@ -98,8 +98,7 @@ class TestContextManager:
         # Arrange
         # 创建大量消息，超过预算
         messages = [
-            Message(role=MessageRole.USER, content=f"Message {i} " * 100)
-            for i in range(50)
+            Message(role=MessageRole.USER, content=f"Message {i} " * 100) for i in range(50)
         ]
 
         # Act
@@ -158,8 +157,7 @@ class TestContextManager:
         # Arrange
         # 创建大量消息
         messages = [
-            Message(role=MessageRole.USER, content=f"Message {i} " * 50)
-            for i in range(100)
+            Message(role=MessageRole.USER, content=f"Message {i} " * 50) for i in range(100)
         ]
 
         # Act

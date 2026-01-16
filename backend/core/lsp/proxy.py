@@ -45,8 +45,12 @@ class LSPProxy:
         )
 
         return {
-            "pyright": results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])},
-            "ruff": results[1] if not isinstance(results[1], Exception) else {"error": str(results[1])},
+            "pyright": (
+                results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+            ),
+            "ruff": (
+                results[1] if not isinstance(results[1], Exception) else {"error": str(results[1])}
+            ),
         }
 
     async def shutdown(self) -> None:

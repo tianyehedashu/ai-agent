@@ -12,6 +12,15 @@ export interface ChatRequest {
   agentId?: string
 }
 
+// 转换为后端期望的格式（snake_case）
+function toBackendRequest(request: ChatRequest): Record<string, unknown> {
+  return {
+    message: request.message,
+    session_id: request.sessionId,
+    agent_id: request.agentId,
+  }
+}
+
 export interface ResumeRequest {
   checkpointId: string
   action: 'approve' | 'reject' | 'modify'
@@ -30,7 +39,7 @@ export const chatApi = {
   ): Promise<void> {
     return apiClient.stream(
       '/api/v1/chat',
-      request,
+      toBackendRequest(request),
       (event) => {
         onEvent(event as unknown as ChatEvent)
       },

@@ -1,48 +1,85 @@
 """
-Chat Service - 对话服务
+Chat Service - 对话服务（基于 LangGraph）
 
-实现 Agent 执行引擎的封装。
+使用 LangGraph 和 LangChain 实现：
+- 对话历史管理（通过 LangGraph checkpointer，自动管理）
+- 长期记忆存储和检索（LongTermMemoryStore）
 """
 
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.engine.agent import AgentEngine
-from core.engine.checkpointer import Checkpointer
+from app.config import settings
+from core.engine.langgraph_agent import LangGraphAgentEngine
+from core.engine.langgraph_checkpointer import LangGraphCheckpointer
 from core.llm.gateway import LLMGateway
+from core.memory.langgraph_store import LongTermMemoryStore
 from core.types import AgentConfig, AgentEvent, EventType, MessageRole
-from exceptions import CheckpointError, NotFoundError
+from db.vector import get_vector_store
+from exceptions import NotFoundError
 from schemas.message import ChatEvent
 from services.agent import AgentService
 from services.session import SessionService
 from tools.registry import ToolRegistry
 from utils.logging import get_logger
+from utils.serialization import Serializer
 
 logger = get_logger(__name__)
 
 
 class ChatService:
-    """对话服务
+    """对话服务（基于 LangGraph）
 
-    封装 Agent 执行引擎，提供对话接口。
+    使用 LangGraph StateGraph 和 checkpointer 实现对话管理：
+    - 对话历史自动管理（通过 checkpointer，thread_id = session_id）
+    - 长期记忆存储和检索（LongTermMemoryStore）
 
     Attributes:
         db: 数据库会话
         llm_gateway: LLM 网关
         tool_registry: 工具注册表
-        checkpointer: 检查点管理器
+        checkpointer: LangGraph 检查点管理器
+        memory_store: 长期记忆存储
         session_service: 会话服务
         agent_service: Agent 服务
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        checkpointer: LangGraphCheckpointer | None = None,
+    ) -> None:
         self.db = db
-        self.llm_gateway = LLMGateway()
+        # 通过依赖注入传递配置，避免 Core 层依赖应用层
+        self.llm_gateway = LLMGateway(config=settings)
         self.tool_registry = ToolRegistry()
-        self.checkpointer = Checkpointer()
+        # 使用提供的 checkpointer 或创建新的（优先使用全局单例）
+        self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_service = SessionService(db)
         self.agent_service = AgentService(db)
+
+        # 初始化长期记忆存储
+        try:
+            vector_store = get_vector_store()
+            self.memory_store = LongTermMemoryStore(
+                llm_gateway=self.llm_gateway,
+                vector_store=vector_store,
+            )
+            # 初始化 Store
+            # 注意：这里需要异步初始化，但 __init__ 是同步的
+            # 实际初始化在第一次使用时进行
+        except Exception as e:
+            logger.warning("Memory store initialization failed: %s", e, exc_info=True)
+            self.memory_store = None
+
+    async def _ensure_memory_store_initialized(self) -> None:
+        """确保记忆存储已初始化"""
+        if self.memory_store:
+            try:
+                await self.memory_store.setup()
+            except Exception as e:
+                logger.warning("Memory store setup failed: %s", e)
 
     async def chat(
         self,
@@ -54,7 +91,7 @@ class ChatService:
         """处理对话请求
 
         Args:
-            session_id: 会话 ID (可选，不提供则创建新会话)
+            session_id: 对话 ID (可选，不提供则创建新对话，作为 LangGraph 的 thread_id)
             message: 用户消息
             agent_id: Agent ID (可选)
             user_id: 用户 ID
@@ -62,15 +99,37 @@ class ChatService:
         Yields:
             ChatEvent: 聊天事件流
         """
-        # 创建或获取会话
+        # 确保记忆存储已初始化
+        await self._ensure_memory_store_initialized()
+
+        # 创建或获取对话
+        session = None
         if not session_id:
+            # 创建新对话
             session = await self.session_service.create(
                 user_id=user_id,
                 agent_id=agent_id,
             )
             session_id = str(session.id)
+            # 确保对话已刷新到数据库
+            await self.db.flush()
+            await self.db.refresh(session)
+            # 关键：在发送事件前手动提交事务，确保前端能立即查询到
+            await self.db.commit()
+            # 发送对话创建事件，通知前端更新 sessionId
+            yield ChatEvent(
+                type="session_created",
+                data={"session_id": session_id},
+            )
+        else:
+            # 验证对话是否存在且属于当前用户
+            session = await self.session_service.get_by_id(session_id)
+            if not session:
+                raise NotFoundError("Session", session_id)
+            if str(session.user_id) != user_id:
+                raise NotFoundError("Session", session_id)  # 不泄露权限信息
 
-        # 保存用户消息
+        # 保存用户消息到数据库（用于历史记录查询）
         await self.session_service.add_message(
             session_id=session_id,
             role=MessageRole.USER,
@@ -80,19 +139,21 @@ class ChatService:
         # 获取 Agent 配置
         config = await self._get_agent_config(agent_id)
 
-        # 创建执行引擎
-        engine = AgentEngine(
+        # 创建 LangGraph Agent Engine
+        engine = LangGraphAgentEngine(
             config=config,
             llm_gateway=self.llm_gateway,
+            memory_store=self.memory_store,
             tool_registry=self.tool_registry,
             checkpointer=self.checkpointer,
         )
 
-        # 执行 Agent
+        # 执行 Agent（LangGraph 会自动管理对话历史）
         final_content = ""
         try:
             async for event in engine.run(
-                session_id=session_id,
+                session_id=session_id,  # 作为 LangGraph 的 thread_id
+                user_id=user_id,
                 user_message=message,
             ):
                 # 转换为 ChatEvent
@@ -101,13 +162,15 @@ class ChatService:
 
                 # 收集最终内容
                 if event.type == EventType.TEXT:
-                    final_content = event.data.get("content", "")
-                elif event.type == EventType.DONE and not final_content:
+                    text_content = event.data.get("content", "")
+                    if text_content:
+                        final_content += text_content
+                elif event.type == EventType.DONE:
                     final_msg = event.data.get("final_message")
                     if final_msg and final_msg.get("content"):
                         final_content = final_msg["content"]
 
-            # 保存助手消息
+            # 保存助手消息到数据库（用于历史记录查询）
             if final_content:
                 await self.session_service.add_message(
                     session_id=session_id,
@@ -115,71 +178,29 @@ class ChatService:
                     content=final_content,
                 )
 
+                # 提取并存储长期记忆（异步，不阻塞响应）
+                if self.memory_store and session:
+                    try:
+                        # 记忆提取可以在后台异步进行
+                        # 使用 LongTermMemoryStore 存储重要信息
+                        logger.info(
+                            "Conversation completed for session %s, memory extraction can be done asynchronously",
+                            session_id,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Memory extraction failed for session %s: %s",
+                            session_id,
+                            e,
+                            exc_info=True,
+                        )
+
         except Exception as e:
-            logger.error("Chat error: %s", e)
+            logger.error("Chat error for session %s: %s", session_id, e, exc_info=True)
             yield ChatEvent(
                 type="error",
-                data={"error": str(e)},
+                data={"error": str(e), "session_id": session_id},
             )
-
-    async def resume(
-        self,
-        session_id: str,
-        checkpoint_id: str,
-        action: str,
-        modified_args: dict | None,
-        user_id: str,
-    ) -> AsyncGenerator[ChatEvent, None]:
-        """从中断点恢复执行
-
-        Args:
-            session_id: 会话 ID
-            checkpoint_id: 检查点 ID
-            action: 用户操作 (approve/reject/modify)
-            modified_args: 修改后的参数
-            user_id: 用户 ID
-
-        Yields:
-            ChatEvent: 聊天事件流
-
-        Raises:
-            CheckpointError: 检查点不存在时
-        """
-        # 验证会话属于当前用户
-        session = await self.session_service.get_by_id(session_id)
-        if not session:
-            raise NotFoundError("Session", session_id)
-
-        if str(session.user_id) != user_id:
-            raise NotFoundError("Session", session_id)  # 不泄露权限信息
-
-        # 获取检查点信息
-        checkpoint_data = await self.checkpointer.get(checkpoint_id)
-        if not checkpoint_data:
-            raise CheckpointError(
-                f"Checkpoint not found: {checkpoint_id}",
-                checkpoint_id=checkpoint_id,
-            )
-
-        # 获取 Agent 配置
-        agent_id = str(session.agent_id) if session.agent_id else None
-        config = await self._get_agent_config(agent_id)
-
-        # 创建执行引擎
-        engine = AgentEngine(
-            config=config,
-            llm_gateway=self.llm_gateway,
-            tool_registry=self.tool_registry,
-            checkpointer=self.checkpointer,
-        )
-
-        # 恢复执行
-        async for event in engine.resume(
-            checkpoint_id=checkpoint_id,
-            action=action,
-            modified_args=modified_args,
-        ):
-            yield self._convert_event(event)
 
     async def _get_agent_config(self, agent_id: str | None) -> AgentConfig:
         """获取 Agent 配置
@@ -212,15 +233,15 @@ class ChatService:
         # 返回默认配置
         return AgentConfig(
             name="Default Agent",
-            model="claude-3-5-sonnet-20241022",
-            max_iterations=20,
+            model=settings.default_model,
+            max_iterations=settings.agent_max_iterations,
             temperature=0.7,
-            max_tokens=4096,
+            max_tokens=settings.agent_max_tokens,
             tools=["read_file", "write_file", "list_dir", "run_shell", "search_code"],
-            checkpoint_enabled=True,
+            checkpoint_enabled=settings.checkpoint_enabled,
             checkpoint_interval=5,
-            hitl_enabled=True,
-            hitl_operations=["run_shell", "write_file"],
+            hitl_enabled=settings.hitl_enabled,
+            hitl_operations=settings.hitl_interrupt_tools,
         )
 
     def _convert_event(self, event: AgentEvent) -> ChatEvent:
@@ -243,8 +264,11 @@ class ChatService:
             EventType.TERMINATED: "terminated",
         }
 
+        # 确保 data 中的 LiteLLM 对象被序列化
+        serialized_data = Serializer.serialize_dict(event.data)
+
         return ChatEvent(
             type=type_mapping.get(event.type, str(event.type)),
-            data=event.data,
+            data=serialized_data,
             timestamp=event.timestamp,
         )

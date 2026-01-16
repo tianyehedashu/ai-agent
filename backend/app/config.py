@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     chroma_path: str = "./data/chroma"
 
     # ========================================================================
+    # 记忆存储配置
+    # ========================================================================
+    memory_store_type: Literal["postgres", "memory"] = "postgres"  # LangGraph Store 类型
+
+    # ========================================================================
     # LLM 配置
     # ========================================================================
     # OpenAI
@@ -87,11 +92,17 @@ class Settings(BaseSettings):
     volcengine_chat_endpoint_id: str | None = None  # 对话模型接入点 (Doubao-pro/lite)
     volcengine_image_endpoint_id: str | None = None  # 图像生成接入点 (Seedream)
 
+    # 智谱AI (GLM)
+    zhipuai_api_key: SecretStr | None = None
+    zhipuai_api_base: str = "https://open.bigmodel.cn/api/paas/v4"  # 通用端点
+    zhipuai_coding_api_base: str | None = None  # Coding端点（用于GLM-4.7编码套餐）
+
     # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"
 
     # 默认模型配置
-    default_model: str = "claude-3-5-sonnet-20241022"
+    # DeepSeek 支持的模型: deepseek-chat, deepseek-coder, deepseek-reasoner
+    default_model: str = "deepseek-reasoner"
     embedding_model: str = "text-embedding-3-small"
 
     # ========================================================================

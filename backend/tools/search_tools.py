@@ -99,20 +99,24 @@ class WebSearchTool(BaseTool):
 
         # 提取抽象结果
         if data.get("Abstract"):
-            results.append({
-                "title": data.get("Heading", "Abstract"),
-                "url": data.get("AbstractURL", ""),
-                "snippet": data.get("Abstract", ""),
-            })
+            results.append(
+                {
+                    "title": data.get("Heading", "Abstract"),
+                    "url": data.get("AbstractURL", ""),
+                    "snippet": data.get("Abstract", ""),
+                }
+            )
 
         # 提取相关话题
         for topic in data.get("RelatedTopics", [])[:num_results]:
             if isinstance(topic, dict) and "Text" in topic:
-                results.append({
-                    "title": topic.get("Text", "")[:50],
-                    "url": topic.get("FirstURL", ""),
-                    "snippet": topic.get("Text", ""),
-                })
+                results.append(
+                    {
+                        "title": topic.get("Text", "")[:50],
+                        "url": topic.get("FirstURL", ""),
+                        "snippet": topic.get("Text", ""),
+                    }
+                )
 
         return results[:num_results]
 

@@ -10,7 +10,6 @@ Code Fixer - 代码自动修复器
 
 from typing import Any
 
-from app.config import settings
 from core.llm.gateway import LLMGateway
 from core.quality.validator import CodeValidator, ValidationResult
 from utils.logging import get_logger
@@ -42,11 +41,19 @@ class CodeFixer:
 
     def __init__(
         self,
-        llm: LLMGateway | None = None,
+        llm: LLMGateway,
         validator: CodeValidator | None = None,
         max_attempts: int = 3,
     ) -> None:
-        self.llm = llm or LLMGateway()
+        """
+        初始化代码修复器
+
+        Args:
+            llm: LLM 网关（必须提供，通过依赖注入）
+            validator: 代码验证器
+            max_attempts: 最大修复尝试次数
+        """
+        self.llm = llm
         self.validator = validator or CodeValidator()
         self.max_attempts = max_attempts
 
@@ -92,7 +99,7 @@ class CodeFixer:
             try:
                 response = await self.llm.chat(
                     messages=[{"role": "user", "content": prompt}],
-                    model=settings.default_model,
+                    model=None,  # 使用 LLMGateway 的默认模型
                     temperature=0.3,
                 )
 
@@ -151,7 +158,7 @@ class CodeFixer:
 ```
 
 问题:
-- 行 {issue.get('line', 0) + 1}: {issue.get('message', '')} [{issue.get('code', '')}]
+- 行 {issue.get("line", 0) + 1}: {issue.get("message", "")} [{issue.get("code", "")}]
 
 请只修复这个问题，保持其他代码不变。只返回完整的修复后代码。
 代码必须用 ```python 和 ``` 包裹。
@@ -160,7 +167,7 @@ class CodeFixer:
         try:
             response = await self.llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=settings.default_model,
+                model=None,  # 使用 LLMGateway 的默认模型
                 temperature=0.3,
             )
 

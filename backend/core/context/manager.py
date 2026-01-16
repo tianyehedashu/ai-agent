@@ -32,9 +32,24 @@ class ContextManager:
         self.max_context_tokens = max_context_tokens
 
         # Token 预算分配
-        self.system_budget = 2000  # 系统提示词预算
-        self.memory_budget = 4000  # 记忆预算
-        self.history_budget = max_context_tokens - self.system_budget - self.memory_budget
+        # 如果 max_context_tokens 太小，按比例分配
+        if max_context_tokens < 10000:
+            # 小预算：系统 20%，记忆 40%，历史 40%
+            self.system_budget = int(max_context_tokens * 0.2)
+            self.memory_budget = int(max_context_tokens * 0.4)
+            self.history_budget = max_context_tokens - self.system_budget - self.memory_budget
+        else:
+            # 大预算（100k+）：动态分配
+            # 系统提示词：固定 2000 tokens
+            self.system_budget = 2000
+            # 记忆预算：根据上下文大小动态调整（最多 20k tokens，用于存储大量相关记忆）
+            # 对于 100k 上下文，分配 20% 给记忆，这样可以存储更多相关记忆
+            self.memory_budget = min(20000, int(max_context_tokens * 0.2))
+            # 历史消息预算：剩余部分
+            self.history_budget = max_context_tokens - self.system_budget - self.memory_budget
+
+        # 确保 history_budget 至少为 0
+        self.history_budget = max(0, self.history_budget)
 
     def build_context(
         self,
@@ -88,16 +103,35 @@ class ContextManager:
         else:
             parts.append(self._default_system_prompt())
 
-        # 记忆上下文
+        # 记忆上下文（智能裁剪，充分利用 memory_budget）
         if memories:
-            memory_text = "\n".join(f"- {m}" for m in memories)
-            parts.append(f"\n## 相关记忆\n{memory_text}")
+            # 按重要性排序，优先保留重要记忆
+            # 注意：memories 已经是字符串列表，按顺序添加直到达到预算
+            memory_text_parts = []
+            current_tokens = 0
+
+            for memory in memories:
+                memory_line = f"- {memory}"
+                memory_tokens = count_tokens(memory_line)
+
+                # 如果添加这条记忆会超出预算，停止添加
+                if current_tokens + memory_tokens > self.memory_budget:
+                    break
+
+                memory_text_parts.append(memory_line)
+                current_tokens += memory_tokens
+
+            if memory_text_parts:
+                parts.append(
+                    f"\n## 相关记忆（共 {len(memory_text_parts)}/{len(memories)} 条）\n"
+                    + "\n".join(memory_text_parts)
+                )
 
         # 工具上下文
         if tools_context:
             parts.append(f"\n## 可用工具\n{tools_context}")
 
-        # 裁剪到预算
+        # 裁剪到预算（确保不超过 system_budget）
         full_prompt = "\n\n".join(parts)
         return truncate_to_token_limit(full_prompt, self.system_budget)
 

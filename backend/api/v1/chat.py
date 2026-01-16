@@ -10,15 +10,19 @@ Chat API - 对话 API
 """
 
 import json
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from api.deps import AuthUser, get_chat_service, get_checkpoint_service
+from api.deps import RequiredAuthUser, get_chat_service, get_checkpoint_service
 from services.chat import ChatService
 from services.checkpoint import CheckpointService
+from utils.serialization import Serializer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -36,6 +40,14 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="用户消息")
     session_id: str | None = Field(default=None, description="会话 ID（可选）")
     agent_id: str | None = Field(default=None, description="Agent ID（可选）")
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str | None) -> str | None:
+        """验证 session_id：如果提供，不能为空字符串"""
+        if v is not None and v == "":
+            raise ValueError("session_id cannot be empty string")
+        return v
 
 
 class ResumeRequest(BaseModel):
@@ -85,7 +97,7 @@ class DiffResponse(BaseModel):
 @router.post("")
 async def chat(
     request: ChatRequest,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     chat_service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
@@ -102,8 +114,18 @@ async def chat(
                 agent_id=request.agent_id,
                 user_id=current_user.id,
             ):
-                data = event.model_dump(mode="json")
-                yield f"data: {json.dumps(data)}\n\n"
+                # 使用序列化工具确保所有 LiteLLM 对象被转换
+                # 先获取 model_dump 的结果，然后深度序列化
+                # 使用 warnings="error" 来获取完整堆栈（如果有问题）
+                try:
+                    event_dict = event.model_dump(mode="json", warnings="error")
+                except Exception:
+                    # 如果 warnings="error" 抛出异常，说明有问题
+                    logger.error("⚠️ Pydantic 序列化错误！完整堆栈：", exc_info=True)
+                    # 降级处理：先深度序列化，再 model_dump
+                    event_dict = Serializer.serialize_dict(event.model_dump())
+                serialized_data = Serializer.serialize(event_dict)
+                yield f"data: {json.dumps(serialized_data)}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as e:
@@ -124,7 +146,7 @@ async def chat(
 @router.post("/resume")
 async def resume_execution(
     request: ResumeRequest,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     chat_service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
@@ -142,8 +164,10 @@ async def resume_execution(
                 modified_args=request.modified_args,
                 user_id=current_user.id,
             ):
-                data = event.model_dump(mode="json")
-                yield f"data: {json.dumps(data)}\n\n"
+                # 使用序列化工具确保所有 LiteLLM 对象被转换
+                event_dict = event.model_dump(mode="json")
+                serialized_data = Serializer.serialize(event_dict)
+                yield f"data: {json.dumps(serialized_data)}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as e:
@@ -164,7 +188,7 @@ async def resume_execution(
 @router.get("/checkpoints/{session_id}", response_model=list[CheckpointItem])
 async def list_checkpoints(
     session_id: str,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[CheckpointItem]:
@@ -185,19 +209,21 @@ async def list_checkpoints(
 @router.get("/checkpoints/{checkpoint_id}/state")
 async def get_checkpoint_state(
     checkpoint_id: str,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> dict[str, Any]:
     """获取检查点状态"""
     # get_or_raise 会在检查点不存在时抛出 CheckpointError
     checkpoint = await checkpoint_service.get_or_raise(checkpoint_id)
-    return checkpoint.state.model_dump(mode="json")
+    state_dict = checkpoint.state.model_dump(mode="json")
+    # 深度序列化，确保所有 LiteLLM 对象被转换
+    return Serializer.serialize(state_dict)  # type: ignore[return-value]
 
 
 @router.post("/checkpoints/diff", response_model=DiffResponse)
 async def diff_checkpoints(
     request: DiffRequest,
-    current_user: AuthUser,
+    current_user: RequiredAuthUser,
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> DiffResponse:
     """对比两个检查点"""

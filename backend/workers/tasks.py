@@ -11,8 +11,10 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy import delete, select
 
+from app.config import settings
 from core.llm.gateway import LLMGateway
-from core.memory.manager import MemoryManager
+from core.memory.extractor import MemoryExtractor
+from core.memory.langgraph_store import LongTermMemoryStore
 from core.quality.fixer import CodeFixer
 from core.quality.validator import CodeValidator
 from core.sandbox.executor import DockerExecutor
@@ -62,25 +64,33 @@ def process_memory_extraction(
 
     async def _process():
         vector_store = get_vector_store()
-        llm = LLMGateway()
+        llm = LLMGateway(config=settings)
 
-        manager = MemoryManager(
+        # 使用新的 LongTermMemoryStore
+        memory_store = LongTermMemoryStore(
+            llm_gateway=llm,
             vector_store=vector_store,
-            llm=llm,
         )
+        await memory_store.setup()
+
+        # 使用 MemoryExtractor 提取记忆
+        extractor = MemoryExtractor(llm_gateway=llm)
 
         # 使用对话格式
         conversation = [{"role": "user", "content": content}]
-        memories = await manager.extract_memories(
-            session_id=session_id,
+
+        # 提取并存储记忆（使用新接口）
+        memory_ids = await extractor.extract_and_store(
+            memory_store=memory_store,
             user_id=user_id,
             conversation=conversation,
+            session_id=session_id,
         )
 
         return {
             "session_id": session_id,
-            "memories_extracted": len(memories),
-            "memory_ids": [str(m.id) for m in memories],
+            "memories_extracted": len(memory_ids),
+            "memory_ids": memory_ids,
         }
 
     return run_async(_process())
@@ -103,7 +113,7 @@ def generate_embeddings(
     logger.info("Generating embeddings for %d texts", len(texts))
 
     async def _generate():
-        llm = LLMGateway()
+        llm = LLMGateway(config=settings)
         embeddings = await llm.embed_batch(texts, model=model)
         return embeddings
 
@@ -215,7 +225,8 @@ def auto_fix_code(
     logger.info("Auto-fixing code with %d errors", len(errors))
 
     async def _fix():
-        fixer = CodeFixer(max_attempts=max_attempts)
+        llm = LLMGateway(config=settings)
+        fixer = CodeFixer(llm=llm, max_attempts=max_attempts)
         fixed_code, success = await fixer.fix(code=code)
 
         return {

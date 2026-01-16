@@ -9,8 +9,7 @@ FROM python:3.11-slim as base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=random \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on
+    UV_LINK_MODE=copy
 
 WORKDIR /app
 
@@ -21,21 +20,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# 设置 PATH 以包含 uv 虚拟环境
+ENV PATH="/app/.venv/bin:$PATH"
+
 # ============================================
 # Stage 2: Dependencies
 # ============================================
 FROM base as dependencies
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 安装 uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN chmod +x /usr/local/bin/uv
+
+# 复制项目文件
+COPY pyproject.toml uv.lock ./
+
+# 使用 uv 安装生产依赖
+RUN uv sync --frozen --no-dev
 
 # ============================================
 # Stage 3: Development
 # ============================================
 FROM dependencies as development
 
-COPY requirements-dev.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
+# 使用 uv 安装开发依赖
+RUN uv sync --frozen --all-extras
 
 COPY . .
 

@@ -3,10 +3,12 @@ Session API - 会话管理接口
 """
 
 from datetime import datetime
-from typing import Annotated
+import json
+from typing import Annotated, Any
+import uuid
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.deps import AuthUser, check_ownership, get_session_service
 from services.session import SessionService
@@ -50,6 +52,16 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("id", "user_id", "agent_id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v: uuid.UUID | str | None) -> str | None:
+        """将 UUID 转换为字符串"""
+        if v is None:
+            return None
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
+
 
 class MessageResponse(BaseModel):
     """消息响应"""
@@ -65,6 +77,47 @@ class MessageResponse(BaseModel):
     metadata: dict
     token_count: int | None
     created_at: datetime
+
+    @field_validator("id", "session_id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v: uuid.UUID | str) -> str:
+        """将 UUID 转换为字符串"""
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
+
+    @field_validator("metadata", "tool_calls", mode="before")
+    @classmethod
+    def convert_jsonb_to_dict(cls, v: Any) -> dict | None:
+        """将 JSONB 字段转换为字典
+
+        SQLAlchemy 的 JSONB 字段可能返回特殊对象，需要转换为普通字典。
+        """
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        # 处理 SQLAlchemy JSONB 类型或其他特殊对象
+        try:
+            # 方法1: 尝试 JSON 序列化/反序列化
+            json_str = json.dumps(v, default=str)
+            return json.loads(json_str)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+        # 方法2: 如果对象有 data 属性（某些 JSONB 包装器）
+        if hasattr(v, "data"):
+            data = v.data
+            if isinstance(data, dict):
+                return data
+        # 方法3: 尝试转换为字典
+        try:
+            if hasattr(v, "__dict__") and v.__dict__:
+                return dict(v.__dict__)
+        except (TypeError, AttributeError):
+            pass
+        # 如果所有方法都失败，对于 metadata 返回空字典，对于 tool_calls 返回 None
+        # 通过检查字段名来判断
+        return {}
 
 
 # =============================================================================
@@ -173,4 +226,22 @@ async def get_session_messages(
     check_ownership(str(session.user_id), current_user.id, "Session")
 
     messages = await session_service.get_messages(session_id, skip=skip, limit=limit)
-    return [MessageResponse.model_validate(m) for m in messages]
+    # 手动转换消息，确保 JSONB 字段正确序列化
+    result = []
+    for msg in messages:
+        # 确保 metadata 和 tool_calls 是字典类型
+        msg_dict = {
+            "id": str(msg.id),
+            "session_id": str(msg.session_id),
+            "role": msg.role,
+            "content": msg.content,
+            "tool_calls": dict(msg.tool_calls) if msg.tool_calls else None,
+            "tool_call_id": msg.tool_call_id,
+            "metadata": dict(msg.extra_data)
+            if hasattr(msg, "extra_data") and msg.extra_data
+            else {},
+            "token_count": msg.token_count,
+            "created_at": msg.created_at,
+        }
+        result.append(MessageResponse.model_validate(msg_dict))
+    return result

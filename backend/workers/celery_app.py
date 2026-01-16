@@ -26,26 +26,21 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
     # 时区
     timezone="UTC",
     enable_utc=True,
-
     # 任务结果配置
     result_expires=3600,  # 结果过期时间 (1小时)
     result_extended=True,
-
     # 任务执行配置
     task_soft_time_limit=300,  # 软超时 5 分钟
-    task_time_limit=600,       # 硬超时 10 分钟
-    task_acks_late=True,       # 任务完成后再确认
+    task_time_limit=600,  # 硬超时 10 分钟
+    task_acks_late=True,  # 任务完成后再确认
     task_reject_on_worker_lost=True,
-
     # Worker 配置
     worker_prefetch_multiplier=1,  # 每个 worker 预取 1 个任务
     worker_max_tasks_per_child=100,  # 每个子进程处理 100 个任务后重启
     worker_max_memory_per_child=256000,  # 256MB 内存限制
-
     # 任务路由
     task_routes={
         "workers.tasks.process_memory_extraction": {"queue": "memory"},
@@ -54,7 +49,6 @@ celery_app.conf.update(
         "workers.tasks.cleanup_expired_checkpoints": {"queue": "maintenance"},
         "workers.tasks.generate_embeddings": {"queue": "embeddings"},
     },
-
     # 队列定义
     task_queues=(
         Queue("default", Exchange("default"), routing_key="default"),
@@ -64,23 +58,19 @@ celery_app.conf.update(
         Queue("maintenance", Exchange("maintenance"), routing_key="maintenance"),
         Queue("embeddings", Exchange("embeddings"), routing_key="embeddings"),
     ),
-
     # 默认队列
     task_default_queue="default",
     task_default_exchange="default",
     task_default_routing_key="default",
-
     # 任务优先级
     task_queue_max_priority=10,
     task_default_priority=5,
-
     # 重试配置
     task_annotations={
         "*": {
             "rate_limit": "100/m",  # 每分钟最多 100 个任务
         },
     },
-
     # Beat 调度配置 (定时任务)
     beat_schedule={
         "cleanup-checkpoints-hourly": {

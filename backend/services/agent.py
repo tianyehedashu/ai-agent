@@ -13,6 +13,23 @@ from exceptions import NotFoundError
 from models.agent import Agent
 
 
+def safe_uuid(value: str | None) -> uuid.UUID | None:
+    """安全地将字符串转换为 UUID
+
+    Args:
+        value: 要转换的字符串
+
+    Returns:
+        UUID 对象或 None（如果值无效）
+    """
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 class AgentService:
     """Agent 服务
 
@@ -53,8 +70,12 @@ class AgentService:
         Returns:
             创建的 Agent 对象
         """
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            raise ValueError(f"Invalid user_id format: {user_id}")
+
         agent = Agent(
-            user_id=uuid.UUID(user_id),
+            user_id=user_uuid,
             name=name,
             description=description,
             system_prompt=system_prompt,
@@ -114,9 +135,14 @@ class AgentService:
         Returns:
             Agent 列表
         """
+        # 检查 user_id 是否为有效的 UUID（匿名用户会返回空列表）
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            return []
+
         result = await self.db.execute(
             select(Agent)
-            .where(Agent.user_id == uuid.UUID(user_id))
+            .where(Agent.user_id == user_uuid)
             .order_by(Agent.created_at.desc())
             .offset(skip)
             .limit(limit)

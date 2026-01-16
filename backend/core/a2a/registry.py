@@ -4,7 +4,6 @@ Agent 注册表
 管理可用的 Agent 信息
 """
 
-
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

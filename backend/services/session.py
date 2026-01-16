@@ -15,6 +15,23 @@ from models.message import Message
 from models.session import Session
 
 
+def safe_uuid(value: str | None) -> uuid.UUID | None:
+    """安全地将字符串转换为 UUID
+
+    Args:
+        value: 要转换的字符串
+
+    Returns:
+        UUID 对象或 None（如果值无效）
+    """
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 class SessionService:
     """会话服务
 
@@ -43,9 +60,15 @@ class SessionService:
         Returns:
             创建的 Session 对象
         """
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            raise ValueError(f"Invalid user_id format: {user_id}")
+
+        agent_uuid = safe_uuid(agent_id) if agent_id else None
+
         session = Session(
-            user_id=uuid.UUID(user_id),
-            agent_id=uuid.UUID(agent_id) if agent_id else None,
+            user_id=user_uuid,
+            agent_id=agent_uuid,
             title=title,
         )
         self.db.add(session)
@@ -100,10 +123,17 @@ class SessionService:
         Returns:
             Session 列表
         """
-        query = select(Session).where(Session.user_id == uuid.UUID(user_id))
+        # 检查 user_id 是否为有效的 UUID（匿名用户会返回空列表）
+        user_uuid = safe_uuid(user_id)
+        if not user_uuid:
+            return []
+
+        query = select(Session).where(Session.user_id == user_uuid)
 
         if agent_id:
-            query = query.where(Session.agent_id == uuid.UUID(agent_id))
+            agent_uuid = safe_uuid(agent_id)
+            if agent_uuid:
+                query = query.where(Session.agent_id == agent_uuid)
 
         query = query.order_by(Session.updated_at.desc()).offset(skip).limit(limit)
 
@@ -215,13 +245,15 @@ class SessionService:
         )
         self.db.add(message)
 
-        # 更新会话统计
+        # 更新会话统计（验证会话存在）
         result = await self.db.execute(select(Session).where(Session.id == uuid.UUID(session_id)))
         session = result.scalar_one_or_none()
-        if session:
-            session.message_count += 1
-            if token_count:
-                session.token_count += token_count
+        if not session:
+            raise NotFoundError("Session", session_id)
+
+        session.message_count += 1
+        if token_count:
+            session.token_count += token_count
 
         await self.db.flush()
         await self.db.refresh(message)

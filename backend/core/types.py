@@ -14,8 +14,9 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
+import logging
 from typing import (
     Any,
     Generic,
@@ -25,7 +26,11 @@ from typing import (
     TypeVar,
 )
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from utils.serialization import SerializableDict, Serializer
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # 基础枚举类型
@@ -121,7 +126,7 @@ class Message(BaseModel):
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AgentConfig(BaseModel):
@@ -170,23 +175,56 @@ class AgentState(BaseModel):
     """Agent 状态 (用于检查点)"""
 
     session_id: str
-    messages: list[dict[str, Any]] = Field(default_factory=list)
-    context: dict[str, Any] = Field(default_factory=dict)
+    messages: list[Message] = Field(default_factory=list)
+    # 使用 SerializableDict 类型，提供运行时验证和序列化保证
+    # PlainValidator 会在验证时自动调用序列化工具，确保数据可序列化
+    context: SerializableDict = Field(default_factory=dict)
     current_plan: list[str] | None = None
     iteration: int = 0
     total_tokens: int = 0
-    pending_tool_call: dict[str, Any] | None = None
+    pending_tool_call: SerializableDict | None = None
     completed: bool = False
     status: Literal["running", "paused", "completed", "error"] = "running"
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: SerializableDict = Field(default_factory=dict)
 
 
 class AgentEvent(BaseModel):
     """Agent 事件"""
 
+    model_config = ConfigDict(
+        # 移除 ser_json_infra=True，避免 Pydantic 内部序列化检查导致警告
+        # ser_json_infra=True,  # 注释掉，看看是否能解决问题
+    )
+
     type: EventType
-    data: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    # 使用 SerializableDict 类型，既保持类型安全，又提供运行时验证
+    # PlainValidator 会在验证时自动调用序列化工具，确保数据可序列化
+    data: SerializableDict = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_all_data(cls, data: Any) -> Any:
+        """在模型验证之前，深度序列化所有数据，确保 LiteLLM 对象被转换"""
+        if isinstance(data, dict) and "data" in data:
+            # 深度序列化 data 字段，确保嵌套的 LiteLLM 对象被转换
+            data["data"] = (
+                Serializer.serialize_dict(data["data"])
+                if isinstance(data["data"], dict)
+                else Serializer.serialize(data["data"])
+            )
+        return data
+
+    @model_serializer(mode="wrap")
+    def serialize_model(self, serializer: Any, info: Any) -> dict[str, Any]:
+        """自定义序列化，确保所有嵌套对象都被正确序列化"""
+        # 先使用默认序列化
+        result = serializer(self)
+
+        # 然后深度序列化 data 字段，确保 LiteLLM 对象被转换
+        if isinstance(result, dict) and "data" in result:
+            result["data"] = Serializer.serialize_dict(result["data"])
+        return result
 
 
 class CheckpointMeta(BaseModel):
@@ -202,12 +240,31 @@ class CheckpointMeta(BaseModel):
 class Checkpoint(BaseModel):
     """检查点"""
 
+    model_config = ConfigDict(
+        # 移除 ser_json_infra=True，避免 Pydantic 内部序列化检查导致警告
+        # ser_json_infra=True,  # 注释掉，看看是否能解决问题
+    )
+
     id: str
     session_id: str
     step: int
     state: AgentState
     created_at: datetime
     parent_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_state(cls, data: Any) -> Any:
+        """在模型验证之前，确保 state 中的数据是可序列化的"""
+        if isinstance(data, dict) and "state" in data:
+            state_data = data["state"]
+            if isinstance(state_data, dict):
+                # 确保 state 中的 context 和 metadata 是可序列化的
+                if "context" in state_data:
+                    state_data["context"] = Serializer.serialize_dict(state_data["context"])
+                if "metadata" in state_data:
+                    state_data["metadata"] = Serializer.serialize_dict(state_data["metadata"])
+        return data
 
 
 # ============================================================================
@@ -414,10 +471,8 @@ NodeFunction = Callable[[AgentState], Awaitable[AgentState]]
 ConditionFunction = Callable[[AgentState], str]
 EventGenerator = "AsyncGenerator[AgentEvent, None]"
 
-# JSON 类型
-JSONValue = str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
+# JSON 类型（已移至 utils.serialization，保留别名以保持兼容性）
 JSONSchema = dict[str, Any]
-JSONObject = dict[str, Any]
 
 # ID 类型
 UserId = str

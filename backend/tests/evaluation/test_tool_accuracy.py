@@ -2,7 +2,6 @@
 工具调用准确率评估测试
 """
 
-
 import pytest
 
 from core.types import ToolCall, ToolResult

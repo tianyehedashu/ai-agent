@@ -1,8 +1,25 @@
 /**
  * API Client
+ *
+ * 基于 Vite 的 API 客户端最佳实践：
+ * - 开发环境：使用相对路径，通过 vite.config.ts 的 proxy 转发，自动解决 CORS
+ * - 生产环境：配置 VITE_API_URL 环境变量，或前后端同域部署
+ *
+ * @example vite.config.ts 配置
+ * ```ts
+ * server: {
+ *   proxy: {
+ *     '/api': {
+ *       target: 'http://localhost:8000',
+ *       changeOrigin: true,
+ *     },
+ *   },
+ * }
+ * ```
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+// 开发环境为空（使用 vite proxy），生产环境按需配置
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>
@@ -14,7 +31,6 @@ class ApiClient {
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
-    // 从 localStorage 恢复 token
     this.token = localStorage.getItem('auth_token')
   }
 
@@ -27,19 +43,37 @@ class ApiClient {
     }
   }
 
+  /**
+   * 构建请求 URL
+   * - 有 baseUrl 时：构建完整 URL（生产环境）
+   * - 无 baseUrl 时：返回相对路径（开发环境，由 vite proxy 转发）
+   */
   private buildUrl(
     path: string,
     params?: Record<string, string | number | boolean | undefined>
   ): string {
-    const url = new URL(path, this.baseUrl)
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          url.searchParams.append(key, String(value))
-        }
-      })
+    const queryString = this.buildQueryString(params)
+
+    if (this.baseUrl) {
+      const url = new URL(path, this.baseUrl)
+      url.search = queryString
+      return url.toString()
     }
-    return url.toString()
+
+    return queryString ? `${path}?${queryString}` : path
+  }
+
+  private buildQueryString(
+    params?: Record<string, string | number | boolean | undefined>
+  ): string {
+    if (!params) return ''
+    const searchParams = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) {
+        searchParams.append(key, String(value))
+      }
+    }
+    return searchParams.toString()
   }
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {

@@ -51,6 +51,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const handleEvent = useCallback(
     (event: ChatEvent) => {
       switch (event.type) {
+        case 'session_created': {
+          // 保存新创建的会话 ID，用于后续消息的上下文关联
+          const sessionData = event.data as { session_id?: string }
+          if (sessionData.session_id) {
+            sessionIdRef.current = sessionData.session_id
+          }
+          break
+        }
+
         case 'thinking': {
           // 显示思考状态
           break

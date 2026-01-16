@@ -4,6 +4,7 @@
 评估 Agent 完成指定任务的能力
 """
 
+import asyncio
 from dataclasses import dataclass
 from enum import Enum
 import time
@@ -78,8 +79,11 @@ class TaskEvaluator:
         start_time = time.time()
 
         try:
-            # 执行 Agent
-            response = await agent.run(input_prompt, timeout=timeout)
+            # 执行 Agent，使用 asyncio.wait_for 实现超时
+            response = await asyncio.wait_for(
+                agent.run(input_prompt, timeout=timeout),
+                timeout=timeout,
+            )
 
             # 评估输出
             score = await self._score_output(
@@ -90,6 +94,7 @@ class TaskEvaluator:
 
             status = self._determine_status(score, response)
 
+            time_taken_ms = max(1, int((time.time() - start_time) * 1000))
             return TaskEvalResult(
                 task_id=task_id,
                 status=status,
@@ -97,13 +102,14 @@ class TaskEvaluator:
                 expected_output=expected,
                 actual_output=response.content if hasattr(response, "content") else str(response),
                 steps_taken=getattr(response, "iterations", 0),
-                time_taken_ms=int((time.time() - start_time) * 1000),
+                time_taken_ms=time_taken_ms,
                 tokens_used=getattr(response, "total_tokens", 0),
                 errors=[],
                 metadata={"criteria": criteria},
             )
 
         except TimeoutError:
+            time_taken_ms = max(1, int((time.time() - start_time) * 1000))
             return TaskEvalResult(
                 task_id=task_id,
                 status=TaskStatus.TIMEOUT,
@@ -111,12 +117,13 @@ class TaskEvaluator:
                 expected_output=expected,
                 actual_output="",
                 steps_taken=0,
-                time_taken_ms=int((time.time() - start_time) * 1000),
+                time_taken_ms=time_taken_ms,
                 tokens_used=0,
                 errors=["Timeout"],
                 metadata={},
             )
         except Exception as e:
+            time_taken_ms = max(1, int((time.time() - start_time) * 1000))
             return TaskEvalResult(
                 task_id=task_id,
                 status=TaskStatus.ERROR,
@@ -124,7 +131,7 @@ class TaskEvaluator:
                 expected_output=expected,
                 actual_output="",
                 steps_taken=0,
-                time_taken_ms=int((time.time() - start_time) * 1000),
+                time_taken_ms=time_taken_ms,
                 tokens_used=0,
                 errors=[str(e)],
                 metadata={},
