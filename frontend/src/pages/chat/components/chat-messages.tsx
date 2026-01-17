@@ -16,6 +16,7 @@ interface ChatMessagesProps {
   isLoading: boolean
   pendingToolCalls?: ToolCall[]
   processRuns?: Record<string, ProcessEvent[]>
+  currentRunId?: string | null
 }
 
 export default function ChatMessages({
@@ -24,6 +25,7 @@ export default function ChatMessages({
   isLoading,
   pendingToolCalls = [],
   processRuns = {},
+  currentRunId = null,
 }: Readonly<ChatMessagesProps>): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -50,17 +52,27 @@ export default function ChatMessages({
           <MessageBubble key={message.id} message={message} processRuns={processRuns} />
         ))}
 
-        {/* Streaming content */}
-        {streamingContent && (
-          <MessageBubble
-            message={{
-              id: 'streaming',
-              role: 'assistant',
-              content: streamingContent,
-              createdAt: new Date().toISOString(),
-            }}
-            processRuns={processRuns}
-          />
+        {/* Streaming content with live process panel */}
+        {currentRunId !== null && (
+          <div className="flex items-start gap-4 animate-in">
+            <Avatar className="h-8 w-8 bg-primary/10">
+              <AvatarFallback>
+                <Bot className="h-4 w-4" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              {streamingContent && (
+                <div className="rounded-lg px-4 py-3 bg-muted">
+                  <div className="markdown-body prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+              {currentRunId in processRuns && processRuns[currentRunId].length > 0 && (
+                <ProcessPanel events={processRuns[currentRunId]} />
+              )}
+            </div>
+          </div>
         )}
 
         {/* Pending Tool Calls */}
@@ -72,8 +84,8 @@ export default function ChatMessages({
           </div>
         )}
 
-        {/* Loading indicator */}
-        {isLoading && !streamingContent && pendingToolCalls.length === 0 && (
+        {/* Loading indicator - only show if no process panel visible */}
+        {isLoading && !streamingContent && pendingToolCalls.length === 0 && currentRunId === null && (
           <div className="flex items-start gap-4">
             <Avatar className="h-8 w-8 bg-primary/10">
               <AvatarFallback>

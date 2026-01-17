@@ -23,6 +23,7 @@ interface UseChatReturn {
   pendingToolCalls: ToolCall[]
   interrupt: InterruptState | null
   processRuns: Record<string, ProcessEvent[]>
+  currentRunId: string | null
   sendMessage: (content: string) => Promise<void>
   resumeExecution: (
     action: 'approve' | 'reject' | 'modify',
@@ -46,6 +47,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([])
   const [interrupt, setInterrupt] = useState<InterruptState | null>(null)
   const [processRuns, setProcessRuns] = useState<Record<string, ProcessEvent[]>>({})
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
 
   const sessionIdRef = useRef<string | undefined>(initialSessionId)
   const currentToolCallsRef = useRef<ToolCall[]>([])
@@ -176,6 +178,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           setStreamingContent('')
           setPendingToolCalls([])
           currentToolCallsRef.current = []
+          currentRunIdRef.current = null
+          setCurrentRunId(null)
           setIsLoading(false)
           break
         }
@@ -224,6 +228,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       currentToolCallsRef.current = []
       const runId = generateId()
       currentRunIdRef.current = runId
+      setCurrentRunId(runId)
       setProcessRuns((prev) => ({ ...prev, [runId]: [] }))
 
       try {
@@ -289,6 +294,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     setInterrupt(null)
     currentToolCallsRef.current = []
     currentRunIdRef.current = null
+    setCurrentRunId(null)
     setProcessRuns({})
   }, [])
 
@@ -299,6 +305,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     pendingToolCalls,
     interrupt,
     processRuns,
+    currentRunId,
     sendMessage,
     resumeExecution,
     clearMessages,

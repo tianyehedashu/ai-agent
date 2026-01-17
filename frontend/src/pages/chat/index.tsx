@@ -28,6 +28,7 @@ export default function ChatPage(): React.JSX.Element {
     pendingToolCalls,
     interrupt,
     processRuns,
+    currentRunId,
     sendMessage,
     resumeExecution,
     clearMessages,
@@ -112,6 +113,7 @@ export default function ChatPage(): React.JSX.Element {
           isLoading={isLoading}
           pendingToolCalls={pendingToolCalls}
           processRuns={processRuns}
+          currentRunId={currentRunId}
         />
 
         {/* Input */}
