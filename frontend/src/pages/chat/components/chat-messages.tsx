@@ -59,6 +59,7 @@ export default function ChatMessages({
               content: streamingContent,
               createdAt: new Date().toISOString(),
             }}
+            processRuns={processRuns}
           />
         )}
 
