@@ -3,17 +3,19 @@ import { useEffect, useRef } from 'react'
 import { User, Bot } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
+import { ProcessPanel } from '@/components/chat/process-panel'
 import { ToolCallCard } from '@/components/chat/tool-call-card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import type { Message, ToolCall } from '@/types'
+import type { Message, ProcessEvent, ToolCall } from '@/types'
 
 interface ChatMessagesProps {
   messages: Message[]
   streamingContent: string
   isLoading: boolean
   pendingToolCalls?: ToolCall[]
+  processRuns?: Record<string, ProcessEvent[]>
 }
 
 export default function ChatMessages({
@@ -21,6 +23,7 @@ export default function ChatMessages({
   streamingContent,
   isLoading,
   pendingToolCalls = [],
+  processRuns = {},
 }: Readonly<ChatMessagesProps>): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -44,7 +47,7 @@ export default function ChatMessages({
     <ScrollArea className="flex-1 p-4">
       <div className="mx-auto max-w-3xl space-y-6">
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} processRuns={processRuns} />
         ))}
 
         {/* Streaming content */}
@@ -90,8 +93,13 @@ export default function ChatMessages({
   )
 }
 
-function MessageBubble({ message }: Readonly<{ message: Message }>): React.JSX.Element {
+function MessageBubble({
+  message,
+  processRuns,
+}: Readonly<{ message: Message; processRuns: Record<string, ProcessEvent[]> }>): React.JSX.Element {
   const isUser = message.role === 'user'
+  const runId = message.metadata?.runId as string | undefined
+  const runEvents = runId ? processRuns[runId] : undefined
 
   return (
     <div className={cn('flex items-start gap-4 animate-in', isUser && 'flex-row-reverse')}>
@@ -101,31 +109,35 @@ function MessageBubble({ message }: Readonly<{ message: Message }>): React.JSX.E
         </AvatarFallback>
       </Avatar>
 
-      <div
-        className={cn(
-          'flex-1 rounded-lg px-4 py-3',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-        )}
-      >
-        {message.content && (
-          <div className="markdown-body prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
-        )}
+      <div className="flex-1">
+        <div
+          className={cn(
+            'rounded-lg px-4 py-3',
+            isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+          )}
+        >
+          {message.content && (
+            <div className="markdown-body prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
 
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {message.toolCalls.map((toolCall) => (
-              <div
-                key={toolCall.id}
-                className="rounded border bg-background/50 p-2 font-mono text-xs"
-              >
-                <span className="text-muted-foreground">调用工具: </span>
-                <span className="text-primary">{toolCall.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
+          {message.toolCalls && message.toolCalls.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {message.toolCalls.map((toolCall) => (
+                <div
+                  key={toolCall.id}
+                  className="rounded border bg-background/50 p-2 font-mono text-xs"
+                >
+                  <span className="text-muted-foreground">调用工具: </span>
+                  <span className="text-primary">{toolCall.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {runEvents && runEvents.length > 0 ? <ProcessPanel events={runEvents} /> : null}
       </div>
     </div>
   )
