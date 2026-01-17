@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDot, TerminalSquare, Text, TriangleAlert } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleDot, TerminalSquare, Text } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -16,8 +16,8 @@ const kindMeta = {
   tool_call: { label: 'tool_call', icon: TerminalSquare as IconType, color: 'text-blue-500' },
   tool_result: { label: 'tool_result', icon: CheckCircle2 as IconType, color: 'text-emerald-500' },
   done: { label: 'done', icon: CheckCircle2 as IconType, color: 'text-primary' },
-  error: { label: 'error', icon: TriangleAlert as IconType, color: 'text-red-500' },
-  interrupt: { label: 'interrupt', icon: TriangleAlert as IconType, color: 'text-yellow-500' },
+  error: { label: 'error', icon: AlertTriangle as IconType, color: 'text-red-500' },
+  interrupt: { label: 'interrupt', icon: AlertTriangle as IconType, color: 'text-yellow-500' },
 } satisfies Record<ProcessEventKind, { label: string; icon: IconType; color: string }>
 
 function getEventTitle(event: ProcessEvent): string {
@@ -47,17 +47,32 @@ function getEventPreview(event: ProcessEvent): string | null {
 }
 
 export function ProcessPanel({ events }: Readonly<ProcessPanelProps>): React.JSX.Element {
+  const thinkingCount = events.filter((event) => event.kind === 'thinking').length
+  const toolCount = events.filter((event) => event.kind === 'tool_call').length
+  const errorCount = events.filter((event) => event.kind === 'error').length
+  const summaryParts = [
+    thinkingCount > 0 ? `思考 ${String(thinkingCount)}` : null,
+    toolCount > 0 ? `工具 ${String(toolCount)}` : null,
+    errorCount > 0 ? `错误 ${String(errorCount)}` : null,
+  ].filter((part): part is string => Boolean(part))
+  const summaryText = summaryParts.join(' · ')
+
   return (
     <Card className="mt-3 border-muted/60 bg-muted/30">
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-xs font-semibold text-muted-foreground">全过程</span>
-        <span className="text-xs text-muted-foreground">{events.length} events</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {summaryText ? <span>{summaryText}</span> : null}
+          <span>{events.length} events</span>
+        </div>
       </div>
       <div className="space-y-2 px-3 pb-3">
         {events.map((event, index) => {
           const meta = kindMeta[event.kind]
           const Icon = meta.icon
           const preview = getEventPreview(event)
+          const isError = event.kind === 'error'
+          const isInterrupt = event.kind === 'interrupt'
           return (
             <div key={event.id} className="flex items-start gap-3">
               <div className="relative flex h-5 w-5 items-center justify-center">
@@ -66,8 +81,22 @@ export function ProcessPanel({ events }: Readonly<ProcessPanelProps>): React.JSX
                   <span className="absolute top-5 h-3 w-px bg-border" aria-hidden />
                 )}
               </div>
-              <div className="flex-1 rounded-md border border-border/60 bg-background/70 px-2 py-1">
-                <div className="text-xs font-medium text-foreground">{getEventTitle(event)}</div>
+              <div
+                className={cn(
+                  'flex-1 rounded-md border border-border/60 bg-background/70 px-2 py-1',
+                  isError && 'border-red-500/40 bg-red-500/10',
+                  isInterrupt && 'border-yellow-500/40 bg-yellow-500/10'
+                )}
+              >
+                <div
+                  className={cn(
+                    'text-xs font-medium text-foreground',
+                    isError && 'text-red-500',
+                    isInterrupt && 'text-yellow-600'
+                  )}
+                >
+                  {getEventTitle(event)}
+                </div>
                 {preview ? (
                   <div className="mt-1 text-xs text-muted-foreground">{preview}</div>
                 ) : null}
