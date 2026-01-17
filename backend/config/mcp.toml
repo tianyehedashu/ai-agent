@@ -1,0 +1,178 @@
+# =============================================================================
+# MCP (Model Context Protocol) 服务器配置
+# =============================================================================
+# 定义可用的 MCP 服务器及其连接配置
+
+[metadata]
+version = "1.0"
+description = "MCP 服务器全局配置"
+
+# -----------------------------------------------------------------------------
+# 全局 MCP 设置
+# -----------------------------------------------------------------------------
+[settings]
+# 连接超时（秒）
+connection_timeout = 10
+
+# 工具调用超时（秒）
+tool_timeout = 60
+
+# 重试配置
+max_retries = 3
+retry_delay_seconds = 1.0
+
+# 是否缓存工具列表
+cache_tools = true
+cache_ttl_seconds = 300
+
+# -----------------------------------------------------------------------------
+# 预定义 MCP 服务器
+# -----------------------------------------------------------------------------
+# 传输方式:
+#   - stdio: 通过标准输入输出通信（本地进程）
+#   - http: HTTP/REST 通信
+#   - websocket: WebSocket 通信
+#
+# 配置格式:
+#   [servers.name]
+#   name = "显示名称"
+#   description = "描述"
+#   url = "连接地址"
+#   transport = "stdio" | "http" | "websocket"
+#   enabled = true | false
+#   auto_start = true | false  (仅 stdio)
+#   api_key_env = "环境变量名"  (仅 http/websocket)
+
+# -----------------------------------------------------------------------------
+# 文件系统 MCP 服务器
+[servers.filesystem]
+name = "Filesystem"
+description = "文件系统操作工具 - 读写文件、目录操作"
+url = "stdio://npx -y @modelcontextprotocol/server-filesystem"
+transport = "stdio"
+enabled = false              # 默认禁用，Agent 可启用
+auto_start = true
+
+[servers.filesystem.config]
+# 允许访问的目录（安全限制）
+allowed_directories = ["${WORKSPACE}"]
+
+[servers.filesystem.tools]
+# 工具级别配置覆盖
+read_file = { enabled = true, requires_confirmation = false }
+write_file = { enabled = true, requires_confirmation = true }
+create_directory = { enabled = true, requires_confirmation = true }
+list_directory = { enabled = true, requires_confirmation = false }
+delete_file = { enabled = false }  # 禁用删除
+
+# -----------------------------------------------------------------------------
+# Git MCP 服务器
+[servers.git]
+name = "Git"
+description = "Git 版本控制操作 - 提交、分支、历史"
+url = "stdio://npx -y @modelcontextprotocol/server-git"
+transport = "stdio"
+enabled = false
+auto_start = true
+
+[servers.git.config]
+repository = "${WORKSPACE}"
+
+[servers.git.tools]
+git_status = { enabled = true, requires_confirmation = false }
+git_log = { enabled = true, requires_confirmation = false }
+git_diff = { enabled = true, requires_confirmation = false }
+git_commit = { enabled = true, requires_confirmation = true }
+git_push = { enabled = true, requires_confirmation = true }
+
+# -----------------------------------------------------------------------------
+# GitHub MCP 服务器
+[servers.github]
+name = "GitHub"
+description = "GitHub API 操作 - Issues、PRs、仓库"
+url = "stdio://npx -y @modelcontextprotocol/server-github"
+transport = "stdio"
+enabled = false
+auto_start = true
+
+[servers.github.config]
+# GitHub Token（从环境变量读取）
+token_env = "GITHUB_TOKEN"
+
+[servers.github.tools]
+search_repositories = { enabled = true, requires_confirmation = false }
+get_file_contents = { enabled = true, requires_confirmation = false }
+create_issue = { enabled = true, requires_confirmation = true }
+create_pull_request = { enabled = true, requires_confirmation = true }
+
+# -----------------------------------------------------------------------------
+# 浏览器 MCP 服务器 (Puppeteer)
+[servers.browser]
+name = "Browser"
+description = "浏览器自动化工具 - 网页截图、内容抓取"
+url = "stdio://npx -y @modelcontextprotocol/server-puppeteer"
+transport = "stdio"
+enabled = false
+auto_start = false  # 需要时再启动
+
+[servers.browser.config]
+headless = true
+timeout = 30
+
+[servers.browser.tools]
+puppeteer_navigate = { enabled = true, requires_confirmation = false }
+puppeteer_screenshot = { enabled = true, requires_confirmation = false }
+puppeteer_click = { enabled = true, requires_confirmation = true }
+puppeteer_fill = { enabled = true, requires_confirmation = true }
+
+# -----------------------------------------------------------------------------
+# PostgreSQL MCP 服务器
+[servers.postgres]
+name = "PostgreSQL"
+description = "PostgreSQL 数据库操作"
+url = "stdio://npx -y @modelcontextprotocol/server-postgres"
+transport = "stdio"
+enabled = false
+
+[servers.postgres.config]
+connection_string_env = "POSTGRES_URL"
+read_only = true  # 安全起见，默认只读
+
+[servers.postgres.tools]
+query = { enabled = true, requires_confirmation = true }
+
+# -----------------------------------------------------------------------------
+# Slack MCP 服务器
+[servers.slack]
+name = "Slack"
+description = "Slack 消息发送和频道操作"
+url = "stdio://npx -y @modelcontextprotocol/server-slack"
+transport = "stdio"
+enabled = false
+
+[servers.slack.config]
+token_env = "SLACK_BOT_TOKEN"
+
+[servers.slack.tools]
+slack_post_message = { enabled = true, requires_confirmation = true }
+slack_list_channels = { enabled = true, requires_confirmation = false }
+
+# -----------------------------------------------------------------------------
+# 自定义 HTTP MCP 服务器模板
+# 使用此模板配置自定义的 HTTP MCP 服务器
+[servers._http_template]
+name = "Custom HTTP Server"
+description = "自定义 HTTP MCP 服务器模板"
+url = "http://localhost:8080"
+transport = "http"
+enabled = false
+api_key_env = "CUSTOM_MCP_API_KEY"
+
+[servers._http_template.headers]
+# 自定义 HTTP 头
+# Authorization = "Bearer ${API_KEY}"
+# X-Custom-Header = "value"
+
+[servers._http_template.tools]
+# 工具配置
+# tool_name = { enabled = true, requires_confirmation = false }

@@ -11,7 +11,7 @@ import os
 from typing import Any
 
 import litellm  # pylint: disable=import-error
-from litellm import acompletion  # pylint: disable=import-error
+from litellm import acompletion, aembedding  # pylint: disable=import-error
 from pydantic import BaseModel
 import tiktoken
 
@@ -27,6 +27,7 @@ class LLMResponse(BaseModel):
     """LLM 响应"""
 
     content: str | None = None
+    reasoning_content: str | None = None  # 推理模型的思考过程（DeepSeek Reasoner 等）
     tool_calls: list[ToolCall] | None = None
     finish_reason: str | None = None
     usage: dict[str, int] | None = None
@@ -36,6 +37,7 @@ class StreamChunk(BaseModel):
     """流式响应块"""
 
     content: str | None = None
+    reasoning_content: str | None = None  # 推理模型的思考过程
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str | None = None
 
@@ -377,11 +379,12 @@ class LLMGateway:
     def _extract_message(self, msg: Any) -> dict[str, Any]:
         """提取 message 对象"""
         msg_dict: dict[str, Any] = {}
-        # 提取 content（支持 GLM 的 reasoning_content）
+        # 提取 content
         if hasattr(msg, "content"):
             msg_dict["content"] = str(msg.content) if msg.content else None
-        elif hasattr(msg, "reasoning_content"):
-            msg_dict["content"] = str(msg.reasoning_content) if msg.reasoning_content else None
+        # 提取 reasoning_content（DeepSeek Reasoner 等推理模型的思考过程）
+        if hasattr(msg, "reasoning_content") and msg.reasoning_content:
+            msg_dict["reasoning_content"] = str(msg.reasoning_content)
         # 提取 tool_calls
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             msg_dict["tool_calls"] = self._extract_tool_calls(msg.tool_calls)
@@ -432,10 +435,11 @@ class LLMGateway:
         choice = choices[0] if isinstance(choices, list) else {}
         message = choice.get("message", {}) if isinstance(choice, dict) else {}
 
-        # 提取内容（支持 GLM 的 reasoning_content）
+        # 提取 content
         content = message.get("content") if isinstance(message, dict) else None
-        if content is None and isinstance(message, dict) and "reasoning_content" in message:
-            content = message.get("reasoning_content")
+
+        # 提取 reasoning_content（推理模型的思考过程，独立字段）
+        reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
 
         # 解析工具调用
         tool_calls = self._parse_tool_calls_from_dict(message)
@@ -446,6 +450,7 @@ class LLMGateway:
         # 返回完全转换的内部类型
         return LLMResponse(
             content=str(content) if content else None,
+            reasoning_content=str(reasoning_content) if reasoning_content else None,
             tool_calls=tool_calls,
             finish_reason=str(choice.get("finish_reason"))
             if isinstance(choice, dict) and choice.get("finish_reason")
@@ -587,10 +592,11 @@ class LLMGateway:
         if not isinstance(delta, dict):
             delta = {}
 
-        # 处理内容（支持 GLM 的 reasoning_content）
+        # 提取 content
         content = delta.get("content")
-        if content is None and "reasoning_content" in delta:
-            content = delta.get("reasoning_content")
+
+        # 提取 reasoning_content（推理模型的思考过程，独立字段）
+        reasoning_content = delta.get("reasoning_content")
 
         # 处理工具调用
         self._update_tool_calls_buffer(delta, tool_calls_buffer)
@@ -601,6 +607,7 @@ class LLMGateway:
 
         return StreamChunk(
             content=str(content) if content else None,
+            reasoning_content=str(reasoning_content) if reasoning_content else None,
             tool_calls=list(tool_calls_buffer.values()) if tool_calls_buffer else None,
             finish_reason=finish_reason_str,
         )
@@ -783,3 +790,113 @@ class LLMGateway:
             encoding = tiktoken.get_encoding("cl100k_base")
 
         return len(encoding.encode(text))
+
+    # =========================================================================
+    # Embedding 方法
+    # =========================================================================
+
+    async def embed(self, text: str, model: str | None = None) -> list[float]:
+        """
+        生成文本的嵌入向量
+
+        使用 LiteLLM 统一接口，支持多个提供商的 embedding 模型：
+        - OpenAI: text-embedding-3-small, text-embedding-3-large
+        - 火山引擎: doubao-embedding-*
+        - 其他 LiteLLM 支持的 embedding 模型
+
+        Args:
+            text: 要嵌入的文本
+            model: 嵌入模型名称，默认使用配置中的 embedding_model
+
+        Returns:
+            嵌入向量（浮点数列表）
+        """
+        model = model or self.config.embedding_model
+
+        # 获取 API 配置
+        api_config = self._get_embedding_api_config(model)
+
+        try:
+            response = await aembedding(
+                model=model,
+                input=[text],
+                **api_config,
+            )
+            return response.data[0]["embedding"]
+        except Exception as e:
+            logger.error("Embedding failed for model %s: %s", model, e)
+            raise
+
+    async def embed_batch(self, texts: list[str], model: str | None = None) -> list[list[float]]:
+        """
+        批量生成文本的嵌入向量
+
+        Args:
+            texts: 要嵌入的文本列表
+            model: 嵌入模型名称，默认使用配置中的 embedding_model
+
+        Returns:
+            嵌入向量列表
+        """
+        model = model or self.config.embedding_model
+
+        # 获取 API 配置
+        api_config = self._get_embedding_api_config(model)
+
+        try:
+            response = await aembedding(
+                model=model,
+                input=texts,
+                **api_config,
+            )
+            return [item["embedding"] for item in response.data]
+        except Exception as e:
+            logger.error("Batch embedding failed for model %s: %s", model, e)
+            raise
+
+    def _get_embedding_api_config(self, model: str) -> dict[str, Any]:
+        """
+        获取 embedding 模型的 API 配置
+
+        根据模型名称确定提供商，返回对应的 API key 和 base URL
+
+        Args:
+            model: 模型名称
+
+        Returns:
+            API 配置字典
+        """
+        model_lower = model.lower()
+        config: dict[str, Any] = {}
+
+        # OpenAI embedding 模型
+        if "text-embedding" in model_lower or "ada" in model_lower:
+            if self.config.openai_api_key:
+                config["api_key"] = self.config.openai_api_key.get_secret_value()
+                config["api_base"] = self.config.openai_api_base
+
+        # 火山引擎 embedding 模型 (doubao-embedding-*)
+        elif "doubao-embedding" in model_lower or "volcengine" in model_lower:
+            if self.config.volcengine_api_key:
+                config["api_key"] = self.config.volcengine_api_key.get_secret_value()
+                config["api_base"] = self.config.volcengine_api_base
+
+        # 阿里云 DashScope embedding 模型
+        elif "text-embedding-v" in model_lower or "dashscope" in model_lower:
+            if self.config.dashscope_api_key:
+                config["api_key"] = self.config.dashscope_api_key.get_secret_value()
+                config["api_base"] = self.config.dashscope_api_base
+
+        # 智谱 AI embedding 模型
+        elif "embedding" in model_lower and "zhipu" in model_lower:
+            if self.config.zhipuai_api_key:
+                config["api_key"] = self.config.zhipuai_api_key.get_secret_value()
+                config["api_base"] = self.config.zhipuai_api_base
+
+        # 默认使用 OpenAI 配置（兼容大多数 embedding 模型）
+        else:
+            if self.config.openai_api_key:
+                config["api_key"] = self.config.openai_api_key.get_secret_value()
+                config["api_base"] = self.config.openai_api_base
+
+        return config

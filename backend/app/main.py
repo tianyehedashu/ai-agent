@@ -73,7 +73,11 @@ def _setup_litellm_env() -> None:
 async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     """应用生命周期管理"""
     # 启动时
-    setup_logging()
+    setup_logging(
+        log_level=settings.log_level,
+        log_format=settings.log_format,
+        is_development=settings.is_development,
+    )
 
     # 抑制 LiteLLM 内部的 Pydantic 序列化警告（这是 LiteLLM 内部问题，不影响功能）
     warnings.filterwarnings(
@@ -121,6 +125,17 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # 关闭时
+    # 清理 LiteLLM 异步客户端
+    try:
+        import litellm  # pylint: disable=import-outside-toplevel
+
+        if hasattr(litellm, "close_litellm_async_clients"):
+            # close_litellm_async_clients 是一个协程，需要 await
+            await litellm.close_litellm_async_clients()
+            logger.info("LiteLLM async clients closed successfully")
+    except Exception as e:
+        logger.warning("Error closing LiteLLM async clients: %s", e)
+
     # 清理 checkpointer
     if hasattr(_fastapi_app.state, "checkpointer"):
         try:

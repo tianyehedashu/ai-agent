@@ -113,9 +113,11 @@ async def get_current_user(
                 )
             else:
                 # 如果无法创建或获取用户，抛出错误
+                # 在开发模式下，这不应该发生，但如果发生了，返回一个更友好的错误
+                logger.error("Failed to create or retrieve anonymous user after retry")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create anonymous user",
+                    detail="Failed to create anonymous user. Please check database connection.",
                 )
         else:
             # 生产模式下不允许匿名用户

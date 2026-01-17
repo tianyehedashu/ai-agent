@@ -1,0 +1,480 @@
+# =============================================================================
+# AI-Agent 应用配置文件（统一管理）
+# =============================================================================
+# 支持环境变量引用：
+#   ${VAR}         - 引用环境变量，不存在则为空
+#   ${VAR:default} - 引用环境变量，不存在则使用默认值
+#
+# 敏感信息（API Keys）通过 .env 加载到环境变量，再由此处引用
+# 这样可以在一个文件中看到所有配置的全貌
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 基础设施配置（引用环境变量）
+# -----------------------------------------------------------------------------
+# 这些配置的实际值来自 .env 文件，此处定义结构和默认值
+
+[infra]
+# 数据库
+database_url = "${DATABASE_URL:postgresql+asyncpg://postgres:postgres@localhost:5432/ai_agent}"
+
+# Redis
+redis_url = "${REDIS_URL:redis://localhost:6379/0}"
+
+# 向量数据库
+vector_db_type = "${VECTOR_DB_TYPE:qdrant}"
+qdrant_url = "${QDRANT_URL:http://localhost:6333}"
+
+# -----------------------------------------------------------------------------
+# LLM 提供商配置（API Keys 从环境变量读取）
+# -----------------------------------------------------------------------------
+
+[llm]
+# =============================================================================
+# 场景化模型配置
+# =============================================================================
+# 为不同使用场景选择最合适的模型
+# 模型名称格式: provider/model_name (如 deepseek/deepseek-chat)
+
+# 默认对话模型（用户直接交互）
+# 推荐: deepseek/deepseek-chat（性价比）、dashscope/qwen-turbo（速度）
+default_model = "deepseek/deepseek-chat"
+
+# 快速响应模型（用于简单任务、工具调用前的意图识别等）
+# 推荐: dashscope/qwen-turbo (407ms)、zai/glm-4-flash（免费）
+fast_model = "dashscope/qwen-turbo"
+
+# 复杂推理模型（数学、逻辑、代码分析等）
+# 推荐: deepseek/deepseek-reasoner、dashscope/qwq-32b-preview
+reasoning_model = "deepseek/deepseek-reasoner"
+
+# 代码生成模型
+# 推荐: dashscope/qwen2.5-coder-32b-instruct (446ms)、zai/codegeex-4（免费）
+code_model = "dashscope/qwen2.5-coder-32b-instruct"
+
+# 长文档处理模型（超过 100K token 的文档）
+# 推荐: zai/glm-4-long (1M上下文)、dashscope/qwen-plus (128K)
+long_context_model = "zai/glm-4-long"
+
+# 视觉理解模型
+# 推荐: dashscope/qwen-vl-max、zai/glm-4.6v
+vision_model = "dashscope/qwen-vl-max"
+
+# =============================================================================
+# Embedding 配置
+# =============================================================================
+# provider: "api"（云端 API）或 "local"（本地模型，CPU 友好，无需 GPU）
+embedding_provider = "api"
+
+# API 模式推荐模型:
+#   - text-embedding-3-small (OpenAI, 1536维, 效果最佳)
+#   - text-embedding-3-large (OpenAI, 3072维, 高精度场景)
+# 本地模式推荐模型 (FastEmbed, CPU友好):
+#   - BAAI/bge-small-zh-v1.5 (中文轻量, 512维)
+#   - BAAI/bge-base-zh-v1.5 (中文推荐, 768维)
+#   - BAAI/bge-m3 (多语言, 1024维)
+embedding_model = "text-embedding-3-small"
+
+# 向量维度（必须与模型匹配）
+# API: text-embedding-3-small=1536, text-embedding-3-large=3072
+# 本地: bge-small-zh=512, bge-base-zh=768, bge-m3=1024
+embedding_dimension = 1536
+
+# OpenAI
+[llm.openai]
+api_key = "${OPENAI_API_KEY:}"
+api_base = "${OPENAI_API_BASE:https://api.openai.com/v1}"
+
+# DeepSeek
+[llm.deepseek]
+api_key = "${DEEPSEEK_API_KEY:}"
+api_base = "${DEEPSEEK_API_BASE:https://api.deepseek.com}"
+
+# Anthropic
+[llm.anthropic]
+api_key = "${ANTHROPIC_API_KEY:}"
+
+# 阿里云 DashScope
+[llm.dashscope]
+api_key = "${DASHSCOPE_API_KEY:}"
+api_base = "${DASHSCOPE_API_BASE:https://dashscope.aliyuncs.com/compatible-mode/v1}"
+
+# 智谱 AI
+[llm.zhipuai]
+api_key = "${ZHIPUAI_API_KEY:}"
+api_base = "${ZHIPUAI_API_BASE:https://open.bigmodel.cn/api/paas/v4}"
+
+# 火山引擎
+[llm.volcengine]
+api_key = "${VOLCENGINE_API_KEY:}"
+api_base = "${VOLCENGINE_API_BASE:https://ark.cn-beijing.volces.com/api/v3}"
+chat_endpoint_id = "${VOLCENGINE_CHAT_ENDPOINT_ID:}"
+
+# 本地模型 (Ollama)
+[llm.local]
+url = "${LOCAL_LLM_URL:http://localhost:11434}"
+
+# -----------------------------------------------------------------------------
+# SimpleMem 会话内长程记忆
+# -----------------------------------------------------------------------------
+# 基于 SimpleMem 论文实现，提供 30x Token 压缩和 26.4% F1 提升
+# 官方仓库: https://github.com/aiming-lab/SimpleMem
+
+[simplemem]
+enabled = true
+
+# 提取模型（使用小模型节省成本）
+# 推荐（按性价比排序）：
+#   1. dashscope/qwen-turbo     - ¥0.002/千tokens，响应407ms，推荐首选
+#   2. zai/glm-4-flash          - ¥0.0001/千tokens，基本免费
+#   3. deepseek/deepseek-chat   - ¥0.001/百万tokens，高性价比
+#   4. gpt-4o-mini              - $0.15/百万tokens，效果最佳
+extraction_model = "${EXTRACTION_MODEL:dashscope/qwen-turbo}"
+
+# 滑动窗口配置
+[simplemem.window]
+size = 10      # 每次处理的消息数量
+stride = 5     # 步长（窗口重叠部分）
+
+# 信息密度过滤
+[simplemem.filter]
+novelty_threshold = 0.35   # 新颖度阈值 (0-1)，越高越严格
+min_content_length = 20    # 最小内容长度
+skip_trivial = true        # 跳过简单问答（如 "你好"、"谢谢"）
+
+# 自适应检索
+[simplemem.retrieval]
+k_min = 3    # 简单查询返回的记忆数量
+k_max = 15   # 复杂查询返回的记忆数量
+complexity_threshold = 0.5
+
+# 记忆合并
+[simplemem.consolidation]
+interval = 50  # 每 N 条记忆触发一次合并
+
+# -----------------------------------------------------------------------------
+# 模型配置
+# -----------------------------------------------------------------------------
+# 支持的模型列表及其配置
+# 完整模型列表参见: backend/config/litellm_models.yaml
+
+[models]
+# 默认模型 (LiteLLM 调用格式: provider/model_name)
+default = "deepseek/deepseek-chat"
+embedding = "text-embedding-3-small"
+
+# =============================================================================
+# 模型列表（用于前端选择器、路由等）
+# =============================================================================
+# 价格说明: input_price/output_price 单位为 ¥/千tokens 或 $/百万tokens (已标注)
+
+# -----------------------------------------------------------------------------
+# DeepSeek (深度求索) - 性价比之王
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "deepseek/deepseek-chat"
+name = "DeepSeek Chat (V3)"
+provider = "deepseek"
+litellm_model = "deepseek/deepseek-chat"
+context_window = 65536
+input_price = 1.0       # ¥/百万tokens
+output_price = 2.0
+supports_vision = false
+supports_tools = true
+recommended_for = ["default", "general"]
+description = "通用对话，性价比极高"
+
+[[models.available]]
+id = "deepseek/deepseek-coder"
+name = "DeepSeek Coder"
+provider = "deepseek"
+litellm_model = "deepseek/deepseek-coder"
+context_window = 16384
+input_price = 1.0
+output_price = 2.0
+supports_vision = false
+supports_tools = true
+recommended_for = ["code"]
+description = "代码生成专用"
+
+[[models.available]]
+id = "deepseek/deepseek-reasoner"
+name = "DeepSeek Reasoner (R1)"
+provider = "deepseek"
+litellm_model = "deepseek/deepseek-reasoner"
+context_window = 65536
+input_price = 4.0
+output_price = 16.0
+supports_vision = false
+supports_tools = false  # R1 暂不支持 tool calling
+supports_reasoning = true
+recommended_for = ["reasoning", "math", "logic"]
+description = "复杂推理，输出思维链"
+
+# -----------------------------------------------------------------------------
+# 阿里云 DashScope (通义千问) - 速度最快
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "dashscope/qwen-turbo"
+name = "通义千问 Turbo"
+provider = "dashscope"
+litellm_model = "dashscope/qwen-turbo"
+context_window = 131072
+input_price = 0.002     # ¥/千tokens
+output_price = 0.006
+supports_vision = false
+supports_tools = true
+recommended_for = ["fast", "extraction"]
+description = "响应最快 (407ms)，适合简单任务"
+
+[[models.available]]
+id = "dashscope/qwen-plus"
+name = "通义千问 Plus"
+provider = "dashscope"
+litellm_model = "dashscope/qwen-plus"
+context_window = 131072
+input_price = 0.004
+output_price = 0.012
+supports_vision = false
+supports_tools = true
+recommended_for = ["general"]
+description = "平衡版，性能与成本兼顾"
+
+[[models.available]]
+id = "dashscope/qwen-max"
+name = "通义千问 Max"
+provider = "dashscope"
+litellm_model = "dashscope/qwen-max"
+context_window = 32768
+input_price = 0.02
+output_price = 0.06
+supports_vision = false
+supports_tools = true
+recommended_for = ["complex"]
+description = "能力最强"
+
+[[models.available]]
+id = "dashscope/qwen2.5-coder-32b-instruct"
+name = "Qwen 2.5 Coder 32B"
+provider = "dashscope"
+litellm_model = "dashscope/qwen2.5-coder-32b-instruct"
+context_window = 131072
+input_price = 0.002
+output_price = 0.006
+supports_vision = false
+supports_tools = true
+recommended_for = ["code"]
+description = "代码最强，响应快 (446ms)"
+
+[[models.available]]
+id = "dashscope/qwq-32b-preview"
+name = "QwQ 32B (推理)"
+provider = "dashscope"
+litellm_model = "dashscope/qwq-32b-preview"
+context_window = 32768
+input_price = 0.002
+output_price = 0.006
+supports_vision = false
+supports_tools = false
+supports_reasoning = true
+recommended_for = ["reasoning"]
+description = "推理增强，类似 o1/R1"
+
+[[models.available]]
+id = "dashscope/qwen-vl-max"
+name = "通义千问 VL Max"
+provider = "dashscope"
+litellm_model = "dashscope/qwen-vl-max"
+context_window = 32768
+input_price = 0.02
+output_price = 0.02
+supports_vision = true
+supports_tools = true
+recommended_for = ["vision"]
+description = "视觉理解增强版"
+
+# -----------------------------------------------------------------------------
+# 智谱 AI (GLM) - 超长上下文
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "zai/glm-4-flash"
+name = "GLM-4 Flash"
+provider = "zhipuai"
+litellm_model = "zai/glm-4-flash"
+context_window = 131072
+input_price = 0.0001    # ¥/千tokens，基本免费
+output_price = 0.0001
+supports_vision = false
+supports_tools = true
+recommended_for = ["fast", "free"]
+description = "免费/极低价，极速响应"
+
+[[models.available]]
+id = "zai/glm-4-plus"
+name = "GLM-4 Plus"
+provider = "zhipuai"
+litellm_model = "zai/glm-4-plus"
+context_window = 131072
+input_price = 0.05
+output_price = 0.05
+supports_vision = false
+supports_tools = true
+recommended_for = ["general"]
+description = "增强版，指令遵循能力强"
+
+[[models.available]]
+id = "zai/glm-4-long"
+name = "GLM-4 Long"
+provider = "zhipuai"
+litellm_model = "zai/glm-4-long"
+context_window = 1000000  # 100万 tokens!
+input_price = 0.001
+output_price = 0.001
+supports_vision = false
+supports_tools = true
+recommended_for = ["long_context"]
+description = "超长上下文 (100万tokens)"
+
+[[models.available]]
+id = "zai/glm-4.6"
+name = "GLM-4.6"
+provider = "zhipuai"
+litellm_model = "zai/glm-4.6"
+context_window = 204800
+input_price = 0.05
+output_price = 0.05
+supports_vision = false
+supports_tools = true
+recommended_for = ["general"]
+description = "最新稳定版"
+
+[[models.available]]
+id = "zai/codegeex-4"
+name = "CodeGeeX-4"
+provider = "zhipuai"
+litellm_model = "zai/codegeex-4"
+context_window = 131072
+input_price = 0.0001    # 基本免费
+output_price = 0.0001
+supports_vision = false
+supports_tools = true
+recommended_for = ["code", "free"]
+description = "代码专用，基本免费"
+
+# -----------------------------------------------------------------------------
+# OpenAI - 国际标杆
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "gpt-4o"
+name = "GPT-4o"
+provider = "openai"
+litellm_model = "gpt-4o"
+context_window = 128000
+input_price = 2.50      # $/百万tokens
+output_price = 10.00
+supports_vision = true
+supports_tools = true
+recommended_for = ["quality", "vision"]
+description = "OpenAI 旗舰，效果最佳"
+
+[[models.available]]
+id = "gpt-4o-mini"
+name = "GPT-4o Mini"
+provider = "openai"
+litellm_model = "gpt-4o-mini"
+context_window = 128000
+input_price = 0.15
+output_price = 0.60
+supports_vision = true
+supports_tools = true
+recommended_for = ["general"]
+description = "小型高效版"
+
+# -----------------------------------------------------------------------------
+# Anthropic (Claude)
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "claude-3-5-sonnet"
+name = "Claude 3.5 Sonnet"
+provider = "anthropic"
+litellm_model = "claude-3-5-sonnet-20241022"
+context_window = 200000
+input_price = 3.00      # $/百万tokens
+output_price = 15.00
+supports_vision = true
+supports_tools = true
+recommended_for = ["code", "quality"]
+description = "代码能力强，长上下文"
+
+# -----------------------------------------------------------------------------
+# Agent 执行配置
+# -----------------------------------------------------------------------------
+
+[agent]
+max_iterations = 20
+max_tokens = 100000
+timeout_seconds = 600
+
+# Human-in-the-Loop 配置
+[agent.hitl]
+enabled = true
+# 需要人工确认的危险操作
+interrupt_tools = [
+    "run_shell",
+    "write_file",
+    "delete_file",
+    "send_email",
+]
+# 自动批准的安全操作（支持通配符）
+auto_approve_patterns = [
+    "read_*",
+    "search_*",
+    "list_*",
+]
+
+# -----------------------------------------------------------------------------
+# 检查点配置
+# -----------------------------------------------------------------------------
+
+[checkpoint]
+enabled = true
+storage = "redis"    # "redis" | "postgres"
+ttl_days = 7
+
+# -----------------------------------------------------------------------------
+# Token 优化配置
+# -----------------------------------------------------------------------------
+
+[token_optimization]
+# 提示词缓存（2026 年最有效的成本优化，节省 50%-90%）
+prompt_cache_enabled = true
+
+# 记忆摘要
+[token_optimization.summarization]
+enabled = true
+threshold = 8000         # Token 阈值，超过触发摘要
+preserve_recent = 4      # 保留最近 N 条消息不摘要
+
+# 分层记忆
+[token_optimization.tiered_memory]
+enabled = true
+short_term_ttl_hours = 24
+long_term_importance_threshold = 6.0
+
+# -----------------------------------------------------------------------------
+# 日志配置
+# -----------------------------------------------------------------------------
+
+[logging]
+level = "INFO"           # DEBUG | INFO | WARNING | ERROR | CRITICAL
+format = "json"          # json | text
+# file = "./logs/app.log"  # 可选：输出到文件
+
+# -----------------------------------------------------------------------------
+# 监控配置
+# -----------------------------------------------------------------------------
+
+[monitoring]
+metrics_enabled = true
+tracing_enabled = false
+# jaeger_endpoint = "http://localhost:14268/api/traces"

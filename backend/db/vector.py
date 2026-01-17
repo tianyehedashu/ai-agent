@@ -4,13 +4,16 @@ Vector Store - 向量数据库封装
 支持:
 - Qdrant (生产环境)
 - Chroma (开发环境)
+
+Embedding 使用统一的 EmbeddingService，支持：
+- API 模式: OpenAI, 火山引擎, 阿里云等（通过 LiteLLM）
+- 本地模式: FastEmbed (BAAI/bge 系列，CPU 友好，无需 GPU)
 """
 
 from abc import ABC, abstractmethod
 from typing import Any
 
 import chromadb
-import openai
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
@@ -23,6 +26,8 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
+from core.llm.embeddings import EmbeddingService
+from services.embedding import get_embedding_service_from_settings
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -89,6 +94,7 @@ class QdrantStore(VectorStore):
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self._client = None
+        self._embedding_service: EmbeddingService | None = None
 
     async def _get_client(self):
         """获取 Qdrant 客户端"""
@@ -207,14 +213,26 @@ class QdrantStore(VectorStore):
             points_selector=PointIdsList(points=point_ids),
         )
 
+    def _get_embedding_service(self) -> EmbeddingService:
+        """
+        懒加载 EmbeddingService
+
+        支持 API 和本地模型两种模式：
+        - API 模式: OpenAI, 火山引擎等（通过 LiteLLM）
+        - 本地模式: FastEmbed (BAAI/bge 系列，CPU 友好)
+        """
+        if self._embedding_service is None:
+            self._embedding_service = get_embedding_service_from_settings()
+        return self._embedding_service
+
     async def _get_embedding(self, text: str) -> list[float]:
-        """获取文本嵌入"""
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=text,
-        )
-        return response.data[0].embedding
+        """
+        获取文本嵌入
+
+        使用统一的 EmbeddingService，支持 API 和本地模型
+        """
+        service = self._get_embedding_service()
+        return await service.embed(text)
 
 
 class ChromaStore(VectorStore):

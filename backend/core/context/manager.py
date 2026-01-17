@@ -4,14 +4,22 @@ Context Manager - 上下文管理器实现
 负责:
 - 组装完整上下文 (System + History + Memory)
 - Token 预算管理
-- 上下文裁剪
+- 智能上下文压缩（首轮保护、重要性评分、摘要）
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from core.context.smart_compressor import (
+    CompressionConfig,
+    CompressionResult,
+    SmartContextCompressor,
+)
 from core.types import AgentConfig, Message
 from utils.logging import get_logger
 from utils.tokens import count_tokens, truncate_to_token_limit
+
+if TYPE_CHECKING:
+    from core.llm.gateway import LLMGateway
 
 logger = get_logger(__name__)
 
@@ -20,16 +28,35 @@ class ContextManager:
     """
     上下文管理器
 
-    负责组装和管理 Agent 执行所需的上下文
+    负责组装和管理 Agent 执行所需的上下文。
+
+    智能压缩策略（替代简单滑动窗口）：
+    1. 首轮保护 - 保留任务定义和初始上下文
+    2. 重要性评分 - 根据内容特征判断消息重要性
+    3. 摘要压缩 - 将低重要性的早期对话压缩为摘要
+    4. 尾部保护 - 保留最近消息确保连贯性
     """
 
     def __init__(
         self,
         config: AgentConfig,
         max_context_tokens: int = 100000,
+        llm_gateway: "LLMGateway | None" = None,
+        enable_smart_compression: bool = True,
     ) -> None:
+        """
+        初始化上下文管理器
+
+        Args:
+            config: Agent 配置
+            max_context_tokens: 最大上下文 Token 数
+            llm_gateway: LLM 网关（用于智能摘要）
+            enable_smart_compression: 是否启用智能压缩
+        """
         self.config = config
         self.max_context_tokens = max_context_tokens
+        self.llm_gateway = llm_gateway
+        self.enable_smart_compression = enable_smart_compression
 
         # Token 预算分配
         # 如果 max_context_tokens 太小，按比例分配
@@ -50,6 +77,21 @@ class ContextManager:
 
         # 确保 history_budget 至少为 0
         self.history_budget = max(0, self.history_budget)
+
+        # 初始化智能压缩器
+        self._compressor = SmartContextCompressor(
+            llm_gateway=llm_gateway,
+            config=CompressionConfig(
+                max_history_tokens=self.history_budget,
+                protect_first_n_turns=2,
+                protect_last_n_messages=6,
+                enable_summarization=True,
+                summarization_threshold=0.7,
+            ),
+        )
+
+        # 上次压缩结果（用于监控）
+        self._last_compression_result: CompressionResult | None = None
 
     def build_context(
         self,
@@ -82,10 +124,79 @@ class ContextManager:
             }
         )
 
-        # 2. 对话历史 (需要裁剪)
+        # 2. 对话历史 (智能压缩或简单裁剪)
         history = self._trim_history(messages)
         for msg in history:
             context.append(self._format_message(msg))
+
+        return context
+
+    async def build_context_async(
+        self,
+        messages: list[Message],
+        memories: list[str] | None = None,
+        tools_context: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        异步构建完整上下文（支持智能摘要）
+
+        与 build_context 的区别：
+        - 支持异步摘要生成
+        - 使用智能压缩器
+
+        Args:
+            messages: 对话历史
+            memories: 相关记忆
+            tools_context: 工具上下文
+
+        Returns:
+            格式化的消息列表
+        """
+        context: list[dict[str, Any]] = []
+
+        # 1. 系统提示词
+        system_content = self._build_system_prompt(
+            memories=memories,
+            tools_context=tools_context,
+        )
+        context.append(
+            {
+                "role": "system",
+                "content": system_content,
+            }
+        )
+
+        # 2. 智能压缩对话历史
+        if self.enable_smart_compression:
+            result = await self._compressor.compress(messages, self.history_budget)
+            self._last_compression_result = result
+
+            # 如果有摘要，添加为系统消息
+            if result.summary:
+                context.append(
+                    {
+                        "role": "system",
+                        "content": f"[之前对话摘要]\n{result.summary}",
+                    }
+                )
+
+            # 添加保留的消息
+            for msg in result.messages:
+                context.append(self._format_message(msg))
+
+            logger.info(
+                "Smart compression: %d -> %d messages, %d -> %d tokens (%.1f%% saved)",
+                result.original_count,
+                result.compressed_count,
+                result.original_tokens,
+                result.compressed_tokens,
+                result.compression_ratio * 100,
+            )
+        else:
+            # 降级到简单裁剪
+            history = self._trim_history(messages)
+            for msg in history:
+                context.append(self._format_message(msg))
 
         return context
 
@@ -253,3 +364,64 @@ class ContextManager:
         )
 
         return response.content or ""
+
+    def get_compression_stats(self) -> dict[str, Any] | None:
+        """
+        获取上次压缩的统计信息
+
+        Returns:
+            压缩统计，如果没有则返回 None
+        """
+        if not self._last_compression_result:
+            return None
+
+        result = self._last_compression_result
+        return {
+            "original_count": result.original_count,
+            "compressed_count": result.compressed_count,
+            "original_tokens": result.original_tokens,
+            "compressed_tokens": result.compressed_tokens,
+            "compression_ratio": result.compression_ratio,
+            "dropped_messages": result.dropped_messages,
+            "summarized_messages": result.summarized_messages,
+            "has_summary": result.summary is not None,
+        }
+
+    def get_compression_preview(
+        self,
+        messages: list[Message],
+    ) -> dict[str, Any]:
+        """
+        获取压缩预览
+
+        用于 UI 展示每条消息的重要性评分。
+
+        Args:
+            messages: 消息列表
+
+        Returns:
+            预览信息，包含每条消息的重要性评分
+        """
+        return self._compressor.get_compression_preview(messages, self.history_budget)
+
+    def set_llm_gateway(self, llm_gateway: "LLMGateway") -> None:
+        """
+        设置 LLM 网关
+
+        用于延迟初始化或更新 LLM 网关。
+
+        Args:
+            llm_gateway: LLM 网关实例
+        """
+        self.llm_gateway = llm_gateway
+        # 重新创建压缩器以使用新的 LLM 网关
+        self._compressor = SmartContextCompressor(
+            llm_gateway=llm_gateway,
+            config=CompressionConfig(
+                max_history_tokens=self.history_budget,
+                protect_first_n_turns=2,
+                protect_last_n_messages=6,
+                enable_summarization=True,
+                summarization_threshold=0.7,
+            ),
+        )

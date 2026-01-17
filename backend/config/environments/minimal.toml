@@ -1,0 +1,79 @@
+# =============================================================================
+# 最小化环境模板
+# =============================================================================
+# 适用于: 简单任务、安全敏感场景、资源受限环境
+
+[metadata]
+name = "minimal"
+description = "最小化环境，仅包含基础文件操作，最高安全性"
+tags = ["minimal", "secure", "lightweight"]
+
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 沙箱配置覆盖
+# -----------------------------------------------------------------------------
+[sandbox]
+mode = "docker"
+timeout_seconds = 15  # 简单任务不需要太长时间
+
+[sandbox.docker]
+image = "alpine:latest"
+packages = []
+
+[sandbox.resources]
+memory_limit = "64m"    # 最小内存
+cpu_limit = 0.5
+
+[sandbox.network]
+enabled = false         # 完全禁用网络
+
+[sandbox.security]
+read_only_root = true
+no_new_privileges = true
+drop_capabilities = ["ALL"]
+
+# -----------------------------------------------------------------------------
+# Shell 环境覆盖
+# -----------------------------------------------------------------------------
+[shell]
+default_shell = "/bin/sh"
+work_dir = "/workspace"
+
+[shell.env]
+# 最小环境变量
+
+# -----------------------------------------------------------------------------
+# 工具配置覆盖
+# -----------------------------------------------------------------------------
+[tools]
+# 仅启用只读操作
+enabled = [
+    "read_file",
+    "list_directory",
+    "search_files",
+]
+
+# 禁用所有危险操作
+disabled = [
+    "write_file",
+    "delete_file",
+    "run_python",
+    "run_shell",
+    "run_javascript",
+    "http_request",
+    "web_search",
+    "fetch_url",
+    "query_database",
+    "install_package",
+]
+
+# 全部自动批准（因为都是只读操作）
+auto_approve_patterns = ["*"]
+
+# -----------------------------------------------------------------------------
+# HITL 配置覆盖
+# -----------------------------------------------------------------------------
+[hitl]
+# 最小环境不需要确认（没有危险操作）
+require_confirmation = []

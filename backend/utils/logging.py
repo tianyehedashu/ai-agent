@@ -1,24 +1,45 @@
 """
 Logging Utilities - 日志工具
+
+架构说明：
+- get_logger() 是无依赖的，可以被任何模块安全导入
+- setup_logging() 需要 settings，在应用启动时调用
 """
 
 import logging
+import os
 import sys
 
-from app.config import settings
+
+def get_logger(name: str) -> logging.Logger:
+    """获取日志器（无依赖，可安全导入）"""
+    return logging.getLogger(name)
 
 
-def setup_logging() -> None:
-    """设置日志"""
-    # 开发环境下使用 DEBUG 级别以便看到所有错误
-    if settings.is_development:
-        log_level = logging.DEBUG
-    else:
-        log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+def setup_logging(
+    log_level: str | None = None,
+    log_format: str = "text",
+    is_development: bool | None = None,
+) -> None:
+    """设置日志
+
+    Args:
+        log_level: 日志级别，默认从环境变量 LOG_LEVEL 读取
+        log_format: 日志格式 (text/json)
+        is_development: 是否开发环境，默认从 APP_ENV 判断
+    """
+    # 从环境变量获取配置（避免循环依赖）
+    if log_level is None:
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+    if is_development is None:
+        is_development = os.getenv("APP_ENV", "development") == "development"
+
+    # 开发环境下使用 DEBUG 级别
+    level = logging.DEBUG if is_development else getattr(logging, log_level.upper(), logging.INFO)
 
     # 配置应用日志器（不干扰 uvicorn 的日志）
     app_logger = logging.getLogger("app")
-    app_logger.setLevel(log_level)
+    app_logger.setLevel(level)
 
     # 如果没有处理器，添加一个
     if not app_logger.handlers:
@@ -32,11 +53,6 @@ def setup_logging() -> None:
     # 设置第三方库日志级别
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """获取日志器"""
-    return logging.getLogger(name)
 
 
 class LoggerMixin:

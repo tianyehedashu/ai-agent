@@ -1,0 +1,150 @@
+# =============================================================================
+# 执行环境系统默认配置
+# =============================================================================
+# 此文件定义全局默认值，可被环境模板和 Agent 配置覆盖
+#
+# 支持环境变量引用：
+#   ${VAR}         - 引用环境变量，不存在则报错
+#   ${VAR:default} - 引用环境变量，不存在则使用默认值
+
+[metadata]
+version = "1.0"
+description = "系统默认执行环境配置"
+
+# -----------------------------------------------------------------------------
+# 沙箱配置
+# -----------------------------------------------------------------------------
+[sandbox]
+# 执行模式: "docker" | "local" | "remote"
+# - docker: Docker 容器隔离（推荐生产环境）
+# - local: 本地直接执行（仅开发环境，不安全）
+# - remote: 远程沙箱服务（企业版）
+mode = "${SANDBOX_MODE:docker}"
+
+# 默认超时（秒）
+timeout_seconds = 30
+
+# 资源限制
+[sandbox.resources]
+memory_limit = "256m"       # 内存限制
+cpu_limit = 1.0             # CPU 核心数
+disk_limit = "1g"           # 磁盘空间限制
+
+# 网络配置
+[sandbox.network]
+enabled = false             # 默认禁用网络（安全）
+allowed_hosts = []          # 允许访问的主机（network.enabled=true 时生效）
+dns_servers = []            # 自定义 DNS
+
+# 安全配置
+[sandbox.security]
+read_only_root = true       # 只读根文件系统
+no_new_privileges = true    # 禁止提权
+drop_capabilities = ["ALL"] # 移除所有 Linux capabilities
+
+# Docker 特定配置
+[sandbox.docker]
+image = "python:3.11-slim"  # 默认镜像
+packages = []               # 预装 Python 包
+packages_cmd = ""           # 自定义包安装命令
+
+# -----------------------------------------------------------------------------
+# Shell 环境配置
+# -----------------------------------------------------------------------------
+[shell]
+# 默认 Shell
+default_shell = "/bin/bash"
+
+# 默认工作目录（容器内）
+work_dir = "/workspace"
+
+# 全局环境变量
+[shell.env]
+LANG = "en_US.UTF-8"
+LC_ALL = "en_US.UTF-8"
+TZ = "${TZ:Asia/Shanghai}"
+PYTHONUNBUFFERED = "1"
+PYTHONDONTWRITEBYTECODE = "1"
+
+# -----------------------------------------------------------------------------
+# 工具配置
+# -----------------------------------------------------------------------------
+[tools]
+# 默认启用的内置工具
+enabled = [
+    "read_file",
+    "write_file",
+    "list_directory",
+    "search_files",
+    "run_python",
+    "run_shell",
+]
+
+# 默认禁用的工具（需要在 Agent 配置中显式启用）
+disabled = []
+
+# 需要人工确认的危险操作
+require_confirmation = [
+    "write_file",
+    "delete_file",
+    "run_shell",
+    "http_request",
+    "query_database",
+]
+
+# 自动批准的安全操作（支持通配符）
+auto_approve_patterns = [
+    "read_*",
+    "list_*",
+    "search_*",
+]
+
+# -----------------------------------------------------------------------------
+# MCP 服务器配置
+# -----------------------------------------------------------------------------
+[mcp]
+# 全局 MCP 设置
+connection_timeout = 10     # 连接超时（秒）
+tool_timeout = 60           # 工具调用超时（秒）
+max_retries = 3             # 最大重试次数
+
+# 全局 MCP 服务器（所有 Agent 可用）
+# 格式: [mcp.servers.name]
+#       url = "..."
+#       transport = "stdio" | "http" | "websocket"
+#       enabled = true | false
+
+[mcp.servers]
+# 默认不配置任何 MCP 服务器
+# 在环境模板或 Agent 配置中添加
+
+# -----------------------------------------------------------------------------
+# Human-in-the-Loop 配置
+# -----------------------------------------------------------------------------
+[hitl]
+enabled = true              # 是否启用 HITL
+
+# 需要确认的操作（与 tools.require_confirmation 合并）
+require_confirmation = []
+
+# 自动批准模式（与 tools.auto_approve_patterns 合并）
+auto_approve_patterns = []
+
+# 确认超时（秒），超时后自动拒绝
+confirmation_timeout = 300
+
+# -----------------------------------------------------------------------------
+# 日志和调试
+# -----------------------------------------------------------------------------
+[logging]
+# 执行日志级别: "debug" | "info" | "warning" | "error"
+level = "info"
+
+# 保留执行历史天数
+retention_days = 7
+
+# 是否记录工具调用详情
+log_tool_calls = true
+
+# 是否记录 LLM 请求/响应（调试用，生产环境建议关闭）
+log_llm_calls = false

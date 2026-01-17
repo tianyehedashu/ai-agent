@@ -6,22 +6,25 @@ Chat Service - 对话服务（基于 LangGraph）
 - 长期记忆存储和检索（LongTermMemoryStore）
 """
 
+import asyncio
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from core.config.service import get_execution_config_service
 from core.engine.langgraph_agent import LangGraphAgentEngine
 from core.engine.langgraph_checkpointer import LangGraphCheckpointer
 from core.llm.gateway import LLMGateway
 from core.memory.langgraph_store import LongTermMemoryStore
-from core.types import AgentConfig, AgentEvent, EventType, MessageRole
+from core.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
+from core.types import AgentConfig, AgentEvent, EventType, Message, MessageRole
 from db.vector import get_vector_store
 from exceptions import NotFoundError
 from schemas.message import ChatEvent
 from services.agent import AgentService
 from services.session import SessionService
-from tools.registry import ToolRegistry
+from tools.registry import ConfiguredToolRegistry, ToolRegistry
 from utils.logging import get_logger
 from utils.serialization import Serializer
 
@@ -53,11 +56,13 @@ class ChatService:
         self.db = db
         # 通过依赖注入传递配置，避免 Core 层依赖应用层
         self.llm_gateway = LLMGateway(config=settings)
-        self.tool_registry = ToolRegistry()
+        self.tool_registry = ToolRegistry()  # 默认工具注册表（向后兼容）
         # 使用提供的 checkpointer 或创建新的（优先使用全局单例）
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_service = SessionService(db)
         self.agent_service = AgentService(db)
+        # 执行环境配置服务
+        self.config_service = get_execution_config_service()
 
         # 初始化长期记忆存储
         try:
@@ -66,12 +71,30 @@ class ChatService:
                 llm_gateway=self.llm_gateway,
                 vector_store=vector_store,
             )
-            # 初始化 Store
-            # 注意：这里需要异步初始化，但 __init__ 是同步的
-            # 实际初始化在第一次使用时进行
+            # 初始化 SimpleMem 适配器（基于 SimpleMem 论文，提供 30x Token 压缩）
+            # 使用小模型做记忆提取，节省成本
+            self.simplemem = (
+                SimpleMemAdapter(
+                    llm_gateway=self.llm_gateway,
+                    memory_store=self.memory_store,
+                    config=SimpleMemConfig(
+                        window_size=settings.simplemem_window_size,
+                        novelty_threshold=settings.simplemem_novelty_threshold,
+                        k_min=3,
+                        k_max=15,
+                        extraction_model=settings.simplemem_extraction_model,
+                    ),
+                )
+                if settings.simplemem_enabled
+                else None
+            )
         except Exception as e:
             logger.warning("Memory store initialization failed: %s", e, exc_info=True)
             self.memory_store = None
+            self.simplemem = None
+
+        # 后台任务集合（防止被垃圾回收）
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def _ensure_memory_store_initialized(self) -> None:
         """确保记忆存储已初始化"""
@@ -137,22 +160,31 @@ class ChatService:
         )
 
         # 获取 Agent 配置
-        config = await self._get_agent_config(agent_id)
+        agent_config = await self._get_agent_config(agent_id)
+
+        # 加载执行环境配置
+        execution_config = self.config_service.load_for_agent(
+            agent_id=agent_id or "default",
+        )
+
+        # 创建配置化的工具注册表
+        configured_tool_registry = ConfiguredToolRegistry(config=execution_config)
 
         # 创建 LangGraph Agent Engine
         engine = LangGraphAgentEngine(
-            config=config,
+            config=agent_config,
             llm_gateway=self.llm_gateway,
             memory_store=self.memory_store,
-            tool_registry=self.tool_registry,
+            tool_registry=configured_tool_registry,
             checkpointer=self.checkpointer,
+            execution_config=execution_config,
         )
 
         # 执行 Agent（LangGraph 会自动管理对话历史）
         final_content = ""
         try:
             async for event in engine.run(
-                session_id=session_id,  # 作为 LangGraph 的 thread_id
+                session_id=session_id,  # 作为 LangGraph 的 thread_id，也用于记忆隔离
                 user_id=user_id,
                 user_message=message,
             ):
@@ -178,28 +210,63 @@ class ChatService:
                     content=final_content,
                 )
 
-                # 提取并存储长期记忆（异步，不阻塞响应）
-                if self.memory_store and session:
-                    try:
-                        # 记忆提取可以在后台异步进行
-                        # 使用 LongTermMemoryStore 存储重要信息
-                        logger.info(
-                            "Conversation completed for session %s, memory extraction can be done asynchronously",
-                            session_id,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Memory extraction failed for session %s: %s",
-                            session_id,
-                            e,
-                            exc_info=True,
-                        )
+                # 使用 SimpleMem 提取并存储会话内长程记忆
+                # 后台异步执行，不阻塞 SSE 流关闭
+                # 记忆按 session_id 隔离，用于在长对话中记住早期内容
+                if self.simplemem and session:
+                    # 构建消息列表
+                    conversation_messages = [
+                        Message(role=MessageRole.USER, content=message),
+                        Message(role=MessageRole.ASSISTANT, content=final_content),
+                    ]
+                    # 后台任务：不阻塞主流程
+                    task = asyncio.create_task(
+                        self._extract_memory_background(conversation_messages, user_id, session_id)
+                    )
+                    # 防止任务被垃圾回收，完成后自动移除
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
 
         except Exception as e:
             logger.error("Chat error for session %s: %s", session_id, e, exc_info=True)
             yield ChatEvent(
                 type="error",
                 data={"error": str(e), "session_id": session_id},
+            )
+
+    async def _extract_memory_background(
+        self,
+        messages: list[Message],
+        user_id: str,
+        session_id: str,
+    ) -> None:
+        """后台任务：使用 SimpleMem 提取记忆
+
+        异步执行，不阻塞主流程。失败时只记录日志，不影响用户体验。
+
+        Args:
+            messages: 对话消息列表
+            user_id: 用户 ID
+            session_id: 会话 ID
+        """
+        try:
+            atoms = await self.simplemem.process_and_store(
+                messages=messages,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            if atoms:
+                logger.info(
+                    "SimpleMem extracted %d memory atoms for session %s",
+                    len(atoms),
+                    session_id,
+                )
+        except Exception as e:
+            logger.warning(
+                "SimpleMem memory extraction failed for session %s: %s",
+                session_id,
+                e,
+                exc_info=True,
             )
 
     async def _get_agent_config(self, agent_id: str | None) -> AgentConfig:

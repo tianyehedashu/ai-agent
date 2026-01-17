@@ -1,0 +1,92 @@
+# =============================================================================
+# Python 开发环境模板
+# =============================================================================
+# 适用于: Python 代码执行、数据处理、脚本开发
+
+[metadata]
+name = "python-dev"
+description = "Python 开发环境，预装常用库，适合数据处理和脚本开发"
+tags = ["python", "development", "data", "scripting"]
+
+# 继承系统默认配置
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 沙箱配置覆盖
+# -----------------------------------------------------------------------------
+[sandbox]
+mode = "docker"
+timeout_seconds = 60  # Python 任务可能需要更长时间
+
+[sandbox.docker]
+image = "python:3.11-slim"
+packages = [
+    "pandas",
+    "numpy",
+    "requests",
+    "beautifulsoup4",
+    "lxml",
+    "pyyaml",
+    "python-dotenv",
+]
+
+[sandbox.resources]
+memory_limit = "512m"   # Python 数据处理需要更多内存
+cpu_limit = 2.0
+
+[sandbox.network]
+enabled = true
+allowed_hosts = [
+    # Python 包管理
+    "pypi.org",
+    "files.pythonhosted.org",
+    "pypi.python.org",
+    # 常用数据源
+    "raw.githubusercontent.com",
+    "github.com",
+]
+
+# -----------------------------------------------------------------------------
+# Shell 环境覆盖
+# -----------------------------------------------------------------------------
+[shell]
+default_shell = "/bin/bash"
+work_dir = "/workspace"
+
+[shell.env]
+PYTHONPATH = "/workspace:/workspace/src"
+PIP_NO_CACHE_DIR = "1"
+PIP_DISABLE_PIP_VERSION_CHECK = "1"
+
+# -----------------------------------------------------------------------------
+# 工具配置覆盖
+# -----------------------------------------------------------------------------
+[tools]
+enabled = [
+    "read_file",
+    "write_file",
+    "list_directory",
+    "search_files",
+    "run_python",
+    "run_shell",
+    "http_request",
+    "install_package",
+]
+
+# Python 开发中，pip install 可以自动批准
+auto_approve_patterns = [
+    "read_*",
+    "list_*",
+    "search_*",
+    "install_package",  # 允许自动安装包
+]
+
+# -----------------------------------------------------------------------------
+# HITL 配置覆盖
+# -----------------------------------------------------------------------------
+[hitl]
+require_confirmation = [
+    "write_file",
+    "delete_file",
+    "run_shell",
+]

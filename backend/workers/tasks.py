@@ -105,11 +105,18 @@ def process_memory_extraction(
 def generate_embeddings(
     self,
     texts: list[str],
-    model: str = "text-embedding-3-small",
+    model: str | None = None,
 ) -> list[list[float]]:
     """
     生成文本嵌入向量
+
+    Args:
+        texts: 要生成嵌入的文本列表
+        model: 嵌入模型，默认使用配置中的 embedding_model
     """
+    # 使用配置中的默认模型
+    if model is None:
+        model = settings.embedding_model
     logger.info("Generating embeddings for %d texts", len(texts))
 
     async def _generate():

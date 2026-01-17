@@ -12,12 +12,23 @@ LLM Gateway - 大语言模型网关
 图像生成:
 - 火山引擎 Seedream (Doubao-Seedream)
 - OpenAI DALL-E
+
+Token 优化:
+- 提示词缓存 (Prompt Caching)
+- 支持 Anthropic/DeepSeek/OpenAI 的缓存 API
 """
 
 from typing import TYPE_CHECKING
 
+from core.llm.embeddings import (
+    APIEmbedding,
+    EmbeddingProvider,
+    EmbeddingService,
+    LocalEmbedding,
+)
 from core.llm.gateway import LLMGateway
 from core.llm.image_generator import ImageGenerationResult, ImageGenerator
+from core.llm.prompt_cache import PromptCacheManager, get_prompt_cache_manager
 from core.llm.providers import (
     AnthropicProvider,
     DashScopeProvider,
@@ -33,18 +44,30 @@ if TYPE_CHECKING:
     from core.config import ImageGeneratorConfig, LLMConfig
 
 __all__ = [
+    # Embedding Service（本地 + API 统一接口）
+    "APIEmbedding",
+    # Providers
     "AnthropicProvider",
     "DashScopeProvider",
     "DeepSeekProvider",
+    "EmbeddingProvider",
+    "EmbeddingService",
+    # Image Generator
     "ImageGenerationResult",
     "ImageGenerator",
+    # Gateway
     "LLMGateway",
+    "LocalEmbedding",
     "OpenAIProvider",
+    # Prompt Cache
+    "PromptCacheManager",
     "VolcEngineProvider",
     "ZhipuAIProvider",
     "create_image_generator",
     "create_llm_gateway",
+    # Utils
     "get_all_models",
+    "get_prompt_cache_manager",
     "get_provider",
 ]
 

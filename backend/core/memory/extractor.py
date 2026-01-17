@@ -119,19 +119,21 @@ class MemoryExtractor:
     async def extract_and_store(
         self,
         memory_store: LongTermMemoryStore,
-        user_id: str,
+        session_id: str,
         conversation: list[dict[str, Any]],
-        session_id: str | None = None,
+        user_id: str | None = None,
         model: str | None = None,
     ) -> list[str]:
         """
         提取记忆并存储到 LongTermMemoryStore
 
+        记忆按 session_id 隔离，实现"会话内长程记忆"。
+
         Args:
             memory_store: 长期记忆存储
-            user_id: 用户 ID
+            session_id: 会话 ID（记忆按会话隔离）
             conversation: 对话历史
-            session_id: 会话 ID（可选，用于元数据）
+            user_id: 用户 ID（可选，用于审计）
             model: 使用的模型（可选）
 
         Returns:
@@ -144,16 +146,14 @@ class MemoryExtractor:
         memory_ids = []
         for memory in extracted:
             memory_id = await memory_store.put(
-                user_id=user_id,
+                session_id=session_id,  # 记忆按会话隔离
                 memory_type=memory["type"],
                 content=memory["content"],
                 importance=memory["importance"],
                 metadata={
-                    "source_session_id": session_id,
+                    "user_id": user_id,
                     "extracted": True,
-                }
-                if session_id
-                else {"extracted": True},
+                },
             )
             memory_ids.append(memory_id)
 

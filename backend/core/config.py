@@ -35,6 +35,9 @@ class LLMConfig(Protocol):
     # 默认模型
     default_model: str
 
+    # Embedding 配置
+    embedding_model: str
+
     # 调试配置
     debug: bool = False
     is_development: bool = False

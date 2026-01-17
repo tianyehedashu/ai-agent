@@ -1,0 +1,109 @@
+# =============================================================================
+# 数据科学环境模板
+# =============================================================================
+# 适用于: 数据分析、机器学习、可视化
+
+[metadata]
+name = "data-science"
+description = "数据科学环境，预装科学计算和机器学习库"
+tags = ["python", "data-science", "machine-learning", "analytics"]
+
+extends = "python-dev"  # 继承 Python 开发环境
+
+# -----------------------------------------------------------------------------
+# 沙箱配置覆盖
+# -----------------------------------------------------------------------------
+[sandbox]
+timeout_seconds = 300  # 数据处理和模型训练需要更长时间
+
+[sandbox.docker]
+image = "python:3.11-slim"
+packages = [
+    # 数据处理
+    "pandas",
+    "numpy",
+    "polars",
+    # 科学计算
+    "scipy",
+    "scikit-learn",
+    # 可视化
+    "matplotlib",
+    "seaborn",
+    "plotly",
+    # 数据获取
+    "requests",
+    "httpx",
+    "aiohttp",
+    # 文件格式
+    "openpyxl",
+    "xlrd",
+    "pyarrow",
+    # 工具
+    "tqdm",
+    "python-dotenv",
+]
+
+[sandbox.resources]
+memory_limit = "2g"     # 数据科学需要大量内存
+cpu_limit = 4.0
+
+[sandbox.network]
+enabled = true
+allowed_hosts = [
+    # Python 包
+    "pypi.org",
+    "files.pythonhosted.org",
+    # 数据源
+    "raw.githubusercontent.com",
+    "github.com",
+    "kaggle.com",
+    "*.kaggle.com",
+    # Hugging Face
+    "huggingface.co",
+    "*.huggingface.co",
+]
+
+# -----------------------------------------------------------------------------
+# Shell 环境覆盖
+# -----------------------------------------------------------------------------
+[shell.env]
+PYTHONPATH = "/workspace:/workspace/src"
+MPLBACKEND = "Agg"              # Matplotlib 非交互式后端
+SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL = "True"
+
+# -----------------------------------------------------------------------------
+# 工具配置覆盖
+# -----------------------------------------------------------------------------
+[tools]
+enabled = [
+    "read_file",
+    "write_file",
+    "list_directory",
+    "search_files",
+    "run_python",
+    "run_shell",
+    "http_request",
+    "fetch_url",
+    "install_package",
+]
+
+[tools.config.run_python]
+# 数据科学环境允许更多导入
+blocked_imports = [
+    "subprocess",
+    "os.system",
+    "pty",
+]
+
+# -----------------------------------------------------------------------------
+# HITL 配置覆盖
+# -----------------------------------------------------------------------------
+[hitl]
+# 数据科学场景下，HTTP GET 和抓取数据可以自动批准
+auto_approve_patterns = [
+    "read_*",
+    "list_*",
+    "search_*",
+    "fetch_url",
+    "install_package",
+]

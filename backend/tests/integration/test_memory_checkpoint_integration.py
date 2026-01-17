@@ -54,20 +54,20 @@ async def checkpointer():
 @pytest.mark.asyncio
 @pytest.mark.integration
 class TestLongTermMemoryStore:
-    """测试长期记忆存储"""
+    """测试长期记忆存储（按 session_id 隔离）"""
 
     async def test_store_and_retrieve_memory(
         self,
         memory_store: LongTermMemoryStore,
     ):
         """测试存储和检索记忆"""
-        user_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         memory_type = "preference"
         content = "我喜欢使用 Python 编程，偏好函数式编程风格"
 
-        # 存储记忆
+        # 存储记忆（按 session_id 隔离）
         memory_id = await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type=memory_type,
             content=content,
             importance=8.0,
@@ -78,7 +78,7 @@ class TestLongTermMemoryStore:
 
         # 检索记忆
         memories = await memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query="编程语言偏好",
             limit=10,
         )
@@ -93,18 +93,18 @@ class TestLongTermMemoryStore:
         memory_store: LongTermMemoryStore,
     ):
         """测试按类型过滤搜索"""
-        user_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
 
         # 存储不同类型的记忆
         await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type="preference",
             content="我喜欢喝咖啡",
             importance=7.0,
         )
 
         await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type="fact",
             content="咖啡因是一种兴奋剂",
             importance=5.0,
@@ -112,7 +112,7 @@ class TestLongTermMemoryStore:
 
         # 只搜索 preference 类型
         preferences = await memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query="偏好",
             limit=10,
             memory_type="preference",
@@ -126,27 +126,27 @@ class TestLongTermMemoryStore:
         memory_store: LongTermMemoryStore,
     ):
         """测试删除记忆"""
-        user_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         memory_type = "fact"
         content = "测试记忆，将被删除"
 
         # 存储记忆
         memory_id = await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type=memory_type,
             content=content,
         )
 
         # 删除记忆
         await memory_store.delete(
-            user_id=user_id,
+            session_id=session_id,
             memory_id=memory_id,
             memory_type=memory_type,
         )
 
         # 确认已删除
         memories = await memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query="测试",
             limit=10,
         )
@@ -199,21 +199,20 @@ class TestMemoryCheckpointIntegration:
         checkpointer: LangGraphCheckpointer,
     ):
         """测试完整工作流程"""
-        user_id = str(uuid.uuid4())
         session_id = str(uuid.uuid4())
 
-        # 1. 存储长期记忆
+        # 1. 存储会话内长程记忆（按 session_id 隔离）
         memory_id = await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type="preference",
             content="用户喜欢使用简洁的命令行界面",
             importance=7.0,
         )
         assert memory_id is not None
 
-        # 2. 检索长期记忆
+        # 2. 检索会话内记忆
         memories = await memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query="用户偏好",
             limit=5,
         )
@@ -233,18 +232,18 @@ class TestMemoryCheckpointIntegration:
         llm_gateway: LLMGateway,
     ):
         """测试记忆提取工作流程"""
-        user_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
 
-        # 简化测试，直接存储记忆
+        # 简化测试，直接存储会话内记忆
         await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type="fact",
             content="用户姓名：李四，职业：软件工程师",
             importance=9.0,
         )
 
         await memory_store.put(
-            user_id=user_id,
+            session_id=session_id,
             memory_type="preference",
             content="用户偏好：Python 和 TypeScript 编程语言",
             importance=8.0,
@@ -252,7 +251,7 @@ class TestMemoryCheckpointIntegration:
 
         # 检索相关记忆
         memories = await memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query="用户信息",
             limit=10,
         )

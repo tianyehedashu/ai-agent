@@ -1,7 +1,14 @@
 """
 Application Configuration Management
 
-使用 Pydantic Settings 管理配置，支持环境变量和 .env 文件
+配置优先级（从高到低）：
+1. 环境变量（最高优先级）
+2. .env 文件
+3. config/app.toml 文件
+4. 代码中的默认值
+
+敏感信息（API Keys、密码）放在 .env 文件
+应用逻辑配置（功能开关、模型列表）放在 config/app.toml
 """
 
 from functools import lru_cache
@@ -9,6 +16,8 @@ from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.config_loader import app_config
 
 
 class Settings(BaseSettings):
@@ -100,10 +109,43 @@ class Settings(BaseSettings):
     # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"
 
-    # 默认模型配置
-    # DeepSeek 支持的模型: deepseek-chat, deepseek-coder, deepseek-reasoner
-    default_model: str = "deepseek-reasoner"
-    embedding_model: str = "text-embedding-3-small"
+    # ==========================================================================
+    # 场景化模型配置（从 config/app.toml 加载）
+    # ==========================================================================
+    # 模型名称格式: provider/model_name (如 deepseek/deepseek-chat)
+
+    # 默认对话模型
+    default_model: str = Field(default_factory=lambda: app_config.llm.default_model)
+
+    # 快速响应模型（用于简单任务、工具调用前的意图识别等）
+    fast_model: str = Field(default_factory=lambda: app_config.llm.fast_model)
+
+    # 复杂推理模型（数学、逻辑、代码分析等）
+    reasoning_model: str = Field(default_factory=lambda: app_config.llm.reasoning_model)
+
+    # 代码生成模型
+    code_model: str = Field(default_factory=lambda: app_config.llm.code_model)
+
+    # 长文档处理模型
+    long_context_model: str = Field(default_factory=lambda: app_config.llm.long_context_model)
+
+    # 视觉理解模型
+    vision_model: str = Field(default_factory=lambda: app_config.llm.vision_model)
+
+    # ==========================================================================
+    # Embedding 配置（从 config/app.toml 加载）
+    # ==========================================================================
+    # provider: "api"（云端 API）或 "local"（本地模型，CPU 友好）
+    embedding_provider: Literal["api", "local"] = Field(
+        default_factory=lambda: app_config.llm.embedding_provider  # type: ignore
+    )
+    # API 模式模型: text-embedding-3-small, doubao-embedding-* 等
+    # 本地模式模型: bge-small-zh, bge-base-en 或完整名称如 BAAI/bge-small-zh-v1.5
+    embedding_model: str = Field(default_factory=lambda: app_config.llm.embedding_model)
+    # 向量维度（不同模型维度不同）
+    # API: text-embedding-3-small=1536, text-embedding-3-large=3072
+    # 本地: bge-small-zh=512, bge-base-zh=768, bge-m3=1024
+    embedding_dimension: int = Field(default_factory=lambda: app_config.llm.embedding_dimension)
 
     # ========================================================================
     # 安全配置
@@ -160,6 +202,43 @@ class Settings(BaseSettings):
     checkpoint_enabled: bool = True
     checkpoint_storage: Literal["redis", "postgres"] = "redis"
     checkpoint_ttl_days: int = 7
+
+    # ========================================================================
+    # Token 优化配置
+    # ========================================================================
+    # 提示词缓存（Prompt Caching）
+    # 这是 2026 年最有效的 Token 成本优化手段，可节省 50%-90%
+    prompt_cache_enabled: bool = True
+
+    # 记忆摘要（Summarization）
+    # 当对话 Token 超过阈值时自动触发摘要，可节省 40%-70%
+    memory_summarization_enabled: bool = True
+    memory_summarization_threshold: int = 8000  # Token 阈值
+    memory_summarization_preserve_recent: int = 4  # 保留最近 N 条消息
+
+    # 分层记忆（Tiered Memory）
+    # 分离工作记忆、短期记忆、长期记忆
+    tiered_memory_enabled: bool = True
+    short_term_memory_ttl_hours: int = 24
+    long_term_importance_threshold: float = 6.0
+
+    # ========================================================================
+    # SimpleMem 配置（会话内长程记忆）
+    # ========================================================================
+    # SimpleMem 提供 30x Token 压缩和 26.4% F1 提升
+    # 详细配置见 config/app.toml [simplemem] 部分
+    # 环境变量可覆盖 TOML 配置
+    simplemem_enabled: bool = Field(default_factory=lambda: app_config.simplemem.enabled)
+    simplemem_extraction_model: str | None = Field(
+        default_factory=lambda: app_config.simplemem.extraction_model
+    )
+    simplemem_window_size: int = Field(default_factory=lambda: app_config.simplemem.window.size)
+    simplemem_novelty_threshold: float = Field(
+        default_factory=lambda: app_config.simplemem.filter.novelty_threshold
+    )
+    simplemem_skip_trivial: bool = Field(
+        default_factory=lambda: app_config.simplemem.filter.skip_trivial
+    )
 
     # ========================================================================
     # 日志配置

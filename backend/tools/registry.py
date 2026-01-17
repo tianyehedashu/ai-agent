@@ -4,10 +4,13 @@ Tool Registry - 工具注册表
 管理工具的注册和检索
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.types import ToolCategory, ToolResult
 from tools.base import BaseTool, tool_registry
+
+if TYPE_CHECKING:
+    from core.config.execution_config import ExecutionConfig
 
 
 class ToolRegistry:
@@ -72,9 +75,91 @@ class ToolRegistry:
         try:
             return await tool.execute(**kwargs)
         except Exception as e:
+            # 提供详细的错误信息，包括异常类型和消息
+            error_msg = f"{type(e).__name__}: {str(e)!s}" if str(e) else type(e).__name__
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=f"Tool execution error: {e!s}",
+                error=f"Tool execution error: {error_msg}",
             )
+
+
+class ConfiguredToolRegistry(ToolRegistry):
+    """
+    基于 ExecutionConfig 的工具注册表
+
+    根据执行环境配置过滤和管理工具
+    """
+
+    def __init__(self, config: "ExecutionConfig") -> None:
+        """
+        初始化配置化的工具注册表
+
+        Args:
+            config: 执行环境配置
+        """
+        super().__init__()
+        self.config = config
+        self._filter_enabled_tools()
+
+    def _filter_enabled_tools(self) -> None:
+        """根据配置过滤启用的工具"""
+        enabled = set(self.config.tools.enabled)
+        disabled = set(self.config.tools.disabled)
+
+        # 如果没有指定启用的工具，默认全部启用
+        if not enabled:
+            return
+
+        # 过滤工具：只保留启用的，排除禁用的
+        tools_to_remove = []
+        for name in self._tools:
+            if name in disabled or (enabled and name not in enabled):
+                tools_to_remove.append(name)
+
+        for name in tools_to_remove:
+            del self._tools[name]
+
+    def requires_confirmation(self, tool_name: str) -> bool:
+        """
+        检查工具是否需要人工确认
+
+        Args:
+            tool_name: 工具名称
+
+        Returns:
+            是否需要确认
+        """
+        import fnmatch
+
+        # 检查自动批准模式
+        auto_approve_patterns = (
+            self.config.tools.auto_approve_patterns + self.config.hitl.auto_approve_patterns
+        )
+        for pattern in auto_approve_patterns:
+            if fnmatch.fnmatch(tool_name, pattern):
+                return False
+
+        # 检查需要确认列表
+        require_confirm = (
+            self.config.tools.require_confirmation + self.config.hitl.require_confirmation
+        )
+        if tool_name in require_confirm:
+            return True
+
+        # 检查工具本身的配置
+        tool_config = self.config.tools.config.get(tool_name, {})
+        return tool_config.get("requires_confirmation", False)
+
+    def get_tool_config(self, tool_name: str) -> dict[str, Any]:
+        """
+        获取工具的配置
+
+        Args:
+            tool_name: 工具名称
+
+        Returns:
+            工具配置字典
+        """
+        return self.config.tools.config.get(tool_name, {})

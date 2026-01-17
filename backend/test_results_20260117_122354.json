@@ -1,0 +1,618 @@
+[
+  {
+    "provider": "deepseek",
+    "model_id": "deepseek-coder",
+    "model_name": "DeepSeek Coder",
+    "litellm_model": "deepseek/deepseek-coder",
+    "success": true,
+    "latency_ms": 1932.8853000188246,
+    "response_text": "我是DeepSeek，由深度求索公司创造的AI助手，致力于用热情细腻的方式为你提供帮助和解答！😊",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 10,
+      "completion_tokens": 27,
+      "total_tokens": 37
+    },
+    "timestamp": "2026-01-17T12:23:30.672220"
+  },
+  {
+    "provider": "deepseek",
+    "model_id": "deepseek-chat",
+    "model_name": "DeepSeek Chat (V3)",
+    "litellm_model": "deepseek/deepseek-chat",
+    "success": true,
+    "latency_ms": 2145.5997999873944,
+    "response_text": "我是DeepSeek，由深度求索公司创造的AI助手，致力于用热情与细心为你提供智能对话和问题解答服务。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 10,
+      "completion_tokens": 28,
+      "total_tokens": 38
+    },
+    "timestamp": "2026-01-17T12:23:30.682046"
+  },
+  {
+    "provider": "deepseek",
+    "model_id": "deepseek-reasoner",
+    "model_name": "DeepSeek Reasoner (R1)",
+    "litellm_model": "deepseek/deepseek-reasoner",
+    "success": true,
+    "latency_ms": 3780.1514000166208,
+    "response_text": "[思考过程]: 我们被问到：\"计算: 123 + 456 = ?\"。这是一个简单的加法问题。我们需要计算123和456的和。\n\n步骤：\n123 + 456：\n首先，个位数相加：3+6=9\n十位数相加：2+5=7\n百位数相加：1+4=5\n所以，总和是579。\n\n因此，答案是579。\n[答案]: 123 + 456 = 579",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 13,
+      "completion_tokens": 84,
+      "total_tokens": 97
+    },
+    "timestamp": "2026-01-17T12:23:30.683405"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen3-32b",
+    "model_name": "Qwen3 32B",
+    "litellm_model": "dashscope/qwen3-32b",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.BadRequestError: DashscopeException - parameter.enable_thinking must be set to false for non-streaming calls",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:34.464530"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-coder-14b-instruct",
+    "model_name": "Qwen 2.5 Coder 14B",
+    "litellm_model": "dashscope/qwen2.5-coder-14b-instruct",
+    "success": true,
+    "latency_ms": 956.4713999861851,
+    "response_text": "我是Qwen，由阿里云开发的人工智能助手。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 24,
+      "completion_tokens": 13,
+      "total_tokens": 37
+    },
+    "timestamp": "2026-01-17T12:23:34.466076"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-coder-7b-instruct",
+    "model_name": "Qwen 2.5 Coder 7B",
+    "litellm_model": "dashscope/qwen2.5-coder-7b-instruct",
+    "success": true,
+    "latency_ms": 1098.3269999851473,
+    "response_text": "我是Qwen，由阿里云开发的人工智能助手，致力于帮助用户获得准确、有用的信息。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 22,
+      "total_tokens": 36
+    },
+    "timestamp": "2026-01-17T12:23:34.468725"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-vl-plus",
+    "model_name": "通义千问 VL Plus",
+    "litellm_model": "dashscope/qwen-vl-plus",
+    "success": true,
+    "latency_ms": 1106.4168000011705,
+    "response_text": "[思考过程]: \n[答案]: 我是一个能够理解和生成自然语言的AI助手，旨在帮助用户解答问题、提供信息和完成各种任务。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 25,
+      "total_tokens": 39
+    },
+    "timestamp": "2026-01-17T12:23:34.469408"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-14b-instruct",
+    "model_name": "Qwen 2.5 14B",
+    "litellm_model": "dashscope/qwen2.5-14b-instruct",
+    "success": true,
+    "latency_ms": 1191.8748000171036,
+    "response_text": "我是Qwen，由阿里云研发的预训练语言模型，能够提供智能对话、内容生成等多种功能，致力于为用户提供高效、准确的帮助。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 32,
+      "total_tokens": 46
+    },
+    "timestamp": "2026-01-17T12:23:34.475289"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-72b-instruct",
+    "model_name": "Qwen 2.5 72B",
+    "litellm_model": "dashscope/qwen2.5-72b-instruct",
+    "success": true,
+    "latency_ms": 1223.2648999779485,
+    "response_text": "我是Qwen，由阿里云研发的超大规模语言模型，致力于成为您贴心的知识助手。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 21,
+      "total_tokens": 35
+    },
+    "timestamp": "2026-01-17T12:23:34.466250"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-32b-instruct",
+    "model_name": "Qwen 2.5 32B",
+    "litellm_model": "dashscope/qwen2.5-32b-instruct",
+    "success": true,
+    "latency_ms": 1481.8021000246517,
+    "response_text": "我是Qwen，阿里云开发的一个大型语言模型，致力于通过提供准确和有用的信息来帮助用户。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 23,
+      "total_tokens": 37
+    },
+    "timestamp": "2026-01-17T12:23:34.469200"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-turbo",
+    "model_name": "通义千问 Turbo",
+    "litellm_model": "dashscope/qwen-turbo",
+    "success": true,
+    "latency_ms": 407.25600003497675,
+    "response_text": "我是一个大型语言模型，可以回答问题、创作文字、编程等，帮助用户完成各种任务。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 18,
+      "completion_tokens": 22,
+      "total_tokens": 40
+    },
+    "timestamp": "2026-01-17T12:23:34.475510"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-max",
+    "model_name": "通义千问 Max",
+    "litellm_model": "dashscope/qwen-max",
+    "success": true,
+    "latency_ms": 696.9697999884374,
+    "response_text": "我是Qwen，由阿里云开发的超大规模语言模型，旨在帮助用户更高效地获取信息、创造价值。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 26,
+      "total_tokens": 40
+    },
+    "timestamp": "2026-01-17T12:23:34.475504"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-max-latest",
+    "model_name": "通义千问 Max (最新)",
+    "litellm_model": "dashscope/qwen-max-latest",
+    "success": true,
+    "latency_ms": 1682.6022999593988,
+    "response_text": "我是通义千问，阿里巴巴集团旗下的超大规模语言模型，能够帮助你回答问题、创作文字、编程等。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 26,
+      "total_tokens": 40
+    },
+    "timestamp": "2026-01-17T12:23:34.469586"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-plus-latest",
+    "model_name": "通义千问 Plus (最新)",
+    "litellm_model": "dashscope/qwen-plus-latest",
+    "success": true,
+    "latency_ms": 1794.632500037551,
+    "response_text": "我是通义千问（Qwen），阿里巴巴集团旗下的超大规模语言模型，能够回答问题、创作文字（如写故事、公文、邮件、剧本等）、进行逻辑推理、编程，还能表达观点，甚至玩游戏，支持多种语言，致力于为用户提供高效、智能、友好的交互体验。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 65,
+      "total_tokens": 79
+    },
+    "timestamp": "2026-01-17T12:23:34.468996"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-plus",
+    "model_name": "通义千问 Plus",
+    "litellm_model": "dashscope/qwen-plus",
+    "success": true,
+    "latency_ms": 1808.831799949985,
+    "response_text": "我是通义千问，由阿里云研发的超大规模语言模型，能够回答问题、创作文字、表达观点并参与多轮对话。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 31,
+      "total_tokens": 45
+    },
+    "timestamp": "2026-01-17T12:23:34.465852"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-turbo-latest",
+    "model_name": "通义千问 Turbo (最新)",
+    "litellm_model": "dashscope/qwen-turbo-latest",
+    "success": true,
+    "latency_ms": 349.9454000266269,
+    "response_text": "我是一个人工智能助手，旨在帮助你解答问题、提供信息和支持各种任务。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 17,
+      "total_tokens": 31
+    },
+    "timestamp": "2026-01-17T12:23:34.475525"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-7b-instruct",
+    "model_name": "Qwen 2.5 7B",
+    "litellm_model": "dashscope/qwen2.5-7b-instruct",
+    "success": true,
+    "latency_ms": 778.9216000237502,
+    "response_text": "我是Qwen，由阿里云开发的大规模语言模型，可以回答问题、创作文字，还能表达观点和撰写代码。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 27,
+      "total_tokens": 41
+    },
+    "timestamp": "2026-01-17T12:23:34.475513"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen2.5-coder-32b-instruct",
+    "model_name": "Qwen 2.5 Coder 32B",
+    "litellm_model": "dashscope/qwen2.5-coder-32b-instruct",
+    "success": true,
+    "latency_ms": 452.5619999621995,
+    "response_text": "我是Qwen，由阿里巴巴云开发的超大规模语言模型。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 14,
+      "total_tokens": 28
+    },
+    "timestamp": "2026-01-17T12:23:34.475528"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwq-plus",
+    "model_name": "QwQ Plus (推理)",
+    "litellm_model": "dashscope/qwq-plus",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.BadRequestError: DashscopeException - This model only support stream mode, please enable the stream parameter to access the model. ",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:34.475531"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen-vl-max",
+    "model_name": "通义千问 VL Max",
+    "litellm_model": "dashscope/qwen-vl-max",
+    "success": true,
+    "latency_ms": 1816.9869999983348,
+    "response_text": "[思考过程]: \n[答案]: 我是通义千问（Qwen），是阿里巴巴集团旗下的通义实验室自主研发的超大规模语言模型，能够回答问题、创作文字，如写故事、写公文、写邮件、写剧本等等，还能进行逻辑推理、编程，甚至表达观点。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 57,
+      "total_tokens": 71
+    },
+    "timestamp": "2026-01-17T12:23:34.475494"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwq-32b-preview",
+    "model_name": "QwQ 32B Preview (推理)",
+    "litellm_model": "dashscope/qwq-32b-preview",
+    "success": true,
+    "latency_ms": 1672.7085000020452,
+    "response_text": "123加上456等于多少呢？我得好好想想。首先，我 know 加法是要从右往左加，也就是从个位开始加起。\n\n所以，先加个位：3加上6等于9。\n\n然后是十位：2加上5等于7。\n\n最后是百位：1加上4等于5。\n\n所以，合起来就是579。\n\n wait a minute，我再检查一下。123加上456，等于5",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 28,
+      "completion_tokens": 100,
+      "total_tokens": 128
+    },
+    "timestamp": "2026-01-17T12:23:34.475517"
+  },
+  {
+    "provider": "dashscope",
+    "model_id": "qwen3-235b-a22b",
+    "model_name": "Qwen3 235B-A22B (MoE)",
+    "litellm_model": "dashscope/qwen3-235b-a22b",
+    "success": true,
+    "latency_ms": 11808.11400001403,
+    "response_text": "[思考过程]: 好的，用户让我用一句话介绍自己。首先，我需要明确用户的需求是什么。可能他们需要一个简洁明了的自我介绍，用于某种场合，比如社交、工作或者学校。接下来，我要考虑用户的身份，可能是学生、求职者，或者是在社交平台上想了解我的人。他们的真实需求可能不仅仅是表面上的一句话，可能想了解我的特点、能力或者价值观。\n\n然后，我需要分析用户可能没有说出来的深层需求。比如，他们可能希望这句话能突出我的独",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 14,
+      "completion_tokens": 487,
+      "total_tokens": 501
+    },
+    "timestamp": "2026-01-17T12:23:34.475521"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-z1-32b",
+    "model_name": "GLM-Z1 32B (推理)",
+    "litellm_model": "zai/glm-z1-32b",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.BadRequestError: ZaiException - 模型不存在，请检查模型代码。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.500575"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-flash",
+    "model_name": "GLM-4 Flash",
+    "litellm_model": "zai/glm-4-flash",
+    "success": true,
+    "latency_ms": 768.9540999708697,
+    "response_text": "我是一个致力于提供有益信息、解答问题和帮助用户的人工智能助手。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 11,
+      "completion_tokens": 16,
+      "total_tokens": 27
+    },
+    "timestamp": "2026-01-17T12:23:47.501369"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4.5-airx",
+    "model_name": "GLM-4.5 AirX",
+    "litellm_model": "zai/glm-4.5-airx",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501829"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-air",
+    "model_name": "GLM-4 Air",
+    "litellm_model": "zai/glm-4-air",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.500952"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "codegeex-4",
+    "model_name": "CodeGeeX-4",
+    "litellm_model": "zai/codegeex-4",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501676"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4.6",
+    "model_name": "GLM-4.6",
+    "litellm_model": "zai/glm-4.6",
+    "success": true,
+    "latency_ms": 1529.4074999983422,
+    "response_text": "[思考过程]: \n1.  **分析用户的请求：**\n    *   **核心任务：**“请用一句话介绍你自己。”\n    *   **隐含背景：**用户正在与一个AI（我）互动。他们知道我不是人类。这个请求是关于我的*功能*和*本质*，而不是我的个人经历。\n    *   **限制条件：**“一句话”。这是关键的限制条件。它要求简洁和精准。\n\n2.  **构思我的核心属性：\n[答案]: ",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 11,
+      "completion_tokens": 100,
+      "total_tokens": 111
+    },
+    "timestamp": "2026-01-17T12:23:47.501971"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-plus",
+    "model_name": "GLM-4 Plus",
+    "litellm_model": "zai/glm-4-plus",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501059"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4",
+    "model_name": "GLM-4",
+    "litellm_model": "zai/glm-4",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.500819"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4v",
+    "model_name": "GLM-4V",
+    "litellm_model": "zai/glm-4v",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501515"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4.6v",
+    "model_name": "GLM-4.6V (视觉)",
+    "litellm_model": "zai/glm-4.6v",
+    "success": true,
+    "latency_ms": 2035.5224999948405,
+    "response_text": "[思考过程]: 用户让我用一句话介绍自己，首先得明确“自己”指的是AI助手，所以需要简洁明了地说明身份和核心功能。要突出帮助用户解决问题的能力，同时保持友好和专业的语气。可能需要包含“AI助手”、“帮助用户”、“解决问题”这些关键词，然后组织成流畅的一句话。比如“我是一个旨在帮助用户解答问题、提供信息和协助完成各类任务的AI助手。”这样既说明了身份，又点出了核心功能，应该符合要求。\n[答案]: \n",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 12,
+      "completion_tokens": 100,
+      "total_tokens": 112
+    },
+    "timestamp": "2026-01-17T12:23:47.501195"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4v-flash",
+    "model_name": "GLM-4V Flash",
+    "litellm_model": "zai/glm-4v-flash",
+    "success": true,
+    "latency_ms": 599.5854000211693,
+    "response_text": "我是一个由智谱AI公司开发的智能机器人，我的名字是智谱清言，我能够理解和回答各种问题，帮助人们获取信息和解决问题。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 65,
+      "completion_tokens": 32,
+      "total_tokens": 97
+    },
+    "timestamp": "2026-01-17T12:23:47.501995"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-airx",
+    "model_name": "GLM-4 AirX",
+    "litellm_model": "zai/glm-4-airx",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501982"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4.5-air",
+    "model_name": "GLM-4.5 Air",
+    "litellm_model": "zai/glm-4.5-air",
+    "success": true,
+    "latency_ms": 2733.022300002631,
+    "response_text": "[思考过程]: \n用户让我用一句话介绍自己。首先，我需要明确“自己”在这里指的是AI助手，也就是我这个身份。然后，要突出核心功能和服务特点。通常AI助手的特点是提供信息、帮助解决问题、友好互动等。\n\n接下来，要简洁明了，一句话概括。可能需要包括身份、能力、服务目标。比如：“我是AI助手，致力于用知识为你解答疑惑、提供帮助。” 或者更简洁一点：“我是AI助手，随时准备用知识陪你交流\n[答案]: ",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 11,
+      "completion_tokens": 100,
+      "total_tokens": 111
+    },
+    "timestamp": "2026-01-17T12:23:47.498898"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4v-plus",
+    "model_name": "GLM-4V Plus",
+    "litellm_model": "zai/glm-4v-plus",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.502019"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-long",
+    "model_name": "GLM-4 Long (1M上下文)",
+    "litellm_model": "zai/glm-4-long",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.501990"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-0520",
+    "model_name": "GLM-4 0520",
+    "litellm_model": "zai/glm-4-0520",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.502013"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4-alltools",
+    "model_name": "GLM-4.7 (最新旗舰)",
+    "litellm_model": "zai/glm-4-alltools",
+    "success": false,
+    "latency_ms": 0.0,
+    "response_text": "",
+    "error_message": "litellm.RateLimitError: RateLimitError: ZaiException - 余额不足或无可用资源包,请充值。",
+    "tokens_used": {},
+    "timestamp": "2026-01-17T12:23:47.502007"
+  },
+  {
+    "provider": "zhipuai",
+    "model_id": "glm-4.5-flash",
+    "model_name": "GLM-4.5 Flash",
+    "litellm_model": "zai/glm-4.5-flash",
+    "success": true,
+    "latency_ms": 1938.227900012862,
+    "response_text": "[思考过程]: \n用户让我用一句话介绍自己。首先，我需要明确“自己”在这里指的是AI助手，也就是我作为语言模型的角色。接下来，要突出核心功能：帮助用户解答问题、提供信息、辅助创作等。同时，语气要友好、专业，让用户觉得可靠且易于沟通。需要简洁，避免冗长，确保一句话涵盖主要职责和特点。可能的结构是：身份+核心功能+特点。比如“我是智谱AI训练的GLM\n[答案]: ",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 11,
+      "completion_tokens": 100,
+      "total_tokens": 111
+    },
+    "timestamp": "2026-01-17T12:23:47.502002"
+  },
+  {
+    "provider": "volcengine",
+    "model_id": "doubao-1.5-pro",
+    "model_name": "豆包 1.5 Pro",
+    "litellm_model": "volcengine/{endpoint_id}",
+    "success": true,
+    "latency_ms": 3396.419500000775,
+    "response_text": "[思考过程]: \n用户让我用一句话介绍自己，首先得明确核心信息：身份（AI助手）、开发者（字节跳动）、特点（能解答问题、提供帮助）。要简洁明了，不要太复杂。比如：“我是字节跳动开发的智能助手豆包，能为你解答问题、提供各类帮助。”这样应该覆盖了关键 points，符合“一句话”的要求。\n[答案]: 我是字节跳动开发的智能助手豆包，致力于为你解答问题、提供各类实用帮助。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 16,
+      "completion_tokens": 108,
+      "total_tokens": 124
+    },
+    "timestamp": "2026-01-17T12:23:51.153292"
+  },
+  {
+    "provider": "volcengine",
+    "model_id": "doubao-1.5-lite",
+    "model_name": "豆包 1.5 Lite",
+    "litellm_model": "volcengine/{endpoint_id}",
+    "success": true,
+    "latency_ms": 3525.881399982609,
+    "response_text": "[思考过程]: \n用户让我用一句话介绍自己，首先得明确核心身份——字节跳动开发的AI助手，然后要简洁，突出关键信息，比如名字和功能定位。要口语化，不要太技术化。比如：“我是字节跳动开发的AI助手豆包，能为你提供信息查询、日常交流等帮助。”这样既点明了身份，又说了功能，符合一句话的要求。\n[答案]: 我是字节跳动开发的AI助手豆包，致力于为用户提供信息查询、日常交流等各类帮助。",
+    "error_message": "",
+    "tokens_used": {
+      "prompt_tokens": 16,
+      "completion_tokens": 112,
+      "total_tokens": 128
+    },
+    "timestamp": "2026-01-17T12:23:51.153096"
+  }
+]

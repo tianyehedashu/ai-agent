@@ -137,52 +137,57 @@ class LongTermMemoryStore:
             # PostgresStore 的 setup 是同步方法，需要在线程中运行
             await asyncio.to_thread(store.setup)  # type: ignore[misc]
 
-        # 确保向量集合存在
+        # 确保向量集合存在（使用配置的 embedding 维度）
         await self.vector_store.create_collection(
             name="memories",
-            dimension=1536,  # text-embedding-3-small 的维度
+            dimension=settings.embedding_dimension,
         )
 
         logger.info("LongTermMemoryStore initialized")
 
     async def search(
         self,
-        user_id: str,
+        session_id: str,
         query: str,
         limit: int = 10,
         memory_type: str | None = None,
+        user_id: str | None = None,  # 保留用于向后兼容，但不再使用
     ) -> list[dict[str, Any]]:
         """
         搜索长期记忆（使用向量搜索）
 
+        记忆按 session_id 隔离，只检索当前会话的记忆。
+        这是"会话内长程记忆"的实现，用于解决长对话中的上下文窗口限制。
+
         Args:
-            user_id: 用户 ID
+            session_id: 会话 ID（记忆按会话隔离）
             query: 查询文本
             limit: 返回数量
             memory_type: 记忆类型过滤（可选）
+            user_id: 已弃用，保留用于向后兼容
 
         Returns:
             记忆列表，包含 id, content, type, importance, metadata, score
         """
         # 1. 向量搜索（使用 Qdrant/Chroma）
-        # 注意：ChromaStore 的 query_filter 需要特殊处理
+        # 按 session_id 过滤，只检索当前会话的记忆
         vector_results = await self.vector_store.search(
             collection="memories",
             query=query,
             limit=limit * 2,
-            query_filter={"user_id": user_id} if user_id else None,
+            query_filter={"session_id": session_id} if session_id else None,
         )
 
         logger.debug(
-            "Vector search returned %d results for user_id=%s, query=%s",
+            "Vector search returned %d results for session_id=%s, query=%s",
             len(vector_results),
-            user_id,
+            session_id,
             query,
         )
 
         # 2. 从 LangGraph Store 获取完整元数据
         memories = []
-        namespace = [f"user_{user_id}", "memories"]
+        namespace = [f"session_{session_id}", "memories"]
 
         # 使用 async with 确保连接正确管理（连接池会自动复用连接）
         async with self._store_context_factory() as store:
@@ -192,7 +197,7 @@ class LongTermMemoryStore:
                 logger.debug("Processing memory_id=%s from vector search", memory_id)
 
                 # 构建命名空间
-                # 注意：存储时使用的 namespace 是 [user_id, memories, memory_type]
+                # 注意：存储时使用的 namespace 是 [session_{session_id}, memories, memory_type]
                 # 所以搜索时需要尝试所有可能的命名空间组合
                 memory_data = None
                 possible_namespaces = []
@@ -269,27 +274,32 @@ class LongTermMemoryStore:
 
     async def put(
         self,
-        user_id: str,
+        session_id: str,
         memory_type: str,
         content: str,
         importance: float = 5.0,
         metadata: dict[str, Any] | None = None,
+        user_id: str | None = None,  # 保留用于向后兼容，但不再用于 namespace
     ) -> str:
         """
         存储长期记忆（同时存储到 Store 和向量数据库）
 
+        记忆按 session_id 隔离，实现"会话内长程记忆"。
+        用于在长对话中保留早期重要信息，解决上下文窗口限制。
+
         Args:
-            user_id: 用户 ID
+            session_id: 会话 ID（记忆按会话隔离）
             memory_type: 记忆类型
             content: 记忆内容
             importance: 重要性 (1-10)
             metadata: 元数据
+            user_id: 已弃用，保留用于向后兼容
 
         Returns:
             记忆 ID
         """
         memory_id = str(uuid.uuid4())
-        namespace = [f"user_{user_id}", "memories", memory_type]
+        namespace = [f"session_{session_id}", "memories", memory_type]
 
         # 1. 存储到 LangGraph Store（元数据）
         value: dict[str, Any] = {
@@ -311,48 +321,45 @@ class LongTermMemoryStore:
             )
 
         # 2. 存储到向量数据库（用于语义搜索）
-        # 注意：VectorStore.upsert 会自动生成嵌入
-        # 如果需要统一使用 LiteLLM，可以先生成嵌入：
-        # import litellm
-        # embedding = await litellm.aembedding(
-        #     model=self.llm_gateway.config.embedding_model,
-        #     input=content
-        # )
-        # vector = embedding.data[0]["embedding"]
-
+        # 按 session_id 索引，确保只检索当前会话的记忆
         await self.vector_store.upsert(
             collection="memories",
             point_id=memory_id,
             text=content,
             metadata={
-                "user_id": user_id,
+                "session_id": session_id,
                 "memory_type": memory_type,
                 "importance": importance,
                 **(metadata or {}),
             },
-            # vector=vector  # 如果使用 LiteLLM 生成的嵌入，传递这里
         )
 
         logger.info(
-            "Stored memory: %s (type=%s, importance=%.1f)", memory_id, memory_type, importance
+            "Stored memory: %s (session=%s, type=%s, importance=%.1f)",
+            memory_id,
+            session_id,
+            memory_type,
+            importance,
         )
         return memory_id
 
     async def delete(
         self,
-        user_id: str,
+        session_id: str,
         memory_id: str,
         memory_type: str,
+        user_id: str | None = None,  # 保留用于向后兼容
     ) -> None:
         """
         删除记忆（同时从 Store 和向量数据库删除）
 
         Args:
-            user_id: 用户 ID
+            session_id: 会话 ID
             memory_id: 记忆 ID
             memory_type: 记忆类型
+            user_id: 已弃用，保留用于向后兼容
         """
-        namespace = [f"user_{user_id}", "memories", memory_type]
+        namespace = [f"session_{session_id}", "memories", memory_type]
 
         # 从 Store 删除
         # 使用 async with 确保连接正确管理（连接池会自动复用连接）

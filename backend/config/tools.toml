@@ -1,0 +1,343 @@
+# =============================================================================
+# 工具定义与配置
+# =============================================================================
+# 定义所有可用工具及其默认配置、参数和约束
+
+[metadata]
+version = "1.0"
+description = "内置工具定义"
+
+# =============================================================================
+# 文件操作工具
+# =============================================================================
+
+[tools.read_file]
+name = "read_file"
+description = "读取文件内容，支持文本和二进制文件"
+category = "file"
+requires_confirmation = false
+enabled_by_default = true
+
+[tools.read_file.parameters]
+path = { type = "string", description = "文件路径（相对于工作目录）", required = true }
+encoding = { type = "string", description = "文件编码", default = "utf-8" }
+binary = { type = "boolean", description = "是否以二进制模式读取", default = false }
+
+[tools.read_file.constraints]
+max_file_size = "10m"
+allowed_extensions = ["*"]
+blocked_paths = [
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "**/.env",
+    "**/.env.*",
+    "**/secrets.*",
+    "**/*_secret*",
+    "**/*.pem",
+    "**/*.key",
+]
+
+# -----------------------------------------------------------------------------
+[tools.write_file]
+name = "write_file"
+description = "写入文件内容，支持覆盖和追加模式"
+category = "file"
+requires_confirmation = true
+enabled_by_default = true
+
+[tools.write_file.parameters]
+path = { type = "string", description = "文件路径（相对于工作目录）", required = true }
+content = { type = "string", description = "文件内容", required = true }
+mode = { type = "string", description = "写入模式", default = "overwrite", enum = ["overwrite", "append"] }
+encoding = { type = "string", description = "文件编码", default = "utf-8" }
+
+[tools.write_file.constraints]
+max_file_size = "5m"
+workspace_only = true
+blocked_paths = [
+    "**/*.exe",
+    "**/*.dll",
+    "**/*.so",
+    "**/*.sh",
+    "**/*.bash",
+    "/etc/**",
+    "/usr/**",
+    "/bin/**",
+]
+blocked_extensions = [".exe", ".dll", ".so", ".sh", ".bash", ".bat", ".cmd"]
+
+# -----------------------------------------------------------------------------
+[tools.delete_file]
+name = "delete_file"
+description = "删除文件"
+category = "file"
+requires_confirmation = true
+enabled_by_default = false  # 默认禁用，需显式启用
+
+[tools.delete_file.parameters]
+path = { type = "string", description = "文件路径", required = true }
+
+[tools.delete_file.constraints]
+workspace_only = true
+blocked_paths = [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/__pycache__/**",
+    "**/venv/**",
+    "**/.venv/**",
+]
+
+# -----------------------------------------------------------------------------
+[tools.list_directory]
+name = "list_directory"
+description = "列出目录内容"
+category = "file"
+requires_confirmation = false
+enabled_by_default = true
+
+[tools.list_directory.parameters]
+path = { type = "string", description = "目录路径", default = "." }
+recursive = { type = "boolean", description = "是否递归列出", default = false }
+pattern = { type = "string", description = "文件名匹配模式（glob）", default = "*" }
+
+[tools.list_directory.constraints]
+max_depth = 5
+max_files = 1000
+
+# -----------------------------------------------------------------------------
+[tools.search_files]
+name = "search_files"
+description = "在文件中搜索内容"
+category = "file"
+requires_confirmation = false
+enabled_by_default = true
+
+[tools.search_files.parameters]
+pattern = { type = "string", description = "搜索模式（正则表达式）", required = true }
+path = { type = "string", description = "搜索目录", default = "." }
+file_pattern = { type = "string", description = "文件名匹配模式", default = "*" }
+max_results = { type = "integer", description = "最大结果数", default = 100 }
+
+# =============================================================================
+# 代码执行工具
+# =============================================================================
+
+[tools.run_python]
+name = "run_python"
+description = "执行 Python 代码"
+category = "code"
+requires_confirmation = false
+enabled_by_default = true
+
+[tools.run_python.parameters]
+code = { type = "string", description = "Python 代码", required = true }
+timeout = { type = "integer", description = "超时秒数（覆盖默认值）" }
+
+[tools.run_python.config]
+python_path = "python3"
+# 允许的导入（空列表表示允许所有）
+allowed_imports = []
+# 禁止的导入
+blocked_imports = [
+    "subprocess",
+    "os.system",
+    "os.popen",
+    "commands",
+    "pty",
+    "socket",           # 原始 socket
+    "ctypes",           # C 扩展
+    "multiprocessing",  # 多进程
+]
+# 禁止的内置函数
+blocked_builtins = [
+    "eval",
+    "exec",
+    "compile",
+    "__import__",
+    "open",            # 使用受限版本
+    "input",           # 禁止用户输入
+]
+
+# -----------------------------------------------------------------------------
+[tools.run_shell]
+name = "run_shell"
+description = "执行 Shell 命令"
+category = "code"
+requires_confirmation = true
+enabled_by_default = true
+
+[tools.run_shell.parameters]
+command = { type = "string", description = "Shell 命令", required = true }
+work_dir = { type = "string", description = "工作目录" }
+timeout = { type = "integer", description = "超时秒数" }
+
+[tools.run_shell.config]
+shell = "/bin/bash"
+# 命令黑名单（包含这些字符串的命令会被拒绝）
+blocked_commands = [
+    "rm -rf /",
+    "rm -rf /*",
+    "dd if=",
+    "mkfs",
+    "fdisk",
+    "parted",
+    ":(){ :|:& };:",   # Fork 炸弹
+    "chmod 777",
+    "chmod -R 777",
+    "curl | bash",
+    "curl | sh",
+    "wget | bash",
+    "wget | sh",
+    "> /dev/sda",
+    "mv /* ",
+    "cat /dev/zero",
+    "cat /dev/random",
+]
+# 命令白名单模式（可选，启用后只允许白名单中的命令）
+# allowed_commands = ["ls", "cat", "grep", "find", "python", "pip", "node", "npm"]
+
+# -----------------------------------------------------------------------------
+[tools.run_javascript]
+name = "run_javascript"
+description = "执行 JavaScript/Node.js 代码"
+category = "code"
+requires_confirmation = false
+enabled_by_default = false
+
+[tools.run_javascript.parameters]
+code = { type = "string", description = "JavaScript 代码", required = true }
+runtime = { type = "string", description = "运行时", default = "node", enum = ["node", "deno", "bun"] }
+timeout = { type = "integer", description = "超时秒数" }
+
+# =============================================================================
+# 网络工具
+# =============================================================================
+
+[tools.http_request]
+name = "http_request"
+description = "发送 HTTP 请求"
+category = "network"
+requires_confirmation = true
+enabled_by_default = false
+
+[tools.http_request.parameters]
+url = { type = "string", description = "请求 URL", required = true }
+method = { type = "string", description = "HTTP 方法", default = "GET", enum = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"] }
+headers = { type = "object", description = "请求头" }
+body = { type = "string", description = "请求体" }
+timeout = { type = "integer", description = "超时秒数", default = 30 }
+
+[tools.http_request.config]
+max_response_size = "10m"
+follow_redirects = true
+max_redirects = 5
+# 这些方法不需要确认
+auto_approve_methods = ["GET", "HEAD", "OPTIONS"]
+
+[tools.http_request.constraints]
+# URL 黑名单
+blocked_hosts = [
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "*.local",
+    "*.internal",
+    "*.localhost",
+    "metadata.google.internal",
+    "169.254.169.254",        # AWS metadata
+    "100.100.100.200",        # Aliyun metadata
+]
+# URL 白名单（留空表示允许所有非黑名单主机）
+allowed_hosts = []
+
+# -----------------------------------------------------------------------------
+[tools.web_search]
+name = "web_search"
+description = "网络搜索"
+category = "network"
+requires_confirmation = false
+enabled_by_default = false
+
+[tools.web_search.parameters]
+query = { type = "string", description = "搜索查询", required = true }
+max_results = { type = "integer", description = "最大结果数", default = 5 }
+search_type = { type = "string", description = "搜索类型", default = "web", enum = ["web", "news", "images"] }
+
+[tools.web_search.config]
+# 搜索提供商: tavily | serper | bing | google
+provider = "tavily"
+api_key_env = "SEARCH_API_KEY"
+
+# -----------------------------------------------------------------------------
+[tools.fetch_url]
+name = "fetch_url"
+description = "抓取网页内容"
+category = "network"
+requires_confirmation = false
+enabled_by_default = false
+
+[tools.fetch_url.parameters]
+url = { type = "string", description = "网页 URL", required = true }
+format = { type = "string", description = "输出格式", default = "markdown", enum = ["markdown", "html", "text"] }
+
+[tools.fetch_url.config]
+timeout = 30
+max_size = "5m"
+user_agent = "Mozilla/5.0 (compatible; AIAgent/1.0)"
+
+# =============================================================================
+# 数据库工具
+# =============================================================================
+
+[tools.query_database]
+name = "query_database"
+description = "执行数据库查询"
+category = "database"
+requires_confirmation = true
+enabled_by_default = false
+
+[tools.query_database.parameters]
+query = { type = "string", description = "SQL 查询", required = true }
+database = { type = "string", description = "数据库标识", required = true }
+
+[tools.query_database.config]
+# 只允许 SELECT 查询（安全模式）
+read_only = true
+allowed_operations = ["SELECT"]
+# 结果限制
+max_rows = 1000
+max_execution_time = 30
+
+[tools.query_database.constraints]
+# 禁止查询的表
+blocked_tables = [
+    "users",
+    "passwords",
+    "secrets",
+    "credentials",
+    "api_keys",
+]
+
+# =============================================================================
+# 包管理工具
+# =============================================================================
+
+[tools.install_package]
+name = "install_package"
+description = "安装 Python 包"
+category = "package"
+requires_confirmation = true
+enabled_by_default = false
+
+[tools.install_package.parameters]
+package = { type = "string", description = "包名称", required = true }
+version = { type = "string", description = "版本约束" }
+
+[tools.install_package.config]
+package_manager = "pip"
+# 白名单模式（可选）
+# allowed_packages = ["pandas", "numpy", "requests"]
+# 黑名单
+blocked_packages = []

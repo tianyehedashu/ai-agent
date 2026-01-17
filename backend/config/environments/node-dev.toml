@@ -1,0 +1,72 @@
+# =============================================================================
+# Node.js 开发环境模板
+# =============================================================================
+# 适用于: JavaScript/TypeScript 开发、前端构建、Node.js 脚本
+
+[metadata]
+name = "node-dev"
+description = "Node.js 开发环境，支持 TypeScript"
+tags = ["node", "javascript", "typescript", "frontend"]
+
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 沙箱配置覆盖
+# -----------------------------------------------------------------------------
+[sandbox]
+mode = "docker"
+timeout_seconds = 45
+
+[sandbox.docker]
+image = "node:20-alpine"
+packages_cmd = "npm install -g typescript ts-node @types/node"
+
+[sandbox.resources]
+memory_limit = "512m"
+cpu_limit = 2.0
+
+[sandbox.network]
+enabled = true
+allowed_hosts = [
+    # npm 包管理
+    "registry.npmjs.org",
+    "registry.npmmirror.com",
+    "*.npmjs.com",
+    # 常用 CDN
+    "unpkg.com",
+    "cdn.jsdelivr.net",
+]
+
+# -----------------------------------------------------------------------------
+# Shell 环境覆盖
+# -----------------------------------------------------------------------------
+[shell]
+default_shell = "/bin/sh"
+work_dir = "/workspace"
+
+[shell.env]
+NODE_ENV = "development"
+NPM_CONFIG_LOGLEVEL = "warn"
+NPM_CONFIG_FUND = "false"
+NPM_CONFIG_AUDIT = "false"
+
+# -----------------------------------------------------------------------------
+# 工具配置覆盖
+# -----------------------------------------------------------------------------
+[tools]
+enabled = [
+    "read_file",
+    "write_file",
+    "list_directory",
+    "search_files",
+    "run_shell",
+    "run_javascript",
+    "http_request",
+]
+
+auto_approve_patterns = [
+    "read_*",
+    "list_*",
+    "search_*",
+    "run_javascript",
+]

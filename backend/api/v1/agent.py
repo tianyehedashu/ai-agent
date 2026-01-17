@@ -85,9 +85,9 @@ async def list_agents(
 ) -> list[AgentResponse]:
     """获取用户的 Agent 列表"""
     agents = await agent_service.list_by_user(current_user.id, skip=skip, limit=limit)
-    return [
-        AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)}) for agent in agents
-    ]
+    # 使用 from_attributes=True 自动从 SQLAlchemy 模型提取字段
+    # Pydantic 会自动将 UUID 转换为字符串
+    return [AgentResponse.model_validate(agent, from_attributes=True) for agent in agents]
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
@@ -108,7 +108,7 @@ async def create_agent(
         max_tokens=data.max_tokens,
         max_iterations=data.max_iterations,
     )
-    return AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)})
+    return AgentResponse.model_validate(agent, from_attributes=True)
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
@@ -128,7 +128,7 @@ async def get_agent(
         "Agent",
     )
 
-    return AgentResponse.model_validate({**agent.__dict__, "id": str(agent.id)})
+    return AgentResponse.model_validate(agent, from_attributes=True)
 
 
 @router.put("/{agent_id}", response_model=AgentResponse)

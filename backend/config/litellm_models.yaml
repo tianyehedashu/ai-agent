@@ -1,0 +1,1024 @@
+# =============================================================================
+# LiteLLM 支持的中国主流 LLM 提供商完整模型配置
+# =============================================================================
+# 更新时间: 2026-01-17
+# LiteLLM 版本: v1.80.16+
+#
+# 包含: DeepSeek、智谱AI、阿里云DashScope、火山引擎 的完整最新模型列表
+# =============================================================================
+
+# =============================================================================
+# 一、DeepSeek (深度求索)
+# =============================================================================
+# 文档: https://platform.deepseek.com/api-docs
+# LiteLLM 前缀: deepseek/
+# 环境变量: DEEPSEEK_API_KEY
+# API Base: https://api.deepseek.com
+# 说明: LiteLLM 支持所有 DeepSeek 模型
+# =============================================================================
+
+deepseek:
+  provider: deepseek
+  api_key_env: DEEPSEEK_API_KEY
+  api_base: https://api.deepseek.com
+
+  models:
+    # ========== DeepSeek V3 系列 (最新旗舰) ==========
+    - id: deepseek-chat
+      name: DeepSeek Chat (V3)
+      litellm_model: deepseek/deepseek-chat
+      description: 通用对话模型，基于 DeepSeek-V3，性价比极高
+      # 模型参数
+      total_parameters: 671B
+      activated_parameters: 37B
+      architecture: MoE (Mixture of Experts)
+      # 上下文配置
+      context_window: 65536
+      max_output_tokens: 8192
+      # 价格 (2026-01 官方价格)
+      input_price_cny_per_million: 1.0   # ¥1/百万tokens (缓存命中 ¥0.1)
+      output_price_cny_per_million: 2.0  # ¥2/百万tokens
+      input_price_usd_per_million: 0.14
+      output_price_usd_per_million: 0.28
+      # 能力支持
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      supports_json_mode: true
+      supports_function_calling: true
+
+    - id: deepseek-coder
+      name: DeepSeek Coder
+      litellm_model: deepseek/deepseek-coder
+      description: 代码生成专用模型，支持多种编程语言
+      total_parameters: 33B
+      context_window: 16384
+      max_output_tokens: 4096
+      input_price_cny_per_million: 1.0
+      output_price_cny_per_million: 2.0
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: deepseek-reasoner
+      name: DeepSeek Reasoner (R1)
+      litellm_model: deepseek/deepseek-reasoner
+      description: |
+        推理增强模型 (DeepSeek-R1)，擅长数学、逻辑、复杂推理任务。
+        返回 reasoning_content 字段包含完整思维过程。
+      total_parameters: 671B
+      activated_parameters: 37B
+      architecture: MoE + Chain-of-Thought
+      context_window: 65536
+      max_output_tokens: 8192
+      input_price_cny_per_million: 4.0   # 推理模型价格较高
+      output_price_cny_per_million: 16.0
+      input_price_usd_per_million: 0.55
+      output_price_usd_per_million: 2.19
+      supports_vision: false
+      supports_tools: false  # R1 暂不支持工具调用
+      supports_streaming: true
+      supports_reasoning_content: true  # 支持思维链输出
+      special_features:
+        - reasoning_content
+        - chain_of_thought
+        - extended_thinking
+
+    # ========== DeepSeek V3.2 系列 (2025-12 发布) ==========
+    - id: deepseek-v3.2
+      name: DeepSeek V3.2
+      litellm_model: deepseek/deepseek-v3.2
+      description: |
+        V3.2 正式版，引入稀疏注意力 (DSA)，支持更长上下文和更高效推理。
+        2025-12-01 发布。
+      total_parameters: 671B
+      activated_parameters: 37B
+      architecture: MoE + Sparse Attention (DSA)
+      context_window: 131072  # 128K
+      max_output_tokens: 16384
+      input_price_cny_per_million: 1.0
+      output_price_cny_per_million: 2.0
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      supports_chinese: true
+
+    - id: deepseek-v3.2-speciale
+      name: DeepSeek V3.2 Speciale
+      litellm_model: deepseek/deepseek-v3.2-speciale
+      description: |
+        V3.2 推理增强版，专为复杂推理任务设计。
+        IMO/CMO/IOI 等竞赛金牌级别表现。思考长度惩罚放宽。
+      total_parameters: 671B
+      activated_parameters: 37B
+      architecture: MoE + Sparse Attention + Enhanced Reasoning
+      context_window: 131072
+      max_output_tokens: 65536  # 更长输出支持
+      input_price_cny_per_million: 4.0
+      output_price_cny_per_million: 16.0
+      supports_vision: false
+      supports_tools: false  # Speciale 版本工具调用受限
+      supports_streaming: true
+      supports_reasoning_content: true
+
+  # DeepSeek 通用参数
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 1.0
+      description: 控制输出随机性。推理模型建议使用较低值 (0.0-0.3)
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 1.0
+      description: 核采样概率
+    max_tokens:
+      type: integer
+      range: [1, 65536]
+      default: 4096
+      description: 最大输出 token 数
+    frequency_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+    presence_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+    stop:
+      type: array
+      max_items: 16
+    stream:
+      type: boolean
+      default: false
+    response_format:
+      type: object
+      description: '{"type": "json_object"} 启用 JSON 模式'
+
+# =============================================================================
+# 二、智谱AI (Zhipu AI / GLM 系列)
+# =============================================================================
+# 文档: https://open.bigmodel.cn/dev/api
+# LiteLLM 前缀: zai/ (从 v1.80.8 开始支持)
+# 环境变量: ZHIPUAI_API_KEY
+# API Base: https://open.bigmodel.cn/api/paas/v4
+# =============================================================================
+
+zhipuai:
+  provider: zhipuai
+  api_key_env: ZHIPUAI_API_KEY
+  api_base: https://open.bigmodel.cn/api/paas/v4
+  litellm_prefix: zai
+
+  models:
+    # ========== GLM-4.7 (2025-12 最新旗舰) ==========
+    - id: glm-4.7
+      name: GLM-4.7 (最新旗舰)
+      litellm_model: zai/glm-4-alltools
+      description: |
+        智谱最新旗舰模型，355B 参数 MoE 架构。
+        支持代码生成、Agent Coding、工具调用、视觉理解。
+        综合能力全面升级，推理与智能体能力最强。
+      total_parameters: 355B
+      activated_parameters: 32B
+      architecture: MoE (Mixture of Experts)
+      context_window: 204800  # 200K
+      max_output_tokens: 131072  # 128K
+      input_price_cny_per_thousand: 0.05
+      output_price_cny_per_thousand: 0.05
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+      license: MIT
+
+    # ========== GLM-4.6 系列 ==========
+    - id: glm-4.6
+      name: GLM-4.6
+      litellm_model: zai/glm-4.6
+      description: 强性能版本，支持工具调用，推理性能佳
+      context_window: 204800
+      max_output_tokens: 131072
+      input_price_cny_per_thousand: 0.05
+      output_price_cny_per_thousand: 0.05
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4.6v
+      name: GLM-4.6V (视觉)
+      litellm_model: zai/glm-4.6v
+      description: 旗舰视觉推理，原生支持工具调用
+      context_window: 131072
+      max_output_tokens: 32768
+      input_price_cny_per_thousand: 0.05
+      output_price_cny_per_thousand: 0.05
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== GLM-4.5 系列 ==========
+    - id: glm-4.5-air
+      name: GLM-4.5 Air
+      litellm_model: zai/glm-4.5-air
+      description: 高性价比版本
+      context_window: 131072
+      max_output_tokens: 98304
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4.5-airx
+      name: GLM-4.5 AirX
+      litellm_model: zai/glm-4.5-airx
+      description: Air 增强版，推理速度更快
+      context_window: 131072
+      max_output_tokens: 98304
+      input_price_cny_per_thousand: 0.01
+      output_price_cny_per_thousand: 0.01
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4.5-flash
+      name: GLM-4.5 Flash
+      litellm_model: zai/glm-4.5-flash
+      description: 闪电版，极速响应，免费/极低价
+      context_window: 131072
+      max_output_tokens: 98304
+      input_price_cny_per_thousand: 0.0001  # 基本免费
+      output_price_cny_per_thousand: 0.0001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== GLM-4 系列 (稳定版) ==========
+    - id: glm-4
+      name: GLM-4
+      litellm_model: zai/glm-4
+      description: 主力对话模型，128K 长上下文
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.1
+      output_price_cny_per_thousand: 0.1
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4-plus
+      name: GLM-4 Plus
+      litellm_model: zai/glm-4-plus
+      description: 增强版，更强的指令遵循能力
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.05
+      output_price_cny_per_thousand: 0.05
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4-air
+      name: GLM-4 Air
+      litellm_model: zai/glm-4-air
+      description: 轻量版，高性价比
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4-airx
+      name: GLM-4 AirX
+      litellm_model: zai/glm-4-airx
+      description: Air 增强版
+      context_window: 8192
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.01
+      output_price_cny_per_thousand: 0.01
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4-flash
+      name: GLM-4 Flash
+      litellm_model: zai/glm-4-flash
+      description: 闪电版，极速响应
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.0001
+      output_price_cny_per_thousand: 0.0001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4-0520
+      name: GLM-4 0520
+      litellm_model: zai/glm-4-0520
+      description: 2024-05-20 版本快照
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.1
+      output_price_cny_per_thousand: 0.1
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== GLM-4 Long (超长上下文) ==========
+    - id: glm-4-long
+      name: GLM-4 Long
+      litellm_model: zai/glm-4-long
+      description: 超长上下文版本，支持 100 万 token 输入
+      context_window: 1000000  # 1M tokens!
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== GLM-4V 视觉系列 ==========
+    - id: glm-4v
+      name: GLM-4V
+      litellm_model: zai/glm-4v
+      description: 视觉理解模型
+      context_window: 2048
+      max_output_tokens: 1024
+      input_price_cny_per_thousand: 0.05
+      output_price_cny_per_thousand: 0.05
+      supports_vision: true
+      supports_tools: false
+      supports_streaming: true
+
+    - id: glm-4v-plus
+      name: GLM-4V Plus
+      litellm_model: zai/glm-4v-plus
+      description: 视觉理解增强版
+      context_window: 8192
+      max_output_tokens: 2048
+      input_price_cny_per_thousand: 0.01
+      output_price_cny_per_thousand: 0.01
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+
+    - id: glm-4v-flash
+      name: GLM-4V Flash
+      litellm_model: zai/glm-4v-flash
+      description: 视觉理解快速版
+      context_window: 8192
+      max_output_tokens: 2048
+      input_price_cny_per_thousand: 0.0001
+      output_price_cny_per_thousand: 0.0001
+      supports_vision: true
+      supports_tools: false
+      supports_streaming: true
+
+    # ========== CodeGeeX (代码专用) ==========
+    - id: codegeex-4
+      name: CodeGeeX-4
+      litellm_model: zai/codegeex-4
+      description: 代码生成专用模型，基本免费
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.0001
+      output_price_cny_per_thousand: 0.0001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== GLM-Z1 推理系列 ==========
+    - id: glm-z1-32b
+      name: GLM-Z1 32B (推理)
+      litellm_model: zai/glm-z1-32b
+      description: 高性能推理模型，32B 参数
+      total_parameters: 32B
+      context_window: 32768
+      max_output_tokens: 16384
+      input_price_cny_per_thousand: 0.01
+      output_price_cny_per_thousand: 0.01
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      supports_reasoning_content: true
+
+    - id: glm-z1-rumination-32b
+      name: GLM-Z1 Rumination 32B
+      litellm_model: zai/glm-z1-rumination-32b
+      description: 沉思型推理模型，深度思考
+      total_parameters: 32B
+      context_window: 32768
+      max_output_tokens: 16384
+      input_price_cny_per_thousand: 0.01
+      output_price_cny_per_thousand: 0.01
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      supports_reasoning_content: true
+
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 1.0]
+      default: 0.95
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 0.7
+    max_tokens:
+      type: integer
+      range: [1, 131072]
+      default: 4096
+    stop:
+      type: array
+    stream:
+      type: boolean
+      default: false
+    do_sample:
+      type: boolean
+      default: true
+      description: 是否采样，false 时使用贪心解码
+
+# =============================================================================
+# 三、阿里云 DashScope (通义千问 Qwen)
+# =============================================================================
+# 文档: https://help.aliyun.com/zh/dashscope/
+# LiteLLM 前缀: dashscope/
+# 环境变量: DASHSCOPE_API_KEY
+# API Base: https://dashscope.aliyuncs.com/compatible-mode/v1
+# =============================================================================
+
+dashscope:
+  provider: dashscope
+  api_key_env: DASHSCOPE_API_KEY
+  api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+
+  models:
+    # ========== Qwen 商业版 (最新) ==========
+    - id: qwen-turbo
+      name: 通义千问 Turbo
+      litellm_model: dashscope/qwen-turbo
+      description: 速度快，适合简单任务
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-turbo-latest
+      name: 通义千问 Turbo (最新)
+      litellm_model: dashscope/qwen-turbo-latest
+      description: Turbo 最新版本
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-plus
+      name: 通义千问 Plus
+      litellm_model: dashscope/qwen-plus
+      description: 平衡版，性能与成本兼顾
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.012
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-plus-latest
+      name: 通义千问 Plus (最新)
+      litellm_model: dashscope/qwen-plus-latest
+      description: Plus 最新版本
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.012
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-max
+      name: 通义千问 Max
+      litellm_model: dashscope/qwen-max
+      description: 最强能力，适合复杂任务
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.02
+      output_price_cny_per_thousand: 0.06
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-max-latest
+      name: 通义千问 Max (最新)
+      litellm_model: dashscope/qwen-max-latest
+      description: Max 最新版本
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.02
+      output_price_cny_per_thousand: 0.06
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen-max-longcontext
+      name: 通义千问 Max 长上下文
+      litellm_model: dashscope/qwen-max-longcontext
+      description: Max 长上下文版本
+      context_window: 30720
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.02
+      output_price_cny_per_thousand: 0.06
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== Qwen3 系列 (最新) ==========
+    - id: qwen3-235b-a22b
+      name: Qwen3 235B-A22B (MoE)
+      litellm_model: dashscope/qwen3-235b-a22b
+      description: Qwen3 MoE 架构旗舰，235B 参数，22B 激活
+      total_parameters: 235B
+      activated_parameters: 22B
+      architecture: MoE
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.012
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen3-32b
+      name: Qwen3 32B
+      litellm_model: dashscope/qwen3-32b
+      description: Qwen3 32B Dense 模型
+      total_parameters: 32B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen3-30b-a3b
+      name: Qwen3 30B-A3B (MoE)
+      litellm_model: dashscope/qwen3-30b-a3b
+      description: Qwen3 MoE，30B 参数，3B 激活，轻量高效
+      total_parameters: 30B
+      activated_parameters: 3B
+      architecture: MoE
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.002
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== Qwen 视觉模型 ==========
+    - id: qwen-vl-plus
+      name: 通义千问 VL Plus
+      litellm_model: dashscope/qwen-vl-plus
+      description: 视觉语言模型
+      context_window: 32768
+      max_output_tokens: 2048
+      input_price_cny_per_thousand: 0.008
+      output_price_cny_per_thousand: 0.008
+      supports_vision: true
+      supports_tools: false
+      supports_streaming: true
+
+    - id: qwen-vl-max
+      name: 通义千问 VL Max
+      litellm_model: dashscope/qwen-vl-max
+      description: 视觉语言模型增强版
+      context_window: 32768
+      max_output_tokens: 2048
+      input_price_cny_per_thousand: 0.02
+      output_price_cny_per_thousand: 0.02
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== Qwen 2.5 开源版 ==========
+    - id: qwen2.5-72b-instruct
+      name: Qwen 2.5 72B Instruct
+      litellm_model: dashscope/qwen2.5-72b-instruct
+      description: Qwen 2.5 开源版 72B 参数
+      total_parameters: 72B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.012
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-32b-instruct
+      name: Qwen 2.5 32B Instruct
+      litellm_model: dashscope/qwen2.5-32b-instruct
+      description: Qwen 2.5 开源版 32B 参数
+      total_parameters: 32B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-14b-instruct
+      name: Qwen 2.5 14B Instruct
+      litellm_model: dashscope/qwen2.5-14b-instruct
+      description: Qwen 2.5 开源版 14B 参数
+      total_parameters: 14B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.002
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-7b-instruct
+      name: Qwen 2.5 7B Instruct
+      litellm_model: dashscope/qwen2.5-7b-instruct
+      description: Qwen 2.5 开源版 7B 参数
+      total_parameters: 7B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.0005
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-3b-instruct
+      name: Qwen 2.5 3B Instruct
+      litellm_model: dashscope/qwen2.5-3b-instruct
+      description: Qwen 2.5 开源版 3B 参数，轻量
+      total_parameters: 3B
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.0003
+      output_price_cny_per_thousand: 0.0006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== Qwen 2.5 代码专用 ==========
+    - id: qwen2.5-coder-32b-instruct
+      name: Qwen 2.5 Coder 32B
+      litellm_model: dashscope/qwen2.5-coder-32b-instruct
+      description: Qwen 2.5 代码专用 32B
+      total_parameters: 32B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-coder-14b-instruct
+      name: Qwen 2.5 Coder 14B
+      litellm_model: dashscope/qwen2.5-coder-14b-instruct
+      description: Qwen 2.5 代码专用 14B
+      total_parameters: 14B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.002
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    - id: qwen2.5-coder-7b-instruct
+      name: Qwen 2.5 Coder 7B
+      litellm_model: dashscope/qwen2.5-coder-7b-instruct
+      description: Qwen 2.5 代码专用 7B
+      total_parameters: 7B
+      context_window: 131072
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.0005
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+
+    # ========== QwQ 推理模型 ==========
+    - id: qwq-32b-preview
+      name: QwQ 32B Preview (推理)
+      litellm_model: dashscope/qwq-32b-preview
+      description: |
+        推理增强模型，类似 o1/DeepSeek-R1。
+        擅长数学、逻辑推理，返回思维链过程。
+      total_parameters: 32B
+      context_window: 32768
+      max_output_tokens: 16384
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.006
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      supports_reasoning_content: true
+
+    - id: qwq-plus
+      name: QwQ Plus (推理)
+      litellm_model: dashscope/qwq-plus
+      description: QwQ 增强版推理模型
+      context_window: 131072
+      max_output_tokens: 16384
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.012
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      supports_reasoning_content: true
+
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 0.7
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 0.9
+    top_k:
+      type: integer
+      range: [1, 100]
+      default: 50
+    max_tokens:
+      type: integer
+      range: [1, 8192]
+      default: 4096
+    repetition_penalty:
+      type: float
+      range: [1.0, 2.0]
+      default: 1.0
+    stop:
+      type: array
+    stream:
+      type: boolean
+      default: false
+    enable_search:
+      type: boolean
+      default: false
+      description: 是否启用联网搜索
+
+# =============================================================================
+# 四、火山引擎 (Volcengine / 字节跳动豆包)
+# =============================================================================
+# 文档: https://www.volcengine.com/docs/82379
+# LiteLLM 前缀: volcengine/<endpoint_id>
+# 环境变量: VOLCENGINE_API_KEY
+# API Base: https://ark.cn-beijing.volces.com/api/v3
+#
+# 注意: 火山引擎需要先在控制台创建端点(Endpoint)获取 endpoint_id
+# =============================================================================
+
+volcengine:
+  provider: volcengine
+  api_key_env: VOLCENGINE_API_KEY
+  api_base: https://ark.cn-beijing.volces.com/api/v3
+
+  models:
+    # ========== Doubao 1.5 Pro 系列 (高性能) ==========
+    - id: doubao-1.5-pro-32k
+      name: 豆包 1.5 Pro 32K
+      litellm_model: volcengine/{endpoint_id}
+      description: |
+        专业版，平衡性能与成本。
+        需要在火山引擎控制台创建端点获取 endpoint_id。
+      context_window: 32768
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.0008
+      output_price_cny_per_thousand: 0.002
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-1.5-pro-128k
+      name: 豆包 1.5 Pro 128K
+      litellm_model: volcengine/{endpoint_id}
+      description: 专业版长上下文，适合长文档处理
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.005
+      output_price_cny_per_thousand: 0.009
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-1.5-pro-256k
+      name: 豆包 1.5 Pro 256K
+      litellm_model: volcengine/{endpoint_id}
+      description: 专业版超长上下文
+      context_window: 262144
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.005
+      output_price_cny_per_thousand: 0.009
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    # ========== Doubao 1.5 Lite 系列 (轻量高效) ==========
+    - id: doubao-1.5-lite-32k
+      name: 豆包 1.5 Lite 32K
+      litellm_model: volcengine/{endpoint_id}
+      description: 轻量版，速度快成本低
+      context_window: 32768
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.0003
+      output_price_cny_per_thousand: 0.0006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-1.5-lite-128k
+      name: 豆包 1.5 Lite 128K
+      litellm_model: volcengine/{endpoint_id}
+      description: 轻量版长上下文
+      context_window: 131072
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.0008
+      output_price_cny_per_thousand: 0.001
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    # ========== Doubao 1.5 Vision 系列 ==========
+    - id: doubao-1.5-vision-pro
+      name: 豆包 1.5 Vision Pro
+      litellm_model: volcengine/{endpoint_id}
+      description: 视觉理解模型，支持图像输入
+      context_window: 32768
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.003
+      output_price_cny_per_thousand: 0.009
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-1.5-vision-lite
+      name: 豆包 1.5 Vision Lite
+      litellm_model: volcengine/{endpoint_id}
+      description: 视觉理解轻量版
+      context_window: 32768
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.003
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    # ========== Doubao Seed 1.6 系列 (最新旗舰) ==========
+    - id: doubao-seed-1.6
+      name: 豆包 Seed 1.6
+      litellm_model: volcengine/{endpoint_id}
+      description: 最新旗舰模型，综合能力最强
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.001
+      output_price_cny_per_thousand: 0.004
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-seed-1.6-flash
+      name: 豆包 Seed 1.6 Flash
+      litellm_model: volcengine/{endpoint_id}
+      description: Seed 快速版，延迟更低
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.0003
+      output_price_cny_per_thousand: 0.0006
+      supports_vision: false
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    - id: doubao-seed-1.6-vision
+      name: 豆包 Seed 1.6 Vision
+      litellm_model: volcengine/{endpoint_id}
+      description: Seed 视觉版，支持多模态
+      context_window: 32768
+      max_output_tokens: 8192
+      input_price_cny_per_thousand: 0.003
+      output_price_cny_per_thousand: 0.009
+      supports_vision: true
+      supports_tools: true
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    # ========== 角色扮演模型 ==========
+    - id: doubao-character-pro-32k
+      name: 豆包角色扮演 Pro 32K
+      litellm_model: volcengine/{endpoint_id}
+      description: 角色扮演专用，更好的人设保持
+      context_window: 32768
+      max_output_tokens: 4096
+      input_price_cny_per_thousand: 0.002
+      output_price_cny_per_thousand: 0.004
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      requires_endpoint_id: true
+
+    # ========== 深度思考模型 ==========
+    - id: doubao-thinking-pro
+      name: 豆包深度思考 Pro
+      litellm_model: volcengine/{endpoint_id}
+      description: 类似 o1 的深度思考模型，支持复杂推理
+      context_window: 32768
+      max_output_tokens: 16384
+      input_price_cny_per_thousand: 0.004
+      output_price_cny_per_thousand: 0.016
+      supports_vision: false
+      supports_tools: false
+      supports_streaming: true
+      supports_reasoning_content: true
+      requires_endpoint_id: true
+
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 0.7
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 0.9
+    max_tokens:
+      type: integer
+      range: [1, 16384]
+      default: 4096
+    frequency_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+    presence_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+    stop:
+      type: array
+    stream:
+      type: boolean
+      default: false
+
+# =============================================================================
+# 使用说明
+# =============================================================================
+#
+# 1. LiteLLM 调用格式:
+#    from litellm import completion
+#    response = completion(
+#        model="deepseek/deepseek-chat",  # provider/model_name
+#        messages=[{"role": "user", "content": "你好"}],
+#        api_key=os.getenv("DEEPSEEK_API_KEY"),
+#        temperature=0.7,
+#        max_tokens=4096,
+#        stream=True
+#    )
+#
+# 2. 各提供商前缀:
+#    - DeepSeek: deepseek/
+#    - 智谱AI: zai/
+#    - DashScope: dashscope/
+#    - 火山引擎: volcengine/
+#
+# 3. 环境变量:
+#    export DEEPSEEK_API_KEY=sk-xxx
+#    export DASHSCOPE_API_KEY=sk-xxx
+#    export ZHIPUAI_API_KEY=xxx
+#    export VOLCENGINE_API_KEY=xxx
+#    export VOLCENGINE_CHAT_ENDPOINT_ID=ep-xxx  # 火山引擎需要
+#
+# 4. 特殊说明:
+#    - 火山引擎需要先在控制台创建端点获取 endpoint_id
+#    - DeepSeek Reasoner/V3.2-Speciale 不支持工具调用
+#    - 智谱 GLM-Z1 系列是推理模型，返回 reasoning_content
+#    - QwQ 是通义千问的推理模型
+#
+# =============================================================================

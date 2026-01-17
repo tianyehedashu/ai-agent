@@ -74,22 +74,42 @@ class RunShellTool(BaseTool):
                     error=f"Command timed out after {params.timeout} seconds",
                 )
 
-            output = stdout.decode()
-            if stderr:
-                output += f"\nSTDERR:\n{stderr.decode()}"
+            stdout_text = stdout.decode("utf-8", errors="replace").strip()
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
 
-            return ToolResult(
-                tool_call_id="",
-                success=process.returncode == 0,
-                output=output.strip(),
-                error=f"Exit code: {process.returncode}" if process.returncode != 0 else None,
-            )
-        except (OSError, ValueError, TypeError) as e:
+            if process.returncode == 0:
+                # 成功：输出包含 stdout，如果有 stderr 也包含
+                output = stdout_text
+                if stderr_text:
+                    output += f"\nSTDERR:\n{stderr_text}"
+                return ToolResult(
+                    tool_call_id="",
+                    success=True,
+                    output=output,
+                    error=None,
+                )
+            else:
+                # 失败：错误信息包含退出码和 stderr
+                error_parts = [f"Exit code: {process.returncode}"]
+                if stderr_text:
+                    error_parts.append(f"Error output: {stderr_text}")
+                elif stdout_text:
+                    error_parts.append(f"Output: {stdout_text}")
+
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output=stdout_text if stdout_text else "",
+                    error="; ".join(error_parts),
+                )
+        except Exception as e:
+            # 捕获所有异常，提供详细的错误信息
+            error_msg = f"{type(e).__name__}: {e!s}"
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=str(e),
+                error=error_msg,
             )
 
 

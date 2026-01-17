@@ -17,6 +17,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
+from core.config import ExecutionConfig
 from core.engine.langgraph_checkpointer import LangGraphCheckpointer
 from core.llm.gateway import LLMGateway
 from core.memory.extractor import MemoryExtractor
@@ -68,6 +69,7 @@ class LangGraphAgentEngine:
         checkpointer: LangGraphCheckpointer | None = None,
         max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        execution_config: ExecutionConfig | None = None,
     ) -> None:
         """
         初始化 LangGraph Agent Engine
@@ -80,6 +82,7 @@ class LangGraphAgentEngine:
             checkpointer: 检查点管理器
             max_tool_iterations: 最大工具调用迭代次数
             timeout_seconds: 执行超时时间（秒）
+            execution_config: 执行环境配置（可选）
         """
         self.config = config
         self.llm_gateway = llm_gateway
@@ -87,6 +90,7 @@ class LangGraphAgentEngine:
         self.tools = tool_registry or ToolRegistry()
         self.max_tool_iterations = max_tool_iterations
         self.timeout_seconds = timeout_seconds
+        self.execution_config = execution_config
         # 初始化记忆提取器
         self.memory_extractor = MemoryExtractor(llm_gateway=llm_gateway)
 
@@ -179,13 +183,22 @@ class LangGraphAgentEngine:
         return "extract_memory"
 
     async def _recall_long_term_memory(self, state: AgentState) -> dict[str, Any]:
-        """召回长期记忆"""
-        user_id = state.get("user_id", "")
+        """召回长期记忆（会话内长程记忆）
+
+        记忆按 session_id 隔离，只检索当前会话的记忆。
+        用于在长对话中召回早期的重要信息。
+
+        注意：不跳过任何消息的检索，因为：
+        - 短消息如 "?" "不对" 可能需要上下文理解
+        - 向量检索成本很低（毫秒级）
+        - SimpleMem 的过滤在存储阶段已完成，检索阶段应尽量召回
+        """
+        session_id = state.get("session_id", "")
         last_message = state["messages"][-1].content if state["messages"] else ""
 
-        # 搜索相关记忆
+        # 搜索当前会话的相关记忆
         memories = await self.memory_store.search(
-            user_id=user_id,
+            session_id=session_id,
             query=last_message,
             limit=5,
         )
@@ -270,6 +283,9 @@ class LangGraphAgentEngine:
         )
 
         # 解析响应
+        # 优先使用 content，若为空则使用 reasoning_content（推理模型兼容）
+        final_content = response.content or response.reasoning_content or ""
+
         if response.tool_calls:
             # LLM 请求调用工具
             # 将 ToolCall 对象转换为 LangChain 需要的字典格式
@@ -284,14 +300,14 @@ class LangGraphAgentEngine:
 
             # 返回带工具调用的 AI 消息，并设置待处理的工具调用
             return {
-                "messages": [AIMessage(content=response.content or "", tool_calls=tool_calls_dict)],
+                "messages": [AIMessage(content=final_content, tool_calls=tool_calls_dict)],
                 "pending_tool_calls": tool_calls_dict,
                 "tool_iteration": state.get("tool_iteration", 0) + 1,
             }
 
         # 返回纯文本响应，清空待处理的工具调用
         return {
-            "messages": [AIMessage(content=response.content or "")],
+            "messages": [AIMessage(content=final_content)],
             "pending_tool_calls": [],
         }
 
@@ -329,7 +345,14 @@ class LangGraphAgentEngine:
             )
 
             # 创建 ToolMessage
-            content = result.output if result.success else f"Error: {result.error}"
+            if result.success:
+                content = result.output
+            else:
+                # 确保错误信息有意义
+                error_msg = result.error or "Unknown error occurred"
+                content = f"Error: {error_msg}"
+                if result.output:
+                    content += f"\nOutput: {result.output}"
             tool_messages.append(ToolMessage(content=content, tool_call_id=tool_call.id))
 
         # 返回工具消息，清空待处理的工具调用
@@ -362,7 +385,24 @@ class LangGraphAgentEngine:
             )
 
     async def _extract_memory(self, state: AgentState) -> dict[str, Any]:
-        """提取并存储长期记忆"""
+        """提取并存储长期记忆
+
+        注意：为避免重复提取，此节点的行为取决于配置：
+        - 如果 simplemem_enabled=True：跳过此节点，由 ChatService 后台调用 SimpleMem
+        - 如果 simplemem_enabled=False：使用 MemoryExtractor 提取
+
+        SimpleMem 有更好的过滤（novelty_threshold, skip_trivial）和混合检索（BM25+向量），
+        所以推荐启用 SimpleMem 并让此节点跳过。
+        """
+        # pylint: disable=import-outside-toplevel
+        from app.config import settings  # 避免循环导入
+
+        # 如果启用了 SimpleMem，跳过此节点（由 ChatService 异步处理）
+        # 这样避免重复提取，SimpleMem 有更好的过滤机制
+        if settings.simplemem_enabled:
+            logger.debug("Skipping extract_memory: SimpleMem is enabled")
+            return {}
+
         user_id = state.get("user_id", "")
         session_id = state.get("session_id", "")
 
@@ -403,7 +443,7 @@ class LangGraphAgentEngine:
         执行 Agent
 
         Args:
-            session_id: 会话 ID（作为 LangGraph 的 thread_id）
+            session_id: 会话 ID（作为 LangGraph 的 thread_id，也用于记忆隔离）
             user_id: 用户 ID
             user_message: 用户消息
 

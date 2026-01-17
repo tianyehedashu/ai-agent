@@ -56,9 +56,18 @@ dependencies = [
     # Utilities
     "python-dateutil>=2.8.0",
     "aiofiles>=23.2.0",
+    # Configuration
+    "tomli-w>=1.0.0",  # TOML 写入支持 (Python 3.11+ 内置 tomllib 只读)
     # Evaluation
     "pyyaml>=6.0.0",
     "langchain-community>=0.4.1",
+    # SimpleMem - 高效终身记忆 (30x Token 压缩)
+    # https://github.com/aiming-lab/SimpleMem
+    "lancedb>=0.25.0",
+    "rank-bm25>=0.2.2",
+    # Local Embedding - CPU 友好的本地向量化
+    # FastEmbed 基于 ONNX Runtime，无需 GPU，比 sentence-transformers 轻量
+    "fastembed>=0.4.0",
 ]
 
 [project.optional-dependencies]
@@ -222,6 +231,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "e2e: End-to-end tests",
+    "slow: Slow tests (multi-turn conversations, long context)",
 ]
 filterwarnings = [
     # 抑制 litellm 的 RuntimeWarning（第三方库问题）
@@ -270,6 +280,13 @@ version_files = [
 [tool.commitizen.customize]
 message_template = "{{change_type}}{% if scope %}({{scope}}){% endif %}: {{message}}"
 schema_pattern = "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\(.+\\))?!?: .+"
+
+[dependency-groups]
+dev = [
+    "nest-asyncio>=1.6.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
 
 # ============================================================================
 # Ruff Format (替代 Black)
