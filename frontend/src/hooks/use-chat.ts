@@ -8,7 +8,7 @@ import { useState, useCallback, useRef } from 'react'
 
 import { chatApi } from '@/api/chat'
 import { generateId } from '@/lib/utils'
-import type { ChatEvent, Message, ToolCall } from '@/types'
+import type { ChatEvent, Message, ProcessEvent, ToolCall } from '@/types'
 
 interface UseChatOptions {
   sessionId?: string
@@ -22,6 +22,7 @@ interface UseChatReturn {
   streamingContent: string
   pendingToolCalls: ToolCall[]
   interrupt: InterruptState | null
+  processRuns: Record<string, ProcessEvent[]>
   sendMessage: (content: string) => Promise<void>
   resumeExecution: (
     action: 'approve' | 'reject' | 'modify',
@@ -44,9 +45,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [streamingContent, setStreamingContent] = useState('')
   const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([])
   const [interrupt, setInterrupt] = useState<InterruptState | null>(null)
+  const [processRuns, setProcessRuns] = useState<Record<string, ProcessEvent[]>>({})
 
   const sessionIdRef = useRef<string | undefined>(initialSessionId)
   const currentToolCallsRef = useRef<ToolCall[]>([])
+  const currentRunIdRef = useRef<string | null>(null)
+
+  const appendProcessEvent = useCallback((runId: string, event: ProcessEvent) => {
+    setProcessRuns((prev) => ({
+      ...prev,
+      [runId]: [...(prev[runId] ?? []), event],
+    }))
+  }, [])
 
   const handleEvent = useCallback(
     (event: ChatEvent) => {
@@ -62,6 +72,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         case 'thinking': {
           // 显示思考状态
+          if (currentRunIdRef.current) {
+            appendProcessEvent(currentRunIdRef.current, {
+              id: generateId(),
+              kind: 'thinking',
+              timestamp: event.timestamp,
+              payload: event.data,
+            })
+          }
           break
         }
 
@@ -69,6 +87,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const textData = event.data as { content?: string }
           if (textData.content) {
             setStreamingContent((prev) => prev + (textData.content ?? ''))
+            if (currentRunIdRef.current) {
+              appendProcessEvent(currentRunIdRef.current, {
+                id: generateId(),
+                kind: 'text',
+                timestamp: event.timestamp,
+                payload: textData,
+              })
+            }
           }
           break
         }
@@ -77,6 +103,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const toolCallData = event.data as unknown as ToolCall
           currentToolCallsRef.current.push(toolCallData)
           setPendingToolCalls([...currentToolCallsRef.current])
+          if (currentRunIdRef.current) {
+            appendProcessEvent(currentRunIdRef.current, {
+              id: generateId(),
+              kind: 'tool_call',
+              timestamp: event.timestamp,
+              payload: toolCallData as unknown as Record<string, unknown>,
+            })
+          }
           break
         }
 
@@ -87,6 +121,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             (tc) => tc.id !== resultData.toolCallId
           )
           setPendingToolCalls([...currentToolCallsRef.current])
+          if (currentRunIdRef.current) {
+            appendProcessEvent(currentRunIdRef.current, {
+              id: generateId(),
+              kind: 'tool_result',
+              timestamp: event.timestamp,
+              payload: event.data,
+            })
+          }
           break
         }
 
@@ -94,12 +136,21 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const interruptData = event.data as unknown as InterruptState
           setInterrupt(interruptData)
           setIsLoading(false)
+          if (currentRunIdRef.current) {
+            appendProcessEvent(currentRunIdRef.current, {
+              id: generateId(),
+              kind: 'interrupt',
+              timestamp: event.timestamp,
+              payload: event.data,
+            })
+          }
           break
         }
 
         case 'done': {
           const doneData = event.data as { final_message?: { content?: string } }
           const finalContent = doneData.final_message?.content ?? ''
+          const runId = currentRunIdRef.current
 
           // 添加助手消息
           if (finalContent) {
@@ -107,9 +158,19 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
               id: generateId(),
               role: 'assistant',
               content: finalContent,
+              metadata: runId ? { runId } : undefined,
               createdAt: new Date().toISOString(),
             }
             setMessages((prev) => [...prev, assistantMessage])
+          }
+
+          if (runId) {
+            appendProcessEvent(runId, {
+              id: generateId(),
+              kind: 'done',
+              timestamp: event.timestamp,
+              payload: event.data,
+            })
           }
 
           setStreamingContent('')
@@ -123,6 +184,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const errorData = event.data as { error: string }
           onError?.(new Error(errorData.error))
           setIsLoading(false)
+          if (currentRunIdRef.current) {
+            appendProcessEvent(currentRunIdRef.current, {
+              id: generateId(),
+              kind: 'error',
+              timestamp: event.timestamp,
+              payload: errorData as unknown as Record<string, unknown>,
+            })
+          }
           break
         }
 
@@ -132,7 +201,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       }
     },
-    [onError]
+    [appendProcessEvent, onError]
   )
 
   const sendMessage = useCallback(
@@ -153,6 +222,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       setStreamingContent('')
       setInterrupt(null)
       currentToolCallsRef.current = []
+      const runId = generateId()
+      currentRunIdRef.current = runId
+      setProcessRuns((prev) => ({ ...prev, [runId]: [] }))
 
       try {
         await chatApi.sendMessage(
@@ -216,6 +288,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     setPendingToolCalls([])
     setInterrupt(null)
     currentToolCallsRef.current = []
+    currentRunIdRef.current = null
+    setProcessRuns({})
   }, [])
 
   return {
@@ -224,6 +298,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     streamingContent,
     pendingToolCalls,
     interrupt,
+    processRuns,
     sendMessage,
     resumeExecution,
     clearMessages,

@@ -27,6 +27,7 @@ export default function ChatPage(): React.JSX.Element {
     streamingContent,
     pendingToolCalls,
     interrupt,
+    processRuns,
     sendMessage,
     resumeExecution,
     clearMessages,
@@ -110,6 +111,7 @@ export default function ChatPage(): React.JSX.Element {
           streamingContent={streamingContent}
           isLoading={isLoading}
           pendingToolCalls={pendingToolCalls}
+          processRuns={processRuns}
         />
 
         {/* Input */}

@@ -81,10 +81,31 @@ export interface Message {
 }
 
 // ============================================
+// Process Timeline Types
+// ============================================
+
+export type ProcessEventKind =
+  | 'thinking'
+  | 'text'
+  | 'tool_call'
+  | 'tool_result'
+  | 'done'
+  | 'error'
+  | 'interrupt'
+
+export interface ProcessEvent {
+  id: string
+  kind: ProcessEventKind
+  timestamp: string
+  payload: Record<string, unknown>
+}
+
+// ============================================
 // Chat Event Types
 // ============================================
 
 export type ChatEventType =
+  | 'session_created'
   | 'thinking'
   | 'text'
   | 'tool_call'

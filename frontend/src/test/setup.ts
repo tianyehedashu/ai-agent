@@ -38,3 +38,6 @@ global.IntersectionObserver = class IntersectionObserver {
     return []
   }
 }
+
+// Mock scrollIntoView
+Element.prototype.scrollIntoView = () => {}
