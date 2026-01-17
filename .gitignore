@@ -226,6 +226,10 @@ memory_store/
 # Tool execution outputs
 tool_outputs/
 
+# Vector database data
+chroma_data/
+**/chroma_data/
+
 # ============================================
 # Alembic
 # ============================================
