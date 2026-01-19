@@ -1,0 +1,69 @@
+# =============================================================================
+# Docker 开发环境模板
+# =============================================================================
+# 使用 Docker 沙箱但放宽一些限制，方便开发调试
+#
+# 使用方式：在 Agent 配置中设置 extends = "docker-dev"
+
+[metadata]
+name = "docker-dev"
+description = "Docker 开发环境 - 安全隔离但方便调试"
+tags = ["docker", "development"]
+
+# 继承系统默认配置
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 沙箱配置（明确使用 Docker）
+# -----------------------------------------------------------------------------
+[sandbox]
+mode = "docker"           # 强制使用 Docker
+timeout_seconds = 120     # 开发时给更长超时
+
+[sandbox.resources]
+memory_limit = "512m"     # 开发时给更多内存
+cpu_limit = 2.0           # 开发时给更多 CPU
+
+[sandbox.network]
+enabled = true            # 开发时允许网络（可选）
+allowed_hosts = [
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "raw.githubusercontent.com",
+]
+
+[sandbox.docker]
+# 推荐使用自定义镜像（包含 busybox 和常用工具）
+# 构建命令: cd backend/docker/sandbox && ./build.sh (Linux/Mac) 或 .\build.ps1 (Windows)
+image = "ai-agent-sandbox:latest"
+
+# 备用选项：使用官方镜像（功能较少）
+# image = "python:3.11-slim"
+
+# 会话模式：容器保持运行，状态保留（推荐）
+session_enabled = true
+workspace_volume = null  # 使用默认工作目录，如需持久化可设置为主机路径
+container_workspace = "/workspace"
+
+packages = [
+    "requests",           # 常用开发包
+    "httpx",
+]
+
+# 会话策略（开发环境更宽松）
+[sandbox.docker.session_policy]
+idle_timeout = 14400           # 4 小时无活动后清理（开发时更宽松）
+disconnect_timeout = 3600      # 1 小时断开后清理
+completion_retain = 7200       # 2 小时任务完成后保留
+max_session_duration = 43200   # 12 小时最大会话时长
+max_sessions_per_user = 10     # 开发时允许更多会话
+max_total_sessions = 50        # 开发环境容器数量上限
+allow_session_reuse = true
+
+# -----------------------------------------------------------------------------
+# Shell 环境（开发友好）
+# -----------------------------------------------------------------------------
+[shell.env]
+PYTHONPATH = "/workspace/src"
+DEBUG = "1"

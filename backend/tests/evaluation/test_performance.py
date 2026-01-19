@@ -71,7 +71,7 @@ class TestPerformanceEvaluator:
 
         # Arrange
         async def failing_agent(prompt: str):
-            raise Exception("Agent failed")
+            raise Exception("Agent failed")  # pylint: disable=broad-exception-raised
 
         agent = type("Agent", (), {"run": failing_agent})()
         evaluator = PerformanceEvaluator(agent, num_requests=5, concurrency=2)

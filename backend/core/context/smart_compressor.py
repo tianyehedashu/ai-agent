@@ -27,6 +27,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from core.types import Message, MessageRole
+from core.utils.message_formatter import estimate_message_tokens, format_tool_calls
 from utils.logging import get_logger
 from utils.tokens import count_tokens
 
@@ -78,6 +79,10 @@ class CompressionConfig:
     enable_summarization: bool = True
     summarization_threshold: float = 0.7  # 超过预算的 70% 时触发摘要
     max_summary_tokens: int = 500
+
+    # SimpleMem 协同配置
+    enable_memory_dedup: bool = True  # 启用记忆去重（降低已在记忆中的消息优先级）
+    memory_overlap_penalty: float = 15.0  # 与记忆重叠时的降分值
 
     # 重要性关键词（用于评分）
     critical_keywords: list[str] = field(
@@ -162,6 +167,7 @@ class SmartContextCompressor:
         self,
         messages: list[Message],
         budget_tokens: int | None = None,
+        recalled_memories: list[str] | None = None,
     ) -> CompressionResult:
         """
         智能压缩消息列表
@@ -169,6 +175,7 @@ class SmartContextCompressor:
         Args:
             messages: 原始消息列表
             budget_tokens: Token 预算（可选，默认使用配置）
+            recalled_memories: 已召回的记忆内容列表（用于去重优化）
 
         Returns:
             压缩结果
@@ -203,8 +210,8 @@ class SmartContextCompressor:
                 summarized_messages=0,
             )
 
-        # 2. 对所有消息进行重要性评分
-        scored_messages = self._score_messages(messages)
+        # 2. 对所有消息进行重要性评分（考虑已召回的记忆）
+        scored_messages = self._score_messages(messages, recalled_memories)
 
         # 3. 标记保护区域
         self._mark_protected_regions(scored_messages)
@@ -241,7 +248,11 @@ class SmartContextCompressor:
             summarized_messages=summarized_count,
         )
 
-    def _score_messages(self, messages: list[Message]) -> list[ScoredMessage]:
+    def _score_messages(
+        self,
+        messages: list[Message],
+        recalled_memories: list[str] | None = None,
+    ) -> list[ScoredMessage]:
         """
         对消息进行重要性评分
 
@@ -250,12 +261,28 @@ class SmartContextCompressor:
         2. 内容关键词
         3. 消息类型（工具调用通常重要）
         4. 长度（太短可能是确认语）
+        5. 与召回记忆的重叠度（SimpleMem 协同）
         """
         scored = []
         total = len(messages)
 
         for i, msg in enumerate(messages):
             importance, score, reasons = self._calculate_importance(msg, i, total)
+
+            # SimpleMem 协同：如果消息内容与召回记忆高度重叠，降低优先级
+            if recalled_memories and self.config.enable_memory_dedup and msg.content:
+                overlap = self._calculate_memory_overlap(msg.content, recalled_memories)
+                if overlap > 0.5:  # 超过 50% 重叠
+                    penalty = self.config.memory_overlap_penalty * overlap
+                    score -= penalty
+                    reasons.append(f"记忆重叠({overlap:.0%})")
+                    logger.debug(
+                        "Message %d overlaps with memory (%.0f%%), score reduced by %.1f",
+                        i,
+                        overlap * 100,
+                        penalty,
+                    )
+
             tokens = self._estimate_tokens(msg)
 
             scored.append(
@@ -270,6 +297,47 @@ class SmartContextCompressor:
             )
 
         return scored
+
+    def _calculate_memory_overlap(
+        self,
+        content: str,
+        memories: list[str],
+    ) -> float:
+        """
+        计算消息内容与记忆的重叠度
+
+        使用简单的词袋模型计算 Jaccard 相似度。
+        如果需要更精确，可以使用向量相似度，但会增加计算成本。
+
+        Args:
+            content: 消息内容
+            memories: 记忆内容列表
+
+        Returns:
+            最高重叠度（0-1）
+        """
+        if not content or not memories:
+            return 0.0
+
+        # 简化处理：使用词袋模型
+        content_words = set(content.lower().split())
+        if len(content_words) < 3:  # 太短的内容不做去重
+            return 0.0
+
+        max_overlap = 0.0
+        for memory in memories:
+            memory_words = set(memory.lower().split())
+            if not memory_words:
+                continue
+
+            # Jaccard 相似度
+            intersection = len(content_words & memory_words)
+            union = len(content_words | memory_words)
+            if union > 0:
+                overlap = intersection / union
+                max_overlap = max(max_overlap, overlap)
+
+        return max_overlap
 
     def _calculate_importance(
         self, message: Message, index: int, total: int
@@ -530,18 +598,8 @@ class SmartContextCompressor:
         return final_messages, dropped_count
 
     def _estimate_tokens(self, message: Message) -> int:
-        """估算消息 Token 数"""
-        tokens = 4  # 消息格式开销
-
-        if message.content:
-            tokens += count_tokens(message.content)
-
-        if message.tool_calls:
-            for tc in message.tool_calls:
-                tokens += count_tokens(tc.name)
-                tokens += count_tokens(str(tc.arguments))
-
-        return tokens
+        """估算消息 Token 数（复用公共函数）"""
+        return estimate_message_tokens(message)
 
     def build_compressed_context(
         self,
@@ -569,25 +627,15 @@ class SmartContextCompressor:
                 }
             )
 
-        # 添加保留的消息
+        # 添加保留的消息（复用公共格式化函数）
         for msg in result.messages:
-            formatted = {"role": msg.role.value}
+            formatted: dict[str, Any] = {"role": msg.role.value}
 
             if msg.content:
                 formatted["content"] = msg.content
 
             if msg.tool_calls:
-                formatted["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": str(tc.arguments),
-                        },
-                    }
-                    for tc in msg.tool_calls
-                ]
+                formatted["tool_calls"] = format_tool_calls(msg.tool_calls)
 
             if msg.tool_call_id:
                 formatted["tool_call_id"] = msg.tool_call_id

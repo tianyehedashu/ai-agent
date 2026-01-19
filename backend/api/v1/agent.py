@@ -4,9 +4,10 @@ Agent API - Agent 管理接口
 
 from datetime import datetime
 from typing import Annotated
+import uuid
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.deps import (
     RequiredAuthUser,
@@ -69,6 +70,14 @@ class AgentResponse(BaseModel):
     is_public: bool
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v: uuid.UUID | str) -> str:
+        """将 UUID 转换为字符串"""
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
 
 
 # =============================================================================

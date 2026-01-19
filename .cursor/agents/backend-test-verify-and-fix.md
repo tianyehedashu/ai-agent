@@ -1,7 +1,6 @@
 ---
 name: backend-test-verify-and-fix
-description: " 运行后端测试套件，识别并修复所有测试失败问题"
-model: inherit
+model: fast
 ---
 
 # 后端测试验证与修复 Agent

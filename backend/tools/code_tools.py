@@ -1,17 +1,28 @@
 """
 Code Tools - 代码操作工具
+
+使用沙箱执行器实现安全的代码执行：
+- Docker 模式（生产环境推荐）：在容器中隔离执行
+- Local 模式（开发环境）：本地直接执行
 """
 
 import asyncio
 from pathlib import Path
-import tempfile
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
 from app.config import settings
+from core.sandbox.executor import SandboxConfig as SandboxExecConfig
+from core.sandbox.factory import ExecutorFactory
 from core.types import ToolCategory, ToolResult
 from tools.base import BaseTool, ToolParameters, register_tool
+from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from core.config.execution_config import ExecutionConfig
+
+logger = get_logger(__name__)
 
 
 class RunShellParams(ToolParameters):
@@ -37,151 +48,211 @@ class SearchCodeParams(ToolParameters):
     file_pattern: str = Field(default="*", description="文件名模式")
 
 
+def _parse_memory_limit(limit: str) -> int:
+    """解析内存限制字符串为 MB 数值"""
+    limit = limit.lower().strip()
+    if limit.endswith("g"):
+        return int(float(limit[:-1]) * 1024)
+    if limit.endswith("m"):
+        return int(float(limit[:-1]))
+    if limit.endswith("k"):
+        return max(1, int(float(limit[:-1]) / 1024))
+    return int(limit)
+
+
 @register_tool
 class RunShellTool(BaseTool):
-    """运行 Shell 命令工具"""
+    """
+    运行 Shell 命令工具
+
+    根据配置在沙箱（Docker）或本地环境中执行 Shell 命令。
+    生产环境应使用 Docker 模式以确保安全隔离。
+    """
 
     name = "run_shell"
-    description = "在系统 Shell 中执行命令"
+    description = "在沙箱环境中执行 Shell 命令（支持 Docker 隔离或本地执行）"
     category = ToolCategory.CODE
     requires_confirmation = True
     parameters_model = RunShellParams
+
+    # 运行时配置（由 ToolRegistry 注入）
+    execution_config: ClassVar["ExecutionConfig | None"] = None
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = RunShellParams(**kwargs)
 
         try:
-            cwd = params.cwd or settings.work_dir
+            # 获取沙箱执行器
+            executor = ExecutorFactory.create(self.execution_config)
 
-            process = await asyncio.create_subprocess_shell(
-                params.command,
-                cwd=cwd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            # 构建沙箱配置
+            sandbox_config = self._build_sandbox_config(params.timeout)
+
+            logger.debug(
+                "Executing shell command in %s mode: %s",
+                self.execution_config.sandbox.mode if self.execution_config else "local",
+                params.command[:100],
             )
 
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=params.timeout,
-                )
-            except TimeoutError:
-                process.kill()
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output="",
-                    error=f"Command timed out after {params.timeout} seconds",
-                )
+            # 在沙箱中执行
+            result = await executor.execute_shell(
+                command=params.command,
+                config=sandbox_config,
+            )
 
-            stdout_text = stdout.decode("utf-8", errors="replace").strip()
-            stderr_text = stderr.decode("utf-8", errors="replace").strip()
-
-            if process.returncode == 0:
-                # 成功：输出包含 stdout，如果有 stderr 也包含
-                output = stdout_text
-                if stderr_text:
-                    output += f"\nSTDERR:\n{stderr_text}"
+            # 转换为 ToolResult
+            if result.success:
+                output = result.stdout
+                if result.stderr:
+                    output += f"\nSTDERR:\n{result.stderr}"
                 return ToolResult(
                     tool_call_id="",
                     success=True,
-                    output=output,
+                    output=output.strip(),
                     error=None,
+                    duration_ms=result.duration_ms,
                 )
             else:
-                # 失败：错误信息包含退出码和 stderr
-                error_parts = [f"Exit code: {process.returncode}"]
-                if stderr_text:
-                    error_parts.append(f"Error output: {stderr_text}")
-                elif stdout_text:
-                    error_parts.append(f"Output: {stdout_text}")
-
+                error_parts = [f"Exit code: {result.exit_code}"]
+                if result.error:
+                    error_parts.append(result.error)
+                elif result.stderr:
+                    error_parts.append(f"Error output: {result.stderr}")
                 return ToolResult(
                     tool_call_id="",
                     success=False,
-                    output=stdout_text if stdout_text else "",
+                    output=result.stdout,
                     error="; ".join(error_parts),
+                    duration_ms=result.duration_ms,
                 )
-        except Exception as e:
-            # 捕获所有异常，提供详细的错误信息
-            error_msg = f"{type(e).__name__}: {e!s}"
+
+        except NotImplementedError as e:
+            # 沙箱模式不可用（如 remote 模式未实现）
+            logger.warning("Sandbox mode not available: %s", e)
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=error_msg,
+                error=f"Sandbox not available: {e}",
             )
+        except Exception as e:
+            logger.exception("Shell execution error: %s", e)
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=f"{type(e).__name__}: {e!s}",
+            )
+
+    def _build_sandbox_config(self, timeout: int) -> SandboxExecConfig:
+        """构建沙箱执行配置"""
+        if self.execution_config:
+            sandbox = self.execution_config.sandbox
+            return SandboxExecConfig(
+                timeout_seconds=timeout,
+                memory_limit_mb=_parse_memory_limit(sandbox.resources.memory_limit),
+                cpu_limit=sandbox.resources.cpu_limit,
+                network_enabled=sandbox.network.enabled,
+                read_only_root=sandbox.security.read_only_root,
+            )
+        # 使用默认配置
+        return SandboxExecConfig(timeout_seconds=timeout)
 
 
 @register_tool
 class RunPythonTool(BaseTool):
-    """运行 Python 代码工具"""
+    """
+    运行 Python 代码工具
+
+    根据配置在沙箱（Docker）或本地环境中执行 Python 代码。
+    生产环境应使用 Docker 模式以确保安全隔离。
+    """
 
     name = "run_python"
-    description = "在隔离环境中执行 Python 代码"
+    description = "在沙箱环境中执行 Python 代码（支持 Docker 隔离或本地执行）"
     category = ToolCategory.CODE
     requires_confirmation = True
     parameters_model = RunPythonParams
+
+    # 运行时配置（由 ToolRegistry 注入）
+    execution_config: ClassVar["ExecutionConfig | None"] = None
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = RunPythonParams(**kwargs)
 
         try:
-            # 创建临时文件 (使用 asyncio.to_thread 包装同步操作)
-            def create_temp_file() -> str:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".py",
-                    delete=False,
-                ) as f:
-                    f.write(params.code)
-                    return f.name
+            # 获取沙箱执行器
+            executor = ExecutorFactory.create(self.execution_config)
 
-            temp_path = await asyncio.to_thread(create_temp_file)
+            # 构建沙箱配置
+            sandbox_config = self._build_sandbox_config(params.timeout)
 
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    "python",
-                    temp_path,
-                    cwd=settings.work_dir,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+            logger.debug(
+                "Executing Python code in %s mode",
+                self.execution_config.sandbox.mode if self.execution_config else "local",
+            )
 
-                try:
-                    stdout, stderr = await asyncio.wait_for(
-                        process.communicate(),
-                        timeout=params.timeout,
-                    )
-                except TimeoutError:
-                    process.kill()
-                    return ToolResult(
-                        tool_call_id="",
-                        success=False,
-                        output="",
-                        error=f"Execution timed out after {params.timeout} seconds",
-                    )
+            # 在沙箱中执行
+            result = await executor.execute_python(
+                code=params.code,
+                config=sandbox_config,
+            )
 
-                output = stdout.decode()
-                if stderr:
-                    output += f"\nSTDERR:\n{stderr.decode()}"
-
+            # 转换为 ToolResult
+            if result.success:
+                output = result.stdout
+                if result.stderr:
+                    output += f"\nSTDERR:\n{result.stderr}"
                 return ToolResult(
                     tool_call_id="",
-                    success=process.returncode == 0,
+                    success=True,
                     output=output.strip(),
-                    error=f"Exit code: {process.returncode}" if process.returncode != 0 else None,
+                    error=None,
+                    duration_ms=result.duration_ms,
                 )
-            finally:
-                await asyncio.to_thread(Path(temp_path).unlink)
+            else:
+                error_parts = [f"Exit code: {result.exit_code}"]
+                if result.error:
+                    error_parts.append(result.error)
+                elif result.stderr:
+                    error_parts.append(f"Error output: {result.stderr}")
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output=result.stdout,
+                    error="; ".join(error_parts),
+                    duration_ms=result.duration_ms,
+                )
 
-        except (OSError, ValueError, TypeError, FileNotFoundError) as e:
+        except NotImplementedError as e:
+            logger.warning("Sandbox mode not available: %s", e)
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=str(e),
+                error=f"Sandbox not available: {e}",
             )
+        except Exception as e:
+            logger.exception("Python execution error: %s", e)
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=f"{type(e).__name__}: {e!s}",
+            )
+
+    def _build_sandbox_config(self, timeout: int) -> SandboxExecConfig:
+        """构建沙箱执行配置"""
+        if self.execution_config:
+            sandbox = self.execution_config.sandbox
+            return SandboxExecConfig(
+                timeout_seconds=timeout,
+                memory_limit_mb=_parse_memory_limit(sandbox.resources.memory_limit),
+                cpu_limit=sandbox.resources.cpu_limit,
+                network_enabled=sandbox.network.enabled,
+                read_only_root=sandbox.security.read_only_root,
+            )
+        return SandboxExecConfig(timeout_seconds=timeout)
 
 
 @register_tool

@@ -6,8 +6,11 @@ Pytest Configuration - 测试配置
 
 import asyncio
 from collections.abc import AsyncGenerator, Generator
+import contextlib
 import os
 import sys
+from urllib.parse import urlparse
+import uuid
 import warnings
 
 import nest_asyncio
@@ -64,6 +67,7 @@ def pytest_configure(config):
 # 初始化 JWT Manager（在导入测试模块之前）
 # 注意：这些导入必须在警告过滤器配置之后（见上方 pytest_configure）
 # 因此使用 noqa: E402 来忽略模块级导入不在顶部的警告
+# pylint: disable=wrong-import-position
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
@@ -74,13 +78,15 @@ from core.auth.jwt import init_jwt_manager  # noqa: E402
 from db.database import Base  # noqa: E402
 from models.user import User  # noqa: E402
 
+# pylint: enable=wrong-import-position
+
 # 初始化 JWT Manager 以便测试可以使用便捷函数
 init_jwt_manager(settings)
 
 # 测试数据库 URL
 TEST_DATABASE_URL = settings.database_url.replace(
-    settings.database_url.split("/")[-1],
-    "test_" + settings.database_url.split("/")[-1],
+    settings.database_url.rsplit("/", maxsplit=1)[-1],
+    "test_" + settings.database_url.rsplit("/", maxsplit=1)[-1],
 )
 
 # 测试引擎（延迟创建，避免在导入时连接数据库）
@@ -90,9 +96,8 @@ TestAsyncSessionLocal = None
 
 async def _ensure_test_database():
     """确保测试数据库存在（如果不存在则创建）"""
-    from urllib.parse import urlparse
-
-    import asyncpg
+    # asyncpg 是可选依赖，如果未安装则跳过数据库创建
+    import asyncpg  # pylint: disable=import-outside-toplevel
 
     # 解析数据库 URL
     # 格式: postgresql+asyncpg://user:password@host:port/database
@@ -159,7 +164,7 @@ def _create_test_engine():
             # 如果创建失败，设置为 None
             test_engine = None
             TestAsyncSessionLocal = None
-            db_name = TEST_DATABASE_URL.split("/")[-1]
+            db_name = TEST_DATABASE_URL.rsplit("/", maxsplit=1)[-1]
             raise RuntimeError(
                 f"Failed to create test database engine: {e}. "
                 f"Please ensure the test database '{db_name}' exists. "
@@ -180,9 +185,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """数据库会话 fixture"""
     # 先确保测试数据库存在
-    from contextlib import suppress
-
-    with suppress(Exception):
+    with contextlib.suppress(Exception):
         # 如果创建数据库失败，继续尝试连接（可能数据库已存在）
         await _ensure_test_database()
 
@@ -195,7 +198,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         # 如果是数据库不存在的错误，提供更友好的提示
         error_msg = str(e)
         if "does not exist" in error_msg or "InvalidCatalogNameError" in error_msg:
-            db_name = TEST_DATABASE_URL.split("/")[-1]
+            db_name = TEST_DATABASE_URL.rsplit("/", maxsplit=1)[-1]
             pytest.skip(
                 f"Test database '{db_name}' does not exist. "
                 f"Please create it manually: CREATE DATABASE {db_name};"
@@ -218,7 +221,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """HTTP 客户端 fixture"""
-    # 延迟导入，避免在导入时触发 lifespan
+    # 延迟导入，避免在导入时触发 lifespan 和循环导入
+    # pylint: disable=import-outside-toplevel
     from unittest.mock import AsyncMock, MagicMock, patch
 
     # Mock init_db 和 init_redis 以避免在测试时初始化
@@ -236,9 +240,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         # patch app_env 属性，这样 is_development property 会返回 False
         patch("app.config.settings.app_env", "production"),
     ):
-        from app.main import app
-        from core.engine.langgraph_checkpointer import LangGraphCheckpointer
-        from db.database import get_session
+        # 这些导入必须在 patch 生效后才能执行
+        from app.main import app  # pylint: disable=import-outside-toplevel
+        from core.engine.langgraph_checkpointer import (
+            LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
+        )
+        from db.database import get_session  # pylint: disable=import-outside-toplevel
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
@@ -264,8 +271,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
     """测试用户 fixture"""
-    import uuid
-
     user = User(
         email=f"test_{uuid.uuid4()}@example.com",  # 使用唯一邮箱避免冲突
         password_hash="hashed_password",
@@ -280,7 +285,8 @@ async def test_user(db_session: AsyncSession) -> User:
 @pytest_asyncio.fixture
 async def auth_headers(test_user: User, db_session: AsyncSession) -> dict[str, str]:
     """认证头 fixture"""
-    from services.user import UserService
+    # 延迟导入避免循环依赖
+    from services.user import UserService  # pylint: disable=import-outside-toplevel
 
     user_service = UserService(db_session)
     token_pair = await user_service.create_token(test_user)
@@ -341,7 +347,6 @@ def _suppress_litellm_atexit_errors():
 # 配置 LiteLLM 的日志处理器，使用安全的处理器避免退出时的错误
 # 注意：这只影响测试环境，不影响正常运行
 try:
-    import contextlib as _contextlib
     import logging as _logging
 
     from litellm._logging import verbose_logger as _verbose_logger
@@ -350,7 +355,7 @@ try:
         """安全的 StreamHandler，在流关闭时不抛出异常"""
 
         def emit(self, record):
-            with _contextlib.suppress(ValueError, OSError):
+            with contextlib.suppress(ValueError, OSError):
                 super().emit(record)
 
         def handleError(self, record):
@@ -370,6 +375,6 @@ except Exception:
     pass
 
 # 注册 atexit 处理器作为备用
-import atexit  # noqa: E402
+import atexit  # noqa: E402  # pylint: disable=wrong-import-position,wrong-import-order
 
 atexit.register(_suppress_litellm_atexit_errors)

@@ -9,7 +9,9 @@ FROM python:3.11-slim as base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=random \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 WORKDIR /app
 

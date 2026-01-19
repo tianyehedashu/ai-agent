@@ -15,9 +15,11 @@ from litellm import acompletion, aembedding  # pylint: disable=import-error
 from pydantic import BaseModel
 import tiktoken
 
-from core.config import LLMConfig
+from core.interfaces import LLMConfigProtocol
+from core.llm.prompt_cache import get_prompt_cache_manager
 from core.llm.providers import get_provider
 from core.types import Message, ToolCall
+from core.utils.message_formatter import format_messages as format_messages_util
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,7 +55,7 @@ class LLMGateway:
     - 重试与 Fallback
     """
 
-    def __init__(self, config: LLMConfig) -> None:
+    def __init__(self, config: LLMConfigProtocol) -> None:
         """
         初始化 LLM Gateway
 
@@ -61,6 +63,8 @@ class LLMGateway:
             config: LLM 配置（通过依赖注入传入，避免依赖应用层）
         """
         self.config = config
+        # 初始化 Prompt Cache 管理器
+        self._cache_manager = get_prompt_cache_manager()
 
         # 配置 LiteLLM - 禁用回调以避免不必要的日志记录
         litellm.success_callback = []
@@ -93,12 +97,12 @@ class LLMGateway:
         if config.anthropic_api_key:
             litellm.api_key = config.anthropic_api_key.get_secret_value()
 
-    def _should_enable_debug(self, config: LLMConfig) -> bool:
+    def _should_enable_debug(self, config: LLMConfigProtocol) -> bool:
         """
         检查是否应该启用调试模式
 
         Args:
-            config: LLM 配置对象（应实现 LLMConfig Protocol）
+            config: LLM 配置对象（应实现 LLMConfigProtocol）
 
         Returns:
             如果应该启用调试模式则返回 True
@@ -273,14 +277,24 @@ class LLMGateway:
         # 预处理消息（处理模型特定的格式要求）
         processed_messages = self._preprocess_messages(normalized_model, messages)
 
+        # 应用 Prompt Caching（对支持的提供商添加缓存标记）
+        cached_messages = self._cache_manager.prepare_cacheable_messages(processed_messages, model)
+
         # 构建请求参数
         kwargs: dict[str, Any] = {
             "model": normalized_model,
-            "messages": processed_messages,
+            "messages": cached_messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": stream,
         }
+
+        # 添加 Anthropic 特定的缓存 header
+        if self._cache_manager.is_cache_supported(model):
+            provider = self._cache_manager.get_provider_from_model(model)
+            if provider == "anthropic":
+                # Anthropic 需要 beta header 来启用缓存
+                kwargs["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
 
         # 添加工具
         if tools:
@@ -499,6 +513,13 @@ class LLMGateway:
         try:
             response = await acompletion(**kwargs)
             response_dict = self._extract_response_dict(response)
+
+            # 更新 Prompt Cache 统计（如果提供商支持）
+            usage = response_dict.get("usage")
+            if usage:
+                provider = self._cache_manager.get_provider_from_model(model)
+                self._cache_manager.update_stats(usage, provider)
+
             return self._parse_response_data(response_dict)
         except Exception as e:
             error_msg = str(e)
@@ -752,33 +773,8 @@ class LLMGateway:
             return {"raw": arguments}
 
     def format_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        """格式化消息为 LLM API 格式"""
-        formatted = []
-        for msg in messages:
-            item: dict[str, Any] = {"role": msg.role.value}
-
-            if msg.content:
-                item["content"] = msg.content
-
-            if msg.tool_calls:
-                item["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": str(tc.arguments),
-                        },
-                    }
-                    for tc in msg.tool_calls
-                ]
-
-            if msg.tool_call_id:
-                item["tool_call_id"] = msg.tool_call_id
-
-            formatted.append(item)
-
-        return formatted
+        """格式化消息为 LLM API 格式（复用公共函数）"""
+        return format_messages_util(messages)
 
     async def count_tokens(self, text: str, model: str | None = None) -> int:
         """计算 token 数量"""

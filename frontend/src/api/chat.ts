@@ -29,13 +29,14 @@ export interface ResumeRequest {
 
 export const chatApi = {
   /**
-   * 发送聊天消息 (流式)
+   * 发送聊天消息 (流式，支持取消)
    */
   sendMessage(
     request: ChatRequest,
     onEvent: (event: ChatEvent) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     return apiClient.stream(
       '/api/v1/chat',
@@ -44,19 +45,21 @@ export const chatApi = {
         onEvent(event as unknown as ChatEvent)
       },
       onError,
-      onComplete
+      onComplete,
+      signal
     )
   },
 
   /**
-   * 恢复执行 (流式)
+   * 恢复执行 (流式，支持取消)
    */
   resume(
     sessionId: string,
     request: ResumeRequest,
     onEvent: (event: ChatEvent) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     return apiClient.stream(
       '/api/v1/chat/resume',
@@ -65,7 +68,8 @@ export const chatApi = {
         onEvent(event as unknown as ChatEvent)
       },
       onError,
-      onComplete
+      onComplete,
+      signal
     )
   },
 

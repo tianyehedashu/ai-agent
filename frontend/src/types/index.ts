@@ -106,6 +106,7 @@ export interface ProcessEvent {
 
 export type ChatEventType =
   | 'session_created'
+  | 'session_recreated'
   | 'thinking'
   | 'text'
   | 'tool_call'
@@ -157,6 +158,30 @@ export interface DoneEventData {
 
 export interface ErrorEventData {
   error: string
+}
+
+// ============================================
+// Session Recreation Types
+// ============================================
+
+/** 会话历史信息（会话被清理前保存的状态） */
+export interface SessionHistory {
+  sessionId: string
+  cleanedAt: string
+  cleanupReason: string
+  packagesInstalled: string[]
+  filesCreated: string[]
+  commandCount: number
+  totalDurationMs: number
+}
+
+/** 会话重建事件数据 */
+export interface SessionRecreationData {
+  sessionId: string
+  isNew: boolean
+  isRecreated: boolean
+  previousState: SessionHistory | null
+  message: string | null
 }
 
 // ============================================

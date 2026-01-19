@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from core.config import ImageGeneratorConfig
+    from core.interfaces import ImageGeneratorConfigProtocol
 
 logger = get_logger(__name__)
 
@@ -38,7 +38,7 @@ class ImageGenerator:
     统一多个图像生成提供商的接口
     """
 
-    def __init__(self, config: "ImageGeneratorConfig") -> None:
+    def __init__(self, config: "ImageGeneratorConfigProtocol") -> None:
         """
         初始化图像生成服务
 

@@ -6,6 +6,7 @@
 
 import asyncio
 from dataclasses import dataclass
+import random
 import statistics
 import time
 from typing import Any
@@ -138,8 +139,6 @@ class LoadTestRunner:
         Returns:
             负载测试结果
         """
-        import random
-
         start_time = time.time()
         request_interval = 1.0 / target_rps
 

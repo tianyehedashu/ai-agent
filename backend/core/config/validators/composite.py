@@ -6,12 +6,12 @@
 
 from typing import TYPE_CHECKING
 
-from core.config.validators.base import ConfigValidator, ValidationResult
-from core.config.validators.sandbox_validator import SandboxValidator
-from core.config.validators.security_validator import SecurityValidator
+from .base import ConfigValidator, ValidationResult
+from .sandbox_validator import SandboxValidator
+from .security_validator import SecurityValidator
 
 if TYPE_CHECKING:
-    from core.config.execution_config import ExecutionConfig
+    from ..execution_config import ExecutionConfig
 
 
 class CompositeValidator(ConfigValidator):

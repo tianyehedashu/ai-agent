@@ -4,7 +4,8 @@ Tool Registry - 工具注册表
 管理工具的注册和检索
 """
 
-from typing import TYPE_CHECKING, Any
+import fnmatch
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from core.types import ToolCategory, ToolResult
 from tools.base import BaseTool, tool_registry
@@ -89,8 +90,11 @@ class ConfiguredToolRegistry(ToolRegistry):
     """
     基于 ExecutionConfig 的工具注册表
 
-    根据执行环境配置过滤和管理工具
+    根据执行环境配置过滤和管理工具，并将配置注入到需要沙箱执行的工具中。
     """
+
+    # 需要注入 ExecutionConfig 的工具列表
+    SANDBOX_AWARE_TOOLS: ClassVar[set[str]] = {"run_shell", "run_python"}
 
     def __init__(self, config: "ExecutionConfig") -> None:
         """
@@ -101,7 +105,15 @@ class ConfiguredToolRegistry(ToolRegistry):
         """
         super().__init__()
         self.config = config
+        self._inject_execution_config()
         self._filter_enabled_tools()
+
+    def _inject_execution_config(self) -> None:
+        """将执行环境配置注入到需要沙箱执行的工具中"""
+        for tool_name in self.SANDBOX_AWARE_TOOLS:
+            tool = self._tools.get(tool_name)
+            if tool and hasattr(tool.__class__, "execution_config"):
+                tool.__class__.execution_config = self.config
 
     def _filter_enabled_tools(self) -> None:
         """根据配置过滤启用的工具"""
@@ -131,8 +143,6 @@ class ConfiguredToolRegistry(ToolRegistry):
         Returns:
             是否需要确认
         """
-        import fnmatch
-
         # 检查自动批准模式
         auto_approve_patterns = (
             self.config.tools.auto_approve_patterns + self.config.hitl.auto_approve_patterns

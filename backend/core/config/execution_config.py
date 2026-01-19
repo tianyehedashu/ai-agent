@@ -44,6 +44,31 @@ class SecurityConfig(BaseModel):
     drop_capabilities: list[str] = Field(default_factory=lambda: ["ALL"])
 
 
+class SessionPolicyConfig(BaseModel):
+    """会话策略配置"""
+
+    # 空闲超时（秒）- 无活动后多久清理
+    idle_timeout: int = 7200  # 2 小时（更友好的默认值）
+
+    # 断开超时（秒）- 断开连接后等待重连时间
+    disconnect_timeout: int = 1800  # 30 分钟（允许临时离开）
+
+    # 任务完成后保留时间（秒）- 方便用户查看结果
+    completion_retain: int = 3600  # 1 小时
+
+    # 最大会话时长（秒）- 硬性限制
+    max_session_duration: int = 28800  # 8 小时（支持长时间工作）
+
+    # 每用户最大会话数
+    max_sessions_per_user: int = 5
+
+    # 全局最大会话数
+    max_total_sessions: int = 200
+
+    # 是否允许会话复用（同一对话复用容器）
+    allow_session_reuse: bool = True
+
+
 class DockerConfig(BaseModel):
     """Docker 特定配置"""
 
@@ -51,6 +76,14 @@ class DockerConfig(BaseModel):
     packages: list[str] = Field(default_factory=list)
     packages_cmd: str | None = None
     volumes: list[dict[str, Any]] = Field(default_factory=list)
+
+    # 会话模式配置
+    session_enabled: bool = True  # 启用会话容器（状态保持）
+    workspace_volume: str | None = None  # 主机工作目录，用于持久化
+    container_workspace: str = "/workspace"  # 容器内工作目录
+
+    # 会话策略
+    session_policy: SessionPolicyConfig = Field(default_factory=SessionPolicyConfig)
 
 
 class SandboxConfig(BaseModel):

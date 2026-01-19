@@ -8,6 +8,7 @@ SimpleMem 集成测试
 
 注意：记忆按 session_id 隔离，实现"会话内长程记忆"
 """
+# pylint: disable=protected-access  # 测试代码需要访问私有方法
 
 from pathlib import Path
 import sys
@@ -17,8 +18,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# pylint: disable=wrong-import-position
 from core.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 from core.types import Message, MessageRole
+
+# pylint: enable=wrong-import-position
 
 
 @pytest.fixture

@@ -4,6 +4,7 @@ LLM-as-Judge 评估
 使用 LLM 评估 Agent 响应质量
 """
 
+import json
 from typing import Any, ClassVar
 
 from pydantic import BaseModel
@@ -70,8 +71,6 @@ Evaluate now:"""
         criteria: dict[str, Any] | None = None,
     ) -> JudgeScore:
         """使用 LLM 评估响应质量"""
-        import json
-
         prompt = self.JUDGE_PROMPT.format(
             query=query,
             expected=expected or "Not specified",
@@ -112,8 +111,6 @@ Evaluate now:"""
         response_b: str,
     ) -> dict[str, Any]:
         """对比两个响应"""
-        import json
-
         compare_prompt = """Compare these two responses to the same query.
 
 Query: {query}

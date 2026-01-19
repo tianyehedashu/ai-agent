@@ -41,7 +41,7 @@ from core.llm.providers import (
 )
 
 if TYPE_CHECKING:
-    from core.config import ImageGeneratorConfig, LLMConfig
+    from core.interfaces import ImageGeneratorConfigProtocol, LLMConfigProtocol
 
 __all__ = [
     # Embedding Service（本地 + API 统一接口）
@@ -72,7 +72,7 @@ __all__ = [
 ]
 
 
-def create_llm_gateway(config: "LLMConfig") -> LLMGateway:
+def create_llm_gateway(config: "LLMConfigProtocol") -> LLMGateway:
     """
     创建 LLM Gateway 实例
 
@@ -88,7 +88,7 @@ def create_llm_gateway(config: "LLMConfig") -> LLMGateway:
     return LLMGateway(config=config)
 
 
-def create_image_generator(config: "ImageGeneratorConfig") -> ImageGenerator:
+def create_image_generator(config: "ImageGeneratorConfigProtocol") -> ImageGenerator:
     """
     创建 Image Generator 实例
 

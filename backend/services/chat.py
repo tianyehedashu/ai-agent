@@ -12,21 +12,22 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from core.config.service import get_execution_config_service
+from core.config import get_execution_config_service
 from core.engine.langgraph_agent import LangGraphAgentEngine
 from core.engine.langgraph_checkpointer import LangGraphCheckpointer
 from core.llm.gateway import LLMGateway
 from core.memory.langgraph_store import LongTermMemoryStore
 from core.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
-from core.types import AgentConfig, AgentEvent, EventType, Message, MessageRole
+from core.sandbox import SessionManager, SessionRecreationResult
+from core.types import AgentConfig, EventType, Message, MessageRole
 from db.vector import get_vector_store
 from exceptions import NotFoundError
 from schemas.message import ChatEvent
 from services.agent import AgentService
 from services.session import SessionService
+from services.title import TitleService
 from tools.registry import ConfiguredToolRegistry, ToolRegistry
 from utils.logging import get_logger
-from utils.serialization import Serializer
 
 logger = get_logger(__name__)
 
@@ -61,6 +62,7 @@ class ChatService:
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_service = SessionService(db)
         self.agent_service = AgentService(db)
+        self.title_service = TitleService(db, llm_gateway=self.llm_gateway)
         # 执行环境配置服务
         self.config_service = get_execution_config_service()
 
@@ -104,6 +106,7 @@ class ChatService:
             except Exception as e:
                 logger.warning("Memory store setup failed: %s", e)
 
+    # pylint: disable=too-many-branches
     async def chat(
         self,
         session_id: str | None,
@@ -139,11 +142,8 @@ class ChatService:
             await self.db.refresh(session)
             # 关键：在发送事件前手动提交事务，确保前端能立即查询到
             await self.db.commit()
-            # 发送对话创建事件，通知前端更新 sessionId
-            yield ChatEvent(
-                type="session_created",
-                data={"session_id": session_id},
-            )
+            # 发送对话创建事件（使用类型安全工厂方法）
+            yield ChatEvent.session_created(session_id)
         else:
             # 验证对话是否存在且属于当前用户
             session = await self.session_service.get_by_id(session_id)
@@ -151,6 +151,27 @@ class ChatService:
                 raise NotFoundError("Session", session_id)
             if str(session.user_id) != user_id:
                 raise NotFoundError("Session", session_id)  # 不泄露权限信息
+
+        # 检查是否需要生成标题（会话无标题且是第一条消息）
+        should_generate_title = session and not session.title
+        if should_generate_title:
+            # 检查消息数量（在添加消息前）
+            messages = await self.session_service.get_messages(session_id, skip=0, limit=1)
+            is_first_message = len(messages) == 0
+
+            if is_first_message:
+                # 异步生成标题（根据第一条消息），不阻塞对话流程
+                task = asyncio.create_task(
+                    self.title_service.generate_and_update(
+                        session_id=session_id,
+                        strategy="first_message",
+                        message=message,
+                        user_id=user_id,
+                    )
+                )
+                # 保存任务引用，防止被垃圾回收
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
         # 保存用户消息到数据库（用于历史记录查询）
         await self.session_service.add_message(
@@ -166,6 +187,21 @@ class ChatService:
         execution_config = self.config_service.load_for_agent(
             agent_id=agent_id or "default",
         )
+
+        # 获取或创建沙箱会话（如果启用 Docker 沙箱）
+        if (
+            execution_config.sandbox.mode.value == "docker"
+            and execution_config.sandbox.docker.session_enabled
+        ):
+            session_manager = SessionManager.get_instance()
+            recreation_result = await session_manager.get_or_create_session_with_info(
+                user_id=user_id,
+                conversation_id=session_id,
+            )
+
+            # 如果是重建的会话（之前被清理过），发送提示事件
+            if recreation_result.is_recreated and recreation_result.previous_state:
+                yield self._create_session_recreated_event(recreation_result)
 
         # 创建配置化的工具注册表
         configured_tool_registry = ConfiguredToolRegistry(config=execution_config)
@@ -188,19 +224,22 @@ class ChatService:
                 user_id=user_id,
                 user_message=message,
             ):
-                # 转换为 ChatEvent
-                chat_event = self._convert_event(event)
-                yield chat_event
+                # AgentEvent 就是 ChatEvent，直接 yield（无需转换）
+                yield event
 
-                # 收集最终内容
+                # 收集最终内容（使用类型安全的数据访问方法）
                 if event.type == EventType.TEXT:
-                    text_content = event.data.get("content", "")
+                    text_content = event.get_content()
                     if text_content:
                         final_content += text_content
                 elif event.type == EventType.DONE:
-                    final_msg = event.data.get("final_message")
-                    if final_msg and final_msg.get("content"):
-                        final_content = final_msg["content"]
+                    # 使用类型安全的方法获取最终消息
+                    final_msg = event.get_final_message()
+                    if final_msg:
+                        # FinalMessage 自动处理 content 和 reasoning_content
+                        msg_content = final_msg.content or final_msg.reasoning_content
+                        if msg_content:
+                            final_content = msg_content
 
             # 保存助手消息到数据库（用于历史记录查询）
             if final_content:
@@ -229,10 +268,7 @@ class ChatService:
 
         except Exception as e:
             logger.error("Chat error for session %s: %s", session_id, e, exc_info=True)
-            yield ChatEvent(
-                type="error",
-                data={"error": str(e), "session_id": session_id},
-            )
+            yield ChatEvent.error(error=str(e), session_id=session_id)
 
     async def _extract_memory_background(
         self,
@@ -311,31 +347,44 @@ class ChatService:
             hitl_operations=settings.hitl_interrupt_tools,
         )
 
-    def _convert_event(self, event: AgentEvent) -> ChatEvent:
-        """转换 AgentEvent 为 ChatEvent
+    def _create_session_recreated_event(self, result: SessionRecreationResult) -> ChatEvent:
+        """创建会话重建事件
+
+        当用户的沙箱环境被清理后重新发送消息时，生成此事件通知前端。
 
         Args:
-            event: Agent 事件
+            result: 会话重建结果
 
         Returns:
-            聊天事件
+            会话重建事件
         """
-        type_mapping = {
-            EventType.THINKING: "thinking",
-            EventType.TEXT: "text",
-            EventType.TOOL_CALL: "tool_call",
-            EventType.TOOL_RESULT: "tool_result",
-            EventType.INTERRUPT: "interrupt",
-            EventType.DONE: "done",
-            EventType.ERROR: "error",
-            EventType.TERMINATED: "terminated",
+        previous_state = result.previous_state
+        data: dict = {
+            "session_id": result.session.session_id,
+            "is_new": result.is_new,
+            "is_recreated": result.is_recreated,
+            "message": result.message,
         }
 
-        # 确保 data 中的 LiteLLM 对象被序列化
-        serialized_data = Serializer.serialize_dict(event.data)
+        # 如果有历史状态，添加详细信息
+        if previous_state:
+            data["previous_state"] = {
+                "session_id": previous_state.last_session_id,
+                "cleaned_at": (
+                    previous_state.last_cleaned_at.isoformat()
+                    if previous_state.last_cleaned_at
+                    else None
+                ),
+                "cleanup_reason": (
+                    previous_state.cleanup_reason.value if previous_state.cleanup_reason else None
+                ),
+                "packages_installed": previous_state.installed_packages,
+                "files_created": previous_state.created_files,
+                "command_count": previous_state.total_commands,
+                "total_duration_ms": 0,  # 可以后续添加
+            }
 
         return ChatEvent(
-            type=type_mapping.get(event.type, str(event.type)),
-            data=serialized_data,
-            timestamp=event.timestamp,
+            type="session_recreated",
+            data=data,
         )

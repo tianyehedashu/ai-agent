@@ -281,6 +281,22 @@ def get_provider(model: str) -> BaseProvider:
     return PROVIDERS["openai"]
 
 
+def get_provider_name(model: str) -> str:
+    """
+    根据模型名称获取提供商名称（字符串）
+
+    这是一个轻量级函数，只返回提供商名称字符串，
+    适合需要简单判断提供商的场景。
+
+    Args:
+        model: 模型名称
+
+    Returns:
+        提供商名称字符串
+    """
+    return get_provider(model).name
+
+
 def get_all_models() -> dict[str, list[str]]:
     """获取所有支持的模型列表"""
     return {provider.name: provider.models for provider in PROVIDERS.values()}

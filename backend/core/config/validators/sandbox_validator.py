@@ -4,11 +4,11 @@
 
 from typing import TYPE_CHECKING
 
-from core.config.execution_config import SandboxMode
-from core.config.validators.base import ConfigValidator, ValidationResult
+from ..execution_config import SandboxMode
+from .base import ConfigValidator, ValidationResult
 
 if TYPE_CHECKING:
-    from core.config.execution_config import ExecutionConfig
+    from ..execution_config import ExecutionConfig
 
 
 class SandboxValidator(ConfigValidator):

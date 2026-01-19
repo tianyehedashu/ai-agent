@@ -47,6 +47,7 @@ async def send_chat_message(
     """
     events = []
     streamed_content = ""  # 收集流式内容
+    thinking_content = ""  # 收集推理模型的思考内容
     final_response = ""
     returned_session_id = session_id
 
@@ -77,17 +78,27 @@ async def send_chat_message(
                         text_content = event["data"].get("content", "")
                         if text_content:
                             streamed_content += text_content
+                    elif event["type"] == "thinking":
+                        # 收集推理模型的思考内容（deepseek-reasoner 等）
+                        # thinking 事件可能包含 content 字段（推理过程）
+                        thinking_text = event["data"].get("content", "")
+                        if thinking_text:
+                            thinking_content += thinking_text
                     elif event["type"] == "done":
                         final_msg = event["data"].get("final_message", {})
-                        final_response = final_msg.get("content", "")
+                        # 优先使用 content，如果为空则使用 reasoning_content（推理模型兼容）
+                        final_response = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                     elif event["type"] == "error":
                         # 记录错误事件
                         print(f"  ⚠️ 错误事件: {event['data']}")
                 except json.JSONDecodeError as e:
                     print(f"  ⚠️ JSON 解析错误: {e}, line: {line[:100]}...")
 
-    # 优先使用 done 事件中的完整内容，否则使用流式内容
-    final_response = final_response or streamed_content
+    # 优先使用 done 事件中的完整内容，否则使用流式内容，最后使用思考内容
+    # 对于推理模型（如 deepseek-reasoner），content 可能为空，但 thinking 有内容
+    final_response = final_response or streamed_content or thinking_content
 
     # 调试信息：如果没有响应但有事件，打印事件类型
     if not final_response and events:
@@ -279,9 +290,9 @@ class TestSimpleMemE2E:
         print(f"\nAI 回复: {response}")
 
         # 验证早期信息被记住
-        assert (
-            "Alpha" in response or "alpha" in response.lower() or "7" in response
-        ), f"AI 应该记住代号 'Alpha-7'，但回复是: {response}"
+        assert "Alpha" in response or "alpha" in response.lower() or "7" in response, (
+            f"AI 应该记住代号 'Alpha-7'，但回复是: {response}"
+        )
 
         print("✓ 长对话记忆保持验证通过")
 

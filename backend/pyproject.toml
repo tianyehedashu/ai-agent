@@ -85,6 +85,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-watch>=4.2.0",
+    "pytest-xdist>=3.5.0",  # 并发测试执行
     "httpx>=0.26.0",
     "faker>=22.0.0",
     "factory-boy>=3.3.0",

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from core.config import AuthConfig
+    from core.interfaces import AuthConfigProtocol
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ class TokenPayload(BaseModel):
 class JWTManager:
     """JWT 管理器"""
 
-    def __init__(self, config: "AuthConfig") -> None:
+    def __init__(self, config: "AuthConfigProtocol") -> None:
         """
         初始化 JWT 管理器
 
@@ -165,7 +165,7 @@ class JWTManager:
             return None
 
 
-def init_jwt_manager(config: "AuthConfig") -> None:
+def init_jwt_manager(config: "AuthConfigProtocol") -> None:
     """
     初始化全局 JWT Manager
 

@@ -1,7 +1,7 @@
 ---
 name: code-rule-check
-model: inherit
-description: 后端代码检查
+model: fast
+description: 对修改的代码进行全面检查，确保符合项目规范和质量标准。
 ---
 
 # 代码规则检查清单

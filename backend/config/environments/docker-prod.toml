@@ -1,0 +1,56 @@
+# =============================================================================
+# Docker 生产环境模板
+# =============================================================================
+# 平衡用户体验和资源管理的生产配置
+#
+# 使用方式：在 Agent 配置中设置 extends = "docker-prod"
+
+[metadata]
+name = "docker-prod"
+description = "Docker 生产环境 - 平衡体验与资源"
+tags = ["docker", "production"]
+
+# 继承系统默认配置
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 沙箱配置
+# -----------------------------------------------------------------------------
+[sandbox]
+mode = "docker"
+timeout_seconds = 60     # 生产环境适中的超时
+
+[sandbox.resources]
+memory_limit = "512m"    # 适中的内存限制
+cpu_limit = 1.0
+disk_limit = "2g"
+
+[sandbox.network]
+enabled = true
+allowed_hosts = [
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "raw.githubusercontent.com",
+    "registry.npmjs.org",
+]
+
+[sandbox.security]
+read_only_root = true
+no_new_privileges = true
+drop_capabilities = ["ALL"]
+
+[sandbox.docker]
+image = "ai-agent-sandbox:latest"
+session_enabled = true
+container_workspace = "/workspace"
+
+# 会话策略（生产环境 - 平衡体验与资源）
+[sandbox.docker.session_policy]
+idle_timeout = 7200            # 2 小时无活动后清理
+disconnect_timeout = 1800      # 30 分钟断开后清理
+completion_retain = 3600       # 1 小时任务完成后保留
+max_session_duration = 28800   # 8 小时最大会话时长
+max_sessions_per_user = 5      # 每用户 5 个会话
+max_total_sessions = 200       # 全局最大 200 个会话
+allow_session_reuse = true

@@ -1,6 +1,7 @@
 """
 GAIA 评估测试
 """
+# pylint: disable=protected-access  # 测试代码需要访问私有方法
 
 from unittest.mock import AsyncMock
 

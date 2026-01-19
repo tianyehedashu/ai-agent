@@ -96,6 +96,7 @@ class ApiClient {
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
+      credentials: 'include', // 携带 Cookie，支持匿名用户隔离
     })
 
     if (!response.ok) {
@@ -130,17 +131,25 @@ class ApiClient {
     })
   }
 
+  async patch<T>(path: string, data?: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  }
+
   async delete<T>(path: string): Promise<T> {
     return this.request<T>(path, { method: 'DELETE' })
   }
 
-  // SSE 流式请求
+  // SSE 流式请求（支持取消）
   async stream(
     path: string,
     data: unknown,
     onEvent: (event: { type: string; data: unknown }) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const url = this.buildUrl(path)
 
@@ -158,6 +167,8 @@ class ApiClient {
         method: 'POST',
         headers,
         body: JSON.stringify(data),
+        signal, // 支持 AbortController 取消
+        credentials: 'include', // 携带 Cookie，支持匿名用户隔离
       })
 
       if (!response.ok) {

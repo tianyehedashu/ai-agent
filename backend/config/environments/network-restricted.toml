@@ -1,0 +1,61 @@
+# =============================================================================
+# 受限网络环境模板
+# =============================================================================
+# 仅允许访问特定的可信主机（安全性更高）
+#
+# 使用方式：在 Agent 配置中设置 extends = "network-restricted"
+
+[metadata]
+name = "network-restricted"
+description = "受限网络访问 - 仅允许访问白名单主机"
+tags = ["network", "security", "whitelist"]
+
+# 继承系统默认配置
+extends = ""
+
+# -----------------------------------------------------------------------------
+# 网络配置 - 白名单模式
+# -----------------------------------------------------------------------------
+[sandbox.network]
+enabled = true              # 启用网络访问
+allowed_hosts = [           # 仅允许访问以下主机
+    # Python 包管理
+    "pypi.org",
+    "files.pythonhosted.org",
+    
+    # 代码托管
+    "github.com",
+    "gitlab.com",
+    "raw.githubusercontent.com",
+    
+    # AI API
+    "api.openai.com",
+    "api.anthropic.com",
+    "api.cohere.ai",
+    
+    # 常用 API
+    "api.github.com",
+    "httpbin.org",
+]
+dns_servers = [
+    "8.8.8.8",              # Google DNS
+    "8.8.4.4",
+]
+
+# -----------------------------------------------------------------------------
+# 安全配置 - 加强限制
+# -----------------------------------------------------------------------------
+[sandbox.security]
+read_only_root = true
+no_new_privileges = true
+drop_capabilities = ["ALL"]
+
+# -----------------------------------------------------------------------------
+# 资源配置 - 适度限制
+# -----------------------------------------------------------------------------
+[sandbox.resources]
+memory_limit = "256m"
+cpu_limit = 1.0
+
+[sandbox]
+timeout_seconds = 45        # 适度的超时时间

@@ -12,6 +12,7 @@ Prompt Cache Manager - 提示词缓存管理器
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
+from core.llm.providers import get_provider_name
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -117,32 +118,15 @@ class PromptCacheManager:
         """
         根据模型名称推断提供商
 
+        复用 providers.py 中的统一逻辑，确保一致性。
+
         Args:
             model: 模型名称
 
         Returns:
             提供商名称
         """
-        model_lower = model.lower()
-
-        # 提供商关键词映射
-        provider_keywords = [
-            (["claude"], "anthropic"),
-            (["deepseek"], "deepseek"),
-            (["gpt"], "openai"),
-            (["o1"], "openai"),  # OpenAI O1 系列
-            (["qwen"], "dashscope"),
-            (["doubao", "volcengine"], "volcengine"),
-            (["glm"], "zhipuai"),
-        ]
-
-        for keywords, provider in provider_keywords:
-            if any(kw in model_lower for kw in keywords) or (
-                keywords == ["o1"] and model_lower.startswith("o1")
-            ):
-                return provider
-
-        return "unknown"
+        return get_provider_name(model)
 
     def is_cache_supported(self, model: str) -> bool:
         """

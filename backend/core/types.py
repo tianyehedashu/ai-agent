@@ -66,8 +66,14 @@ class MessageRole(str, Enum):
 
 
 class EventType(str, Enum):
-    """Agent 事件类型"""
+    """Agent 事件类型
 
+    统一的事件类型定义，用于 Agent 引擎和 API 层。
+    使用 StrEnum 继承，可以直接用于 JSON 序列化。
+    """
+
+    SESSION_CREATED = "session_created"
+    SESSION_RECREATED = "session_recreated"
     THINKING = "thinking"
     TEXT = "text"
     TOOL_CALL = "tool_call"
@@ -188,43 +194,270 @@ class AgentState(BaseModel):
     metadata: SerializableDict = Field(default_factory=dict)
 
 
-class AgentEvent(BaseModel):
-    """Agent 事件"""
+# ============================================================================
+# 事件数据模型 - 类型安全的数据结构
+# ============================================================================
 
-    model_config = ConfigDict(
-        # 移除 ser_json_infra=True，避免 Pydantic 内部序列化检查导致警告
-        # ser_json_infra=True,  # 注释掉，看看是否能解决问题
-    )
+
+class FinalMessage(BaseModel):
+    """最终消息结构
+
+    支持普通模型和推理模型：
+    - content: 最终回复内容（所有模型）
+    - reasoning_content: 推理过程（推理模型，如 DeepSeek Reasoner）
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    content: str
+    reasoning_content: str | None = None
+
+
+class ThinkingEventData(BaseModel):
+    """思考事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str  # "processing", "reasoning", "analyzing"
+    iteration: int = 1
+    content: str | None = None  # 推理模型的思考内容
+
+
+class TextEventData(BaseModel):
+    """文本事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    content: str
+
+
+class DoneEventData(BaseModel):
+    """完成事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    iterations: int = 1
+    tool_iterations: int = 0
+    total_tokens: int = 0
+    final_message: FinalMessage
+
+
+class ErrorEventData(BaseModel):
+    """错误事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    error: str
+    session_id: str | None = None
+
+
+class ToolCallEventData(BaseModel):
+    """工具调用事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool_call_id: str
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolResultEventData(BaseModel):
+    """工具结果事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool_call_id: str
+    tool_name: str
+    success: bool
+    output: str
+    error: str | None = None
+    duration_ms: int | None = None
+
+
+class SessionEventData(BaseModel):
+    """会话事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    session_id: str
+
+
+# ============================================================================
+# AgentEvent - 统一事件模型
+# ============================================================================
+
+
+class AgentEvent(BaseModel):
+    """Agent 事件
+
+    统一的事件模型，用于 Agent 引擎和 API 层。
+    支持类型安全的工厂方法和数据访问。
+
+    Usage:
+        # 方式 1: 传统字典方式（向后兼容）
+        event = AgentEvent(type=EventType.DONE, data={"final_message": {"content": "Hi"}})
+
+        # 方式 2: 类型安全方式（推荐）
+        event = AgentEvent.done(content="Hi", reasoning_content="思考过程")
+    """
+
+    model_config = ConfigDict()
 
     type: EventType
-    # 使用 SerializableDict 类型，既保持类型安全，又提供运行时验证
-    # PlainValidator 会在验证时自动调用序列化工具，确保数据可序列化
     data: SerializableDict = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="before")
     @classmethod
     def validate_all_data(cls, data: Any) -> Any:
-        """在模型验证之前，深度序列化所有数据，确保 LiteLLM 对象被转换"""
+        """在模型验证之前，深度序列化所有数据"""
         if isinstance(data, dict) and "data" in data:
-            # 深度序列化 data 字段，确保嵌套的 LiteLLM 对象被转换
+            event_data = data["data"]
+            if isinstance(event_data, BaseModel):
+                event_data = event_data.model_dump()
             data["data"] = (
-                Serializer.serialize_dict(data["data"])
-                if isinstance(data["data"], dict)
-                else Serializer.serialize(data["data"])
+                Serializer.serialize_dict(event_data)
+                if isinstance(event_data, dict)
+                else Serializer.serialize(event_data)
             )
         return data
 
     @model_serializer(mode="wrap")
     def serialize_model(self, serializer: Any, info: Any) -> dict[str, Any]:
         """自定义序列化，确保所有嵌套对象都被正确序列化"""
-        # 先使用默认序列化
         result = serializer(self)
-
-        # 然后深度序列化 data 字段，确保 LiteLLM 对象被转换
         if isinstance(result, dict) and "data" in result:
             result["data"] = Serializer.serialize_dict(result["data"])
         return result
+
+    # =========================================================================
+    # 类型安全的工厂方法
+    # =========================================================================
+
+    @classmethod
+    def session_created(cls, session_id: str) -> AgentEvent:
+        """创建会话创建事件"""
+        return cls(
+            type=EventType.SESSION_CREATED,
+            data=SessionEventData(session_id=session_id).model_dump(),
+        )
+
+    @classmethod
+    def thinking(
+        cls,
+        status: str = "processing",
+        iteration: int = 1,
+        content: str | None = None,
+    ) -> AgentEvent:
+        """创建思考事件"""
+        return cls(
+            type=EventType.THINKING,
+            data=ThinkingEventData(
+                status=status, iteration=iteration, content=content
+            ).model_dump(),
+        )
+
+    @classmethod
+    def text(cls, content: str) -> AgentEvent:
+        """创建文本事件"""
+        return cls(
+            type=EventType.TEXT,
+            data=TextEventData(content=content).model_dump(),
+        )
+
+    @classmethod
+    def done(
+        cls,
+        content: str,
+        reasoning_content: str | None = None,
+        iterations: int = 1,
+        tool_iterations: int = 0,
+        total_tokens: int = 0,
+    ) -> AgentEvent:
+        """创建完成事件"""
+        return cls(
+            type=EventType.DONE,
+            data=DoneEventData(
+                iterations=iterations,
+                tool_iterations=tool_iterations,
+                total_tokens=total_tokens,
+                final_message=FinalMessage(content=content, reasoning_content=reasoning_content),
+            ).model_dump(),
+        )
+
+    @classmethod
+    def error(cls, error: str, session_id: str | None = None) -> AgentEvent:
+        """创建错误事件"""
+        return cls(
+            type=EventType.ERROR,
+            data=ErrorEventData(error=error, session_id=session_id).model_dump(),
+        )
+
+    @classmethod
+    def tool_call(
+        cls,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> AgentEvent:
+        """创建工具调用事件"""
+        return cls(
+            type=EventType.TOOL_CALL,
+            data=ToolCallEventData(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                arguments=arguments or {},
+            ).model_dump(),
+        )
+
+    @classmethod
+    def tool_result(
+        cls,
+        tool_call_id: str,
+        tool_name: str,
+        success: bool,
+        output: str,
+        error: str | None = None,
+        duration_ms: int | None = None,
+    ) -> AgentEvent:
+        """创建工具结果事件"""
+        return cls(
+            type=EventType.TOOL_RESULT,
+            data=ToolResultEventData(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                success=success,
+                output=output,
+                error=error,
+                duration_ms=duration_ms,
+            ).model_dump(),
+        )
+
+    # =========================================================================
+    # 类型安全的数据访问方法
+    # =========================================================================
+
+    def get_final_message(self) -> FinalMessage | None:
+        """获取最终消息（类型安全）"""
+        if self.type != EventType.DONE:
+            return None
+        final_msg = self.data.get("final_message")
+        if not final_msg:
+            return None
+        return FinalMessage(
+            content=final_msg.get("content", ""),
+            reasoning_content=final_msg.get("reasoning_content"),
+        )
+
+    def get_content(self) -> str:
+        """获取事件内容（通用方法）"""
+        if self.type in (EventType.TEXT, EventType.THINKING):
+            return self.data.get("content", "")
+        if self.type == EventType.DONE:
+            final_msg = self.get_final_message()
+            if final_msg:
+                return final_msg.content or final_msg.reasoning_content or ""
+        return ""
 
 
 class CheckpointMeta(BaseModel):

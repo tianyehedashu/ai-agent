@@ -4,11 +4,11 @@
  * 封装聊天相关的状态和逻辑
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 import { chatApi } from '@/api/chat'
 import { generateId } from '@/lib/utils'
-import type { ChatEvent, Message, ProcessEvent, ToolCall } from '@/types'
+import type { ChatEvent, Message, ProcessEvent, SessionRecreationData, ToolCall } from '@/types'
 
 interface UseChatOptions {
   sessionId?: string
@@ -24,12 +24,16 @@ interface UseChatReturn {
   interrupt: InterruptState | null
   processRuns: Record<string, ProcessEvent[]>
   currentRunId: string | null
+  sessionRecreation: SessionRecreationData | null
   sendMessage: (content: string) => Promise<void>
+  cancelRequest: () => void // 取消当前请求
   resumeExecution: (
     action: 'approve' | 'reject' | 'modify',
     modifiedArgs?: Record<string, unknown>
   ) => Promise<void>
   clearMessages: () => void
+  loadMessages: (messages: Message[]) => void // 加载历史消息
+  dismissSessionRecreation: () => void
 }
 
 interface InterruptState {
@@ -48,10 +52,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [interrupt, setInterrupt] = useState<InterruptState | null>(null)
   const [processRuns, setProcessRuns] = useState<Record<string, ProcessEvent[]>>({})
   const [currentRunId, setCurrentRunId] = useState<string | null>(null)
+  const [sessionRecreation, setSessionRecreation] = useState<SessionRecreationData | null>(null)
 
   const sessionIdRef = useRef<string | undefined>(initialSessionId)
   const currentToolCallsRef = useRef<ToolCall[]>([])
   const currentRunIdRef = useRef<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // 同步 sessionId 变化
+  useEffect(() => {
+    sessionIdRef.current = initialSessionId
+  }, [initialSessionId])
 
   const appendProcessEvent = useCallback((runId: string, event: ProcessEvent) => {
     setProcessRuns((prev) => ({
@@ -68,6 +79,50 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const sessionData = event.data as { session_id?: string }
           if (sessionData.session_id) {
             sessionIdRef.current = sessionData.session_id
+          }
+          break
+        }
+
+        case 'session_recreated': {
+          // 会话沙箱环境被重建（之前的容器已被清理）
+          const recreationData = event.data as {
+            session_id?: string
+            is_new?: boolean
+            is_recreated?: boolean
+            previous_state?: {
+              session_id?: string
+              cleaned_at?: string
+              cleanup_reason?: string
+              packages_installed?: string[]
+              files_created?: string[]
+              command_count?: number
+              total_duration_ms?: number
+            } | null
+            message?: string | null
+          }
+
+          // 转换为前端格式（snake_case -> camelCase）
+          const sessionRecreationInfo: SessionRecreationData = {
+            sessionId: recreationData.session_id ?? '',
+            isNew: recreationData.is_new ?? false,
+            isRecreated: recreationData.is_recreated ?? false,
+            previousState: recreationData.previous_state
+              ? {
+                  sessionId: recreationData.previous_state.session_id ?? '',
+                  cleanedAt: recreationData.previous_state.cleaned_at ?? '',
+                  cleanupReason: recreationData.previous_state.cleanup_reason ?? '',
+                  packagesInstalled: recreationData.previous_state.packages_installed ?? [],
+                  filesCreated: recreationData.previous_state.files_created ?? [],
+                  commandCount: recreationData.previous_state.command_count ?? 0,
+                  totalDurationMs: recreationData.previous_state.total_duration_ms ?? 0,
+                }
+              : null,
+            message: recreationData.message ?? null,
+          }
+
+          // 只有当是重建（有历史记录）时才显示提示
+          if (sessionRecreationInfo.isRecreated && sessionRecreationInfo.previousState) {
+            setSessionRecreation(sessionRecreationInfo)
           }
           break
         }
@@ -102,25 +157,40 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
 
         case 'tool_call': {
-          const toolCallData = event.data as unknown as ToolCall
-          currentToolCallsRef.current.push(toolCallData)
+          // 后端发送: { tool_call_id, tool_name, arguments }
+          const toolCallData = event.data as {
+            tool_call_id?: string
+            tool_name?: string
+            arguments?: Record<string, unknown>
+          }
+          // 转换为内部 ToolCall 格式
+          const toolCall: ToolCall = {
+            id: toolCallData.tool_call_id ?? generateId(),
+            name: toolCallData.tool_name ?? 'unknown',
+            arguments: toolCallData.arguments ?? {},
+          }
+          currentToolCallsRef.current.push(toolCall)
           setPendingToolCalls([...currentToolCallsRef.current])
           if (currentRunIdRef.current) {
             appendProcessEvent(currentRunIdRef.current, {
               id: generateId(),
               kind: 'tool_call',
               timestamp: event.timestamp,
-              payload: toolCallData as unknown as Record<string, unknown>,
+              // 传递完整的后端数据（包含 tool_name 和 arguments）
+              payload: event.data,
             })
           }
           break
         }
 
         case 'tool_result': {
+          // 后端发送: { tool_call_id, tool_name, success, output, error, duration_ms }
+          // 注意：后端使用 snake_case (tool_call_id)
+          const resultData = event.data as { tool_call_id?: string; toolCallId?: string }
+          const toolCallId = resultData.tool_call_id ?? resultData.toolCallId
           // 工具执行完成，清除对应的 pending
-          const resultData = event.data as { toolCallId: string }
           currentToolCallsRef.current = currentToolCallsRef.current.filter(
-            (tc) => tc.id !== resultData.toolCallId
+            (tc) => tc.id !== toolCallId
           )
           setPendingToolCalls([...currentToolCallsRef.current])
           if (currentRunIdRef.current) {
@@ -208,9 +278,30 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     [appendProcessEvent, onError]
   )
 
+  const cancelRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setIsLoading(false)
+      setStreamingContent('')
+      currentToolCallsRef.current = []
+      currentRunIdRef.current = null
+      setCurrentRunId(null)
+    }
+  }, [])
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading) return
+
+      // 取消之前的请求（如果有）
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+
+      // 创建新的 AbortController
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
 
       // 添加用户消息
       const userMessage: Message = {
@@ -240,16 +331,25 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           },
           handleEvent,
           (error) => {
-            onError?.(error)
+            // 忽略取消导致的错误
+            if (error.name !== 'AbortError') {
+              onError?.(error)
+            }
             setIsLoading(false)
           },
           () => {
             setIsLoading(false)
-          }
+            abortControllerRef.current = null
+          },
+          abortController.signal
         )
       } catch (error) {
-        onError?.(error as Error)
+        // 忽略取消导致的错误
+        if ((error as Error).name !== 'AbortError') {
+          onError?.(error as Error)
+        }
         setIsLoading(false)
+        abortControllerRef.current = null
       }
     },
     [isLoading, agentId, handleEvent, onError]
@@ -296,6 +396,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     currentRunIdRef.current = null
     setCurrentRunId(null)
     setProcessRuns({})
+    setSessionRecreation(null)
+  }, [])
+
+  const loadMessages = useCallback((messages: Message[]) => {
+    setMessages(messages)
+    setStreamingContent('')
+    setPendingToolCalls([])
+    setInterrupt(null)
+    currentToolCallsRef.current = []
+    currentRunIdRef.current = null
+    setCurrentRunId(null)
+    // 不清除 processRuns，因为历史消息可能关联到已有的 processRuns
+    // 不清除 sessionRecreation，因为这是会话级别的信息
+  }, [])
+
+  const dismissSessionRecreation = useCallback(() => {
+    setSessionRecreation(null)
   }, [])
 
   return {
@@ -306,8 +423,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     interrupt,
     processRuns,
     currentRunId,
+    sessionRecreation,
     sendMessage,
+    cancelRequest,
     resumeExecution,
     clearMessages,
+    loadMessages,
+    dismissSessionRecreation,
   }
 }

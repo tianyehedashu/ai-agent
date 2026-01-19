@@ -28,6 +28,7 @@ from api.v1.router import api_router
 from app.config import settings
 from core.auth.jwt import init_jwt_manager
 from core.engine.langgraph_checkpointer import LangGraphCheckpointer
+from core.sandbox import SessionManager
 from db.database import init_db
 from db.redis import close_redis, init_redis
 from exceptions import (
@@ -122,9 +123,20 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         _fastapi_app.state.checkpointer = global_checkpointer
         logger.warning("Using MemorySaver as fallback for checkpointer")
 
+    # 初始化并启动会话管理器
+    session_manager = SessionManager.get_instance()
+    await session_manager.start()
+    _fastapi_app.state.session_manager = session_manager
+    logger.info("SessionManager started")
+
     yield
 
     # 关闭时
+    # 停止会话管理器（会清理所有会话容器）
+    if hasattr(_fastapi_app.state, "session_manager"):
+        await _fastapi_app.state.session_manager.stop()
+        logger.info("SessionManager stopped")
+
     # 清理 LiteLLM 异步客户端
     try:
         import litellm  # pylint: disable=import-outside-toplevel
@@ -164,6 +176,40 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =============================================================================
+# 匿名用户 Cookie 中间件
+# =============================================================================
+
+# 匿名用户 Cookie 配置
+ANONYMOUS_USER_COOKIE = "anonymous_user_id"
+ANONYMOUS_COOKIE_MAX_AGE = 365 * 24 * 60 * 60  # 1 年
+
+
+@app.middleware("http")
+async def anonymous_user_cookie_middleware(request: Request, call_next):
+    """为匿名用户设置持久化 Cookie
+
+    当检测到新的匿名用户（request.state.anonymous_user_id 存在）时，
+    在响应中设置 Cookie 以便后续请求能够识别同一用户。
+    """
+    response = await call_next(request)
+
+    # 检查是否需要设置匿名用户 Cookie
+    if hasattr(request.state, "anonymous_user_id"):
+        anonymous_id = request.state.anonymous_user_id
+        # 设置持久化 Cookie（1 年有效期）
+        response.set_cookie(
+            key=ANONYMOUS_USER_COOKIE,
+            value=anonymous_id,
+            max_age=ANONYMOUS_COOKIE_MAX_AGE,
+            httponly=True,  # 防止 XSS 攻击
+            samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
+            secure=not settings.is_development,  # 生产环境要求 HTTPS
+        )
+
+    return response
 
 
 # =============================================================================

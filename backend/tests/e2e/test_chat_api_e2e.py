@@ -175,7 +175,10 @@ class TestChatAPIE2E:
 
                     elif event["type"] == "done":
                         final_msg = event["data"].get("final_message", {})
-                        first_response = final_msg.get("content", "")
+                        # 推理模型兼容：优先 content，否则 reasoning_content
+                        first_response = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                         print(f"  → AI 回复: {first_response[:100]}...")
 
         assert session_id, "应该创建 session_id"
@@ -206,7 +209,10 @@ class TestChatAPIE2E:
 
                     if event["type"] == "done":
                         final_msg = event["data"].get("final_message", {})
-                        second_response = final_msg.get("content", "")
+                        # 推理模型兼容：优先 content，否则 reasoning_content
+                        second_response = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                         print(f"  → AI 回复: {second_response}")
 
         # ============================================
@@ -220,9 +226,9 @@ class TestChatAPIE2E:
         assert done_event, "应该收到 done 事件"
 
         # AI 应该能记住名字 "张三"
-        assert (
-            "张三" in second_response
-        ), f"AI 应该记住用户名字是'张三'，但回复是: {second_response}"
+        assert "张三" in second_response, (
+            f"AI 应该记住用户名字是'张三'，但回复是: {second_response}"
+        )
 
         print("✓ AI 正确记住了名字: 张三")
         print("✓ 对话历史功能正常!")
@@ -255,7 +261,10 @@ class TestChatAPIE2E:
                     if event["type"] == "session_created":
                         session_id = event["data"]["session_id"]
                     elif event["type"] == "done":
-                        content = event["data"].get("final_message", {}).get("content", "")
+                        final_msg = event["data"].get("final_message", {})
+                        content = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                         print(f"  AI: {content[:50]}...")
 
         assert session_id
@@ -271,7 +280,10 @@ class TestChatAPIE2E:
                 if line.startswith("data: ") and line != "data: [DONE]":
                     event = json.loads(line[6:])
                     if event["type"] == "done":
-                        content = event["data"].get("final_message", {}).get("content", "")
+                        final_msg = event["data"].get("final_message", {})
+                        content = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                         print(f"  AI: {content[:50]}...")
 
         # 第三轮: 验证
@@ -286,16 +298,19 @@ class TestChatAPIE2E:
                 if line.startswith("data: ") and line != "data: [DONE]":
                     event = json.loads(line[6:])
                     if event["type"] == "done":
-                        final_response = event["data"].get("final_message", {}).get("content", "")
+                        final_msg = event["data"].get("final_message", {})
+                        final_response = final_msg.get("content") or final_msg.get(
+                            "reasoning_content", ""
+                        )
                         print(f"  AI: {final_response}")
 
         # 验证 AI 记住了两个信息
-        assert (
-            "苹果" in final_response or "apple" in final_response.lower()
-        ), f"AI 应该记住'喜欢吃苹果': {final_response}"
-        assert (
-            "北京" in final_response or "Beijing" in final_response
-        ), f"AI 应该记住'住在北京': {final_response}"
+        assert "苹果" in final_response or "apple" in final_response.lower(), (
+            f"AI 应该记住'喜欢吃苹果': {final_response}"
+        )
+        assert "北京" in final_response or "Beijing" in final_response, (
+            f"AI 应该记住'住在北京': {final_response}"
+        )
         print("\n✓ AI 正确记住了多轮对话中的所有信息!")
 
 
@@ -356,24 +371,9 @@ class TestAgentAPIE2E:
         """
         with httpx.Client(base_url=API_BASE_URL, timeout=30.0, follow_redirects=True) as client:
             response = client.get("/api/v1/agents/")
-            if response.status_code != 200:
-                print(f"错误状态码: {response.status_code}")
-                print(f"错误响应: {response.text}")
-                try:
-                    error_data = response.json()
-                    print(f"错误详情: {error_data}")
-                except Exception:
-                    pass
-                # 如果是 500 错误，可能是后端服务配置问题
-                if response.status_code == 500:
-                    pytest.skip(
-                        f"后端服务返回 500 错误，可能是配置问题。"
-                        f"请确保后端服务在开发模式下运行（app_env=development）。"
-                        f"错误详情: {response.text[:200]}"
-                    )
-            assert (
-                response.status_code == 200
-            ), f"Expected 200, got {response.status_code}: {response.text}"
+            assert response.status_code == 200, (
+                f"Expected 200, got {response.status_code}: {response.text}"
+            )
             data = response.json()
             assert isinstance(data, list)
             print(f"✓ 获取 Agent 列表成功，共 {len(data)} 个")
@@ -415,8 +415,14 @@ class TestLLMGatewayE2E:
             )
 
             assert response is not None
-            assert "content" in response
-            print(f"✓ LLM 调用成功: {response['content']}")
+            # 对于推理模型（如 deepseek-reasoner），content 可能为 None，但 reasoning_content 有值
+            # 检查至少有一个有值
+            assert response.content is not None or response.reasoning_content is not None, (
+                f"响应中 content 和 reasoning_content 都为 None: {response}"
+            )
+            # 显示实际返回的内容
+            content = response.content or response.reasoning_content or ""
+            print(f"✓ LLM 调用成功: {content[:100]}")
 
         except Exception as e:
             pytest.skip(f"LLM API 调用失败（可能是 API Key 未配置）: {e}")

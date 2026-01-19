@@ -225,19 +225,3 @@ class TestChatService:
         # Assert
         assert config.name == "Default Agent"
         assert len(config.tools) > 0
-
-    @pytest.mark.asyncio
-    async def test_convert_event(self, service):
-        """测试: 转换 AgentEvent 为 ChatEvent"""
-        # Arrange
-        agent_event = AgentEvent(
-            type=EventType.TEXT,
-            data={"content": "Hello"},
-        )
-
-        # Act
-        chat_event = service._convert_event(agent_event)
-
-        # Assert
-        assert chat_event.type == "text"
-        assert chat_event.data == {"content": "Hello"}

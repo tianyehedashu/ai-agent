@@ -89,6 +89,7 @@ class TestLLMProviders:
     # ========================================================================
 
     @pytest.mark.asyncio
+    # pylint: disable=too-many-branches,too-many-statements
     async def test_zhipuai_glm_chat(self, gateway):
         """
         测试: 智谱AI GLM 实际聊天调用

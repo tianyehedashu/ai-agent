@@ -100,6 +100,22 @@ describe('ApiClient', () => {
       )
     })
 
+    it('请求应该携带 credentials: include 以支持 Cookie', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: 'test' }),
+      })
+
+      await apiClient.get('/api/v1/test')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/test',
+        expect.objectContaining({
+          credentials: 'include',
+        })
+      )
+    })
+
     it('POST 请求应该正常工作', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

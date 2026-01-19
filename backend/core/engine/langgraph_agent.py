@@ -8,8 +8,8 @@ LangGraph Agent Engine - 基于 LangGraph 的 Agent 执行引擎
 - 工具调用循环
 """
 
+import asyncio
 from collections.abc import AsyncGenerator
-import json
 import operator
 import time
 from typing import Annotated, Any, Literal, TypedDict
@@ -22,7 +22,8 @@ from core.engine.langgraph_checkpointer import LangGraphCheckpointer
 from core.llm.gateway import LLMGateway
 from core.memory.extractor import MemoryExtractor
 from core.memory.langgraph_store import LongTermMemoryStore
-from core.types import AgentConfig, AgentEvent, EventType, ToolCall, ToolResult
+from core.types import AgentConfig, AgentEvent, ToolCall, ToolResult
+from core.utils.message_formatter import convert_langchain_messages
 from tools.registry import ToolRegistry
 from utils.logging import get_logger
 
@@ -35,8 +36,13 @@ DEFAULT_TIMEOUT_SECONDS = 300
 
 
 # 定义 Agent 状态（LangGraph 格式）
+# 注意：LangGraph 要求状态必须是 TypedDict，无法使用 Pydantic 或 dataclass
 class AgentState(TypedDict):
-    """Agent 状态（LangGraph 格式）"""
+    """Agent 状态（LangGraph 格式）
+
+    LangGraph StateGraph 要求状态必须是 TypedDict 或 dict。
+    使用 StateView 包装类可以获得属性访问和类型安全。
+    """
 
     messages: Annotated[list[BaseMessage], operator.add]
     user_id: str
@@ -47,6 +53,104 @@ class AgentState(TypedDict):
     recalled_memories: list[dict[str, Any]]
     pending_tool_calls: list[dict[str, Any]]  # 待处理的工具调用
     tool_results: list[dict[str, Any]]  # 工具执行结果
+    reasoning_content: str | None  # 推理模型的思考内容
+
+
+class StateView:
+    """AgentState 的属性访问包装类
+
+    提供属性访问方式，同时保持与 LangGraph TypedDict 的兼容。
+
+    Usage:
+        # 方式 1：字典访问（原始方式）
+        user_id = state["user_id"]
+
+        # 方式 2：属性访问（推荐）
+        view = StateView(state)
+        user_id = view.user_id
+        if view.has_pending_tools:
+            ...
+    """
+
+    __slots__ = ("_state",)  # 优化内存
+
+    def __init__(self, state: AgentState) -> None:
+        self._state = state
+
+    # =========================================================================
+    # 属性访问器 - 类型安全，IDE 自动补全
+    # =========================================================================
+
+    @property
+    def messages(self) -> list[BaseMessage]:
+        """消息列表"""
+        return self._state["messages"]
+
+    @property
+    def user_id(self) -> str:
+        """用户 ID"""
+        return self._state["user_id"]
+
+    @property
+    def session_id(self) -> str:
+        """会话 ID"""
+        return self._state["session_id"]
+
+    @property
+    def iteration(self) -> int:
+        """当前迭代次数"""
+        return self._state["iteration"]
+
+    @property
+    def tool_iteration(self) -> int:
+        """工具调用迭代次数"""
+        return self._state["tool_iteration"]
+
+    @property
+    def total_tokens(self) -> int:
+        """总 Token 数"""
+        return self._state["total_tokens"]
+
+    @property
+    def recalled_memories(self) -> list[dict[str, Any]]:
+        """召回的记忆"""
+        return self._state["recalled_memories"]
+
+    @property
+    def pending_tool_calls(self) -> list[dict[str, Any]]:
+        """待处理的工具调用"""
+        return self._state["pending_tool_calls"]
+
+    @property
+    def tool_results(self) -> list[dict[str, Any]]:
+        """工具执行结果"""
+        return self._state["tool_results"]
+
+    @property
+    def reasoning_content(self) -> str | None:
+        """推理内容（推理模型）"""
+        return self._state["reasoning_content"]
+
+    # =========================================================================
+    # 辅助方法 - 业务逻辑
+    # =========================================================================
+
+    @property
+    def has_pending_tools(self) -> bool:
+        """是否有待处理的工具调用"""
+        return len(self.pending_tool_calls) > 0
+
+    @property
+    def last_message_content(self) -> str:
+        """最后一条消息的内容"""
+        if self.messages:
+            return self.messages[-1].content or ""
+        return ""
+
+    @property
+    def has_memories(self) -> bool:
+        """是否有召回的记忆"""
+        return len(self.recalled_memories) > 0
 
 
 class LangGraphAgentEngine:
@@ -165,19 +269,19 @@ class LangGraphAgentEngine:
             "execute_tools": 如果有待处理的工具调用
             "extract_memory": 如果没有工具调用，进入记忆提取
         """
-        pending_tool_calls = state.get("pending_tool_calls", [])
-        tool_iteration = state.get("tool_iteration", 0)
+        # 使用 StateView 获得属性访问和辅助方法
+        view = StateView(state)
 
         # 检查是否超过最大迭代次数
-        if tool_iteration >= self.max_tool_iterations:
+        if view.tool_iteration >= self.max_tool_iterations:
             logger.warning(
                 "Tool iteration limit reached (%d), stopping tool execution",
                 self.max_tool_iterations,
             )
             return "extract_memory"
 
-        # 检查是否有待处理的工具调用
-        if pending_tool_calls:
+        # 使用辅助属性检查工具调用
+        if view.has_pending_tools:
             return "execute_tools"
 
         return "extract_memory"
@@ -193,13 +297,12 @@ class LangGraphAgentEngine:
         - 向量检索成本很低（毫秒级）
         - SimpleMem 的过滤在存储阶段已完成，检索阶段应尽量召回
         """
-        session_id = state.get("session_id", "")
-        last_message = state["messages"][-1].content if state["messages"] else ""
+        view = StateView(state)
 
         # 搜索当前会话的相关记忆
         memories = await self.memory_store.search(
-            session_id=session_id,
-            query=last_message,
+            session_id=view.session_id,
+            query=view.last_message_content,
             limit=5,
         )
 
@@ -213,6 +316,7 @@ class LangGraphAgentEngine:
         1. 构建消息列表（包含历史、工具结果等）
         2. 调用 LLM
         3. 解析响应（文本或工具调用）
+        4. 记录推理内容（如果模型支持）
         """
         # 构建系统提示
         system_prompt = self.config.system_prompt or "你是一个有用的助手。"
@@ -227,48 +331,16 @@ class LangGraphAgentEngine:
 - 当任务完成或获得足够信息时，立即生成最终回复，不要继续调用工具
 - 如果工具调用失败，尝试其他方法或向用户说明情况"""
 
+        # 使用 StateView 获得属性访问
+        view = StateView(state)
+
         # 添加召回的记忆
-        recalled_memories = state.get("recalled_memories", [])
-        if recalled_memories:
-            memory_text = "\n".join([f"- {m['content']}" for m in recalled_memories])
+        if view.has_memories:
+            memory_text = "\n".join([f"- {m['content']}" for m in view.recalled_memories])
             system_prompt += f"\n\n相关记忆：\n{memory_text}"
 
-        # 构建消息列表（LiteLLM 格式）
-        lite_messages = [{"role": "system", "content": system_prompt}]
-
-        # 添加所有消息（包括历史、工具调用、工具结果）
-        for msg in state["messages"]:
-            if isinstance(msg, HumanMessage):
-                lite_messages.append({"role": "user", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                msg_dict: dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
-                # 如果有工具调用，添加到消息中
-                if msg.tool_calls:
-                    msg_dict["tool_calls"] = [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                # 使用 json.dumps 确保参数是有效的 JSON 字符串
-                                "arguments": (
-                                    tc["args"]
-                                    if isinstance(tc["args"], str)
-                                    else json.dumps(tc["args"], ensure_ascii=False)
-                                ),
-                            },
-                        }
-                        for tc in msg.tool_calls
-                    ]
-                lite_messages.append(msg_dict)
-            elif isinstance(msg, ToolMessage):
-                lite_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": msg.tool_call_id,
-                        "content": msg.content,
-                    }
-                )
+        # 使用类型安全的消息转换（LangChain -> LiteLLM 格式）
+        lite_messages = convert_langchain_messages(view.messages, system_prompt=system_prompt)
 
         # 获取工具定义
         tools = self.tools.to_openai_tools(self.config.tools) if self.config.tools else None
@@ -286,6 +358,10 @@ class LangGraphAgentEngine:
         # 优先使用 content，若为空则使用 reasoning_content（推理模型兼容）
         final_content = response.content or response.reasoning_content or ""
 
+        # 记录推理内容（用于事件发送）
+        # 推理内容是独立的，不应与最终内容混淆
+        reasoning_content = response.reasoning_content if response.reasoning_content else None
+
         if response.tool_calls:
             # LLM 请求调用工具
             # 将 ToolCall 对象转换为 LangChain 需要的字典格式
@@ -299,38 +375,68 @@ class LangGraphAgentEngine:
             ]
 
             # 返回带工具调用的 AI 消息，并设置待处理的工具调用
+            # 包含 reasoning_content 供事件发送使用
             return {
                 "messages": [AIMessage(content=final_content, tool_calls=tool_calls_dict)],
                 "pending_tool_calls": tool_calls_dict,
-                "tool_iteration": state.get("tool_iteration", 0) + 1,
+                "tool_iteration": view.tool_iteration + 1,
+                "reasoning_content": reasoning_content,  # 传递推理内容
             }
 
         # 返回纯文本响应，清空待处理的工具调用
         return {
             "messages": [AIMessage(content=final_content)],
             "pending_tool_calls": [],
+            "reasoning_content": reasoning_content,  # 传递推理内容
         }
 
     async def _execute_tools(self, state: AgentState) -> dict[str, Any]:
         """
-        执行工具
+        并行执行工具
 
-        执行所有待处理的工具调用，并将结果作为 ToolMessage 返回
+        对所有待处理的工具调用并行执行，显著提升多工具场景的响应速度。
+        使用 asyncio.gather 实现并行，return_exceptions=True 确保单个失败不影响其他工具。
         """
-        pending_tool_calls = state.get("pending_tool_calls", [])
-        tool_messages: list[ToolMessage] = []
-        tool_results: list[dict[str, Any]] = []
+        view = StateView(state)
+        if not view.has_pending_tools:
+            return {
+                "messages": [],
+                "pending_tool_calls": [],
+                "tool_results": [],
+            }
 
-        for tc_dict in pending_tool_calls:
-            # 创建 ToolCall 对象
-            tool_call = ToolCall(
+        # 构建 ToolCall 对象列表
+        tool_calls = [
+            ToolCall(
                 id=tc_dict["id"],
                 name=tc_dict["name"],
                 arguments=tc_dict["args"] if isinstance(tc_dict["args"], dict) else {},
             )
+            for tc_dict in view.pending_tool_calls
+        ]
 
-            # 执行工具
-            result = await self._execute_single_tool(tool_call)
+        # 并行执行所有工具（单个失败不影响其他工具）
+        logger.info("Executing %d tools in parallel", len(tool_calls))
+        results = await asyncio.gather(
+            *[self._execute_single_tool(tc) for tc in tool_calls],
+            return_exceptions=True,
+        )
+
+        # 处理结果
+        tool_messages: list[ToolMessage] = []
+        tool_results: list[dict[str, Any]] = []
+
+        for tool_call, result in zip(tool_calls, results, strict=True):
+            # 处理异常情况（asyncio.gather 返回异常对象）
+            if isinstance(result, Exception):
+                logger.error("Tool %s raised exception: %s", tool_call.name, result)
+                result = ToolResult(
+                    tool_call_id=tool_call.id,
+                    success=False,
+                    output="",
+                    error=str(result),
+                    duration_ms=0,
+                )
 
             # 记录工具结果
             tool_results.append(
@@ -348,12 +454,17 @@ class LangGraphAgentEngine:
             if result.success:
                 content = result.output
             else:
-                # 确保错误信息有意义
                 error_msg = result.error or "Unknown error occurred"
                 content = f"Error: {error_msg}"
                 if result.output:
                     content += f"\nOutput: {result.output}"
             tool_messages.append(ToolMessage(content=content, tool_call_id=tool_call.id))
+
+        logger.info(
+            "Parallel tool execution completed: %d succeeded, %d failed",
+            sum(1 for r in tool_results if r["success"]),
+            sum(1 for r in tool_results if not r["success"]),
+        )
 
         # 返回工具消息，清空待处理的工具调用
         return {
@@ -403,15 +514,14 @@ class LangGraphAgentEngine:
             logger.debug("Skipping extract_memory: SimpleMem is enabled")
             return {}
 
-        user_id = state.get("user_id", "")
-        session_id = state.get("session_id", "")
+        view = StateView(state)
 
-        if not user_id or not self.memory_store:
+        if not view.user_id or not self.memory_store:
             return {}
 
         # 构建对话历史（用于记忆提取）
         conversation = []
-        for msg in state["messages"]:
+        for msg in view.messages:
             if isinstance(msg, HumanMessage):
                 conversation.append({"role": "user", "content": msg.content})
             elif isinstance(msg, AIMessage):
@@ -423,15 +533,95 @@ class LangGraphAgentEngine:
                 # 使用 MemoryExtractor 提取并存储记忆
                 await self.memory_extractor.extract_and_store(
                     memory_store=self.memory_store,
-                    user_id=user_id,
+                    user_id=view.user_id,
                     conversation=conversation[-4:],  # 使用最近 2 轮对话
-                    session_id=session_id,
+                    session_id=view.session_id,
                 )
-                logger.info("Extracted and stored memories for session %s", session_id)
+                logger.info("Extracted and stored memories for session %s", view.session_id)
             except Exception as e:
                 logger.warning("Memory extraction failed: %s", e, exc_info=True)
 
         return {}
+
+    def _handle_llm_node_event(
+        self, node_output: dict[str, Any], current_iteration: int
+    ) -> list[AgentEvent]:
+        """处理 LLM 节点事件，返回推理和工具调用事件列表"""
+        events = []
+        reasoning = node_output.get("reasoning_content")
+        if reasoning:
+            events.append(
+                AgentEvent.thinking(
+                    status="reasoning",
+                    iteration=current_iteration,
+                    content=reasoning,
+                )
+            )
+
+        pending_calls = node_output.get("pending_tool_calls", [])
+        for tc in pending_calls:
+            events.append(
+                AgentEvent.tool_call(
+                    tool_call_id=tc.get("id", ""),
+                    tool_name=tc.get("name", ""),
+                    arguments=tc.get("args", {}),
+                )
+            )
+
+        return events
+
+    def _handle_tools_node_event(
+        self, node_output: dict[str, Any], current_iteration: int
+    ) -> list[AgentEvent]:
+        """处理工具执行节点事件，返回工具结果事件列表"""
+        events = []
+        if "tool_results" not in node_output:
+            return events
+
+        for tr in node_output["tool_results"]:
+            events.append(
+                AgentEvent.tool_result(
+                    tool_call_id=tr["tool_call_id"],
+                    tool_name=tr["tool_name"],
+                    success=tr["success"],
+                    output=tr["output"],
+                    error=tr["error"],
+                    duration_ms=tr["duration_ms"],
+                )
+            )
+
+        events.append(AgentEvent.thinking(status="analyzing", iteration=current_iteration))
+        return events
+
+    def _extract_final_content(self, final_result: dict[str, Any]) -> tuple[str, str | None]:
+        """从最终状态中提取内容和推理内容"""
+        final_content = ""
+        final_reasoning = final_result.get("reasoning_content")
+        messages = final_result.get("messages", [])
+
+        if not messages:
+            if final_reasoning:
+                final_content = final_reasoning
+            return final_content, final_reasoning
+
+        # 策略 1：从后往前找最后一条 AIMessage（非工具调用）
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
+                final_content = msg.content
+                break
+
+        # 策略 2：如果没找到非工具调用的消息，尝试获取最后一条 AIMessage 的 content
+        if not final_content:
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage) and msg.content:
+                    final_content = msg.content
+                    break
+
+        # 策略 3：如果仍然没有 content，使用 reasoning_content（推理模型兼容）
+        if not final_content and final_reasoning:
+            final_content = final_reasoning
+
+        return final_content, final_reasoning
 
     async def run(
         self,
@@ -441,6 +631,13 @@ class LangGraphAgentEngine:
     ) -> AsyncGenerator[AgentEvent, None]:
         """
         执行 Agent
+
+        业界最佳实践的事件流设计：
+        1. thinking 事件 - 包含状态和推理内容（如果模型支持）
+        2. tool_call 事件 - 包含工具名和参数
+        3. tool_result 事件 - 包含结果或错误详情
+        4. text 事件 - 最终回复内容
+        5. done 事件 - 统计信息
 
         Args:
             session_id: 会话 ID（作为 LangGraph 的 thread_id，也用于记忆隔离）
@@ -464,17 +661,16 @@ class LangGraphAgentEngine:
             "recalled_memories": [],
             "pending_tool_calls": [],
             "tool_results": [],
+            "reasoning_content": None,
         }
 
-        # 发送思考事件
-        yield AgentEvent(
-            type=EventType.THINKING,
-            data={"status": "processing"},
-        )
+        # 发送初始思考事件（使用类型安全工厂方法）
+        yield AgentEvent.thinking(status="processing", iteration=1)
 
         try:
             # 记录开始时间用于超时检查
             start_time = time.time()
+            current_iteration = 0
 
             # 使用 astream 来获取中间状态，以便发送工具调用事件
             async for event in self.graph.astream(initial_state, config=config):
@@ -482,73 +678,44 @@ class LangGraphAgentEngine:
                 elapsed = time.time() - start_time
                 if elapsed > self.timeout_seconds:
                     logger.warning("Agent execution timed out after %.1f seconds", elapsed)
-                    yield AgentEvent(
-                        type=EventType.ERROR,
-                        data={"error": f"执行超时（{self.timeout_seconds}秒）"},
-                    )
+                    yield AgentEvent.error(f"执行超时（{self.timeout_seconds}秒）")
                     return
 
                 # event 是一个字典，key 是节点名，value 是节点返回的状态更新
                 for node_name, node_output in event.items():
-                    # 处理工具执行事件
-                    if node_name == "execute_tools" and "tool_results" in node_output:
-                        for tr in node_output["tool_results"]:
-                            # 发送工具调用事件
-                            yield AgentEvent(
-                                type=EventType.TOOL_CALL,
-                                data={
-                                    "tool_call_id": tr["tool_call_id"],
-                                    "tool_name": tr["tool_name"],
-                                },
-                            )
-                            # 发送工具结果事件
-                            yield AgentEvent(
-                                type=EventType.TOOL_RESULT,
-                                data={
-                                    "tool_call_id": tr["tool_call_id"],
-                                    "success": tr["success"],
-                                    "output": tr["output"],
-                                    "error": tr["error"],
-                                    "duration_ms": tr["duration_ms"],
-                                },
-                            )
+                    if node_name == "call_llm":
+                        current_iteration += 1
+                        for evt in self._handle_llm_node_event(node_output, current_iteration):
+                            yield evt
+
+                    if node_name == "execute_tools":
+                        for evt in self._handle_tools_node_event(node_output, current_iteration):
+                            yield evt
 
             # astream 完成后，获取完整的最终状态
             # 注意：astream 返回的是增量更新，需要通过 get_state 获取完整状态
             final_state = await self.graph.aget_state(config)
             final_result = final_state.values if final_state else {}
 
-            # 获取最后一条消息
-            final_content = ""
-            messages = final_result.get("messages", [])
-            if messages:
-                # 从后往前找最后一条 AIMessage（非工具调用）
-                for msg in reversed(messages):
-                    if isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
-                        final_content = msg.content
-                        break
+            # 获取最后一条消息的内容
+            final_content, final_reasoning = self._extract_final_content(final_result)
 
             # 发送文本事件
             if final_content:
-                yield AgentEvent(
-                    type=EventType.TEXT,
-                    data={"content": final_content},
-                )
+                yield AgentEvent.text(final_content)
 
-            # 发送完成事件（包含 final_message 供前端使用）
-            yield AgentEvent(
-                type=EventType.DONE,
-                data={
-                    "iterations": final_result.get("iteration", 0),
-                    "tool_iterations": final_result.get("tool_iteration", 0),
-                    "total_tokens": final_result.get("total_tokens", 0),
-                    "final_message": {"content": final_content},
-                },
+            # 发送完成事件（使用类型安全工厂方法）
+            # 自动处理 reasoning_content
+            yield AgentEvent.done(
+                content=final_content,
+                reasoning_content=final_reasoning if final_reasoning != final_content else None,
+                iterations=current_iteration,
+                tool_iterations=final_result.get("tool_iteration", 0),
+                total_tokens=final_result.get("total_tokens", 0),
             )
 
+        except TimeoutError as e:
+            yield AgentEvent.error(str(e))
         except Exception as e:
             logger.exception("Agent execution error: %s", e)
-            yield AgentEvent(
-                type=EventType.ERROR,
-                data={"error": str(e)},
-            )
+            yield AgentEvent.error(str(e))

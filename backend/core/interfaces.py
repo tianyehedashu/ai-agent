@@ -1,7 +1,17 @@
 """
-Core Configuration - 核心配置接口
+Core Interfaces - 核心层接口定义
 
-定义 Core 层需要的配置接口，避免依赖应用层配置
+定义 Core 层依赖的配置接口（使用 Python Protocol 实现结构化子类型）。
+这些接口使 Core 层不直接依赖 app.config.Settings，遵循依赖倒置原则（DIP）。
+
+命名约定：所有 Protocol 类以 `Protocol` 后缀结尾，明确标识其为接口定义。
+
+使用方式：
+    from core.interfaces import LLMConfigProtocol
+
+    def create_gateway(config: LLMConfigProtocol) -> LLMGateway:
+        # config 可以是任何符合 LLMConfigProtocol 结构的对象
+        ...
 """
 
 from typing import Protocol
@@ -9,7 +19,7 @@ from typing import Protocol
 from pydantic import SecretStr
 
 
-class LLMConfig(Protocol):
+class LLMConfigProtocol(Protocol):
     """LLM 配置接口"""
 
     # API Keys
@@ -43,7 +53,7 @@ class LLMConfig(Protocol):
     is_development: bool = False
 
 
-class SandboxConfig(Protocol):
+class SandboxConfigProtocol(Protocol):
     """沙箱配置接口"""
 
     sandbox_enabled: bool
@@ -54,21 +64,21 @@ class SandboxConfig(Protocol):
     work_dir: str
 
 
-class MemoryConfig(Protocol):
+class MemoryConfigProtocol(Protocol):
     """记忆配置接口"""
 
-    # 使用 LLMConfig 中的 API keys
+    # 使用 LLMConfigProtocol 中的 API keys
     pass
 
 
-class QualityConfig(Protocol):
+class QualityConfigProtocol(Protocol):
     """代码质量配置接口"""
 
-    # 使用 LLMConfig 中的 API keys
+    # 使用 LLMConfigProtocol 中的 API keys
     pass
 
 
-class AuthConfig(Protocol):
+class AuthConfigProtocol(Protocol):
     """认证配置接口"""
 
     jwt_secret_key: str
@@ -77,7 +87,7 @@ class AuthConfig(Protocol):
     refresh_token_expire_days: int
 
 
-class ImageGeneratorConfig(Protocol):
+class ImageGeneratorConfigProtocol(Protocol):
     """图像生成配置接口"""
 
     # 火山引擎配置

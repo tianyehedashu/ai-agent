@@ -8,8 +8,9 @@ from collections.abc import AsyncGenerator
 import sys
 import traceback
 from typing import Annotated
+import uuid
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,10 +24,14 @@ from services.checkpoint import CheckpointService
 from services.memory import MemoryService
 from services.session import SessionService
 from services.stats import StatsService
+from services.title import TitleService
 from services.user import UserService
 from utils.logging import get_logger
 
 security = HTTPBearer(auto_error=False)
+
+# 匿名用户 Cookie 名称
+ANONYMOUS_USER_COOKIE = "anonymous_user_id"
 
 
 # =============================================================================
@@ -48,73 +53,112 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 # =============================================================================
 
 
+async def _get_or_create_anonymous_user(
+    db: AsyncSession,
+    anonymous_id: str,
+) -> CurrentUser | None:
+    """获取或创建匿名用户
+
+    为每个独立的 anonymous_id 创建独立的匿名用户，实现多匿名用户隔离。
+
+    Args:
+        db: 数据库会话
+        anonymous_id: 匿名用户标识（来自 Cookie 或新生成）
+
+    Returns:
+        CurrentUser 或 None（如果创建失败）
+    """
+    logger = get_logger(__name__)
+    # 使用 anonymous_id 生成唯一邮箱，实现用户隔离
+    anonymous_email = f"anonymous-{anonymous_id}@local"
+    user_service = UserService(db)
+
+    try:
+        # 先尝试通过邮箱查找匿名用户
+        user = await user_service.get_by_email(anonymous_email)
+
+        if not user:
+            # 如果不存在，创建新的匿名用户
+            try:
+                user = await user_service.create(
+                    email=anonymous_email,
+                    password=f"anonymous-{anonymous_id}",  # 随机密码，不会用于登录
+                    name=f"Anonymous User ({anonymous_id[:8]})",
+                )
+                logger.info("Created new anonymous user: %s", anonymous_email)
+            except Exception as e:
+                # 如果创建失败（可能因为并发创建），再次尝试获取
+                logger.warning("Failed to create anonymous user, will retry: %s", e)
+                # 开发环境下也直接输出
+                if settings.is_development:
+                    print("=" * 80, file=sys.stderr)
+                    print(
+                        f"ERROR creating anonymous user: {type(e).__name__}: {e}",
+                        file=sys.stderr,
+                    )
+                    traceback.print_exc(file=sys.stderr)
+                    print("=" * 80, file=sys.stderr)
+                # 再次尝试获取用户（可能其他请求已经创建了）
+                user = await user_service.get_by_email(anonymous_email)
+
+        if user:
+            return CurrentUser(
+                id=str(user.id),
+                email=user.email,
+                name=user.name or f"Anonymous User ({anonymous_id[:8]})",
+                is_anonymous=True,
+            )
+    except Exception as e:
+        # 捕获所有异常并记录
+        logger.exception("Error in _get_or_create_anonymous_user: %s", e)
+        if settings.is_development:
+            print("=" * 80, file=sys.stderr)
+            print(
+                f"ERROR in _get_or_create_anonymous_user: {type(e).__name__}: {e}", file=sys.stderr
+            )
+            traceback.print_exc(file=sys.stderr)
+            print("=" * 80, file=sys.stderr)
+        raise
+
+    return None
+
+
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
+    anonymous_user_id: str | None = Cookie(default=None, alias=ANONYMOUS_USER_COOKIE),
 ) -> CurrentUser:
     """
     获取当前用户
 
-    在开发模式下返回匿名用户，生产模式下需要有效 Token。
+    在开发模式下返回匿名用户（基于 Cookie 隔离），生产模式下需要有效 Token。
+
+    匿名用户隔离机制：
+    - 每个浏览器/客户端通过 Cookie 获得独立的 anonymous_user_id
+    - 不同的 anonymous_user_id 对应不同的用户记录
+    - 实现多匿名用户同时访问时的完全隔离
     """
+    logger = get_logger(__name__)
+
     if not credentials:
         if settings.is_development:
-            # 开发模式：自动创建或获取匿名用户
-            logger = get_logger(__name__)
-            anonymous_email = "anonymous@local"
-            user_service = UserService(db)
+            # 开发模式：基于 Cookie 的匿名用户隔离
+            # 如果没有 Cookie，生成新的 anonymous_id
+            if not anonymous_user_id:
+                anonymous_user_id = str(uuid.uuid4())
+                logger.info("Generated new anonymous_user_id: %s", anonymous_user_id[:8])
 
-            try:
-                # 先尝试通过邮箱查找匿名用户
-                user = await user_service.get_by_email(anonymous_email)
+            # 将 anonymous_id 存储到 request.state，供响应中间件设置 Cookie
+            request.state.anonymous_user_id = anonymous_user_id
 
-                if not user:
-                    # 如果不存在，创建匿名用户
-                    # 使用一个固定的密码哈希（不会用于登录，只是满足数据库约束）
-                    try:
-                        user = await user_service.create(
-                            email=anonymous_email,
-                            password="anonymous",  # 匿名用户密码（不会用于登录）
-                            name="Anonymous User",
-                        )
-                    except Exception as e:
-                        # 如果创建失败（可能因为并发创建），再次尝试获取
-                        logger.exception("Failed to create anonymous user, will retry: %s", e)
-                        # 开发环境下也直接输出
-                        if settings.is_development:
-                            print("=" * 80, file=sys.stderr)
-                            print(
-                                f"ERROR creating anonymous user: {type(e).__name__}: {e}",
-                                file=sys.stderr,
-                            )
-                            traceback.print_exc(file=sys.stderr)
-                            print("=" * 80, file=sys.stderr)
-                        # 不手动回滚，让 get_session() 统一处理
-                        # 再次尝试获取用户（可能其他请求已经创建了）
-                        user = await user_service.get_by_email(anonymous_email)
-            except Exception as e:
-                # 捕获所有异常并记录
-                logger.exception("Error in get_current_user (anonymous mode): %s", e)
-                # 开发环境下也直接输出到 stderr，确保能看到
-                if settings.is_development:
-                    print("=" * 80, file=sys.stderr)
-                    print(f"ERROR in get_current_user: {type(e).__name__}: {e}", file=sys.stderr)
-                    traceback.print_exc(file=sys.stderr)
-                    print("=" * 80, file=sys.stderr)
-                # 不手动回滚，让 get_session() 统一处理异常和回滚
-                raise
+            # 获取或创建匿名用户
+            current_user = await _get_or_create_anonymous_user(db, anonymous_user_id)
 
-            if user:
-                return CurrentUser(
-                    id=str(user.id),
-                    email=user.email,
-                    name=user.name or "Anonymous User",
-                    is_anonymous=True,
-                )
+            if current_user:
+                return current_user
             else:
-                # 如果无法创建或获取用户，抛出错误
-                # 在开发模式下，这不应该发生，但如果发生了，返回一个更友好的错误
-                logger.error("Failed to create or retrieve anonymous user after retry")
+                logger.error("Failed to create or retrieve anonymous user")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to create anonymous user. Please check database connection.",
@@ -270,6 +314,11 @@ async def get_agent_service(db: DbSession) -> AgentService:
 async def get_session_service(db: DbSession) -> SessionService:
     """获取会话服务"""
     return SessionService(db)
+
+
+async def get_title_service(db: DbSession) -> TitleService:
+    """获取标题服务"""
+    return TitleService(db=db)
 
 
 async def get_chat_service(

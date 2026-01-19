@@ -32,8 +32,15 @@ disk_limit = "1g"           # 磁盘空间限制
 
 # 网络配置
 [sandbox.network]
-enabled = false             # 默认禁用网络（安全）
-allowed_hosts = []          # 允许访问的主机（network.enabled=true 时生效）
+enabled = true              # 启用网络访问
+allowed_hosts = [           # 允许访问的主机（留空表示允许所有）
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "raw.githubusercontent.com",
+    "api.openai.com",
+    "api.anthropic.com",
+]
 dns_servers = []            # 自定义 DNS
 
 # 安全配置
@@ -44,9 +51,23 @@ drop_capabilities = ["ALL"] # 移除所有 Linux capabilities
 
 # Docker 特定配置
 [sandbox.docker]
-image = "python:3.11-slim"  # 默认镜像
-packages = []               # 预装 Python 包
-packages_cmd = ""           # 自定义包安装命令
+image = "ai-agent-sandbox:latest"  # 使用自定义镜像（包含 Node.js + Python + BusyBox）
+# image = "python:3.11-slim"       # 备用：官方 Python 镜像
+packages = []                      # 预装 Python 包
+packages_cmd = ""                  # 自定义包安装命令
+
+# 会话模式
+session_enabled = true             # 启用会话容器（状态保持）
+
+# 会话策略配置
+[sandbox.docker.session_policy]
+idle_timeout = 7200                # 空闲超时（秒）- 2 小时无活动后清理（更友好）
+disconnect_timeout = 1800          # 断开超时（秒）- 30 分钟后清理（允许临时离开）
+completion_retain = 3600           # 任务完成后保留（秒）- 1 小时后清理
+max_session_duration = 28800       # 最大会话时长（秒）- 8 小时硬性限制（支持长时间工作）
+max_sessions_per_user = 5          # 每用户最大会话数
+max_total_sessions = 200           # 全局最大会话数
+allow_session_reuse = true         # 允许同一对话复用容器
 
 # -----------------------------------------------------------------------------
 # Shell 环境配置

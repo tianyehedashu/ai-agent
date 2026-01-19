@@ -7,11 +7,12 @@ import json
 from typing import Annotated, Any
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from api.deps import AuthUser, check_ownership, get_session_service
+from api.deps import AuthUser, check_ownership, get_session_service, get_title_service
 from services.session import SessionService
+from services.title import TitleService
 
 router = APIRouter()
 
@@ -194,6 +195,58 @@ async def update_session(
     )
 
     return SessionResponse.model_validate(updated_session)
+
+
+@router.post("/{session_id}/generate-title", response_model=SessionResponse)
+async def generate_session_title(
+    session_id: str,
+    current_user: AuthUser,
+    session_service: SessionService = Depends(get_session_service),
+    title_service: TitleService = Depends(get_title_service),
+    strategy: Annotated[str, Query(description="生成策略: first_message 或 summary")] = "summary",
+) -> SessionResponse:
+    """生成会话标题
+
+    支持两种策略：
+    - first_message: 根据第一条消息生成（仅当会话只有一条消息时有效）
+    - summary: 根据多条消息总结生成
+    """
+    session = await session_service.get_by_id_or_raise(session_id)
+
+    # 检查权限
+    check_ownership(str(session.user_id), current_user.id, "Session")
+
+    # 验证策略
+    if strategy not in ["first_message", "summary"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid strategy. Must be 'first_message' or 'summary'",
+        )
+
+    # 获取第一条消息（如果是 first_message 策略）
+    first_message = None
+    if strategy == "first_message":
+        messages = await session_service.get_messages(session_id, skip=0, limit=1)
+        if messages and messages[0].content:
+            first_message = messages[0].content
+
+    # 生成并更新标题
+    success = await title_service.generate_and_update(
+        session_id=session_id,
+        strategy=strategy,  # type: ignore
+        message=first_message,
+        user_id=current_user.id,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate title",
+        )
+
+    # 刷新会话并返回
+    await session_service.db.refresh(session)
+    return SessionResponse.model_validate(session)
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

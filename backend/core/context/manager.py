@@ -15,6 +15,7 @@ from core.context.smart_compressor import (
     SmartContextCompressor,
 )
 from core.types import AgentConfig, Message
+from core.utils.message_formatter import estimate_message_tokens, format_message
 from utils.logging import get_logger
 from utils.tokens import count_tokens, truncate_to_token_limit
 
@@ -166,9 +167,13 @@ class ContextManager:
             }
         )
 
-        # 2. 智能压缩对话历史
+        # 2. 智能压缩对话历史（传入召回的记忆用于去重优化）
         if self.enable_smart_compression:
-            result = await self._compressor.compress(messages, self.history_budget)
+            result = await self._compressor.compress(
+                messages,
+                self.history_budget,
+                recalled_memories=memories,  # SimpleMem 协同：避免重复信息
+            )
             self._last_compression_result = result
 
             # 如果有摘要，添加为系统消息
@@ -276,7 +281,7 @@ class ContextManager:
         total_tokens = 0
 
         for msg in reversed(messages):
-            msg_tokens = self._estimate_message_tokens(msg)
+            msg_tokens = estimate_message_tokens(msg)
 
             if total_tokens + msg_tokens > self.history_budget:
                 break
@@ -287,53 +292,18 @@ class ContextManager:
         logger.debug("Trimmed history: %d -> %d messages", len(messages), len(trimmed))
         return trimmed
 
-    def _estimate_message_tokens(self, message: Message) -> int:
-        """估算单条消息的 token 数"""
-        tokens = 4  # 消息格式开销
-
-        if message.content:
-            tokens += count_tokens(message.content)
-
-        if message.tool_calls:
-            for tc in message.tool_calls:
-                tokens += count_tokens(tc.name)
-                tokens += count_tokens(str(tc.arguments))
-
-        return tokens
-
     def _format_message(self, message: Message) -> dict[str, Any]:
-        """格式化消息"""
-        result: dict[str, Any] = {"role": message.role.value}
-
-        if message.content:
-            result["content"] = message.content
-
-        if message.tool_calls:
-            result["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": str(tc.arguments),
-                    },
-                }
-                for tc in message.tool_calls
-            ]
-
-        if message.tool_call_id:
-            result["tool_call_id"] = message.tool_call_id
-
-        return result
+        """格式化消息（复用公共函数）"""
+        return format_message(message)
 
     def get_remaining_budget(self, current_messages: list[Message]) -> int:
         """获取剩余 token 预算"""
-        used = sum(self._estimate_message_tokens(m) for m in current_messages)
+        used = sum(estimate_message_tokens(m) for m in current_messages)
         return max(0, self.max_context_tokens - self.system_budget - used)
 
     def should_summarize(self, messages: list[Message]) -> bool:
         """判断是否需要摘要压缩"""
-        total_tokens = sum(self._estimate_message_tokens(m) for m in messages)
+        total_tokens = sum(estimate_message_tokens(m) for m in messages)
         return total_tokens > self.history_budget * 0.8
 
     async def summarize_history(

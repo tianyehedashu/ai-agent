@@ -159,7 +159,7 @@ class TestTaskEvaluator:
 
         # Arrange
         async def failing_run(prompt: str, timeout: int = 60):
-            raise Exception("Agent execution failed")
+            raise Exception("Agent execution failed")  # pylint: disable=broad-exception-raised
 
         mock_agent.run = failing_run
         test_cases = [

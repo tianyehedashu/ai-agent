@@ -184,6 +184,7 @@ class GAIAEvaluator:
 
         return content.strip()[:200]  # 截取前200字符
 
+    # pylint: disable=too-many-return-statements
     def _evaluate_answer(self, expected: str, actual: str) -> tuple[bool, float]:
         """评估答案正确性"""
         expected_clean = expected.strip().lower()
