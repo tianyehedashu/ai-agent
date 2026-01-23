@@ -7,48 +7,61 @@ import sys
 
 
 def check_architecture():
-    """检查架构符合性"""
+    """检查架构符合性
+
+    此函数在运行时动态导入各层模块以验证 DDD 4 层架构。
+    导入必须在函数内部进行，以便捕获 ImportError 并报告架构问题。
+    """
     print("1. Architecture Check (DDD 4-Layer)")
     print("-" * 50)
 
     checks = []
 
     # Presentation layer
+    # pylint: disable=import-outside-toplevel,unused-import
+    # 原因：运行时架构检查，必须在函数内部导入以捕获 ImportError
     try:
-        from domains.identity.presentation.router import router as identity_router  # noqa: F401
-        from domains.runtime.presentation.chat_router import router as chat_router  # noqa: F401
-        from domains.runtime.presentation.session_router import (
+        from domains.agent.presentation.chat_router import router as chat_router  # noqa: F401
+        from domains.agent.presentation.session_router import (
             router as session_router,  # noqa: F401
         )
+        from domains.identity.presentation.router import router as identity_router  # noqa: F401
+
         checks.append(("✓", "Presentation layer imports OK"))
     except ImportError as e:
         checks.append(("✗", f"Presentation layer import failed: {e}"))
 
     # Application layer
+    # pylint: disable=import-outside-toplevel,unused-import
     try:
+        from domains.agent.application.chat_use_case import ChatUseCase  # noqa: F401
+        from domains.agent.application.session_use_case import SessionUseCase  # noqa: F401
         from domains.identity.application.user_use_case import UserUseCase  # noqa: F401
-        from domains.runtime.application.chat_use_case import ChatUseCase  # noqa: F401
-        from domains.runtime.application.session_use_case import SessionUseCase  # noqa: F401
+
         checks.append(("✓", "Application layer imports OK"))
     except ImportError as e:
         checks.append(("✗", f"Application layer import failed: {e}"))
 
     # Domain layer
+    # pylint: disable=import-outside-toplevel,unused-import
     try:
+        from domains.agent.domain.entities.session import Session  # noqa: F401
         from domains.identity.domain.repositories.user_repository import (
             UserRepository,  # noqa: F401
         )
-        from domains.runtime.domain.entities.session import Session  # noqa: F401
+
         checks.append(("✓", "Domain layer imports OK"))
     except ImportError as e:
         checks.append(("✗", f"Domain layer import failed: {e}"))
 
     # Infrastructure layer
+    # pylint: disable=import-outside-toplevel,unused-import
     try:
-        from domains.identity.infrastructure.models.user import User  # noqa: F401
-        from domains.runtime.infrastructure.repositories.sqlalchemy_session_repository import (  # noqa: F401
+        from domains.agent.infrastructure.repositories.sqlalchemy_session_repository import (  # noqa: F401
             SQLAlchemySessionRepository,
         )
+        from domains.identity.infrastructure.models.user import User  # noqa: F401
+
         checks.append(("✓", "Infrastructure layer imports OK"))
     except ImportError as e:
         checks.append(("✗", f"Infrastructure layer import failed: {e}"))
@@ -131,8 +144,11 @@ def check_app_startup():
     print("\n4. FastAPI App Check")
     print("-" * 50)
 
+    # pylint: disable=import-outside-toplevel,unused-import
+    # 原因：运行时检查，必须在函数内部导入以捕获异常
     try:
         from bootstrap.main import app  # noqa: F401
+
         print("✓ FastAPI app imports OK")
         return True
     except Exception as e:

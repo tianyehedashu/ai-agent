@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from domains.runtime.infrastructure.sandbox.session_manager import (
+from domains.agent.infrastructure.sandbox.session_manager import (
     CleanupReason,
     SessionHistory,
     SessionInfo,

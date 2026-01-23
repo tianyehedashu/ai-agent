@@ -7,6 +7,7 @@ Pytest Configuration - 测试配置
 import asyncio
 from collections.abc import AsyncGenerator, Generator
 import contextlib
+import logging
 import os
 import sys
 from urllib.parse import urlparse
@@ -74,9 +75,9 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 from bootstrap.config import settings  # noqa: E402
-from shared.infrastructure.db.database import Base  # noqa: E402
+from domains.identity.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
 from domains.identity.infrastructure.models.user import User  # noqa: E402
-from shared.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
+from libs.db.database import Base  # noqa: E402
 
 # pylint: enable=wrong-import-position
 
@@ -92,6 +93,9 @@ TEST_DATABASE_URL = settings.database_url.replace(
 # 测试引擎（延迟创建，避免在导入时连接数据库）
 test_engine = None
 TestAsyncSessionLocal = None
+
+# 标记表是否已创建（进程级别）
+_tables_created = False
 
 
 async def _ensure_test_database():
@@ -183,15 +187,30 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """数据库会话 fixture"""
+    """数据库会话 fixture
+
+    使用嵌套事务（SAVEPOINT）确保测试完全隔离：
+    1. 表结构在进程启动时创建一次（幂等操作）
+    2. 每个测试在独立的 SAVEPOINT 中运行
+    3. 测试结束后回滚到 SAVEPOINT，数据完全隔离
+
+    这种方式支持并发测试（pytest-xdist），因为：
+    - 每个测试使用独立的数据库连接
+    - 每个连接有自己的事务和 SAVEPOINT
+    - 测试之间完全隔离，不会相互影响
+
+    注意：测试中的 commit() 会被转换为 SAVEPOINT 的 commit，
+    不会真正提交到数据库，测试结束后会回滚。
+    """
+    global _tables_created
+
     # 先确保测试数据库存在
     with contextlib.suppress(Exception):
-        # 如果创建数据库失败，继续尝试连接（可能数据库已存在）
         await _ensure_test_database()
 
     try:
         # 延迟创建测试引擎
-        engine, session_factory = _create_test_engine()
+        engine, _ = _create_test_engine()
         if engine is None:
             pytest.skip("Database engine creation failed (asyncpg may not be installed)")
     except RuntimeError as e:
@@ -207,15 +226,39 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     except Exception as e:
         pytest.skip(f"Database setup failed: {e}")
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # 确保表存在（幂等操作，多进程安全）
+    if not _tables_created:
+        async with engine.begin() as conn:
+            # create_all 是幂等的，多个进程同时调用也安全
+            await conn.run_sync(Base.metadata.create_all)
+        _tables_created = True
 
-    async with session_factory() as session:
-        yield session
-        await session.rollback()
+    # 创建独立的数据库连接
+    # 使用 begin() 开始一个事务，然后在其中创建 SAVEPOINT
+    connection = await engine.connect()
+    transaction = await connection.begin()
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    try:
+        # 创建会话，绑定到这个连接
+        # 使用 begin_nested() 创建 SAVEPOINT，这样测试中的 commit() 不会真正提交
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        # 开始嵌套事务（SAVEPOINT）
+        nested = await session.begin_nested()
+
+        try:
+            yield session
+        finally:
+            # 无论测试成功还是失败，都回滚 SAVEPOINT
+            if nested.is_active:
+                await nested.rollback()
+
+            # 关闭会话
+            await session.close()
+    finally:
+        # 回滚外层事务
+        await transaction.rollback()
+        await connection.close()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -232,19 +275,72 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
 
     with (
-        patch("shared.infrastructure.db.database.init_db"),
-        patch("shared.infrastructure.db.redis.init_redis"),
-        patch("shared.infrastructure.db.database.get_session_factory", return_value=mock_factory),
-        patch("shared.infrastructure.db.database.get_async_session", new=mock_factory),
+        patch("libs.db.database.init_db"),
+        patch("libs.db.redis.init_redis"),
+        patch("libs.db.database.get_session_factory", return_value=mock_factory),
+        patch("libs.db.database.get_async_session", new=mock_factory),
         # 在测试环境中禁用开发模式的匿名用户功能，确保认证测试正常工作
         # patch app_env 属性，这样 is_development property 会返回 False
         patch("bootstrap.config.settings.app_env", "production"),
     ):
         # 这些导入必须在 patch 生效后才能执行
         from bootstrap.main import app  # pylint: disable=import-outside-toplevel
-        from shared.infrastructure.db.database import get_session  # pylint: disable=import-outside-toplevel
-        from domains.runtime.infrastructure.engine.langgraph_checkpointer import (
+        from domains.agent.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
+        )
+        from libs.db.database import (
+            get_session,  # pylint: disable=import-outside-toplevel
+        )
+
+        async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
+            yield db_session
+
+        app.dependency_overrides[get_session] = override_get_session
+
+        # 确保 checkpointer 在测试环境中已初始化
+        if not hasattr(app.state, "checkpointer"):
+            # 在测试环境中使用 MemorySaver（更快，不需要数据库表）
+            test_checkpointer = LangGraphCheckpointer(storage_type="memory")
+            await test_checkpointer.setup()
+            app.state.checkpointer = test_checkpointer
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+
+        app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """开发模式 HTTP 客户端 fixture（启用匿名用户功能）"""
+    # 延迟导入，避免在导入时触发 lifespan 和循环导入
+    # pylint: disable=import-outside-toplevel
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    # Mock init_db 和 init_redis 以避免在测试时初始化
+    # 同时 mock get_session_factory 和 get_async_session 以支持直接调用
+    mock_factory = MagicMock()
+    mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
+    mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch("libs.db.database.init_db"),
+        patch("libs.db.redis.init_redis"),
+        patch("libs.db.database.get_session_factory", return_value=mock_factory),
+        patch("libs.db.database.get_async_session", new=mock_factory),
+        # 保持开发模式以启用匿名用户功能
+        patch("bootstrap.config.settings.app_env", "development"),
+    ):
+        # 这些导入必须在 patch 生效后才能执行
+        from bootstrap.main import app  # pylint: disable=import-outside-toplevel
+        from domains.agent.infrastructure.engine.langgraph_checkpointer import (
+            LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
+        )
+        from libs.db.database import (
+            get_session,  # pylint: disable=import-outside-toplevel
         )
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -273,7 +369,7 @@ async def test_user(db_session: AsyncSession) -> User:
     """测试用户 fixture"""
     user = User(
         email=f"test_{uuid.uuid4()}@example.com",  # 使用唯一邮箱避免冲突
-        password_hash="hashed_password",
+        hashed_password="hashed_password",
         name="Test User",
     )
     db_session.add(user)
@@ -347,7 +443,7 @@ def _suppress_litellm_atexit_errors():
 # 配置 LiteLLM 的日志处理器，使用安全的处理器避免退出时的错误
 # 注意：这只影响测试环境，不影响正常运行
 try:
-    import logging as _logging
+    import logging as _logging  # pylint: disable=ungrouped-imports
 
     from litellm._logging import verbose_logger as _verbose_logger
 
@@ -378,3 +474,55 @@ except Exception:
 import atexit  # noqa: E402  # pylint: disable=wrong-import-position,wrong-import-order
 
 atexit.register(_suppress_litellm_atexit_errors)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_docker_containers():
+    """
+    测试会话结束后清理孤儿 Docker 容器
+    在多进程测试（pytest-xdist）时，只清理已停止的容器和超时的容器,
+    避免影响其他进程正在使用的容器。
+
+    清理策略：
+    1. 清理所有已停止的容器（Exited 状态）- 这些是测试正常结束时留下的
+    2. 清理运行超过 5 分钟的容器 - 这些可能是泄漏的容器
+
+    为什么不会影响其他进程：
+    - 其他进程正在使用的容器运行时间很短（几秒到几分钟），不会被清理
+    - 只有已停止的容器和长时间运行的容器（超过 5 分钟）才会被清理
+    - 正常测试应该在几分钟内完成，所以不会误删其他进程的容器
+
+    注意：正常测试应该通过 try/finally 或 async with 自己清理容器，
+    这个 fixture 只是作为最后的保障，清理可能泄漏的容器。
+    """
+    yield
+
+    # 在测试会话结束时清理孤儿容器（已停止的或超时的）
+    try:
+        # pylint: disable=import-outside-toplevel
+        from domains.agent.infrastructure.sandbox.executor import (
+            SessionDockerExecutor,
+        )
+
+        # 清理孤儿容器（已停止的或运行超过 5 分钟的）
+        # 使用 nest_asyncio 支持在已有事件循环中运行
+        try:
+            _ = asyncio.get_running_loop()
+            # 如果已有事件循环，使用 nest_asyncio
+            nest_asyncio.apply()
+            cleaned = asyncio.run(
+                SessionDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
+            )
+        except RuntimeError:
+            # 没有运行的事件循环，直接运行
+            cleaned = asyncio.run(
+                SessionDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
+            )
+
+        if cleaned:
+            logger = logging.getLogger(__name__)
+            logger.info("Cleaned up %d orphaned test containers: %s", len(cleaned), cleaned)
+    except Exception as e:
+        # 如果清理失败，记录但不影响测试结果
+        logger = logging.getLogger(__name__)
+        logger.warning("Failed to cleanup Docker containers: %s", e)

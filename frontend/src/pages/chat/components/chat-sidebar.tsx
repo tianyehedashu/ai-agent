@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, MoreVertical, Loader2, MessageCircle, PanelLeftClose, PanelLeftOpen, MessageSquarePlus } from 'lucide-react'
+import { Trash2, MoreVertical, Loader2, MessageCircle, PanelLeftClose, PanelLeftOpen, MessageSquarePlus } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
@@ -24,7 +24,7 @@ import { cn, formatRelativeTime } from '@/lib/utils'
 import type { Session } from '@/types'
 
 // Group sessions by date
-const groupSessions = (sessions: Session[]) => {
+const groupSessions = (sessions: Session[]): Record<string, Session[]> => {
   const groups: Record<string, Session[]> = {
     '今天': [],
     '昨天': [],
@@ -84,7 +84,7 @@ export default function ChatSidebar(): React.JSX.Element {
     },
   })
 
-  const sessions = sessionsData?.items ?? []
+  const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
   
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
@@ -109,7 +109,9 @@ export default function ChatSidebar(): React.JSX.Element {
                 variant="ghost" 
                 size="icon" 
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={() => setIsCollapsed(!isCollapsed)}
+                onClick={() => {
+                  setIsCollapsed(!isCollapsed)
+                }}
               >
                 {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               </Button>
@@ -240,8 +242,12 @@ function SessionItem({
           ? 'bg-secondary text-foreground shadow-sm'
           : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => {
+        setIsHovered(true)
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false)
+      }}
     >
       {isCollapsed ? (
         <MessageCircle className="h-5 w-5" />

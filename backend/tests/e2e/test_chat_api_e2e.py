@@ -400,7 +400,7 @@ class TestLLMGatewayE2E:
         注意: 此测试需要配置 LLM API Key
         """
         from bootstrap.config import settings
-        from shared.infrastructure.llm.gateway import LLMGateway
+        from domains.agent.infrastructure.llm.gateway import LLMGateway
 
         gateway = LLMGateway(config=settings)
 

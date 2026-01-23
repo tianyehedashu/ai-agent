@@ -1,7 +1,8 @@
 """
 会话列表获取功能集成测试
 
-测试获取用户会话列表的各种场景（分页、过滤、排序等"""
+测试获取用户会话列表的各种场景（分页、过滤、排序等）
+"""
 
 from fastapi import status
 from httpx import AsyncClient
@@ -14,7 +15,7 @@ class TestSessionList:
 
     @pytest.mark.asyncio
     async def test_list_sessions_empty(self, dev_client: AsyncClient, auth_headers: dict):
-        """测试: 获取空会话列""
+        """测试: 获取空会话列表"""
         # Act
         list_response = await dev_client.get("/api/v1/sessions/", headers=auth_headers)
 
@@ -39,12 +40,14 @@ class TestSessionList:
             )
             session_ids.append(create_response.json()["id"])
 
-        # Act - 第一页（limit=2?        page1_response = await dev_client.get(
+        # Act - 第一页（limit=2）
+        page1_response = await dev_client.get(
             "/api/v1/sessions/?skip=0&limit=2", headers=auth_headers
         )
         page1_sessions = page1_response.json()
 
-        # Act - 第二页（limit=2?        page2_response = await dev_client.get(
+        # Act - 第二页（limit=2）
+        page2_response = await dev_client.get(
             "/api/v1/sessions/?skip=2&limit=2", headers=auth_headers
         )
         page2_sessions = page2_response.json()
@@ -70,7 +73,8 @@ class TestSessionList:
         )
         agent_id = agent_response.json()["id"]
 
-        # Arrange - 创建Agent 的会话和不带 Agent 的会        with_agent_response = await dev_client.post(
+        # Arrange - 创建 Agent 的会话和不带 Agent 的会话
+        with_agent_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"agent_id": agent_id, "title": "With Agent"},
             headers=auth_headers,
@@ -101,7 +105,8 @@ class TestSessionList:
         self, dev_client: AsyncClient, auth_headers: dict
     ):
         """测试: limit 参数验证"""
-        # Act - limit 超过最大值（100?        response = await dev_client.get("/api/v1/sessions/?limit=101", headers=auth_headers)
+        # Act - limit 超过最大值（100）
+        response = await dev_client.get("/api/v1/sessions/?limit=101", headers=auth_headers)
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -111,7 +116,8 @@ class TestSessionList:
         self, dev_client: AsyncClient, auth_headers: dict
     ):
         """测试: skip 参数验证"""
-        # Act - skip 为负        response = await dev_client.get("/api/v1/sessions/?skip=-1", headers=auth_headers)
+        # Act - skip 为负数
+        response = await dev_client.get("/api/v1/sessions/?skip=-1", headers=auth_headers)
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -181,7 +187,7 @@ class TestSessionList:
     async def test_list_sessions_only_returns_own_sessions(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 用户只能看到自己的会""
+        """测试: 用户只能看到自己的会话"""
         # Arrange - 注册用户创建会话
         registered_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -205,10 +211,12 @@ class TestSessionList:
         anonymous_list = await dev_client.get("/api/v1/sessions/")
         anonymous_sessions = anonymous_list.json()
 
-        # Assert - 注册用户只能看到自己的会        registered_ids = [s["id"] for s in registered_sessions]
+        # Assert - 注册用户只能看到自己的会话
+        registered_ids = [s["id"] for s in registered_sessions]
         assert registered_session_id in registered_ids
         assert anonymous_session_id not in registered_ids
 
-        # Assert - 匿名用户只能看到自己的会        anonymous_ids = [s["id"] for s in anonymous_sessions]
+        # Assert - 匿名用户只能看到自己的会话
+        anonymous_ids = [s["id"] for s in anonymous_sessions]
         assert anonymous_session_id in anonymous_ids
         assert registered_session_id not in anonymous_ids

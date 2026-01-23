@@ -12,11 +12,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bootstrap.config import settings
-from domains.runtime.infrastructure.engine.langgraph_agent import LangGraphAgentEngine
-from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from shared.infrastructure.llm.gateway import LLMGateway
-from domains.runtime.infrastructure.memory.langgraph_store import LongTermMemoryStore
-from shared.types import AgentConfig
+from domains.agent.domain.types import AgentConfig
+from domains.agent.infrastructure.engine.langgraph_agent import LangGraphAgentEngine
+from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 
 
 class TestChatE2E:

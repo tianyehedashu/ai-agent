@@ -3,7 +3,7 @@
 """
 
 
-from shared.infrastructure.config.execution_config import (
+from libs.config.execution_config import (
     DockerConfig,
     ExecutionConfig,
     SandboxConfig,
@@ -11,7 +11,7 @@ from shared.infrastructure.config.execution_config import (
     SecurityConfig,
     ToolsConfig,
 )
-from shared.infrastructure.config.validators import (
+from libs.config.validators import (
     CompositeValidator,
     SandboxValidator,
     SecurityValidator,

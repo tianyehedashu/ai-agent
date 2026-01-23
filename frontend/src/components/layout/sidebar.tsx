@@ -51,7 +51,7 @@ const navigation = [
 ]
 
 // Group sessions by date
-const groupSessions = (sessions: Session[]) => {
+const groupSessions = (sessions: Session[]): Record<string, Session[]> => {
   const groups: Record<string, Session[]> = {
     今天: [],
     昨天: [],
@@ -114,7 +114,7 @@ export default function Sidebar(): React.JSX.Element {
     },
   })
 
-  const sessions = sessionsData?.items ?? []
+  const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
   const handleCreateSession = (): void => {
@@ -130,23 +130,23 @@ export default function Sidebar(): React.JSX.Element {
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
-          'relative flex h-full flex-col border-r border-border/50 bg-card/50 backdrop-blur-xl transition-all duration-300',
+          'relative flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300',
           isCollapsed ? 'w-16' : 'w-72'
         )}
       >
         {/* Logo */}
-        <div className="flex h-14 items-center border-b border-border/50 px-4">
+        <div className="flex h-14 items-center border-b border-border/40 px-4">
           {!isCollapsed && (
-            <Link to="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-sm">
-                <Bot className="h-5 w-5 text-primary-foreground" />
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm transition-colors group-hover:bg-primary/20">
+                <Bot className="h-5 w-5 text-primary" />
               </div>
               <span className="text-lg font-semibold tracking-tight">AI Agent</span>
             </Link>
           )}
           {isCollapsed && (
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-sm">
-              <Bot className="h-5 w-5 text-primary-foreground" />
+            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm">
+              <Bot className="h-5 w-5 text-primary" />
             </div>
           )}
         </div>
@@ -158,7 +158,7 @@ export default function Sidebar(): React.JSX.Element {
               <Button
                 variant="default"
                 className={cn(
-                  'w-full shadow-sm transition-all hover:shadow-md',
+                  'w-full shadow-sm transition-all hover:shadow-md bg-primary text-primary-foreground hover:bg-primary/90',
                   isCollapsed ? 'px-0' : 'justify-start gap-2'
                 )}
                 onClick={handleCreateSession}
@@ -359,8 +359,8 @@ function SessionItem({
           ? 'bg-secondary text-foreground'
           : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => { setIsHovered(true); }}
+      onMouseLeave={() => { setIsHovered(false); }}
     >
       <span className="flex-1 truncate text-[13px]">{session.title ?? '新对话'}</span>
       {(isHovered || isActive) && (

@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.infrastructure.db.database import get_session
 from domains.identity.application import UserUseCase
 from domains.identity.application.principal_service import ANONYMOUS_USER_COOKIE
 from domains.identity.infrastructure.authentication import (
@@ -14,9 +13,9 @@ from domains.identity.infrastructure.authentication import (
     current_active_user,
     fastapi_users,
 )
-from domains.identity.presentation.schemas import UserCreate, UserRead, UserUpdate
-from shared.presentation.deps import get_current_user
-from shared.presentation.schemas import CurrentUser
+from domains.identity.presentation.deps import get_current_user
+from domains.identity.presentation.schemas import CurrentUser, UserCreate, UserRead, UserUpdate
+from libs.db.database import get_session
 
 router = APIRouter()
 

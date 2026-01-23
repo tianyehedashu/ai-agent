@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { Sparkles, Loader2 } from 'lucide-react'
 
+import { sessionApi } from '@/api/session'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { sessionApi } from '@/api/session'
 
 interface EditTitleDialogProps {
   open: boolean
@@ -100,7 +100,7 @@ export function EditTitleDialog({
             <Input
               id="title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); }}
               placeholder="输入标题..."
               maxLength={200}
             />
@@ -151,7 +151,7 @@ export function EditTitleDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => { onOpenChange(false); }}>
             取消
           </Button>
           <Button onClick={handleSave} disabled={isSaving || !title.trim()}>

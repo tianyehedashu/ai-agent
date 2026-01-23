@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
+from domains.agent.application.title_use_case import TitleUseCase
 from domains.identity.infrastructure.models.user import User
-from domains.runtime.application.title_use_case import TitleUseCase
 
 
 @pytest.mark.unit

@@ -8,8 +8,13 @@ import uuid
 
 import pytest
 
-from shared.types import AgentState, Checkpoint, Message, MessageRole
-from domains.runtime.application.checkpoint_service import CheckpointService
+from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.domain.types import (
+    AgentState,
+    Checkpoint,
+    Message,
+    MessageRole,
+)
 from exceptions import CheckpointError
 
 
@@ -30,9 +35,22 @@ class TestCheckpointService:
     @pytest.fixture
     def service(self, db_session, mock_cache):
         """Create service instance."""
-        with patch(
-            "domains.runtime.application.checkpoint_service.CheckpointCache",
-            return_value=mock_cache,
+        # Mock CheckpointCache to return our mock instance
+        # Also mock get_redis to avoid Redis initialization errors
+        mock_redis = AsyncMock()
+        with (
+            patch(
+                "domains.agent.application.checkpoint_service.CheckpointCache",
+                return_value=mock_cache,
+            ),
+            patch(
+                "domains.agent.infrastructure.memory.checkpoint_cache.get_redis",
+                return_value=mock_redis,
+            ),
+            patch(
+                "libs.db.redis.get_redis",
+                return_value=mock_redis,
+            ),
         ):
             return CheckpointService(db_session)
 

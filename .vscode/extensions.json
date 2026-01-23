@@ -15,7 +15,10 @@
 
     // 其他有用的扩展
     "ms-python.black-formatter",
-    "ms-python.isort"
+    "ms-python.isort",
+
+    // 前端扩展
+    "bradlc.vscode-tailwindcss"
   ],
   "unwantedRecommendations": [
     // 避免使用冲突的 linter

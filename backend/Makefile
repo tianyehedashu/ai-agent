@@ -115,7 +115,7 @@ lint-fix: ## 运行代码检查并自动修复
 
 lint-pylint: ## 运行 Pylint 检查
 	@echo 运行 Pylint 检查...
-	-$(UV) run pylint app api core models schemas services db utils workers scripts --output-format=parseable
+	-$(UV) run pylint domains shared bootstrap workers scripts utils exceptions evaluation --output-format=parseable
 
 format: ## 格式化代码
 	@echo 格式化代码...
@@ -158,26 +158,28 @@ fix: lint-fix format ## 自动修复所有问题
 # 并发测试配置: 使用 pytest-xdist 加速测试执行
 # 可通过环境变量 PYTEST_NUM_WORKERS 自定义并发数，默认为 auto（自动检测 CPU 核心数）
 PYTEST_NUM_WORKERS ?= auto
+# 使用 loadgroup 分发策略，确保 xdist_group 标记的测试在同一个 worker 中运行
+PYTEST_DIST ?= loadgroup
 
 test: ## 运行测试（不含 E2E，并发执行）
 	@echo 运行测试（排除 E2E，并发数: $(PYTEST_NUM_WORKERS)）...
-	$(UV) run pytest -m "not e2e" -n $(PYTEST_NUM_WORKERS)
+	$(UV) run pytest -m "not e2e" -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 
 test-all: ## 运行所有测试（包含 E2E，需要启动环境，并发执行）
 	@echo 运行所有测试（并发数: $(PYTEST_NUM_WORKERS)）...
-	$(UV) run pytest -n $(PYTEST_NUM_WORKERS)
+	$(UV) run pytest -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 
 test-cov: ## 运行测试并生成覆盖率报告（不含 E2E，并发执行）
 	@echo 运行测试 (带覆盖率，并发数: $(PYTEST_NUM_WORKERS))...
-	$(UV) run pytest -m "not e2e" --cov --cov-report=html --cov-report=term-missing -n $(PYTEST_NUM_WORKERS)
+	$(UV) run pytest -m "not e2e" --cov --cov-report=html --cov-report=term-missing -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 
 test-unit: ## 只运行单元测试（并发执行）
 	@echo 运行单元测试（并发数: $(PYTEST_NUM_WORKERS)）...
-	$(UV) run pytest -m unit -n $(PYTEST_NUM_WORKERS)
+	$(UV) run pytest -m unit -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 
 test-integration: ## 只运行集成测试（使用 TestClient，不需要启动服务，并发执行）
 	@echo 运行集成测试（并发数: $(PYTEST_NUM_WORKERS)）...
-	$(UV) run pytest -m integration -n $(PYTEST_NUM_WORKERS)
+	$(UV) run pytest -m integration -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 
 test-e2e: ## 运行 E2E 测试（跳过慢测试，需要启动 docker-compose 和后端服务，单进程执行避免资源冲突）
 	@echo ==========================================
@@ -311,6 +313,15 @@ docker-build-sandbox: ## 构建沙箱镜像（包含 busybox 和常用工具）
 docker-test-sandbox: ## 测试沙箱镜像
 	docker run -it --rm ai-agent-sandbox:latest bash
 
+docker-cleanup-sandbox: ## 清理所有沙箱容器（交互式）
+	python scripts/cleanup_sandbox_containers.py
+
+docker-cleanup-sandbox-force: ## 强制清理所有沙箱容器（包括运行中的）
+	python scripts/cleanup_sandbox_containers.py --force
+
+docker-cleanup-sandbox-dry-run: ## 预览要清理的沙箱容器（不实际删除）
+	python scripts/cleanup_sandbox_containers.py --dry-run
+
 docker-compose-up: ## 启动所有服务 (docker-compose)
 	docker-compose up -d
 
@@ -336,7 +347,7 @@ sonar: ## 运行 SonarCloud 扫描并下载报告 (支持从 .env 文件读取�
 	@echo 检查环境...
 	@$(PYTHON) scripts/check_sonar_env.py
 	@echo 生成覆盖率报告（并发数: $(PYTEST_NUM_WORKERS)）...
-	-$(UV) run pytest --cov --cov-report=xml:coverage.xml --junitxml=test-results.xml -q -n $(PYTEST_NUM_WORKERS)
+	-$(UV) run pytest --cov --cov-report=xml:coverage.xml --junitxml=test-results.xml -q -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 	@echo 运行 SonarCloud 扫描...
 	@$(PYTHON) scripts/run_sonar_scanner.py
 	@echo ✓ SonarCloud 扫描完成
@@ -356,7 +367,7 @@ sonar-scan: ## 只运行 SonarCloud 扫描（不下载报告）
 	@echo 检查环境...
 	@$(PYTHON) scripts/check_sonar_env.py
 	@echo 生成覆盖率报告（并发数: $(PYTEST_NUM_WORKERS)）...
-	-$(UV) run pytest --cov --cov-report=xml:coverage.xml --junitxml=test-results.xml -q -n $(PYTEST_NUM_WORKERS)
+	-$(UV) run pytest --cov --cov-report=xml:coverage.xml --junitxml=test-results.xml -q -n $(PYTEST_NUM_WORKERS) --dist=$(PYTEST_DIST)
 	@echo 运行 SonarCloud 扫描...
 	@$(PYTHON) scripts/run_sonar_scanner.py
 	@echo ✓ SonarCloud 扫描完成

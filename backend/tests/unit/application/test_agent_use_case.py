@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.agent_catalog.application.agent_use_case import AgentUseCase
+from domains.agent.application.agent_use_case import AgentUseCase
 from domains.identity.infrastructure.models.user import User
 from exceptions import NotFoundError
 

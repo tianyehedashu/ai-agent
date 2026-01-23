@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from shared.infrastructure.llm.gateway import LLMGateway, LLMResponse
-from shared.types import ToolCall
+from domains.agent.domain.types import ToolCall
+from domains.agent.infrastructure.llm.gateway import LLMGateway, LLMResponse
 
 
 class TestLLMGateway:
@@ -85,7 +85,7 @@ class TestLLMGateway:
     async def test_chat_with_streaming(self, gateway):
         """测试: 流式响应"""
         # Arrange
-        from shared.infrastructure.llm.gateway import StreamChunk
+        from domains.agent.infrastructure.llm.gateway import StreamChunk
 
         async def mock_stream(**kwargs):
             chunks = [

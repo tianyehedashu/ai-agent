@@ -5,21 +5,21 @@ User Model - 用户模型
 
 from typing import TYPE_CHECKING
 
-from fastapi_users.db import SQLAlchemyBaseUserTableUUID
+from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.infrastructure.db.database import Base
-from shared.infrastructure.orm.base import TimestampMixin
+from libs.db.database import Base
+from libs.orm.base import TimestampMixin
 
 # SQLAlchemy relationship 常量
 CASCADE_DELETE_ORPHAN = "all, delete-orphan"
 
 if TYPE_CHECKING:
-    from domains.agent_catalog.infrastructure.models.agent import Agent
-    from domains.runtime.infrastructure.models.memory import Memory
-    from domains.runtime.infrastructure.models.session import Session
+    from domains.agent.infrastructure.models.agent import Agent
+    from domains.agent.infrastructure.models.memory import Memory
+    from domains.agent.infrastructure.models.session import Session
 
 
 class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):

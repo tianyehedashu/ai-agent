@@ -6,14 +6,14 @@
 
 import pytest
 
-from shared.infrastructure.config.execution_config import ExecutionConfig, HITLConfig, ToolsConfig
-from shared.infrastructure.config.service import (
+from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
+from libs.config.execution_config import ExecutionConfig, HITLConfig, ToolsConfig
+from libs.config.service import (
     ExecutionConfigService,
     get_execution_config_service,
     reset_execution_config_service,
 )
-from shared.infrastructure.config.sources.toml_source import AgentTomlSource, TomlConfigSource
-from domains.runtime.infrastructure.tools.registry import ConfiguredToolRegistry
+from libs.config.sources.toml_source import AgentTomlSource, TomlConfigSource
 
 
 class TestExecutionConfigServiceIntegration:

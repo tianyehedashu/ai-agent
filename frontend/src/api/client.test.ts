@@ -95,8 +95,8 @@ describe('ApiClient', () => {
           method: 'GET',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          }),
-        })
+          }) as Record<string, unknown>,
+        }) as RequestInit
       )
     })
 
@@ -220,8 +220,8 @@ describe('ApiClient', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer test-token',
-          }),
-        })
+          }) as Record<string, unknown>,
+        }) as RequestInit
       )
     })
 

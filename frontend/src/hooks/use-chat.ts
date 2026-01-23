@@ -6,6 +6,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 
+import { useQueryClient } from '@tanstack/react-query'
+
 import { chatApi } from '@/api/chat'
 import { generateId } from '@/lib/utils'
 import type { ChatEvent, Message, ProcessEvent, SessionRecreationData, ToolCall } from '@/types'
@@ -44,6 +46,7 @@ interface InterruptState {
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const { sessionId: initialSessionId, agentId, onError } = options
+  const queryClient = useQueryClient()
 
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -79,6 +82,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const sessionData = event.data as { session_id?: string }
           if (sessionData.session_id) {
             sessionIdRef.current = sessionData.session_id
+            // 刷新会话列表，以便显示新创建的会话
+            void queryClient.invalidateQueries({ queryKey: ['sessions'] })
           }
           break
         }
@@ -251,6 +256,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           currentRunIdRef.current = null
           setCurrentRunId(null)
           setIsLoading(false)
+          
+          // 对话完成后刷新会话列表，以便显示可能已生成的标题
+          // 标题生成是异步的，可能在对话完成后才完成
+          if (sessionIdRef.current) {
+            // 延迟一点刷新，给标题生成留出时间
+            setTimeout(() => {
+              void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+            }, 1000)
+          }
           break
         }
 
@@ -275,7 +289,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       }
     },
-    [appendProcessEvent, onError]
+    [appendProcessEvent, onError, queryClient]
   )
 
   const cancelRequest = useCallback(() => {

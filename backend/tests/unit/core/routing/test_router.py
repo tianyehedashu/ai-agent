@@ -4,8 +4,13 @@ Routing 单元测试
 
 import pytest
 
-from domains.runtime.infrastructure.routing.router import RouteDecision, StateRouter
-from shared.types import AgentState, Message, MessageRole, ToolCall
+from domains.agent.domain.types import (
+    AgentState,
+    Message,
+    MessageRole,
+    ToolCall,
+)
+from domains.agent.infrastructure.routing.router import RouteDecision, StateRouter
 
 
 @pytest.mark.unit

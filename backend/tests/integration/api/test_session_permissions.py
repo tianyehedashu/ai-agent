@@ -19,7 +19,7 @@ class TestSessionPermissions:
     async def test_anonymous_user_cannot_access_registered_user_session(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 匿名用户不能访问注册用户的会""
+        """测试: 匿名用户不能访问注册用户的会话"""
         # Arrange - 注册用户创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -29,10 +29,12 @@ class TestSessionPermissions:
         assert create_response.status_code == status.HTTP_201_CREATED
         session_id = create_response.json()["id"]
 
-        # Act - 匿名用户（无认证头）尝试访问注册用户的会        # 清除可能存在的认证头，确保是匿名用户
+        # Act - 匿名用户（无认证头）尝试访问注册用户的会话
+        # 清除可能存在的认证头，确保是匿名用户
         anonymous_response = await dev_client.get(f"/api/v1/sessions/{session_id}")
 
-        # Assert - 应该返回 403 ?404（不泄露权限信息        assert anonymous_response.status_code in [
+        # Assert - 应该返回 403 或 404（不泄露权限信息）
+        assert anonymous_response.status_code in [
             status.HTTP_403_FORBIDDEN,
             status.HTTP_404_NOT_FOUND,
         ]
@@ -41,28 +43,31 @@ class TestSessionPermissions:
     async def test_registered_user_cannot_access_anonymous_user_session(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 注册用户不能访问匿名用户的会""
+        """测试: 注册用户不能访问匿名用户的会话"""
         # Arrange - 匿名用户创建会话
-        # 清除认证头，确保是匿名用        anon_create_response = await dev_client.post(
+        # 清除认证头，确保是匿名用户
+        anon_create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Anonymous User Session"},
         )
         assert anon_create_response.status_code == status.HTTP_201_CREATED
         anon_session_id = anon_create_response.json()["id"]
 
-        # Act - 注册用户尝试访问匿名用户的会        registered_response = await dev_client.get(
+        # Act - 注册用户尝试访问匿名用户的会话
+        registered_response = await dev_client.get(
             f"/api/v1/sessions/{anon_session_id}",
             headers=auth_headers,
         )
 
-        # Assert - 应该返回 403 ?404（不泄露权限信息        assert registered_response.status_code in [
+        # Assert - 应该返回 403 或 404（不泄露权限信息）
+        assert registered_response.status_code in [
             status.HTTP_403_FORBIDDEN,
             status.HTTP_404_NOT_FOUND,
         ]
 
     @pytest.mark.asyncio
     async def test_anonymous_user_can_only_see_own_sessions(self, dev_client: AsyncClient):
-        """测试: 匿名用户只能看到自己的会""
+        """测试: 匿名用户只能看到自己的会话"""
         # Arrange - 匿名用户 1 创建会话
         anon1_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -72,7 +77,7 @@ class TestSessionPermissions:
         anon1_session_id = anon1_response.json()["id"]
         anon1_cookie = dev_client.cookies.get(ANONYMOUS_USER_COOKIE)
 
-        # Arrange - 匿名用户 2 创建会话（清Cookie 模拟新用户）
+        # Arrange - 匿名用户 2 创建会话（清除 Cookie 模拟新用户）
         dev_client.cookies.clear()
         anon2_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -81,10 +86,12 @@ class TestSessionPermissions:
         assert anon2_response.status_code == status.HTTP_201_CREATED
         anon2_session_id = anon2_response.json()["id"]
 
-        # Act - 匿名用户 1 查看自己的会话列        dev_client.cookies.set(ANONYMOUS_USER_COOKIE, anon1_cookie)
+        # Act - 匿名用户 1 查看自己的会话列表
+        dev_client.cookies.set(ANONYMOUS_USER_COOKIE, anon1_cookie)
         anon1_list_response = await dev_client.get("/api/v1/sessions/")
 
-        # Act - 匿名用户 2 查看自己的会话列        dev_client.cookies.clear()
+        # Act - 匿名用户 2 查看自己的会话列表
+        dev_client.cookies.clear()
         dev_client.cookies.set(
             ANONYMOUS_USER_COOKIE, anon2_response.cookies.get(ANONYMOUS_USER_COOKIE)
         )
@@ -105,7 +112,7 @@ class TestSessionPermissions:
     async def test_anonymous_user_cannot_update_registered_user_session(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 匿名用户不能更新注册用户的会""
+        """测试: 匿名用户不能更新注册用户的会话"""
         # Arrange - 注册用户创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -130,7 +137,7 @@ class TestSessionPermissions:
     async def test_anonymous_user_cannot_delete_registered_user_session(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 匿名用户不能删除注册用户的会""
+        """测试: 匿名用户不能删除注册用户的会话"""
         # Arrange - 注册用户创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -157,7 +164,7 @@ class TestSessionPermissions:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_session_response_format(self, dev_client: AsyncClient):
-        """测试: 匿名用户会话的响应格式包anonymous_user_id"""
+        """测试: 匿名用户会话的响应格式包含 anonymous_user_id"""
         # Arrange & Act
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -178,7 +185,7 @@ class TestSessionPermissions:
     async def test_registered_user_session_response_format(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 注册用户会话的响应格式包user_id"""
+        """测试: 注册用户会话的响应格式包含 user_id"""
         # Arrange & Act
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -197,7 +204,7 @@ class TestSessionPermissions:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_can_access_own_session_messages(self, dev_client: AsyncClient):
-        """测试: 匿名用户可以访问自己会话的消""
+        """测试: 匿名用户可以访问自己会话的消息"""
         # Arrange - 创建匿名用户会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -216,7 +223,7 @@ class TestSessionPermissions:
     async def test_anonymous_user_cannot_access_other_anonymous_user_messages(
         self, dev_client: AsyncClient
     ):
-        """测试: 匿名用户不能访问其他匿名用户会话的消""
+        """测试: 匿名用户不能访问其他匿名用户会话的消息"""
         # Arrange - 匿名用户 1 创建会话
         anon1_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -224,9 +231,11 @@ class TestSessionPermissions:
         )
         anon1_session_id = anon1_response.json()["id"]
 
-        # Arrange - 匿名用户 2（清Cookie?        dev_client.cookies.clear()
+        # Arrange - 匿名用户 2（清除 Cookie）
+        dev_client.cookies.clear()
 
-        # Act - 匿名用户 2 尝试访问匿名用户 1 的会话消        messages_response = await dev_client.get(f"/api/v1/sessions/{anon1_session_id}/messages")
+        # Act - 匿名用户 2 尝试访问匿名用户 1 的会话消息
+        messages_response = await dev_client.get(f"/api/v1/sessions/{anon1_session_id}/messages")
 
         # Assert
         assert messages_response.status_code in [

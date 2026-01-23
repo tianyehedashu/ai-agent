@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
-from shared.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.gateway import LLMGateway
 
 
 class JudgeScore(BaseModel):

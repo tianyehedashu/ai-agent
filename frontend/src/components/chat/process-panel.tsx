@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import {
   AlertTriangle,
   Brain,
@@ -54,7 +55,7 @@ function processEventsForDisplay(events: ProcessEvent[]): DisplayEvent[] {
   let textBuffer: ProcessEvent[] = []
   let thinkingBuffer: ProcessEvent[] = []
 
-  const flushTextBuffer = () => {
+  const flushTextBuffer = (): void => {
     if (textBuffer.length === 0) return
     const combinedContent = textBuffer
       .map((e) => {
@@ -76,7 +77,7 @@ function processEventsForDisplay(events: ProcessEvent[]): DisplayEvent[] {
     textBuffer = []
   }
 
-  const flushThinkingBuffer = () => {
+  const flushThinkingBuffer = (): void => {
     if (thinkingBuffer.length === 0) return
     // 合并连续的 thinking 事件
     const lastThinking = thinkingBuffer[thinkingBuffer.length - 1]
@@ -265,7 +266,7 @@ function ProcessEventItem({
   const Icon = meta.icon
   const hasDetails = Boolean(event.details)
 
-  const getIcon = () => {
+  const getIcon = (): React.JSX.Element => {
     if (event.isError) {
       return <XCircle className="h-3.5 w-3.5 text-red-500" />
     }
@@ -312,7 +313,7 @@ function ProcessEventItem({
           {hasDetails && (
             <button
               type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => { setIsExpanded(!isExpanded); }}
               className="shrink-0 rounded p-0.5 hover:bg-muted/50"
             >
               {isExpanded ? (
@@ -368,9 +369,9 @@ export function ProcessPanel({
 
   // 生成摘要徽章
   const badges = [
-    thinkingCount > 0 && { label: `思考 ${thinkingCount}`, color: 'text-purple-500' },
-    toolCount > 0 && { label: `工具 ${toolCount}`, color: 'text-blue-500' },
-    errorCount > 0 && { label: `失败 ${errorCount}`, color: 'text-red-500' },
+    thinkingCount > 0 && { label: `思考 ${String(thinkingCount)}`, color: 'text-purple-500' },
+    toolCount > 0 && { label: `工具 ${String(toolCount)}`, color: 'text-blue-500' },
+    errorCount > 0 && { label: `失败 ${String(errorCount)}`, color: 'text-red-500' },
   ].filter(Boolean) as Array<{ label: string; color: string }>
 
   return (
@@ -378,7 +379,7 @@ export function ProcessPanel({
       {/* 可点击的头部 */}
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => { setIsExpanded(!isExpanded); }}
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/20"
       >
         {/* 展开/折叠图标 */}
@@ -438,7 +439,7 @@ export function ProcessPanel({
       {isExpanded && needsExpandAll && (
         <button
           type="button"
-          onClick={() => setIsFullHeight(!isFullHeight)}
+          onClick={() => { setIsFullHeight(!isFullHeight); }}
           className="flex w-full items-center justify-center gap-1 border-t border-border/30 py-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
         >
           {isFullHeight ? (

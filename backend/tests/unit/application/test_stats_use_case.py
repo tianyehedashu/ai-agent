@@ -2,12 +2,13 @@
 Stats Use Case unit tests.
 """
 
+import uuid
+
 import pytest
 
-from domains.agent_catalog.application import AgentUseCase
+from domains.agent.application import AgentUseCase, SessionUseCase
+from domains.agent.application.stats_service import StatsService
 from domains.identity.infrastructure.models.user import User
-from domains.runtime.application import SessionUseCase
-from domains.runtime.application.stats_service import StatsService
 
 
 @pytest.mark.unit
@@ -22,7 +23,7 @@ class TestStatsService:
 
         # Create some test data.
         user = User(
-            email="test@example.com",
+            email=f"test_{uuid.uuid4()}@example.com",
             hashed_password="hashed",
             name="Test User",
         )
@@ -67,7 +68,7 @@ class TestStatsService:
         # Arrange
         stats_service = StatsService(db_session)
         user = User(
-            email="test@example.com",
+            email=f"test_{uuid.uuid4()}@example.com",
             hashed_password="hashed",
             name="Test User",
         )
@@ -112,7 +113,7 @@ class TestStatsService:
         # Arrange
         stats_service = StatsService(db_session)
         user = User(
-            email="empty@example.com",
+            email=f"empty_{uuid.uuid4()}@example.com",
             hashed_password="hashed",
             name="Empty User",
         )

@@ -10,7 +10,7 @@ Code Fixer - 代码自动修复器
 
 from typing import Any
 
-from shared.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.studio.infrastructure.quality.validator import CodeValidator, ValidationResult
 from utils.logging import get_logger
 

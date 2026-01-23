@@ -4,7 +4,7 @@ Password Management 单元测试
 
 import pytest
 
-from shared.infrastructure.auth.password import hash_password, verify_password
+from domains.identity.infrastructure.auth.password import hash_password, verify_password
 
 
 @pytest.mark.unit

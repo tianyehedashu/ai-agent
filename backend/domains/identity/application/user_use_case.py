@@ -6,7 +6,7 @@ User Use Case - 用户用例
 
 import uuid
 
-from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.domain.repositories.user_repository import UserRepository

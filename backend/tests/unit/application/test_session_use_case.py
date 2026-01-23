@@ -6,9 +6,9 @@ import uuid
 
 import pytest
 
+from domains.agent.application.session_use_case import SessionUseCase
+from domains.agent.domain.entities.session import SessionOwner
 from domains.identity.infrastructure.models.user import User
-from domains.runtime.application.session_use_case import SessionUseCase
-from domains.runtime.domain.entities.session import SessionOwner
 from exceptions import NotFoundError
 
 

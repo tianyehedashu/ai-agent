@@ -96,7 +96,28 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+# =============================================================================
+# 当前用户模式（依赖注入用）
+# =============================================================================
+
+
+class CurrentUser(BaseModel):
+    """当前登录用户
+
+    用于依赖注入，表示已认证的用户信息
+    支持注册用户和匿名用户
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    email: str
+    name: str
+    is_anonymous: bool = False
+
+
 __all__ = [
+    "CurrentUser",
     "PasswordChange",
     "TokenResponse",
     "UserCreate",

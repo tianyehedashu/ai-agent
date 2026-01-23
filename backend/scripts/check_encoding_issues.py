@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """检查项目中所有 Python 文件的编码问题"""
-import sys
 import io
 from pathlib import Path
 import re
+import sys
 
 # 设置标准输出编码
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # 查找所有 Python 文件
-backend_dir = Path('.')
+backend_dir = Path()
 python_files = list(backend_dir.rglob('*.py'))
 
 # 排除虚拟环境和缓存目录
@@ -25,13 +25,13 @@ for file_path in python_files:
     try:
         # 尝试以 UTF-8 读取文件
         content = file_path.read_text(encoding='utf-8')
-        
+
         # 检查常见的乱码模式
         # 1. 包含替换字符 \ufffd
         if '\ufffd' in content:
             issues.append((str(file_path), '包含替换字符 \\ufffd'))
             continue
-        
+
         # 2. 检查 docstring 或注释中的乱码模式（连续的 ? 或特殊字符）
         # 查找可能的中文注释后跟乱码的情况
         patterns = [
@@ -41,7 +41,7 @@ for file_path in python_files:
             r"'''.*[?].*'''",  # docstring 中包含乱码
             r'#.*[?]',  # 注释中包含乱码
         ]
-        
+
         for pattern in patterns:
             matches = re.finditer(pattern, content, re.MULTILINE | re.DOTALL)
             for match in matches:
@@ -51,7 +51,7 @@ for file_path in python_files:
                     f'第 {line_num} 行: 可能的乱码模式 "{match.group()[:50]}"'
                 ))
                 break  # 每个文件只报告一次
-                
+
     except UnicodeDecodeError as e:
         issues.append((str(file_path), f'无法以 UTF-8 解码: {e}'))
     except Exception as e:

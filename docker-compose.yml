@@ -1,8 +1,6 @@
 # AI Agent Docker Compose Configuration
 # 开发环境配置
 
-version: '3.8'
-
 services:
   # ============================================
   # Backend Service
@@ -22,6 +20,7 @@ services:
       - JWT_SECRET=dev-secret-key-change-in-production
     volumes:
       - ./backend:/app
+      - /app/workspace  # 排除 workspace 目录，使用匿名卷避免多容器共享冲突
       - backend_data:/app/data
     depends_on:
       - db

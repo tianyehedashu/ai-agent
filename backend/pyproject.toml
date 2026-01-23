@@ -14,6 +14,9 @@ dependencies = [
     "python-multipart>=0.0.6",
     "sse-starlette>=1.8.0",
     "websockets>=12.0",
+    # Authentication
+    "fastapi-users>=10.0.0",
+    "fastapi-users-db-sqlalchemy>=7.0.0",
     # Data Validation
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -157,6 +160,8 @@ module = [
     "litellm.*",
     "qdrant_client.*",
     "chromadb.*",
+    "fastapi_users.*",
+    "fastapi_users_db_sqlalchemy.*",
 ]
 ignore_missing_imports = true
 

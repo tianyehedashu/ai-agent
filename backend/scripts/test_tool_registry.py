@@ -4,8 +4,8 @@ import asyncio
 import sys
 import traceback
 
-from domains.runtime.infrastructure.tools.base import BaseTool
-from domains.runtime.infrastructure.tools.registry import ToolRegistry
+from domains.agent.infrastructure.tools.base import BaseTool
+from domains.agent.infrastructure.tools.registry import ToolRegistry
 
 
 async def check_asyncio_subprocess():

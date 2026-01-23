@@ -11,15 +11,20 @@ import uuid
 
 from fastapi import Depends
 from fastapi_users import FastAPIUsers
-from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    BearerTransport,
+    JWTStrategy,
+)
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+import jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from shared.infrastructure.db.database import get_session
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.user_manager import UserManager
+from libs.db.database import get_session
 
 # 密码哈希上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -89,8 +94,6 @@ def create_access_token(
     expires_delta: timedelta | None = None,
 ) -> str:
     """创建访问令牌"""
-    import jwt
-
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
@@ -107,8 +110,6 @@ def create_access_token(
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
     """解码访问令牌"""
-    import jwt
-
     try:
         payload = jwt.decode(
             token,

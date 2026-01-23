@@ -6,7 +6,7 @@
 
 import pytest
 
-from shared.types import ToolCall, ToolResult
+from domains.agent.domain.types import ToolCall, ToolResult
 from evaluation.tool_accuracy import ToolAccuracyEvaluator
 
 

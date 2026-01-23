@@ -461,7 +461,7 @@ export default function StudioPage(): React.JSX.Element {
               ) : (
                 <div className="divide-y">
                   {diagnostics.map((item) => {
-                    const itemKey = `${item.line}-${item.column}-${item.code ?? item.message.slice(0, 20)}`
+                    const itemKey = `${String(item.line)}-${String(item.column)}-${item.code ?? item.message.slice(0, 20)}`
                     return (
                       <button
                         type="button"
@@ -487,7 +487,7 @@ export default function StudioPage(): React.JSX.Element {
                           )}
                         </div>
                         <span className="shrink-0 text-xs text-muted-foreground">
-                          [{item.line}:{item.column}]
+                          [{String(item.line)}:{String(item.column)}]
                         </span>
                         {item.source && (
                           <Badge variant="outline" className="shrink-0 text-xs">

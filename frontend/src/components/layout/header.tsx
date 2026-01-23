@@ -1,5 +1,5 @@
 import { Moon, Sun, User } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useTheme } from '@/components/theme-provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useUserStore } from '@/stores/user'
 
 const pageTitles: Record<string, string> = {
   '/': '对话',
@@ -22,12 +23,24 @@ const pageTitles: Record<string, string> = {
 
 export default function Header(): React.JSX.Element {
   const location = useLocation()
+  const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
+  // 用户信息已由 AuthProvider 在应用启动时获取
+  const { currentUser, logout } = useUserStore()
 
   const title = pageTitles[location.pathname] || '对话'
 
+  const handleLogout = async (): Promise<void> => {
+    await logout()
+  }
+
+  // 显示用户信息
+  const displayName = currentUser?.name ?? '用户'
+  const displayEmail = currentUser?.email ?? 'user@example.com'
+  const isAnonymous = currentUser?.is_anonymous ?? false
+
   return (
-    <header className="flex h-14 items-center justify-between border-b px-6">
+    <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {/* Page Title */}
       <h1 className="text-lg font-semibold">{title}</h1>
 
@@ -59,15 +72,31 @@ export default function Header(): React.JSX.Element {
           <DropdownMenuContent align="end" className="w-56">
             <div className="flex items-center justify-start gap-2 p-2">
               <div className="flex flex-col space-y-1 leading-none">
-                <p className="font-medium">用户</p>
-                <p className="text-xs text-muted-foreground">user@example.com</p>
+                <p className="font-medium">{displayName}</p>
+                <p className="text-xs text-muted-foreground">{displayEmail}</p>
+                {isAnonymous && (
+                  <p className="text-xs text-muted-foreground italic">匿名用户</p>
+                )}
               </div>
             </div>
             <DropdownMenuSeparator />
+            {isAnonymous && (
+              <>
+                <DropdownMenuItem onClick={() => { navigate('/login'); }}>
+                  <span className="text-primary font-semibold">登录账号</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem>个人资料</DropdownMenuItem>
             <DropdownMenuItem>API 密钥</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">退出登录</DropdownMenuItem>
+            <DropdownMenuItem 
+              className="text-destructive" 
+              onClick={handleLogout}
+            >
+              退出登录
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

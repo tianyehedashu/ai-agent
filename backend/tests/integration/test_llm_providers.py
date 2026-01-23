@@ -10,7 +10,7 @@ import os
 import pytest
 
 from bootstrap.config import settings
-from shared.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.gateway import LLMGateway
 
 
 class TestLLMProviders:

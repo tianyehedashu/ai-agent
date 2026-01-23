@@ -25,7 +25,7 @@ export default function ChatInput({
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
+      textareaRef.current.style.height = `${String(Math.min(textareaRef.current.scrollHeight, 200))}px`
     }
   }, [value])
 
@@ -48,17 +48,17 @@ export default function ChatInput({
       <div
         className={cn(
           'relative flex flex-col rounded-2xl border border-border/60 bg-card/80 shadow-lg backdrop-blur-sm transition-all duration-200',
-          'focus-within:border-primary/40 focus-within:shadow-xl focus-within:shadow-primary/5'
+          'focus-within:border-primary/40 focus-within:shadow-xl focus-within:shadow-primary/5 dark:focus-within:shadow-primary/20'
         )}
       >
         {/* Text Input */}
         <Textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { onChange(e.target.value); }}
           onKeyDown={handleKeyDown}
           placeholder="给 AI Agent 发送消息..."
-          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/40"
+          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
           rows={1}
           disabled={isLoading}
         />
@@ -69,7 +69,7 @@ export default function ChatInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
               title="上传文件"
             >
               <Paperclip className="h-4 w-4" />
@@ -77,7 +77,7 @@ export default function ChatInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
               title="联网搜索"
             >
               <Globe className="h-4 w-4" />
@@ -86,7 +86,7 @@ export default function ChatInput({
 
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-muted-foreground/40">
-              {value.length > 0 && `${value.length} 字`}
+              {value.length > 0 && `${String(value.length)} 字`}
             </span>
             <Button
               size="icon"
@@ -97,7 +97,7 @@ export default function ChatInput({
                 'h-8 w-8 rounded-lg transition-all duration-200',
                 value.trim() && !isLoading
                   ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md'
-                  : 'bg-secondary text-muted-foreground'
+                  : 'bg-muted text-muted-foreground/50'
               )}
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

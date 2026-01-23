@@ -15,9 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from domains.identity.presentation.deps import get_current_user
 from domains.studio.application import WorkflowService
-from shared.presentation.deps import get_current_user
-from shared.presentation.errors import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND
+from libs.api.errors import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND
 
 router = APIRouter(prefix="/studio", tags=["Studio"])
 
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/studio", tags=["Studio"])
 
 
 class WorkflowCreateRequest(BaseModel):
-    """创建工作流请""
+    """创建工作流请求"""
 
     name: str
     description: str = ""
@@ -36,7 +36,7 @@ class WorkflowCreateRequest(BaseModel):
 
 
 class WorkflowUpdateRequest(BaseModel):
-    """更新工作流请""
+    """更新工作流请求"""
 
     name: str | None = None
     description: str | None = None
@@ -79,7 +79,7 @@ async def create_workflow(
     request: WorkflowCreateRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """创建工作""
+    """创建工作流"""
     service = WorkflowService()
     workflow = await service.create(
         name=request.name,
@@ -102,7 +102,7 @@ async def list_workflows(
     offset: int = 0,
     current_user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    """列出工作""
+    """列出工作流"""
     service = WorkflowService()
     workflows = await service.list_by_user(
         user_id=current_user["id"],
@@ -127,7 +127,7 @@ async def get_workflow(
     workflow_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """获取工作流详""
+    """获取工作流详情"""
     service = WorkflowService()
     workflow = await service.get(workflow_id)
 
@@ -152,7 +152,7 @@ async def update_workflow(
     request: WorkflowUpdateRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """更新工作""
+    """更新工作流"""
     service = WorkflowService()
     workflow = await service.update(
         workflow_id=workflow_id,
@@ -179,7 +179,7 @@ async def delete_workflow(
     workflow_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, str]:
-    """删除工作""
+    """删除工作流"""
     service = WorkflowService()
     success = await service.delete(workflow_id)
 
@@ -200,7 +200,7 @@ async def parse_code(
     request: ParseCodeRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """解析代码，返React Flow 格式"""
+    """解析代码，返回 React Flow 格式"""
     service = WorkflowService()
     return await service.parse_code(request.code)
 
@@ -211,7 +211,7 @@ async def generate_code(
     request: GenerateCodeRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, str]:
-    """?React Flow 格式生成代码"""
+    """从 React Flow 格式生成代码"""
     service = WorkflowService()
     code = await service.generate_code(request.nodes, request.edges)
     return {"code": code}
@@ -228,7 +228,7 @@ async def save_version(
     request: SaveVersionRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """保存新版""
+    """保存新版本"""
     service = WorkflowService()
     version = await service.save_version(workflow_id, request.message)
 
@@ -269,7 +269,7 @@ async def restore_version(
     version: int,
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """恢复到指定版""
+    """恢复到指定版本"""
     service = WorkflowService()
     workflow = await service.restore_version(workflow_id, version)
 
@@ -295,7 +295,7 @@ async def test_run(
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
     """
-    测试运行工作(SSE)
+    测试运行工作流 (SSE)
 
     TODO: 实现实际的测试执行逻辑
     """

@@ -4,7 +4,8 @@ Quality API - 代码质量 API
 实现:
 - POST /quality/validate: 代码验证
 - POST /quality/fix: 代码修复
-- POST /quality/format: 代码格式"""
+- POST /quality/format: 代码格式化
+"""
 
 from typing import Any
 
@@ -12,11 +13,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from bootstrap.config import settings
-from shared.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.identity.presentation.deps import get_current_user
 from domains.studio.infrastructure.lsp.proxy import LSPProxy
 from domains.studio.infrastructure.quality.fixer import CodeFixer
 from domains.studio.infrastructure.quality.validator import CodeValidator
-from shared.presentation.deps import get_current_user
 
 # 默认文件路径常量
 DEFAULT_FILE_PATH = "code.py"
@@ -43,7 +44,7 @@ class FixRequest(BaseModel):
 
 
 class FormatRequest(BaseModel):
-    """格式化请""
+    """格式化请求"""
 
     code: str
     file_path: str = DEFAULT_FILE_PATH
@@ -64,7 +65,8 @@ async def validate_code(
     """
     验证代码
 
-    返回语法、类型、Lint、架构规范的检查结    """
+    返回语法, 类型, Lint, 架构规范的检查结果
+    """
     validator = CodeValidator()
     result = await validator.validate(
         code=request.code,
@@ -120,8 +122,9 @@ async def format_code(
     _current_user: dict = Depends(get_current_user),
 ) -> dict[str, str]:
     """
-    格式化代
-    使用 Ruff 格式Python 代码
+    格式化代码
+
+    使用 Ruff 格式化 Python 代码
     """
     lsp = LSPProxy()
     formatted = await lsp.format_code(request.file_path, request.code)
@@ -140,7 +143,8 @@ async def get_diagnostics(
     """
     获取诊断信息
 
-    返回 Pyright ?Ruff 的诊断结    """
+    返回 Pyright 和 Ruff 的诊断结果
+    """
     lsp = LSPProxy()
     diagnostics = await lsp.get_diagnostics(request.file_path, request.code)
 
@@ -175,7 +179,8 @@ async def get_completion(
     """
     获取代码补全建议
 
-    返回基于当前位置的补全列    """
+    返回基于当前位置的补全列表
+    """
     lsp = LSPProxy()
     completions = await lsp.get_completions(
         file_path=request.file_path,

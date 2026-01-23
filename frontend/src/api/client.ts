@@ -1,6 +1,11 @@
 /**
  * API Client
  *
+ * 认证策略（优先级从高到低）：
+ * 1. JWT Token (Authorization: Bearer) - 已登录用户
+ * 2. Cookie (anonymous_user_id) - 匿名用户（浏览器自动发送）
+ * 3. Header (X-Anonymous-User-Id) - 匿名用户备用方案（Cookie 丢失时）
+ *
  * 基于 Vite 的 API 客户端最佳实践：
  * - 开发环境：使用相对路径，通过 vite.config.ts 的 proxy 转发，自动解决 CORS
  * - 生产环境：配置 VITE_API_URL 环境变量，或前后端同域部署
@@ -19,7 +24,11 @@
  */
 
 // 开发环境为空（使用 vite proxy），生产环境按需配置
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+
+// 本地存储 key
+const AUTH_TOKEN_KEY = 'auth_token'
+const ANONYMOUS_USER_ID_KEY = 'anonymous_user_id'
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>
@@ -28,19 +37,52 @@ interface RequestOptions extends RequestInit {
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
+  private anonymousUserId: string | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
-    this.token = localStorage.getItem('auth_token')
+    this.token = localStorage.getItem(AUTH_TOKEN_KEY)
+    this.anonymousUserId = localStorage.getItem(ANONYMOUS_USER_ID_KEY)
   }
 
+  /**
+   * 设置 JWT Token
+   */
   setToken(token: string | null): void {
     this.token = token
     if (token) {
-      localStorage.setItem('auth_token', token)
+      localStorage.setItem(AUTH_TOKEN_KEY, token)
     } else {
-      localStorage.removeItem('auth_token')
+      localStorage.removeItem(AUTH_TOKEN_KEY)
     }
+  }
+
+  /**
+   * 设置匿名用户 ID（从后端响应中获取）
+   * 用于 Cookie 丢失时的备用认证
+   */
+  setAnonymousUserId(id: string | null): void {
+    this.anonymousUserId = id
+    if (id) {
+      localStorage.setItem(ANONYMOUS_USER_ID_KEY, id)
+    } else {
+      localStorage.removeItem(ANONYMOUS_USER_ID_KEY)
+    }
+  }
+
+  /**
+   * 获取当前匿名用户 ID
+   */
+  getAnonymousUserId(): string | null {
+    return this.anonymousUserId
+  }
+
+  /**
+   * 清除所有认证信息（用于登出）
+   */
+  clearAuth(): void {
+    this.setToken(null)
+    this.setAnonymousUserId(null)
   }
 
   /**
@@ -89,8 +131,13 @@ class ApiClient {
       ? { ...defaultHeaders, ...customHeaders }
       : defaultHeaders
 
+    // 认证策略：优先使用 Token，其次使用匿名用户 ID
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`
+    } else if (this.anonymousUserId) {
+      // 没有 Token 时，添加匿名用户 ID 作为备用认证
+      // 这在 Cookie 丢失时可以帮助后端识别用户
+      headers['X-Anonymous-User-Id'] = this.anonymousUserId
     }
 
     const response = await fetch(url, {
@@ -98,6 +145,13 @@ class ApiClient {
       headers,
       credentials: 'include', // 携带 Cookie，支持匿名用户隔离
     })
+
+    // 从响应头中提取并保存 anonymous_user_id（如果存在）
+    // 这样即使 Cookie 丢失，前端仍可通过 localStorage 恢复身份
+    const anonymousId = response.headers.get('X-Anonymous-User-Id')
+    if (anonymousId && !this.token) {
+      this.setAnonymousUserId(anonymousId)
+    }
 
     if (!response.ok) {
       const error = (await response.json().catch(() => ({ message: 'Unknown error' }))) as {
@@ -121,6 +175,21 @@ class ApiClient {
     return this.request<T>(path, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+    })
+  }
+
+  async postForm<T>(path: string, data: Record<string, string>): Promise<T> {
+    const formData = new URLSearchParams()
+    for (const [key, value] of Object.entries(data)) {
+      formData.append(key, value)
+    }
+
+    return this.request<T>(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
     })
   }
 
@@ -158,8 +227,11 @@ class ApiClient {
       Accept: 'text/event-stream',
     }
 
+    // 认证策略：优先使用 Token，其次使用匿名用户 ID
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`
+    } else if (this.anonymousUserId) {
+      headers['X-Anonymous-User-Id'] = this.anonymousUserId
     }
 
     try {
@@ -170,6 +242,12 @@ class ApiClient {
         signal, // 支持 AbortController 取消
         credentials: 'include', // 携带 Cookie，支持匿名用户隔离
       })
+
+      // 从响应头中提取并保存 anonymous_user_id
+      const anonymousId = response.headers.get('X-Anonymous-User-Id')
+      if (anonymousId && !this.token) {
+        this.setAnonymousUserId(anonymousId)
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${String(response.status)}`)

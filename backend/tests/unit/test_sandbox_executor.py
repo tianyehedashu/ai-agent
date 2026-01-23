@@ -9,14 +9,14 @@ import sys
 
 import pytest
 
-from domains.runtime.infrastructure.sandbox.executor import (
+from domains.agent.infrastructure.sandbox.executor import (
     DockerExecutor,
     ExecutionResult,
     LocalExecutor,
     SandboxConfig,
     SessionDockerExecutor,
 )
-from domains.runtime.infrastructure.sandbox.factory import ExecutorFactory
+from domains.agent.infrastructure.sandbox.factory import ExecutorFactory
 
 
 class TestSandboxConfig:
@@ -224,8 +224,14 @@ class TestDockerExecutor:
         assert "Hello World" in result.stdout
 
 
+@pytest.mark.xdist_group("docker_session")
 class TestSessionDockerExecutor:
-    """测试会话级 Docker 执行器"""
+    """测试会话级 Docker 执行器
+
+    注意：此类中的测试需要使用 xdist_group 标记，
+    确保在并行测试时这些测试在同一个 worker 中串行执行，
+    避免 cleanup_all_session_containers 清理正在使用的容器。
+    """
 
     @pytest.fixture
     def executor(self):
@@ -330,7 +336,11 @@ class TestExecutorFactory:
 
     def test_create_local_executor(self):
         """测试创建本地执行器"""
-        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from libs.config.execution_config import (
+            ExecutionConfig,
+            SandboxConfig,
+            SandboxMode,
+        )
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.LOCAL),
@@ -340,7 +350,11 @@ class TestExecutorFactory:
 
     def test_create_session_docker_executor_default(self):
         """测试创建会话 Docker 执行器（默认启用 session）"""
-        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from libs.config.execution_config import (
+            ExecutionConfig,
+            SandboxConfig,
+            SandboxMode,
+        )
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.DOCKER),
@@ -351,7 +365,7 @@ class TestExecutorFactory:
 
     def test_create_stateless_docker_executor(self):
         """测试创建无状态 Docker 执行器（禁用 session）"""
-        from shared.infrastructure.config.execution_config import (
+        from libs.config.execution_config import (
             DockerConfig,
             ExecutionConfig,
             SandboxConfig,
@@ -370,7 +384,11 @@ class TestExecutorFactory:
 
     def test_create_remote_executor_not_implemented(self):
         """测试创建远程执行器（未实现）"""
-        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from libs.config.execution_config import (
+            ExecutionConfig,
+            SandboxConfig,
+            SandboxMode,
+        )
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.REMOTE),

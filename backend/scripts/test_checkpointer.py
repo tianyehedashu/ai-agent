@@ -12,7 +12,7 @@ import asyncio
 import sys
 
 from bootstrap.config import settings
-from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
 
 # Windows 需要使用 SelectorEventLoop（psycopg 要求）
 if sys.platform == "win32":

@@ -232,4 +232,4 @@ clean-frontend: ## 清理前端临时文件
 	@echo ==========================================
 	@echo   清理前端临时文件
 	@echo ==========================================
-	@cd frontend && rm -rf node_modules/.vite dist coverage .turbo || true
+	-@powershell -Command "cd frontend; @('node_modules/.vite', 'dist', 'coverage', '.turbo') | ForEach-Object { if (Test-Path $$_) { Remove-Item -Recurse -Force $$_ } }"

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from shared.infrastructure.llm.gateway import LLMResponse
+from domains.agent.infrastructure.llm.gateway import LLMResponse
 from evaluation.llm_judge import LLMJudge, MultiDimensionJudge
 
 

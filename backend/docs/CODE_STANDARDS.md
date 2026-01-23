@@ -5,7 +5,7 @@
 | 原则 | 说明 |
 |------|------|
 | **类型优先** | 所有代码必须有完整类型注解，通过 `pyright --strict` |
-| **DRY** | 复用 `shared/types.py`、UseCase 层，禁止重复逻辑 |
+| **DRY** | 复用 `domains.*.domain.types`、UseCase 层，禁止重复逻辑 |
 | **DDD 分层** | Presentation → Application → Domain ← Infrastructure |
 | **显式优于隐式** | 明确声明类型和依赖，禁止 `from xxx import *` |
 
@@ -13,58 +13,86 @@
 
 ```
 backend/
-├── api/v1/                 # API 路由汇总（表现层入口）
-├── bootstrap/              # 启动层：FastAPI 入口、配置
-│   ├── main.py             # FastAPI 应用入口
-│   ├── config.py           # 应用配置
-│   └── config_loader.py    # TOML 配置加载器
+├── libs/                   # 纯技术基础设施（非业务）
+│   ├── types/              # 通用工具类型 (Result[T])
+│   ├── config/             # 配置管理
+│   ├── db/                 # 数据库组件
+│   ├── api/                # 共享 API 工具（服务工厂、错误常量）
+│   ├── middleware/         # 通用中间件（日志、限流、错误处理）
+│   ├── observability/      # 可观测性
+│   └── orm/                # ORM 基类
 ├── domains/                # 业务领域
-│   ├── agent_catalog/      # Agent 目录管理
+│   ├── identity/           # 身份认证域
+│   │   ├── domain/types.py # Principal, ANONYMOUS_*
+│   │   └── presentation/   # 认证依赖、中间件、Schema
+│   ├── agent/              # Agent 域（核心业务域）
+│   │   ├── domain/
+│   │   │   ├── types.py    # Message, AgentEvent, ToolCall
+│   │   │   ├── entities/   # AgentEntity, SessionDomainService
+│   │   │   └── repositories/ # 仓储接口
+│   │   ├── application/    # AgentUseCase, ChatUseCase, SessionUseCase
+│   │   └── infrastructure/
+│   │       ├── llm/        # LLM 网关
+│   │       ├── memory/     # 记忆系统
+│   │       ├── tools/      # 工具系统
+│   │       ├── reasoning/  # 推理策略
+│   │       └── models/     # ORM 模型
 │   ├── evaluation/         # 评估领域
-│   ├── identity/           # 身份认证
-│   ├── runtime/            # Agent 运行时（核心）
-│   │   ├── application/    # UseCase 业务编排
-│   │   ├── domain/         # 实体/领域服务
-│   │   ├── infrastructure/ # 基础设施实现
-│   │   │   ├── engine/     # LangGraph Agent
-│   │   │   ├── memory/     # 记忆系统
-│   │   │   ├── reasoning/  # 推理策略
-│   │   │   ├── sandbox/    # 沙箱执行器
-│   │   │   └── tools/      # 工具系统
-│   │   └── presentation/   # 路由 + Schema
 │   └── studio/             # 工作室领域
-├── shared/                 # 共享层
-│   ├── kernel/             # 内核类型 (Principal)
-│   ├── infrastructure/     # 共享基础设施
-│   │   ├── auth/           # 认证 (JWT/RBAC)
-│   │   ├── db/             # 数据库连接
-│   │   ├── llm/            # LLM 网关
-│   │   └── orm/            # ORM 基类
-│   ├── presentation/       # 共享表示层（deps, errors, schemas）
-│   └── types.py            # 核心类型定义
+├── bootstrap/              # 启动层
+│   ├── main.py             # FastAPI 入口
+│   └── config.py           # 应用配置
 ├── utils/                  # 工具函数
 └── tests/                  # 测试目录
 ```
 
 **目录说明**：
-- `api/v1/` - 表现层入口，路由聚合，导入 `shared.presentation` 的依赖
-- `bootstrap/` - 启动层，负责初始化 FastAPI 应用、配置和生命周期管理
-- `shared/presentation/` - 共享的表示层组件：依赖注入、错误常量、Schema
+- `libs/` - 纯技术基础设施，与业务无关的通用组件
+- `domains/identity/` - 身份认证域，包含认证依赖、中间件、用户相关类型
+- `domains/agent/` - Agent 域，包含 Agent 配置、会话、执行、记忆、工具等核心功能
+- 每个域有自己的 `types.py` 放域特有类型
 
 | 层级 | 职责 | 依赖 |
 |------|------|------|
 | `presentation/` | HTTP 路由、Schema、参数验证 | application |
 | `application/` | UseCase 业务编排、事务处理 | domain |
-| `domain/` | 实体、领域服务、仓储接口 | - |
+| `domain/` | 实体、领域服务、仓储接口、域类型 | libs.types |
 | `infrastructure/` | 仓储实现、ORM 模型、外部适配 | domain (接口) |
-| `shared/` | 跨领域共享组件 | - |
+
+## 共享组件库 (libs/)
+
+| 子模块 | 职责 |
+|--------|------|
+| `libs/types/` | 通用工具类型 (Result[T]) |
+| `libs/config/` | 配置管理 |
+| `libs/db/` | 数据库组件 |
+| `libs/api/` | 服务工厂（get_*_service）、错误常量 |
+| `libs/middleware/` | 通用中间件（日志、限流、错误处理）|
+
+**注意**：认证相关依赖已移至 `domains/identity/presentation/`
 
 ## 类型安全
 
 ```python
-# ✅ 使用项目类型
-from shared.types import Result, AgentConfig, EventType, ToolCall
-from shared.kernel.types import Principal
+# ✅ 从 identity 域导入身份类型
+from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
+
+# ✅ 从 identity 域导入认证依赖
+from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_session_ownership
+from domains.identity.presentation.schemas import CurrentUser
+
+# ✅ 从 agent 域导入消息/事件类型
+from domains.agent.domain.types import Message, AgentEvent, EventType, AgentConfig, ToolCall
+
+# ✅ 从 agent 域导入基础设施组件
+from domains.agent.infrastructure.llm import LLMGateway
+from domains.agent.infrastructure.tools import ConfiguredToolRegistry
+from domains.agent.application import ChatUseCase, SessionUseCase, AgentUseCase
+
+# ✅ 从 libs 导入纯技术基础设施
+from libs.config import ExecutionConfig
+from libs.types import Result
+from libs.api.deps import get_db, get_session_service  # 服务工厂
 
 # ✅ Pydantic 模型
 class UserCreate(BaseModel):

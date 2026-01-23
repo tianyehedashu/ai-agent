@@ -24,13 +24,23 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.v1.router import api_router
 from bootstrap.config import settings
-from shared.infrastructure.auth.jwt import init_jwt_manager
-from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.runtime.infrastructure.sandbox import SessionManager
-from shared.infrastructure.db.database import init_db
-from shared.infrastructure.db.redis import close_redis, init_redis
+from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+from domains.agent.infrastructure.sandbox import SessionManager
+
+# 从各领域的 presentation 层导入路由
+from domains.agent.presentation.agent_router import router as agent_router
+from domains.agent.presentation.chat_router import router as chat_router
+from domains.agent.presentation.execution_router import router as execution_router
+from domains.agent.presentation.memory_router import router as memory_router
+from domains.agent.presentation.session_router import router as session_router
+from domains.agent.presentation.system_router import router as system_router
+from domains.agent.presentation.tools_router import router as tools_router
+from domains.evaluation.presentation.router import router as evaluation_router
+from domains.identity.infrastructure.auth.jwt import init_jwt_manager
+from domains.identity.presentation.router import router as identity_router
+from domains.studio.presentation.quality_router import router as quality_router
+from domains.studio.presentation.router import router as studio_router
 from exceptions import (
     AIAgentError,
     AuthenticationError,
@@ -44,6 +54,8 @@ from exceptions import (
     ToolExecutionError,
     ValidationError,
 )
+from libs.db.database import init_db
+from libs.db.redis import close_redis, init_redis
 from utils.logging import get_logger, setup_logging
 
 # pylint: enable=wrong-import-position
@@ -424,8 +436,41 @@ async def general_exception_handler(
 # API 路由
 # =============================================================================
 
-# 注册 API 路由
-app.include_router(api_router, prefix="/api/v1")
+# 注册各领域的 API 路由
+api_router_prefix = "/api/v1"
+
+# 认证相关路由
+app.include_router(identity_router, prefix=f"{api_router_prefix}/auth", tags=["Authentication"])
+
+# Agent 管理
+app.include_router(agent_router, prefix=f"{api_router_prefix}/agents", tags=["Agents"])
+
+# 会话管理
+app.include_router(session_router, prefix=f"{api_router_prefix}/sessions", tags=["Sessions"])
+
+# 对话接口
+app.include_router(chat_router, prefix=api_router_prefix, tags=["Chat"])
+
+# 工具管理
+app.include_router(tools_router, prefix=api_router_prefix, tags=["Tools"])
+
+# 记忆管理
+app.include_router(memory_router, prefix=f"{api_router_prefix}/memory", tags=["Memory"])
+
+# 工作台 (Studio)
+app.include_router(studio_router, prefix=api_router_prefix, tags=["Studio"])
+
+# 代码质量
+app.include_router(quality_router, prefix=api_router_prefix, tags=["Quality"])
+
+# 系统接口
+app.include_router(system_router, prefix=f"{api_router_prefix}/system", tags=["System"])
+
+# 评估接口
+app.include_router(evaluation_router, prefix=api_router_prefix, tags=["Evaluation"])
+
+# 执行配置
+app.include_router(execution_router, prefix=api_router_prefix, tags=["Execution"])
 
 
 @app.get("/")

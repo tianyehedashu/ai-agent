@@ -9,7 +9,8 @@ import { apiClient } from './client'
 // 后端返回的Session格式（snake_case）
 interface BackendSession {
   id: string
-  user_id: string
+  user_id: string | null  // 注册用户 ID（匿名用户为 null）
+  anonymous_user_id: string | null  // 匿名用户 ID（注册用户为 null）
   agent_id: string | null
   title: string | null
   status: string
@@ -70,22 +71,31 @@ function toFrontendMessage(backend: BackendMessage): Message {
         }
         // 兼容格式：可能是 { tool_name: ..., arguments: ... }
         const tcObj = tc as Record<string, unknown>
+        const idValue = tcObj.id ?? tcObj.tool_call_id
+        const nameValue = tcObj.name ?? tcObj.tool_name
         return {
-          id: String(tcObj.id ?? tcObj.tool_call_id ?? ''),
-          name: String(tcObj.name ?? tcObj.tool_name ?? ''),
+          id: typeof idValue === 'string' ? idValue : '',
+          name: typeof nameValue === 'string' ? nameValue : '',
           arguments: (tcObj.arguments ?? {}) as Record<string, unknown>,
         }
       })
-    } else if (typeof backend.tool_calls === 'object') {
+    } else if (typeof backend.tool_calls === 'object' && !Array.isArray(backend.tool_calls)) {
       // 如果是单个对象，转换为数组
-      const tcObj = backend.tool_calls as Record<string, unknown>
-      toolCalls = [
-        {
-          id: String(tcObj.id ?? tcObj.tool_call_id ?? ''),
-          name: String(tcObj.name ?? tcObj.tool_name ?? ''),
-          arguments: (tcObj.arguments ?? {}) as Record<string, unknown>,
-        },
-      ]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (backend.tool_calls === null) {
+        toolCalls = undefined
+      } else {
+        const tcObj = backend.tool_calls
+        const idValue = tcObj.id ?? tcObj.tool_call_id
+        const nameValue = tcObj.name ?? tcObj.tool_name
+        toolCalls = [
+          {
+            id: typeof idValue === 'string' ? idValue : '',
+            name: typeof nameValue === 'string' ? nameValue : '',
+            arguments: (tcObj.arguments ?? {}) as Record<string, unknown>,
+          },
+        ]
+      }
     }
   }
 

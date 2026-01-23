@@ -5,9 +5,12 @@ import uuid
 
 import pytest
 
-from shared.types import AgentEvent, EventType
+from domains.agent.application import ChatUseCase, SessionUseCase
+from domains.agent.domain.types import (
+    AgentEvent,
+    EventType,
+)
 from domains.identity.infrastructure.models.user import User
-from domains.runtime.application import ChatUseCase, SessionUseCase
 
 
 @pytest.mark.unit
@@ -43,7 +46,7 @@ class TestChatUseCase:
         service.title_service.generate_and_update = AsyncMock()
 
         with patch(
-            "domains.runtime.application.chat_use_case.LangGraphAgentEngine"
+            "domains.agent.application.chat_use_case.LangGraphAgentEngine"
         ) as mock_engine_class:
             mock_engine = AsyncMock()
             mock_engine.run = mock_run_generator
@@ -79,7 +82,7 @@ class TestChatUseCase:
         service.title_service.generate_and_update = AsyncMock()
 
         with patch(
-            "domains.runtime.application.chat_use_case.LangGraphAgentEngine"
+            "domains.agent.application.chat_use_case.LangGraphAgentEngine"
         ) as mock_engine_class:
             mock_engine = AsyncMock()
             mock_engine.run = mock_run_generator
@@ -112,7 +115,7 @@ class TestChatUseCase:
         service.title_service.generate_and_update = AsyncMock()
 
         with patch(
-            "domains.runtime.application.chat_use_case.LangGraphAgentEngine"
+            "domains.agent.application.chat_use_case.LangGraphAgentEngine"
         ) as mock_engine_class:
             mock_engine = AsyncMock()
             mock_engine.run = mock_run_generator
@@ -143,7 +146,7 @@ class TestChatUseCase:
         service.title_service.generate_and_update = AsyncMock()
 
         with patch(
-            "domains.runtime.application.chat_use_case.LangGraphAgentEngine"
+            "domains.agent.application.chat_use_case.LangGraphAgentEngine"
         ) as mock_engine_class:
             mock_engine = AsyncMock()
             mock_engine.run = mock_run_generator_error
@@ -163,7 +166,7 @@ class TestChatUseCase:
 
     @pytest.mark.asyncio
     async def test_get_agent_config_with_agent_id(self, service, db_session):
-        from domains.agent_catalog.application import AgentUseCase
+        from domains.agent.application import AgentUseCase
 
         user = await self._create_test_user(db_session)
         agent = await AgentUseCase(db_session).create_agent(

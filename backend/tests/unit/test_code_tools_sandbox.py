@@ -9,16 +9,16 @@ import tempfile
 
 import pytest
 
-from shared.infrastructure.config.execution_config import (
+from domains.agent.infrastructure.sandbox.factory import ExecutorFactory
+from domains.agent.infrastructure.tools.code_tools import RunPythonTool, RunShellTool
+from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
+from libs.config.execution_config import (
     ExecutionConfig,
     ResourceConfig,
     SandboxConfig,
     SandboxMode,
     ShellConfig,
 )
-from domains.runtime.infrastructure.sandbox.factory import ExecutorFactory
-from domains.runtime.infrastructure.tools.code_tools import RunPythonTool, RunShellTool
-from domains.runtime.infrastructure.tools.registry import ConfiguredToolRegistry
 
 
 class TestRunShellToolWithSandbox:
@@ -192,7 +192,7 @@ class TestSandboxModeSelection:
 
     def test_local_mode_uses_local_executor(self):
         """测试本地模式使用本地执行器"""
-        from domains.runtime.infrastructure.sandbox.executor import LocalExecutor
+        from domains.agent.infrastructure.sandbox.executor import LocalExecutor
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.LOCAL),
@@ -203,7 +203,7 @@ class TestSandboxModeSelection:
 
     def test_docker_mode_uses_session_executor(self):
         """测试 Docker 模式使用会话执行器（默认启用 session）"""
-        from domains.runtime.infrastructure.sandbox.executor import SessionDockerExecutor
+        from domains.agent.infrastructure.sandbox.executor import SessionDockerExecutor
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.DOCKER),
@@ -228,7 +228,7 @@ class TestMemoryLimitParsing:
 
     def test_parse_megabytes(self):
         """测试解析 MB 单位"""
-        from domains.runtime.infrastructure.tools.code_tools import _parse_memory_limit
+        from domains.agent.infrastructure.tools.code_tools import _parse_memory_limit
 
         assert _parse_memory_limit("256m") == 256
         assert _parse_memory_limit("512M") == 512
@@ -236,7 +236,7 @@ class TestMemoryLimitParsing:
 
     def test_parse_gigabytes(self):
         """测试解析 GB 单位"""
-        from domains.runtime.infrastructure.tools.code_tools import _parse_memory_limit
+        from domains.agent.infrastructure.tools.code_tools import _parse_memory_limit
 
         assert _parse_memory_limit("1g") == 1024
         assert _parse_memory_limit("2G") == 2048
@@ -244,14 +244,14 @@ class TestMemoryLimitParsing:
 
     def test_parse_kilobytes(self):
         """测试解析 KB 单位"""
-        from domains.runtime.infrastructure.tools.code_tools import _parse_memory_limit
+        from domains.agent.infrastructure.tools.code_tools import _parse_memory_limit
 
         assert _parse_memory_limit("1024k") == 1
         assert _parse_memory_limit("2048k") == 2
 
     def test_parse_plain_number(self):
         """测试解析纯数字"""
-        from domains.runtime.infrastructure.tools.code_tools import _parse_memory_limit
+        from domains.agent.infrastructure.tools.code_tools import _parse_memory_limit
 
         assert _parse_memory_limit("256") == 256
         assert _parse_memory_limit("512") == 512

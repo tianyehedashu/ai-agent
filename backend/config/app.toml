@@ -67,18 +67,21 @@ vision_model = "dashscope/qwen-vl-max"
 embedding_provider = "api"
 
 # API 模式推荐模型:
-#   - text-embedding-3-small (OpenAI, 1536维, 效果最佳)
+#   - dashscope/text-embedding-v3 (DashScope, 1024维, 中文友好, 直接调用 API, 推荐)
+#   - dashscope/text-embedding-v2 (DashScope, 1536维, 直接调用 API)
+#   - text-embedding-3-small (OpenAI, 1536维, 需要 OPENAI_API_KEY)
 #   - text-embedding-3-large (OpenAI, 3072维, 高精度场景)
 # 本地模式推荐模型 (FastEmbed, CPU友好):
 #   - BAAI/bge-small-zh-v1.5 (中文轻量, 512维)
 #   - BAAI/bge-base-zh-v1.5 (中文推荐, 768维)
 #   - BAAI/bge-m3 (多语言, 1024维)
-embedding_model = "text-embedding-3-small"
+embedding_model = "dashscope/text-embedding-v3"
 
 # 向量维度（必须与模型匹配）
-# API: text-embedding-3-small=1536, text-embedding-3-large=3072
+# DashScope: text-embedding-v3=1024, text-embedding-v2=1536
+# OpenAI: text-embedding-3-small=1536, text-embedding-3-large=3072
 # 本地: bge-small-zh=512, bge-base-zh=768, bge-m3=1024
-embedding_dimension = 1536
+embedding_dimension = 1024
 
 # OpenAI
 [llm.openai]

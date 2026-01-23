@@ -10,24 +10,25 @@ from typing import TYPE_CHECKING
 import uuid
 
 from fastapi import HTTPException, Request, status
-from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+
+from bootstrap.config import settings
+from domains.identity.domain.types import Principal
+from domains.identity.infrastructure.authentication import get_jwt_strategy
+from domains.identity.infrastructure.models.user import User
+from domains.identity.infrastructure.user_manager import UserManager
+from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from fastapi.security import HTTPAuthorizationCredentials
     from sqlalchemy.ext.asyncio import AsyncSession
-
-from bootstrap.config import settings
-from domains.identity.infrastructure.authentication import get_jwt_strategy
-from domains.identity.infrastructure.models.user import User
-from domains.identity.infrastructure.user_manager import UserManager
-from shared.kernel.types import Principal
-from utils.logging import get_logger
 
 # =============================================================================
 # 匿名用户常量（集中定义，供其他模块导入）
 # =============================================================================
 ANONYMOUS_USER_COOKIE = "anonymous_user_id"
 ANONYMOUS_COOKIE_MAX_AGE = 365 * 24 * 60 * 60  # 1 year
+ANONYMOUS_USER_HEADER = "X-Anonymous-User-Id"
 
 
 async def _get_or_create_anonymous_principal(

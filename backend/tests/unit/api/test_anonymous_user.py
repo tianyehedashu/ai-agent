@@ -10,7 +10,7 @@ import pytest
 
 from domains.identity.application import ANONYMOUS_USER_COOKIE
 from domains.identity.application.principal_service import _get_or_create_anonymous_principal
-from shared.kernel.types import Principal
+from domains.identity.domain.types import Principal
 
 
 @pytest.mark.unit

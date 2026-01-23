@@ -63,7 +63,7 @@ class TestSessionTitle:
 
     @pytest.mark.asyncio
     async def test_update_title_max_length(self, dev_client: AsyncClient, auth_headers: dict):
-        """测试: 更新标题到最大长""
+        """测试: 更新标题到最大长度"""
         # Arrange
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -89,7 +89,7 @@ class TestSessionTitle:
     async def test_update_title_exceeds_max_length(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 更新标题超过最大长""
+        """测试: 更新标题超过最大长度"""
         # Arrange
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -123,9 +123,9 @@ class TestSessionTitle:
         session_id = create_response.json()["id"]
 
         # Mock LLM 响应
-        mock_title = "生成的标
+        mock_title = "生成的标题"
 
-        with patch("domains.runtime.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance
@@ -159,9 +159,9 @@ class TestSessionTitle:
         session_id = create_response.json()["id"]
 
         # Mock LLM 响应
-        mock_title = "第一条消息标
+        mock_title = "第一条消息标题"
 
-        with patch("domains.runtime.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance
@@ -184,7 +184,7 @@ class TestSessionTitle:
     async def test_generate_title_invalid_strategy(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 使用无效的策略生成标""
+        """测试: 使用无效的策略生成标题"""
         # Arrange
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -228,7 +228,7 @@ class TestSessionTitle:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_can_update_own_title(self, dev_client: AsyncClient):
-        """测试: 匿名用户可以更新自己的会话标""
+        """测试: 匿名用户可以更新自己的会话标题"""
         # Arrange - 创建匿名用户会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -261,7 +261,7 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "匿名用户标题"
 
-        with patch("domains.runtime.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance
@@ -282,7 +282,7 @@ class TestSessionTitle:
     async def test_update_title_and_status_together(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 同时更新标题和状""
+        """测试: 同时更新标题和状态"""
         # Arrange
         create_response = await dev_client.post(
             "/api/v1/sessions/",

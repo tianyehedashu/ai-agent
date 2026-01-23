@@ -6,9 +6,9 @@ Tool Registry 单元测试
 
 import pytest
 
-from shared.types import ToolCategory, ToolResult
-from domains.runtime.infrastructure.tools.base import BaseTool
-from domains.runtime.infrastructure.tools.registry import ToolRegistry
+from domains.agent.domain.types import ToolCategory, ToolResult
+from domains.agent.infrastructure.tools.base import BaseTool
+from domains.agent.infrastructure.tools.registry import ToolRegistry
 
 
 class MockTool(BaseTool):

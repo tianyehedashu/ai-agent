@@ -16,12 +16,15 @@ import pytest
 # 直接导入，避免循环依赖
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from domains.runtime.infrastructure.memory.simplemem_client import (
+from domains.agent.domain.types import (
+    Message,
+    MessageRole,
+)
+from domains.agent.infrastructure.memory.simplemem_client import (
     MemoryAtom,
     SimpleMemAdapter,
     SimpleMemConfig,
 )
-from shared.types import Message, MessageRole
 
 
 @pytest.fixture

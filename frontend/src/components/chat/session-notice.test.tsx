@@ -2,15 +2,15 @@
  * SessionNotice 组件测试
  */
 
-import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SessionRecreationData } from '@/types'
 
 import { SessionNotice } from './session-notice'
 
 describe('SessionNotice', () => {
-  const mockDismiss = vi.fn()
+  const mockDismiss = vi.fn() as ReturnType<typeof vi.fn> & { mockClear: () => void }
 
   const baseRecreationData: SessionRecreationData = {
     sessionId: 'test-session-123',
@@ -81,10 +81,13 @@ describe('SessionNotice', () => {
   })
 
   it('truncates long package lists', () => {
+    if (!baseRecreationData.previousState) {
+      throw new Error('previousState is required for this test')
+    }
     const dataWithManyPackages: SessionRecreationData = {
       ...baseRecreationData,
       previousState: {
-        ...baseRecreationData.previousState!,
+        ...baseRecreationData.previousState,
         packagesInstalled: ['pkg1', 'pkg2', 'pkg3', 'pkg4', 'pkg5', 'pkg6', 'pkg7'],
       },
     }

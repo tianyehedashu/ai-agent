@@ -13,7 +13,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # 导入必须在 sys.path 修改之后，使用 # pylint: disable=wrong-import-position 抑制警告
 from sqlalchemy import text  # pylint: disable=wrong-import-position
 
-from shared.infrastructure.db.database import close_db, get_engine, init_db  # pylint: disable=wrong-import-position
+from libs.db.database import (  # pylint: disable=wrong-import-position
+    close_db,
+    get_engine,
+    init_db,
+)
 
 # 所有继承 BaseModel 的表
 BASEMODEL_TABLES = [

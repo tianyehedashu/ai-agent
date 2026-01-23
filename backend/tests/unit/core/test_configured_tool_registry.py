@@ -6,10 +6,10 @@ ConfiguredToolRegistry 单元测试
 
 import pytest
 
-from shared.infrastructure.config.execution_config import ExecutionConfig, HITLConfig, ToolsConfig
-from shared.types import ToolCategory, ToolResult
-from domains.runtime.infrastructure.tools.base import BaseTool
-from domains.runtime.infrastructure.tools.registry import ConfiguredToolRegistry
+from domains.agent.domain.types import ToolCategory, ToolResult
+from domains.agent.infrastructure.tools.base import BaseTool
+from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
+from libs.config.execution_config import ExecutionConfig, HITLConfig, ToolsConfig
 
 
 class MockTool(BaseTool):

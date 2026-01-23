@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from shared.types import ToolCall, ToolResult
+from domains.agent.domain.types import ToolCall, ToolResult
 
 
 @dataclass

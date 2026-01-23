@@ -7,8 +7,8 @@ Token Domain Service - Token 领域服务
 from dataclasses import dataclass
 
 from bootstrap.config import get_settings
+from domains.identity.infrastructure.auth.jwt import create_refresh_token, verify_token
 from domains.identity.infrastructure.authentication import get_jwt_strategy
-from shared.infrastructure.auth.jwt import create_refresh_token, verify_token
 
 
 @dataclass

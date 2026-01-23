@@ -16,7 +16,7 @@ class TestAnonymousSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_complete_lifecycle(self, dev_client: AsyncClient):
-        """测试: 匿名用户会话的完整生命周""
+        """测试: 匿名用户会话的完整生命周期"""
         # 1. 创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -86,7 +86,8 @@ class TestAnonymousSessionLifecycle:
             assert create_response.status_code == status.HTTP_201_CREATED
             session_ids.append(create_response.json()["id"])
 
-        # Assert - 所有会话都属于同一个匿名用        list_response = await dev_client.get("/api/v1/sessions/")
+        # Assert - 所有会话都属于同一个匿名用户
+        list_response = await dev_client.get("/api/v1/sessions/")
         assert list_response.status_code == status.HTTP_200_OK
         sessions = list_response.json()
         session_ids_in_list = [s["id"] for s in sessions]
@@ -122,11 +123,13 @@ class TestAnonymousSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_session_with_agent(self, dev_client: AsyncClient):
-        """测试: 匿名用户可以创建Agent 的会""
-        # 注意：这个测试需要先创建一Agent
-        # 但在开发模式下，Agent 可能需要注册用        # 这里先测试基本流程，如果 Agent 创建失败则跳
+        """测试: 匿名用户可以创建 Agent 的会话"""
+        # 注意：这个测试需要先创建一个 Agent
+        # 但在开发模式下，Agent 可能需要注册用户
+        # 这里先测试基本流程，如果 Agent 创建失败则跳过
         # Arrange - 尝试创建 Agent（可能需要认证）
-        # 如果失败，则跳过此测        try:
+        # 如果失败，则跳过此测试
+        try:
             agent_response = await dev_client.post(
                 "/api/v1/agents/",
                 json={"name": "Test Agent", "system_prompt": "Test"},
@@ -137,7 +140,8 @@ class TestAnonymousSessionLifecycle:
         except Exception:
             pytest.skip("Cannot create agent without authentication")
 
-        # Act - 创建Agent 的会        create_response = await dev_client.post(
+        # Act - 创建 Agent 的会话
+        create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"agent_id": agent_id, "title": "Session with Agent"},
         )
@@ -167,9 +171,12 @@ class TestAnonymousSessionLifecycle:
         assert create_response.status_code == status.HTTP_201_CREATED
         session_anonymous_id = create_response.json()["anonymous_user_id"]
 
-        # Act - 再次请求（应该使用相同的 Cookie?        second_response = await dev_client.get("/api/v1/sessions/")
+        # Act - 再次请求（应该使用相同的 Cookie）
+        second_response = await dev_client.get("/api/v1/sessions/")
         second_cookie = dev_client.cookies.get(ANONYMOUS_USER_COOKIE)
 
-        # Assert - Cookie 应该保持一        assert first_cookie == second_cookie
-        # 会话应该属于同一个匿名用        sessions = second_response.json()
+        # Assert - Cookie 应该保持一致
+        assert first_cookie == second_cookie
+        # 会话应该属于同一个匿名用户
+        sessions = second_response.json()
         assert any(s["anonymous_user_id"] == session_anonymous_id for s in sessions)

@@ -19,8 +19,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # pylint: disable=wrong-import-position
-from domains.runtime.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
-from shared.types import Message, MessageRole
+from domains.agent.domain.types import (
+    Message,
+    MessageRole,
+)
+from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 
 # pylint: enable=wrong-import-position
 

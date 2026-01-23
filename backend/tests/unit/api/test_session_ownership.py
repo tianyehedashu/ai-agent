@@ -8,10 +8,10 @@ import uuid
 
 import pytest
 
-from domains.runtime.infrastructure.models.session import Session
+from domains.agent.infrastructure.models.session import Session
+from domains.identity.presentation.deps import check_session_ownership
+from domains.identity.presentation.schemas import CurrentUser
 from exceptions import PermissionDeniedError
-from shared.presentation.deps import check_session_ownership
-from shared.presentation.schemas import CurrentUser
 
 
 @pytest.mark.unit
@@ -38,7 +38,7 @@ class TestSessionOwnership:
             user_id = str(uuid.uuid4())
         return CurrentUser(
             id=user_id,
-            email="test@example.com",
+            email=f"test_{user_id}@example.com",
             name="Test User",
             is_anonymous=False,
         )
@@ -47,7 +47,7 @@ class TestSessionOwnership:
         """Create anonymous user."""
         if anonymous_id is None:
             anonymous_id = str(uuid.uuid4())
-        from shared.kernel.types import Principal
+        from domains.identity.domain.types import Principal
 
         principal_id = Principal.make_anonymous_id(anonymous_id)
         return CurrentUser(

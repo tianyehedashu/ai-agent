@@ -11,10 +11,10 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.studio.infrastructure.models.workflow import Workflow, WorkflowVersion
 from domains.studio.infrastructure.studio.codegen import LangGraphCodeGen
 from domains.studio.infrastructure.studio.parser import LangGraphParser
-from shared.infrastructure.db.database import get_async_session
-from domains.studio.infrastructure.models.workflow import Workflow, WorkflowVersion
+from libs.db.database import get_async_session
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

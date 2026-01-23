@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """验证编码修复结果"""
-import sys
 import io
 from pathlib import Path
+import sys
 
 # 设置标准输出编码
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # 查找所有 Python 文件
-backend_dir = Path('.')
+backend_dir = Path()
 python_files = list(backend_dir.rglob('*.py'))
 
 # 排除虚拟环境和缓存目录

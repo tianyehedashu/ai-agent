@@ -108,19 +108,30 @@ export default function ChatMessages({
                 <div className="markdown-body prose prose-slate dark:prose-invert max-w-none text-[15px] leading-relaxed">
                   <ReactMarkdown
                     components={{
-                      code({ className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '')
+                      code({ className, children, ...props }): React.JSX.Element {
+                        const match = /language-(\w+)/.exec(className ?? '')
+                        const childrenStr = Array.isArray(children) 
+                          ? children.map(c => {
+                              if (typeof c === 'string') return c
+                              if (typeof c === 'number' || typeof c === 'boolean') return String(c)
+                              return ''
+                            }).join('')
+                          : typeof children === 'string' 
+                            ? children 
+                            : typeof children === 'number' || typeof children === 'boolean'
+                              ? String(children)
+                              : ''
                         return match ? (
                           <SyntaxHighlighter
                             style={vscDarkPlus as Record<string, React.CSSProperties>}
                             language={match[1]}
                             PreTag="div"
                           >
-                            {String(children).replace(/\n$/, '')}
+                            {childrenStr.replace(/\n$/, '')}
                           </SyntaxHighlighter>
                         ) : (
                           <code className={className} {...props}>
-                            {children}
+                            {childrenStr}
                           </code>
                         )
                       },
@@ -174,19 +185,19 @@ function SuggestionCard({
   iconColor: string
   title: string
   description: string
-}) {
+}): React.JSX.Element {
   return (
-    <button className="group flex items-start gap-3 rounded-xl border border-border/50 bg-card/50 p-4 text-left transition-all hover:border-border hover:bg-card hover:shadow-sm">
+    <button className="group flex items-start gap-3 rounded-xl border border-border/40 bg-secondary/20 p-4 text-left transition-all hover:border-border/80 hover:bg-secondary/40 hover:shadow-sm">
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/80 transition-colors group-hover:bg-secondary',
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background shadow-sm transition-colors ring-1 ring-border/20',
           iconColor
         )}
       >
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="font-medium leading-none">{title}</p>
+        <p className="font-medium leading-none text-foreground/90">{title}</p>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
     </button>
@@ -205,7 +216,7 @@ function MessageBubble({
     return (
       <div className="flex items-start justify-end gap-3 animate-in fade-in slide-in-from-bottom-2">
         <div className="max-w-[85%] sm:max-w-[75%]">
-          <div className="rounded-2xl rounded-br-md bg-primary px-4 py-3 text-primary-foreground shadow-sm">
+          <div className="rounded-2xl rounded-br-md bg-secondary px-4 py-3 text-secondary-foreground shadow-sm">
             <div className="text-[15px] leading-relaxed">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
@@ -232,19 +243,30 @@ function MessageBubble({
         <div className="markdown-body prose prose-slate dark:prose-invert max-w-none text-[15px] leading-relaxed">
           <ReactMarkdown
             components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '')
+              code({ className, children, ...props }): React.JSX.Element {
+                const match = /language-(\w+)/.exec(className ?? '')
+                const childrenStr = Array.isArray(children) 
+                  ? children.map(c => {
+                      if (typeof c === 'string') return c
+                      if (typeof c === 'number' || typeof c === 'boolean') return String(c)
+                      return ''
+                    }).join('')
+                  : typeof children === 'string' 
+                    ? children 
+                    : typeof children === 'number' || typeof children === 'boolean'
+                      ? String(children)
+                      : ''
                 return match ? (
                   <SyntaxHighlighter
                     style={vscDarkPlus as Record<string, React.CSSProperties>}
                     language={match[1]}
                     PreTag="div"
                   >
-                    {String(children).replace(/\n$/, '')}
+                    {childrenStr.replace(/\n$/, '')}
                   </SyntaxHighlighter>
                 ) : (
                   <code className={className} {...props}>
-                    {children}
+                    {childrenStr}
                   </code>
                 )
               },
@@ -268,7 +290,7 @@ function MessageBubble({
                   <Terminal className="h-3.5 w-3.5" />
                   <span className="font-semibold">{toolCall.name}</span>
                 </div>
-                {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                {Object.keys(toolCall.arguments).length > 0 && (
                   <pre className="mt-2 overflow-x-auto rounded-md bg-background/50 p-2 text-xs text-muted-foreground">
                     {JSON.stringify(toolCall.arguments, null, 2)}
                   </pre>

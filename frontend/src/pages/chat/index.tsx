@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 
 import { History, Sparkles } from 'lucide-react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
@@ -17,6 +17,7 @@ import ChatMessages from './components/chat-messages'
 
 export default function ChatPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const [showDebugger, setShowDebugger] = useState(false)
   const { setCurrentSession, input, setInput } = useChatStore()
@@ -46,44 +47,83 @@ export default function ChatPage(): React.JSX.Element {
     },
   })
 
-  const loadSession = useCallback(
-    async (id: string) => {
-      try {
-        const session = await sessionApi.get(id)
-        setCurrentSession(session)
-      } catch (error) {
-        console.error('Failed to load session:', error)
+  // 处理会话访问错误（如 403 无权限），重定向到首页
+  const handleSessionAccessError = useCallback(
+    (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      const isPermissionError = errorMessage.includes('permission') || errorMessage.includes('403')
+
+      if (isPermissionError) {
+        toast({
+          title: '无法访问该会话',
+          description: '该会话可能已被删除或您没有访问权限，正在返回首页...',
+          variant: 'destructive',
+        })
+        // 重定向到首页
+        navigate('/chat', { replace: true })
+      } else {
+        toast({
+          title: '加载失败',
+          description: errorMessage,
+          variant: 'destructive',
+        })
       }
     },
-    [setCurrentSession]
+    [toast, navigate]
   )
 
   // Load session - 当 sessionId 变化时，先清除消息再加载
   useEffect(() => {
+    // 使用标志位来跟踪这个 effect 是否仍然有效
+    // 当 sessionId 变化时，旧的 effect 会被清理，cancelled 会被设置为 true
+    let cancelled = false
+    
     // 每次 sessionId 变化都先清除消息
     clearMessages()
     
     if (sessionId) {
-      void loadSession(sessionId)
+      // 加载会话信息
+      sessionApi
+        .get(sessionId)
+        .then((session) => {
+          // 只有当这个 effect 没有被取消时才更新状态
+          if (!cancelled) {
+            setCurrentSession(session)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error('Failed to load session:', error)
+            handleSessionAccessError(error)
+          }
+        })
+      
       // 加载历史消息
       sessionApi
         .getMessages(sessionId)
         .then((messages) => {
-          loadMessages(messages)
+          // 只有当这个 effect 没有被取消时才更新状态
+          if (!cancelled) {
+            loadMessages(messages)
+          }
         })
-        .catch((error) => {
-          // 如果加载失败，只记录错误，不影响会话信息加载
-          console.error('Failed to load messages:', error)
-          toast({
-            title: '加载消息失败',
-            description: error instanceof Error ? error.message : '未知错误',
-            variant: 'destructive',
-          })
+        .catch((error: unknown) => {
+          // 如果加载失败，检查是否是权限问题
+          // 只有当这个 effect 没有被取消时才处理错误
+          if (!cancelled) {
+            console.error('Failed to load messages:', error)
+            handleSessionAccessError(error)
+          }
         })
     } else {
       setCurrentSession(null)
     }
-  }, [sessionId, loadSession, setCurrentSession, clearMessages, loadMessages])
+    
+    // 清理函数：当 sessionId 变化或组件卸载时调用
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, setCurrentSession, clearMessages, loadMessages, handleSessionAccessError])
 
   const handleSend = async (): Promise<void> => {
     if (!input.trim() || isLoading) return
@@ -109,7 +149,7 @@ export default function ChatPage(): React.JSX.Element {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowDebugger(true)}
+            onClick={() => { setShowDebugger(true); }}
             className="h-8 gap-1.5 rounded-full bg-background/80 px-3 text-xs text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
           >
             <History className="h-3.5 w-3.5" />
@@ -140,7 +180,7 @@ export default function ChatPage(): React.JSX.Element {
       </div>
 
       {/* Input Area - Fixed at bottom with centered content */}
-      <div className="relative border-t border-border/40 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-2">
+      <div className="relative z-10 border-t border-border/40 bg-background/95 pb-4 pt-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-3xl px-4">
           {/* Subtle branding when empty */}
           {messages.length === 0 && !isLoading && (

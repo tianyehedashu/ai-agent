@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
+from domains.agent.application.memory_service import MemoryService
 from domains.identity.infrastructure.models.user import User
-from domains.runtime.application.memory_service import MemoryService
 from exceptions import NotFoundError
 
 

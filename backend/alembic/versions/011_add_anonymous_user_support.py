@@ -4,7 +4,10 @@ Revision ID: 011
 Revises: 010_align_users_for_fastapi_users
 Create Date: 2026-01-20
 
-支持匿名用户多轮聊天- 添加 anonymous_user_id 字段sessions ?- ?user_id 改为可选（nullable?- 添加约束确保 user_id ?anonymous_user_id 至少有一个不为空
+支持匿名用户多轮聊天:
+- 添加 anonymous_user_id 字段到 sessions 表
+- 将 user_id 改为可空
+- 添加约束确保 user_id 或 anonymous_user_id 至少有一个不为空
 """
 
 import sqlalchemy as sa
@@ -25,13 +28,15 @@ def upgrade() -> None:
     columns = [col["name"] for col in inspector.get_columns("sessions")]
     indexes = [idx["name"] for idx in inspector.get_indexes("sessions")]
 
-    # 1. 添加 anonymous_user_id 字段（如果不存在    if "anonymous_user_id" not in columns:
+    # 1. 添加 anonymous_user_id 字段（如果不存在）
+    if "anonymous_user_id" not in columns:
         op.add_column(
             "sessions",
             sa.Column("anonymous_user_id", sa.String(100), nullable=True),
         )
 
-    # 2. 创建 anonymous_user_id 索引（如果不存在    if "ix_sessions_anonymous_user_id" not in indexes:
+    # 2. 创建 anonymous_user_id 索引（如果不存在）
+    if "ix_sessions_anonymous_user_id" not in indexes:
         op.create_index(
             "ix_sessions_anonymous_user_id",
             "sessions",
@@ -39,14 +44,16 @@ def upgrade() -> None:
             unique=False,
         )
 
-    # 3. ?user_id 改为可选（nullable?    # 注意：现有数据都user_id，所以这个改动是安全    op.alter_column(
+    # 3. 将 user_id 改为可选（nullable）
+    # 注意：现有数据都有 user_id，所以这个改动是安全的
+    op.alter_column(
         "sessions",
         "user_id",
         existing_type=sa.dialects.postgresql.UUID(as_uuid=True),
         nullable=True,
     )
 
-    # 4. 添加约束确保 user_id ?anonymous_user_id 至少有一个不为空
+    # 4. 添加约束确保 user_id 或 anonymous_user_id 至少有一个不为空
     op.create_check_constraint(
         "session_must_have_user_or_anonymous",
         "sessions",
@@ -62,7 +69,10 @@ def downgrade() -> None:
         type_="check",
     )
 
-    # 2. ?user_id 改回不可    # 注意：如果有匿名用户会话（user_id ?NULL），这个操作会失    # 需要先删除这些会话或手动处    op.alter_column(
+    # 2. 将 user_id 改回不可为空
+    # 注意：如果有匿名用户会话（user_id 为 NULL），这个操作会失败
+    # 需要先删除这些会话或手动处理
+    op.alter_column(
         "sessions",
         "user_id",
         existing_type=sa.dialects.postgresql.UUID(as_uuid=True),

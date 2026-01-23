@@ -1,0 +1,14 @@
+# 强制 Git 使用 UTF-8 编码处理文本文件
+* text=auto eol=lf
+
+# 明确指定 Python 文件使用 UTF-8
+*.py text eol=lf charset=utf-8
+
+# 明确指定其他文本文件使用 UTF-8
+*.{md,txt,json,yaml,yml,toml,ini,cfg,conf} text eol=lf charset=utf-8
+*.{ts,tsx,js,jsx,css,html,htm} text eol=lf charset=utf-8
+
+# 二进制文件
+*.{png,jpg,jpeg,gif,ico,svg,woff,woff2,ttf,eot} binary
+*.{zip,tar,gz,7z,rar} binary
+*.{exe,dll,so,dylib} binary

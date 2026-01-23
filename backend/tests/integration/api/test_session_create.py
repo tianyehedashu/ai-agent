@@ -1,7 +1,8 @@
 """
 会话创建功能集成测试
 
-测试创建新会话的各种场景和边界情"""
+测试创建新会话的各种场景和边界情况
+"""
 
 import uuid
 
@@ -18,8 +19,8 @@ class TestSessionCreate:
     async def test_create_session_with_all_params(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 使用所有参数创建会""
-        # Arrange - 先创Agent
+        """测试: 使用所有参数创建会话"""
+        # Arrange - 先创建Agent
         agent_response = await dev_client.post(
             "/api/v1/agents/",
             json={"name": "Test Agent", "system_prompt": "Test prompt"},
@@ -111,7 +112,7 @@ class TestSessionCreate:
     async def test_create_session_title_max_length(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 创建会话title 最大长度限""
+        """测试: 创建会话title 最大长度限制"""
         # Arrange - 200字符的title（最大长度）
         max_title = "a" * 200
 
@@ -161,7 +162,8 @@ class TestSessionCreate:
         )
 
         # Assert
-        # 注意：根据实现，可能会创建会话但 agent_id 无效，或者返回错        # 这里假设会创建会话（外键约束可能不会立即检查）
+        # 注意：根据实现，可能会创建会话但 agent_id 无效，或者返回错误
+        # 这里假设会创建会话（外键约束可能不会立即检查）
         assert create_response.status_code in [
             status.HTTP_201_CREATED,
             status.HTTP_400_BAD_REQUEST,
@@ -171,7 +173,8 @@ class TestSessionCreate:
     @pytest.mark.asyncio
     async def test_create_multiple_sessions(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 创建多个会话"""
-        # Act - 创建3个会        session_ids = []
+        # Act - 创建3个会话
+        session_ids = []
         for i in range(3):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
@@ -209,7 +212,7 @@ class TestSessionCreate:
 
     @pytest.mark.asyncio
     async def test_create_session_empty_title(self, dev_client: AsyncClient, auth_headers: dict):
-        """测试: 创建会话title 为空字符""
+        """测试: 创建会话title 为空字符串"""
         # Act
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -226,7 +229,7 @@ class TestSessionCreate:
 
     @pytest.mark.asyncio
     async def test_create_session_unicode_title(self, dev_client: AsyncClient, auth_headers: dict):
-        """测试: 创建会话时使Unicode 字符title"""
+        """测试: 创建会话时使用Unicode 字符作为title"""
         # Arrange
         unicode_title = "测试会话 🚀 中文标题"
 

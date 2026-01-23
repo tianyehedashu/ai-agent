@@ -72,7 +72,8 @@ class TestSessionDelete:
         )
         registered_session_id = registered_response.json()["id"]
 
-        # Act - 匿名用户尝试删除注册用户的会        delete_response = await dev_client.delete(f"/api/v1/sessions/{registered_session_id}")
+        # Act - 匿名用户尝试删除注册用户的会话
+        delete_response = await dev_client.delete(f"/api/v1/sessions/{registered_session_id}")
 
         # Assert
         assert delete_response.status_code in [
@@ -89,7 +90,7 @@ class TestSessionDelete:
 
     @pytest.mark.asyncio
     async def test_delete_anonymous_user_session(self, dev_client: AsyncClient):
-        """测试: 匿名用户删除自己的会""
+        """测试: 匿名用户删除自己的会话"""
         # Arrange - 创建匿名用户会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -111,7 +112,7 @@ class TestSessionDelete:
     async def test_delete_session_removes_from_list(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 删除会话后从列表中移""
+        """测试: 删除会话后从列表中移除"""
         # Arrange - 创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
@@ -120,7 +121,8 @@ class TestSessionDelete:
         )
         session_id = create_response.json()["id"]
 
-        # Act - 获取列表（应该包含该会话        list_before = await dev_client.get("/api/v1/sessions/", headers=auth_headers)
+        # Act - 获取列表（应该包含该会话）
+        list_before = await dev_client.get("/api/v1/sessions/", headers=auth_headers)
         sessions_before = list_before.json()
         assert any(s["id"] == session_id for s in sessions_before)
 
@@ -147,14 +149,16 @@ class TestSessionDelete:
             )
             session_ids.append(create_response.json()["id"])
 
-        # Act - 删除所有会        for session_id in session_ids:
+        # Act - 删除所有会话
+        for session_id in session_ids:
             delete_response = await dev_client.delete(
                 f"/api/v1/sessions/{session_id}",
                 headers=auth_headers,
             )
             assert delete_response.status_code == status.HTTP_204_NO_CONTENT
 
-        # Assert - 所有会话都已删        for session_id in session_ids:
+        # Assert - 所有会话都已删除
+        for session_id in session_ids:
             get_response = await dev_client.get(
                 f"/api/v1/sessions/{session_id}",
                 headers=auth_headers,
@@ -165,8 +169,9 @@ class TestSessionDelete:
     async def test_delete_session_with_messages(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 删除包含消息的会""
-        # Arrange - 创建会话并添加消息（通过聊天接口        create_response = await dev_client.post(
+        """测试: 删除包含消息的会话"""
+        # Arrange - 创建会话并添加消息（通过聊天接口）
+        create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Session with Messages"},
             headers=auth_headers,
@@ -174,7 +179,7 @@ class TestSessionDelete:
         session_id = create_response.json()["id"]
 
         # 注意：这里假设有消息，实际测试可能需要通过聊天接口添加消息
-        # 或者直接通过数据库添加消
+        # 或者直接通过数据库添加消息
         # Act - 删除会话
         delete_response = await dev_client.delete(
             f"/api/v1/sessions/{session_id}",
@@ -206,7 +211,8 @@ class TestSessionDelete:
         )
 
         # Assert
-        # 可能返回 404 ?422，取决于 UUID 验证的实        assert delete_response.status_code in [
+        # 可能返回 404 或 422，取决于 UUID 验证的实现
+        assert delete_response.status_code in [
             status.HTTP_404_NOT_FOUND,
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         ]

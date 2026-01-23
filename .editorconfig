@@ -1,0 +1,46 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# 所有文件使用 UTF-8 编码
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Python 文件
+[*.py]
+charset = utf-8
+indent_style = space
+indent_size = 4
+
+# TypeScript/JavaScript 文件
+[*.{ts,tsx,js,jsx}]
+charset = utf-8
+indent_style = space
+indent_size = 2
+
+# Markdown 文件
+[*.md]
+charset = utf-8
+trim_trailing_whitespace = false
+
+# YAML 文件
+[*.{yaml,yml}]
+charset = utf-8
+indent_style = space
+indent_size = 2
+
+# JSON 文件
+[*.json]
+charset = utf-8
+indent_style = space
+indent_size = 2
+
+# TOML 文件
+[*.toml]
+charset = utf-8
+indent_style = space
+indent_size = 2
