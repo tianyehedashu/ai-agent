@@ -48,6 +48,11 @@
   "python.analysis.typeCheckingMode": "strict",
   "python.analysis.diagnosticMode": "workspace",
 
+  // 文件编码配置 - 强制使用 UTF-8
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "files.eol": "\n",
+
   // 排除文件（与 pyproject.toml 保持一致）
   "files.exclude": {
     "**/__pycache__": true,

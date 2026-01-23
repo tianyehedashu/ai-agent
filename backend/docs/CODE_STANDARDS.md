@@ -5,38 +5,66 @@
 | 原则 | 说明 |
 |------|------|
 | **类型优先** | 所有代码必须有完整类型注解，通过 `pyright --strict` |
-| **DRY** | 复用 `core/types.py`、`services/` 层，禁止重复逻辑 |
-| **单一职责** | API 层处理 HTTP，Service 层处理业务，Model 层定义数据 |
+| **DRY** | 复用 `shared/types.py`、UseCase 层，禁止重复逻辑 |
+| **DDD 分层** | Presentation → Application → Domain ← Infrastructure |
 | **显式优于隐式** | 明确声明类型和依赖，禁止 `from xxx import *` |
 
-## 项目结构
+## 项目结构 (DDD 4层架构)
 
 ```
 backend/
-├── api/v1/          # API 路由
-├── app/             # FastAPI 入口、配置
-├── core/            # 核心类型定义 (types.py)
-├── models/          # SQLAlchemy ORM 模型
-├── schemas/         # Pydantic 请求/响应
-├── services/        # 业务逻辑层
-├── db/              # 数据库连接
-├── tools/           # Agent 工具
-└── tests/           # 测试 (unit/integration/e2e)
+├── api/v1/                 # API 路由汇总（表现层入口）
+├── bootstrap/              # 启动层：FastAPI 入口、配置
+│   ├── main.py             # FastAPI 应用入口
+│   ├── config.py           # 应用配置
+│   └── config_loader.py    # TOML 配置加载器
+├── domains/                # 业务领域
+│   ├── agent_catalog/      # Agent 目录管理
+│   ├── evaluation/         # 评估领域
+│   ├── identity/           # 身份认证
+│   ├── runtime/            # Agent 运行时（核心）
+│   │   ├── application/    # UseCase 业务编排
+│   │   ├── domain/         # 实体/领域服务
+│   │   ├── infrastructure/ # 基础设施实现
+│   │   │   ├── engine/     # LangGraph Agent
+│   │   │   ├── memory/     # 记忆系统
+│   │   │   ├── reasoning/  # 推理策略
+│   │   │   ├── sandbox/    # 沙箱执行器
+│   │   │   └── tools/      # 工具系统
+│   │   └── presentation/   # 路由 + Schema
+│   └── studio/             # 工作室领域
+├── shared/                 # 共享层
+│   ├── kernel/             # 内核类型 (Principal)
+│   ├── infrastructure/     # 共享基础设施
+│   │   ├── auth/           # 认证 (JWT/RBAC)
+│   │   ├── db/             # 数据库连接
+│   │   ├── llm/            # LLM 网关
+│   │   └── orm/            # ORM 基类
+│   ├── presentation/       # 共享表示层（deps, errors, schemas）
+│   └── types.py            # 核心类型定义
+├── utils/                  # 工具函数
+└── tests/                  # 测试目录
 ```
+
+**目录说明**：
+- `api/v1/` - 表现层入口，路由聚合，导入 `shared.presentation` 的依赖
+- `bootstrap/` - 启动层，负责初始化 FastAPI 应用、配置和生命周期管理
+- `shared/presentation/` - 共享的表示层组件：依赖注入、错误常量、Schema
 
 | 层级 | 职责 | 依赖 |
 |------|------|------|
-| `api/` | HTTP 请求处理、参数验证 | services, schemas |
-| `services/` | 业务逻辑、事务处理 | models, db |
-| `models/` | 数据库模型、关系映射 | db |
-| `schemas/` | 请求/响应数据结构 | - |
-| `core/` | 核心类型、枚举、协议 | - |
+| `presentation/` | HTTP 路由、Schema、参数验证 | application |
+| `application/` | UseCase 业务编排、事务处理 | domain |
+| `domain/` | 实体、领域服务、仓储接口 | - |
+| `infrastructure/` | 仓储实现、ORM 模型、外部适配 | domain (接口) |
+| `shared/` | 跨领域共享组件 | - |
 
 ## 类型安全
 
 ```python
 # ✅ 使用项目类型
-from core.types import Result, AgentConfig, EventType, ToolCall
+from shared.types import Result, AgentConfig, EventType, ToolCall
+from shared.kernel.types import Principal
 
 # ✅ Pydantic 模型
 class UserCreate(BaseModel):
@@ -49,7 +77,7 @@ avatar: Mapped[str | None] = mapped_column(nullable=True)
 
 # ✅ 避免循环依赖
 if TYPE_CHECKING:
-    from models.user import User
+    from domains.identity.infrastructure.models.user import User
 ```
 
 ## 命名规范

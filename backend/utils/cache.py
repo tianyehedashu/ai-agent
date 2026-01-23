@@ -13,7 +13,7 @@ from typing import Any, ParamSpec, TypeVar
 
 from redis.asyncio import Redis
 
-from app.config import settings
+from bootstrap.config import settings
 
 P = ParamSpec("P")
 T = TypeVar("T")

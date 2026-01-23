@@ -5,7 +5,7 @@
 
 import pytest
 
-from core.types import ToolCall, ToolResult
+from shared.types import ToolCall, ToolResult
 from evaluation.tool_accuracy import ToolAccuracyEvaluator
 
 

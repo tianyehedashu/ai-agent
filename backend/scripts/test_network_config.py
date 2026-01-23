@@ -13,16 +13,16 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # pylint: disable=wrong-import-position  # sys.path.insert 必须在前
-from core.config import get_execution_config_service
-from core.config.execution_config import (
+from shared.infrastructure.config import get_execution_config_service
+from shared.infrastructure.config.execution_config import (
     ExecutionConfig,
     NetworkConfig,
 )
-from core.config.execution_config import (
+from shared.infrastructure.config.execution_config import (
     SandboxConfig as SandboxCfg,
 )
-from core.sandbox.executor import SandboxConfig
-from core.sandbox.factory import ExecutorFactory
+from domains.runtime.infrastructure.sandbox.executor import SandboxConfig
+from domains.runtime.infrastructure.sandbox.factory import ExecutorFactory
 
 
 async def test_network_disabled():

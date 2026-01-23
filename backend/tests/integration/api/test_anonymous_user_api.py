@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import ANONYMOUS_USER_COOKIE
+from shared.presentation import ANONYMOUS_USER_COOKIE
 
 
 @pytest_asyncio.fixture
@@ -25,16 +25,16 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
 
     with (
-        patch("db.database.init_db"),
-        patch("db.redis.init_redis"),
-        patch("db.database.get_session_factory", return_value=mock_factory),
-        patch("db.database.get_async_session", new=mock_factory),
+        patch("shared.infrastructure.db.database.init_db"),
+        patch("shared.infrastructure.db.redis.init_redis"),
+        patch("shared.infrastructure.db.database.get_session_factory", return_value=mock_factory),
+        patch("shared.infrastructure.db.database.get_async_session", new=mock_factory),
         # 保持开发模式以启用匿名用户功能
-        patch("app.config.settings.app_env", "development"),
+        patch("bootstrap.config.settings.app_env", "development"),
     ):
-        from app.main import app
-        from core.engine.langgraph_checkpointer import LangGraphCheckpointer
-        from db.database import get_session
+        from bootstrap.main import app
+        from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+        from shared.infrastructure.db.database import get_session
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
@@ -101,15 +101,15 @@ class TestAnonymousUserAPI:
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
 
         with (
-            patch("db.database.init_db"),
-            patch("db.redis.init_redis"),
-            patch("db.database.get_session_factory", return_value=mock_factory),
-            patch("db.database.get_async_session", new=mock_factory),
-            patch("app.config.settings.app_env", "development"),
+            patch("shared.infrastructure.db.database.init_db"),
+            patch("shared.infrastructure.db.redis.init_redis"),
+            patch("shared.infrastructure.db.database.get_session_factory", return_value=mock_factory),
+            patch("shared.infrastructure.db.database.get_async_session", new=mock_factory),
+            patch("bootstrap.config.settings.app_env", "development"),
         ):
-            from app.main import app
-            from core.engine.langgraph_checkpointer import LangGraphCheckpointer
-            from db.database import get_session
+            from bootstrap.main import app
+            from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+            from shared.infrastructure.db.database import get_session
 
             async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
                 yield db_session

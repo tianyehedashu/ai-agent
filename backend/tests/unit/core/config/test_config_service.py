@@ -5,14 +5,14 @@ ExecutionConfigService 单元测试
 
 import pytest
 
-from core.config.env_resolver import EnvVarResolver
-from core.config.execution_config import ExecutionConfig
-from core.config.service import (
+from shared.infrastructure.config.env_resolver import EnvVarResolver
+from shared.infrastructure.config.execution_config import ExecutionConfig
+from shared.infrastructure.config.service import (
     ExecutionConfigService,
     get_execution_config_service,
     reset_execution_config_service,
 )
-from core.config.sources.toml_source import AgentTomlSource, TomlConfigSource
+from shared.infrastructure.config.sources.toml_source import AgentTomlSource, TomlConfigSource
 
 
 class TestEnvVarResolver:

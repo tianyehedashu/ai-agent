@@ -13,11 +13,11 @@ import uuid
 
 import pytest
 
-from app.config import settings
-from core.engine.langgraph_checkpointer import LangGraphCheckpointer
-from core.llm.gateway import LLMGateway
-from core.memory.langgraph_store import LongTermMemoryStore
-from db.vector import get_vector_store
+from bootstrap.config import settings
+from domains.runtime.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+from shared.infrastructure.llm.gateway import LLMGateway
+from domains.runtime.infrastructure.memory.langgraph_store import LongTermMemoryStore
+from shared.infrastructure.db.vector import get_vector_store
 
 
 @pytest.fixture

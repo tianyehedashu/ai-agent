@@ -10,9 +10,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from api.deps import AuthUser, check_ownership, get_session_service, get_title_service
-from services.session import SessionService
-from services.title import TitleService
+from shared.presentation import AuthUser, check_ownership, get_session_service, get_title_service
+from domains.runtime.application import SessionUseCase, TitleUseCase
 
 router = APIRouter()
 
@@ -129,13 +128,13 @@ class MessageResponse(BaseModel):
 @router.get("/", response_model=list[SessionResponse])
 async def list_sessions(
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     agent_id: str | None = None,
 ) -> list[SessionResponse]:
     """获取用户的会话列表"""
-    sessions = await session_service.list_by_user(
+    sessions = await session_service.list_sessions(
         user_id=current_user.id,
         skip=skip,
         limit=limit,
@@ -148,10 +147,10 @@ async def list_sessions(
 async def create_session(
     data: SessionCreate,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
 ) -> SessionResponse:
     """创建新会话"""
-    session = await session_service.create(
+    session = await session_service.create_session(
         user_id=current_user.id,
         agent_id=data.agent_id,
         title=data.title,
@@ -163,10 +162,10 @@ async def create_session(
 async def get_session(
     session_id: str,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
 ) -> SessionResponse:
     """获取会话详情"""
-    session = await session_service.get_by_id_or_raise(session_id)
+    session = await session_service.get_session_or_raise(session_id)
 
     # 检查权限
     check_ownership(str(session.user_id), current_user.id, "Session")
@@ -179,19 +178,19 @@ async def update_session(
     session_id: str,
     data: SessionUpdate,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
 ) -> SessionResponse:
     """更新会话"""
-    session = await session_service.get_by_id_or_raise(session_id)
+    session = await session_service.get_session_or_raise(session_id)
 
     # 检查权限
     check_ownership(str(session.user_id), current_user.id, "Session")
 
-    # 更新
-    updated_session = await session_service.update(
+    # 更新（仅传非 None 的字段，未传的用 ... 表示不更新）
+    updated_session = await session_service.update_session(
         session_id=session_id,
-        title=data.title,
-        status=data.status,
+        title=data.title if data.title is not None else ...,
+        status=data.status if data.status is not None else ...,
     )
 
     return SessionResponse.model_validate(updated_session)
@@ -201,8 +200,8 @@ async def update_session(
 async def generate_session_title(
     session_id: str,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
-    title_service: TitleService = Depends(get_title_service),
+    session_service: SessionUseCase = Depends(get_session_service),
+    title_service: TitleUseCase = Depends(get_title_service),
     strategy: Annotated[str, Query(description="生成策略: first_message 或 summary")] = "summary",
 ) -> SessionResponse:
     """生成会话标题
@@ -211,7 +210,7 @@ async def generate_session_title(
     - first_message: 根据第一条消息生成（仅当会话只有一条消息时有效）
     - summary: 根据多条消息总结生成
     """
-    session = await session_service.get_by_id_or_raise(session_id)
+    session = await session_service.get_session_or_raise(session_id)
 
     # 检查权限
     check_ownership(str(session.user_id), current_user.id, "Session")
@@ -233,7 +232,7 @@ async def generate_session_title(
     # 生成并更新标题
     success = await title_service.generate_and_update(
         session_id=session_id,
-        strategy=strategy,  # type: ignore
+        strategy=strategy,
         message=first_message,
         user_id=current_user.id,
     )
@@ -253,27 +252,27 @@ async def generate_session_title(
 async def delete_session(
     session_id: str,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
 ) -> None:
     """删除会话"""
-    session = await session_service.get_by_id_or_raise(session_id)
+    session = await session_service.get_session_or_raise(session_id)
 
     # 检查权限
     check_ownership(str(session.user_id), current_user.id, "Session")
 
-    await session_service.delete(session_id)
+    await session_service.delete_session(session_id)
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageResponse])
 async def get_session_messages(
     session_id: str,
     current_user: AuthUser,
-    session_service: SessionService = Depends(get_session_service),
+    session_service: SessionUseCase = Depends(get_session_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[MessageResponse]:
     """获取会话的消息历史"""
-    session = await session_service.get_by_id_or_raise(session_id)
+    session = await session_service.get_session_or_raise(session_id)
 
     # 检查权限
     check_ownership(str(session.user_id), current_user.id, "Session")

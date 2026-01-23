@@ -4,8 +4,8 @@
 
 import pytest
 
-from core.config.sources.base import ConfigSource
-from core.config.sources.toml_source import AgentTomlSource, TomlConfigSource
+from shared.infrastructure.config.sources.base import ConfigSource
+from shared.infrastructure.config.sources.toml_source import AgentTomlSource, TomlConfigSource
 
 
 class TestTomlConfigSource:

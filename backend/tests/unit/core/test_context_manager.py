@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.context.manager import ContextManager
-from core.types import AgentConfig, AgentMode, Message, MessageRole
+from domains.runtime.infrastructure.context.manager import ContextManager
+from shared.types import AgentConfig, AgentMode, Message, MessageRole
 
 
 class TestContextManager:
@@ -199,7 +199,7 @@ class TestContextManager:
     def test_format_message_with_tool_calls(self, context_manager):
         """测试: 格式化包含工具调用的消息"""
         # Arrange
-        from core.types import ToolCall
+        from shared.types import ToolCall
 
         message = Message(
             role=MessageRole.ASSISTANT,

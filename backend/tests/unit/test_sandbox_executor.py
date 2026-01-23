@@ -9,14 +9,14 @@ import sys
 
 import pytest
 
-from core.sandbox.executor import (
+from domains.runtime.infrastructure.sandbox.executor import (
     DockerExecutor,
     ExecutionResult,
     LocalExecutor,
     SandboxConfig,
     SessionDockerExecutor,
 )
-from core.sandbox.factory import ExecutorFactory
+from domains.runtime.infrastructure.sandbox.factory import ExecutorFactory
 
 
 class TestSandboxConfig:
@@ -330,7 +330,7 @@ class TestExecutorFactory:
 
     def test_create_local_executor(self):
         """测试创建本地执行器"""
-        from core.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.LOCAL),
@@ -340,7 +340,7 @@ class TestExecutorFactory:
 
     def test_create_session_docker_executor_default(self):
         """测试创建会话 Docker 执行器（默认启用 session）"""
-        from core.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.DOCKER),
@@ -351,7 +351,7 @@ class TestExecutorFactory:
 
     def test_create_stateless_docker_executor(self):
         """测试创建无状态 Docker 执行器（禁用 session）"""
-        from core.config.execution_config import (
+        from shared.infrastructure.config.execution_config import (
             DockerConfig,
             ExecutionConfig,
             SandboxConfig,
@@ -370,7 +370,7 @@ class TestExecutorFactory:
 
     def test_create_remote_executor_not_implemented(self):
         """测试创建远程执行器（未实现）"""
-        from core.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
+        from shared.infrastructure.config.execution_config import ExecutionConfig, SandboxConfig, SandboxMode
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.REMOTE),

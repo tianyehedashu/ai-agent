@@ -8,9 +8,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
-from core.types import ToolCategory
-from tools.registry import ToolRegistry
+from shared.presentation import get_current_user
+from shared.types import ToolCategory
+from domains.runtime.infrastructure.tools.registry import ToolRegistry
 
 router = APIRouter()
 

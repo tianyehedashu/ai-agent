@@ -73,10 +73,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E4
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
-from app.config import settings  # noqa: E402
-from core.auth.jwt import init_jwt_manager  # noqa: E402
-from db.database import Base  # noqa: E402
-from models.user import User  # noqa: E402
+from bootstrap.config import settings  # noqa: E402
+from shared.infrastructure.db.database import Base  # noqa: E402
+from domains.identity.infrastructure.models.user import User  # noqa: E402
+from shared.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
 
 # pylint: enable=wrong-import-position
 
@@ -232,20 +232,20 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
 
     with (
-        patch("db.database.init_db"),
-        patch("db.redis.init_redis"),
-        patch("db.database.get_session_factory", return_value=mock_factory),
-        patch("db.database.get_async_session", new=mock_factory),
+        patch("shared.infrastructure.db.database.init_db"),
+        patch("shared.infrastructure.db.redis.init_redis"),
+        patch("shared.infrastructure.db.database.get_session_factory", return_value=mock_factory),
+        patch("shared.infrastructure.db.database.get_async_session", new=mock_factory),
         # 在测试环境中禁用开发模式的匿名用户功能，确保认证测试正常工作
         # patch app_env 属性，这样 is_development property 会返回 False
-        patch("app.config.settings.app_env", "production"),
+        patch("bootstrap.config.settings.app_env", "production"),
     ):
         # 这些导入必须在 patch 生效后才能执行
-        from app.main import app  # pylint: disable=import-outside-toplevel
-        from core.engine.langgraph_checkpointer import (
+        from bootstrap.main import app  # pylint: disable=import-outside-toplevel
+        from shared.infrastructure.db.database import get_session  # pylint: disable=import-outside-toplevel
+        from domains.runtime.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
         )
-        from db.database import get_session  # pylint: disable=import-outside-toplevel
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
@@ -286,10 +286,10 @@ async def test_user(db_session: AsyncSession) -> User:
 async def auth_headers(test_user: User, db_session: AsyncSession) -> dict[str, str]:
     """认证头 fixture"""
     # 延迟导入避免循环依赖
-    from services.user import UserService  # pylint: disable=import-outside-toplevel
+    from domains.identity.application import UserUseCase  # pylint: disable=import-outside-toplevel
 
-    user_service = UserService(db_session)
-    token_pair = await user_service.create_token(test_user)
+    user_uc = UserUseCase(db_session)
+    token_pair = await user_uc.create_token(test_user)
     return {"Authorization": f"Bearer {token_pair.access_token}"}
 
 

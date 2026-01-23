@@ -15,10 +15,10 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from api.deps import AuthUser, RequiredAuthUser, get_user_service
+from shared.presentation import AuthUser, RequiredAuthUser, get_user_service
+from domains.identity.application import UserUseCase
+from domains.identity.presentation.schemas import TokenResponse
 from exceptions import ConflictError
-from schemas.user import TokenResponse
-from services.user import UserService
 
 router = APIRouter()
 
@@ -99,11 +99,11 @@ class AuthResponse(BaseModel):
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> AuthResponse:
     """用户注册"""
     # 检查邮箱是否已存在
-    existing = await user_service.get_by_email(request.email)
+    existing = await user_service.get_user_by_email(request.email)
     if existing:
         raise ConflictError(
             message="Email already registered",
@@ -111,7 +111,7 @@ async def register(
         )
 
     # 创建用户
-    user = await user_service.create(
+    user = await user_service.create_user(
         email=request.email,
         password=request.password,
         name=request.name,
@@ -137,7 +137,7 @@ async def register(
 @router.post("/login", response_model=AuthResponse)
 async def login(
     request: LoginRequest,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> AuthResponse:
     """用户登录"""
     # authenticate 会在失败时抛出 AuthenticationError
@@ -166,7 +166,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     request: RefreshRequest,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> TokenResponse:
     """刷新 Token"""
     # refresh_token 会在失败时抛出 TokenError
@@ -181,11 +181,11 @@ async def refresh_token(
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     current_user: RequiredAuthUser,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> UserResponse:
     """获取当前用户"""
-    # get_by_id_or_raise 会在用户不存在时抛出 NotFoundError
-    user = await user_service.get_by_id_or_raise(current_user.id)
+    # get_user_by_id_or_raise 会在用户不存在时抛出 NotFoundError
+    user = await user_service.get_user_by_id_or_raise(current_user.id)
 
     return UserResponse(
         id=str(user.id),
@@ -201,10 +201,10 @@ async def get_me(
 async def update_me(
     request: UpdateUserRequest,
     current_user: RequiredAuthUser,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> UserResponse:
     """更新当前用户"""
-    user = await user_service.update(
+    user = await user_service.update_user(
         user_id=current_user.id,
         name=request.name,
         avatar_url=request.avatar_url,
@@ -224,7 +224,7 @@ async def update_me(
 async def change_password(
     request: ChangePasswordRequest,
     current_user: RequiredAuthUser,
-    user_service: UserService = Depends(get_user_service),
+    user_service: UserUseCase = Depends(get_user_service),
 ) -> None:
     """修改密码"""
     # change_password 会在验证失败时抛出 AuthenticationError

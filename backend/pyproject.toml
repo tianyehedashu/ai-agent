@@ -23,9 +23,8 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "psycopg[binary]>=3.2.0",  # PostgreSQL 驱动（LangGraph 需要）
-    # Cache & Queue
+    # Cache
     "redis>=5.0.0",
-    "celery>=5.3.0",
     # LLM
     "litellm>=1.80.16",
     "tiktoken>=0.5.0",
@@ -49,8 +48,6 @@ dependencies = [
     # Code Analysis (for Code-First)
     "libcst>=1.1.0",
     "jedi>=0.19.0",
-    # Task Queue
-    "kombu>=5.3.0",
     # Docker SDK
     "docker>=7.0.0",
     # Utilities
@@ -112,7 +109,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "api", "core", "models", "schemas", "services", "db", "utils", "workers"]
+packages = ["app", "api", "core", "models", "schemas", "services", "db", "utils"]
 
 # ============================================================================
 # Type Checking - Pyright
@@ -158,7 +155,6 @@ module = [
     "langchain.*",
     "langgraph.*",
     "litellm.*",
-    "celery.*",
     "qdrant_client.*",
     "chromadb.*",
 ]
@@ -209,7 +205,7 @@ ignore = [
 # in cases like avoiding circular imports. Use with discretion.
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "api", "core", "models", "schemas", "services", "db", "utils", "workers"]
+known-first-party = ["app", "api", "core", "models", "schemas", "services", "db", "utils"]
 force-single-line = false
 force-sort-within-sections = true
 # isort will organize imports at top of file and flag misplaced imports

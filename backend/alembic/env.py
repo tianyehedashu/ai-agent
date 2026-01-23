@@ -12,10 +12,18 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-from app.config import settings
+from bootstrap.config import settings
 
 # 导入所有模型以确保它们被注册
-from models.base import Base
+from shared.infrastructure.orm.base import Base
+
+# 导入所有领域模型以确保它们被注册到 SQLAlchemy
+from domains.agent_catalog.infrastructure.models.agent import Agent  # noqa: F401
+from domains.identity.infrastructure.models.user import User  # noqa: F401
+from domains.runtime.infrastructure.models.memory import Memory  # noqa: F401
+from domains.runtime.infrastructure.models.message import Message  # noqa: F401
+from domains.runtime.infrastructure.models.session import Session  # noqa: F401
+from domains.studio.infrastructure.models.workflow import Workflow, WorkflowVersion  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

@@ -28,7 +28,7 @@ API 实现说明:
    - 每次请求会自动加载历史消息
 
 3. 消息流程:
-   - 用户发送消息 → ChatService.chat()
+   - 用户发送消息 → ChatUseCase.chat()
    - 创建/获取 session → 发送 session_created 事件
    - LangGraphAgentEngine.run() 执行
    - 从 Checkpointer 加载历史 → 合并当前消息
@@ -399,8 +399,8 @@ class TestLLMGatewayE2E:
 
         注意: 此测试需要配置 LLM API Key
         """
-        from app.config import settings
-        from core.llm.gateway import LLMGateway
+        from bootstrap.config import settings
+        from shared.infrastructure.llm.gateway import LLMGateway
 
         gateway = LLMGateway(config=settings)
 

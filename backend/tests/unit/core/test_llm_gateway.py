@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from core.llm.gateway import LLMGateway, LLMResponse
-from core.types import ToolCall
+from shared.infrastructure.llm.gateway import LLMGateway, LLMResponse
+from shared.types import ToolCall
 
 
 class TestLLMGateway:
@@ -18,7 +18,7 @@ class TestLLMGateway:
     @pytest.fixture
     def gateway(self):
         """创建被测对象"""
-        from app.config import settings
+        from bootstrap.config import settings
 
         return LLMGateway(config=settings)
 
@@ -85,7 +85,7 @@ class TestLLMGateway:
     async def test_chat_with_streaming(self, gateway):
         """测试: 流式响应"""
         # Arrange
-        from core.llm.gateway import StreamChunk
+        from shared.infrastructure.llm.gateway import StreamChunk
 
         async def mock_stream(**kwargs):
             chunks = [
@@ -147,7 +147,7 @@ class TestLLMGateway:
         """测试: 获取 GLM 模型的 API Key"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "zhipuai_api_key", SecretStr("test-key"))
@@ -167,7 +167,7 @@ class TestLLMGateway:
         """测试: GLM 模型名称大小写不敏感"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "zhipuai_api_key", SecretStr("test-key"))
@@ -186,7 +186,7 @@ class TestLLMGateway:
     @pytest.mark.asyncio
     async def test_get_api_key_glm_no_key(self, gateway, monkeypatch):
         """测试: GLM 模型未配置 API Key 时返回空配置"""
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings - 没有API Key
         monkeypatch.setattr(settings, "zhipuai_api_key", None)
@@ -206,7 +206,7 @@ class TestLLMGateway:
         """测试: 获取 DeepSeek 模型的 API Key"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "deepseek_api_key", SecretStr("test-deepseek-key"))
@@ -226,7 +226,7 @@ class TestLLMGateway:
         """测试: DeepSeek 模型名称大小写不敏感"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "deepseek_api_key", SecretStr("test-deepseek-key"))
@@ -245,7 +245,7 @@ class TestLLMGateway:
     @pytest.mark.asyncio
     async def test_get_api_key_deepseek_no_key(self, gateway, monkeypatch):
         """测试: DeepSeek 模型未配置 API Key 时返回空配置"""
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings - 没有API Key
         monkeypatch.setattr(settings, "deepseek_api_key", None)
@@ -265,7 +265,7 @@ class TestLLMGateway:
         """测试: 获取火山引擎豆包模型的 API Key"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
@@ -290,7 +290,7 @@ class TestLLMGateway:
         """测试: 火山引擎使用通用 endpoint_id 作为回退"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings - 只有通用 endpoint_id
         monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
@@ -312,7 +312,7 @@ class TestLLMGateway:
         """测试: 火山引擎模型名称大小写不敏感"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "volcengine_api_key", SecretStr("test-volcengine-key"))
@@ -333,7 +333,7 @@ class TestLLMGateway:
     @pytest.mark.asyncio
     async def test_get_api_key_volcengine_no_key(self, gateway, monkeypatch):
         """测试: 火山引擎模型未配置 API Key 时返回空配置"""
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings - 没有API Key
         monkeypatch.setattr(settings, "volcengine_api_key", None)
@@ -353,7 +353,7 @@ class TestLLMGateway:
         """测试: 获取阿里云 DashScope 通义千问模型的 API Key"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "dashscope_api_key", SecretStr("test-dashscope-key"))
@@ -375,7 +375,7 @@ class TestLLMGateway:
         """测试: 通义千问模型名称大小写不敏感"""
         from pydantic import SecretStr
 
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings
         monkeypatch.setattr(settings, "dashscope_api_key", SecretStr("test-dashscope-key"))
@@ -396,7 +396,7 @@ class TestLLMGateway:
     @pytest.mark.asyncio
     async def test_get_api_key_dashscope_qwen_no_key(self, gateway, monkeypatch):
         """测试: 通义千问模型未配置 API Key 时返回空配置"""
-        from app.config import settings
+        from bootstrap.config import settings
 
         # Mock settings - 没有API Key
         monkeypatch.setattr(settings, "dashscope_api_key", None)

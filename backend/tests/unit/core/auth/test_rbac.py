@@ -4,7 +4,7 @@ RBAC 单元测试
 
 import pytest
 
-from core.auth.rbac import (
+from shared.infrastructure.auth.rbac import (
     Permission,
     Role,
     check_resource_ownership,

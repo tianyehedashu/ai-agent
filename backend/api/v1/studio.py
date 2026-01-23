@@ -15,9 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.deps import get_current_user
-from api.errors import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND
-from core.studio.workflow import WorkflowService
+from shared.presentation import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND, get_current_user
+from domains.studio.infrastructure.studio.workflow import WorkflowService
 
 router = APIRouter(prefix="/studio", tags=["Studio"])
 

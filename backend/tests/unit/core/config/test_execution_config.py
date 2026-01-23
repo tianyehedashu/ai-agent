@@ -4,7 +4,7 @@ ExecutionConfig 单元测试
 测试执行环境配置模型和配置合并逻辑
 """
 
-from core.config.execution_config import (
+from shared.infrastructure.config.execution_config import (
     ConfigMerger,
     ExecutionConfig,
     HITLConfig,

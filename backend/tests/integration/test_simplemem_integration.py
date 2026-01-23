@@ -1,7 +1,7 @@
 """
 SimpleMem 集成测试
 
-测试 SimpleMem 与 ChatService 的集成：
+测试 SimpleMem 与 ChatUseCase 的集成：
 1. 对话处理后自动提取记忆
 2. 自适应检索功能
 3. 与 LongTermMemoryStore 的协作
@@ -19,8 +19,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # pylint: disable=wrong-import-position
-from core.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
-from core.types import Message, MessageRole
+from domains.runtime.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
+from shared.types import Message, MessageRole
 
 # pylint: enable=wrong-import-position
 

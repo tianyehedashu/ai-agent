@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.deps import OptionalUser, get_stats_service
-from app.config import settings
-from core.llm import get_all_models
-from services.stats import StatsService
+from shared.presentation import OptionalUser, get_stats_service
+from bootstrap.config import settings
+from domains.runtime.application.stats_service import StatsService
+from shared.infrastructure.llm import get_all_models
 
 router = APIRouter()
 
@@ -59,7 +59,7 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy",
         service=settings.app_name,
-        version=__import__("app").__version__,
+        version=__import__("bootstrap").__version__,
         environment=settings.app_env,
         timestamp=datetime.now(UTC),
     )

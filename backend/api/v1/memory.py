@@ -8,8 +8,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.deps import AuthUser, check_ownership, get_memory_service
-from services.memory import MemoryService
+from shared.presentation import AuthUser, check_ownership, get_memory_service
+from domains.runtime.application.memory_service import MemoryService
 
 router = APIRouter()
 

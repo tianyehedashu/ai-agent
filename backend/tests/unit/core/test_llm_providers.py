@@ -4,7 +4,7 @@ LLM Providers 单元测试
 测试各个 LLM 提供商的模型列表和工具格式化功能
 """
 
-from core.llm.providers import (
+from shared.infrastructure.llm.providers import (
     AnthropicProvider,
     DashScopeProvider,
     DeepSeekProvider,

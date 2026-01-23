@@ -586,7 +586,7 @@ result = await executor.execute_python("print('Hello')")
 ### 8.2 工具注册表
 
 ```python
-from tools.registry import ConfiguredToolRegistry
+from domains.runtime.infrastructure.tools.registry import ConfiguredToolRegistry
 
 # 创建配置化的工具注册表
 registry = ConfiguredToolRegistry(config)
@@ -603,7 +603,7 @@ if registry.requires_confirmation("write_file"):
 ### 8.3 MCP 管理器
 
 ```python
-from tools.mcp.client import ConfiguredMCPManager
+from domains.runtime.infrastructure.tools.mcp.client import ConfiguredMCPManager
 
 # 创建 MCP 管理器
 mcp_manager = ConfiguredMCPManager(config)

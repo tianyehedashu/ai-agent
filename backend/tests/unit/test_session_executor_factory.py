@@ -6,12 +6,12 @@ SessionExecutorFactory 单元测试
 
 import pytest
 
-from core.sandbox.executor import SandboxConfig
-from core.sandbox.session_executor_factory import (
+from domains.runtime.infrastructure.sandbox.executor import SandboxConfig
+from domains.runtime.infrastructure.sandbox.session_executor_factory import (
     DefaultSessionExecutorFactory,
     MockSessionExecutorFactory,
 )
-from core.sandbox.session_manager import SessionManager, SessionPolicy, SessionState
+from domains.runtime.infrastructure.sandbox.session_manager import SessionManager, SessionPolicy, SessionState
 
 
 class TestDefaultSessionExecutorFactory:
@@ -165,7 +165,7 @@ class CustomExecutorFactory:
 
     def create_session_executor(self, max_idle_seconds: int, config=None):
         """使用自定义镜像创建执行器"""
-        from core.sandbox.executor import SessionDockerExecutor
+        from domains.runtime.infrastructure.sandbox.executor import SessionDockerExecutor
 
         self.creation_count += 1
         return SessionDockerExecutor(

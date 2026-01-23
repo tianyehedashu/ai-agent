@@ -9,13 +9,13 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from api.deps import (
+from shared.presentation import (
     RequiredAuthUser,
     check_ownership,
     check_ownership_or_public,
     get_agent_service,
 )
-from services.agent import AgentService
+from domains.agent_catalog.application import AgentUseCase
 
 router = APIRouter()
 
@@ -88,12 +88,12 @@ class AgentResponse(BaseModel):
 @router.get("/", response_model=list[AgentResponse])
 async def list_agents(
     current_user: RequiredAuthUser,
-    agent_service: AgentService = Depends(get_agent_service),
+    agent_service: AgentUseCase = Depends(get_agent_service),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[AgentResponse]:
     """获取用户的 Agent 列表"""
-    agents = await agent_service.list_by_user(current_user.id, skip=skip, limit=limit)
+    agents = await agent_service.list_agents(current_user.id, skip=skip, limit=limit)
     # 使用 from_attributes=True 自动从 SQLAlchemy 模型提取字段
     # Pydantic 会自动将 UUID 转换为字符串
     return [AgentResponse.model_validate(agent, from_attributes=True) for agent in agents]
@@ -103,10 +103,10 @@ async def list_agents(
 async def create_agent(
     data: AgentCreate,
     current_user: RequiredAuthUser,
-    agent_service: AgentService = Depends(get_agent_service),
+    agent_service: AgentUseCase = Depends(get_agent_service),
 ) -> AgentResponse:
     """创建新 Agent"""
-    agent = await agent_service.create(
+    agent = await agent_service.create_agent(
         user_id=current_user.id,
         name=data.name,
         description=data.description,
@@ -124,10 +124,10 @@ async def create_agent(
 async def get_agent(
     agent_id: str,
     current_user: RequiredAuthUser,
-    agent_service: AgentService = Depends(get_agent_service),
+    agent_service: AgentUseCase = Depends(get_agent_service),
 ) -> AgentResponse:
     """获取 Agent 详情"""
-    agent = await agent_service.get_by_id_or_raise(agent_id)
+    agent = await agent_service.get_agent_or_raise(agent_id)
 
     # 检查权限（所有者或公开）
     check_ownership_or_public(
@@ -145,16 +145,16 @@ async def update_agent(
     agent_id: str,
     data: AgentUpdate,
     current_user: RequiredAuthUser,
-    agent_service: AgentService = Depends(get_agent_service),
+    agent_service: AgentUseCase = Depends(get_agent_service),
 ) -> AgentResponse:
     """更新 Agent"""
-    agent = await agent_service.get_by_id_or_raise(agent_id)
+    agent = await agent_service.get_agent_or_raise(agent_id)
 
     # 检查权限（仅所有者）
     check_ownership(str(agent.user_id), current_user.id, "Agent")
 
     # 更新
-    updated_agent = await agent_service.update(
+    updated_agent = await agent_service.update_agent(
         agent_id=agent_id,
         name=data.name,
         description=data.description,
@@ -173,12 +173,12 @@ async def update_agent(
 async def delete_agent(
     agent_id: str,
     current_user: RequiredAuthUser,
-    agent_service: AgentService = Depends(get_agent_service),
+    agent_service: AgentUseCase = Depends(get_agent_service),
 ) -> None:
     """删除 Agent"""
-    agent = await agent_service.get_by_id_or_raise(agent_id)
+    agent = await agent_service.get_agent_or_raise(agent_id)
 
     # 检查权限（仅所有者）
     check_ownership(str(agent.user_id), current_user.id, "Agent")
 
-    await agent_service.delete(agent_id)
+    await agent_service.delete_agent(agent_id)

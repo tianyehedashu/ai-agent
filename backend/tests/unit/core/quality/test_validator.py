@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.quality.types import Severity, ValidationIssue
-from core.quality.validator import CodeValidator, ValidationResult
+from domains.studio.infrastructure.quality.types import Severity, ValidationIssue
+from domains.studio.infrastructure.quality.validator import CodeValidator, ValidationResult
 
 
 @pytest.mark.unit

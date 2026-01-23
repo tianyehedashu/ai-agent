@@ -12,14 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 import tomli_w
 
-from api.deps import get_current_user
-from core.config.execution_config import ExecutionConfig
-from core.config.service import (
+from shared.presentation import get_current_user
+from shared.infrastructure.config.execution_config import ExecutionConfig
+from shared.infrastructure.config.service import (
     ExecutionConfigService,
     get_execution_config_service,
 )
-from models.user import User
-from tools.registry import ConfiguredToolRegistry
+from domains.identity.infrastructure.models.user import User
+from domains.runtime.infrastructure.tools.registry import ConfiguredToolRegistry
 
 router = APIRouter(prefix="/execution", tags=["execution"])
 

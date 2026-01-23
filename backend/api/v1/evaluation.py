@@ -10,10 +10,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from api.deps import RequiredAuthUser
-from app.config import settings
-from core.llm.gateway import LLMGateway
-from core.types import ToolCall
+from shared.presentation import RequiredAuthUser
+from bootstrap.config import settings
+from shared.infrastructure.llm.gateway import LLMGateway
+from shared.types import ToolCall
 from evaluation.gaia import GAIAEvaluator, GAIAReport
 from evaluation.llm_judge import JudgeScore, LLMJudge
 from evaluation.task_completion import EvaluationReport

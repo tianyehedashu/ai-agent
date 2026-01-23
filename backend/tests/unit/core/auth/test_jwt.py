@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from core.auth.jwt import (
+from shared.infrastructure.auth.jwt import (
     TokenPayload,
     create_access_token,
     create_refresh_token,

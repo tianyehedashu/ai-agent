@@ -8,8 +8,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
-from core.llm.gateway import LLMResponse, StreamChunk
-from core.types import ToolCall
+from shared.infrastructure.llm.gateway import LLMResponse, StreamChunk
+from shared.types import ToolCall
 
 
 @dataclass

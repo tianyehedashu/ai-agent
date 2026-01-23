@@ -12,12 +12,12 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.deps import get_current_user
-from app.config import settings
-from core.llm.gateway import LLMGateway
-from core.lsp.proxy import LSPProxy
-from core.quality.fixer import CodeFixer
-from core.quality.validator import CodeValidator
+from shared.presentation import get_current_user
+from bootstrap.config import settings
+from shared.infrastructure.llm.gateway import LLMGateway
+from domains.studio.infrastructure.lsp.proxy import LSPProxy
+from domains.studio.infrastructure.quality.fixer import CodeFixer
+from domains.studio.infrastructure.quality.validator import CodeValidator
 
 # 默认文件路径常量
 DEFAULT_FILE_PATH = "code.py"

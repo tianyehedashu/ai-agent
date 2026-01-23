@@ -35,7 +35,7 @@ class TestSystemAPI:
     ):
         """测试: 当配置了智谱AI API Key时，模型列表包含GLM模型"""
         # Arrange - Mock API Key配置
-        from app.config import settings
+        from bootstrap.config import settings
 
         monkeypatch.setattr(settings, "zhipuai_api_key", "test-key")
 
@@ -62,7 +62,7 @@ class TestSystemAPI:
     ):
         """测试: 当未配置智谱AI API Key时，模型列表不包含GLM模型"""
         # Arrange - Mock API Key为None
-        from app.config import settings
+        from bootstrap.config import settings
 
         monkeypatch.setattr(settings, "zhipuai_api_key", None)
 

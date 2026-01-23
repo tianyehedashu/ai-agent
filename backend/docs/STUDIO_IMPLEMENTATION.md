@@ -112,7 +112,7 @@ from core.llm.gateway import LLMGateway
 from core.studio.workflow import WorkflowService
 from core.studio.parser import LangGraphParser
 from core.types import AgentConfig, AgentEvent
-from tools.registry import ToolRegistry
+from domains.runtime.infrastructure.tools.registry import ToolRegistry
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

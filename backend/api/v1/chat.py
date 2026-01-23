@@ -17,9 +17,9 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from api.deps import RequiredAuthUser, get_chat_service, get_checkpoint_service
-from services.chat import ChatService
-from services.checkpoint import CheckpointService
+from shared.presentation import RequiredAuthUser, get_chat_service, get_checkpoint_service
+from domains.runtime.application import ChatUseCase
+from domains.runtime.application.checkpoint_service import CheckpointService
 from utils.serialization import Serializer
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class DiffResponse(BaseModel):
 async def chat(
     request: ChatRequest,
     current_user: RequiredAuthUser,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
     发送消息并获取流式响应
@@ -147,7 +147,7 @@ async def chat(
 async def resume_execution(
     request: ResumeRequest,
     current_user: RequiredAuthUser,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
     恢复中断的执行
