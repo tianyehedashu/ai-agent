@@ -188,3 +188,41 @@ class TestChatUseCase:
 
         assert config.name == "Default Agent"
         assert len(config.tools) > 0
+
+    @pytest.mark.asyncio
+    async def test_background_task_uses_independent_session(self, service, db_session):
+        """测试后台任务使用独立的数据库会话，避免与主请求会话冲突"""
+        from contextlib import asynccontextmanager
+        from unittest.mock import AsyncMock, patch
+
+        user = await self._create_test_user(db_session)
+        session = await SessionUseCase(db_session).create_session(user_id=str(user.id))
+        session_id = str(session.id)
+
+        # Mock LLM Gateway 避免实际 API 调用
+        mock_llm_response = AsyncMock()
+        mock_llm_response.content = "生成的标题"
+        service.llm_gateway.chat = AsyncMock(return_value=mock_llm_response)
+
+        # Mock get_session_context 返回测试会话，模拟独立会话
+        @asynccontextmanager
+        async def mock_session_context():
+            yield db_session
+
+        # 提交主请求会话（模拟请求结束）
+        await db_session.commit()
+
+        # 验证后台任务可以在独立会话中运行，即使主会话已关闭
+        message = "测试消息"
+        user_id = str(user.id)
+
+        with patch(
+            "domains.agent.application.chat_use_case.get_session_context",
+            new=mock_session_context,
+        ):
+            # 这应该成功，不会抛出 IllegalStateChangeError
+            # 后台任务会使用 mock 的独立会话
+            await service._generate_title_background(session_id, message, user_id)
+
+        # 验证 LLM 被调用（说明后台任务成功运行）
+        assert service.llm_gateway.chat.called

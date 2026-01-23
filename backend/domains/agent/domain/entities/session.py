@@ -62,9 +62,8 @@ class SessionOwner:
         """
         if is_anonymous:
             # 提取匿名用户的真实 ID（去除 'anonymous-' 前缀）
-            from domains.identity.domain.types import (
-                Principal,  # pylint: disable=import-outside-toplevel
-            )
+            # pylint: disable=import-outside-toplevel
+            from domains.identity.domain.types import Principal
 
             return cls(anonymous_user_id=Principal.extract_anonymous_id(principal_id))
         return cls(user_id=uuid.UUID(principal_id))

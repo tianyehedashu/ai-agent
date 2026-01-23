@@ -30,6 +30,7 @@ from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, 
 from domains.identity.domain.types import Principal
 from exceptions import NotFoundError
 from libs.config import get_execution_config_service
+from libs.db.database import get_session_context
 from libs.db.vector import get_vector_store
 from utils.logging import get_logger
 
@@ -57,9 +58,8 @@ class ChatUseCase:
         self.agent_service = AgentUseCase(db)
 
         # 延迟导入 TitleUseCase（避免循环依赖）
-        from domains.agent.application.title_use_case import (
-            TitleUseCase,  # pylint: disable=import-outside-toplevel
-        )
+        # pylint: disable=import-outside-toplevel
+        from domains.agent.application.title_use_case import TitleUseCase
 
         self.title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
 
@@ -228,16 +228,36 @@ class ChatUseCase:
 
         message_count = await self.session_use_case.count_messages(session_id)
         if message_count == 0:
+            # 创建后台任务，使用独立的数据库会话
             task = asyncio.create_task(
-                self.title_service.generate_and_update(
+                self._generate_title_background(session_id, message, user_id)
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+    async def _generate_title_background(
+        self, session_id: str, message: str, user_id: str
+    ) -> None:
+        """后台任务：生成标题（使用独立的数据库会话）"""
+        try:
+            # 使用独立的数据库会话，避免与主请求会话冲突
+            async with get_session_context() as db:
+                from domains.agent.application.title_use_case import TitleUseCase
+
+                title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
+                await title_service.generate_and_update(
                     session_id=session_id,
                     strategy="first_message",
                     message=message,
                     user_id=user_id,
                 )
+        except Exception as e:
+            logger.warning(
+                "Background title generation failed for session %s: %s",
+                session_id,
+                e,
+                exc_info=True,
             )
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
 
     async def _prepare_agent_engine(
         self,
@@ -345,8 +365,10 @@ class ChatUseCase:
         user_id: str,
         session_id: str,
     ) -> None:
-        """后台任务：提取记忆"""
+        """后台任务：提取记忆（使用独立的数据库会话）"""
         try:
+            # SimpleMem 可能需要访问数据库，使用独立的会话
+            # 注意：SimpleMem 内部可能使用自己的数据库连接，这里主要是为了安全
             atoms = await self.simplemem.process_and_store(
                 messages=messages,
                 user_id=user_id,

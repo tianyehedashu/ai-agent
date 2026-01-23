@@ -96,10 +96,10 @@ lock: ## 生成/更新 uv.lock 文件
 # ==============================================================================
 
 dev: ## 启动开发服务器 (带热重载)
-	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	$(UV) run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-debug: ## 启动开发服务器 (调试模式)
-	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
+	$(UV) run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
 
 # ==============================================================================
 # 代码质量检查
@@ -115,7 +115,7 @@ lint-fix: ## 运行代码检查并自动修复
 
 lint-pylint: ## 运行 Pylint 检查
 	@echo 运行 Pylint 检查...
-	-$(UV) run pylint domains shared bootstrap workers scripts utils exceptions evaluation --output-format=parseable
+	-$(UV) run pylint domains libs bootstrap scripts utils exceptions evaluation --output-format=parseable
 
 format: ## 格式化代码
 	@echo 格式化代码...

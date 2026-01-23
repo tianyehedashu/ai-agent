@@ -195,8 +195,8 @@ def print_container_list(containers: list[str], title: str = "沙箱容器列表
     print("-" * 80)
 
 
-async def main() -> int:
-    """主函数"""
+def _parse_arguments() -> argparse.Namespace:
+    """解析命令行参数"""
     parser = argparse.ArgumentParser(
         description="清理沙箱容器（session-* 前缀）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -229,42 +229,87 @@ async def main() -> int:
     )
 
     args = parser.parse_args()
-
     # 如果指定了 --all，自动启用 --force
     if args.all:
         args.force = True
+    return args
+
+
+def _filter_containers(args: argparse.Namespace) -> list[str]:
+    """根据参数过滤容器"""
+    all_containers = list_containers(include_running=True)
+    if not all_containers:
+        return []
+
+    if args.stopped_only:
+        stopped_containers = list_containers(include_running=False)
+        return stopped_containers
+    return all_containers
+
+
+def _check_running_containers(containers: list[str], force: bool) -> None:
+    """检查并警告运行中的容器"""
+    running_containers = [
+        c for c in containers if get_container_info(c)["status"] == "running"
+    ]
+    if running_containers and not force:
+        print(f"\n⚠️  警告: 发现 {len(running_containers)} 个运行中的容器:")
+        for container in running_containers:
+            print(f"    - {container}")
+        print("\n💡 提示: 使用 --force 或 --all 可以强制删除运行中的容器")
+
+
+def _confirm_cleanup(force: bool) -> bool:
+    """确认是否执行清理"""
+    if force:
+        return True
+
+    print("\n❓ 确认删除以上容器? [y/N]: ", end="", flush=True)
+    try:
+        response = input().strip().lower()
+        return response in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print("\n❌ 已取消清理操作")
+        return False
+
+
+def _print_cleanup_results(cleaned: list[str]) -> None:
+    """打印清理结果"""
+    print("\n" + "=" * 80)
+    if cleaned:
+        print(f"✅ 成功清理 {len(cleaned)} 个容器:")
+        for container in cleaned:
+            print(f"    ✓ {container}")
+    else:
+        print("⚠️  没有容器被清理（可能所有容器都在运行中，需要 --force 参数）")
+    print("=" * 80)
+
+
+async def main() -> int:
+    """主函数"""
+    args = _parse_arguments()
 
     print("=" * 80)
     print("沙箱容器清理工具")
     print("=" * 80)
 
-    # 列出所有容器
-    all_containers = list_containers(include_running=True)
-    if not all_containers:
+    # 列出并过滤容器
+    containers_to_cleanup = _filter_containers(args)
+    if not containers_to_cleanup:
         print("\n✅ 没有找到沙箱容器，无需清理。")
         return 0
 
-    # 根据选项过滤容器
-    if args.stopped_only:
-        stopped_containers = list_containers(include_running=False)
-        containers_to_cleanup = stopped_containers
-        print(f"\n📋 仅清理已停止的容器 ({len(containers_to_cleanup)} 个)")
-    else:
-        containers_to_cleanup = all_containers
-        print(f"\n📋 清理所有沙箱容器 ({len(containers_to_cleanup)} 个)")
-
-    # 显示容器列表
+    # 显示容器信息
+    filter_msg = (
+        f"仅清理已停止的容器 ({len(containers_to_cleanup)} 个)"
+        if args.stopped_only
+        else f"清理所有沙箱容器 ({len(containers_to_cleanup)} 个)"
+    )
+    print(f"\n📋 {filter_msg}")
     print_container_list(containers_to_cleanup, "待清理的容器")
 
-    # 检查是否有运行中的容器
-    running_containers = [
-        c for c in containers_to_cleanup if get_container_info(c)["status"] == "running"
-    ]
-    if running_containers and not args.force:
-        print(f"\n⚠️  警告: 发现 {len(running_containers)} 个运行中的容器:")
-        for container in running_containers:
-            print(f"    - {container}")
-        print("\n💡 提示: 使用 --force 或 --all 可以强制删除运行中的容器")
+    # 检查运行中的容器
+    _check_running_containers(containers_to_cleanup, args.force)
 
     # 如果是 dry-run，只显示不删除
     if args.dry_run:
@@ -272,16 +317,8 @@ async def main() -> int:
         return 0
 
     # 确认删除
-    if not args.force:
-        print("\n❓ 确认删除以上容器? [y/N]: ", end="", flush=True)
-        try:
-            response = input().strip().lower()
-            if response not in ("y", "yes"):
-                print("❌ 已取消清理操作")
-                return 1
-        except (EOFError, KeyboardInterrupt):
-            print("\n❌ 已取消清理操作")
-            return 1
+    if not _confirm_cleanup(args.force):
+        return 1
 
     # 执行清理
     print("\n🧹 开始清理容器...")
@@ -292,15 +329,7 @@ async def main() -> int:
         cleaned = await cleanup_containers(containers_to_cleanup, force=args.force)
 
     # 显示结果
-    print("\n" + "=" * 80)
-    if cleaned:
-        print(f"✅ 成功清理 {len(cleaned)} 个容器:")
-        for container in cleaned:
-            print(f"    ✓ {container}")
-    else:
-        print("⚠️  没有容器被清理（可能所有容器都在运行中，需要 --force 参数）")
-
-    print("=" * 80)
+    _print_cleanup_results(cleaned)
     return 0
 
 

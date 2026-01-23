@@ -130,6 +130,10 @@ def create_embedding_service_from_settings() -> EmbeddingService:
     model = getattr(settings, "embedding_model", "text-embedding-3-small")
     dimension = getattr(settings, "embedding_dimension", 1536)
 
+    # 确保 model 是字符串类型
+    if not isinstance(model, str):
+        model = str(model)
+
     # 获取 API 配置
     api_key = None
     api_base = None
