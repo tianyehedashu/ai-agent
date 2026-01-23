@@ -135,6 +135,26 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         _fastapi_app.state.checkpointer = global_checkpointer
         logger.warning("Using MemorySaver as fallback for checkpointer")
 
+    # 清理孤儿容器（上次异常关闭遗留的）
+    # 在初始化 SessionManager 之前清理，避免冲突
+    try:
+        from domains.agent.infrastructure.sandbox.executor import (  # pylint: disable=import-outside-toplevel
+            SessionDockerExecutor,
+        )
+
+        orphans = await SessionDockerExecutor.cleanup_orphaned_containers(
+            max_age_seconds=300  # 清理超过 5 分钟的孤儿容器
+        )
+        if orphans:
+            logger.info(
+                "Cleaned up %d orphaned containers on startup: %s",
+                len(orphans),
+                orphans,
+            )
+    except Exception as e:
+        # 清理失败不应阻止应用启动
+        logger.warning("Failed to cleanup orphaned containers: %s", e)
+
     # 初始化并启动会话管理器
     session_manager = SessionManager.get_instance()
     await session_manager.start()

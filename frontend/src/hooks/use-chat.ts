@@ -132,6 +132,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           break
         }
 
+        case 'title_updated': {
+          // 标题已更新，刷新会话列表和当前会话信息
+          const titleData = event.data as { session_id?: string; title?: string }
+          if (titleData.session_id) {
+            // 刷新会话列表，以便显示更新后的标题
+            void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+            // 如果当前会话的标题被更新，更新当前会话信息
+            if (sessionIdRef.current === titleData.session_id && titleData.title) {
+              void queryClient.invalidateQueries({ queryKey: ['session', titleData.session_id] })
+            }
+          }
+          break
+        }
+
         case 'thinking': {
           // 显示思考状态
           if (currentRunIdRef.current) {

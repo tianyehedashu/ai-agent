@@ -10,6 +10,7 @@ Sandbox - 沙箱执行系统
 - SessionExecutorFactory: 会话执行器工厂协议（依赖注入）
 - DefaultSessionExecutorFactory: 默认会话执行器工厂
 - MockSessionExecutorFactory: 测试用模拟工厂
+- SandboxLifecycleAdapter: 沙箱生命周期适配器（实现领域服务接口）
 """
 
 from domains.agent.infrastructure.sandbox.executor import (
@@ -21,6 +22,9 @@ from domains.agent.infrastructure.sandbox.executor import (
     SessionDockerExecutor,
 )
 from domains.agent.infrastructure.sandbox.factory import ExecutorFactory
+from domains.agent.infrastructure.sandbox.lifecycle_adapter import (
+    SandboxLifecycleAdapter,
+)
 from domains.agent.infrastructure.sandbox.session_executor_factory import (
     DefaultSessionExecutorFactory,
     MockSessionExecutorFactory,
@@ -46,6 +50,7 @@ __all__ = [
     "MockSessionExecutorFactory",
     "SandboxConfig",
     "SandboxExecutor",
+    "SandboxLifecycleAdapter",
     "SessionDockerExecutor",
     "SessionExecutorFactory",
     "SessionHistory",

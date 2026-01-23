@@ -1,5 +1,6 @@
 import { Moon, Sun, User } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 
 import { useTheme } from '@/components/theme-provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -12,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useUserStore } from '@/stores/user'
+import { sessionApi } from '@/api/session'
 
 const pageTitles: Record<string, string> = {
   '/': '对话',
@@ -24,11 +26,20 @@ const pageTitles: Record<string, string> = {
 export default function Header(): React.JSX.Element {
   const location = useLocation()
   const navigate = useNavigate()
+  const { sessionId } = useParams<{ sessionId?: string }>()
   const { theme, setTheme } = useTheme()
   // 用户信息已由 AuthProvider 在应用启动时获取
   const { currentUser, logout } = useUserStore()
 
-  const title = pageTitles[location.pathname] || '对话'
+  // 如果有 sessionId，获取会话信息以显示标题
+  const { data: session } = useQuery({
+    queryKey: ['session', sessionId],
+    queryFn: () => (sessionId ? sessionApi.get(sessionId) : null),
+    enabled: !!sessionId && location.pathname.startsWith('/chat'),
+  })
+
+  // 优先显示会话标题，否则显示页面标题
+  const title = session?.title || pageTitles[location.pathname] || '对话'
 
   const handleLogout = async (): Promise<void> => {
     await logout()

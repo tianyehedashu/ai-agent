@@ -17,7 +17,13 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
-from domains.agent.domain.types import AgentConfig, AgentEvent, ToolCall, ToolResult
+from domains.agent.domain.types import (
+    AgentConfig,
+    AgentEvent,
+    AgentExecutionLimits,
+    ToolCall,
+    ToolResult,
+)
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.llm.message_formatter import convert_langchain_messages
@@ -28,11 +34,6 @@ from libs.config import ExecutionConfig
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# 默认最大工具调用迭代次数
-DEFAULT_MAX_TOOL_ITERATIONS = 10
-# 默认超时时间（秒）
-DEFAULT_TIMEOUT_SECONDS = 300
 
 
 # 定义 Agent 状态（LangGraph 格式）
@@ -171,8 +172,8 @@ class LangGraphAgentEngine:
         memory_store: LongTermMemoryStore,
         tool_registry: ToolRegistry | None = None,
         checkpointer: LangGraphCheckpointer | None = None,
-        max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        max_tool_iterations: int | None = None,
+        timeout_seconds: int | None = None,
         execution_config: ExecutionConfig | None = None,
     ) -> None:
         """
@@ -192,8 +193,17 @@ class LangGraphAgentEngine:
         self.llm_gateway = llm_gateway
         self.memory_store = memory_store
         self.tools = tool_registry or ToolRegistry()
-        self.max_tool_iterations = max_tool_iterations
-        self.timeout_seconds = timeout_seconds
+        # 使用 domain 层定义的业务常量
+        self.max_tool_iterations = (
+            max_tool_iterations
+            if max_tool_iterations is not None
+            else AgentExecutionLimits.DEFAULT_MAX_TOOL_ITERATIONS
+        )
+        self.timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else AgentExecutionLimits.DEFAULT_TIMEOUT_SECONDS
+        )
         self.execution_config = execution_config
         # 初始化记忆提取器
         self.memory_extractor = MemoryExtractor(llm_gateway=llm_gateway)

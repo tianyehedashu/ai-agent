@@ -107,6 +107,7 @@ export interface ProcessEvent {
 export type ChatEventType =
   | 'session_created'
   | 'session_recreated'
+  | 'title_updated'
   | 'thinking'
   | 'text'
   | 'tool_call'

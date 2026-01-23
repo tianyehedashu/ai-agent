@@ -226,3 +226,75 @@ class TestChatUseCase:
 
         # 验证 LLM 被调用（说明后台任务成功运行）
         assert service.llm_gateway.chat.called
+
+    @pytest.mark.asyncio
+    async def test_chat_auto_generates_title_on_first_message(self, service, db_session):
+        """测试：发送第一条消息后，会话标题应该自动生成"""
+        from contextlib import asynccontextmanager
+        from unittest.mock import AsyncMock, patch
+
+        user = await self._create_test_user(db_session)
+        message = "我想学习 Python 编程，请给我一些建议"
+
+        mock_event = AgentEvent(
+            type=EventType.DONE,
+            data={"final_message": {"content": "好的，我来帮你学习 Python"}},
+        )
+
+        async def mock_run_generator(*args, **kwargs):
+            yield mock_event
+
+        # Mock LLM Gateway 返回生成的标题
+        mock_llm_response = AsyncMock()
+        mock_llm_response.content = "Python 编程学习"
+        service.llm_gateway.chat = AsyncMock(return_value=mock_llm_response)
+
+        # Mock get_session_context 返回测试会话，用于后台任务
+        @asynccontextmanager
+        async def mock_session_context():
+            yield db_session
+
+        with patch(
+            "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+        ) as mock_engine_class, patch(
+            "domains.agent.application.chat_use_case.get_session_context",
+            new=mock_session_context,
+        ):
+            mock_engine = AsyncMock()
+            mock_engine.run = mock_run_generator
+            mock_engine_class.return_value = mock_engine
+
+            # 发送第一条消息
+            events = []
+            async for event in service.chat(
+                session_id=None,
+                message=message,
+                agent_id=None,
+                user_id=str(user.id),
+            ):
+                events.append(event)
+
+            # 验证会话已创建
+            sessions = await SessionUseCase(db_session).list_sessions(str(user.id))
+            assert len(sessions) > 0
+            session = sessions[0]
+
+            # 验证后台任务被创建（标题生成任务）
+            assert len(service._background_tasks) > 0, "应该创建了标题生成的后台任务"
+
+            # 等待后台任务完成
+            import asyncio
+            await asyncio.gather(*service._background_tasks, return_exceptions=True)
+
+            # 刷新会话以获取最新数据
+            await db_session.refresh(session)
+
+            # 验证标题已被生成并更新
+            # 由于使用了 mock，标题应该被更新为 "Python 编程学习"
+            assert session.title is not None
+            assert session.title != ""
+            # 验证标题是生成的内容（不是默认标题）
+            assert "Python" in session.title or "编程" in session.title or "学习" in session.title
+            # 验证标题生成服务被调用（通过检查 LLM 是否被调用）
+            # LLM 应该被调用用于生成标题
+            assert service.llm_gateway.chat.called

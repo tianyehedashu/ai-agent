@@ -4,7 +4,10 @@ Session Use Case - 会话用例
 编排领域服务和仓储，实现会话管理用例。不包含业务逻辑，只负责协调。
 """
 
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +22,12 @@ from domains.agent.infrastructure.repositories import (
     SQLAlchemySessionRepository,
 )
 from exceptions import NotFoundError, PermissionDeniedError
+from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
+
+logger = get_logger(__name__)
 
 
 def _safe_uuid(value: str | None) -> uuid.UUID | None:
@@ -35,6 +44,7 @@ class SessionUseCase:
     """会话用例
 
     协调会话相关的操作，包括 CRUD 和消息管理。使用领域服务进行业务规则验证。
+    支持可选注入 SandboxLifecycleService，实现会话与沙箱生命周期联动。
     """
 
     def __init__(
@@ -42,12 +52,23 @@ class SessionUseCase:
         db: AsyncSession,
         session_repo: SessionRepository | None = None,
         message_repo: MessageRepository | None = None,
+        sandbox_service: SandboxLifecycleService | None = None,
     ) -> None:
+        """初始化会话用例
+
+        Args:
+            db: 数据库会话
+            session_repo: 会话仓储（可选，默认使用 SQLAlchemy 实现）
+            message_repo: 消息仓储（可选，默认使用 SQLAlchemy 实现）
+            sandbox_service: 沙箱生命周期服务（可选，用于会话删除时联动清理沙箱）
+        """
         self.db = db
         # 支持依赖注入，默认使用 SQLAlchemy 实现
         self.session_repo = session_repo or SQLAlchemySessionRepository(db)
         self.message_repo = message_repo or SQLAlchemyMessageRepository(db)
         self.domain_service = SessionDomainService()
+        # 可选的沙箱服务，用于生命周期联动
+        self.sandbox_service = sandbox_service
 
     # =========================================================================
     # Session CRUD
@@ -140,7 +161,31 @@ class SessionUseCase:
         return session
 
     async def delete_session(self, session_id: str) -> None:
-        """删除会话"""
+        """删除会话
+
+        如果注入了 SandboxLifecycleService，会联动清理关联的沙箱。
+
+        Args:
+            session_id: 会话 ID
+
+        Raises:
+            NotFoundError: 会话不存在时
+        """
+        # 1. 清理关联的沙箱（如果有服务）
+        if self.sandbox_service:
+            try:
+                cleaned = await self.sandbox_service.cleanup_by_session(session_id)
+                if cleaned:
+                    logger.info("Cleaned up sandbox for session %s", session_id)
+            except Exception as e:
+                # 沙箱清理失败不应阻止会话删除
+                logger.warning(
+                    "Failed to cleanup sandbox for session %s: %s",
+                    session_id,
+                    e,
+                )
+
+        # 2. 删除会话
         success = await self.session_repo.delete(uuid.UUID(session_id))
         if not success:
             raise NotFoundError("Session", session_id)

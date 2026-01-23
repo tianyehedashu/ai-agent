@@ -72,6 +72,9 @@ class ChatUseCase:
         # 后台任务集合
         self._background_tasks: set[asyncio.Task] = set()
 
+        # 事件队列（用于后台任务发送事件）
+        self._event_queues: dict[str, asyncio.Queue[AgentEvent | None]] = {}
+
     def _init_memory_store(self) -> None:
         """初始化记忆存储"""
         try:
@@ -136,29 +139,37 @@ class ChatUseCase:
         if is_new_session:
             yield AgentEvent.session_created(session_id)
 
-        # 处理标题生成
-        await self._handle_title_generation(session, session_id, message, user_id)
+        # 为当前会话创建事件队列（用于后台任务发送事件）
+        event_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
+        self._event_queues[session_id] = event_queue
 
-        # 保存用户消息
-        await self.session_use_case.add_message(
-            session_id=session_id,
-            role=MessageRole.USER,
-            content=message,
-        )
+        try:
+            # 处理标题生成
+            await self._handle_title_generation(session, session_id, message, user_id)
 
-        # 准备 Agent 引擎
-        engine, session_recreated_event = await self._prepare_agent_engine(
-            agent_id, session_id, user_id
-        )
+            # 保存用户消息
+            await self.session_use_case.add_message(
+                session_id=session_id,
+                role=MessageRole.USER,
+                content=message,
+            )
 
-        if session_recreated_event:
-            yield session_recreated_event
+            # 准备 Agent 引擎
+            engine, session_recreated_event = await self._prepare_agent_engine(
+                agent_id, session_id, user_id
+            )
 
-        # 执行 Agent
-        async for event in self._execute_agent_and_save(
-            engine, session_id, message, user_id, session
-        ):
-            yield event
+            if session_recreated_event:
+                yield session_recreated_event
+
+            # 执行 Agent，同时监听事件队列
+            async for event in self._execute_agent_with_event_queue(
+                engine, session_id, message, user_id, session, event_queue
+            ):
+                yield event
+        finally:
+            # 清理事件队列
+            self._event_queues.pop(session_id, None)
 
     async def resume(
         self,
@@ -245,12 +256,32 @@ class ChatUseCase:
                 from domains.agent.application.title_use_case import TitleUseCase
 
                 title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
-                await title_service.generate_and_update(
+                success = await title_service.generate_and_update(
                     session_id=session_id,
                     strategy="first_message",
                     message=message,
                     user_id=user_id,
                 )
+
+                # 如果标题生成成功，发送标题更新事件
+                if success:
+                    # 获取更新后的标题
+                    from domains.agent.application.session_use_case import SessionUseCase
+                    session_use_case = SessionUseCase(db)
+                    session = await session_use_case.get_session(session_id)
+                    if session and session.title:
+                        # 将事件放入队列（如果队列存在）
+                        event_queue = self._event_queues.get(session_id)
+                        if event_queue:
+                            title_event = AgentEvent.title_updated(
+                                session_id=session_id, title=session.title
+                            )
+                            await event_queue.put(title_event)
+                            logger.debug(
+                                "Sent title_updated event for session %s: %s",
+                                session_id[:8],
+                                session.title,
+                            )
         except Exception as e:
             logger.warning(
                 "Background title generation failed for session %s: %s",
@@ -295,34 +326,64 @@ class ChatUseCase:
 
         return engine, session_recreated_event
 
-    async def _execute_agent_and_save(
+    async def _execute_agent_with_event_queue(
         self,
         engine: LangGraphAgentEngine,
         session_id: str,
         message: str,
         user_id: str,
         session: object | None,
+        event_queue: asyncio.Queue[AgentEvent | None],
     ) -> AsyncGenerator[AgentEvent, None]:
-        """执行 Agent 并保存结果"""
+        """执行 Agent 并保存结果，同时监听事件队列"""
         final_content = ""
+        engine_done = False
+
+        # 创建引擎任务
+        async def engine_task():
+            nonlocal final_content, engine_done
+            try:
+                async for event in engine.run(
+                    session_id=session_id,
+                    user_message=message,
+                    user_id=user_id,
+                ):
+                    # 将引擎事件放入队列
+                    await event_queue.put(event)
+
+                    if event.type == EventType.TEXT:
+                        text_content = event.get_content()
+                        if text_content:
+                            final_content += text_content
+                    elif event.type == EventType.DONE:
+                        final_msg = event.get_final_message()
+                        if final_msg:
+                            msg_content = final_msg.content or final_msg.reasoning_content
+                            if msg_content:
+                                final_content = msg_content
+                engine_done = True
+                # 发送结束标记
+                await event_queue.put(None)
+            except Exception as e:
+                logger.error("Engine error for session %s: %s", session_id, e, exc_info=True)
+                await event_queue.put(AgentEvent.error(error=str(e), session_id=session_id))
+                engine_done = True
+                await event_queue.put(None)
+
         try:
-            async for event in engine.run(
-                session_id=session_id,
-                user_message=message,
-                user_id=user_id,
-            ):
+            # 启动引擎任务
+            engine_task_obj = asyncio.create_task(engine_task())
+
+            # 从队列中获取事件并 yield
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    # 引擎已完成
+                    break
                 yield event
 
-                if event.type == EventType.TEXT:
-                    text_content = event.get_content()
-                    if text_content:
-                        final_content += text_content
-                elif event.type == EventType.DONE:
-                    final_msg = event.get_final_message()
-                    if final_msg:
-                        msg_content = final_msg.content or final_msg.reasoning_content
-                        if msg_content:
-                            final_content = msg_content
+            # 等待引擎任务完成
+            await engine_task_obj
 
             if final_content:
                 await self._save_assistant_message_and_memory(
@@ -332,6 +393,20 @@ class ChatUseCase:
         except Exception as e:
             logger.error("Chat error for session %s: %s", session_id, e, exc_info=True)
             yield AgentEvent.error(error=str(e), session_id=session_id)
+
+    async def _execute_agent_and_save(
+        self,
+        engine: LangGraphAgentEngine,
+        session_id: str,
+        message: str,
+        user_id: str,
+        session: object | None,
+    ) -> AsyncGenerator[AgentEvent, None]:
+        """执行 Agent 并保存结果（保留用于向后兼容）"""
+        async for event in self._execute_agent_with_event_queue(
+            engine, session_id, message, user_id, session, asyncio.Queue()
+        ):
+            yield event
 
     async def _save_assistant_message_and_memory(
         self,
@@ -367,19 +442,21 @@ class ChatUseCase:
     ) -> None:
         """后台任务：提取记忆（使用独立的数据库会话）"""
         try:
-            # SimpleMem 可能需要访问数据库，使用独立的会话
-            # 注意：SimpleMem 内部可能使用自己的数据库连接，这里主要是为了安全
-            atoms = await self.simplemem.process_and_store(
-                messages=messages,
-                user_id=user_id,
-                session_id=session_id,
-            )
-            if atoms:
-                logger.info(
-                    "SimpleMem extracted %d memory atoms for session %s",
-                    len(atoms),
-                    session_id,
+            # 使用独立的数据库会话上下文，确保后台任务不会与主请求会话冲突
+            # 虽然 SimpleMem 和 LongTermMemoryStore 使用自己的数据库连接，
+            # 但为了保持一致性和安全性，我们仍然使用独立的会话上下文
+            async with get_session_context():
+                atoms = await self.simplemem.process_and_store(
+                    messages=messages,
+                    user_id=user_id,
+                    session_id=session_id,
                 )
+                if atoms:
+                    logger.info(
+                        "SimpleMem extracted %d memory atoms for session %s",
+                        len(atoms),
+                        session_id,
+                    )
         except Exception as e:
             logger.warning(
                 "SimpleMem memory extraction failed for session %s: %s",
@@ -389,35 +466,40 @@ class ChatUseCase:
             )
 
     async def _get_agent_config(self, agent_id: str | None) -> AgentConfig:
-        """获取 Agent 配置"""
+        """获取 Agent 配置
+
+        优先使用数据库中存储的 Agent 配置，否则使用默认配置。
+        默认配置由 domain 层的 AgentConfig.create_default() 提供，
+        但允许通过 settings 覆盖部分参数。
+        """
         if agent_id:
             agent = await self.agent_service.get_agent(agent_id)
             if agent:
-                return AgentConfig(
-                    name=agent.name,
-                    model=agent.model,
-                    max_iterations=agent.max_iterations,
-                    temperature=agent.temperature,
-                    max_tokens=agent.max_tokens,
-                    tools=agent.tools,
-                    system_prompt=agent.system_prompt,
-                    checkpoint_enabled=True,
-                    checkpoint_interval=5,
-                    hitl_enabled=True,
-                    hitl_operations=["run_shell", "write_file", "delete_file"],
-                )
+                return self._build_config_from_agent(agent)
+
+        # 使用 domain 层的默认工厂，但允许 settings 覆盖关键参数
+        return AgentConfig.create_default(
+            model=settings.default_model,
+            checkpoint_enabled=settings.checkpoint_enabled,
+            hitl_enabled=settings.hitl_enabled,
+        )
+
+    def _build_config_from_agent(self, agent: object) -> AgentConfig:
+        """从 Agent 实体构建配置"""
+        from domains.agent.domain.types import AgentExecutionLimits
 
         return AgentConfig(
-            name="Default Agent",
-            model=settings.default_model,
-            max_iterations=settings.agent_max_iterations,
-            temperature=0.7,
-            max_tokens=settings.agent_max_tokens,
-            tools=["read_file", "write_file", "list_dir", "run_shell", "search_code"],
-            checkpoint_enabled=settings.checkpoint_enabled,
+            name=agent.name,
+            model=agent.model,
+            max_iterations=agent.max_iterations,
+            temperature=agent.temperature,
+            max_tokens=agent.max_tokens,
+            tools=agent.tools,
+            system_prompt=agent.system_prompt,
+            checkpoint_enabled=True,
             checkpoint_interval=5,
-            hitl_enabled=settings.hitl_enabled,
-            hitl_operations=settings.hitl_interrupt_tools,
+            hitl_enabled=True,
+            hitl_operations=AgentExecutionLimits.DEFAULT_HITL_OPERATIONS.copy(),
         )
 
     def _create_session_recreated_event(self, result: SessionRecreationResult) -> AgentEvent:

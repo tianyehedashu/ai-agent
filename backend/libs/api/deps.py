@@ -8,8 +8,10 @@ API Dependencies - 共享 API 依赖注入
 身份认证相关依赖请使用：domains.identity.presentation.deps
 """
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +23,9 @@ from domains.agent.application.stats_service import StatsService
 from domains.identity.application import UserUseCase
 from libs.db.database import get_session
 
+if TYPE_CHECKING:
+    from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
+
 __all__ = [
     "DbSession",
     "get_agent_service",
@@ -28,6 +33,7 @@ __all__ = [
     "get_checkpoint_service",
     "get_db",
     "get_memory_service",
+    "get_sandbox_service",
     "get_session_service",
     "get_stats_service",
     "get_title_service",
@@ -64,9 +70,38 @@ async def get_agent_service(db: DbSession) -> AgentUseCase:
     return AgentUseCase(db)
 
 
-async def get_session_service(db: DbSession) -> SessionUseCase:
-    """获取会话服务"""
-    return SessionUseCase(db)
+def get_sandbox_service(request: Request) -> SandboxLifecycleService | None:
+    """获取沙箱生命周期服务
+
+    从应用状态中获取 SessionManager，并创建 SandboxLifecycleAdapter。
+    如果 SessionManager 不可用，返回 None。
+
+    Args:
+        request: FastAPI 请求对象
+
+    Returns:
+        SandboxLifecycleService 实例，如果不可用则返回 None
+    """
+    session_manager = getattr(request.app.state, "session_manager", None)
+    if session_manager:
+        from domains.agent.infrastructure.sandbox.lifecycle_adapter import (
+            SandboxLifecycleAdapter,
+        )
+
+        return SandboxLifecycleAdapter(session_manager)
+    return None
+
+
+async def get_session_service(
+    db: DbSession,
+    request: Request,
+) -> SessionUseCase:
+    """获取会话服务
+
+    自动注入沙箱生命周期服务（如果可用），实现会话与沙箱生命周期联动。
+    """
+    sandbox_service = get_sandbox_service(request)
+    return SessionUseCase(db, sandbox_service=sandbox_service)
 
 
 async def get_title_service(db: DbSession) -> TitleUseCase:

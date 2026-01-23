@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Literal, Protocol, TypedDict, TypeVar
+from typing import Any, ClassVar, Literal, Protocol, TypedDict, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
@@ -57,6 +57,7 @@ class EventType(str, Enum):
 
     SESSION_CREATED = "session_created"
     SESSION_RECREATED = "session_recreated"
+    TITLE_UPDATED = "title_updated"
     THINKING = "thinking"
     TEXT = "text"
     TOOL_CALL = "tool_call"
@@ -150,6 +151,15 @@ class SessionEventData(BaseModel):
     session_id: str
 
 
+class TitleUpdatedEventData(BaseModel):
+    """标题更新事件数据"""
+
+    model_config = ConfigDict(frozen=True)
+
+    session_id: str
+    title: str
+
+
 # ============================================================================
 # AgentEvent - 统一事件模型
 # ============================================================================
@@ -191,6 +201,10 @@ class AgentEvent(BaseModel):
     @classmethod
     def session_created(cls, session_id: str) -> AgentEvent:
         return cls(type=EventType.SESSION_CREATED, data=SessionEventData(session_id=session_id).model_dump())
+
+    @classmethod
+    def title_updated(cls, session_id: str, title: str) -> AgentEvent:
+        return cls(type=EventType.TITLE_UPDATED, data=TitleUpdatedEventData(session_id=session_id, title=title).model_dump())
 
     @classmethod
     def thinking(cls, status: str = "processing", iteration: int = 1, content: str | None = None) -> AgentEvent:
@@ -335,6 +349,48 @@ class AgentConfig(BaseModel):
     hitl_operations: list[str] = Field(
         default_factory=lambda: ["run_shell", "write_file", "delete_file"]
     )
+
+    @classmethod
+    def create_default(
+        cls,
+        name: str = "Default Agent",
+        model: str | None = None,
+        tools: list[str] | None = None,
+        system_prompt: str | None = None,
+        checkpoint_enabled: bool = True,
+        hitl_enabled: bool = True,
+    ) -> AgentConfig:
+        """创建默认 Agent 配置
+
+        提供业务规则定义的默认值，同时允许覆盖关键参数。
+
+        Args:
+            name: Agent 名称
+            model: LLM 模型名称（默认使用 claude-3-5-sonnet）
+            tools: 启用的工具列表（默认使用 DEFAULT_TOOLS）
+            system_prompt: 系统提示
+            checkpoint_enabled: 是否启用检查点
+            hitl_enabled: 是否启用 HITL
+
+        Returns:
+            配置好的 AgentConfig 实例
+        """
+        # 延迟导入避免循环依赖（AgentExecutionLimits 在文件末尾定义）
+        from domains.agent.domain.types import AgentExecutionLimits
+
+        return cls(
+            name=name,
+            model=model or "claude-3-5-sonnet-20241022",
+            max_iterations=AgentExecutionLimits.DEFAULT_MAX_ITERATIONS,
+            temperature=0.7,
+            max_tokens=AgentExecutionLimits.DEFAULT_MAX_TOKENS,
+            tools=tools if tools is not None else AgentExecutionLimits.DEFAULT_TOOLS.copy(),
+            system_prompt=system_prompt,
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_interval=5,
+            hitl_enabled=hitl_enabled,
+            hitl_operations=AgentExecutionLimits.DEFAULT_HITL_OPERATIONS.copy(),
+        )
 
 
 class TerminationCondition(BaseModel):
@@ -525,3 +581,49 @@ AgentId = str
 SessionId = str
 MessageId = str
 CheckpointId = str
+
+
+# ============================================================================
+# 业务常量
+# ============================================================================
+
+
+class AgentExecutionLimits:
+    """Agent 执行限制常量（业务规则）
+
+    集中管理 Agent 执行相关的限制值，便于统一调整和测试。
+    """
+
+    # 工具调用限制
+    DEFAULT_MAX_TOOL_ITERATIONS: int = 10
+    """单次对话中最大工具调用迭代次数"""
+
+    # 执行超时
+    DEFAULT_TIMEOUT_SECONDS: int = 300
+    """Agent 执行超时时间（秒）"""
+
+    # Agent 迭代限制
+    DEFAULT_MAX_ITERATIONS: int = 20
+    """Agent 最大迭代次数"""
+
+    # Token 限制
+    DEFAULT_MAX_TOKENS: int = 4096
+    """单次响应最大 Token 数"""
+
+    # 默认工具列表
+    DEFAULT_TOOLS: ClassVar[list[str]] = [
+        "read_file",
+        "write_file",
+        "list_dir",
+        "run_shell",
+        "search_code",
+    ]
+    """默认启用的工具列表"""
+
+    # HITL 默认操作
+    DEFAULT_HITL_OPERATIONS: ClassVar[list[str]] = [
+        "run_shell",
+        "write_file",
+        "delete_file",
+    ]
+    """默认需要人工确认的操作"""
