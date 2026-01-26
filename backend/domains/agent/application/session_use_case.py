@@ -6,26 +6,30 @@ Session Use Case - 会话用例
 
 from __future__ import annotations
 
-import uuid
 from typing import TYPE_CHECKING
-
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
 
 from domains.agent.domain.entities.session import SessionDomainService, SessionOwner
-from domains.agent.domain.repositories.message_repository import MessageRepository
-from domains.agent.domain.repositories.session_repository import SessionRepository
 from domains.agent.domain.types import MessageRole
-from domains.agent.infrastructure.models.message import Message
-from domains.agent.infrastructure.models.session import Session
 from domains.agent.infrastructure.repositories import (
-    SQLAlchemyMessageRepository,
-    SQLAlchemySessionRepository,
+    MessageRepository,
+    SessionRepository,
 )
 from exceptions import NotFoundError, PermissionDeniedError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.agent.domain.interfaces.message_repository import (
+        MessageRepository as MessageRepositoryInterface,
+    )
+    from domains.agent.domain.interfaces.session_repository import (
+        SessionRepository as SessionRepositoryInterface,
+    )
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
+    from domains.agent.infrastructure.models.message import Message
+    from domains.agent.infrastructure.models.session import Session
 
 logger = get_logger(__name__)
 
@@ -50,22 +54,22 @@ class SessionUseCase:
     def __init__(
         self,
         db: AsyncSession,
-        session_repo: SessionRepository | None = None,
-        message_repo: MessageRepository | None = None,
+        session_repo: SessionRepositoryInterface | None = None,
+        message_repo: MessageRepositoryInterface | None = None,
         sandbox_service: SandboxLifecycleService | None = None,
     ) -> None:
         """初始化会话用例
 
         Args:
             db: 数据库会话
-            session_repo: 会话仓储（可选，默认使用 SQLAlchemy 实现）
-            message_repo: 消息仓储（可选，默认使用 SQLAlchemy 实现）
+            session_repo: 会话仓储（可选，默认使用默认实现）
+            message_repo: 消息仓储（可选，默认使用默认实现）
             sandbox_service: 沙箱生命周期服务（可选，用于会话删除时联动清理沙箱）
         """
         self.db = db
-        # 支持依赖注入，默认使用 SQLAlchemy 实现
-        self.session_repo = session_repo or SQLAlchemySessionRepository(db)
-        self.message_repo = message_repo or SQLAlchemyMessageRepository(db)
+        # 支持依赖注入，默认使用默认实现
+        self.session_repo = session_repo or SessionRepository(db)
+        self.message_repo = message_repo or MessageRepository(db)
         self.domain_service = SessionDomainService()
         # 可选的沙箱服务，用于生命周期联动
         self.sandbox_service = sandbox_service

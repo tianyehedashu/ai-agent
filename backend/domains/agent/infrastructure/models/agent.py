@@ -9,15 +9,19 @@ from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, OwnedMixin
 
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.session import Session
     from domains.identity.infrastructure.models.user import User
 
 
-class Agent(BaseModel):
-    """Agent 模型"""
+class Agent(BaseModel, OwnedMixin):
+    """Agent 模型
+
+    继承 OwnedMixin 提供所有权相关的类型协议和方法。
+    Agent 只支持注册用户（user_id 必填）。
+    """
 
     __tablename__ = "agents"
 

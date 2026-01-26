@@ -9,7 +9,7 @@ from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, OwnedMixin
 
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.agent import Agent
@@ -17,8 +17,12 @@ if TYPE_CHECKING:
     from domains.identity.infrastructure.models.user import User
 
 
-class Session(BaseModel):
-    """会话模型"""
+class Session(BaseModel, OwnedMixin):
+    """会话模型
+
+    继承 OwnedMixin 提供所有权相关的类型协议和方法。
+    支持注册用户（user_id）和匿名用户（anonymous_user_id）。
+    """
 
     __tablename__ = "sessions"
 

@@ -12,10 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bootstrap.config import settings
 from domains.agent.application import AgentUseCase
 from domains.agent.application.session_use_case import SessionUseCase
+from domains.agent.application.title_use_case import TitleUseCase
 from domains.agent.domain.entities.session import SessionOwner
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
+    AgentExecutionLimits,
     EventType,
     Message,
     MessageRole,
@@ -56,10 +58,6 @@ class ChatUseCase:
         # 使用新的 SessionUseCase
         self.session_use_case = SessionUseCase(db)
         self.agent_service = AgentUseCase(db)
-
-        # 延迟导入 TitleUseCase（避免循环依赖）
-        # pylint: disable=import-outside-toplevel
-        from domains.agent.application.title_use_case import TitleUseCase
 
         self.title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
 
@@ -253,8 +251,6 @@ class ChatUseCase:
         try:
             # 使用独立的数据库会话，避免与主请求会话冲突
             async with get_session_context() as db:
-                from domains.agent.application.title_use_case import TitleUseCase
-
                 title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
                 success = await title_service.generate_and_update(
                     session_id=session_id,
@@ -266,7 +262,6 @@ class ChatUseCase:
                 # 如果标题生成成功，发送标题更新事件
                 if success:
                     # 获取更新后的标题
-                    from domains.agent.application.session_use_case import SessionUseCase
                     session_use_case = SessionUseCase(db)
                     session = await session_use_case.get_session(session_id)
                     if session and session.title:
@@ -486,8 +481,6 @@ class ChatUseCase:
 
     def _build_config_from_agent(self, agent: object) -> AgentConfig:
         """从 Agent 实体构建配置"""
-        from domains.agent.domain.types import AgentExecutionLimits
-
         return AgentConfig(
             name=agent.name,
             model=agent.model,

@@ -9,11 +9,13 @@ HTTP 中间件模块
 from domains.identity.presentation.middleware import AuthMiddleware
 from libs.middleware.error_handler import ErrorHandlerMiddleware
 from libs.middleware.logging import LoggingMiddleware
+from libs.middleware.permission import PermissionContextMiddleware
 from libs.middleware.rate_limit import RateLimitMiddleware
 
 __all__ = [
     "AuthMiddleware",
     "ErrorHandlerMiddleware",
     "LoggingMiddleware",
+    "PermissionContextMiddleware",
     "RateLimitMiddleware",
 ]

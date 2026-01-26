@@ -6,9 +6,11 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.domain.repositories.agent_repository import AgentRepository
+from domains.agent.domain.interfaces.agent_repository import (
+    AgentRepository as AgentRepositoryInterface,
+)
 from domains.agent.infrastructure.models.agent import Agent
-from domains.agent.infrastructure.repositories import SQLAlchemyAgentRepository
+from domains.agent.infrastructure.repositories import AgentRepository
 from exceptions import NotFoundError
 
 
@@ -31,10 +33,10 @@ class AgentUseCase:
     def __init__(
         self,
         db: AsyncSession,
-        agent_repo: AgentRepository | None = None,
+        agent_repo: AgentRepositoryInterface | None = None,
     ) -> None:
         self.db = db
-        self.agent_repo = agent_repo or SQLAlchemyAgentRepository(db)
+        self.agent_repo = agent_repo or AgentRepository(db)
 
     async def create_agent(
         self,

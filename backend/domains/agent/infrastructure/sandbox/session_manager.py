@@ -758,3 +758,25 @@ class SessionManager:
         """获取用户的所有会话"""
         session_ids = self._user_sessions.get(user_id, set())
         return [self._sessions[sid] for sid in session_ids if sid in self._sessions]
+
+    def get_session_id_by_conversation(self, conversation_id: str) -> str | None:
+        """根据会话 ID（conversation_id）获取沙箱会话 ID
+
+        Args:
+            conversation_id: 对话/会话 ID
+
+        Returns:
+            沙箱会话 ID，如果不存在返回 None
+        """
+        return self._conversation_sessions.get(conversation_id)
+
+    def get_session_history(self, conversation_id: str) -> SessionHistory | None:
+        """获取会话历史记录
+
+        Args:
+            conversation_id: 对话/会话 ID
+
+        Returns:
+            会话历史记录，如果不存在返回 None
+        """
+        return self._session_history.get(conversation_id)

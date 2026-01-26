@@ -114,6 +114,7 @@ class CurrentUser(BaseModel):
     email: str
     name: str
     is_anonymous: bool = False
+    role: str = "user"  # 用户角色：admin, user, viewer
 
 
 __all__ = [

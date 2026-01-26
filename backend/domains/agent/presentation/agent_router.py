@@ -129,7 +129,7 @@ async def get_agent(
 
     check_ownership_or_public(
         str(agent.user_id),
-        current_user.id,
+        current_user,
         agent.is_public,
         "Agent",
     )
@@ -146,7 +146,7 @@ async def update_agent(
 ) -> AgentResponse:
     """更新 Agent"""
     agent = await agent_service.get_agent_or_raise(agent_id)
-    check_ownership(str(agent.user_id), current_user.id, "Agent")
+    check_ownership(str(agent.user_id), current_user, "Agent")
 
     updated_agent = await agent_service.update_agent(
         agent_id=agent_id,
@@ -171,5 +171,5 @@ async def delete_agent(
 ) -> None:
     """删除 Agent"""
     agent = await agent_service.get_agent_or_raise(agent_id)
-    check_ownership(str(agent.user_id), current_user.id, "Agent")
+    check_ownership(str(agent.user_id), current_user, "Agent")
     await agent_service.delete_agent(agent_id)

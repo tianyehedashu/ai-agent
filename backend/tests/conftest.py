@@ -389,6 +389,23 @@ async def auth_headers(test_user: User, db_session: AsyncSession) -> dict[str, s
     return {"Authorization": f"Bearer {token_pair.access_token}"}
 
 
+@pytest_asyncio.fixture
+async def permission_context(test_user: User):
+    """权限上下文 fixture - 为测试用户设置权限上下文"""
+    from libs.db.permission_context import (
+        PermissionContext,
+        clear_permission_context,
+        set_permission_context,
+    )
+
+    ctx = PermissionContext(user_id=test_user.id, role="user")
+    set_permission_context(ctx)
+    try:
+        yield ctx
+    finally:
+        clear_permission_context()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_litellm():
     """清理 LiteLLM 资源，避免在程序退出时出现日志错误"""

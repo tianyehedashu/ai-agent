@@ -2,7 +2,7 @@
 
 Agent 领域的核心领域层：
 - entities: 领域实体
-- repositories: 仓储接口
+- interfaces: 仓储接口（抽象）
 - services: 领域服务
 - types: 领域类型
 """

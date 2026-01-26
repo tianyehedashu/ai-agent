@@ -136,7 +136,7 @@ async def delete_memory(
 ) -> None:
     """删除记忆"""
     memory = await memory_service.get_by_id_or_raise(memory_id)
-    check_ownership(str(memory.user_id), current_user.id, "Memory")
+    check_ownership(str(memory.user_id), current_user, "Memory")
     await memory_service.delete(memory_id)
 
 

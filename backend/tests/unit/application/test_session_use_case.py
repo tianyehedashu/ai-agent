@@ -10,6 +10,11 @@ from domains.agent.application.session_use_case import SessionUseCase
 from domains.agent.domain.entities.session import SessionOwner
 from domains.identity.infrastructure.models.user import User
 from exceptions import NotFoundError
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 
 
 @pytest.mark.unit
@@ -50,37 +55,47 @@ class TestSessionUseCase:
     async def test_create_anonymous_session(self, db_session):
         """Test: Create anonymous session."""
         # Arrange
-        use_case = SessionUseCase(db_session)
         anonymous_id = f"anon_{uuid.uuid4()}"
+        ctx = PermissionContext(anonymous_user_id=anonymous_id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
 
-        # Act
-        session = await use_case.create_session(
-            anonymous_user_id=anonymous_id,
-            title="Anonymous Session",
-        )
+            # Act
+            session = await use_case.create_session(
+                anonymous_user_id=anonymous_id,
+                title="Anonymous Session",
+            )
 
-        # Assert
-        assert session.id is not None
-        assert session.anonymous_user_id == anonymous_id
-        assert session.user_id is None
+            # Assert
+            assert session.id is not None
+            assert session.anonymous_user_id == anonymous_id
+            assert session.user_id is None
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_get_session(self, db_session):
         """Test: Get session by ID."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="Test Session",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="Test Session",
+            )
 
-        # Act
-        found = await use_case.get_session(str(session.id))
+            # Act
+            found = await use_case.get_session(str(session.id))
 
-        # Assert
-        assert found is not None
-        assert found.id == session.id
+            # Assert
+            assert found is not None
+            assert found.id == session.id
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_get_session_not_found(self, db_session):
@@ -99,61 +114,76 @@ class TestSessionUseCase:
         """Test: List user's sessions."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        user_id = str(user.id)
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            user_id = str(user.id)
 
-        await use_case.create_session(
-            user_id=user_id,
-            title="Session 1",
-        )
-        await use_case.create_session(
-            user_id=user_id,
-            title="Session 2",
-        )
+            await use_case.create_session(
+                user_id=user_id,
+                title="Session 1",
+            )
+            await use_case.create_session(
+                user_id=user_id,
+                title="Session 2",
+            )
 
-        # Act
-        sessions = await use_case.list_sessions(user_id=user_id)
+            # Act
+            sessions = await use_case.list_sessions(user_id=user_id)
 
-        # Assert
-        assert len(sessions) >= 2
+            # Assert
+            assert len(sessions) >= 2
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_update_session(self, db_session):
         """Test: Update session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="Original Title",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="Original Title",
+            )
 
-        # Act
-        updated = await use_case.update_session(
-            session_id=str(session.id),
-            title="Updated Title",
-        )
+            # Act
+            updated = await use_case.update_session(
+                session_id=str(session.id),
+                title="Updated Title",
+            )
 
-        # Assert
-        assert updated.title == "Updated Title"
+            # Assert
+            assert updated.title == "Updated Title"
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_delete_session(self, db_session):
         """Test: Delete session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="To Delete",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="To Delete",
+            )
 
-        # Act
-        await use_case.delete_session(str(session.id))
+            # Act
+            await use_case.delete_session(str(session.id))
 
-        # Assert
-        found = await use_case.get_session(str(session.id))
-        assert found is None
+            # Assert
+            found = await use_case.get_session(str(session.id))
+            assert found is None
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_delete_session_not_found(self, db_session):
@@ -170,70 +200,85 @@ class TestSessionUseCase:
         """Test: Add message to session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="Message Test",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="Message Test",
+            )
 
-        # Act
-        message = await use_case.add_message(
-            session_id=str(session.id),
-            role="user",
-            content="Hello, world!",
-        )
+            # Act
+            message = await use_case.add_message(
+                session_id=str(session.id),
+                role="user",
+                content="Hello, world!",
+            )
 
-        # Assert
-        assert message.id is not None
-        assert message.role == "user"
-        assert message.content == "Hello, world!"
+            # Assert
+            assert message.id is not None
+            assert message.role == "user"
+            assert message.content == "Hello, world!"
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_get_messages(self, db_session):
         """Test: Get session messages."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="Message Test",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="Message Test",
+            )
 
-        await use_case.add_message(
-            session_id=str(session.id),
-            role="user",
-            content="User message",
-        )
-        await use_case.add_message(
-            session_id=str(session.id),
-            role="assistant",
-            content="Assistant message",
-        )
+            await use_case.add_message(
+                session_id=str(session.id),
+                role="user",
+                content="User message",
+            )
+            await use_case.add_message(
+                session_id=str(session.id),
+                role="assistant",
+                content="Assistant message",
+            )
 
-        # Act
-        messages = await use_case.get_messages(str(session.id))
+            # Act
+            messages = await use_case.get_messages(str(session.id))
 
-        # Assert
-        assert len(messages) >= 2
+            # Assert
+            assert len(messages) >= 2
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_ownership_check(self, db_session):
         """Test: Session ownership validation."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
-        session = await use_case.create_session(
-            user_id=str(user.id),
-            title="Ownership Test",
-        )
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session)
+            session = await use_case.create_session(
+                user_id=str(user.id),
+                title="Ownership Test",
+            )
 
-        owner = SessionOwner(user_id=user.id)
+            owner = SessionOwner(user_id=user.id)
 
-        # Act
-        found = await use_case.get_session_with_ownership_check(
-            str(session.id),
-            owner,
-        )
+            # Act
+            found = await use_case.get_session_with_ownership_check(
+                str(session.id),
+                owner,
+            )
 
-        # Assert
-        assert found.id == session.id
+            # Assert
+            assert found.id == session.id
+        finally:
+            clear_permission_context()

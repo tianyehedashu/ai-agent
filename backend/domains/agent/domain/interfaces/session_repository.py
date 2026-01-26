@@ -1,7 +1,9 @@
 """
 Session Repository Interface - 会话仓储接口
 
-定义会话数据访问的抽象接口，遵循依赖倒置原则Infrastructure 层提供具体实现"""
+定义会话数据访问的抽象接口，遵循依赖倒置原则。
+Infrastructure 层提供具体实现。
+"""
 
 from abc import ABC, abstractmethod
 from typing import Protocol
@@ -24,7 +26,9 @@ class SessionEntity(Protocol):
 class SessionRepository(ABC):
     """会话仓储接口
 
-    定义会话数据访问的抽象方法    具体实现Infrastructure 层提供（?SQLAlchemy 实现）?    """
+    定义会话数据访问的抽象方法。
+    具体实现由 Infrastructure 层提供。
+    """
 
     @abstractmethod
     async def create(
@@ -39,11 +43,12 @@ class SessionRepository(ABC):
         Args:
             user_id: 注册用户 ID
             anonymous_user_id: 匿名用户 ID
-            agent_id: 关联Agent ID
+            agent_id: 关联的 Agent ID
             title: 会话标题
 
         Returns:
-            创建的会话实        """
+            创建的会话实体
+        """
         ...
 
     @abstractmethod
@@ -54,7 +59,7 @@ class SessionRepository(ABC):
             session_id: 会话 ID
 
         Returns:
-            会话实体None
+            会话实体或 None
         """
         ...
 
@@ -67,12 +72,15 @@ class SessionRepository(ABC):
         skip: int = 0,
         limit: int = 20,
     ) -> list[SessionEntity]:
-        """查询用户的会话列
+        """查询用户的会话列表
+
         Args:
             user_id: 注册用户 ID
             anonymous_user_id: 匿名用户 ID
-            agent_id: 筛选指Agent
-            skip: 跳过记录            limit: 返回记录
+            agent_id: 筛选指定 Agent
+            skip: 跳过记录数
+            limit: 返回记录数
+
         Returns:
             会话实体列表
         """
@@ -89,7 +97,9 @@ class SessionRepository(ABC):
 
         Args:
             session_id: 会话 ID
-            title: 新标            status: 新状
+            title: 新标题
+            status: 新状态
+
         Returns:
             更新后的会话实体，如果不存在返回 None
         """

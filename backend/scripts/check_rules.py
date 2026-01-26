@@ -2,8 +2,22 @@
 Code Rule Check Script - 代码规则检查脚本
 """
 
+import os
 from pathlib import Path
 import sys
+
+# 设置 UTF-8 编码以支持 Unicode 字符
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
+# 添加 backend 目录到 Python 路径
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
 
 
 def check_architecture():
@@ -45,9 +59,9 @@ def check_architecture():
     # Domain layer
     # pylint: disable=import-outside-toplevel,unused-import
     try:
-        from domains.agent.domain.entities.session import Session  # noqa: F401
-        from domains.identity.domain.repositories.user_repository import (
-            UserRepository,  # noqa: F401
+        from domains.agent.domain.entities.session import SessionDomainService  # noqa: F401
+        from domains.agent.domain.interfaces.session_repository import (
+            SessionRepository,
         )
 
         checks.append(("✓", "Domain layer imports OK"))
@@ -57,8 +71,8 @@ def check_architecture():
     # Infrastructure layer
     # pylint: disable=import-outside-toplevel,unused-import
     try:
-        from domains.agent.infrastructure.repositories.sqlalchemy_session_repository import (  # noqa: F401
-            SQLAlchemySessionRepository,
+        from domains.agent.infrastructure.repositories import (  # noqa: F401
+            SessionRepository,
         )
         from domains.identity.infrastructure.models.user import User  # noqa: F401
 
@@ -87,10 +101,10 @@ def check_directory_structure():
         "identity/application",
         "identity/domain",
         "identity/infrastructure",
-        "runtime/presentation",
-        "runtime/application",
-        "runtime/domain",
-        "runtime/infrastructure",
+        "agent/presentation",
+        "agent/application",
+        "agent/domain",
+        "agent/infrastructure",
     ]
 
     all_exist = True
@@ -118,6 +132,9 @@ def check_imports():
 
     for py_file in python_files:
         if any(excluded in str(py_file) for excluded in exclude_dirs):
+            continue
+        # 排除脚本自身
+        if "check_rules.py" in str(py_file):
             continue
 
         try:

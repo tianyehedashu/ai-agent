@@ -1,9 +1,14 @@
 """
 Base Model - 模型基类
+
+包含:
+- TimestampMixin: 时间戳混入类
+- OwnedMixin: 所有权混入类
+- BaseModel: 模型基类
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 import uuid
 
 from sqlalchemy import DateTime, func
@@ -16,6 +21,74 @@ from libs.db.database import Base
 def generate_uuid() -> uuid.UUID:
     """生成 UUID"""
     return uuid.uuid4()
+
+
+# =============================================================================
+# 所有权协议和混入类
+# =============================================================================
+
+
+@runtime_checkable
+class OwnedProtocol(Protocol):
+    """所有权协议 - 用于类型检查
+
+    定义拥有所有权的模型必须实现的接口。
+    """
+
+    user_id: uuid.UUID | None
+    anonymous_user_id: str | None
+
+
+class OwnedMixin:
+    """所有权混入类
+
+    为模型提供所有权字段的类型声明和通用方法。
+    各模型仍然自己定义字段（必填/可选），Mixin 只提供类型协议。
+
+    使用方式：
+    - Agent: 继承 OwnedMixin，user_id 必填
+    - Session: 继承 OwnedMixin，user_id 可选，anonymous_user_id 可选
+
+    Example:
+        class Agent(BaseModel, OwnedMixin):
+            user_id: Mapped[uuid.UUID] = mapped_column(...)  # 必填
+
+        class Session(BaseModel, OwnedMixin):
+            user_id: Mapped[uuid.UUID | None] = mapped_column(...)  # 可选
+            anonymous_user_id: Mapped[str | None] = mapped_column(...)  # 可选
+    """
+
+    # 类型声明（不定义字段，由子类自己定义）
+    # 使用字符串注解避免循环导入
+    user_id: "Mapped[uuid.UUID | None]"
+    anonymous_user_id: "Mapped[str | None] | None"
+
+    def is_owned_by(
+        self,
+        user_id: uuid.UUID | None = None,
+        anonymous_user_id: str | None = None,
+    ) -> bool:
+        """检查是否被指定用户拥有
+
+        Args:
+            user_id: 注册用户 ID
+            anonymous_user_id: 匿名用户 ID
+
+        Returns:
+            是否被指定用户拥有
+        """
+        # 优先检查匿名用户
+        if anonymous_user_id and hasattr(self, "anonymous_user_id"):
+            return getattr(self, "anonymous_user_id", None) == anonymous_user_id
+        # 检查注册用户
+        if user_id:
+            return getattr(self, "user_id", None) == user_id
+        return False
+
+
+# =============================================================================
+# 时间戳混入类
+# =============================================================================
 
 
 class TimestampMixin:

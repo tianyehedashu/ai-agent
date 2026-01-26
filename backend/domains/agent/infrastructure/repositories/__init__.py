@@ -1,17 +1,20 @@
-"""Agent Domain - Repository Implementations"""
+"""Agent Domain - Repository Implementations
 
-from domains.agent.infrastructure.repositories.sqlalchemy_agent_repository import (
-    SQLAlchemyAgentRepository,
+提供仓储接口的具体实现。
+"""
+
+from domains.agent.infrastructure.repositories.agent_repository import (
+    AgentRepository,
 )
-from domains.agent.infrastructure.repositories.sqlalchemy_message_repository import (
-    SQLAlchemyMessageRepository,
+from domains.agent.infrastructure.repositories.message_repository import (
+    MessageRepository,
 )
-from domains.agent.infrastructure.repositories.sqlalchemy_session_repository import (
-    SQLAlchemySessionRepository,
+from domains.agent.infrastructure.repositories.session_repository import (
+    SessionRepository,
 )
 
 __all__ = [
-    "SQLAlchemyAgentRepository",
-    "SQLAlchemyMessageRepository",
-    "SQLAlchemySessionRepository",
+    "AgentRepository",
+    "MessageRepository",
+    "SessionRepository",
 ]

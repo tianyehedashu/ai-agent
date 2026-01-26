@@ -1,22 +1,38 @@
 """
-SQLAlchemy Agent Repository - Agent 仓储实现
+Agent Repository - Agent 仓储实现
 
-使用 SQLAlchemy 实现 Agent 数据访问"""
+实现 Agent 数据访问，支持自动权限过滤。
+"""
 
 import uuid
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.domain.repositories.agent_repository import AgentRepository
+from domains.agent.domain.interfaces.agent_repository import (
+    AgentRepository as AgentRepositoryInterface,
+)
 from domains.agent.infrastructure.models.agent import Agent
+from libs.db.base_repository import OwnedRepositoryBase
+from libs.db.permission_context import get_permission_context
 
 
-class SQLAlchemyAgentRepository(AgentRepository):
-    """SQLAlchemy Agent 仓储实现"""
+class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
+    """Agent 仓储实现
+
+    继承 OwnedRepositoryBase 提供自动权限过滤功能。
+    仅支持注册用户（不支持匿名用户）。
+    """
 
     def __init__(self, db: AsyncSession) -> None:
+        super().__init__(db)
         self.db = db
+
+    @property
+    def model_class(self) -> type[Agent]:
+        """返回模型类"""
+        return Agent
+
+    # 不支持匿名用户，使用默认的 anonymous_user_id_column = None
 
     async def create(
         self,
@@ -48,9 +64,8 @@ class SQLAlchemyAgentRepository(AgentRepository):
         return agent
 
     async def get_by_id(self, agent_id: uuid.UUID) -> Agent | None:
-        """通过 ID 获取 Agent"""
-        result = await self.db.execute(select(Agent).where(Agent.id == agent_id))
-        return result.scalar_one_or_none()
+        """通过 ID 获取 Agent（自动检查所有权）"""
+        return await self.get_owned(agent_id)
 
     async def find_by_user(
         self,
@@ -58,15 +73,35 @@ class SQLAlchemyAgentRepository(AgentRepository):
         skip: int = 0,
         limit: int = 20,
     ) -> list[Agent]:
-        """查询用户Agent 列表"""
-        result = await self.db.execute(
-            select(Agent)
-            .where(Agent.user_id == user_id)
-            .order_by(Agent.created_at.desc())
-            .offset(skip)
-            .limit(limit)
+        """查询用户 Agent 列表（自动过滤当前用户的数据）
+
+        Args:
+            user_id: 注册用户 ID（必须与 PermissionContext 一致）
+            skip: 跳过记录数
+            limit: 返回记录数
+
+        Returns:
+            Agent 实体列表
+
+        Raises:
+            ValueError: 如果传递的 user_id 与 PermissionContext 不一致
+        """
+        # 验证传递的参数与 PermissionContext 一致（防止授权漏洞）
+        # 管理员可以查询任何用户的数据，所以跳过验证
+        ctx = get_permission_context()
+        if ctx and not ctx.is_admin and ctx.user_id != user_id:
+            raise ValueError(
+                f"user_id parameter ({user_id}) does not match PermissionContext ({ctx.user_id}). "
+                "This may indicate an authorization bug."
+            )
+
+        # 使用 find_owned 自动应用权限过滤
+        return await self.find_owned(
+            skip=skip,
+            limit=limit,
+            order_by="created_at",
+            order_desc=True,
         )
-        return list(result.scalars().all())
 
     async def update(
         self,

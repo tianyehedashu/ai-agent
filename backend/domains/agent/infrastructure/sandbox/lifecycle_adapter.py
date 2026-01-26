@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from domains.agent.domain.entities.user_quota import UserQuota
 from domains.agent.domain.services.sandbox_lifecycle import (
     SandboxInfo,
     SandboxState,
@@ -21,6 +20,7 @@ from domains.agent.infrastructure.sandbox.session_manager import (
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    from domains.agent.domain.entities.user_quota import UserQuota
     from domains.agent.infrastructure.sandbox.session_manager import (
         SessionInfo,
         SessionManager,
@@ -59,8 +59,8 @@ class SandboxLifecycleAdapter:
         Returns:
             是否成功清理
         """
-        # 从 conversation_sessions 映射中查找沙箱 ID
-        sandbox_id = self._manager._conversation_sessions.get(session_id)
+        # 使用公共方法获取沙箱 ID
+        sandbox_id = self._manager.get_session_id_by_conversation(session_id)
         if sandbox_id:
             await self._manager.end_session(sandbox_id, CleanupReason.USER_REQUEST)
             logger.info(
@@ -138,7 +138,7 @@ class SandboxLifecycleAdapter:
         Returns:
             沙箱信息，如果不存在返回 None
         """
-        sandbox_id = self._manager._conversation_sessions.get(session_id)
+        sandbox_id = self._manager.get_session_id_by_conversation(session_id)
         if sandbox_id:
             session = await self._manager.get_session(sandbox_id)
             if session:
@@ -166,7 +166,7 @@ class SandboxLifecycleAdapter:
         Returns:
             沙箱状态，如果没有历史记录返回 None
         """
-        history = self._manager._session_history.get(session_id)
+        history = self._manager.get_session_history(session_id)
         if history:
             return SandboxState(
                 session_id=session_id,

@@ -10,7 +10,6 @@ API Dependencies - 共享 API 依赖注入
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
@@ -20,10 +19,13 @@ from domains.agent.application import AgentUseCase, ChatUseCase, SessionUseCase,
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.stats_service import StatsService
+from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.identity.application import UserUseCase
 from libs.db.database import get_session
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
 
 __all__ = [
@@ -84,10 +86,6 @@ def get_sandbox_service(request: Request) -> SandboxLifecycleService | None:
     """
     session_manager = getattr(request.app.state, "session_manager", None)
     if session_manager:
-        from domains.agent.infrastructure.sandbox.lifecycle_adapter import (
-            SandboxLifecycleAdapter,
-        )
-
         return SandboxLifecycleAdapter(session_manager)
     return None
 

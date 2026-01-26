@@ -56,6 +56,7 @@ from exceptions import (
 )
 from libs.db.database import init_db
 from libs.db.redis import close_redis, init_redis
+from libs.middleware.permission import PermissionContextMiddleware
 from utils.logging import get_logger, setup_logging
 
 # pylint: enable=wrong-import-position
@@ -208,6 +209,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 权限上下文中间件（在认证依赖之后设置权限上下文）
+app.add_middleware(PermissionContextMiddleware)
 
 
 # =============================================================================

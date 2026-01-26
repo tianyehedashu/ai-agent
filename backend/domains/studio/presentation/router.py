@@ -1,8 +1,8 @@
 """
-Studio API - 工作API
+Studio API - 工作流 API
 
 实现:
-- 工作CRUD
+- 工作流 CRUD
 - 代码解析
 - 代码生成
 - 测试运行
@@ -11,11 +11,11 @@ Studio API - 工作API
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from domains.identity.presentation.deps import get_current_user
+from domains.identity.presentation.deps import AuthUser, check_ownership
 from domains.studio.application import WorkflowService
 from libs.api.errors import VERSION_NOT_FOUND, WORKFLOW_NOT_FOUND
 
@@ -77,14 +77,14 @@ class TestRunRequest(BaseModel):
 @router.post("/workflows")
 async def create_workflow(
     request: WorkflowCreateRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """创建工作流"""
     service = WorkflowService()
     workflow = await service.create(
         name=request.name,
         description=request.description,
-        user_id=current_user["id"],
+        user_id=current_user.id,
         code=request.code,
     )
     return {
@@ -98,14 +98,14 @@ async def create_workflow(
 
 @router.get("/workflows")
 async def list_workflows(
+    current_user: AuthUser,
     limit: int = 50,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """列出工作流"""
     service = WorkflowService()
     workflows = await service.list_by_user(
-        user_id=current_user["id"],
+        user_id=current_user.id,
         limit=limit,
         offset=offset,
     )
@@ -125,7 +125,7 @@ async def list_workflows(
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(
     workflow_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """获取工作流详情"""
     service = WorkflowService()
@@ -133,6 +133,9 @@ async def get_workflow(
 
     if not workflow:
         raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+
+    # 检查所有权（管理员可访问所有）
+    check_ownership(str(workflow.user_id), current_user, "Workflow")
 
     return {
         "id": str(workflow.id),
@@ -150,10 +153,19 @@ async def get_workflow(
 async def update_workflow(
     workflow_id: str,
     request: WorkflowUpdateRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """更新工作流"""
     service = WorkflowService()
+
+    # 先获取工作流检查所有权
+    existing = await service.get(workflow_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+
+    # 检查所有权（管理员可访问所有）
+    check_ownership(str(existing.user_id), current_user, "Workflow")
+
     workflow = await service.update(
         workflow_id=workflow_id,
         name=request.name,
@@ -177,10 +189,19 @@ async def update_workflow(
 @router.delete("/workflows/{workflow_id}")
 async def delete_workflow(
     workflow_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, str]:
     """删除工作流"""
     service = WorkflowService()
+
+    # 先获取工作流检查所有权
+    existing = await service.get(workflow_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+
+    # 检查所有权（管理员可访问所有）
+    check_ownership(str(existing.user_id), current_user, "Workflow")
+
     success = await service.delete(workflow_id)
 
     if not success:
@@ -198,10 +219,17 @@ async def delete_workflow(
 async def parse_code(
     workflow_id: str,
     request: ParseCodeRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """解析代码，返回 React Flow 格式"""
     service = WorkflowService()
+
+    # 检查工作流所有权
+    workflow = await service.get(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+    check_ownership(str(workflow.user_id), current_user, "Workflow")
+
     return await service.parse_code(request.code)
 
 
@@ -209,10 +237,17 @@ async def parse_code(
 async def generate_code(
     workflow_id: str,
     request: GenerateCodeRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, str]:
     """从 React Flow 格式生成代码"""
     service = WorkflowService()
+
+    # 检查工作流所有权
+    workflow = await service.get(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+    check_ownership(str(workflow.user_id), current_user, "Workflow")
+
     code = await service.generate_code(request.nodes, request.edges)
     return {"code": code}
 
@@ -226,10 +261,17 @@ async def generate_code(
 async def save_version(
     workflow_id: str,
     request: SaveVersionRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """保存新版本"""
     service = WorkflowService()
+
+    # 检查工作流所有权
+    workflow = await service.get(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+    check_ownership(str(workflow.user_id), current_user, "Workflow")
+
     version = await service.save_version(workflow_id, request.message)
 
     if not version:
@@ -246,11 +288,18 @@ async def save_version(
 @router.get("/workflows/{workflow_id}/versions")
 async def list_versions(
     workflow_id: str,
+    current_user: AuthUser,
     limit: int = 20,
-    current_user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """列出版本历史"""
     service = WorkflowService()
+
+    # 检查工作流所有权
+    workflow = await service.get(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+    check_ownership(str(workflow.user_id), current_user, "Workflow")
+
     versions = await service.list_versions(workflow_id, limit)
     return [
         {
@@ -267,10 +316,17 @@ async def list_versions(
 async def restore_version(
     workflow_id: str,
     version: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: AuthUser,
 ) -> dict[str, Any]:
     """恢复到指定版本"""
     service = WorkflowService()
+
+    # 检查工作流所有权
+    existing = await service.get(workflow_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
+    check_ownership(str(existing.user_id), current_user, "Workflow")
+
     workflow = await service.restore_version(workflow_id, version)
 
     if not workflow:
@@ -291,8 +347,8 @@ async def restore_version(
 @router.post("/test/run")
 async def test_run(
     request: TestRunRequest,
+    current_user: AuthUser,
     workflow_id: str | None = None,
-    current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
     """
     测试运行工作流 (SSE)

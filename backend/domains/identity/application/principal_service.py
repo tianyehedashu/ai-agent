@@ -47,6 +47,7 @@ async def _get_or_create_anonymous_principal(
         email=Principal.make_anonymous_email(anonymous_id),
         name=f"Anonymous User ({anonymous_id[:8]})",
         is_anonymous=True,
+        role="user",  # 匿名用户默认为普通用户
     )
 
 
@@ -115,6 +116,7 @@ async def get_principal(
         email=user.email,
         name=user.name or "",
         is_anonymous=False,
+        role=user.role,  # 从 User 模型获取角色
     )
 
 
@@ -139,4 +141,5 @@ async def get_principal_optional(
         email=user.email,
         name=user.name or "",
         is_anonymous=False,
+        role=user.role,  # 从 User 模型获取角色
     )

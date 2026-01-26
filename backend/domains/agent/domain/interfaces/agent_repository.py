@@ -1,7 +1,8 @@
 """
 Agent Repository Interface - Agent 仓储接口
 
-定义 Agent 数据访问的抽象接口"""
+定义 Agent 数据访问的抽象接口。
+"""
 
 from abc import ABC, abstractmethod
 from typing import Protocol
@@ -55,7 +56,7 @@ class AgentRepository(ABC):
         skip: int = 0,
         limit: int = 20,
     ) -> list[AgentEntity]:
-        """查询用户Agent 列表"""
+        """查询用户的 Agent 列表"""
         ...
 
     @abstractmethod

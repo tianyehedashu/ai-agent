@@ -200,35 +200,91 @@ class AgentEvent(BaseModel):
     # 工厂方法
     @classmethod
     def session_created(cls, session_id: str) -> AgentEvent:
-        return cls(type=EventType.SESSION_CREATED, data=SessionEventData(session_id=session_id).model_dump())
+        return cls(
+            type=EventType.SESSION_CREATED,
+            data=SessionEventData(session_id=session_id).model_dump(),
+        )
 
     @classmethod
     def title_updated(cls, session_id: str, title: str) -> AgentEvent:
-        return cls(type=EventType.TITLE_UPDATED, data=TitleUpdatedEventData(session_id=session_id, title=title).model_dump())
+        return cls(
+            type=EventType.TITLE_UPDATED,
+            data=TitleUpdatedEventData(session_id=session_id, title=title).model_dump(),
+        )
 
     @classmethod
-    def thinking(cls, status: str = "processing", iteration: int = 1, content: str | None = None) -> AgentEvent:
-        return cls(type=EventType.THINKING, data=ThinkingEventData(status=status, iteration=iteration, content=content).model_dump())
+    def thinking(
+        cls, status: str = "processing", iteration: int = 1, content: str | None = None
+    ) -> AgentEvent:
+        return cls(
+            type=EventType.THINKING,
+            data=ThinkingEventData(
+                status=status, iteration=iteration, content=content
+            ).model_dump(),
+        )
 
     @classmethod
     def text(cls, content: str) -> AgentEvent:
         return cls(type=EventType.TEXT, data=TextEventData(content=content).model_dump())
 
     @classmethod
-    def done(cls, content: str, reasoning_content: str | None = None, iterations: int = 1, tool_iterations: int = 0, total_tokens: int = 0) -> AgentEvent:
-        return cls(type=EventType.DONE, data=DoneEventData(iterations=iterations, tool_iterations=tool_iterations, total_tokens=total_tokens, final_message=FinalMessage(content=content, reasoning_content=reasoning_content)).model_dump())
+    def done(
+        cls,
+        content: str,
+        reasoning_content: str | None = None,
+        iterations: int = 1,
+        tool_iterations: int = 0,
+        total_tokens: int = 0,
+    ) -> AgentEvent:
+        return cls(
+            type=EventType.DONE,
+            data=DoneEventData(
+                iterations=iterations,
+                tool_iterations=tool_iterations,
+                total_tokens=total_tokens,
+                final_message=FinalMessage(content=content, reasoning_content=reasoning_content),
+            ).model_dump(),
+        )
 
     @classmethod
     def error(cls, error: str, session_id: str | None = None) -> AgentEvent:
-        return cls(type=EventType.ERROR, data=ErrorEventData(error=error, session_id=session_id).model_dump())
+        return cls(
+            type=EventType.ERROR,
+            data=ErrorEventData(error=error, session_id=session_id).model_dump(),
+        )
 
     @classmethod
-    def tool_call(cls, tool_call_id: str, tool_name: str, arguments: dict[str, Any] | None = None) -> AgentEvent:
-        return cls(type=EventType.TOOL_CALL, data=ToolCallEventData(tool_call_id=tool_call_id, tool_name=tool_name, arguments=arguments or {}).model_dump())
+    def tool_call(
+        cls, tool_call_id: str, tool_name: str, arguments: dict[str, Any] | None = None
+    ) -> AgentEvent:
+        return cls(
+            type=EventType.TOOL_CALL,
+            data=ToolCallEventData(
+                tool_call_id=tool_call_id, tool_name=tool_name, arguments=arguments or {}
+            ).model_dump(),
+        )
 
     @classmethod
-    def tool_result(cls, tool_call_id: str, tool_name: str, success: bool, output: str, error: str | None = None, duration_ms: int | None = None) -> AgentEvent:
-        return cls(type=EventType.TOOL_RESULT, data=ToolResultEventData(tool_call_id=tool_call_id, tool_name=tool_name, success=success, output=output, error=error, duration_ms=duration_ms).model_dump())
+    def tool_result(
+        cls,
+        tool_call_id: str,
+        tool_name: str,
+        success: bool,
+        output: str,
+        error: str | None = None,
+        duration_ms: int | None = None,
+    ) -> AgentEvent:
+        return cls(
+            type=EventType.TOOL_RESULT,
+            data=ToolResultEventData(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                success=success,
+                output=output,
+                error=error,
+                duration_ms=duration_ms,
+            ).model_dump(),
+        )
 
     # 数据访问方法
     def get_final_message(self) -> FinalMessage | None:
@@ -237,7 +293,10 @@ class AgentEvent(BaseModel):
         final_msg = self.data.get("final_message")
         if not final_msg:
             return None
-        return FinalMessage(content=final_msg.get("content", ""), reasoning_content=final_msg.get("reasoning_content"))
+        return FinalMessage(
+            content=final_msg.get("content", ""),
+            reasoning_content=final_msg.get("reasoning_content"),
+        )
 
     def get_content(self) -> str:
         if self.type in (EventType.TEXT, EventType.THINKING):
@@ -247,6 +306,7 @@ class AgentEvent(BaseModel):
             if final_msg:
                 return final_msg.content or final_msg.reasoning_content or ""
         return ""
+
 
 # ============================================================================
 # 基础枚举类型
@@ -322,6 +382,52 @@ class ToolDefinitionDict(TypedDict):
 
 
 # ============================================================================
+# Agent 执行限制常量（业务规则）
+# ============================================================================
+
+
+class AgentExecutionLimits:
+    """Agent 执行限制常量（业务规则）
+
+    集中管理 Agent 执行相关的限制值，便于统一调整和测试。
+    """
+
+    # 工具调用限制
+    DEFAULT_MAX_TOOL_ITERATIONS: int = 10
+    """单次对话中最大工具调用迭代次数"""
+
+    # 执行超时
+    DEFAULT_TIMEOUT_SECONDS: int = 300
+    """Agent 执行超时时间（秒）"""
+
+    # Agent 迭代限制
+    DEFAULT_MAX_ITERATIONS: int = 20
+    """Agent 最大迭代次数"""
+
+    # Token 限制
+    DEFAULT_MAX_TOKENS: int = 4096
+    """单次响应最大 Token 数"""
+
+    # 默认工具列表
+    DEFAULT_TOOLS: ClassVar[list[str]] = [
+        "read_file",
+        "write_file",
+        "list_dir",
+        "run_shell",
+        "search_code",
+    ]
+    """默认启用的工具列表"""
+
+    # HITL 默认操作
+    DEFAULT_HITL_OPERATIONS: ClassVar[list[str]] = [
+        "run_shell",
+        "write_file",
+        "delete_file",
+    ]
+    """默认需要人工确认的操作"""
+
+
+# ============================================================================
 # Agent 配置和状态
 # ============================================================================
 
@@ -375,9 +481,6 @@ class AgentConfig(BaseModel):
         Returns:
             配置好的 AgentConfig 实例
         """
-        # 延迟导入避免循环依赖（AgentExecutionLimits 在文件末尾定义）
-        from domains.agent.domain.types import AgentExecutionLimits
-
         return cls(
             name=name,
             model=model or "claude-3-5-sonnet-20241022",
@@ -581,49 +684,3 @@ AgentId = str
 SessionId = str
 MessageId = str
 CheckpointId = str
-
-
-# ============================================================================
-# 业务常量
-# ============================================================================
-
-
-class AgentExecutionLimits:
-    """Agent 执行限制常量（业务规则）
-
-    集中管理 Agent 执行相关的限制值，便于统一调整和测试。
-    """
-
-    # 工具调用限制
-    DEFAULT_MAX_TOOL_ITERATIONS: int = 10
-    """单次对话中最大工具调用迭代次数"""
-
-    # 执行超时
-    DEFAULT_TIMEOUT_SECONDS: int = 300
-    """Agent 执行超时时间（秒）"""
-
-    # Agent 迭代限制
-    DEFAULT_MAX_ITERATIONS: int = 20
-    """Agent 最大迭代次数"""
-
-    # Token 限制
-    DEFAULT_MAX_TOKENS: int = 4096
-    """单次响应最大 Token 数"""
-
-    # 默认工具列表
-    DEFAULT_TOOLS: ClassVar[list[str]] = [
-        "read_file",
-        "write_file",
-        "list_dir",
-        "run_shell",
-        "search_code",
-    ]
-    """默认启用的工具列表"""
-
-    # HITL 默认操作
-    DEFAULT_HITL_OPERATIONS: ClassVar[list[str]] = [
-        "run_shell",
-        "write_file",
-        "delete_file",
-    ]
-    """默认需要人工确认的操作"""

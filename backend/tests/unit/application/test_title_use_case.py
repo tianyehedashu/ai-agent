@@ -9,6 +9,11 @@ import pytest
 
 from domains.agent.application.title_use_case import TitleUseCase
 from domains.identity.infrastructure.models.user import User
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 
 
 @pytest.mark.unit
@@ -97,26 +102,31 @@ class TestTitleUseCase:
         """Test: Update session title."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = TitleUseCase(db_session)
-        user_id = str(user.id)
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = TitleUseCase(db_session)
+            user_id = str(user.id)
 
-        # Create session
-        session = await use_case.session_use_case.create_session(
-            user_id=user_id,
-            title="Original Title",
-        )
+            # Create session
+            session = await use_case.session_use_case.create_session(
+                user_id=user_id,
+                title="Original Title",
+            )
 
-        # Act
-        result = await use_case.update_title(
-            session_id=str(session.id),
-            title="Updated Title",
-            user_id=user_id,
-        )
+            # Act
+            result = await use_case.update_title(
+                session_id=str(session.id),
+                title="Updated Title",
+                user_id=user_id,
+            )
 
-        # Assert
-        assert result is True
-        updated_session = await use_case.session_use_case.get_session(str(session.id))
-        assert updated_session.title == "Updated Title"
+            # Assert
+            assert result is True
+            updated_session = await use_case.session_use_case.get_session(str(session.id))
+            assert updated_session.title == "Updated Title"
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_update_title_not_owner(self, db_session):
@@ -163,59 +173,69 @@ class TestTitleUseCase:
         """Test: Long title gets truncated."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = TitleUseCase(db_session)
-        user_id = str(user.id)
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = TitleUseCase(db_session)
+            user_id = str(user.id)
 
-        session = await use_case.session_use_case.create_session(
-            user_id=user_id,
-            title="Original",
-        )
+            session = await use_case.session_use_case.create_session(
+                user_id=user_id,
+                title="Original",
+            )
 
-        long_title = "A" * 300
+            long_title = "A" * 300
 
-        # Act
-        result = await use_case.update_title(
-            session_id=str(session.id),
-            title=long_title,
-            user_id=user_id,
-        )
+            # Act
+            result = await use_case.update_title(
+                session_id=str(session.id),
+                title=long_title,
+                user_id=user_id,
+            )
 
-        # Assert
-        assert result is True
-        updated_session = await use_case.session_use_case.get_session(str(session.id))
-        assert len(updated_session.title) <= 200
+            # Assert
+            assert result is True
+            updated_session = await use_case.session_use_case.get_session(str(session.id))
+            assert len(updated_session.title) <= 200
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_generate_and_update(self, db_session):
         """Test: Generate and update title."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = TitleUseCase(db_session)
-        user_id = str(user.id)
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        try:
+            use_case = TitleUseCase(db_session)
+            user_id = str(user.id)
 
-        session = await use_case.session_use_case.create_session(
-            user_id=user_id,
-            title=None,  # Default title
-        )
-
-        # Mock LLM response
-        with patch.object(
-            use_case.llm_gateway,
-            "chat",
-            new_callable=AsyncMock,
-            return_value="AI生成的标题",
-        ):
-            # Act
-            result = await use_case.generate_and_update(
-                session_id=str(session.id),
-                strategy="first_message",
-                message="How does AI work?",
+            session = await use_case.session_use_case.create_session(
                 user_id=user_id,
+                title=None,  # Default title
             )
 
-            # Assert
-            assert result is True
-            updated_session = await use_case.session_use_case.get_session(
-                str(session.id)
-            )
-            assert updated_session.title == "AI生成的标题"
+            # Mock LLM response
+            with patch.object(
+                use_case.llm_gateway,
+                "chat",
+                new_callable=AsyncMock,
+                return_value="AI生成的标题",
+            ):
+                # Act
+                result = await use_case.generate_and_update(
+                    session_id=str(session.id),
+                    strategy="first_message",
+                    message="How does AI work?",
+                    user_id=user_id,
+                )
+
+                # Assert
+                assert result is True
+                updated_session = await use_case.session_use_case.get_session(
+                    str(session.id)
+                )
+                assert updated_session.title == "AI生成的标题"
+        finally:
+            clear_permission_context()

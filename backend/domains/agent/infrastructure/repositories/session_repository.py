@@ -1,20 +1,22 @@
 """
 Session Repository - 会话仓储实现
 
-使用 PostgreSQL 实现会话数据访问，支持自动权限过滤。
+实现会话数据访问，支持自动权限过滤。
 """
 
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.domain.interfaces.session_repository import SessionRepository
+from domains.agent.domain.interfaces.session_repository import (
+    SessionRepository as SessionRepositoryInterface,
+)
 from domains.agent.infrastructure.models.session import Session
 from libs.db.base_repository import OwnedRepositoryBase
 from libs.db.permission_context import get_permission_context
 
 
-class PostgresSessionRepository(OwnedRepositoryBase[Session], SessionRepository):
+class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface):
     """会话仓储实现
 
     继承 OwnedRepositoryBase 提供自动权限过滤功能。
