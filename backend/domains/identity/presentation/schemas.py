@@ -116,6 +116,16 @@ class CurrentUser(BaseModel):
     is_anonymous: bool = False
     role: str = "user"  # 用户角色：admin, user, viewer
 
+    @property
+    def is_admin(self) -> bool:
+        """是否是管理员"""
+        return self.role == "admin"
+
+    @property
+    def is_superuser(self) -> bool:
+        """是否是超级用户（与 is_admin 同义，兼容 FastAPI Users）"""
+        return self.is_admin
+
 
 __all__ = [
     "CurrentUser",

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import AgentUseCase, ChatUseCase, SessionUseCase, TitleUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.stats_service import StatsService
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
@@ -34,6 +35,7 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_mcp_service",
     "get_memory_service",
     "get_sandbox_service",
     "get_session_service",
@@ -129,3 +131,8 @@ async def get_memory_service(db: DbSession) -> MemoryService:
 async def get_stats_service(db: DbSession) -> StatsService:
     """获取统计服务"""
     return StatsService(db)
+
+
+async def get_mcp_service(db: DbSession) -> MCPManagementUseCase:
+    """获取 MCP 管理服务"""
+    return MCPManagementUseCase(db)

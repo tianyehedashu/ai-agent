@@ -151,7 +151,10 @@ class Settings(BaseSettings):
     # 安全配置
     # ========================================================================
     jwt_secret: SecretStr = Field(default=SecretStr("jwt-secret-change-in-production"))
-    jwt_secret_key: str = "jwt-secret-change-in-production"  # 用于 JWT 编码
+    jwt_secret_key: str = Field(
+        default="jwt-secret-change-in-production",
+        description="JWT 密钥（用于 JWT 编码），如果未设置 JWT_SECRET_KEY，则使用 jwt_secret 的值",
+    )
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 24
     access_token_expire_minutes: int = 60
@@ -159,6 +162,16 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"]
     )
+
+    def model_post_init(self, __context: object) -> None:
+        """初始化后处理：如果 jwt_secret_key 是默认值，则使用 jwt_secret 的值"""
+        super().model_post_init(__context)
+        # 如果 jwt_secret_key 仍然是默认值，且 jwt_secret 不是默认值，则使用 jwt_secret 的值
+        if (
+            self.jwt_secret_key == "jwt-secret-change-in-production"
+            and self.jwt_secret.get_secret_value() != "jwt-secret-change-in-production"
+        ):
+            self.jwt_secret_key = self.jwt_secret.get_secret_value()
 
     # ========================================================================
     # 存储配置

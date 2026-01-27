@@ -6,6 +6,11 @@
  * 2. Cookie (anonymous_user_id) - 匿名用户（浏览器自动发送）
  * 3. Header (X-Anonymous-User-Id) - 匿名用户备用方案（Cookie 丢失时）
  *
+ * 状态管理：
+ * - Token 和 anonymousUserId 由 authStore (Zustand) 统一管理
+ * - apiClient 通过 authStore.getState() 获取认证信息
+ * - 避免直接操作 localStorage，保持状态一致性
+ *
  * 基于 Vite 的 API 客户端最佳实践：
  * - 开发环境：使用相对路径，通过 vite.config.ts 的 proxy 转发，自动解决 CORS
  * - 生产环境：配置 VITE_API_URL 环境变量，或前后端同域部署
@@ -23,12 +28,17 @@
  * ```
  */
 
+import {
+  getAuthToken,
+  getAnonymousUserId,
+  setAuthToken,
+  setAnonymousUserId,
+  clearAuth,
+  handleUnauthorized,
+} from '@/stores/auth'
+
 // 开发环境为空（使用 vite proxy），生产环境按需配置
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
-
-// 本地存储 key
-const AUTH_TOKEN_KEY = 'auth_token'
-const ANONYMOUS_USER_ID_KEY = 'anonymous_user_id'
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>
@@ -36,53 +46,38 @@ interface RequestOptions extends RequestInit {
 
 class ApiClient {
   private baseUrl: string
-  private token: string | null = null
-  private anonymousUserId: string | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
-    this.token = localStorage.getItem(AUTH_TOKEN_KEY)
-    this.anonymousUserId = localStorage.getItem(ANONYMOUS_USER_ID_KEY)
   }
 
   /**
-   * 设置 JWT Token
+   * 设置 JWT Token（委托给 authStore）
    */
   setToken(token: string | null): void {
-    this.token = token
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, token)
-    } else {
-      localStorage.removeItem(AUTH_TOKEN_KEY)
-    }
+    setAuthToken(token)
   }
 
   /**
-   * 设置匿名用户 ID（从后端响应中获取）
+   * 设置匿名用户 ID（委托给 authStore）
    * 用于 Cookie 丢失时的备用认证
    */
   setAnonymousUserId(id: string | null): void {
-    this.anonymousUserId = id
-    if (id) {
-      localStorage.setItem(ANONYMOUS_USER_ID_KEY, id)
-    } else {
-      localStorage.removeItem(ANONYMOUS_USER_ID_KEY)
-    }
+    setAnonymousUserId(id)
   }
 
   /**
    * 获取当前匿名用户 ID
    */
   getAnonymousUserId(): string | null {
-    return this.anonymousUserId
+    return getAnonymousUserId()
   }
 
   /**
    * 清除所有认证信息（用于登出）
    */
   clearAuth(): void {
-    this.setToken(null)
-    this.setAnonymousUserId(null)
+    clearAuth()
   }
 
   /**
@@ -105,9 +100,7 @@ class ApiClient {
     return queryString ? `${path}?${queryString}` : path
   }
 
-  private buildQueryString(
-    params?: Record<string, string | number | boolean | undefined>
-  ): string {
+  private buildQueryString(params?: Record<string, string | number | boolean | undefined>): string {
     if (!params) return ''
     const searchParams = new URLSearchParams()
     for (const [key, value] of Object.entries(params)) {
@@ -131,13 +124,17 @@ class ApiClient {
       ? { ...defaultHeaders, ...customHeaders }
       : defaultHeaders
 
+    // 从 authStore 获取认证信息
+    const token = getAuthToken()
+    const anonymousUserId = getAnonymousUserId()
+
     // 认证策略：优先使用 Token，其次使用匿名用户 ID
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
-    } else if (this.anonymousUserId) {
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    } else if (anonymousUserId) {
       // 没有 Token 时，添加匿名用户 ID 作为备用认证
       // 这在 Cookie 丢失时可以帮助后端识别用户
-      headers['X-Anonymous-User-Id'] = this.anonymousUserId
+      headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
     const response = await fetch(url, {
@@ -147,18 +144,25 @@ class ApiClient {
     })
 
     // 从响应头中提取并保存 anonymous_user_id（如果存在）
-    // 这样即使 Cookie 丢失，前端仍可通过 localStorage 恢复身份
-    const anonymousId = response.headers.get('X-Anonymous-User-Id')
-    if (anonymousId && !this.token) {
-      this.setAnonymousUserId(anonymousId)
+    // 这样即使 Cookie 丢失，前端仍可通过 authStore 恢复身份
+    const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
+    if (responseAnonymousId && !token) {
+      setAnonymousUserId(responseAnonymousId)
     }
 
     if (!response.ok) {
+      // 401 错误时通过 authStore 清除可能无效的 token
+      if (response.status === 401) {
+        handleUnauthorized()
+      }
+
       const error = (await response.json().catch(() => ({ message: 'Unknown error' }))) as {
         detail?: string
         message?: string
       }
-      throw new Error(error.detail ?? error.message ?? `HTTP ${String(response.status)}`)
+      // 错误消息包含状态码，便于上层识别错误类型（如 401 未授权）
+      const errorMessage = error.detail ?? error.message ?? 'Unknown error'
+      throw new Error(`HTTP ${String(response.status)}: ${errorMessage}`)
     }
 
     return (await response.json()) as T
@@ -227,11 +231,15 @@ class ApiClient {
       Accept: 'text/event-stream',
     }
 
+    // 从 authStore 获取认证信息
+    const token = getAuthToken()
+    const anonymousUserId = getAnonymousUserId()
+
     // 认证策略：优先使用 Token，其次使用匿名用户 ID
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
-    } else if (this.anonymousUserId) {
-      headers['X-Anonymous-User-Id'] = this.anonymousUserId
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    } else if (anonymousUserId) {
+      headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
     try {
@@ -244,9 +252,9 @@ class ApiClient {
       })
 
       // 从响应头中提取并保存 anonymous_user_id
-      const anonymousId = response.headers.get('X-Anonymous-User-Id')
-      if (anonymousId && !this.token) {
-        this.setAnonymousUserId(anonymousId)
+      const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
+      if (responseAnonymousId && !token) {
+        setAnonymousUserId(responseAnonymousId)
       }
 
       if (!response.ok) {

@@ -69,6 +69,14 @@ async def get_principal(
     logger = get_logger(__name__)
 
     if not credentials:
+        # INFO 级别日志：帮助诊断 401 错误（DEBUG 级别可能不会显示）
+        logger.info(
+            "Auth check - app_env=%s, is_development=%s, anonymous_user_id=%s, header=%s",
+            settings.app_env,
+            settings.is_development,
+            anonymous_user_id,
+            request.headers.get("X-Anonymous-User-Id"),
+        )
         if settings.is_development:
             # 优先使用 Cookie 中的 anonymous_user_id
             # 如果 Cookie 丢失，尝试从请求头获取（前端 localStorage 备用方案）
@@ -93,6 +101,12 @@ async def get_principal(
                 detail="Failed to create anonymous user. Please check database connection.",
             )
 
+        # 记录为什么返回 401（非开发环境需要认证）
+        logger.warning(
+            "Authentication required but not in development mode. app_env=%s, is_development=%s",
+            settings.app_env,
+            settings.is_development,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -105,6 +119,14 @@ async def get_principal(
     user_manager = UserManager(user_db)
     user = await strategy.read_token(token, user_manager)
     if user is None:
+        # 开发模式下：token 无效时回退到匿名用户（更宽容的处理）
+        if settings.is_development:
+            logger.info("Invalid token in dev mode, falling back to anonymous user")
+            if not anonymous_user_id:
+                anonymous_user_id = str(uuid.uuid4())
+            request.state.anonymous_user_id = anonymous_user_id
+            return await _get_or_create_anonymous_principal(db, anonymous_user_id)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

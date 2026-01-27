@@ -39,7 +39,16 @@ async def get_me(
     """
     获取当前用户信息（支持匿名用户）
 
-    在开发模式下支持匿名用户，生产模式下需要真实认证    """
+    在开发模式下支持匿名用户，生产模式下需要真实认证
+    """
+    from utils.logging import get_logger
+
+    logger = get_logger(__name__)
+    logger.info(
+        "GET /api/v1/auth/me - user_id=%s, is_anonymous=%s",
+        current_user.id,
+        current_user.is_anonymous,
+    )
     return current_user
 
 
@@ -85,7 +94,7 @@ async def change_password(
 async def logout(response: Response) -> None:
     """
     退出登
-    清除匿名用户cookie，允许用户重新登录或创建新的匿名会话    """
+    清除匿名用户cookie，允许用户重新登录或创建新的匿名会话"""
     # 清除anonymous_user_id cookie
     response.delete_cookie(
         key=ANONYMOUS_USER_COOKIE,

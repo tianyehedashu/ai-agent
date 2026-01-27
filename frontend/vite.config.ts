@@ -16,6 +16,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // 确保 Cookie 能正确传递
+        cookieDomainRewrite: '',
+        secure: false,
       },
     },
   },

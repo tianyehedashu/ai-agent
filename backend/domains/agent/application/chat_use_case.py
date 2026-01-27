@@ -5,6 +5,7 @@ Chat Use Case - 对话用例
 """
 
 import asyncio
+import uuid
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,7 @@ from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 from domains.agent.infrastructure.sandbox import SessionManager, SessionRecreationResult
+from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
 from domains.identity.domain.types import Principal
 from exceptions import NotFoundError
@@ -310,6 +312,9 @@ class ChatUseCase:
 
         configured_tool_registry = ConfiguredToolRegistry(config=execution_config)
 
+        # 集成 MCP 工具
+        await self._load_mcp_tools(session_id, configured_tool_registry)
+
         engine = LangGraphAgentEngine(
             config=agent_config,
             llm_gateway=self.llm_gateway,
@@ -526,3 +531,81 @@ class ChatUseCase:
             type="session_recreated",
             data=data,
         )
+
+    async def _load_mcp_tools(
+        self, session_id: str, tool_registry: ConfiguredToolRegistry
+    ) -> None:
+        """
+        加载 Session 配置的 MCP 工具并注册到工具注册表
+
+        Args:
+            session_id: 会话 ID
+            tool_registry: 工具注册表
+        """
+        try:
+            # 获取 Session 实体
+            session = await self.session_use_case.get_session(session_id)
+            if not session:
+                logger.warning("Session %s not found, skipping MCP tools", session_id)
+                return
+
+            # 从 session.config 读取 MCP 配置
+            session_config = session.config if isinstance(session.config, dict) else {}
+            mcp_config = session_config.get("mcp_config", {})
+            enabled_server_ids_raw = mcp_config.get("enabled_servers", [])
+
+            # 转换 UUID（JSONB 存储为字符串）
+            enabled_server_ids = []
+            for sid in enabled_server_ids_raw:
+                try:
+                    if isinstance(sid, str):
+                        enabled_server_ids.append(uuid.UUID(sid))
+                    else:
+                        enabled_server_ids.append(sid)
+                except (ValueError, AttributeError):
+                    logger.warning("Invalid server ID in MCP config: %s", sid)
+
+            if not enabled_server_ids:
+                logger.debug("No MCP servers enabled for session %s", session_id)
+                return
+
+            # 创建 MCP 工具服务
+            mcp_service = MCPToolService(self.db)
+
+            # 加载启用的服务器
+            await mcp_service.load_enabled_servers(enabled_server_ids)
+
+            # 初始化 MCP 管理器
+            mcp_manager = await mcp_service.initialize_mcp_manager()
+            if not mcp_manager:
+                logger.warning("Failed to initialize MCP manager for session %s", session_id)
+                return
+
+            # 获取 MCP 工具
+            mcp_tools = await mcp_service.get_mcp_tools()
+
+            # 注册到工具注册表
+            for tool in mcp_tools:
+                tool_registry.register(tool)
+                logger.info(
+                    "Registered MCP tool: %s for session %s",
+                    tool.name,
+                    session_id[:8],
+                )
+
+            logger.info(
+                "Loaded %d MCP tools for session %s",
+                len(mcp_tools),
+                session_id[:8],
+            )
+
+            # 清理资源
+            await mcp_service.cleanup()
+
+        except Exception as e:
+            logger.error(
+                "Failed to load MCP tools for session %s: %s",
+                session_id,
+                e,
+                exc_info=True,
+            )

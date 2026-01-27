@@ -33,7 +33,7 @@ backend/
 | 语言 | 复用 | 禁止 |
 |------|------|------|
 | Python | `domains.*.domain.types`, `libs.*` | `Any`, `dict` 无类型, `# type: ignore` |
-| TypeScript | `@/types` | `any`, `as any`, `@ts-ignore` |
+| TypeScript | `@/types`, `@/stores` | `any`, `as any`, `@ts-ignore`, 直接操作 `localStorage` |
 
 ## 导入规范
 

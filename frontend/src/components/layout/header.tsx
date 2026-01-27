@@ -1,7 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { Moon, Sun, User } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 
+import { sessionApi } from '@/api/session'
 import { useTheme } from '@/components/theme-provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -13,9 +14,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useUserStore } from '@/stores/user'
-import { sessionApi } from '@/api/session'
 
-const pageTitles: Record<string, string> = {
+const pageTitles: Partial<Record<string, string>> = {
   '/': '对话',
   '/chat': '对话',
   '/agents': 'Agents 管理',
@@ -39,7 +39,7 @@ export default function Header(): React.JSX.Element {
   })
 
   // 优先显示会话标题，否则显示页面标题
-  const title = session?.title || pageTitles[location.pathname] || '对话'
+  const title = session?.title ?? pageTitles[location.pathname] ?? '对话'
 
   const handleLogout = async (): Promise<void> => {
     await logout()
@@ -85,16 +85,18 @@ export default function Header(): React.JSX.Element {
               <div className="flex flex-col space-y-1 leading-none">
                 <p className="font-medium">{displayName}</p>
                 <p className="text-xs text-muted-foreground">{displayEmail}</p>
-                {isAnonymous && (
-                  <p className="text-xs text-muted-foreground italic">匿名用户</p>
-                )}
+                {isAnonymous && <p className="text-xs italic text-muted-foreground">匿名用户</p>}
               </div>
             </div>
             <DropdownMenuSeparator />
             {isAnonymous && (
               <>
-                <DropdownMenuItem onClick={() => { navigate('/login'); }}>
-                  <span className="text-primary font-semibold">登录账号</span>
+                <DropdownMenuItem
+                  onClick={() => {
+                    navigate('/login')
+                  }}
+                >
+                  <span className="font-semibold text-primary">登录账号</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>
@@ -102,10 +104,7 @@ export default function Header(): React.JSX.Element {
             <DropdownMenuItem>个人资料</DropdownMenuItem>
             <DropdownMenuItem>API 密钥</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="text-destructive" 
-              onClick={handleLogout}
-            >
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               退出登录
             </DropdownMenuItem>
           </DropdownMenuContent>

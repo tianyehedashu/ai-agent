@@ -75,6 +75,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 from bootstrap.config import settings  # noqa: E402
+from domains.agent.infrastructure.models.mcp_server import MCPServer  # noqa: E402
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
 from domains.identity.infrastructure.models.user import User  # noqa: E402
 from libs.db.database import Base  # noqa: E402

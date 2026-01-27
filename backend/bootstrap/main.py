@@ -32,6 +32,7 @@ from domains.agent.infrastructure.sandbox import SessionManager
 from domains.agent.presentation.agent_router import router as agent_router
 from domains.agent.presentation.chat_router import router as chat_router
 from domains.agent.presentation.execution_router import router as execution_router
+from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.memory_router import router as memory_router
 from domains.agent.presentation.session_router import router as session_router
 from domains.agent.presentation.system_router import router as system_router
@@ -86,7 +87,13 @@ def _setup_litellm_env() -> None:
 @asynccontextmanager
 async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     """应用生命周期管理"""
-    # 启动时
+    # 启动时 - 输出环境配置以便调试
+    logger.info("=" * 60)
+    logger.info("启动 AI Agent Backend")
+    logger.info("  APP_ENV: %s (is_development=%s)", settings.app_env, settings.is_development)
+    logger.info("  DEBUG: %s", settings.debug)
+    logger.info("=" * 60)
+
     setup_logging(
         log_level=settings.log_level,
         log_format=settings.log_format,
@@ -162,6 +169,18 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     _fastapi_app.state.session_manager = session_manager
     logger.info("SessionManager started")
 
+    # 初始化默认系统级 MCP 服务器
+    try:
+        from domains.agent.application.mcp_init import (
+            init_default_mcp_servers,  # pylint: disable=import-outside-toplevel
+        )
+
+        await init_default_mcp_servers()
+        logger.info("Default MCP servers initialization completed")
+    except Exception as e:
+        # 初始化失败不应阻止应用启动
+        logger.warning("Failed to initialize default MCP servers: %s", e)
+
     yield
 
     # 关闭时
@@ -202,10 +221,17 @@ app = FastAPI(
 )
 
 # CORS 中间件
+# 注意：allow_credentials=True 时不能使用 allow_origins=["*"]
+# 必须明确指定允许的源
+cors_origins = (
+    ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000"]
+    if settings.debug
+    else settings.cors_origins
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.debug else settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=True,  # 允许携带 Cookie
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -240,6 +266,7 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
             key=ANONYMOUS_USER_COOKIE,
             value=anonymous_id,
             max_age=ANONYMOUS_COOKIE_MAX_AGE,
+            path="/",  # 确保 Cookie 对所有路径有效
             httponly=True,  # 防止 XSS 攻击
             samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
             secure=not settings.is_development,  # 生产环境要求 HTTPS
@@ -495,6 +522,9 @@ app.include_router(evaluation_router, prefix=api_router_prefix, tags=["Evaluatio
 
 # 执行配置
 app.include_router(execution_router, prefix=api_router_prefix, tags=["Execution"])
+
+# MCP 管理
+app.include_router(mcp_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Management"])
 
 
 @app.get("/")

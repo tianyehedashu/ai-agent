@@ -14,6 +14,7 @@ import { useChatStore } from '@/stores/chat'
 
 import ChatInput from './components/chat-input'
 import ChatMessages from './components/chat-messages'
+import { MCPSessionConfig } from './components/mcp-session-config'
 
 export default function ChatPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
@@ -77,10 +78,10 @@ export default function ChatPage(): React.JSX.Element {
     // 使用标志位来跟踪这个 effect 是否仍然有效
     // 当 sessionId 变化时，旧的 effect 会被清理，cancelled 会被设置为 true
     let cancelled = false
-    
+
     // 每次 sessionId 变化都先清除消息
     clearMessages()
-    
+
     if (sessionId) {
       // 加载会话信息
       sessionApi
@@ -97,7 +98,7 @@ export default function ChatPage(): React.JSX.Element {
             handleSessionAccessError(error)
           }
         })
-      
+
       // 加载历史消息
       sessionApi
         .getMessages(sessionId)
@@ -118,7 +119,7 @@ export default function ChatPage(): React.JSX.Element {
     } else {
       setCurrentSession(null)
     }
-    
+
     // 清理函数：当 sessionId 变化或组件卸载时调用
     return () => {
       cancelled = true
@@ -145,11 +146,14 @@ export default function ChatPage(): React.JSX.Element {
     <div className="relative flex h-full flex-col">
       {/* Subtle header bar - only shows when in a session */}
       {sessionId && (
-        <div className="absolute right-4 top-3 z-10">
+        <div className="absolute right-4 top-3 z-10 flex gap-2">
+          <MCPSessionConfig sessionId={sessionId} />
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setShowDebugger(true); }}
+            onClick={() => {
+              setShowDebugger(true)
+            }}
             className="h-8 gap-1.5 rounded-full bg-background/80 px-3 text-xs text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
           >
             <History className="h-3.5 w-3.5" />
