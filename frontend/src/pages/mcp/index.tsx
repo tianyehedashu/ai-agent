@@ -11,13 +11,17 @@ import { mcpApi } from '@/api/mcp'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MCPServerConfig } from '@/types/mcp'
 
+import { DetailDrawer } from './components/detail-drawer'
 import { ImportDialog } from './components/import-dialog'
 import { MCPServerCard } from './components/server-card'
 
 export default function MCPPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [selectedServer, setSelectedServer] = useState<MCPServerConfig | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const {
     data: serversData,
@@ -103,13 +107,23 @@ export default function MCPPage(): React.JSX.Element {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredServers.map((server) => (
-            <MCPServerCard key={server.id} server={server} />
+            <MCPServerCard
+              key={server.id}
+              server={server}
+              onClick={(s) => {
+                setSelectedServer(s)
+                setDrawerOpen(true)
+              }}
+            />
           ))}
         </div>
       )}
 
       {/* 导入对话框 */}
       <ImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
+
+      {/* 详情抽屉 */}
+      <DetailDrawer server={selectedServer} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </div>
   )
 }
