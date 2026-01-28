@@ -28,6 +28,24 @@ interface DetailDrawerProps {
   onOpenChange: (open: boolean) => void
 }
 
+/**
+ * Token 占用颜色规则:
+ * - 绿色 (< 500 tokens): 低占用
+ * - 黄色 (500-1500 tokens): 中等占用
+ * - 红色 (> 1500 tokens): 高占用
+ */
+function getTokenColor(count: number): string {
+  if (count < 500) return 'text-green-600 dark:text-green-400'
+  if (count < 1500) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-red-600 dark:text-red-400'
+}
+
+function getTokenBadgeVariant(count: number): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (count < 500) return 'default'
+  if (count < 1500) return 'secondary'
+  return 'destructive'
+}
+
 export function DetailDrawer({
   server,
   open,
@@ -114,7 +132,9 @@ export function DetailDrawer({
             {totalTokens > 0 && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">上下文占用</span>
-                <span className="text-sm">{totalTokens} tokens</span>
+                <Badge variant={getTokenBadgeVariant(totalTokens)} className="text-xs">
+                  {totalTokens} tokens
+                </Badge>
               </div>
             )}
           </div>
@@ -168,7 +188,7 @@ export function DetailDrawer({
                       <p className="truncate text-xs text-muted-foreground">
                         {tool.description ?? '无描述'}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className={`text-xs ${getTokenColor(tool.token_count)}`}>
                         上下文: {tool.token_count} tokens
                       </p>
                     </div>
