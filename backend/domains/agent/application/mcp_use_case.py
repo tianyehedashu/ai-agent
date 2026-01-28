@@ -24,6 +24,8 @@ from domains.agent.presentation.schemas.mcp_schemas import (
     MCPServerResponse,
     MCPServersListResponse,
     MCPServerUpdateRequest,
+    MCPToolsListResponse,
+    MCPToolInfo,
 )
 from domains.identity.presentation.schemas import CurrentUser
 from exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
@@ -38,6 +40,30 @@ class MCPManagementUseCase:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.repository = MCPServerRepository(db)
+
+    def _calculate_token_count(self, tool_config: Any) -> int:
+        """计算工具定义的 Token 占用"""
+        import json
+
+        try:
+            import tiktoken
+            # 使用 GPT-4 的 tokenizer
+            encoding = tiktoken.encoding_for_model("gpt-4")
+
+            # 构建工具定义字符串
+            tool_def = {
+                "name": tool_config.get("name", ""),
+                "description": tool_config.get("description", ""),
+                "inputSchema": tool_config.get("inputSchema", {}),
+            }
+            tool_str = json.dumps(tool_def, ensure_ascii=False)
+
+            # 计算 token 数量
+            return len(encoding.encode(tool_str))
+        except Exception:
+            # 如果计算失败，使用估算: 1 token ≈ 4 字符
+            tool_str = json.dumps(tool_config, ensure_ascii=False)
+            return len(tool_str) // 4
 
     def _get_mock_tools_for_server(self, server: "MCPServer") -> tuple[bool, list[dict[str, str]]]:
         """
@@ -379,3 +405,97 @@ class MCPManagementUseCase:
             "tools_count": len(mock_tools),
             "tools_sample": tools_sample,
         }
+
+    async def list_server_tools(
+        self, server_id: uuid.UUID, current_user: CurrentUser
+    ) -> MCPToolsListResponse:
+        """获取服务器的工具列表"""
+        server = await self.repository.get_by_id(server_id)
+        if not server:
+            raise NotFoundError("MCP Server", str(server_id))
+
+        # 从 available_tools 中提取工具信息
+        tools_data = server.available_tools or {}
+        tools = []
+
+        # 处理工具数据结构
+        if isinstance(tools_data, dict) and "tools" in tools_data:
+            tool_list = tools_data["tools"]
+        else:
+            tool_list = []
+
+        for tool in tool_list:
+            if isinstance(tool, dict):
+                tool_info = MCPToolInfo(
+                    name=tool.get("name", ""),
+                    description=tool.get("description"),
+                    input_schema=tool.get("inputSchema", {}),
+                    enabled=tool.get("enabled", True),
+                    token_count=self._calculate_token_count(tool),
+                )
+                tools.append(tool_info)
+
+        total_tokens = sum(t.token_count for t in tools)
+        enabled_count = sum(1 for t in tools if t.enabled)
+
+        return MCPToolsListResponse(
+            server_id=server.id,
+            server_name=server.name,
+            tools=tools,
+            total_tokens=total_tokens,
+            enabled_count=enabled_count,
+        )
+
+    async def toggle_tool_enabled(
+        self, server_id: uuid.UUID, tool_name: str, enabled: bool, current_user: CurrentUser
+    ) -> MCPToolInfo:
+        """切换工具启用状态"""
+        server = await self.repository.get_by_id(server_id)
+        if not server:
+            raise NotFoundError("MCP Server", str(server_id))
+
+        # 权限检查
+        if server.scope == "system" and not current_user.is_admin:
+            raise PermissionDeniedError(
+                "Cannot modify system server tools",
+                code="CANNOT_MODIFY_SYSTEM_SERVER",
+            )
+
+        if server.scope == "user":
+            if server.user_id is None:
+                raise ValidationError(
+                    "User server must have an owner",
+                    code="INVALID_SERVER",
+                )
+            if str(server.user_id) != current_user.id:
+                if not current_user.is_admin:
+                    raise PermissionDeniedError(
+                        "You don't have permission to modify this server",
+                        code="PERMISSION_DENIED",
+                    )
+
+        # 更新工具启用状态
+        tools_data = dict(server.available_tools or {})
+        if "tools" in tools_data:
+            tool_list = tools_data["tools"]
+            for tool in tool_list:
+                if isinstance(tool, dict) and tool.get("name") == tool_name:
+                    tool["enabled"] = enabled
+                    break
+
+        server.available_tools = tools_data
+        await self.db.commit()
+
+        # 返回更新后的工具信息
+        tool_config = next(
+            (t for t in tools_data.get("tools", []) if isinstance(t, dict) and t.get("name") == tool_name),
+            {},
+        )
+
+        return MCPToolInfo(
+            name=tool_name,
+            description=tool_config.get("description"),
+            input_schema=tool_config.get("inputSchema", {}),
+            enabled=enabled,
+            token_count=self._calculate_token_count(tool_config),
+        )
