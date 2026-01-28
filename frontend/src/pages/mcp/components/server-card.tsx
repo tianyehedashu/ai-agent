@@ -19,30 +19,27 @@ import type { MCPServerConfig } from '@/types/mcp'
 
 interface MCPServerCardProps {
   server: MCPServerConfig
+  onClick?: (server: MCPServerConfig) => void
 }
 
-export function MCPServerCard({ server }: MCPServerCardProps): React.JSX.Element {
+const STATUS_COLOR_MAP: Record<string, string> = {
+  gray: 'bg-gray-500',
+  green: 'bg-green-500',
+  red: 'bg-red-500',
+  yellow: 'bg-yellow-500',
+}
+
+export function MCPServerCard({ server, onClick }: MCPServerCardProps): React.JSX.Element {
   const displayName = server.display_name ?? server.name
 
-  const getStatusColor = (): string => {
-    switch (server.status_color) {
-      case 'green':
-        return 'bg-green-500'
-      case 'red':
-        return 'bg-red-500'
-      case 'yellow':
-        return 'bg-yellow-500'
-      default:
-        return 'bg-gray-500'
-    }
-  }
-
-  const getStatusText = (): string => {
-    return server.status_text ?? '未知'
-  }
+  const statusColor = STATUS_COLOR_MAP[server.status_color ?? 'gray']
+  const statusText = server.status_text ?? '未知'
 
   return (
-    <Card className="group relative overflow-hidden transition-all hover:shadow-md">
+    <Card
+      className="group relative cursor-pointer overflow-hidden transition-all hover:shadow-md"
+      onClick={() => onClick?.(server)}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -89,8 +86,8 @@ export function MCPServerCard({ server }: MCPServerCardProps): React.JSX.Element
         {/* 状态指示 */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${getStatusColor()}`} />
-            <span className="text-sm text-muted-foreground">{getStatusText()}</span>
+            <div className={`h-2 w-2 rounded-full ${statusColor}`} />
+            <span className="text-sm text-muted-foreground">{statusText}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">启用</span>

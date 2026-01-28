@@ -2,12 +2,13 @@
  * MCP 工具管理页面
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, Server } from 'lucide-react'
+import { AlertCircle, Plus, Search, Server } from 'lucide-react'
 
 import { mcpApi } from '@/api/mcp'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -18,19 +19,28 @@ export default function MCPPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
 
-  const { data: serversData, isLoading } = useQuery({
+  const {
+    data: serversData,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['mcp-servers'],
     queryFn: () => mcpApi.listServers(),
   })
 
-  const allServers = [...(serversData?.system_servers ?? []), ...(serversData?.user_servers ?? [])]
+  const allServers = useMemo(
+    () => [...(serversData?.system_servers ?? []), ...(serversData?.user_servers ?? [])],
+    [serversData]
+  )
 
-  const filteredServers = allServers.filter((server) => {
-    const query = searchQuery.toLowerCase()
-    const name = (server.display_name ?? server.name).toLowerCase()
-    const url = server.url.toLowerCase()
-    return name.includes(query) || url.includes(query)
-  })
+  const filteredServers = useMemo(() => {
+    return allServers.filter((server) => {
+      const query = searchQuery.toLowerCase()
+      const name = (server.display_name ?? server.name).toLowerCase()
+      const url = server.url.toLowerCase()
+      return name.includes(query) || url.includes(query)
+    })
+  }, [allServers, searchQuery])
 
   return (
     <div className="container mx-auto p-6">
@@ -66,6 +76,14 @@ export default function MCPPage(): React.JSX.Element {
           />
         </div>
       </div>
+
+      {/* 错误提示 */}
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>加载服务器列表失败，请稍后重试</AlertDescription>
+        </Alert>
+      )}
 
       {/* 服务器列表 */}
       {isLoading ? (
