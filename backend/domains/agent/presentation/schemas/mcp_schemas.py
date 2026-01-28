@@ -161,3 +161,29 @@ class MCPTestResult(BaseModel):
     error_details: str | None = None
     tools_count: int = 0  # 可用工具数量
     tools_sample: list[str] = Field(default_factory=list)  # 部分工具名称示例
+
+
+class MCPToolInfo(BaseModel):
+    """MCP 工具信息"""
+
+    name: str
+    description: str | None = None
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    token_count: int = 0
+
+
+class MCPToolsListResponse(BaseModel):
+    """MCP 工具列表响应"""
+
+    server_id: uuid.UUID
+    server_name: str
+    tools: list[MCPToolInfo]
+    total_tokens: int = 0
+    enabled_count: int = 0
+
+
+class MCPToolToggleRequest(BaseModel):
+    """工具启用/禁用请求"""
+
+    enabled: bool = Field(..., description="是否启用该工具")
