@@ -19,19 +19,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 import type { MCPServerConfig } from '@/types/mcp'
 
 interface DetailDrawerProps {
   server: MCPServerConfig | null
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-interface ToolInfo {
-  name: string
-  description?: string
-  enabled: boolean
-  token_count?: number
 }
 
 export function DetailDrawer({
@@ -42,35 +36,44 @@ export function DetailDrawer({
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
 
-  // 暂时从 server.available_tools 提取工具列表
-  // 后续会使用专门的 API
+  // 使用新 API 获取工具列表
   const { data: toolsData, isLoading: toolsLoading } = useQuery({
     queryKey: ['mcp-server-tools', server?.id],
-    queryFn: () => {
-      if (!server) return []
-      const availableTools = server.available_tools ?? {}
-      const tools = Object.keys(availableTools).map((key) => ({
-        name: key,
-        description: typeof availableTools[key] === 'string' ? availableTools[key] : '',
-        enabled: true,
-        token_count: 0,
-      }))
-      return tools as ToolInfo[]
-    },
+    queryFn: () =>
+      server ? mcpApi.getServerTools(server.id) : Promise.reject(new Error('No server')),
     enabled: open && server !== null,
   })
 
-  const tools = toolsData ?? []
+  const tools = toolsData?.tools ?? []
+  const enabledCount = toolsData?.enabled_count ?? 0
+  const totalTokens = toolsData?.total_tokens ?? 0
+
   const filteredTools = tools.filter((tool) =>
     tool.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // 使用新 API 切换工具启用状态
+  const toggleToolMutation = useMutation({
+    mutationFn: ({ toolName, enabled }: { toolName: string; enabled: boolean }) =>
+      server
+        ? mcpApi.toggleToolEnabled(server.id, toolName, enabled)
+        : Promise.reject(new Error('No server')),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-server-tools', server?.id] }).catch(() => {})
+    },
+    onError: (error: Error) => {
+      toast.error(`操作失败: ${error.message}`)
+    },
+  })
+
   // 测试连接
   const testMutation = useMutation({
-    mutationFn: (serverId: string) => mcpApi.testConnection(serverId),
+    mutationFn: () =>
+      server ? mcpApi.testConnection(server.id) : Promise.reject(new Error('No server')),
     onSuccess: (result) => {
       toast.success(result.message)
       queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }).catch(() => {})
+      queryClient.invalidateQueries({ queryKey: ['mcp-server-tools', server?.id] }).catch(() => {})
     },
     onError: (error: Error) => {
       toast.error(`测试失败: ${error.message}`)
@@ -79,8 +82,7 @@ export function DetailDrawer({
 
   if (!server) return null
 
-  const toolCount = Object.keys(server.available_tools ?? {}).length
-  const enabledCount = filteredTools.filter((t) => t.enabled).length
+  const toolCount = tools.length
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -109,6 +111,12 @@ export function DetailDrawer({
                 {enabledCount} / {toolCount}
               </span>
             </div>
+            {totalTokens > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">上下文占用</span>
+                <span className="text-sm">{totalTokens} tokens</span>
+              </div>
+            )}
           </div>
 
           {/* 操作按钮 */}
@@ -117,7 +125,7 @@ export function DetailDrawer({
               variant="outline"
               size="sm"
               onClick={() => {
-                testMutation.mutate(server.id)
+                testMutation.mutate()
               }}
               disabled={testMutation.isPending}
             >
@@ -153,14 +161,24 @@ export function DetailDrawer({
                 filteredTools.map((tool) => (
                   <div
                     key={tool.name}
-                    className="flex items-center justify-between rounded-lg border p-3"
+                    className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{tool.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {tool.description ?? '无描述'}
                       </p>
+                      <p className="text-xs text-muted-foreground">
+                        上下文: {tool.token_count} tokens
+                      </p>
                     </div>
+                    <Switch
+                      checked={tool.enabled}
+                      onCheckedChange={(checked) => {
+                        toggleToolMutation.mutate({ toolName: tool.name, enabled: checked })
+                      }}
+                      disabled={toggleToolMutation.isPending}
+                    />
                   </div>
                 ))
               )}
