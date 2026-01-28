@@ -55,10 +55,12 @@ export default function ChatInput({
         <Textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => { onChange(e.target.value); }}
+          onChange={(e) => {
+            onChange(e.target.value)
+          }}
           onKeyDown={handleKeyDown}
           placeholder="给 AI Agent 发送消息..."
-          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
+          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
           disabled={isLoading}
         />
@@ -69,7 +71,7 @@ export default function ChatInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
               title="上传文件"
             >
               <Paperclip className="h-4 w-4" />
@@ -77,7 +79,7 @@ export default function ChatInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
               title="联网搜索"
             >
               <Globe className="h-4 w-4" />
@@ -100,7 +102,11 @@ export default function ChatInput({
                   : 'bg-muted text-muted-foreground/50'
               )}
             >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>

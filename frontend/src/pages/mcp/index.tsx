@@ -4,8 +4,9 @@
 
 import { useMemo, useState } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Plus, Search, Server } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -23,6 +24,8 @@ export default function MCPPage(): React.JSX.Element {
   const [selectedServer, setSelectedServer] = useState<MCPServerConfig | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  const queryClient = useQueryClient()
+
   const {
     data: serversData,
     isLoading,
@@ -30,6 +33,32 @@ export default function MCPPage(): React.JSX.Element {
   } = useQuery({
     queryKey: ['mcp-servers'],
     queryFn: () => mcpApi.listServers(),
+  })
+
+  // 切换服务器启用状态
+  const toggleServerMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      mcpApi.toggleServer(id, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }).catch(() => {})
+      toast.success('服务器状态已更新')
+    },
+    onError: (error: Error) => {
+      toast.error(`操作失败: ${error.message}`)
+    },
+  })
+
+  // 删除服务器
+  const deleteServerMutation = useMutation({
+    mutationFn: (id: string) => mcpApi.deleteServer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }).catch(() => {})
+      toast.success('服务器已删除')
+      setDrawerOpen(false)
+    },
+    onError: (error: Error) => {
+      toast.error(`删除失败: ${error.message}`)
+    },
   })
 
   const allServers = useMemo(
@@ -114,6 +143,9 @@ export default function MCPPage(): React.JSX.Element {
                 setSelectedServer(s)
                 setDrawerOpen(true)
               }}
+              onToggle={(s, enabled) => {
+                toggleServerMutation.mutate({ id: s.id, enabled })
+              }}
             />
           ))}
         </div>
@@ -123,7 +155,20 @@ export default function MCPPage(): React.JSX.Element {
       <ImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
 
       {/* 详情抽屉 */}
-      <DetailDrawer server={selectedServer} open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <DetailDrawer
+        server={selectedServer}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        onEdit={() => {
+          // TODO: 打开编辑对话框
+          toast.info('编辑功能即将推出')
+        }}
+        onDelete={(server) => {
+          if (confirm(`确定要删除服务器 "${server.display_name ?? server.name}" 吗？`)) {
+            deleteServerMutation.mutate(server.id)
+          }
+        }}
+      />
     </div>
   )
 }

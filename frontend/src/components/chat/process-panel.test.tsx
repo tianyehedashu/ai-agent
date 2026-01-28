@@ -7,9 +7,24 @@ test('shows summary badges when collapsed', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'thinking', timestamp: '2025-01-01T00:00:00Z', payload: { status: 'processing' } },
-        { id: 'e2', kind: 'tool_call', timestamp: '2025-01-01T00:00:01Z', payload: { tool_name: 'read_file' } },
-        { id: 'e3', kind: 'tool_result', timestamp: '2025-01-01T00:00:02Z', payload: { success: false, error: 'boom' } },
+        {
+          id: 'e1',
+          kind: 'thinking',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { status: 'processing' },
+        },
+        {
+          id: 'e2',
+          kind: 'tool_call',
+          timestamp: '2025-01-01T00:00:01Z',
+          payload: { tool_name: 'read_file' },
+        },
+        {
+          id: 'e3',
+          kind: 'tool_result',
+          timestamp: '2025-01-01T00:00:02Z',
+          payload: { success: false, error: 'boom' },
+        },
         { id: 'e4', kind: 'done', timestamp: '2025-01-01T00:00:03Z', payload: {} },
       ]}
     />
@@ -26,7 +41,12 @@ test('shows event details when expanded', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'tool_call', timestamp: '2025-01-01T00:00:00Z', payload: { tool_name: 'search', arguments: { query: 'test' } } },
+        {
+          id: 'e1',
+          kind: 'tool_call',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { tool_name: 'search', arguments: { query: 'test' } },
+        },
         { id: 'e2', kind: 'done', timestamp: '2025-01-01T00:00:01Z', payload: {} },
       ]}
       defaultExpanded
@@ -45,7 +65,12 @@ test('shows tool result success and failure when expanded', () => {
           id: 'e1',
           kind: 'tool_result',
           timestamp: '2025-01-01T00:00:00Z',
-          payload: { tool_call_id: 'tc1', success: true, output: 'File content here', duration_ms: 100 },
+          payload: {
+            tool_call_id: 'tc1',
+            success: true,
+            output: 'File content here',
+            duration_ms: 100,
+          },
         },
         {
           id: 'e2',
@@ -88,7 +113,12 @@ test('shows loading state when not completed', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'thinking', timestamp: '2025-01-01T00:00:00Z', payload: { status: 'processing' } },
+        {
+          id: 'e1',
+          kind: 'thinking',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { status: 'processing' },
+        },
       ]}
     />
   )
@@ -101,9 +131,24 @@ test('aggregates consecutive thinking events', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'thinking', timestamp: '2025-01-01T00:00:00Z', payload: { status: 'processing' } },
-        { id: 'e2', kind: 'thinking', timestamp: '2025-01-01T00:00:01Z', payload: { status: 'analyzing' } },
-        { id: 'e3', kind: 'thinking', timestamp: '2025-01-01T00:00:02Z', payload: { status: 'reasoning', content: 'Thinking...' } },
+        {
+          id: 'e1',
+          kind: 'thinking',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { status: 'processing' },
+        },
+        {
+          id: 'e2',
+          kind: 'thinking',
+          timestamp: '2025-01-01T00:00:01Z',
+          payload: { status: 'analyzing' },
+        },
+        {
+          id: 'e3',
+          kind: 'thinking',
+          timestamp: '2025-01-01T00:00:02Z',
+          payload: { status: 'reasoning', content: 'Thinking...' },
+        },
         { id: 'e4', kind: 'done', timestamp: '2025-01-01T00:00:03Z', payload: {} },
       ]}
       defaultExpanded
@@ -120,7 +165,12 @@ test('expands on click', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'tool_call', timestamp: '2025-01-01T00:00:00Z', payload: { tool_name: 'test_tool' } },
+        {
+          id: 'e1',
+          kind: 'tool_call',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { tool_name: 'test_tool' },
+        },
         { id: 'e2', kind: 'done', timestamp: '2025-01-01T00:00:01Z', payload: {} },
       ]}
     />
@@ -140,8 +190,18 @@ test('merges consecutive text events', () => {
   render(
     <ProcessPanel
       events={[
-        { id: 'e1', kind: 'text', timestamp: '2025-01-01T00:00:00Z', payload: { content: 'Hello ' } },
-        { id: 'e2', kind: 'text', timestamp: '2025-01-01T00:00:00Z', payload: { content: 'world!' } },
+        {
+          id: 'e1',
+          kind: 'text',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { content: 'Hello ' },
+        },
+        {
+          id: 'e2',
+          kind: 'text',
+          timestamp: '2025-01-01T00:00:00Z',
+          payload: { content: 'world!' },
+        },
         { id: 'e3', kind: 'done', timestamp: '2025-01-01T00:00:01Z', payload: {} },
       ]}
       defaultExpanded

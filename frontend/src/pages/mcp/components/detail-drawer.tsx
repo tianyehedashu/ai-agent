@@ -5,7 +5,7 @@
 import { useState } from 'react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { Edit, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
@@ -26,6 +26,8 @@ interface DetailDrawerProps {
   server: MCPServerConfig | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onEdit?: (server: MCPServerConfig) => void
+  onDelete?: (server: MCPServerConfig) => void
 }
 
 /**
@@ -50,7 +52,9 @@ export function DetailDrawer({
   server,
   open,
   onOpenChange,
-}: DetailDrawerProps): React.ReactElement {
+  onEdit,
+  onDelete,
+}: DetailDrawerProps): React.ReactElement | null {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -154,6 +158,31 @@ export function DetailDrawer({
               />
               测试连接
             </Button>
+            {onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onEdit(server)
+                }}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                编辑
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onDelete(server)
+                }}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                删除
+              </Button>
+            )}
           </div>
 
           {/* 工具列表 */}

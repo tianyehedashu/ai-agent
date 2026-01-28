@@ -20,8 +20,18 @@ test('renders process panel with events (collapsed by default)', () => {
       pendingToolCalls={[]}
       processRuns={{
         r1: [
-          { id: 'e1', kind: 'thinking', timestamp: '2025-01-01T00:00:00Z', payload: { status: 'start' } },
-          { id: 'e2', kind: 'tool_call', timestamp: '2025-01-01T00:00:01Z', payload: { tool_name: 'read_file' } },
+          {
+            id: 'e1',
+            kind: 'thinking',
+            timestamp: '2025-01-01T00:00:00Z',
+            payload: { status: 'start' },
+          },
+          {
+            id: 'e2',
+            kind: 'tool_call',
+            timestamp: '2025-01-01T00:00:01Z',
+            payload: { tool_name: 'read_file' },
+          },
           { id: 'e3', kind: 'done', timestamp: '2025-01-01T00:00:02Z', payload: {} },
         ],
       }}

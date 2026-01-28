@@ -20,6 +20,7 @@ import type { MCPServerConfig } from '@/types/mcp'
 interface MCPServerCardProps {
   server: MCPServerConfig
   onClick?: (server: MCPServerConfig) => void
+  onToggle?: (server: MCPServerConfig, enabled: boolean) => void
 }
 
 const STATUS_COLOR_MAP: Record<string, string> = {
@@ -29,7 +30,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   yellow: 'bg-yellow-500',
 }
 
-export function MCPServerCard({ server, onClick }: MCPServerCardProps): React.JSX.Element {
+export function MCPServerCard({
+  server,
+  onClick,
+  onToggle,
+}: MCPServerCardProps): React.JSX.Element {
   const displayName = server.display_name ?? server.name
 
   const statusColor = STATUS_COLOR_MAP[server.status_color ?? 'gray']
@@ -91,7 +96,13 @@ export function MCPServerCard({ server, onClick }: MCPServerCardProps): React.JS
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">启用</span>
-            <Switch checked={server.enabled} disabled />
+            <Switch
+              checked={server.enabled}
+              onCheckedChange={(checked) => onToggle?.(server, checked)}
+              onClick={(e) => {
+                e.stopPropagation()
+              }}
+            />
           </div>
         </div>
 

@@ -85,7 +85,7 @@ export const userApi = {
     } finally {
       // 清除所有本地存储的认证信息（token 和 anonymousUserId）
       apiClient.clearAuth()
-      
+
       // 尝试清除 anonymous_user_id cookie（作为备用方案）
       // 注意：如果 cookie 是 httpOnly，前端无法直接删除，主要依赖后端清除
       document.cookie = 'anonymous_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'

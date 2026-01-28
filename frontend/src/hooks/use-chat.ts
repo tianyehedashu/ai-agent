@@ -270,7 +270,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           currentRunIdRef.current = null
           setCurrentRunId(null)
           setIsLoading(false)
-          
+
           // 对话完成后刷新会话列表，以便显示可能已生成的标题
           // 标题生成是异步的，可能在对话完成后才完成
           if (sessionIdRef.current) {
