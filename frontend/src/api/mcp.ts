@@ -10,6 +10,8 @@ import type {
   MCPTemplate,
   MCPTestResult,
   SessionMCPConfig,
+  MCPToolInfo,
+  MCPToolsListResponse,
 } from '@/types/mcp'
 
 import { apiClient } from './client'
@@ -83,5 +85,26 @@ export const mcpApi = {
     config: SessionMCPConfig
   ): Promise<SessionMCPConfig> {
     return apiClient.put<SessionMCPConfig>(`/api/v1/sessions/${sessionId}/mcp-config`, config)
+  },
+
+  /**
+   * 获取服务器的工具列表
+   */
+  async getServerTools(id: string): Promise<MCPToolsListResponse> {
+    return apiClient.get<MCPToolsListResponse>(`/api/v1/mcp/servers/${id}/tools`)
+  },
+
+  /**
+   * 切换工具启用状态
+   */
+  async toggleToolEnabled(
+    serverId: string,
+    toolName: string,
+    enabled: boolean
+  ): Promise<MCPToolInfo> {
+    return apiClient.put<MCPToolInfo>(
+      `/api/v1/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}/enabled`,
+      { enabled }
+    )
   },
 }

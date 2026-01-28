@@ -101,3 +101,21 @@ export interface MCPTestResult {
 export interface SessionMCPConfig {
   enabled_servers: string[]
 }
+
+/** MCP 工具信息 */
+export interface MCPToolInfo {
+  name: string
+  description?: string
+  inputSchema?: Record<string, unknown>
+  enabled: boolean
+  token_count: number
+}
+
+/** MCP 工具列表响应 */
+export interface MCPToolsListResponse {
+  server_id: string
+  server_name: string
+  tools: MCPToolInfo[]
+  total_tokens: number
+  enabled_count: number
+}
