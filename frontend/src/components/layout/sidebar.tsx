@@ -14,17 +14,14 @@ import {
   MoreVertical,
   Loader2,
   Pencil,
+  Zap,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { EditTitleDialog } from '@/components/chat/edit-title-dialog'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,12 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { useSidebarStore } from '@/stores/sidebar'
@@ -46,6 +38,7 @@ import type { Session } from '@/types'
 
 const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
+  { name: 'MCP 工具', href: '/mcp', icon: Zap },
   { name: '工作台', href: '/studio', icon: Workflow },
   { name: '设置', href: '/settings', icon: Settings },
 ]
@@ -99,8 +92,7 @@ export default function Sidebar(): React.JSX.Element {
 
   // Create session mutation
   const createMutation = useMutation({
-    mutationFn: (options?: { agentId?: string; title?: string }) =>
-      sessionApi.create(options),
+    mutationFn: (options?: { agentId?: string; title?: string }) => sessionApi.create(options),
     onSuccess: (newSession) => {
       void queryClient.invalidateQueries({ queryKey: ['sessions'] })
       navigate(`/chat/${newSession.id}`)
@@ -130,14 +122,14 @@ export default function Sidebar(): React.JSX.Element {
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
-          'relative flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300',
+          'relative flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur transition-all duration-300 supports-[backdrop-filter]:bg-background/60',
           isCollapsed ? 'w-16' : 'w-72'
         )}
       >
         {/* Logo */}
         <div className="flex h-14 items-center border-b border-border/40 px-4">
           {!isCollapsed && (
-            <Link to="/" className="flex items-center gap-2 group">
+            <Link to="/" className="group flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm transition-colors group-hover:bg-primary/20">
                 <Bot className="h-5 w-5 text-primary" />
               </div>
@@ -158,7 +150,7 @@ export default function Sidebar(): React.JSX.Element {
               <Button
                 variant="default"
                 className={cn(
-                  'w-full shadow-sm transition-all hover:shadow-md bg-primary text-primary-foreground hover:bg-primary/90',
+                  'w-full bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md',
                   isCollapsed ? 'px-0' : 'justify-start gap-2'
                 )}
                 onClick={handleCreateSession}
@@ -359,8 +351,12 @@ function SessionItem({
           ? 'bg-secondary text-foreground'
           : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
       )}
-      onMouseEnter={() => { setIsHovered(true); }}
-      onMouseLeave={() => { setIsHovered(false); }}
+      onMouseEnter={() => {
+        setIsHovered(true)
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false)
+      }}
     >
       <span className="flex-1 truncate text-[13px]">{session.title ?? '新对话'}</span>
       {(isHovered || isActive) && (

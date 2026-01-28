@@ -19,6 +19,7 @@ const pageTitles: Partial<Record<string, string>> = {
   '/': '对话',
   '/chat': '对话',
   '/agents': 'Agents 管理',
+  '/mcp': 'MCP 工具中心',
   '/studio': '工作台',
   '/settings': '设置',
 }

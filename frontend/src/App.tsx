@@ -8,6 +8,7 @@ import AgentsPage from '@/pages/agents'
 import LoginPage from '@/pages/auth/login'
 import RegisterPage from '@/pages/auth/register'
 import ChatPage from '@/pages/chat'
+import MCPPage from '@/pages/mcp'
 import NotFoundPage from '@/pages/not-found'
 import SettingsPage from '@/pages/settings'
 import StudioPage from '@/pages/studio'
@@ -17,26 +18,27 @@ function App(): React.JSX.Element {
     <ThemeProvider defaultTheme="dark" storageKey="ai-agent-theme">
       <AuthProvider>
         <Routes>
-        {/* Auth Routes - No Layout */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+          {/* Auth Routes - No Layout */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-        {/* Protected Routes - With Layout */}
-        <Route
-          path="/*"
-          element={
-            <Layout>
-              <Routes>
-                <Route path="/" element={<ChatPage />} />
-                <Route path="/chat/:sessionId?" element={<ChatPage />} />
-                <Route path="/agents" element={<AgentsPage />} />
-                <Route path="/studio" element={<StudioPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Layout>
-          }
-        />
+          {/* Protected Routes - With Layout */}
+          <Route
+            path="/*"
+            element={
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<ChatPage />} />
+                  <Route path="/chat/:sessionId?" element={<ChatPage />} />
+                  <Route path="/agents" element={<AgentsPage />} />
+                  <Route path="/mcp" element={<MCPPage />} />
+                  <Route path="/studio" element={<StudioPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Layout>
+            }
+          />
         </Routes>
         <Toaster />
       </AuthProvider>
