@@ -16,6 +16,9 @@ from domains.agent.presentation.schemas.mcp_schemas import (
     MCPServerUpdateRequest,
     MCPTemplateResponse,
     MCPTestResult,
+    MCPToolInfo,
+    MCPToolsListResponse,
+    MCPToolToggleRequest,
 )
 from domains.identity.presentation.deps import AuthUser, RequiredAuthUser
 from libs.api.deps import get_mcp_service
@@ -134,3 +137,31 @@ async def test_connection(
     """测试 MCP 服务器的连接状态"""
     result = await use_case.test_connection(server_id, current_user)
     return MCPTestResult(**result)
+
+
+@router.get(
+    "/servers/{server_id}/tools",
+    summary="获取 MCP 服务器的工具列表",
+)
+async def list_server_tools(
+    server_id: uuid.UUID,
+    current_user: AuthUser,
+    use_case: MCPManagementUseCase = Depends(get_mcp_service),
+) -> MCPToolsListResponse:
+    """获取 MCP 服务器的工具列表及 Token 占用"""
+    return await use_case.list_server_tools(server_id, current_user)
+
+
+@router.put(
+    "/servers/{server_id}/tools/{tool_name}/enabled",
+    summary="切换工具启用状态",
+)
+async def toggle_tool_enabled(
+    server_id: uuid.UUID,
+    tool_name: str,
+    request: MCPToolToggleRequest,
+    current_user: RequiredAuthUser,
+    use_case: MCPManagementUseCase = Depends(get_mcp_service),
+) -> MCPToolInfo:
+    """启用或禁用特定工具"""
+    return await use_case.toggle_tool_enabled(server_id, tool_name, request.enabled, current_user)
