@@ -70,6 +70,8 @@ dependencies = [
     "fastembed>=0.4.0",
     # MCP - Model Context Protocol（LLM Server 等 Streamable HTTP 端点）
     "mcp>=1.0.0",
+    # LangChain MCP Adapters - 将 MCP 工具适配为 LangChain 工具
+    "langchain-mcp-adapters>=0.2.1",
 ]
 
 [project.optional-dependencies]

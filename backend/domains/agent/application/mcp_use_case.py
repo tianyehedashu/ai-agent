@@ -16,10 +16,10 @@ from domains.agent.domain.config.mcp_config import (
     MCPTemplate,
 )
 from domains.agent.domain.config.templates import BUILTIN_TEMPLATES
-from domains.agent.infrastructure.models.mcp_server import MCPServer
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
     MCPServerRepository,
 )
+from domains.agent.infrastructure.tools.mcp.client import test_mcp_connection
 from domains.agent.presentation.schemas.mcp_schemas import (
     MCPServerCreateRequest,
     MCPServerResponse,
@@ -66,59 +66,6 @@ class MCPManagementUseCase:
             # 如果计算失败，使用估算: 1 token ≈ 4 字符
             tool_str = json.dumps(tool_config, ensure_ascii=False)
             return len(tool_str) // 4
-
-    def _get_mock_tools_for_server(self, server: MCPServer) -> tuple[bool, list[dict[str, str]]]:
-        """
-        获取服务器的模拟工具列表（用于测试连接）
-
-        Args:
-            server: MCP 服务器实例
-
-        Returns:
-            (连接成功, 工具列表) 元组
-        """
-        mock_tools_map = {
-            "filesystem": [
-                {"name": "read_file", "description": "读取文件内容"},
-                {"name": "write_file", "description": "写入文件内容"},
-                {"name": "list_directory", "description": "列出目录内容"},
-                {"name": "delete_file", "description": "删除文件"},
-            ],
-            "github": [
-                {"name": "create_issue", "description": "创建 GitHub Issue"},
-                {"name": "search_repositories", "description": "搜索仓库"},
-                {"name": "get_file_contents", "description": "获取文件内容"},
-            ],
-            "brave-search": [
-                {"name": "brave_web_search", "description": "Brave 网页搜索"},
-            ],
-            "postgres": [
-                {"name": "query_database", "description": "执行数据库查询"},
-                {"name": "list_tables", "description": "列出数据库表"},
-            ],
-            "slack": [
-                {"name": "send_message", "description": "发送消息到 Slack"},
-                {"name": "list_channels", "description": "列出频道"},
-            ],
-        }
-
-        # 需要额外验证配置的服务器
-        servers_requiring_config = {
-            "github": "github_token",
-            "postgres": "connectionString",
-            "slack": "slack_bot_token",
-        }
-
-        if server.name in mock_tools_map:
-            # 检查是否需要额外配置
-            if server.name in servers_requiring_config:
-                config_key = servers_requiring_config[server.name]
-                if not server.env_config.get(config_key):
-                    return False, []
-            return True, mock_tools_map[server.name]
-
-        # 未知服务器，返回通用工具
-        return True, [{"name": "unknown_tool", "description": "未知工具"}]
 
     async def list_templates(self) -> list[MCPTemplate]:
         """列出所有可用的 MCP 服务器模板"""
@@ -326,6 +273,8 @@ class MCPManagementUseCase:
         """
         测试 MCP 服务器连接
 
+        使用 langchain-mcp-adapters 进行真实的 MCP 协议连接测试。
+
         Args:
             server_id: 服务器 ID
             current_user: 当前用户
@@ -350,47 +299,70 @@ class MCPManagementUseCase:
                 "tools_sample": [],
             }
 
-        # TODO: 实现 MCP 协议连接测试
-        # 这里应该：
-        # 1. 创建 MCPClient 实例
-        # 2. 尝试连接到服务器
-        # 3. 调用 health_check 或 list_tools
-        # 4. 更新服务器的连接状态
+        # 使用真实 MCP 连接测试
+        logger.info("Testing MCP connection for server: %s (%s)", server.name, server.url)
 
-        # 使用辅助方法获取模拟工具
-        connection_success, mock_tools = self._get_mock_tools_for_server(server)
+        try:
+            success, tools, error = await test_mcp_connection(
+                url=server.url,
+                env_config=server.env_config,
+                timeout=30.0,
+            )
 
-        # 更新服务器状态
-        if connection_success:
-            server.connection_status = "connected"
-            server.last_connected_at = datetime.now().isoformat()
-            server.last_error = None
-            server.available_tools = {
-                "tools": mock_tools,
-                "count": len(mock_tools),
-                "updated_at": datetime.now().isoformat(),
+            if success:
+                # 连接成功
+                server.connection_status = "connected"
+                server.last_connected_at = datetime.now().isoformat()
+                server.last_error = None
+                server.available_tools = {
+                    "tools": tools,
+                    "count": len(tools),
+                    "updated_at": datetime.now().isoformat(),
+                }
+                message = f"连接成功！发现 {len(tools)} 个可用工具"
+                tools_sample = [tool["name"] for tool in tools[:5]]
+            else:
+                # 连接失败
+                server.connection_status = "failed"
+                server.last_connected_at = datetime.now().isoformat()
+                server.last_error = error or "连接失败"
+                message = f"连接失败：{error}"
+                tools_sample = []
+
+            await self.db.commit()
+
+            return {
+                "success": success,
+                "message": message,
+                "server_name": server.name,
+                "server_url": server.url,
+                "connection_status": server.connection_status,
+                "error_details": server.last_error if not success else None,
+                "tools_count": len(tools) if success else 0,
+                "tools_sample": tools_sample,
             }
-            message = f"连接成功！发现 {len(mock_tools)} 个可用工具"
-            tools_sample = [tool["name"] for tool in mock_tools[:5]]
-        else:
+
+        except Exception as e:
+            # 发生异常
+            error_msg = str(e)
+            logger.error("MCP connection test failed for %s: %s", server.name, error_msg)
+
             server.connection_status = "failed"
             server.last_connected_at = datetime.now().isoformat()
-            server.last_error = "缺少必要的配置（API 密钥、连接字符串等）"
-            message = "连接失败：缺少必要的配置"
-            tools_sample = []
+            server.last_error = error_msg
 
-        await self.db.commit()
+            await self.db.commit()
 
-        return {
-            "success": connection_success,
-            "message": message,
-            "server_name": server.name,
-            "server_url": server.url,
-            "connection_status": server.connection_status,
-            "error_details": server.last_error if not connection_success else None,
-            "tools_count": len(mock_tools),
-            "tools_sample": tools_sample,
-        }
+            return {
+                "success": False,
+                "message": f"连接测试异常：{error_msg}",
+                "server_name": server.name,
+                "server_url": server.url,
+                "connection_status": "failed",
+                "error_details": error_msg,
+                "tools_count": 0,
+                "tools_sample": [],
+            }
 
     async def list_server_tools(
         self, server_id: uuid.UUID, current_user: CurrentUser

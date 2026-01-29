@@ -2,12 +2,14 @@
 MCP 工具服务
 
 从数据库加载 MCP 服务器配置并初始化工具。
-提供 URL 解析（stdio/sse/http/ws）为 ExecutionConfig 兼容的连接配置。
+使用 langchain-mcp-adapters 实现 MCP 协议连接。
 """
 
+from __future__ import annotations
+
 import re
-from typing import Any
 import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,13 +19,16 @@ from domains.agent.infrastructure.repositories.mcp_server_repository import (
 )
 from domains.agent.infrastructure.tools.base import BaseTool
 from domains.agent.infrastructure.tools.mcp.client import ConfiguredMCPManager
-from domains.agent.infrastructure.tools.mcp.wrapper import MCPToolWrapper
+from domains.agent.infrastructure.tools.mcp.wrapper import MCPToolWrapper, wrap_langchain_tools
 from libs.config.execution_config import (
     ExecutionConfig,
     MCPConfig,
     MCPServerConfig,
 )
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    pass
 
 logger = get_logger(__name__)
 
@@ -79,7 +84,8 @@ class MCPToolService:
     MCP 工具服务
 
     负责从数据库加载 MCP 服务器配置，初始化 MCP 客户端，
-    并将 MCP 工具包装为 BaseTool
+    并将 MCP 工具包装为 BaseTool。
+    使用 langchain-mcp-adapters 实现真实的 MCP 协议连接。
     """
 
     def __init__(self, db: AsyncSession) -> None:
@@ -92,7 +98,7 @@ class MCPToolService:
         self, enabled_server_ids: list[uuid.UUID]
     ) -> list[MCPServerEntityConfig]:
         """
-        加载启用的 MCP 服务器配置
+        加载启用的 MCP 服务器配置。
 
         Args:
             enabled_server_ids: 启用的服务器 ID 列表
@@ -134,9 +140,10 @@ class MCPToolService:
 
     async def initialize_mcp_manager(self) -> ConfiguredMCPManager | None:
         """
-        初始化 ConfiguredMCPManager
+        初始化 ConfiguredMCPManager。
 
-        将数据库中的 MCP 服务器配置转换为 ExecutionConfig 兼容的格式
+        将数据库中的 MCP 服务器配置转换为 ExecutionConfig 兼容的格式，
+        并使用 langchain-mcp-adapters 建立连接。
         """
         if not self._enabled_servers:
             logger.debug("No MCP servers to initialize")
@@ -182,7 +189,10 @@ class MCPToolService:
 
     async def get_mcp_tools(self) -> list[BaseTool]:
         """
-        获取所有 MCP 工具（包装为 BaseTool）
+        获取所有 MCP 工具（包装为 BaseTool）。
+
+        使用 langchain-mcp-adapters 获取 LangChain 工具，
+        然后包装为系统 BaseTool。
 
         Returns:
             BaseTool 列表
@@ -191,24 +201,15 @@ class MCPToolService:
             return []
 
         try:
-            # 列出所有工具
-            all_tools_definitions = await self._mcp_manager.list_all_tools()
+            # 获取 LangChain 工具
+            langchain_tools = self._mcp_manager.get_langchain_tools()
+
+            if not langchain_tools:
+                logger.info("No MCP tools available from connected servers")
+                return []
 
             # 包装为 BaseTool
-            tools = []
-            for tool_def in all_tools_definitions:
-                server_name = tool_def.get("mcp_server", "unknown")
-                tool_name = tool_def.get("name", "unknown")
-
-                # 创建包装器
-                wrapper = MCPToolWrapper(
-                    mcp_client=self._mcp_manager,
-                    server_name=server_name,
-                    tool_name=tool_name,
-                    tool_definition=tool_def,
-                )
-                tools.append(wrapper)
-                logger.debug("Wrapped MCP tool: %s__%s", server_name, tool_name)
+            tools = wrap_langchain_tools(langchain_tools)
 
             logger.info("Loaded %d MCP tools", len(tools))
             return tools
@@ -221,7 +222,7 @@ class MCPToolService:
             return []
 
     async def cleanup(self) -> None:
-        """清理资源"""
+        """清理资源。"""
         if self._mcp_manager:
             try:
                 await self._mcp_manager.disconnect_all()
