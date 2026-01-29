@@ -134,6 +134,30 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         await self.db.refresh(session)
         return session
 
+    async def update_config(
+        self, session_id: uuid.UUID, config_updates: dict
+    ) -> Session | None:
+        """合并更新会话 config（浅合并，用于 mcp_config 等）
+
+        Args:
+            session_id: 会话 ID
+            config_updates: 要合并的 config 片段，如 {"mcp_config": {"enabled_servers": [...]}}
+
+        Returns:
+            更新后的会话实体，不存在则返回 None
+        """
+        session = await self.get_by_id(session_id)
+        if not session:
+            return None
+
+        current = dict(session.config) if session.config else {}
+        current.update(config_updates)
+        session.config = current
+
+        await self.db.flush()
+        await self.db.refresh(session)
+        return session
+
     async def delete(self, session_id: uuid.UUID) -> bool:
         """删除会话"""
         session = await self.get_by_id(session_id)

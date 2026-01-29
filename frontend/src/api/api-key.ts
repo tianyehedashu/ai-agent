@@ -10,7 +10,6 @@ import type {
   ApiKeyCreatedResponse,
   ApiKeyUpdateRequest,
   ApiKeyUsageLog,
-  ApiKeyScope,
 } from '@/types/api-key'
 
 import { apiClient } from './client'
@@ -69,14 +68,14 @@ export const apiKeyApi = {
    * 撤销 API Key
    */
   async revoke(id: string): Promise<void> {
-    return apiClient.post<void>(`/api/v1/api-keys/${id}/revoke`)
+    return apiClient.post<undefined>(`/api/v1/api-keys/${id}/revoke`) as Promise<void>
   },
 
   /**
    * 删除 API Key
    */
   async delete(id: string): Promise<void> {
-    return apiClient.delete<void>(`/api/v1/api-keys/${id}`)
+    return apiClient.delete<undefined>(`/api/v1/api-keys/${id}`) as Promise<void>
   },
 
   /**
@@ -86,10 +85,7 @@ export const apiKeyApi = {
     id: string,
     options?: { skip?: number; limit?: number }
   ): Promise<ApiKeyUsageLog[]> {
-    return apiClient.get<ApiKeyUsageLog[]>(
-      `/api/v1/api-keys/${id}/logs`,
-      options
-    )
+    return apiClient.get<ApiKeyUsageLog[]>(`/api/v1/api-keys/${id}/logs`, options)
   },
 
   /**
@@ -112,7 +108,6 @@ export type {
   ApiKey,
   ApiKeyCreateRequest,
   ApiKeyCreatedResponse,
-  ApiKeyScope,
   ApiKeyStatus,
   ApiKeyUpdateRequest,
   ApiKeyUsageLog,

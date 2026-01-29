@@ -31,12 +31,8 @@ class MCPServer(BaseModel, OwnedMixin):
     )
 
     # 基本字段
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # 服务器配置
@@ -47,9 +43,21 @@ class MCPServer(BaseModel, OwnedMixin):
 
     # 环境配置
     env_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 环境类型
-    env_config: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )  # 环境配置
+    env_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)  # 环境配置
+
+    # 模板关联
+    template_id: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        index=True,
+        comment="来源模板ID，如 'github', 'postgres'",
+    )
+    inherit_defaults: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="是否继承模板默认配置（可选同步）",
+    )
 
     # 状态
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -61,9 +69,7 @@ class MCPServer(BaseModel, OwnedMixin):
     last_connected_at: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="最后连接时间 (ISO格式)"
     )
-    last_error: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="最后错误信息"
-    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True, comment="最后错误信息")
     available_tools: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, comment="可用工具列表"
     )

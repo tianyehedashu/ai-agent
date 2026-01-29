@@ -72,6 +72,21 @@ class TestMCPServerAPI:
         # 如果认证通过，才会返回 404
         assert response.status_code in (401, 403, 404, 422)
 
+    async def test_client_config_no_auth(self, client: AsyncClient):
+        """GET /api/v1/mcp/client-config 无需认证，返回 Cursor mcp.json 同构"""
+        response = await client.get("/api/v1/mcp/client-config")
+        assert response.status_code == 200
+        data = response.json()
+        assert "mcpServers" in data
+        assert "ai-agent-llm" in data["mcpServers"]
+        entry = data["mcpServers"]["ai-agent-llm"]
+        assert entry.get("type") == "streamableHttp"
+        assert "url" in entry
+        assert "llm-server" in entry["url"]
+        assert "headers" in entry
+        assert "Authorization" in entry["headers"]
+        assert "<YOUR_API_KEY>" in entry["headers"]["Authorization"]
+
 
 @pytest.mark.asyncio
 class TestMCPServerWithAPIKey:

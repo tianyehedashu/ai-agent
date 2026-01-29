@@ -47,6 +47,8 @@ class MCPServerResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: uuid.UUID | None = None
+    template_id: str | None = None
+    inherit_defaults: bool = False
 
     # 综合状态（前端用于颜色显示）
     @computed_field
@@ -111,7 +113,7 @@ class MCPServerResponse(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_serializer('created_at', 'updated_at')
+    @field_serializer("created_at", "updated_at")
     def serialize_datetime(self, dt: datetime) -> str:
         """序列化 datetime 为 ISO 格式字符串"""
         return dt.isoformat() if dt else ""
@@ -127,17 +129,14 @@ class MCPServersListResponse(BaseModel):
 class MCPServerCreateRequest(BaseModel):
     """创建 MCP 服务器请求"""
 
-    template_id: str | None = Field(
-        None, description="模板 ID（可选，用于从模板创建）"
-    )
+    template_id: str | None = Field(None, description="模板 ID（可选，用于从模板创建）")
     name: str = Field(..., description="服务器名称（唯一标识符）")
     display_name: str | None = Field(None, description="显示名称")
     url: str = Field(..., description="MCP 服务器 URL")
     env_type: MCPEnvironmentType = Field(..., description="环境类型")
-    env_config: dict[str, Any] = Field(
-        default_factory=dict, description="环境配置"
-    )
+    env_config: dict[str, Any] = Field(default_factory=dict, description="环境配置")
     enabled: bool = Field(True, description="是否启用")
+    inherit_defaults: bool = Field(False, description="是否继承模板默认配置（可选同步）")
 
 
 class MCPServerUpdateRequest(BaseModel):
@@ -148,6 +147,7 @@ class MCPServerUpdateRequest(BaseModel):
     env_type: MCPEnvironmentType | None = Field(None, description="环境类型")
     env_config: dict[str, Any] | None = Field(None, description="环境配置")
     enabled: bool | None = Field(None, description="是否启用")
+    inherit_defaults: bool | None = Field(None, description="是否继承模板默认配置（可选同步）")
 
 
 class MCPTestResult(BaseModel):

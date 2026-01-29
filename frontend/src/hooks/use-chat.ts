@@ -9,6 +9,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { chatApi } from '@/api/chat'
+import { useChatStore } from '@/stores/chat'
 import { generateId } from '@/lib/utils'
 import type { ChatEvent, Message, ProcessEvent, SessionRecreationData, ToolCall } from '@/types'
 
@@ -16,6 +17,8 @@ interface UseChatOptions {
   sessionId?: string
   agentId?: string
   onError?: (error: Error) => void
+  /** 首次发消息后服务端创建会话时回调，用于更新 URL 等（如 navigate(`/chat/${id}`)） */
+  onSessionCreated?: (sessionId: string) => void
 }
 
 interface UseChatReturn {
@@ -45,7 +48,7 @@ interface InterruptState {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { sessionId: initialSessionId, agentId, onError } = options
+  const { sessionId: initialSessionId, agentId, onError, onSessionCreated } = options
   const queryClient = useQueryClient()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -58,13 +61,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [sessionRecreation, setSessionRecreation] = useState<SessionRecreationData | null>(null)
 
   const sessionIdRef = useRef<string | undefined>(initialSessionId)
+  const viewSessionIdRef = useRef<string | undefined>(initialSessionId)
+  const streamSessionIdRef = useRef<string | undefined>(undefined)
   const currentToolCallsRef = useRef<ToolCall[]>([])
   const currentRunIdRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // 同步 sessionId 变化
+  // 同步 sessionId 变化（当前视图会话 = URL 的 sessionId）
   useEffect(() => {
     sessionIdRef.current = initialSessionId
+    viewSessionIdRef.current = initialSessionId
   }, [initialSessionId])
 
   const appendProcessEvent = useCallback((runId: string, event: ProcessEvent) => {
@@ -76,14 +82,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
   const handleEvent = useCallback(
     (event: ChatEvent) => {
+      // 视图隔离：仅当「当前视图会话」与「本流所属会话」一致时才更新 state；session_created 始终执行
+      if (event.type !== 'session_created') {
+        if (viewSessionIdRef.current !== streamSessionIdRef.current) return
+      }
+
       switch (event.type) {
         case 'session_created': {
           // 保存新创建的会话 ID，用于后续消息的上下文关联
           const sessionData = event.data as { session_id?: string }
           if (sessionData.session_id) {
             sessionIdRef.current = sessionData.session_id
+            viewSessionIdRef.current = sessionData.session_id
+            streamSessionIdRef.current = sessionData.session_id
             // 刷新会话列表，以便显示新创建的会话
             void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+            onSessionCreated?.(sessionData.session_id)
+            // 首条消息携带的待用 MCP 配置已持久化到 session，清除本地待用配置
+            useChatStore.getState().clearPendingMCPConfig()
           }
           break
         }
@@ -270,7 +286,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           currentRunIdRef.current = null
           setCurrentRunId(null)
           setIsLoading(false)
-          
+
           // 对话完成后刷新会话列表，以便显示可能已生成的标题
           // 标题生成是异步的，可能在对话完成后才完成
           if (sessionIdRef.current) {
@@ -303,7 +319,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       }
     },
-    [appendProcessEvent, onError, queryClient]
+    [appendProcessEvent, onError, onSessionCreated, queryClient]
   )
 
   const cancelRequest = useCallback(() => {
@@ -349,13 +365,22 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       currentRunIdRef.current = runId
       setCurrentRunId(runId)
       setProcessRuns((prev) => ({ ...prev, [runId]: [] }))
+      streamSessionIdRef.current = sessionIdRef.current
 
       try {
+        const { pendingMCPConfig } = useChatStore.getState()
+        const isFirstMessage = !sessionIdRef.current
+        const mcpConfig =
+          isFirstMessage && pendingMCPConfig.length > 0
+            ? { enabledServers: pendingMCPConfig }
+            : undefined
+
         await chatApi.sendMessage(
           {
             message: content,
             sessionId: sessionIdRef.current,
             agentId,
+            mcpConfig,
           },
           handleEvent,
           (error) => {

@@ -325,3 +325,50 @@ class TestSessionAPI:
         assert isinstance(data, list)
         # 新会话应该没有消息
         assert len(data) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_session_mcp_config(self, client: AsyncClient, auth_headers: dict):
+        """测试: 获取会话 MCP 配置"""
+        create_response = await client.post(
+            "/api/v1/sessions/",
+            json={},
+            headers=auth_headers,
+            follow_redirects=False,
+        )
+        session_id = create_response.json()["id"]
+
+        response = await client.get(
+            f"/api/v1/sessions/{session_id}/mcp-config",
+            headers=auth_headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "enabled_servers" in data
+        assert data["enabled_servers"] == []
+
+    @pytest.mark.asyncio
+    async def test_update_session_mcp_config(self, client: AsyncClient, auth_headers: dict):
+        """测试: 更新会话 MCP 配置"""
+        create_response = await client.post(
+            "/api/v1/sessions/",
+            json={},
+            headers=auth_headers,
+            follow_redirects=False,
+        )
+        session_id = create_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/sessions/{session_id}/mcp-config",
+            json={"enabled_servers": ["server-id-1", "server-id-2"]},
+            headers=auth_headers,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["enabled_servers"] == ["server-id-1", "server-id-2"]
+
+        get_response = await client.get(
+            f"/api/v1/sessions/{session_id}/mcp-config",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == status.HTTP_200_OK
+        assert get_response.json()["enabled_servers"] == ["server-id-1", "server-id-2"]

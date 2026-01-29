@@ -3,6 +3,8 @@
  */
 
 import type {
+  ClientDirectMCPServersResponse,
+  ClientMCPConfigResponse,
   MCPServerConfig,
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
@@ -17,6 +19,20 @@ import type {
 import { apiClient } from './client'
 
 export const mcpApi = {
+  /**
+   * 列出客户端直连的 MCP 服务器（Streamable HTTP，供 Cursor 等连接）
+   */
+  async listClientDirectServers(): Promise<ClientDirectMCPServersResponse> {
+    return apiClient.get<ClientDirectMCPServersResponse>('/api/v1/mcp/')
+  },
+
+  /**
+   * 获取 Cursor mcp.json 同构的客户端直连配置（含占位 API Key）
+   */
+  async getClientConfig(): Promise<ClientMCPConfigResponse> {
+    return apiClient.get<ClientMCPConfigResponse>('/api/v1/mcp/client-config')
+  },
+
   /**
    * 列出所有可用的 MCP 服务器模板
    */
@@ -69,16 +85,14 @@ export const mcpApi = {
   },
 
   /**
-   * 获取 Session 的 MCP 配置
-   * 注意：此API端点可能尚未在后端实现
+   * 获取 Session 的 MCP 配置（当前对话启用的 MCP 服务器 ID 列表）
    */
   async getSessionMCPConfig(sessionId: string): Promise<SessionMCPConfig> {
     return apiClient.get<SessionMCPConfig>(`/api/v1/sessions/${sessionId}/mcp-config`)
   },
 
   /**
-   * 更新 Session 的 MCP 配置
-   * 注意：此API端点可能尚未在后端实现
+   * 更新 Session 的 MCP 配置（选择在当前对话中启用的 MCP 服务器）
    */
   async updateSessionMCPConfig(
     sessionId: string,

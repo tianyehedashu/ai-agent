@@ -22,11 +22,9 @@ from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.stats_service import StatsService
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.identity.application import UserUseCase
-from libs.db.database import get_session
+from libs.db.database import get_db
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
 
 __all__ = [
@@ -46,15 +44,8 @@ __all__ = [
 
 
 # =============================================================================
-# 数据库会话依赖
+# 数据库会话依赖（实现位于 libs.db.database.get_db，此处仅 re-export 与 DbSession）
 # =============================================================================
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话"""
-    async for session in get_session():
-        yield session
-
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 

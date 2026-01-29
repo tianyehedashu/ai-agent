@@ -1,3 +1,4 @@
+import type React from 'react'
 import { type KeyboardEvent, useRef, useEffect } from 'react'
 
 import { Send, Paperclip, Globe, Loader2 } from 'lucide-react'
@@ -11,6 +12,8 @@ interface ChatInputProps {
   onChange: (value: string) => void
   onSend: () => void
   isLoading: boolean
+  /** 工具栏左侧额外按钮（如「对话工具」） */
+  toolbarLeftExtra?: React.ReactNode
 }
 
 export default function ChatInput({
@@ -18,6 +21,7 @@ export default function ChatInput({
   onChange,
   onSend,
   isLoading,
+  toolbarLeftExtra,
 }: Readonly<ChatInputProps>): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -55,21 +59,24 @@ export default function ChatInput({
         <Textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => { onChange(e.target.value); }}
+          onChange={(e) => {
+            onChange(e.target.value)
+          }}
           onKeyDown={handleKeyDown}
           placeholder="给 AI Agent 发送消息..."
-          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
+          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
           disabled={isLoading}
         />
 
         {/* Toolbar */}
         <div className="flex items-center justify-between border-t border-border/30 px-2 py-1.5">
-          <div className="flex items-center">
+          <div className="flex items-center gap-0.5">
+            {toolbarLeftExtra}
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
               title="上传文件"
             >
               <Paperclip className="h-4 w-4" />
@@ -77,7 +84,7 @@ export default function ChatInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
+              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
               title="联网搜索"
             >
               <Globe className="h-4 w-4" />
@@ -100,7 +107,11 @@ export default function ChatInput({
                   : 'bg-muted text-muted-foreground/50'
               )}
             >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>

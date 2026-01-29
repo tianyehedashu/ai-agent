@@ -46,8 +46,15 @@ export function ProviderConfigTab(): React.ReactElement {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ provider, api_key, api_base }: { provider: string; api_key: string; api_base?: string | null }) =>
-      providerConfigApi.update(provider, { api_key, api_base: api_base || undefined }),
+    mutationFn: ({
+      provider,
+      api_key,
+      api_base,
+    }: {
+      provider: string
+      api_key: string
+      api_base?: string | null
+    }) => providerConfigApi.update(provider, { api_key, api_base: api_base ?? undefined }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['provider-configs'] }).catch(() => {})
       setEditingProvider(null)
@@ -82,18 +89,16 @@ export function ProviderConfigTab(): React.ReactElement {
     },
   })
 
-  const configByProvider = new Map<string, ProviderConfig>(
-    configs.map((c) => [c.provider, c])
-  )
+  const configByProvider = new Map<string, ProviderConfig>(configs.map((c) => [c.provider, c]))
 
-  const startEdit = (provider: string) => {
+  const startEdit = (provider: string): void => {
     setEditingProvider(provider)
     setApiKey('')
     const existing = configByProvider.get(provider)
     setApiBase(existing?.api_base ?? '')
   }
 
-  const submitEdit = () => {
+  const submitEdit = (): void => {
     if (!editingProvider || !apiKey.trim()) {
       toast.error('请输入 API Key')
       return
@@ -128,16 +133,11 @@ export function ProviderConfigTab(): React.ReactElement {
             const isEditing = editingProvider === provider
 
             return (
-              <div
-                key={provider}
-                className="flex flex-col gap-2 rounded-lg border p-4"
-              >
+              <div key={provider} className="flex flex-col gap-2 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Key className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">
-                      {PROVIDER_LABELS[provider] ?? provider}
-                    </span>
+                    <span className="font-medium">{PROVIDER_LABELS[provider] ?? provider}</span>
                     {config ? (
                       <Badge variant="secondary">已配置</Badge>
                     ) : (
@@ -149,7 +149,9 @@ export function ProviderConfigTab(): React.ReactElement {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => { startEdit(provider); }}
+                        onClick={() => {
+                          startEdit(provider)
+                        }}
                       >
                         {config ? '更新 Key' : '配置 Key'}
                       </Button>
@@ -158,7 +160,9 @@ export function ProviderConfigTab(): React.ReactElement {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => { testMutation.mutate(provider); }}
+                            onClick={() => {
+                              testMutation.mutate(provider)
+                            }}
                             disabled={testMutation.isPending}
                           >
                             {testMutation.isPending ? '验证中…' : '验证 Key'}
@@ -181,7 +185,9 @@ export function ProviderConfigTab(): React.ReactElement {
                                 <AlertDialogCancel>取消</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => { deleteMutation.mutate(provider); }}
+                                  onClick={() => {
+                                    deleteMutation.mutate(provider)
+                                  }}
                                 >
                                   删除
                                 </AlertDialogAction>
@@ -202,7 +208,9 @@ export function ProviderConfigTab(): React.ReactElement {
                         <Input
                           type={showKey ? 'text' : 'password'}
                           value={apiKey}
-                          onChange={(e) => { setApiKey(e.target.value); }}
+                          onChange={(e) => {
+                            setApiKey(e.target.value)
+                          }}
                           placeholder="输入 API Key（保存后加密存储）"
                           className="pr-10"
                         />
@@ -211,13 +219,11 @@ export function ProviderConfigTab(): React.ReactElement {
                           variant="ghost"
                           size="icon"
                           className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                          onClick={() => { setShowKey(!showKey); }}
+                          onClick={() => {
+                            setShowKey(!showKey)
+                          }}
                         >
-                          {showKey ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
+                          {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
@@ -226,7 +232,9 @@ export function ProviderConfigTab(): React.ReactElement {
                       <Input
                         type="url"
                         value={apiBase}
-                        onChange={(e) => { setApiBase(e.target.value); }}
+                        onChange={(e) => {
+                          setApiBase(e.target.value)
+                        }}
                         placeholder="自定义 API 地址"
                       />
                     </div>

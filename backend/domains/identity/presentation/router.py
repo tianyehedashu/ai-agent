@@ -15,7 +15,7 @@ from domains.identity.infrastructure.authentication import (
 )
 from domains.identity.presentation.deps import get_current_user
 from domains.identity.presentation.schemas import CurrentUser, UserCreate, UserRead, UserUpdate
-from libs.api.deps import get_db
+from libs.db.database import get_db
 
 router = APIRouter()
 

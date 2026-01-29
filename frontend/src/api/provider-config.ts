@@ -17,22 +17,17 @@ export const providerConfigApi = {
   },
 
   /** 创建或更新指定提供商的配置 */
-  async update(
-    provider: string,
-    data: ProviderConfigUpdateRequest
-  ): Promise<ProviderConfig> {
+  async update(provider: string, data: ProviderConfigUpdateRequest): Promise<ProviderConfig> {
     return apiClient.put<ProviderConfig>(`/api/v1/settings/providers/${provider}`, data)
   },
 
   /** 删除指定提供商的配置 */
   async delete(provider: string): Promise<void> {
-    return apiClient.delete<void>(`/api/v1/settings/providers/${provider}`)
+    return apiClient.delete<undefined>(`/api/v1/settings/providers/${provider}`) as Promise<void>
   },
 
   /** 测试指定提供商的 Key 是否有效 */
   async test(provider: string): Promise<ProviderTestResponse> {
-    return apiClient.post<ProviderTestResponse>(
-      `/api/v1/settings/providers/${provider}/test`
-    )
+    return apiClient.post<ProviderTestResponse>(`/api/v1/settings/providers/${provider}/test`)
   },
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 
-import { History, Sparkles } from 'lucide-react'
+import { History, Sparkles, Wrench } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
@@ -22,6 +22,7 @@ export default function ChatPage(): React.JSX.Element {
   const { toast } = useToast()
   const [showDebugger, setShowDebugger] = useState(false)
   const { setCurrentSession, input, setInput } = useChatStore()
+  const [toolConfigOpen, setToolConfigOpen] = useState(false)
 
   const {
     messages,
@@ -45,6 +46,9 @@ export default function ChatPage(): React.JSX.Element {
         description: error.message,
         variant: 'destructive',
       })
+    },
+    onSessionCreated: (id) => {
+      navigate(`/chat/${id}`)
     },
   })
 
@@ -74,12 +78,13 @@ export default function ChatPage(): React.JSX.Element {
   )
 
   // Load session - 当 sessionId 变化时，先清除消息再加载
+  // 全链路：删除当前会话后侧栏会 navigate('/chat') 并重置 chat store，此处 sessionId 变为空，会清空 useChat 状态并 setCurrentSession(null)
   useEffect(() => {
     // 使用标志位来跟踪这个 effect 是否仍然有效
     // 当 sessionId 变化时，旧的 effect 会被清理，cancelled 会被设置为 true
     let cancelled = false
 
-    // 每次 sessionId 变化都先清除消息
+    // 每次 sessionId 变化都先清除消息（含 useChat 的 messages/streamingContent 等）
     clearMessages()
 
     if (sessionId) {
@@ -144,10 +149,21 @@ export default function ChatPage(): React.JSX.Element {
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* Subtle header bar - only shows when in a session */}
-      {sessionId && (
-        <div className="absolute right-4 top-3 z-10 flex gap-2">
-          <MCPSessionConfig sessionId={sessionId} />
+      {/* 右上角：对话工具（始终显示）、时间旅行（仅在有会话时） */}
+      <div className="absolute right-4 top-3 z-10 flex gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setToolConfigOpen(true)
+          }}
+          className="h-8 gap-1.5 rounded-full bg-background/80 px-3 text-xs text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
+          title="配置本对话可用的工具与 MCP 服务器"
+        >
+          <Wrench className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">对话工具</span>
+        </Button>
+        {sessionId && (
           <Button
             variant="ghost"
             size="sm"
@@ -159,8 +175,15 @@ export default function ChatPage(): React.JSX.Element {
             <History className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">时间旅行</span>
           </Button>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* 对话工具与 MCP 配置：有 session 时读写 API，无 session 时读写本地待用配置 */}
+      <MCPSessionConfig
+        sessionId={sessionId}
+        open={toolConfigOpen}
+        onOpenChange={setToolConfigOpen}
+      />
 
       {/* Session Recreation Notice */}
       {sessionRecreation && (
@@ -193,7 +216,25 @@ export default function ChatPage(): React.JSX.Element {
               <span>AI Agent 助手</span>
             </div>
           )}
-          <ChatInput value={input} onChange={setInput} onSend={handleSend} isLoading={isLoading} />
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            isLoading={isLoading}
+            toolbarLeftExtra={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
+                title="配置本对话可用的工具与 MCP 服务器"
+                onClick={() => {
+                  setToolConfigOpen(true)
+                }}
+              >
+                <Wrench className="h-4 w-4" />
+              </Button>
+            }
+          />
         </div>
       </div>
 

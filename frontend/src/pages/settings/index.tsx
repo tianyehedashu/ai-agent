@@ -29,7 +29,7 @@ export default function SettingsPage(): React.JSX.Element {
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
           <TabsTrigger value="providers">大模型配置</TabsTrigger>
-          <TabsTrigger value="mcp">MCP 工具</TabsTrigger>
+          <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
         </TabsList>
 

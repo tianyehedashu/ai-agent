@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bootstrap.config import settings
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.user_manager import UserManager
-from libs.db.database import get_session
+from libs.db.database import get_db
 
 # 密码哈希上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -65,10 +65,10 @@ def get_auth_backend() -> AuthenticationBackend:
 
 
 async def get_user_db(
-    session: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
-    """获取用户数据库"""
-    yield SQLAlchemyUserDatabase(session, User)
+    """获取用户数据库（使用 libs.db.database.get_db，与路由层统一）"""
+    yield SQLAlchemyUserDatabase(db, User)
 
 
 async def get_user_manager(

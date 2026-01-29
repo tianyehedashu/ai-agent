@@ -15,7 +15,7 @@ from domains.agent.domain.config.mcp_config import (
     MCPServerEntityConfig,
     MCPTemplate,
 )
-from domains.agent.domain.config.templates import BUILTIN_TEMPLATES
+from domains.agent.domain.config.templates import BUILTIN_TEMPLATES, get_effective_env_config
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
     MCPServerRepository,
 )
@@ -124,6 +124,8 @@ class MCPManagementUseCase:
                     "env_type": request.env_type,
                     "env_config": request.env_config,
                     "enabled": request.enabled,
+                    "template_id": request.template_id,
+                    "inherit_defaults": getattr(request, "inherit_defaults", False),
                 }
             )
         else:
@@ -135,6 +137,8 @@ class MCPManagementUseCase:
                 env_type=request.env_type,
                 env_config=request.env_config,
                 enabled=request.enabled,
+                template_id=request.template_id,
+                inherit_defaults=getattr(request, "inherit_defaults", False),
             )
 
         # 创建服务器
@@ -302,10 +306,15 @@ class MCPManagementUseCase:
         # 使用真实 MCP 连接测试
         logger.info("Testing MCP connection for server: %s (%s)", server.name, server.url)
 
+        effective_env_config = get_effective_env_config(
+            server.env_config or {},
+            server.template_id,
+            getattr(server, "inherit_defaults", False),
+        )
         try:
             success, tools, error = await test_mcp_connection(
                 url=server.url,
-                env_config=server.env_config,
+                env_config=effective_env_config,
                 timeout=30.0,
             )
 

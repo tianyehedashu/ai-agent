@@ -209,7 +209,14 @@ pytest
 
 单元测试使用 Mock，不需要真实数据库。如果集成测试失败，检查 `conftest.py` 中的测试数据库配置。
 
-### 3. 测试失败：API Key 相关
+### 3. 测试失败：`column xxx does not exist`（表结构不一致）
+
+集成测试使用**独立测试库**（如 `test_ai_agent`），表结构来自「迁移 + create_all」；`create_all` 不会修改已存在的表，若测试库是旧版模型建的，新增的列不会自动出现。处理方式：
+
+- 对测试库执行一次迁移：`DATABASE_URL="<测试库 URL>" uv run alembic upgrade head`（在 backend 目录下）。
+- 详见 **[测试数据库说明（TEST_DATABASE.md）](TEST_DATABASE.md)**：测试库是否专用、表结构来源、为何缺列、新增迁移时的推荐流程。
+
+### 4. 测试失败：API Key 相关
 
 GLM 相关测试使用 Mock，不需要真实的 API Key。如果测试失败，检查 Mock 配置是否正确。
 
@@ -228,5 +235,6 @@ GLM 相关测试使用 Mock，不需要真实的 API Key。如果测试失败，
 ## 相关文件
 
 - `pyproject.toml` - pytest 配置
-- `conftest.py` - pytest fixtures
+- `conftest.py` - pytest fixtures 与测试库初始化
+- [TEST_DATABASE.md](TEST_DATABASE.md) - 测试数据库说明（专用库、表结构来源、缺列问题与流程）
 - `Makefile` - 测试命令快捷方式

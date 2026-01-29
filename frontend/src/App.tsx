@@ -9,6 +9,7 @@ import LoginPage from '@/pages/auth/login'
 import RegisterPage from '@/pages/auth/register'
 import ChatPage from '@/pages/chat'
 import MCPPage from '@/pages/mcp'
+import SystemMCPPage from '@/pages/mcp/system'
 import NotFoundPage from '@/pages/not-found'
 import SettingsPage from '@/pages/settings'
 import StudioPage from '@/pages/studio'
@@ -32,6 +33,7 @@ function App(): React.JSX.Element {
                   <Route path="/chat/:sessionId?" element={<ChatPage />} />
                   <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/mcp" element={<MCPPage />} />
+                  <Route path="/mcp/system" element={<SystemMCPPage />} />
                   <Route path="/studio" element={<StudioPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="*" element={<NotFoundPage />} />

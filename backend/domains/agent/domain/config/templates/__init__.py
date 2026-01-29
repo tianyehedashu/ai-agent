@@ -1,8 +1,10 @@
 """
 MCP 服务器模板系统
 
-提供预配置的 MCP 服务器模板
+提供预配置的 MCP 服务器模板及有效配置合并逻辑。
 """
+
+from typing import Any
 
 from domains.agent.domain.config.mcp_config import (
     MCPEnvironmentType,
@@ -33,10 +35,8 @@ BUILTIN_TEMPLATES: list[MCPTemplate] = [
         required_fields=[],
         optional_fields=["allowed_roots"],
         field_labels={"allowed_roots": "允许访问的目录"},
-        field_placeholders={"allowed_roots": '/workspace'},
-        field_help_texts={
-            "allowed_roots": "指定沙箱中允许访问的目录路径，多个路径用逗号分隔"
-        },
+        field_placeholders={"allowed_roots": "/workspace"},
+        field_help_texts={"allowed_roots": "指定沙箱中允许访问的目录路径，多个路径用逗号分隔"},
     ),
     # 2. GitHub MCP
     MCPTemplate(
@@ -59,9 +59,7 @@ BUILTIN_TEMPLATES: list[MCPTemplate] = [
         optional_fields=[],
         field_labels={"github_token": "GitHub Token"},
         field_placeholders={"github_token": "ghp_xxxxxxxxxxxx"},
-        field_help_texts={
-            "github_token": "GitHub Personal Access Token，需要 repo 权限"
-        },
+        field_help_texts={"github_token": "GitHub Personal Access Token，需要 repo 权限"},
     ),
     # 3. Postgres MCP
     MCPTemplate(
@@ -113,9 +111,7 @@ BUILTIN_TEMPLATES: list[MCPTemplate] = [
         optional_fields=[],
         field_labels={"slack_bot_token": "Slack Bot Token"},
         field_placeholders={"slack_bot_token": "xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx"},
-        field_help_texts={
-            "slack_bot_token": "Slack Bot Token，从 Slack App 配置中获取"
-        },
+        field_help_texts={"slack_bot_token": "Slack Bot Token，从 Slack App 配置中获取"},
     ),
     # 5. Brave Search MCP
     MCPTemplate(
@@ -143,3 +139,30 @@ BUILTIN_TEMPLATES: list[MCPTemplate] = [
         },
     ),
 ]
+
+
+def get_effective_env_config(
+    env_config: dict[str, Any],
+    template_id: str | None,
+    inherit_defaults: bool,
+) -> dict[str, Any]:
+    """
+    获取实例的有效 env_config（考虑模板继承）。
+
+    当 inherit_defaults 为 True 且 template_id 存在时，
+    将模板默认 env_config 与实例 env_config 合并，实例值优先。
+
+    Args:
+        env_config: 实例当前 env_config
+        template_id: 来源模板 ID
+        inherit_defaults: 是否继承模板默认配置
+
+    Returns:
+        合并后的 env_config
+    """
+    if not inherit_defaults or not template_id:
+        return env_config
+    template = next((t for t in BUILTIN_TEMPLATES if t.id == template_id), None)
+    if not template:
+        return env_config
+    return {**template.default_config.env_config, **env_config}

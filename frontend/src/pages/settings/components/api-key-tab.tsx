@@ -104,7 +104,7 @@ export function ApiKeyTab(): React.ReactElement {
   })
 
   // 处理查看完整密钥
-  const handleViewFullKey = (id: string) => {
+  const handleViewFullKey = (id: string): void => {
     setViewKeyId(id)
     setFullKey(null)
     revealMutation.mutate(id)
@@ -122,7 +122,11 @@ export function ApiKeyTab(): React.ReactElement {
           <h2 className="text-2xl font-bold">API Key 管理</h2>
           <p className="text-muted-foreground">管理用于 API 访问的密钥</p>
         </div>
-        <Button onClick={() => { setCreateDialogOpen(true); }}>
+        <Button
+          onClick={() => {
+            setCreateDialogOpen(true)
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           创建 API Key
         </Button>
@@ -144,7 +148,9 @@ export function ApiKeyTab(): React.ReactElement {
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Key className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">暂无 API Key</p>
-              <p className="mt-2 text-sm text-muted-foreground">创建 API Key 以通过 API 访问您的资源</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                创建 API Key 以通过 API 访问您的资源
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -155,9 +161,15 @@ export function ApiKeyTab(): React.ReactElement {
               onToggleActive={(isActive) => {
                 toggleActiveMutation.mutate({ id: apiKey.id, isActive })
               }}
-              onViewLogs={() => { setSelectedKeyId(apiKey.id); }}
-              onRevoke={() => { revokeMutation.mutate(apiKey.id); }}
-              onDelete={() => { deleteMutation.mutate(apiKey.id); }}
+              onViewLogs={() => {
+                setSelectedKeyId(apiKey.id)
+              }}
+              onRevoke={() => {
+                revokeMutation.mutate(apiKey.id)
+              }}
+              onDelete={() => {
+                deleteMutation.mutate(apiKey.id)
+              }}
               revealKey={(id) => {
                 handleViewFullKey(id)
               }}
@@ -179,19 +191,20 @@ export function ApiKeyTab(): React.ReactElement {
 
       {/* 查看完整密钥对话框 */}
       {viewKeyId && (
-        <Dialog open={!!viewKeyId} onOpenChange={(open) => {
-          if (!open) {
-            setViewKeyId(null)
-            setFullKey(null)
-            setCopied(false)
-          }
-        }}>
+        <Dialog
+          open={!!viewKeyId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setViewKeyId(null)
+              setFullKey(null)
+              setCopied(false)
+            }
+          }}
+        >
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>完整的 API Key</DialogTitle>
-              <DialogDescription>
-                请妥善保管您的 API Key
-              </DialogDescription>
+              <DialogDescription>请妥善保管您的 API Key</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
@@ -199,9 +212,7 @@ export function ApiKeyTab(): React.ReactElement {
                 <>
                   <div className="rounded-lg bg-muted p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <code className="flex-1 break-all text-sm font-mono">
-                        {fullKey}
-                      </code>
+                      <code className="flex-1 break-all font-mono text-sm">{fullKey}</code>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -209,7 +220,9 @@ export function ApiKeyTab(): React.ReactElement {
                         onClick={() => {
                           navigator.clipboard.writeText(fullKey).catch(() => {})
                           setCopied(true)
-                          setTimeout(() => { setCopied(false); }, 2000)
+                          setTimeout(() => {
+                            setCopied(false)
+                          }, 2000)
                           toast.success('已复制到剪贴板')
                         }}
                       >
@@ -223,10 +236,8 @@ export function ApiKeyTab(): React.ReactElement {
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed p-6 text-center">
-                  <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mb-4" />
-                  <p className="text-sm text-muted-foreground">
-                    正在解密 API Key...
-                  </p>
+                  <div className="mx-auto mb-4 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <p className="text-sm text-muted-foreground">正在解密 API Key...</p>
                 </div>
               )}
 
@@ -273,10 +284,12 @@ function ApiKeyCard({
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between">
-          <div className="space-y-1 flex-1">
+          <div className="flex-1 space-y-1">
             <div className="flex items-center gap-2">
               <CardTitle className="text-lg">{apiKey.name}</CardTitle>
-              <Badge variant={getStatusBadgeVariant(apiKey.status)}>{getStatusLabel(apiKey.status)}</Badge>
+              <Badge variant={getStatusBadgeVariant(apiKey.status)}>
+                {getStatusLabel(apiKey.status)}
+              </Badge>
               {!apiKey.is_active && apiKey.status === 'active' && (
                 <Badge variant="outline" className="text-muted-foreground">
                   已禁用
@@ -301,12 +314,14 @@ function ApiKeyCard({
               variant="link"
               size="sm"
               className="h-auto p-0 text-xs"
-              onClick={() => { revealKey(apiKey.id); }}
+              onClick={() => {
+                revealKey(apiKey.id)
+              }}
             >
               查看完整密钥
             </Button>
           </div>
-          <code className="block w-full rounded bg-muted px-3 py-2 text-sm font-mono">
+          <code className="block w-full rounded bg-muted px-3 py-2 font-mono text-sm">
             {apiKey.masked_key}
           </code>
         </div>
@@ -324,18 +339,19 @@ function ApiKeyCard({
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span>使用次数: {apiKey.usage_count}</span>
           <span>
-            过期时间: {daysUntilExpiry === 0 ? '今天' : daysUntilExpiry === 1 ? '明天' : `${daysUntilExpiry} 天后`}
+            过期时间:{' '}
+            {daysUntilExpiry === 0
+              ? '今天'
+              : daysUntilExpiry === 1
+                ? '明天'
+                : `${String(daysUntilExpiry)} 天后`}
           </span>
           {apiKey.last_used_at && <span>最后使用: {formatRelativeTime(apiKey.last_used_at)}</span>}
         </div>
 
         {/* 操作按钮 */}
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onViewLogs}
-          >
+          <Button variant="outline" size="sm" onClick={onViewLogs}>
             <History className="mr-2 h-4 w-4" />
             查看日志
           </Button>

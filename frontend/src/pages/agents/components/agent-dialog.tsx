@@ -36,11 +36,14 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import type { Agent, AgentCreateInput } from '@/types'
 
+import { ToolSelector } from './tool-selector'
+
 const formSchema = z.object({
   name: z.string().min(1, '请输入名称').max(100, '名称不能超过100个字符'),
   description: z.string().optional(),
   systemPrompt: z.string().min(1, '请输入系统提示词'),
   model: z.string().min(1, '请选择模型'),
+  tools: z.array(z.string()).default([]),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(1).max(128000),
   maxIterations: z.number().min(1).max(100),
@@ -77,6 +80,7 @@ export default function AgentDialog({
       description: '',
       systemPrompt: '',
       model: 'claude-3-5-sonnet-20241022',
+      tools: [],
       temperature: 0.7,
       maxTokens: 4096,
       maxIterations: 20,
@@ -90,6 +94,7 @@ export default function AgentDialog({
         description: agent.description ?? '',
         systemPrompt: agent.systemPrompt,
         model: agent.model,
+        tools: agent.tools ?? [],
         temperature: agent.temperature,
         maxTokens: agent.maxTokens,
         maxIterations: agent.maxIterations,
@@ -100,6 +105,7 @@ export default function AgentDialog({
         description: '',
         systemPrompt: '',
         model: 'claude-3-5-sonnet-20241022',
+        tools: [],
         temperature: 0.7,
         maxTokens: 4096,
         maxIterations: 20,
@@ -213,6 +219,21 @@ export default function AgentDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="tools"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>可用工具</FormLabel>
+                  <FormDescription>选择该 Agent 可以使用的内置工具</FormDescription>
+                  <FormControl>
+                    <ToolSelector value={field.value} onChange={field.onChange} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

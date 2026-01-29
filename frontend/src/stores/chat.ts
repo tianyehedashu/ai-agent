@@ -25,6 +25,11 @@ interface ChatState {
   // Input
   input: string
   setInput: (input: string) => void
+
+  // 待用 MCP 配置（无 session 时勾选的服务器，首条消息时携带）
+  pendingMCPConfig: string[]
+  setPendingMCPConfig: (servers: string[]) => void
+  clearPendingMCPConfig: () => void
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -67,5 +72,14 @@ export const useChatStore = create<ChatState>((set) => ({
   input: '',
   setInput: (input) => {
     set({ input })
+  },
+
+  // 待用 MCP 配置
+  pendingMCPConfig: [],
+  setPendingMCPConfig: (servers) => {
+    set({ pendingMCPConfig: servers })
+  },
+  clearPendingMCPConfig: () => {
+    set({ pendingMCPConfig: [] })
   },
 }))

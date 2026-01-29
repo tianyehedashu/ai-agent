@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator, Generator
 import contextlib
 import logging
 import os
+from pathlib import Path
 import sys
 from urllib.parse import urlparse
 import uuid
@@ -69,6 +70,7 @@ def pytest_configure(config):
 # 注意：这些导入必须在警告过滤器配置之后（见上方 pytest_configure）
 # pylint: disable=wrong-import-position
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
@@ -102,6 +104,44 @@ TestAsyncSessionLocal = None
 
 # 标记表是否已创建（进程级别）
 _tables_created = False
+
+
+def _run_test_db_migrations() -> None:
+    """对测试数据库执行 Alembic 迁移，确保表结构与迁移一致。
+
+    使用子进程执行，避免与 pytest-asyncio 的事件循环冲突。
+    """
+    import subprocess
+
+    backend_dir = Path(__file__).resolve().parent.parent
+    if not (backend_dir / "alembic.ini").is_file():
+        return
+    env = os.environ.copy()
+    env["DATABASE_URL"] = TEST_DATABASE_URL
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=str(backend_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        logging.getLogger(__name__).warning("Test DB migration failed (stderr): %s", result.stderr)
+
+
+async def _ensure_mcp_servers_template_columns(conn) -> None:
+    """若 mcp_servers 表存在但缺少 template_id/inherit_defaults，则补列（兼容旧测试库）。"""
+    # PostgreSQL 9.5+ 支持 ADD COLUMN IF NOT EXISTS
+    await conn.execute(
+        text("ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS template_id VARCHAR(50) NULL")
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE mcp_servers "
+            "ADD COLUMN IF NOT EXISTS inherit_defaults BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+    )
 
 
 async def _ensure_test_database():
@@ -232,11 +272,19 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     except Exception as e:
         pytest.skip(f"Database setup failed: {e}")
 
-    # 确保表存在（幂等操作，多进程安全）
+    # 确保表存在且与迁移一致（先跑迁移再 create_all 补缺）
     if not _tables_created:
+        try:
+            _run_test_db_migrations()
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "Test DB migration failed (%s), falling back to create_all", e
+            )
         async with engine.begin() as conn:
-            # create_all 是幂等的，多个进程同时调用也安全
+            # create_all 补全迁移未覆盖的表（幂等）
             await conn.run_sync(Base.metadata.create_all)
+            # 若 mcp_servers 已存在但缺少新列（历史 create_all 建的），补上
+            await _ensure_mcp_servers_template_columns(conn)
         _tables_created = True
 
     # 创建独立的数据库连接
@@ -267,6 +315,17 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await connection.close()
 
 
+def _apply_db_overrides(app: object, db_session: AsyncSession) -> None:
+    """统一为 app 注入测试用 DB 会话（仅覆盖 get_db；get_session 由 patch get_session_factory 间接满足）。"""
+    # pylint: disable=import-outside-toplevel
+    from libs.api.deps import get_db
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db  # type: ignore[attr-defined]
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """HTTP 客户端 fixture"""
@@ -294,17 +353,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         from domains.agent.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
         )
-        from libs.api.deps import get_db  # pylint: disable=import-outside-toplevel
-        from libs.db.database import get_session  # pylint: disable=import-outside-toplevel
 
-        async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_session] = override_get_session
+        _apply_db_overrides(app, db_session)
 
         # 确保 checkpointer 在测试环境中已初始化
         if not hasattr(app.state, "checkpointer"):
@@ -319,7 +369,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         ) as ac:
             yield ac
 
-        app.dependency_overrides.clear()
+        app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -348,17 +398,8 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         from domains.agent.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
         )
-        from libs.api.deps import get_db  # pylint: disable=import-outside-toplevel
-        from libs.db.database import get_session  # pylint: disable=import-outside-toplevel
 
-        async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_session] = override_get_session
+        _apply_db_overrides(app, db_session)
 
         # 确保 checkpointer 在测试环境中已初始化
         if not hasattr(app.state, "checkpointer"):
@@ -373,7 +414,7 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
-        app.dependency_overrides.clear()
+        app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 
 @pytest_asyncio.fixture

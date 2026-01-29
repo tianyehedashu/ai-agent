@@ -1,5 +1,5 @@
 /**
- * MCP 工具管理页面
+ * MCP 服务器管理页面
  */
 
 import { useMemo, useState } from 'react'
@@ -14,15 +14,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { MCPServerConfig } from '@/types/mcp'
 
-import { DetailDrawer } from './components/detail-drawer'
+import { EditDialog } from './components/edit-dialog'
 import { ImportDialog } from './components/import-dialog'
 import { MCPServerCard } from './components/server-card'
 
 export default function MCPPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [serverToEdit, setServerToEdit] = useState<MCPServerConfig | null>(null)
   const [selectedServer, setSelectedServer] = useState<MCPServerConfig | null>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -54,7 +55,7 @@ export default function MCPPage(): React.JSX.Element {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }).catch(() => {})
       toast.success('服务器已删除')
-      setDrawerOpen(false)
+      setSelectedServer(null)
     },
     onError: (error: Error) => {
       toast.error(`删除失败: ${error.message}`)
@@ -80,9 +81,9 @@ export default function MCPPage(): React.JSX.Element {
       {/* 页面头部 */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">MCP 工具中心</h1>
+          <h1 className="text-3xl font-bold">MCP 服务器</h1>
           <p className="mt-2 text-muted-foreground">
-            管理和配置 Model Context Protocol 服务器与工具
+            管理和配置 MCP 服务器
           </p>
         </div>
         <Button
@@ -135,38 +136,44 @@ export default function MCPPage(): React.JSX.Element {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredServers.map((server) => (
-            <MCPServerCard
-              key={server.id}
-              server={server}
-              onClick={(s) => {
-                setSelectedServer(s)
-                setDrawerOpen(true)
-              }}
-              onToggle={(s, enabled) => {
-                toggleServerMutation.mutate({ id: s.id, enabled })
-              }}
-            />
-          ))}
+          {filteredServers.map((server) => {
+            const isSelected = selectedServer?.id === server.id
+            return (
+              <MCPServerCard
+                key={server.id}
+                server={server}
+                selected={isSelected}
+                className={isSelected ? 'md:col-span-2 lg:col-span-3' : ''}
+                onClick={(s) =>
+                  setSelectedServer((prev) => (prev?.id === s.id ? null : s))
+                }
+                onToggle={(s, enabled) => {
+                  toggleServerMutation.mutate({ id: s.id, enabled })
+                }}
+                onEdit={(s) => {
+                  setServerToEdit(s)
+                  setEditDialogOpen(true)
+                }}
+                onDelete={(s) => {
+                  if (confirm(`确定要删除服务器 "${s.display_name ?? s.name}" 吗？`)) {
+                    deleteServerMutation.mutate(s.id)
+                    setSelectedServer(null)
+                  }
+                }}
+              />
+            )
+          })}
         </div>
       )}
 
-      {/* 导入对话框 */}
       <ImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
 
-      {/* 详情抽屉 */}
-      <DetailDrawer
-        server={selectedServer}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onEdit={() => {
-          // TODO: 打开编辑对话框
-          toast.info('编辑功能即将推出')
-        }}
-        onDelete={(server) => {
-          if (confirm(`确定要删除服务器 "${server.display_name ?? server.name}" 吗？`)) {
-            deleteServerMutation.mutate(server.id)
-          }
+      <EditDialog
+        server={serverToEdit}
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open)
+          if (!open) setServerToEdit(null)
         }}
       />
     </div>

@@ -8,27 +8,25 @@ MCP 工具服务
 from __future__ import annotations
 
 import re
+from typing import Any
 import uuid
-from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.domain.config.mcp_config import MCPScope, MCPServerEntityConfig
+from domains.agent.domain.config.templates import get_effective_env_config
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
     MCPServerRepository,
 )
 from domains.agent.infrastructure.tools.base import BaseTool
 from domains.agent.infrastructure.tools.mcp.client import ConfiguredMCPManager
-from domains.agent.infrastructure.tools.mcp.wrapper import MCPToolWrapper, wrap_langchain_tools
+from domains.agent.infrastructure.tools.mcp.wrapper import wrap_langchain_tools
 from libs.config.execution_config import (
     ExecutionConfig,
     MCPConfig,
     MCPServerConfig,
 )
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -116,7 +114,12 @@ class MCPToolService:
             try:
                 server = await self.repository.get_by_id(server_id)
                 if server and server.enabled:
-                    # 转换为 Domain Config
+                    effective_env_config = get_effective_env_config(
+                        server.env_config or {},
+                        getattr(server, "template_id", None),
+                        getattr(server, "inherit_defaults", False),
+                    )
+                    # 转换为 Domain Config（使用有效配置）
                     server_config = MCPServerEntityConfig(
                         id=server.id,
                         name=server.name,
@@ -125,7 +128,7 @@ class MCPToolService:
                         scope=MCPScope(server.scope),
                         user_id=server.user_id,
                         env_type=server.env_type,
-                        env_config=server.env_config,
+                        env_config=effective_env_config,
                         enabled=server.enabled,
                     )
                     servers.append(server_config)

@@ -124,6 +124,8 @@ class MCPServerRepository(OwnedRepositoryBase[MCPServer]):
             env_config=config.env_config,
             enabled=config.enabled,
             user_id=user_id,
+            template_id=getattr(config, "template_id", None),
+            inherit_defaults=getattr(config, "inherit_defaults", False),
         )
         self.db.add(server)
         await self.db.flush()
@@ -155,6 +157,10 @@ class MCPServerRepository(OwnedRepositoryBase[MCPServer]):
         server.env_type = config.env_type.value
         server.env_config = config.env_config
         server.enabled = config.enabled
+        if hasattr(config, "template_id"):
+            server.template_id = config.template_id
+        if hasattr(config, "inherit_defaults"):
+            server.inherit_defaults = config.inherit_defaults
 
         await self.db.flush()
         await self.db.refresh(server)
@@ -190,21 +196,15 @@ class MCPServerRepository(OwnedRepositoryBase[MCPServer]):
         counts = {}
 
         # System 服务器
-        system_query = select(self.model_class).where(
-            self.model_class.scope == "system"
-        )
+        system_query = select(self.model_class).where(self.model_class.scope == "system")
         system_query = self._apply_mcp_scope_filter(system_query)
-        system_result = await self.db.execute(
-            system_query.with_only_columns(func.count())
-        )
+        system_result = await self.db.execute(system_query.with_only_columns(func.count()))
         counts["system"] = system_result.scalar() or 0
 
         # User 服务器
         user_query = select(self.model_class).where(self.model_class.scope == "user")
         user_query = self._apply_mcp_scope_filter(user_query)
-        user_result = await self.db.execute(
-            user_query.with_only_columns(func.count())
-        )
+        user_result = await self.db.execute(user_query.with_only_columns(func.count()))
         counts["user"] = user_result.scalar() or 0
 
         return counts

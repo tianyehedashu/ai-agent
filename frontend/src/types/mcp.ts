@@ -28,6 +28,8 @@ export interface MCPServerConfig {
   created_at: string
   updated_at: string
   user_id?: string
+  template_id?: string | null
+  inherit_defaults?: boolean
 }
 
 /** MCP 服务器列表响应 */
@@ -74,6 +76,7 @@ export interface MCPServerCreateRequest {
   env_type: MCPEnvironmentType
   env_config: Record<string, unknown>
   enabled?: boolean
+  inherit_defaults?: boolean
 }
 
 /** 更新 MCP 服务器请求 */
@@ -83,6 +86,7 @@ export interface MCPServerUpdateRequest {
   env_type?: MCPEnvironmentType
   env_config?: Record<string, unknown>
   enabled?: boolean
+  inherit_defaults?: boolean
 }
 
 /** MCP 连接测试结果 */
@@ -118,4 +122,44 @@ export interface MCPToolsListResponse {
   tools: MCPToolInfo[]
   total_tokens: number
   enabled_count: number
+}
+
+// ---------------------------------------------------------------------------
+// 客户端直连 MCP（Streamable HTTP，供 Cursor mcp.json 使用）
+// ---------------------------------------------------------------------------
+
+/** 客户端直连 MCP 服务器工具简要 */
+export interface ClientDirectMCPTool {
+  name: string
+  description?: string
+}
+
+/** 客户端直连 MCP 服务器简要信息（GET /api/v1/mcp/ 返回的单项） */
+export interface ClientDirectMCPServer {
+  name: string
+  scope: string
+  description: string
+  tool_count: number
+  tools?: ClientDirectMCPTool[]
+}
+
+/** 客户端直连 MCP 服务器列表响应（GET /api/v1/mcp/） */
+export interface ClientDirectMCPServersResponse {
+  servers: ClientDirectMCPServer[]
+  transport: string
+  authentication: string
+  protocol_version: string
+}
+
+/** Cursor mcp.json 中单服务器配置（Streamable HTTP） */
+export interface CursorMCPServerConfig {
+  type: 'streamableHttp'
+  url: string
+  description?: string
+  headers: Record<string, string>
+}
+
+/** 客户端直连 MCP 配置响应（GET /api/v1/mcp/client-config，与 Cursor mcp.json 同构） */
+export interface ClientMCPConfigResponse {
+  mcpServers: Record<string, CursorMCPServerConfig>
 }

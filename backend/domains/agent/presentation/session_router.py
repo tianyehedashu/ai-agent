@@ -54,6 +54,18 @@ class SessionUpdate(BaseModel):
     status: str | None = Field(default=None, pattern="^(active|archived)$")
 
 
+class SessionMCPConfigResponse(BaseModel):
+    """会话 MCP 配置响应"""
+
+    enabled_servers: list[str] = Field(default_factory=list)
+
+
+class SessionMCPConfigUpdate(BaseModel):
+    """会话 MCP 配置更新请求"""
+
+    enabled_servers: list[str] = Field(default_factory=list)
+
+
 class SessionResponse(BaseModel):
     """会话响应"""
 
@@ -268,6 +280,41 @@ async def delete_session(
     session = await session_service.get_session_or_raise(session_id)
     check_session_ownership(session, current_user)
     await session_service.delete_session(session_id)
+
+
+@router.get(
+    "/{session_id}/mcp-config",
+    response_model=SessionMCPConfigResponse,
+    summary="获取会话 MCP 配置",
+)
+async def get_session_mcp_config(
+    session_id: str,
+    current_user: AuthUser,
+    session_service: SessionUseCase = Depends(get_session_service),
+) -> SessionMCPConfigResponse:
+    """获取当前会话的 MCP 工具配置（启用的服务器 ID 列表）"""
+    session = await session_service.get_session_or_raise(session_id)
+    check_session_ownership(session, current_user)
+    config = session_service.get_session_mcp_config(session)
+    return SessionMCPConfigResponse(**config)
+
+
+@router.put(
+    "/{session_id}/mcp-config",
+    response_model=SessionMCPConfigResponse,
+    summary="更新会话 MCP 配置",
+)
+async def update_session_mcp_config(
+    session_id: str,
+    data: SessionMCPConfigUpdate,
+    current_user: AuthUser,
+    session_service: SessionUseCase = Depends(get_session_service),
+) -> SessionMCPConfigResponse:
+    """更新当前会话的 MCP 工具配置（选择在该对话中启用的 MCP 服务器）"""
+    session = await session_service.get_session_or_raise(session_id)
+    check_session_ownership(session, current_user)
+    await session_service.update_session_mcp_config(session_id, data.enabled_servers)
+    return SessionMCPConfigResponse(enabled_servers=data.enabled_servers)
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageResponse])

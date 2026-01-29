@@ -11,7 +11,7 @@
 #
 # ==============================================================================
 
-.PHONY: help install dev test lint format typecheck security check clean
+.PHONY: help install dev test lint format typecheck security check clean db-upgrade db-upgrade-test
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -52,6 +52,11 @@ help: ## 显示帮助信息
 	@echo   typecheck       运行类型检查
 	@echo   check           运行所有检查
 	@echo   clean           清理临时文件
+	@echo.
+	@echo 数据库命令:
+	@echo   db-migrate       创建迁移
+	@echo   db-upgrade       开发库升级到最新
+	@echo   db-upgrade-test  测试库升级到最新（开发环境）
 	@echo.
 	@echo SonarCloud 命令:
 	@echo   sonar            运行扫描并下载报告 (推荐)
@@ -256,6 +261,10 @@ db-reset: ## 重置数据库
 	@echo 重置数据库...
 	$(UV) run alembic downgrade base
 	$(UV) run alembic upgrade head
+
+db-upgrade-test: ## 对测试数据库执行迁移（开发环境，与 conftest 使用同一测试库）
+	@echo 对测试数据库执行迁移...
+	$(UV) run python scripts/migrate_test_db.py
 
 # ==============================================================================
 # 文档

@@ -110,14 +110,17 @@ export default function ChatMessages({
                     components={{
                       code({ className, children, ...props }): React.JSX.Element {
                         const match = /language-(\w+)/.exec(className ?? '')
-                        const childrenStr = Array.isArray(children) 
-                          ? children.map(c => {
-                              if (typeof c === 'string') return c
-                              if (typeof c === 'number' || typeof c === 'boolean') return String(c)
-                              return ''
-                            }).join('')
-                          : typeof children === 'string' 
-                            ? children 
+                        const childrenStr = Array.isArray(children)
+                          ? children
+                              .map((c) => {
+                                if (typeof c === 'string') return c
+                                if (typeof c === 'number' || typeof c === 'boolean')
+                                  return String(c)
+                                return ''
+                              })
+                              .join('')
+                          : typeof children === 'string'
+                            ? children
                             : typeof children === 'number' || typeof children === 'boolean'
                               ? String(children)
                               : ''
@@ -141,11 +144,13 @@ export default function ChatMessages({
                   </ReactMarkdown>
                 </div>
               )}
-              {currentRunId && currentRunId in processRuns && processRuns[currentRunId].length > 0 && (
-                <div className="mt-3">
-                  <ProcessPanel events={processRuns[currentRunId]} />
-                </div>
-              )}
+              {currentRunId &&
+                currentRunId in processRuns &&
+                processRuns[currentRunId].length > 0 && (
+                  <div className="mt-3">
+                    <ProcessPanel events={processRuns[currentRunId]} />
+                  </div>
+                )}
 
               {!streamingContent && pendingToolCalls.length === 0 && (
                 <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
@@ -190,7 +195,7 @@ function SuggestionCard({
     <button className="group flex items-start gap-3 rounded-xl border border-border/40 bg-secondary/20 p-4 text-left transition-all hover:border-border/80 hover:bg-secondary/40 hover:shadow-sm">
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background shadow-sm transition-colors ring-1 ring-border/20',
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background shadow-sm ring-1 ring-border/20 transition-colors',
           iconColor
         )}
       >
@@ -245,14 +250,16 @@ function MessageBubble({
             components={{
               code({ className, children, ...props }): React.JSX.Element {
                 const match = /language-(\w+)/.exec(className ?? '')
-                const childrenStr = Array.isArray(children) 
-                  ? children.map(c => {
-                      if (typeof c === 'string') return c
-                      if (typeof c === 'number' || typeof c === 'boolean') return String(c)
-                      return ''
-                    }).join('')
-                  : typeof children === 'string' 
-                    ? children 
+                const childrenStr = Array.isArray(children)
+                  ? children
+                      .map((c) => {
+                        if (typeof c === 'string') return c
+                        if (typeof c === 'number' || typeof c === 'boolean') return String(c)
+                        return ''
+                      })
+                      .join('')
+                  : typeof children === 'string'
+                    ? children
                     : typeof children === 'number' || typeof children === 'boolean'
                       ? String(children)
                       : ''

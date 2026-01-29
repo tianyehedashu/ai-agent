@@ -32,6 +32,14 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 # =============================================================================
 
 
+class MCPConfigInput(BaseModel):
+    """MCP 配置（仅新会话生效）"""
+
+    enabled_servers: list[str] = Field(
+        default_factory=list, description="启用的 MCP 服务器 ID 列表"
+    )
+
+
 class ChatRequest(BaseModel):
     """对话请求"""
 
@@ -40,6 +48,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="用户消息")
     session_id: str | None = Field(default=None, description="会话 ID（可选）")
     agent_id: str | None = Field(default=None, description="Agent ID（可选）")
+    mcp_config: MCPConfigInput | None = Field(default=None, description="MCP 配置（仅新会话生效）")
 
     @field_validator("session_id")
     @classmethod
@@ -108,11 +117,17 @@ async def chat(
 
     async def event_generator():
         try:
+            mcp_config_dict = (
+                {"enabled_servers": request.mcp_config.enabled_servers}
+                if request.mcp_config
+                else None
+            )
             async for event in chat_service.chat(
                 session_id=request.session_id,
                 message=request.message,
                 agent_id=request.agent_id,
                 user_id=current_user.id,
+                mcp_config=mcp_config_dict,
             ):
                 try:
                     event_dict = event.model_dump(mode="json", warnings="error")

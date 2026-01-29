@@ -24,7 +24,7 @@ from domains.identity.application import (
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
 from exceptions import PermissionDeniedError
-from libs.api.deps import get_db
+from libs.db.database import get_db
 from libs.db.permission_context import PermissionContext, set_permission_context
 
 __all__ = [

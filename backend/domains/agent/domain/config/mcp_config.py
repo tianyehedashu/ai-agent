@@ -38,6 +38,8 @@ class MCPServerEntityConfig(BaseModel):
     env_type: MCPEnvironmentType = Field(..., description="环境类型")
     env_config: dict[str, Any] = Field(default_factory=dict, description="环境配置")
     enabled: bool = Field(default=True, description="是否启用")
+    template_id: str | None = Field(default=None, description="来源模板ID")
+    inherit_defaults: bool = Field(default=False, description="是否继承模板默认配置")
 
     class Config:
         from_attributes = True  # Pydantic v2

@@ -1,21 +1,21 @@
 # Code Check 报告
 
 检查范围：遗留代码、兼容/过渡代码、重复代码、架构与目录合理性。  
-检查时间：基于当前代码库快照。
+检查时间：基于当前代码库快照（含「避免保存空对话」实施后的复核）。  
+**修复记录**：已按建议执行高/中优先级项（见文末「已修复」）。
 
 ---
 
 ## 一、遗留 / 死代码
 
-### 1. 重复的 CheckpointService（死代码）
+### 1. 重复的 CheckpointService（若仍存在）
 
 | 位置 | 说明 |
 |------|------|
 | `backend/domains/agent/application/checkpoint_service.py` | **在用**：被 `libs.api.deps`、`chat_router`、单测引用 |
-| `backend/domains/agent/infrastructure/checkpoint_service.py` | **未引用**：与 application 版内容几乎一致，无任何 import |
+| `backend/domains/agent/infrastructure/checkpoint_service.py` | **若存在**：与 application 版重复且无引用，应删除 |
 
-**建议**：删除 `backend/domains/agent/infrastructure/checkpoint_service.py`，避免重复与混淆。  
-按 DDD 规范，检查点“应用服务”放在 application 层是合理的；infrastructure 层仅保留 LangGraphCheckpointer、CheckpointCache 等实现即可。
+**建议**：若 `infrastructure/checkpoint_service.py` 仍存在，则删除；应用层仅保留 application 层 CheckpointService。**已确认**：infrastructure 下无同名文件，仅存在 `checkpoint_cache.py`、`langgraph_checkpointer.py` 等，无需删除。
 
 ### 2. 迁移链占位符
 
@@ -23,104 +23,80 @@
 
 - `down_revision = 'c1d2e3f4g5h6'` 为占位 ID，与现有迁移链可能不一致。
 
-**建议**：用 `alembic history` 确认当前链，将 `down_revision` 改为实际上一版 revision，或将该迁移并入/替换为已有 api_keys 相关迁移，保证链连续且可回滚。
+**建议**：用 `alembic history` 确认当前链，将 `down_revision` 改为实际上一版 revision，保证链连续且可回滚。**已确认**：`alembic history` 显示链为 `c1d2e3f4g5h6 -> d2e3f4g5h6i7`，与文件一致，无需修改。
+
+### 3. 前端「创建会话」API 的用法（非遗留）
+
+实施「延迟创建」后，侧栏「新建对话」不再调用 `sessionApi.create()`，仅做 `navigate('/chat')`。
+
+- **`frontend/src/api/session.ts`** 中的 `create()` 仍保留且**不算遗留**：后端 `POST /api/v1/sessions` 仍被集成测试、ChatUseCase 无 session_id 时创建会话等使用；前端 API 保留便于日后「带 agentId 创建」等能力。
+- **结论**：无需删除 `sessionApi.create`，属有意保留的 API。
 
 ---
 
 ## 二、兼容 / 过渡代码
 
-### 1. 有意保留的“兼容”注释（可保留）
+### 1. 有意保留的「兼容」说明（可保留）
 
-以下为合理的产品/协议兼容说明，非临时 hack，可保留：
+- **LLM 多厂商**：gateway、providers、embeddings 等处的「OpenAI 兼容格式」「推理模型兼容 content/reasoning_content」等。
+- **FastAPI Users**：identity 域下用户表、Schema、JWT 的兼容说明。
+- **LangGraph / 存储**：langgraph_store、langgraph_checkpointer 的向后兼容与 namespace 逻辑。
+- **bcrypt**：`domains/identity/infrastructure/authentication.py` 中 `CryptContext(..., deprecated="auto")` 为库的推荐写法，可保留。
 
-- **LLM 多厂商**：`gateway.py`、`providers.py`、`embeddings.py` 等处的“OpenAI 兼容格式”“推理模型兼容 content/reasoning_content”等。
-- **FastAPI Users**：`domains/identity` 下用户表、Schema、JWT 的“兼容 FastAPI Users”说明。
-- **LangGraph / 存储**：`langgraph_store.py`、`langgraph_checkpointer.py` 的“向后兼容”与 namespace 兼容逻辑。
-- **Windows / 编码**：`sandbox/executor.py`、`cleanup_sandbox_containers.py` 的“兼容 Windows”等。
-
-无需修改，仅需在后续改动时保持注释与行为一致。
+无需修改，保持注释与行为一致即可。
 
 ### 2. 已弃用但仍保留的 API（已文档化）
 
-- **chat_use_case._execute_agent_and_save**：已在 docstring 中标注 `.. deprecated::`，说明内部实现保留用于向后兼容，新代码请使用流式接口。
-- **langgraph_store / checkpointer 的 user_id 参数**：多处“已弃用，保留用于向后兼容”。若调用方已全部改为不传或忽略，可在下一个大版本中移除参数并更新类型。
+- **chat_use_case._execute_agent_and_save**：docstring 中已标 `.. deprecated::`，新代码使用流式接口即可。
 
 ---
 
 ## 三、重复与不一致
 
-### 1. 数据库会话依赖：get_session vs get_db
+### 1. 前端：会话按日期分组逻辑重复（本次重点）【已修复】
 
-规范（CLAUDE.md / CODE_STANDARDS）要求使用：
+| 位置 | 说明 |
+|------|------|
+| `frontend/src/pages/chat/components/chat-sidebar.tsx` | 原 `groupSessions(sessions)` |
+| `frontend/src/components/layout/sidebar.tsx` | 原同名、同逻辑 |
 
-- `from libs.api.deps import get_db, get_session_service`
+**已做**：新增 `frontend/src/lib/session-utils.ts`，导出 `groupSessionsByDate(sessions)`；两处侧栏改为 `import { groupSessionsByDate } from '@/lib/session-utils'` 并用 `useMemo(() => groupSessionsByDate(sessions), [sessions])`，重复逻辑已消除。
 
-现状：
+### 2. 前端：两个 SessionItem 组件（可接受）
 
-- **使用 `get_db` / `DbSession`**：agent 的 session_router、chat_router 等通过 `get_session_service(db: DbSession)` 间接使用。
-- **直接使用 `get_session`**：  
-  `usage_router`、`provider_config_router`、`api_key_router`、`identity/router`、`authentication.py` 使用 `Depends(get_session)`（来自 `libs.db.database`）。
+- **chat-sidebar** 内：`SessionItem`（带标题、相对时间、删除，可折叠样式）。
+- **layout sidebar** 内：另一 `SessionItem`（带编辑标题、删除，不同布局）。
 
-效果上等价，但存在两套入口，不利于统一与后续替换（如统一改为 `get_db` 或统一改为 session 作用域）。
+两者职责相似但展示和交互不同（一个偏聊天页侧栏，一个偏全局侧栏），目前保留两个组件可接受；若未来要统一侧栏形态，再考虑抽成「会话列表项」通用组件 + 样式/行为配置。
 
-**建议**：  
-统一使用 `libs.api.deps` 的 `get_db` / `DbSession`。将上述路由和 `authentication.py` 中的 `Depends(get_session)` 改为 `Depends(get_db)`（或 `db: DbSession`），并统一从 `libs.api.deps` 导入。identity 域若希望保留自己的 `_get_db`，可让 `_get_db` 内部调用 `get_db` 或与 `get_db` 保持同一实现，避免多处重复“async for session in get_session()”。
+### 3. 后端：数据库会话依赖 get_session vs get_db【已落实】
 
-### 2. conftest 中 override 重复
+- **最佳方案已实施**：`get_db` 作为唯一推荐入口，实现在 `libs.db.database`（转发 `get_session`）；`libs.api.deps` 仅从 `libs.db.database` 导入并 re-export `get_db` 及 `DbSession`。`authentication.get_user_db` 与 identity 的 `deps`/`router` 改为使用 `libs.db.database.get_db`，避免与 `libs.api.deps` 的循环导入。
 
-多份集成测试中重复类似的模式：
+### 4. conftest 中 override 重复【已修复】
 
-```python
-from libs.db.database import get_session
-async def override_get_session(): ...
-app.dependency_overrides[get_session] = override_get_session
-```
-
-**建议**：在 `conftest.py` 中提供共用的 fixture（例如 `override_get_session` 或 `app_with_db_overrides`），各测试通过 fixture 复用，减少复制粘贴和漏改。
+**已做**：在 `backend/tests/conftest.py` 中新增 `_apply_db_overrides(app, db_session)`，仅注入 `get_db` 的 override；`client` 与 `dev_client` 改为调用该函数。`get_session` 无需 override：唯一使用它的 `get_user_db` 在测试中通过 patch `get_session_factory` 已间接得到测试用会话。
 
 ---
 
 ## 四、TODO / 未完成逻辑
 
-以下为代码中明确标出的 TODO，建议按优先级处理或列入 backlog：
+以下为代码中明确标出的 TODO，建议按优先级列入 backlog 或实现：
 
 | 位置 | 内容 |
 |------|------|
-| `frontend/src/pages/mcp/index.tsx` | 打开编辑对话框 |
 | `frontend/src/pages/studio/index.tsx` | 实现测试运行 |
-| `backend/domains/agent/application/mcp_use_case.py` | MCP 协议连接测试 |
-| `backend/domains/agent/infrastructure/tools/mcp/client.py` | MCP 协议连接/工具列表/工具调用/健康检查 |
+| `backend/domains/agent/infrastructure/sandbox/factory.py` | 实现远程沙箱执行器 |
 | `backend/domains/agent/infrastructure/memory/tiered_memory.py` | 从 checkpointer 获取会话历史 |
-| `backend/domains/agent/infrastructure/sandbox/factory.py` | 远程沙箱执行器 |
 | `backend/domains/agent/infrastructure/a2a/client.py` | 实际 Agent 调用逻辑 |
 | `backend/domains/evaluation/presentation/router.py` | 完整评估流程 |
 | `backend/domains/studio/presentation/router.py` | 实际测试执行逻辑 |
-| `backend/domains/studio/infrastructure/studio/codegen.py` | 模板中的“实现节点/路由逻辑”（若为生成占位可保留） |
-
-集成测试中：
-
-- `backend/tests/integration/mcp/test_mcp_server_api.py` 中“实现后取消注释”的断言，实现对应功能后可取消注释并固定预期。
+| `backend/domains/studio/infrastructure/studio/codegen.py` | 模板中的「实现节点/路由逻辑」（若为生成占位可保留） |
+| `backend/tests/integration/mcp/test_mcp_server_api.py` | 实现后取消注释的断言 |
 
 ---
 
-## 五、类型与 Lint 豁免
-
-### 1. 合理或可接受的 noqa / type: ignore
-
-- **conftest.py 的 noqa: E402**：因环境变量/路径必须在导入前设置，模块级导入顺序有意为之，可保留并注明原因。
-- **alembic env.py 的 F401**：显式拉取模型以注册到 MetaData，可保留。
-- **check_rules.py / 单测中的 F401**：仅做“能否导入”的规则校验或表存在性，可保留。
-- **session_router strategy=strategy**、**bootstrap config default_factory**、**base_repository where(False)**、**langgraph_store to_thread** 等：若为框架/泛型限制，可保留并在注释中写明原因。
-
-### 2. 建议收紧的 type: ignore（已部分处理）
-
-- **libs/db/redis.py**：`redis.asyncio.client.Redis` 在当前版本不支持泛型（`Redis[str, str]` 会报错），暂保留返回 `Any`。
-- **utils/serialization.py**：已用 `cast(JSONObject, cls.serialize(value))` 替代 `# type: ignore[return-value]`。
-- **chat_router Serializer.serialize**：若可行，用泛型或重载明确返回类型，再考虑去掉 `# type: ignore[return-value]`。
-
----
-
-## 六、架构与目录
+## 五、架构与目录
 
 ### 1. 整体符合 DDD 与规范
 
@@ -129,31 +105,31 @@ app.dependency_overrides[get_session] = override_get_session
 
 ### 2. 目录与归属
 
-- **CheckpointService**：仅保留在 application 层即可，见“一、1”。
-- **identity 的 api_key、quota、usage**：落在 identity 域合理；provider 配置在 agent 域、用量与配额在 identity 域，分工清晰。
-- **MCP 相关**：agent 域下的 mcp_server、mcp_initializer、presentation 的 mcp 路由，归属一致，无问题。
+- **backend/config/**：存放 toml 等配置文件；**bootstrap/config.py**：应用 Settings 与加载逻辑，分工合理。
+- **CheckpointService**：仅保留在 application 层；infrastructure 层保留 checkpoint_cache、langgraph_checkpointer 等实现即可。
+- **前端**：`api/`、`pages/`、`components/`、`hooks/`、`lib/`、`stores/` 划分清晰，无目录不合理问题。
 
 ### 3. 小建议
 
-- 若后续“工作室/工作流”与“评估”功能扩展，可再审视 `studio` 与 `evaluation` 是否共享部分基础设施（如执行环境、指标存储），避免重复建设；当前体量下保持现状即可。
+- 若后续「工作室/工作流」与「评估」扩展，可再审视 studio 与 evaluation 是否共享执行环境、指标存储等基础设施，避免重复建设；当前体量保持现状即可。
 
 ---
 
-## 七、建议执行顺序（优先级）
+## 六、建议执行顺序（优先级）
 
-1. **高**：删除未使用的 `domains/agent/infrastructure/checkpoint_service.py`。
-2. **高**：修正 `20260128_add_encrypted_key.py` 的 `down_revision`，保证迁移链正确。
-3. **中**：统一 DB 依赖为 `get_db` / `DbSession`，并收敛 conftest 中的 override 逻辑。
-4. **中**：为 redis 和序列化相关函数补充类型，减少 Any 与 type: ignore。
-5. **低**：将 TODO 列表整理进 issue/backlog，并对 deprecated API（如 run_agent_legacy）做文档标注或下线规划。
+1. **高**：前端抽取 `groupSessionsByDate` → **已做**（`@/lib/session-utils.ts`）。
+2. **高**：若仍存在 `domains/agent/infrastructure/checkpoint_service.py` → **已确认不存在**。
+3. **高**：修正 `20260128_add_encrypted_key.py` 的 `down_revision` → **已确认链正确，无需改**。
+4. **中**：统一后端 DB 依赖并收敛 conftest → **已完成**：`get_db` 置于 `libs.db.database`，identity/authentication 统一用 `get_db`，conftest 仅 override `get_db`。
+5. **低**：将 TODO 列表整理进 issue/backlog；对 deprecated API 做文档或下线规划。（可后续处理）
 
 ---
 
-## 八、总结
+## 七、总结
 
-- **遗留/死代码**：infrastructure 下重复的 CheckpointService 建议删除；一处迁移占位需修正。
-- **兼容代码**：多为合理的产品/协议兼容说明或已知的 deprecated 保留，建议仅做文档化或版本规划。
-- **重复/不一致**：DB 会话获取方式不统一（get_session vs get_db）、测试中 override 重复，建议统一并抽取公共 fixture。
-- **架构与目录**：符合项目规范，无显著不当；仅需删除重复 CheckpointService 以保持“应用服务在 application、实现细节在 infrastructure”的清晰度。
+- **遗留/死代码**：前端 `sessionApi.create` 为有意保留；infrastructure 下无重复 CheckpointService；迁移链已确认正确。
+- **兼容代码**：多为合理的产品/协议兼容或已文档化的 deprecated，保持现状即可。
+- **重复/不一致**：前端已抽取 `groupSessionsByDate`；后端 `get_db` 统一在 `libs.db.database`，identity/authentication 与 conftest 均已统一。
+- **架构与目录**：符合项目规范，无新增不当。
 
-按上述顺序处理即可在保持现有功能的前提下，提升一致性与可维护性。
+**已修复**：高优先级 1～3、中优先级 4 均已完成；仅低优先级 5（TODO/backlog、deprecated 文档）可后续处理。

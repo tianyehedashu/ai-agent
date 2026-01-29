@@ -164,6 +164,29 @@ class SessionUseCase:
             raise NotFoundError("Session", session_id)
         return session
 
+    def get_session_mcp_config(self, session: Session) -> dict:
+        """从会话实体读取 MCP 配置（enabled_servers）。
+
+        调用方需已校验会话存在与所有权。
+        """
+        config = session.config if isinstance(session.config, dict) else {}
+        mcp = config.get("mcp_config") or {}
+        enabled = mcp.get("enabled_servers")
+        if not isinstance(enabled, list):
+            enabled = []
+        return {"enabled_servers": [str(s) for s in enabled]}
+
+    async def update_session_mcp_config(
+        self, session_id: str, enabled_servers: list[str]
+    ) -> dict:
+        """更新会话的 MCP 配置（enabled_servers）。"""
+        await self.get_session_or_raise(session_id)  # 校验存在
+        await self.session_repo.update_config(
+            uuid.UUID(session_id),
+            {"mcp_config": {"enabled_servers": enabled_servers}},
+        )
+        return {"enabled_servers": enabled_servers}
+
     async def delete_session(self, session_id: str) -> None:
         """删除会话
 

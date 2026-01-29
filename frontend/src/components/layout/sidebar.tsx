@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   MessageSquare,
   Bot,
@@ -15,6 +15,7 @@ import {
   Loader2,
   Pencil,
   Zap,
+  Server,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
@@ -32,48 +33,19 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
+import { groupSessionsByDate } from '@/lib/session-utils'
 import { cn } from '@/lib/utils'
+import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
 import type { Session } from '@/types'
 
 const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'MCP 工具', href: '/mcp', icon: Zap },
+  { name: 'MCP 服务器', href: '/mcp', icon: Zap },
+  { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '工作台', href: '/studio', icon: Workflow },
   { name: '设置', href: '/settings', icon: Settings },
 ]
-
-// Group sessions by date
-const groupSessions = (sessions: Session[]): Record<string, Session[]> => {
-  const groups: Record<string, Session[]> = {
-    今天: [],
-    昨天: [],
-    过去7天: [],
-    更早: [],
-  }
-
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const lastWeek = new Date(today)
-  lastWeek.setDate(lastWeek.getDate() - 7)
-
-  sessions.forEach((session) => {
-    const date = new Date(session.updatedAt)
-    if (date >= today) {
-      groups['今天'].push(session)
-    } else if (date >= yesterday) {
-      groups['昨天'].push(session)
-    } else if (date >= lastWeek) {
-      groups['过去7天'].push(session)
-    } else {
-      groups['更早'].push(session)
-    }
-  })
-
-  return groups
-}
 
 export default function Sidebar(): React.JSX.Element {
   const location = useLocation()
@@ -81,8 +53,6 @@ export default function Sidebar(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { isCollapsed, toggle } = useSidebarStore()
   const [isHistoryOpen, setIsHistoryOpen] = useState(true)
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
 
   // Fetch sessions
   const { data: sessionsData, isLoading: isLoadingSessions } = useQuery({
@@ -90,33 +60,28 @@ export default function Sidebar(): React.JSX.Element {
     queryFn: () => sessionApi.list(1, 50),
   })
 
-  // Create session mutation
-  const createMutation = useMutation({
-    mutationFn: (options?: { agentId?: string; title?: string }) => sessionApi.create(options),
-    onSuccess: (newSession) => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      navigate(`/chat/${newSession.id}`)
-    },
-    onError: (error) => {
-      toast({
-        variant: 'destructive',
-        title: '创建会话失败',
-        description: error instanceof Error ? error.message : '未知错误',
-      })
-    },
-  })
-
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
-  const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
-
-  const handleCreateSession = (): void => {
-    void createMutation.mutateAsync({})
-  }
+  const groupedSessions = useMemo(
+    () => groupSessionsByDate(sessions),
+    [sessions]
+  )
 
   const isChatActive =
     location.pathname === '/' ||
     location.pathname === '/chat' ||
     location.pathname.startsWith('/chat/')
+
+  // 当前会话（用于侧栏「对话」区显示当前会话标题）
+  const { data: currentSession } = useQuery({
+    queryKey: ['session', sessionId],
+    queryFn: () => (sessionId ? sessionApi.get(sessionId) : Promise.resolve(null)),
+    enabled: !!sessionId && isChatActive,
+  })
+
+  // 新建对话：仅导航到无 sessionId 的聊天页，会话在用户发送第一条消息时由后端创建（避免空会话入库）
+  const handleCreateSession = (): void => {
+    navigate('/chat')
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -154,13 +119,8 @@ export default function Sidebar(): React.JSX.Element {
                   isCollapsed ? 'px-0' : 'justify-start gap-2'
                 )}
                 onClick={handleCreateSession}
-                disabled={createMutation.isPending}
               >
-                {createMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
+                <Plus className="h-4 w-4" />
                 {!isCollapsed && <span>新建对话</span>}
               </Button>
             </TooltipTrigger>
@@ -182,7 +142,9 @@ export default function Sidebar(): React.JSX.Element {
                   )}
                 >
                   <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">对话</span>
+                  <span className="flex-1 truncate text-left">
+                    {isChatActive && currentSession?.title ? currentSession.title : '对话'}
+                  </span>
                   {isHistoryOpen ? (
                     <ChevronDown className="h-3 w-3 opacity-50" />
                   ) : (
@@ -212,6 +174,7 @@ export default function Sidebar(): React.JSX.Element {
                                 key={session.id}
                                 session={session}
                                 isActive={session.id === sessionId}
+                                currentSessionId={sessionId}
                               />
                             ))}
                           </div>
@@ -311,13 +274,16 @@ export default function Sidebar(): React.JSX.Element {
 function SessionItem({
   session,
   isActive,
+  currentSessionId,
 }: Readonly<{
   session: Session
   isActive: boolean
+  currentSessionId?: string
 }>): React.JSX.Element {
   const [isHovered, setIsHovered] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { toast } = useToast()
 
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
@@ -328,10 +294,16 @@ function SessionItem({
       try {
         await sessionApi.delete(session.id)
         void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+        void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
         toast({
           title: '删除成功',
           description: '会话已删除',
         })
+        if (session.id === currentSessionId) {
+          useChatStore.getState().setCurrentSession(null)
+          useChatStore.getState().clearMessages()
+          navigate('/chat')
+        }
       } catch (error) {
         toast({
           variant: 'destructive',
@@ -402,6 +374,7 @@ function SessionItem({
         currentTitle={session.title}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+          void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
         }}
       />
     </Link>

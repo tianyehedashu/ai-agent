@@ -47,10 +47,10 @@ vi.mock('../components/import-dialog', () => ({
   ),
 }))
 
-vi.mock('../components/detail-drawer', () => ({
-  DetailDrawer: ({ server, open }: { server: MCPServerConfig | null; open: boolean }) => (
-    <div data-testid="detail-drawer" style={{ display: open ? 'block' : 'none' }}>
-      Detail Drawer: {server?.name ?? 'none'}
+vi.mock('../components/edit-dialog', () => ({
+  EditDialog: ({ open }: { open: boolean }) => (
+    <div data-testid="edit-dialog" style={{ display: open ? 'block' : 'none' }}>
+      Edit Dialog
     </div>
   ),
 }))
@@ -121,7 +121,7 @@ describe('MCPPage', () => {
       </QueryClientProvider>
     )
 
-    expect(screen.getByText('MCP 工具中心')).toBeInTheDocument()
+    expect(screen.getByText('MCP 服务器')).toBeInTheDocument()
   })
 
   it('shows page description', () => {
@@ -131,7 +131,7 @@ describe('MCPPage', () => {
       </QueryClientProvider>
     )
 
-    expect(screen.getByText('管理和配置 Model Context Protocol 服务器与工具')).toBeInTheDocument()
+    expect(screen.getByText('管理和配置 MCP 服务器')).toBeInTheDocument()
   })
 
   it('shows empty state when no servers', async () => {

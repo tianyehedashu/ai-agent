@@ -117,6 +117,7 @@ class ChatUseCase:
         message: str,
         agent_id: str | None,
         user_id: str,
+        mcp_config: dict | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """处理对话请求
 
@@ -125,6 +126,7 @@ class ChatUseCase:
             message: 用户消息
             agent_id: Agent ID
             user_id: 用户 ID
+            mcp_config: MCP 配置（仅新会话生效，如 {"enabled_servers": [...]}）
 
         Yields:
             AgentEvent: 聊天事件
@@ -138,6 +140,11 @@ class ChatUseCase:
 
         if is_new_session:
             yield AgentEvent.session_created(session_id)
+            # 新会话：初始化 MCP 配置，供 _prepare_agent_engine 加载工具
+            if mcp_config and mcp_config.get("enabled_servers"):
+                await self.session_use_case.update_session_mcp_config(
+                    session_id, mcp_config["enabled_servers"]
+                )
 
         # 为当前会话创建事件队列（用于后台任务发送事件）
         event_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
@@ -246,9 +253,7 @@ class ChatUseCase:
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
 
-    async def _generate_title_background(
-        self, session_id: str, message: str, user_id: str
-    ) -> None:
+    async def _generate_title_background(self, session_id: str, message: str, user_id: str) -> None:
         """后台任务：生成标题（使用独立的数据库会话）"""
         try:
             # 使用独立的数据库会话，避免与主请求会话冲突
@@ -536,9 +541,7 @@ class ChatUseCase:
             data=data,
         )
 
-    async def _load_mcp_tools(
-        self, session_id: str, tool_registry: ConfiguredToolRegistry
-    ) -> None:
+    async def _load_mcp_tools(self, session_id: str, tool_registry: ConfiguredToolRegistry) -> None:
         """
         加载 Session 配置的 MCP 工具并注册到工具注册表
 

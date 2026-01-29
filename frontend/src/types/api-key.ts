@@ -39,13 +39,7 @@ export type ApiKeyScope =
 // =============================================================================
 
 export const API_KEY_SCOPE_GROUPS: Record<string, ApiKeyScope[]> = {
-  read_only: [
-    'agent:read',
-    'session:read',
-    'memory:read',
-    'workflow:read',
-    'system:read',
-  ],
+  read_only: ['agent:read', 'session:read', 'memory:read', 'workflow:read', 'system:read'],
   full_access: [
     'agent:read',
     'agent:update',
@@ -59,12 +53,7 @@ export const API_KEY_SCOPE_GROUPS: Record<string, ApiKeyScope[]> = {
     'workflow:update',
     'system:read',
   ],
-  agent_only: [
-    'agent:read',
-    'agent:execute',
-    'session:read',
-    'session:create',
-  ],
+  agent_only: ['agent:read', 'agent:execute', 'session:read', 'session:create'],
   // MCP 相关分组
   mcp_llm_only: ['mcp:llm-server'],
   mcp_all: [
@@ -277,7 +266,9 @@ export function getStatusColor(status: ApiKeyStatus): string {
   }
 }
 
-export function getStatusBadgeVariant(status: ApiKeyStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+export function getStatusBadgeVariant(
+  status: ApiKeyStatus
+): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case 'active':
       return 'default'

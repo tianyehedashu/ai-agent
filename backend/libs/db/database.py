@@ -101,6 +101,17 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         # 上下文管理器会自动关闭会话，无需手动处理
 
 
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    获取数据库会话（FastAPI 依赖注入推荐入口）
+
+    与 get_session 功能相同，作为「规范入口」供路由与 identity 等层使用，
+    避免 libs.api.deps 与 identity 的循环导入。
+    """
+    async for session in get_session():
+        yield session
+
+
 @asynccontextmanager
 async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
     """

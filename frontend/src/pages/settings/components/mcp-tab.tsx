@@ -1,5 +1,5 @@
 /**
- * MCP 工具管理标签页
+ * MCP 服务器管理标签页
  */
 
 import { useState } from 'react'
@@ -104,7 +104,7 @@ export function MCPTab(): React.ReactElement {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">MCP 工具管理</h2>
+          <h2 className="text-2xl font-bold">MCP 服务器管理</h2>
           <p className="text-muted-foreground">管理 Model Context Protocol 服务器</p>
         </div>
         <AddServerDialog

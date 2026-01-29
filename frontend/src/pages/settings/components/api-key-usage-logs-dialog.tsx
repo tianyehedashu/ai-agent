@@ -35,32 +35,9 @@ export function ApiKeyUsageLogsDialog({
     enabled: open,
   })
 
-  const getStatusColor = (status: number): string => {
-    if (status >= 200 && status < 300) return 'text-green-600'
-    if (status >= 300 && status < 400) return 'text-yellow-600'
-    if (status >= 400 && status < 500) return 'text-orange-600'
-    return 'text-red-600'
-  }
-
-  const getMethodBadgeVariant = (method: string): 'default' | 'secondary' | 'outline' | 'destructive' => {
-    switch (method.toLowerCase()) {
-      case 'get':
-        return 'default'
-      case 'post':
-        return 'secondary'
-      case 'put':
-      case 'patch':
-        return 'outline'
-      case 'delete':
-        return 'destructive'
-      default:
-        return 'outline'
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="max-h-[80vh] max-w-2xl">
         <DialogHeader>
           <DialogTitle>API Key 使用日志</DialogTitle>
           <DialogDescription>{logs?.length ?? 0} 条记录</DialogDescription>
@@ -88,7 +65,19 @@ export function ApiKeyUsageLogsDialog({
   )
 }
 
-function LogEntry({ log }: { log: { endpoint: string; method: string; ip_address?: string; status_code: number; response_time_ms?: number; created_at: string; id?: string } }): React.ReactElement {
+function LogEntry({
+  log,
+}: {
+  log: {
+    endpoint: string
+    method: string
+    ip_address?: string
+    status_code: number
+    response_time_ms?: number
+    created_at: string
+    id?: string
+  }
+}): React.ReactElement {
   const getStatusColor = (status: number): string => {
     if (status >= 200 && status < 300) return 'text-green-600'
     if (status >= 300 && status < 400) return 'text-yellow-600'
@@ -96,7 +85,9 @@ function LogEntry({ log }: { log: { endpoint: string; method: string; ip_address
     return 'text-red-600'
   }
 
-  const getMethodBadgeVariant = (method: string): 'default' | 'secondary' | 'outline' | 'destructive' => {
+  const getMethodBadgeVariant = (
+    method: string
+  ): 'default' | 'secondary' | 'outline' | 'destructive' => {
     switch (method.toLowerCase()) {
       case 'get':
         return 'default'

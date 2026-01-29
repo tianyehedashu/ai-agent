@@ -10,6 +10,8 @@ export interface ChatRequest {
   message: string
   sessionId?: string
   agentId?: string
+  /** MCP 配置（仅新会话生效，首条消息时携带） */
+  mcpConfig?: { enabledServers: string[] }
 }
 
 // 转换为后端期望的格式（snake_case）
@@ -18,6 +20,9 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
     message: request.message,
     session_id: request.sessionId,
     agent_id: request.agentId,
+    mcp_config: request.mcpConfig
+      ? { enabled_servers: request.mcpConfig.enabledServers }
+      : undefined,
   }
 }
 

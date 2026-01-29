@@ -230,6 +230,43 @@ async def _handle_mcp_request(request: Request, server_name: str, user_id: UUID 
             mcp_user_id_var.reset(token)
 
 
+# Cursor mcp.json 中常用的客户端显示名（scope -> 显示名）
+_SCOPE_TO_CURSOR_NAME = {
+    "llm-server": "ai-agent-llm",
+}
+
+
+def _scope_to_cursor_name(scope: str) -> str:
+    """将后端 scope 转为 Cursor mcp.json 中常用的 key（如 ai-agent-llm）"""
+    return _SCOPE_TO_CURSOR_NAME.get(scope, scope.replace("-", "_"))
+
+
+@router.get("/client-config", include_in_schema=False)
+async def mcp_client_config(request: Request):
+    """返回 Cursor mcp.json 同构的客户端直连配置（占位 API Key，便于前端复制/下载）"""
+    base_url = str(request.base_url).rstrip("/")
+    # 使用 /api/v1/mcp 前缀与 main 中挂载一致
+    if "/api/v1" not in base_url:
+        base_url = f"{base_url}/api/v1"
+    mcp_servers: dict = {}
+    for server_name in SERVER_MAP:
+        try:
+            scope = MCPServerScope.from_name(server_name)
+            cursor_name = _scope_to_cursor_name(server_name)
+            url = f"{base_url}/mcp/{server_name}"
+            mcp_servers[cursor_name] = {
+                "type": "streamableHttp",
+                "url": url,
+                "description": MCPServerScope.get_description(scope),
+                "headers": {
+                    "Authorization": "Bearer <YOUR_API_KEY>",
+                },
+            }
+        except ValueError:
+            continue
+    return {"mcpServers": mcp_servers}
+
+
 @router.api_route(
     "/{server_name}",
     methods=["GET", "POST", "DELETE"],
@@ -284,7 +321,7 @@ async def mcp_server_info(
 
 @router.get("/", include_in_schema=False)
 async def mcp_servers_list():
-    """列出所有可用的 MCP 服务器"""
+    """列出所有可用的 MCP 服务器（含工具列表）"""
     servers = []
 
     for server_name, server in SERVER_MAP.items():
@@ -298,6 +335,10 @@ async def mcp_servers_list():
                     "scope": server_name,
                     "description": MCPServerScope.get_description(scope),
                     "tool_count": len(tools),
+                    "tools": [
+                        {"name": t.name, "description": getattr(t, "description", None) or ""}
+                        for t in tools
+                    ],
                 }
             )
         except ValueError:
