@@ -1,7 +1,3 @@
-import { useState } from 'react'
-
-import { Eye, EyeOff } from 'lucide-react'
-
 import { useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +13,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
 import { ProviderConfigTab } from './components/provider-config-tab'
 
@@ -85,16 +82,7 @@ export default function SettingsPage(): React.JSX.Element {
         </TabsContent>
 
         <TabsContent value="api">
-          <Card>
-            <CardHeader>
-              <CardTitle>API 密钥</CardTitle>
-              <CardDescription>配置 LLM 服务的 API 密钥</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ApiKeyInput label="Anthropic API Key" name="anthropic" />
-              <ApiKeyInput label="OpenAI API Key" name="openai" />
-            </CardContent>
-          </Card>
+          <ApiKeyTab />
         </TabsContent>
 
         <TabsContent value="providers">
@@ -134,44 +122,6 @@ export default function SettingsPage(): React.JSX.Element {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  )
-}
-
-function ApiKeyInput({
-  label,
-  name: _name,
-}: Readonly<{ label: string; name: string }>): React.JSX.Element {
-  const [showKey, setShowKey] = useState(false)
-  const [value, setValue] = useState('')
-
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Input
-            type={showKey ? 'text' : 'password'}
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value)
-            }}
-            placeholder={`输入您的 ${label}`}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
-            onClick={() => {
-              setShowKey(!showKey)
-            }}
-          >
-            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
-        </div>
-        <Button>保存</Button>
-      </div>
     </div>
   )
 }
