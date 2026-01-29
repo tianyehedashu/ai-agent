@@ -1,5 +1,5 @@
 """
-认证端点集成测试
+认证端点集成测试。使用 tests/conftest.py 的 dev_client fixture。
 
 测试 /api/v1/auth/me 端点的基本功能，确保：
 1. 开发环境下支持匿名用户
@@ -7,55 +7,11 @@
 3. 不会因为配置问题导致 401 错误
 """
 
-from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.identity.presentation.deps import ANONYMOUS_USER_COOKIE
-
-
-@pytest_asyncio.fixture
-async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """开发模式 HTTP 客户端 fixture"""
-    mock_factory = MagicMock()
-    mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
-    mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
-
-    with (
-        patch("libs.db.database.init_db"),
-        patch("libs.db.redis.init_redis"),
-        patch("libs.db.database.get_session_factory", return_value=mock_factory),
-        patch("libs.db.database.get_async_session", new=mock_factory),
-        patch("bootstrap.config.settings.app_env", "development"),
-    ):
-        from bootstrap.main import app
-        from domains.agent.infrastructure.engine.langgraph_checkpointer import (
-            LangGraphCheckpointer,
-        )
-        from libs.db.database import get_session
-
-        async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        app.dependency_overrides[get_session] = override_get_session
-
-        if not hasattr(app.state, "checkpointer"):
-            test_checkpointer = LangGraphCheckpointer(storage_type="memory")
-            await test_checkpointer.setup()
-            app.state.checkpointer = test_checkpointer
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as ac:
-            yield ac
-
-        app.dependency_overrides.clear()
 
 
 @pytest.mark.integration

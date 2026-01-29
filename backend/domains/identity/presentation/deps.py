@@ -24,7 +24,7 @@ from domains.identity.application import (
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
 from exceptions import PermissionDeniedError
-from libs.db.database import get_session
+from libs.api.deps import get_db
 from libs.db.permission_context import PermissionContext, set_permission_context
 
 __all__ = [
@@ -40,6 +40,7 @@ __all__ = [
     "check_session_ownership",
     "get_current_user",
     "get_current_user_optional",
+    "get_user_uuid",
     "require_auth",
     "require_role",
 ]
@@ -60,18 +61,6 @@ class SessionLike(Protocol):
 
 
 # =============================================================================
-# 数据库会话辅助
-# =============================================================================
-
-
-async def _get_db() -> AsyncSession:
-    """获取数据库会话（内部使用）"""
-    async for session in get_session():
-        return session
-    raise RuntimeError("Failed to get database session")
-
-
-# =============================================================================
 # 认证依赖
 # =============================================================================
 
@@ -79,7 +68,7 @@ async def _get_db() -> AsyncSession:
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db),
     anonymous_user_id: str | None = Cookie(default=None, alias=ANONYMOUS_USER_COOKIE),
 ) -> CurrentUser:
     """获取当前用户并设置权限上下文"""
@@ -117,7 +106,7 @@ async def get_current_user(
 
 async def get_current_user_optional(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser | None:
     """获取当前用户（可选）"""
     principal = await get_principal_optional(credentials, db)
@@ -189,6 +178,11 @@ AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 RequiredAuthUser = Annotated[CurrentUser, Depends(require_auth)]
 OptionalUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
+
+
+def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
+    """从当前用户获取 UUID（用于需要注册用户 ID 的 API）"""
+    return uuid.UUID(current_user.id)
 
 
 # =============================================================================

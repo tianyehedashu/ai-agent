@@ -33,13 +33,17 @@ from domains.agent.presentation.agent_router import router as agent_router
 from domains.agent.presentation.chat_router import router as chat_router
 from domains.agent.presentation.execution_router import router as execution_router
 from domains.agent.presentation.mcp_router import router as mcp_router
+from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
+from domains.agent.presentation.provider_config_router import router as provider_config_router
 from domains.agent.presentation.session_router import router as session_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
 from domains.evaluation.presentation.router import router as evaluation_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
+from domains.identity.presentation.api_key_router import router as api_key_router
 from domains.identity.presentation.router import router as identity_router
+from domains.identity.presentation.usage_router import router as usage_router
 from domains.studio.presentation.quality_router import router as quality_router
 from domains.studio.presentation.router import router as studio_router
 from exceptions import (
@@ -181,7 +185,15 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         # 初始化失败不应阻止应用启动
         logger.warning("Failed to initialize default MCP servers: %s", e)
 
-    yield
+    # FastMCP Streamable HTTP 服务器初始化
+    # 使用 initialize_mcp_servers() 统一管理初始化和生命周期
+    # 详见 mcp_server_router.py 中的文档说明
+    from domains.agent.presentation.mcp_server_router import (  # pylint: disable=import-outside-toplevel
+        initialize_mcp_servers,
+    )
+
+    async with initialize_mcp_servers():
+        yield
 
     # 关闭时
     # 停止会话管理器（会清理所有会话容器）
@@ -493,6 +505,9 @@ api_router_prefix = "/api/v1"
 # 认证相关路由
 app.include_router(identity_router, prefix=f"{api_router_prefix}/auth", tags=["Authentication"])
 
+# API Key 管理
+app.include_router(api_key_router, prefix=f"{api_router_prefix}/api-keys", tags=["API Keys"])
+
 # Agent 管理
 app.include_router(agent_router, prefix=f"{api_router_prefix}/agents", tags=["Agents"])
 
@@ -523,8 +538,26 @@ app.include_router(evaluation_router, prefix=api_router_prefix, tags=["Evaluatio
 # 执行配置
 app.include_router(execution_router, prefix=api_router_prefix, tags=["Execution"])
 
-# MCP 管理
+# MCP 管理（管理 API：/servers, /templates 等）
 app.include_router(mcp_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Management"])
+# MCP Streamable HTTP（llm-server 等：/, /{server_name}, /{server_name}/info）
+app.include_router(mcp_server_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Server"])
+# 同时挂载 /mcp，便于 Cursor 等客户端使用 http://localhost:8000/mcp/llm-server
+app.include_router(mcp_server_router, prefix="/mcp", tags=["MCP Server"])
+
+# 设置 - 用户 LLM 提供商配置
+app.include_router(
+    provider_config_router,
+    prefix=f"{api_router_prefix}/settings/providers",
+    tags=["Settings - Provider Config"],
+)
+
+# 用量与配额
+app.include_router(
+    usage_router,
+    prefix=f"{api_router_prefix}/usage",
+    tags=["Usage"],
+)
 
 
 @app.get("/")

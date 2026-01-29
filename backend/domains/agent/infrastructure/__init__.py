@@ -9,6 +9,7 @@
 - context: 上下文管理
 - tools: 工具系统
 - llm: LLM 网关
+- mcp_server: MCP Streamable HTTP 服务器（llm-server 等）
 - models: ORM 模型
 - repositories: 数据仓储
 """

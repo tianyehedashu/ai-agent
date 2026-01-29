@@ -1,61 +1,17 @@
 """
-匿名用户 API 集成测试
+匿名用户 API 集成测试。使用 tests/conftest.py 的 dev_client fixture。
 
 测试基于 Cookie 的匿名用户隔离机制在 API 层面的行为
 """
 
-from collections.abc import AsyncGenerator
 import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.presentation.deps import ANONYMOUS_USER_COOKIE
-
-
-@pytest_asyncio.fixture
-async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """开发模式 HTTP 客户端 fixture（启用匿名用户功能）"""
-    # 延迟导入，避免在导入时触发 lifespan 和循环导入
-    mock_factory = MagicMock()
-    mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
-    mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
-
-    with (
-        patch("libs.db.database.init_db"),
-        patch("libs.db.redis.init_redis"),
-        patch("libs.db.database.get_session_factory", return_value=mock_factory),
-        patch("libs.db.database.get_async_session", new=mock_factory),
-        # 保持开发模式以启用匿名用户功能
-        patch("bootstrap.config.settings.app_env", "development"),
-    ):
-        from bootstrap.main import app
-        from domains.agent.infrastructure.engine.langgraph_checkpointer import (
-            LangGraphCheckpointer,
-        )
-        from libs.db.database import get_session
-
-        async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-            yield db_session
-
-        app.dependency_overrides[get_session] = override_get_session
-
-        # 确保 checkpointer 在测试环境中已初始化
-        if not hasattr(app.state, "checkpointer"):
-            test_checkpointer = LangGraphCheckpointer(storage_type="memory")
-            await test_checkpointer.setup()
-            app.state.checkpointer = test_checkpointer
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as ac:
-            yield ac
-
-        app.dependency_overrides.clear()
 
 
 @pytest.mark.integration
@@ -109,16 +65,18 @@ class TestAnonymousUserAPI:
             patch("libs.db.database.get_async_session", new=mock_factory),
             patch("bootstrap.config.settings.app_env", "development"),
         ):
+            from collections.abc import AsyncGenerator
+
             from bootstrap.main import app
             from domains.agent.infrastructure.engine.langgraph_checkpointer import (
                 LangGraphCheckpointer,
             )
-            from libs.db.database import get_session
+            from libs.api.deps import get_db
 
-            async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
+            async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
                 yield db_session
 
-            app.dependency_overrides[get_session] = override_get_session
+            app.dependency_overrides[get_db] = override_get_db
 
             if not hasattr(app.state, "checkpointer"):
                 test_checkpointer = LangGraphCheckpointer(storage_type="memory")

@@ -13,7 +13,7 @@ Serialization Utilities - 序列化工具
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from pydantic import BaseModel, PlainValidator
 
@@ -105,7 +105,7 @@ class Serializer:
         """
         if not isinstance(value, dict):
             return {}
-        return cls.serialize(value)  # type: ignore[return-value]
+        return cast("JSONObject", cls.serialize(value))
 
     @classmethod
     def _serialize_value(cls, v: Any) -> JSONValue:

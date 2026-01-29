@@ -1,18 +1,15 @@
 """
 MCP 工具服务
 
-从数据库加载 MCP 服务器配置并初始化工具
+从数据库加载 MCP 服务器配置并初始化工具。
+提供 URL 解析（stdio/sse/http/ws）为 ExecutionConfig 兼容的连接配置。
 """
 
+import re
+from typing import Any
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from libs.config.execution_config import (
-    ExecutionConfig,
-    MCPConfig,
-    MCPServerConfig,
-)
 
 from domains.agent.domain.config.mcp_config import MCPScope, MCPServerEntityConfig
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
@@ -21,9 +18,60 @@ from domains.agent.infrastructure.repositories.mcp_server_repository import (
 from domains.agent.infrastructure.tools.base import BaseTool
 from domains.agent.infrastructure.tools.mcp.client import ConfiguredMCPManager
 from domains.agent.infrastructure.tools.mcp.wrapper import MCPToolWrapper
+from libs.config.execution_config import (
+    ExecutionConfig,
+    MCPConfig,
+    MCPServerConfig,
+)
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def parse_url_to_connection(
+    url: str,
+    env_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """将 MCP 连接 URL 解析为 ExecutionConfig 兼容的连接配置。
+
+    - stdio://command [args...] -> {"command": str, "args": list}
+    - sse://host/path -> {"url": "https://host/path"}
+    - http(s)://... -> {"url": str}
+    - ws(s)://... -> {"url": str}
+    env_config 可含 env, cwd, headers，会合并进返回字典。
+    """
+    env_config = env_config or {}
+    result: dict[str, Any] = {}
+
+    if url.startswith("stdio://"):
+        rest = url[8:].strip()
+        parts = rest.split()
+        result["command"] = parts[0] if parts else ""
+        result["args"] = parts[1:] if len(parts) > 1 else []
+        if "env" in env_config:
+            result["env"] = env_config["env"]
+        if "cwd" in env_config:
+            result["cwd"] = env_config["cwd"]
+        return result
+
+    if url.startswith("sse://"):
+        host_path = url[6:].strip()
+        result["url"] = f"https://{host_path}" if not host_path.startswith("http") else host_path
+        if "headers" in env_config:
+            result["headers"] = env_config["headers"]
+        return result
+
+    if re.match(r"^https?://", url) or re.match(r"^wss?://", url):
+        result["url"] = url
+        if "headers" in env_config:
+            result["headers"] = env_config["headers"]
+        return result
+
+    # 未知协议，按 URL 原样
+    result["url"] = url
+    if "headers" in env_config:
+        result["headers"] = env_config["headers"]
+    return result
 
 
 class MCPToolService:
@@ -75,15 +123,11 @@ class MCPToolService:
                         enabled=server.enabled,
                     )
                     servers.append(server_config)
-                    logger.debug(
-                        "Loaded MCP server: %s (%s)", server.name, server.scope
-                    )
+                    logger.debug("Loaded MCP server: %s (%s)", server.name, server.scope)
                 else:
                     logger.warning("MCP server %s is disabled or not found", server_id)
             except Exception as e:
-                logger.error(
-                    "Failed to load MCP server %s: %s", server_id, e, exc_info=True
-                )
+                logger.error("Failed to load MCP server %s: %s", server_id, e, exc_info=True)
 
         self._enabled_servers = servers
         return servers
@@ -164,9 +208,7 @@ class MCPToolService:
                     tool_definition=tool_def,
                 )
                 tools.append(wrapper)
-                logger.debug(
-                    "Wrapped MCP tool: %s__%s", server_name, tool_name
-                )
+                logger.debug("Wrapped MCP tool: %s__%s", server_name, tool_name)
 
             logger.info("Loaded %d MCP tools", len(tools))
             return tools

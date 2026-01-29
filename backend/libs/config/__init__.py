@@ -38,6 +38,7 @@ from .interfaces import (
     QualityConfigProtocol,
     SandboxConfigProtocol,
 )
+from .llm_config_holder import get_llm_config, set_llm_config
 from .service import (
     ExecutionConfigService,
     get_execution_config_service,
@@ -88,5 +89,7 @@ __all__ = [
     "ToolsConfig",
     "ValidationResult",
     "get_execution_config_service",
+    "get_llm_config",
     "reset_execution_config_service",
+    "set_llm_config",
 ]

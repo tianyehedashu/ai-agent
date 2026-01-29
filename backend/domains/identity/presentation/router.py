@@ -15,7 +15,7 @@ from domains.identity.infrastructure.authentication import (
 )
 from domains.identity.presentation.deps import get_current_user
 from domains.identity.presentation.schemas import CurrentUser, UserCreate, UserRead, UserUpdate
-from libs.db.database import get_session
+from libs.api.deps import get_db
 
 router = APIRouter()
 
@@ -56,7 +56,7 @@ async def get_me(
 async def update_me(
     data: UserUpdate,
     user=Depends(current_active_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ) -> UserRead:
     """更新当前用户"""
     user_service = UserUseCase(session)
@@ -79,7 +79,7 @@ class ChangePasswordRequest(BaseModel):
 async def change_password(
     request: ChangePasswordRequest,
     user=Depends(current_active_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ) -> None:
     """修改密码"""
     user_service = UserUseCase(session)

@@ -9,7 +9,8 @@ import redis.asyncio as redis
 
 from bootstrap.config import settings
 
-# 全局 Redis 客户端
+# 全局 Redis 客户端（decode_responses=True 时 value 为 str）
+# 注：redis.asyncio.client.Redis 在部分版本不支持泛型，使用 Any
 _redis_client: Any | None = None
 
 
@@ -37,14 +38,14 @@ async def close_redis() -> None:
         _redis_client = None
 
 
-def get_redis() -> Any:  # type: ignore
+def get_redis() -> Any:
     """获取 Redis 客户端 (同步方式)"""
     if _redis_client is None:
         raise RuntimeError("Redis not initialized. Call init_redis() first.")
     return _redis_client
 
 
-async def get_redis_client() -> Any:  # type: ignore
+async def get_redis_client() -> Any:
     """获取 Redis 客户端 (异步方式，自动初始化)"""
     global _redis_client
 

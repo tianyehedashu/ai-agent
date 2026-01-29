@@ -67,7 +67,6 @@ def pytest_configure(config):
 
 # 初始化 JWT Manager（在导入测试模块之前）
 # 注意：这些导入必须在警告过滤器配置之后（见上方 pytest_configure）
-# 因此使用 noqa: E402 来忽略模块级导入不在顶部的警告
 # pylint: disable=wrong-import-position
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
@@ -75,8 +74,14 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 from bootstrap.config import settings  # noqa: E402
-from domains.agent.infrastructure.models.mcp_server import MCPServer  # noqa: E402
+from domains.agent.infrastructure.models.user_provider_config import (  # noqa: E402
+    UserProviderConfig,  # noqa: F401
+)
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
+from domains.identity.infrastructure.models.quota import (  # noqa: E402, F401
+    QuotaUsageLog,
+    UserQuota,
+)
 from domains.identity.infrastructure.models.user import User  # noqa: E402
 from libs.db.database import Base  # noqa: E402
 
@@ -289,13 +294,16 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         from domains.agent.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
         )
-        from libs.db.database import (
-            get_session,  # pylint: disable=import-outside-toplevel
-        )
+        from libs.api.deps import get_db  # pylint: disable=import-outside-toplevel
+        from libs.db.database import get_session  # pylint: disable=import-outside-toplevel
+
+        async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+            yield db_session
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
 
+        app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_session] = override_get_session
 
         # 确保 checkpointer 在测试环境中已初始化
@@ -340,13 +348,16 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         from domains.agent.infrastructure.engine.langgraph_checkpointer import (
             LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
         )
-        from libs.db.database import (
-            get_session,  # pylint: disable=import-outside-toplevel
-        )
+        from libs.api.deps import get_db  # pylint: disable=import-outside-toplevel
+        from libs.db.database import get_session  # pylint: disable=import-outside-toplevel
+
+        async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+            yield db_session
 
         async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
             yield db_session
 
+        app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_session] = override_get_session
 
         # 确保 checkpointer 在测试环境中已初始化

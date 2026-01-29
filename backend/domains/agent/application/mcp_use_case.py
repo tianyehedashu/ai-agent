@@ -237,12 +237,11 @@ class MCPManagementUseCase:
                     "User server must have an owner",
                     code="INVALID_SERVER",
                 )
-            if str(server.user_id) != current_user.id:
-                if not current_user.is_admin:
-                    raise PermissionDeniedError(
-                        "You don't have permission to update this server",
-                        code="PERMISSION_DENIED",
-                    )
+            if str(server.user_id) != current_user.id and not current_user.is_admin:
+                raise PermissionDeniedError(
+                    "You don't have permission to update this server",
+                    code="PERMISSION_DENIED",
+                )
 
         # 构建更新配置
         config = MCPServerEntityConfig.model_validate(server)
@@ -401,6 +400,16 @@ class MCPManagementUseCase:
         if not server:
             raise NotFoundError("MCP Server", str(server_id))
 
+        # 用户级服务器：仅所有者或管理员可查看工具列表
+        if server.scope == "user":
+            if server.user_id is None:
+                raise NotFoundError("MCP Server", str(server_id))
+            if str(server.user_id) != current_user.id and not current_user.is_admin:
+                raise PermissionDeniedError(
+                    "You don't have permission to access this server's tools",
+                    code="PERMISSION_DENIED",
+                )
+
         # 从 available_tools 中提取工具信息
         tools_data = server.available_tools or {}
         tools = []
@@ -454,12 +463,11 @@ class MCPManagementUseCase:
                     "User server must have an owner",
                     code="INVALID_SERVER",
                 )
-            if str(server.user_id) != current_user.id:
-                if not current_user.is_admin:
-                    raise PermissionDeniedError(
-                        "You don't have permission to modify this server",
-                        code="PERMISSION_DENIED",
-                    )
+            if str(server.user_id) != current_user.id and not current_user.is_admin:
+                raise PermissionDeniedError(
+                    "You don't have permission to modify this server",
+                    code="PERMISSION_DENIED",
+                )
 
         # 更新工具启用状态
         tools_data = dict(server.available_tools or {})

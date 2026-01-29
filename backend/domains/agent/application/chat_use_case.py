@@ -5,8 +5,8 @@ Chat Use Case - 对话用例
 """
 
 import asyncio
-import uuid
 from collections.abc import AsyncGenerator
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -402,7 +402,11 @@ class ChatUseCase:
         user_id: str,
         session: object | None,
     ) -> AsyncGenerator[AgentEvent, None]:
-        """执行 Agent 并保存结果（保留用于向后兼容）"""
+        """执行 Agent 并保存结果。
+
+        .. deprecated::
+            内部实现保留用于向后兼容，新代码请使用流式接口。
+        """
         async for event in self._execute_agent_with_event_queue(
             engine, session_id, message, user_id, session, asyncio.Queue()
         ):

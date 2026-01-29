@@ -40,6 +40,7 @@ from domains.agent.infrastructure.llm.providers import (
     VolcEngineProvider,
     ZhipuAIProvider,
     get_all_models,
+    get_configured_models,
     get_provider,
 )
 
@@ -75,6 +76,7 @@ __all__ = [
     "create_llm_gateway",
     # Utils
     "get_all_models",
+    "get_configured_models",
     "get_prompt_cache_manager",
     "get_provider",
 ]

@@ -68,6 +68,8 @@ dependencies = [
     # Local Embedding - CPU 友好的本地向量化
     # FastEmbed 基于 ONNX Runtime，无需 GPU，比 sentence-transformers 轻量
     "fastembed>=0.4.0",
+    # MCP - Model Context Protocol（LLM Server 等 Streamable HTTP 端点）
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -208,6 +210,10 @@ ignore = [
 # Note: E402 detects module-level imports not at top of file.
 # Function-level imports should be moved to top per PEP 8, but may be acceptable
 # in cases like avoiding circular imports. Use with discretion.
+
+[tool.ruff.lint.per-file-ignores]
+# conftest: 导入须在 pytest_configure 与警告过滤之后，见文件内注释
+"tests/conftest.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "api", "core", "models", "schemas", "services", "db", "utils"]
