@@ -16,6 +16,7 @@ from domains.agent.domain.config.mcp_config import (
     MCPTemplate,
 )
 from domains.agent.domain.config.templates import BUILTIN_TEMPLATES
+from domains.agent.infrastructure.models.mcp_server import MCPServer
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
     MCPServerRepository,
 )
@@ -24,8 +25,8 @@ from domains.agent.presentation.schemas.mcp_schemas import (
     MCPServerResponse,
     MCPServersListResponse,
     MCPServerUpdateRequest,
-    MCPToolsListResponse,
     MCPToolInfo,
+    MCPToolsListResponse,
 )
 from domains.identity.presentation.schemas import CurrentUser
 from exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
@@ -47,6 +48,7 @@ class MCPManagementUseCase:
 
         try:
             import tiktoken
+
             # 使用 GPT-4 的 tokenizer
             encoding = tiktoken.encoding_for_model("gpt-4")
 
@@ -65,7 +67,7 @@ class MCPManagementUseCase:
             tool_str = json.dumps(tool_config, ensure_ascii=False)
             return len(tool_str) // 4
 
-    def _get_mock_tools_for_server(self, server: "MCPServer") -> tuple[bool, list[dict[str, str]]]:
+    def _get_mock_tools_for_server(self, server: MCPServer) -> tuple[bool, list[dict[str, str]]]:
         """
         获取服务器的模拟工具列表（用于测试连接）
 
@@ -135,17 +137,11 @@ class MCPManagementUseCase:
         system_servers, user_servers = await self.repository.list_available()
 
         return MCPServersListResponse(
-            system_servers=[
-                MCPServerResponse.model_validate(server) for server in system_servers
-            ],
-            user_servers=[
-                MCPServerResponse.model_validate(server) for server in user_servers
-            ],
+            system_servers=[MCPServerResponse.model_validate(server) for server in system_servers],
+            user_servers=[MCPServerResponse.model_validate(server) for server in user_servers],
         )
 
-    async def add_server(
-        self, request: MCPServerCreateRequest, current_user: CurrentUser
-    ):
+    async def add_server(self, request: MCPServerCreateRequest, current_user: CurrentUser):
         """
         添加 MCP 服务器
 
@@ -166,9 +162,7 @@ class MCPManagementUseCase:
 
         # 从模板加载默认配置（如果指定）
         if request.template_id:
-            template = next(
-                (t for t in BUILTIN_TEMPLATES if t.id == request.template_id), None
-            )
+            template = next((t for t in BUILTIN_TEMPLATES if t.id == request.template_id), None)
             if not template:
                 raise ValidationError(
                     f"Template not found: {request.template_id}",
@@ -179,8 +173,7 @@ class MCPManagementUseCase:
                 update={
                     "name": request.name,
                     "url": request.url,
-                    "display_name": request.display_name
-                    or template.default_config.display_name,
+                    "display_name": request.display_name or template.default_config.display_name,
                     "env_type": request.env_type,
                     "env_config": request.env_config,
                     "enabled": request.enabled,
@@ -198,9 +191,7 @@ class MCPManagementUseCase:
             )
 
         # 创建服务器
-        server = await self.repository.create(
-            config=config, user_id=uuid.UUID(current_user.id)
-        )
+        server = await self.repository.create(config=config, user_id=uuid.UUID(current_user.id))
 
         await self.db.commit()
 
@@ -308,9 +299,7 @@ class MCPManagementUseCase:
 
         logger.info("Deleted MCP server: %s", server.name)
 
-    async def toggle_server(
-        self, server_id: uuid.UUID, enabled: bool, current_user: CurrentUser
-    ):
+    async def toggle_server(self, server_id: uuid.UUID, enabled: bool, current_user: CurrentUser):
         """
         切换服务器启用状态
 
@@ -328,9 +317,7 @@ class MCPManagementUseCase:
 
         await self.db.commit()
 
-        logger.info(
-            "Toggled MCP server %s: %s", server.name, "enabled" if enabled else "disabled"
-        )
+        logger.info("Toggled MCP server %s: %s", server.name, "enabled" if enabled else "disabled")
 
         return server
 
@@ -488,7 +475,11 @@ class MCPManagementUseCase:
 
         # 返回更新后的工具信息
         tool_config = next(
-            (t for t in tools_data.get("tools", []) if isinstance(t, dict) and t.get("name") == tool_name),
+            (
+                t
+                for t in tools_data.get("tools", [])
+                if isinstance(t, dict) and t.get("name") == tool_name
+            ),
             {},
         )
 
