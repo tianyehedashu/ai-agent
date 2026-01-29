@@ -27,17 +27,15 @@ import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
-const formSchema = z
-  .object({
-    name: z.string().min(2, { message: '用户名至少需要2个字符' }),
-    email: z.string().email({ message: '请输入有效的邮箱地址' }),
-    password: z.string().min(8, { message: '密码长度至少为8位' }),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: '两次输入的密码不一致',
-    path: ['confirmPassword'],
-  })
+const formSchema = z.object({
+  name: z.string().min(2, { message: '用户名至少需要2个字符' }),
+  email: z.string().email({ message: '请输入有效的邮箱地址' }),
+  password: z.string().min(8, { message: '密码长度至少为8位' }),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "两次输入的密码不一致",
+  path: ["confirmPassword"],
+})
 
 export default function RegisterPage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -109,7 +107,7 @@ export default function RegisterPage(): React.JSX.Element {
                         <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                           placeholder="您的称呼"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -129,7 +127,7 @@ export default function RegisterPage(): React.JSX.Element {
                         <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                           placeholder="name@example.com"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -150,7 +148,7 @@ export default function RegisterPage(): React.JSX.Element {
                         <Input
                           type="password"
                           placeholder="至少8位字符"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -171,7 +169,7 @@ export default function RegisterPage(): React.JSX.Element {
                         <Input
                           type="password"
                           placeholder="再次输入密码"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -182,7 +180,7 @@ export default function RegisterPage(): React.JSX.Element {
               />
               <Button
                 type="submit"
-                className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+                className="w-full bg-primary/90 hover:bg-primary transition-all duration-300 shadow-lg shadow-primary/20"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -200,13 +198,7 @@ export default function RegisterPage(): React.JSX.Element {
         <CardFooter className="flex justify-center text-sm text-muted-foreground">
           <p>
             已有账号？{' '}
-            <Button
-              variant="link"
-              className="px-0 font-semibold text-primary"
-              onClick={() => {
-                navigate('/login')
-              }}
-            >
+            <Button variant="link" className="px-0 font-semibold text-primary" onClick={() => { navigate('/login'); }}>
               直接登录
             </Button>
           </p>

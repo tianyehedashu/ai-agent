@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-cd frontend && npx lint-staged
+# --no-stash: 不自动 stash 未暂存改动，避免 pre-commit 失败时改动被留在 stash 里
+# 注意：提交前请确保只暂存要提交的文件，避免未暂存改动被一起提交
+cd frontend && npx lint-staged --no-stash

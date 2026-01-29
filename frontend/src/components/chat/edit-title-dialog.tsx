@@ -100,13 +100,13 @@ export function EditTitleDialog({
             <Input
               id="title"
               value={title}
-              onChange={(e) => {
-                setTitle(e.target.value)
-              }}
+              onChange={(e) => { setTitle(e.target.value); }}
               placeholder="输入标题..."
               maxLength={200}
             />
-            <p className="text-xs text-muted-foreground">{title.length}/200 字符</p>
+            <p className="text-xs text-muted-foreground">
+              {title.length}/200 字符
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -144,20 +144,14 @@ export function EditTitleDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              总结生成：根据多条消息总结生成标题
-              <br />
+              总结生成：根据多条消息总结生成标题<br />
               首句生成：根据第一条消息生成标题
             </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => {
-              onOpenChange(false)
-            }}
-          >
+          <Button variant="outline" onClick={() => { onOpenChange(false); }}>
             取消
           </Button>
           <Button onClick={handleSave} disabled={isSaving || !title.trim()}>

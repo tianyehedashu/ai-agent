@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { MCPTab } from './components/mcp-tab'
+import { ProviderConfigTab } from './components/provider-config-tab'
 
 export default function SettingsPage(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
@@ -30,6 +31,7 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
+          <TabsTrigger value="providers">大模型配置</TabsTrigger>
           <TabsTrigger value="mcp">MCP 工具</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
         </TabsList>
@@ -93,6 +95,10 @@ export default function SettingsPage(): React.JSX.Element {
               <ApiKeyInput label="OpenAI API Key" name="openai" />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="providers">
+          <ProviderConfigTab />
         </TabsContent>
 
         <TabsContent value="mcp">

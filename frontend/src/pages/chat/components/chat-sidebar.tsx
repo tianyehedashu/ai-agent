@@ -1,15 +1,7 @@
 import { useState, useMemo } from 'react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Trash2,
-  MoreVertical,
-  Loader2,
-  MessageCircle,
-  PanelLeftClose,
-  PanelLeftOpen,
-  MessageSquarePlus,
-} from 'lucide-react'
+import { Trash2, MoreVertical, Loader2, MessageCircle, PanelLeftClose, PanelLeftOpen, MessageSquarePlus } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
@@ -21,7 +13,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import type { Session } from '@/types'
@@ -29,10 +26,10 @@ import type { Session } from '@/types'
 // Group sessions by date
 const groupSessions = (sessions: Session[]): Record<string, Session[]> => {
   const groups: Record<string, Session[]> = {
-    今天: [],
-    昨天: [],
-    过去7天: [],
-    更早: [],
+    '今天': [],
+    '昨天': [],
+    '过去7天': [],
+    '更早': [],
   }
 
   const now = new Date()
@@ -88,7 +85,7 @@ export default function ChatSidebar(): React.JSX.Element {
   })
 
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
-
+  
   const groupedSessions = useMemo(() => groupSessions(sessions), [sessions])
 
   const handleCreateSession = (): void => {
@@ -97,55 +94,46 @@ export default function ChatSidebar(): React.JSX.Element {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div
+      <div 
         className={cn(
-          'relative flex shrink-0 flex-col border-r border-border/40 bg-background/95 backdrop-blur transition-all duration-300 ease-in-out supports-[backdrop-filter]:bg-background/60',
-          isCollapsed ? 'w-[70px]' : 'w-[280px]'
+          "relative flex shrink-0 flex-col border-r border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out",
+          isCollapsed ? "w-[70px]" : "w-[280px]"
         )}
       >
         {/* Header */}
-        <div
-          className={cn(
-            'flex items-center p-4',
-            isCollapsed ? 'justify-center' : 'justify-between'
-          )}
-        >
+        <div className={cn("flex items-center p-4", isCollapsed ? "justify-center" : "justify-between")}>
           {!isCollapsed && <span className="text-sm font-semibold tracking-tight">历史记录</span>}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
+              <Button 
+                variant="ghost" 
+                size="icon" 
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setIsCollapsed(!isCollapsed)
                 }}
               >
-                {isCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
+                {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              {isCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              {isCollapsed ? "展开侧边栏" : "收起侧边栏"}
             </TooltipContent>
           </Tooltip>
         </div>
 
         {/* New Chat Button */}
-        <div className={cn('px-3 pb-4', isCollapsed && 'px-2')}>
+        <div className={cn("px-3 pb-4", isCollapsed && "px-2")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 onClick={handleCreateSession}
                 disabled={createMutation.isPending}
-                variant={isCollapsed ? 'outline' : 'default'}
-                size={isCollapsed ? 'icon' : 'default'}
+                variant={isCollapsed ? "outline" : "default"}
+                size={isCollapsed ? "icon" : "default"}
                 className={cn(
-                  'w-full shadow-sm transition-all hover:shadow-md',
-                  isCollapsed ? 'h-10 w-10 rounded-full p-0' : 'justify-start gap-2'
+                  "w-full shadow-sm transition-all hover:shadow-md",
+                  isCollapsed ? "h-10 w-10 p-0 rounded-full" : "justify-start gap-2"
                 )}
               >
                 {createMutation.isPending ? (
@@ -176,14 +164,16 @@ export default function ChatSidebar(): React.JSX.Element {
               {Object.entries(groupedSessions).map(([groupName, groupSessions]) => {
                 if (groupSessions.length === 0) return null
                 return (
-                  <div key={groupName} className={cn(isCollapsed && 'flex flex-col items-center')}>
+                  <div key={groupName} className={cn(isCollapsed && "flex flex-col items-center")}>
                     {!isCollapsed && (
                       <h3 className="mb-2 px-2 text-xs font-medium text-muted-foreground/70">
                         {groupName}
                       </h3>
                     )}
-                    {isCollapsed && <div className="mb-2 h-px w-8 bg-border/50" />}
-                    <div className={cn('space-y-0.5', isCollapsed && 'space-y-2')}>
+                    {isCollapsed && (
+                       <div className="mb-2 h-px w-8 bg-border/50" />
+                    )}
+                    <div className={cn("space-y-0.5", isCollapsed && "space-y-2")}>
                       {groupSessions.map((session) => (
                         <SessionItem
                           key={session.id}
@@ -220,7 +210,7 @@ function SessionItem({
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()
     e.stopPropagation()
-
+    
     if (confirm('确定要删除这个对话吗？')) {
       try {
         await sessionApi.delete(session.id)
@@ -245,7 +235,9 @@ function SessionItem({
       to={`/chat/${session.id}`}
       className={cn(
         'group flex items-center transition-all duration-200',
-        isCollapsed ? 'h-10 w-10 justify-center rounded-full' : 'gap-2 rounded-md px-2 py-2.5',
+        isCollapsed 
+          ? 'h-10 w-10 justify-center rounded-full' 
+          : 'gap-2 rounded-md px-2 py-2.5',
         isActive
           ? 'bg-secondary text-foreground shadow-sm'
           : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -262,9 +254,11 @@ function SessionItem({
       ) : (
         <>
           <div className="flex-1 overflow-hidden">
-            <p className="truncate font-medium leading-none">{session.title ?? '新对话'}</p>
+            <p className="truncate font-medium leading-none">
+              {session.title ?? '新对话'}
+            </p>
             <p className="mt-1 truncate text-xs opacity-70">
-              {formatRelativeTime(session.updatedAt)}
+               {formatRelativeTime(session.updatedAt)}
             </p>
           </div>
 
@@ -301,7 +295,9 @@ function SessionItem({
   if (isCollapsed) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{ItemContent}</TooltipTrigger>
+        <TooltipTrigger asChild>
+          {ItemContent}
+        </TooltipTrigger>
         <TooltipContent side="right" className="max-w-[200px] truncate">
           {session.title ?? '新对话'}
         </TooltipContent>

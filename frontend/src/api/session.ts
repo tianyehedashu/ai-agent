@@ -9,8 +9,8 @@ import { apiClient } from './client'
 // 后端返回的Session格式（snake_case）
 interface BackendSession {
   id: string
-  user_id: string | null // 注册用户 ID（匿名用户为 null）
-  anonymous_user_id: string | null // 匿名用户 ID（注册用户为 null）
+  user_id: string | null  // 注册用户 ID（匿名用户为 null）
+  anonymous_user_id: string | null  // 匿名用户 ID（注册用户为 null）
   agent_id: string | null
   title: string | null
   status: string
@@ -34,10 +34,7 @@ function toFrontendSession(backend: BackendSession): Session {
 }
 
 // 转换为后端期望的格式（snake_case）
-function toBackendCreateRequest(data: {
-  agentId?: string
-  title?: string
-}): Record<string, unknown> {
+function toBackendCreateRequest(data: { agentId?: string; title?: string }): Record<string, unknown> {
   return {
     agent_id: data.agentId,
     title: data.title,

@@ -96,7 +96,7 @@ export default function LoginPage(): React.JSX.Element {
                         <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                           placeholder="name@example.com"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -117,7 +117,7 @@ export default function LoginPage(): React.JSX.Element {
                         <Input
                           type="password"
                           placeholder="••••••••"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                          className="pl-9 bg-background/50 border-muted-foreground/20 focus:border-primary/50 focus:ring-primary/20 transition-all duration-300"
                           {...field}
                         />
                       </div>
@@ -128,7 +128,7 @@ export default function LoginPage(): React.JSX.Element {
               />
               <Button
                 type="submit"
-                className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+                className="w-full bg-primary/90 hover:bg-primary transition-all duration-300 shadow-lg shadow-primary/20"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -146,17 +146,13 @@ export default function LoginPage(): React.JSX.Element {
         <CardFooter className="flex flex-col space-y-2 text-center text-sm text-muted-foreground">
           <p>
             还没有账号？{' '}
-            <Button
-              variant="link"
-              className="px-0 font-semibold text-primary"
-              onClick={() => {
-                navigate('/register')
-              }}
-            >
+            <Button variant="link" className="px-0 font-semibold text-primary" onClick={() => { navigate('/register'); }}>
               立即注册
             </Button>
           </p>
-          <p className="text-xs opacity-50">如果是开发环境，可以使用默认账号进行测试</p>
+          <p className="text-xs opacity-50">
+            如果是开发环境，可以使用默认账号进行测试
+          </p>
         </CardFooter>
       </Card>
     </div>

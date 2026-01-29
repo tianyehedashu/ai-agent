@@ -313,9 +313,7 @@ function ProcessEventItem({
           {hasDetails && (
             <button
               type="button"
-              onClick={() => {
-                setIsExpanded(!isExpanded)
-              }}
+              onClick={() => { setIsExpanded(!isExpanded); }}
               className="shrink-0 rounded p-0.5 hover:bg-muted/50"
             >
               {isExpanded ? (
@@ -381,9 +379,7 @@ export function ProcessPanel({
       {/* 可点击的头部 */}
       <button
         type="button"
-        onClick={() => {
-          setIsExpanded(!isExpanded)
-        }}
+        onClick={() => { setIsExpanded(!isExpanded); }}
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/20"
       >
         {/* 展开/折叠图标 */}
@@ -415,7 +411,9 @@ export function ProcessPanel({
         </div>
 
         {/* 步骤数 */}
-        <span className="ml-auto text-[10px] text-muted-foreground">{displayEvents.length} 步</span>
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          {displayEvents.length} 步
+        </span>
       </button>
 
       {/* 展开的事件列表 */}
@@ -441,9 +439,7 @@ export function ProcessPanel({
       {isExpanded && needsExpandAll && (
         <button
           type="button"
-          onClick={() => {
-            setIsFullHeight(!isFullHeight)
-          }}
+          onClick={() => { setIsFullHeight(!isFullHeight); }}
           className="flex w-full items-center justify-center gap-1 border-t border-border/30 py-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
         >
           {isFullHeight ? (

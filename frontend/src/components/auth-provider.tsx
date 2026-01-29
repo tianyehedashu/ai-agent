@@ -30,13 +30,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
 
   // 使用 TanStack Query 获取当前用户信息
   // 这会确保 Cookie 在后续请求之前被设置
-  const {
-    data: currentUser,
-    isLoading,
-    isFetched,
-    error,
-    refetch,
-  } = useQuery({
+  const { data: currentUser, isLoading, isFetched, error, refetch } = useQuery({
     queryKey: ['auth', 'currentUser'],
     queryFn: () => userApi.getCurrentUser(),
     retry: false, // 不重试，失败说明未登录或服务不可用
@@ -71,7 +65,9 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
           <AlertCircle className="h-12 w-12 text-destructive" />
           <div>
             <p className="font-medium text-foreground">连接失败</p>
-            <p className="mt-1 text-sm text-muted-foreground">无法连接到服务器，请检查网络连接</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              无法连接到服务器，请检查网络连接
+            </p>
           </div>
           <button
             onClick={() => refetch()}

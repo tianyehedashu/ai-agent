@@ -54,7 +54,7 @@ export function DetailDrawer({
   onOpenChange,
   onEdit,
   onDelete,
-}: DetailDrawerProps): React.ReactElement | null {
+}: DetailDrawerProps): React.ReactElement {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
 

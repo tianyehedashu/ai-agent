@@ -72,7 +72,7 @@ export function SessionNotice({
       className={cn(
         'relative mx-auto mb-4 max-w-2xl overflow-hidden',
         'border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5',
-        'duration-300 animate-in fade-in slide-in-from-top-2'
+        'animate-in fade-in slide-in-from-top-2 duration-300'
       )}
     >
       {/* 关闭按钮 */}
