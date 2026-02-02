@@ -190,9 +190,21 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     # 详见 mcp_server_router.py 中的文档说明
     from domains.agent.presentation.mcp_server_router import (  # pylint: disable=import-outside-toplevel
         initialize_mcp_servers,
+        sync_dynamic_prompts_for_streamable_http,
+        sync_dynamic_tools_for_streamable_http,
     )
+    from libs.db.database import get_session_factory  # pylint: disable=import-outside-toplevel
 
     async with initialize_mcp_servers():
+        try:
+            session_factory = get_session_factory()
+            async with session_factory() as db:
+                await sync_dynamic_tools_for_streamable_http(db)
+                await sync_dynamic_prompts_for_streamable_http(db)
+                await db.commit()
+            logger.info("Dynamic tools and prompts synced for Streamable HTTP MCP servers")
+        except Exception as e:
+            logger.warning("Failed to sync dynamic tools/prompts on startup: %s", e)
         yield
 
     # 关闭时

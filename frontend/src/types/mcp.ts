@@ -135,12 +135,21 @@ export interface ClientDirectMCPTool {
 }
 
 /** 客户端直连 MCP 服务器简要信息（GET /api/v1/mcp/ 返回的单项） */
+/** 客户端直连 MCP 单个 Prompt 信息（列表展示用） */
+export interface ClientDirectMCPPrompt {
+  name: string
+  title: string
+  description: string
+}
+
 export interface ClientDirectMCPServer {
   name: string
   scope: string
   description: string
   tool_count: number
   tools?: ClientDirectMCPTool[]
+  prompt_count?: number
+  prompts?: ClientDirectMCPPrompt[]
 }
 
 /** 客户端直连 MCP 服务器列表响应（GET /api/v1/mcp/） */
@@ -162,4 +171,70 @@ export interface CursorMCPServerConfig {
 /** 客户端直连 MCP 配置响应（GET /api/v1/mcp/client-config，与 Cursor mcp.json 同构） */
 export interface ClientMCPConfigResponse {
   mcpServers: Record<string, CursorMCPServerConfig>
+}
+
+// ---------------------------------------------------------------------------
+// 动态工具（客户端直连 MCP 的添加工具）
+// ---------------------------------------------------------------------------
+
+/** 动态工具类型（与后端 DynamicToolType 一致） */
+export type DynamicToolType = 'http_call'
+
+/** 动态工具列表项（GET .../dynamic-tools 单项） */
+export interface DynamicToolItem {
+  id: string
+  tool_key: string
+  tool_type: string
+  config: Record<string, unknown>
+  description: string | null
+  enabled: boolean
+}
+
+/** 添加动态工具请求体（POST .../dynamic-tools） */
+export interface DynamicToolAddRequest {
+  tool_key: string
+  tool_type: DynamicToolType
+  config: Record<string, unknown>
+  description?: string | null
+}
+
+/** 更新动态工具请求体（PUT .../dynamic-tools/{tool_key}，仅传需修改的字段） */
+export interface DynamicToolUpdateRequest {
+  tool_type?: DynamicToolType
+  config?: Record<string, unknown>
+  description?: string | null
+  enabled?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// 动态 Prompts（客户端直连 MCP 的添加 Prompt）
+// ---------------------------------------------------------------------------
+
+/** 动态 Prompt 列表项（GET .../dynamic-prompts 单项） */
+export interface DynamicPromptItem {
+  id: string
+  prompt_key: string
+  title: string | null
+  description: string | null
+  arguments_schema: Record<string, unknown>[]
+  template: string
+  enabled: boolean
+}
+
+/** 添加动态 Prompt 请求体（POST .../dynamic-prompts） */
+export interface DynamicPromptAddRequest {
+  prompt_key: string
+  template: string
+  title?: string | null
+  description?: string | null
+  arguments_schema?: Record<string, unknown>[]
+}
+
+/** 更新动态 Prompt 请求体（PUT .../dynamic-prompts/{prompt_key}，仅传需修改的字段） */
+export interface DynamicPromptUpdateRequest {
+  template?: string
+  title?: string | null
+  description?: string | null
+  arguments_schema?: Record<string, unknown>[]
+  enabled?: boolean
 }

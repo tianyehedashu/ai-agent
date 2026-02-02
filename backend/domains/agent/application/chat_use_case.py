@@ -139,6 +139,14 @@ class ChatUseCase:
         )
 
         if is_new_session:
+            # 新建会话：先落库并提交首条用户消息，再下发 session_created，
+            # 确保前端 navigate 后 GET messages 能拿到首条
+            await self.session_use_case.add_message(
+                session_id=session_id,
+                role=MessageRole.USER,
+                content=message,
+            )
+            await self.db.commit()
             yield AgentEvent.session_created(session_id)
             # 新会话：初始化 MCP 配置，供 _prepare_agent_engine 加载工具
             if mcp_config and mcp_config.get("enabled_servers"):
@@ -154,12 +162,13 @@ class ChatUseCase:
             # 处理标题生成
             await self._handle_title_generation(session, session_id, message, user_id)
 
-            # 保存用户消息
-            await self.session_use_case.add_message(
-                session_id=session_id,
-                role=MessageRole.USER,
-                content=message,
-            )
+            # 保存用户消息（仅非新建会话：新建会话已在上面写入并提交）
+            if not is_new_session:
+                await self.session_use_case.add_message(
+                    session_id=session_id,
+                    role=MessageRole.USER,
+                    content=message,
+                )
 
             # 准备 Agent 引擎
             engine, session_recreated_event = await self._prepare_agent_engine(
@@ -245,7 +254,8 @@ class ChatUseCase:
             return
 
         message_count = await self.session_use_case.count_messages(session_id)
-        if message_count == 0:
+        if message_count <= 1:
+            # 无标题且消息数 ≤ 1 时触发（新建会话首条已提前落库时为 1）
             # 创建后台任务，使用独立的数据库会话
             task = asyncio.create_task(
                 self._generate_title_background(session_id, message, user_id)

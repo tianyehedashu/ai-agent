@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 import { History, Sparkles, Wrench } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -77,15 +77,23 @@ export default function ChatPage(): React.JSX.Element {
     [toast, navigate]
   )
 
-  // Load session - 当 sessionId 变化时，先清除消息再加载
-  // 全链路：删除当前会话后侧栏会 navigate('/chat') 并重置 chat store，此处 sessionId 变为空，会清空 useChat 状态并 setCurrentSession(null)
-  useEffect(() => {
-    // 使用标志位来跟踪这个 effect 是否仍然有效
-    // 当 sessionId 变化时，旧的 effect 会被清理，cancelled 会被设置为 true
-    let cancelled = false
+  // 用于判断是「离开/切换会话」还是「新建会话后进入」
+  const prevSessionIdRef = useRef<string | undefined>(undefined)
 
-    // 每次 sessionId 变化都先清除消息（含 useChat 的 messages/streamingContent 等）
-    clearMessages()
+  // Load session - 当 sessionId 变化时，仅「离开当前会话」或「切换到另一会话」时清除消息；
+  // 「无会话 → 新会话」时不清空，保留乐观添加的首条消息
+  useEffect(() => {
+    const prevSessionId = prevSessionIdRef.current
+    prevSessionIdRef.current = sessionId
+
+    const isLeavingOrSwitching =
+      prevSessionId !== undefined && (sessionId === undefined || prevSessionId !== sessionId)
+    if (isLeavingOrSwitching) {
+      clearMessages()
+    }
+
+    // 使用标志位来跟踪这个 effect 是否仍然有效
+    let cancelled = false
 
     if (sessionId) {
       // 加载会话信息

@@ -32,19 +32,42 @@ FastMCP 的 session_manager 是惰性创建的，必须先调用 streamable_http
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
+from domains.agent.application.mcp_dynamic_prompt_use_case import (  # noqa: TC001
+    MCPDynamicPromptUseCase,
+)
+from domains.agent.application.mcp_dynamic_tool_use_case import (  # noqa: TC001
+    MCPDynamicToolUseCase,
+)
 from domains.agent.domain.mcp.scopes import MCPServerScope
 from domains.agent.infrastructure.mcp_server.auth_middleware import verify_mcp_access
+from domains.agent.infrastructure.mcp_server.dynamic_prompt_factory import build_prompt
+from domains.agent.infrastructure.mcp_server.dynamic_tool_factory import build_tool_fn
 from domains.agent.infrastructure.mcp_server.servers import llm_server
+from domains.agent.infrastructure.repositories.mcp_dynamic_prompt_repository import (
+    MCPDynamicPromptRepository,
+)
+from domains.agent.infrastructure.repositories.mcp_dynamic_tool_repository import (
+    MCPDynamicToolRepository,
+)
+from domains.identity.presentation.deps import (
+    AdminUser,  # noqa: TC001 - required at runtime for FastAPI Depends()
+)
+from libs.api.deps import get_mcp_dynamic_prompt_service, get_mcp_dynamic_tool_service
+from libs.db.database import get_db
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from uuid import UUID
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -267,6 +290,231 @@ async def mcp_client_config(request: Request):
     return {"mcpServers": mcp_servers}
 
 
+# 动态工具 API（仅管理员，server_name 须在 SERVER_MAP 中）
+class DynamicToolAddBody(BaseModel):
+    """添加动态工具请求体"""
+
+    tool_key: str = Field(..., min_length=1, max_length=100)
+    tool_type: str = Field(..., min_length=1, max_length=50)
+    config: dict[str, Any] = Field(default_factory=dict)
+    description: str | None = None
+
+
+class DynamicToolUpdateBody(BaseModel):
+    """更新动态工具请求体（仅传需修改的字段）"""
+
+    tool_type: str | None = Field(None, min_length=1, max_length=50)
+    config: dict[str, Any] | None = None
+    description: str | None = None
+    enabled: bool | None = None
+
+
+@router.get("/servers/{server_name}/dynamic-tools", include_in_schema=False)
+async def list_dynamic_tools(
+    server_name: str,
+    _admin: AdminUser,
+    use_case: MCPDynamicToolUseCase = Depends(get_mcp_dynamic_tool_service),
+) -> list[dict]:
+    """列出某客户端直连 MCP 的动态工具（仅管理员）"""
+    _get_server(server_name)  # 404 if not in SERVER_MAP
+    return await use_case.list_dynamic_tools(server_name)
+
+
+@router.post("/servers/{server_name}/dynamic-tools", status_code=201, include_in_schema=False)
+async def add_dynamic_tool(
+    server_name: str,
+    body: DynamicToolAddBody,
+    _admin: AdminUser,
+    use_case: MCPDynamicToolUseCase = Depends(get_mcp_dynamic_tool_service),
+) -> dict:
+    """添加一条动态工具并注册到 FastMCP（仅管理员）"""
+    server = _get_server(server_name)
+    try:
+        record = await use_case.add_dynamic_tool(
+            server_name=server_name,
+            tool_key=body.tool_key.strip(),
+            tool_type=body.tool_type,
+            config=body.config,
+            description=body.description,
+        )
+    except Exception:
+        raise
+    try:
+        fn = build_tool_fn(body.tool_type, body.config)
+        server.add_tool(
+            fn,
+            name=body.tool_key.strip(),
+            description=body.description or "",
+        )
+    except ValueError as e:
+        logger.warning("Failed to register dynamic tool with FastMCP: %s", e)
+    return record
+
+
+@router.put(
+    "/servers/{server_name}/dynamic-tools/{tool_key}",
+    include_in_schema=False,
+)
+async def update_dynamic_tool(
+    server_name: str,
+    tool_key: str,
+    body: DynamicToolUpdateBody,
+    _admin: AdminUser,
+    use_case: MCPDynamicToolUseCase = Depends(get_mcp_dynamic_tool_service),
+) -> dict:
+    """更新一条动态工具并同步到 FastMCP（仅管理员）"""
+    server = _get_server(server_name)
+    updates = body.model_dump(exclude_unset=True)
+    record = await use_case.update_dynamic_tool(server_name, tool_key, **updates)
+    try:
+        server.remove_tool(tool_key)
+    except Exception as e:
+        logger.warning("Failed to remove old tool from FastMCP: %s", e)
+    tool_type = record["tool_type"]
+    config = record["config"] or {}
+    if record.get("enabled", True):
+        try:
+            fn = build_tool_fn(tool_type, config)
+            server.add_tool(
+                fn,
+                name=record["tool_key"],
+                description=record["description"] or "",
+            )
+        except ValueError as e:
+            logger.warning("Failed to re-register dynamic tool with FastMCP: %s", e)
+    return record
+
+
+@router.delete(
+    "/servers/{server_name}/dynamic-tools/{tool_key}",
+    status_code=204,
+    include_in_schema=False,
+)
+async def delete_dynamic_tool(
+    server_name: str,
+    tool_key: str,
+    _admin: AdminUser,
+    use_case: MCPDynamicToolUseCase = Depends(get_mcp_dynamic_tool_service),
+) -> None:
+    """删除一条动态工具并从 FastMCP 移除（仅管理员）"""
+    server = _get_server(server_name)
+    await use_case.remove_dynamic_tool(server_name, tool_key)
+    try:
+        server.remove_tool(tool_key)
+    except Exception as e:
+        logger.warning("Failed to remove tool from FastMCP: %s", e)
+
+
+# 动态 Prompt API（仅管理员）
+class DynamicPromptAddBody(BaseModel):
+    """添加动态 Prompt 请求体"""
+
+    prompt_key: str = Field(..., min_length=1, max_length=100)
+    template: str = Field(..., min_length=1)
+    title: str | None = Field(None, max_length=200)
+    description: str | None = None
+    arguments_schema: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DynamicPromptUpdateBody(BaseModel):
+    """更新动态 Prompt 请求体（仅传需修改的字段）"""
+
+    template: str | None = Field(None, min_length=1)
+    title: str | None = Field(None, max_length=200)
+    description: str | None = None
+    arguments_schema: list[dict[str, Any]] | None = None
+    enabled: bool | None = None
+
+
+@router.get("/servers/{server_name}/dynamic-prompts", include_in_schema=False)
+async def list_dynamic_prompts(
+    server_name: str,
+    _admin: AdminUser,
+    use_case: MCPDynamicPromptUseCase = Depends(get_mcp_dynamic_prompt_service),
+) -> list[dict]:
+    """列出某客户端直连 MCP 的动态 Prompts（仅管理员）"""
+    _get_server(server_name)
+    return await use_case.list_dynamic_prompts(server_name)
+
+
+@router.post("/servers/{server_name}/dynamic-prompts", status_code=201, include_in_schema=False)
+async def add_dynamic_prompt(
+    server_name: str,
+    body: DynamicPromptAddBody,
+    _admin: AdminUser,
+    use_case: MCPDynamicPromptUseCase = Depends(get_mcp_dynamic_prompt_service),
+) -> dict:
+    """添加一条动态 Prompt 并注册到 FastMCP（仅管理员）"""
+    server = _get_server(server_name)
+    record = await use_case.add_dynamic_prompt(
+        server_name=server_name,
+        prompt_key=body.prompt_key.strip(),
+        template=body.template.strip(),
+        title=body.title.strip() if body.title else None,
+        description=body.description.strip() if body.description else None,
+        arguments_schema=body.arguments_schema,
+    )
+    try:
+        prompt_obj = build_prompt(
+            name=record["prompt_key"],
+            template=record["template"],
+            title=record.get("title"),
+            description=record.get("description"),
+            arguments_schema=record.get("arguments_schema") or [],
+        )
+        server.add_prompt(prompt_obj)
+        logger.debug("Registered dynamic prompt %s on %s", record["prompt_key"], server_name)
+    except ValueError as e:
+        logger.warning("Failed to register dynamic prompt with FastMCP: %s", e)
+    return record
+
+
+@router.put(
+    "/servers/{server_name}/dynamic-prompts/{prompt_key}",
+    include_in_schema=False,
+)
+async def update_dynamic_prompt(
+    server_name: str,
+    prompt_key: str,
+    body: DynamicPromptUpdateBody,
+    _admin: AdminUser,
+    use_case: MCPDynamicPromptUseCase = Depends(get_mcp_dynamic_prompt_service),
+) -> dict:
+    """更新一条动态 Prompt 并同步到 FastMCP（仅管理员）"""
+    server = _get_server(server_name)
+    updates = body.model_dump(exclude_unset=True)
+    record = await use_case.update_dynamic_prompt(server_name, prompt_key, **updates)
+    try:
+        prompt_obj = build_prompt(
+            name=record["prompt_key"],
+            template=record["template"],
+            title=record.get("title"),
+            description=record.get("description"),
+            arguments_schema=record.get("arguments_schema") or [],
+        )
+        server.add_prompt(prompt_obj)
+        logger.debug("Re-registered dynamic prompt %s on %s", record["prompt_key"], server_name)
+    except ValueError as e:
+        logger.warning("Failed to re-register dynamic prompt with FastMCP: %s", e)
+    return record
+
+
+@router.delete(
+    "/servers/{server_name}/dynamic-prompts/{prompt_key}",
+    status_code=204,
+    include_in_schema=False,
+)
+async def delete_dynamic_prompt(
+    server_name: str,
+    prompt_key: str,
+    _admin: AdminUser,
+    use_case: MCPDynamicPromptUseCase = Depends(get_mcp_dynamic_prompt_service),
+) -> None:
+    """删除一条动态 Prompt（仅管理员）。注：FastMCP 无 remove_prompt，需重启后该 prompt 才从 MCP 协议中消失。"""
+    _get_server(server_name)
+    await use_case.remove_dynamic_prompt(server_name, prompt_key)
+
+
 @router.api_route(
     "/{server_name}",
     methods=["GET", "POST", "DELETE"],
@@ -302,33 +550,50 @@ async def mcp_streamable_http_endpoint(
 async def mcp_server_info(
     server_name: str,
     _auth: tuple = Depends(verify_mcp_access),
+    db: AsyncSession = Depends(get_db),
 ):
     """获取 MCP 服务器信息"""
     server = _get_server(server_name)
-    # FastMCP 未提供公开的 list_tools API，仅能通过 _tool_manager 获取工具列表
     tools = server._tool_manager.list_tools() if hasattr(server, "_tool_manager") else []  # pylint: disable=protected-access
-
+    prompt_repo = MCPDynamicPromptRepository(db)
+    prompt_rows = await prompt_repo.list_by_server("streamable_http", server_name)
+    prompts = [
+        {"name": r.prompt_key, "title": r.title or r.prompt_key, "description": r.description or ""}
+        for r in prompt_rows
+        if r.enabled
+    ]
     return {
         "name": server.name,
         "scope": server_name,
         "description": MCPServerScope.get_description(MCPServerScope.from_name(server_name)),
         "tool_count": len(tools),
         "tools": [{"name": t.name, "description": t.description} for t in tools] if tools else [],
+        "prompt_count": len(prompts),
+        "prompts": prompts,
         "transport": "Streamable HTTP",
         "protocol_version": "2024-11-05",
     }
 
 
 @router.get("/", include_in_schema=False)
-async def mcp_servers_list():
-    """列出所有可用的 MCP 服务器（含工具列表）"""
+async def mcp_servers_list(db: AsyncSession = Depends(get_db)):
+    """列出所有可用的 MCP 服务器（含工具与 Prompts 列表）"""
     servers = []
-
+    prompt_repo = MCPDynamicPromptRepository(db)
     for server_name, server in SERVER_MAP.items():
         try:
             scope = MCPServerScope.from_name(server_name)
-            # FastMCP 未提供公开的 list_tools API，仅能通过 _tool_manager 获取
             tools = server._tool_manager.list_tools() if hasattr(server, "_tool_manager") else []  # pylint: disable=protected-access
+            prompt_rows = await prompt_repo.list_by_server("streamable_http", server_name)
+            prompts = [
+                {
+                    "name": r.prompt_key,
+                    "title": r.title or r.prompt_key,
+                    "description": r.description or "",
+                }
+                for r in prompt_rows
+                if r.enabled
+            ]
             servers.append(
                 {
                     "name": server.name,
@@ -339,6 +604,8 @@ async def mcp_servers_list():
                         {"name": t.name, "description": getattr(t, "description", None) or ""}
                         for t in tools
                     ],
+                    "prompt_count": len(prompts),
+                    "prompts": prompts,
                 }
             )
         except ValueError:
@@ -350,3 +617,63 @@ async def mcp_servers_list():
         "authentication": "API Key (Bearer sk_...)",
         "protocol_version": "2024-11-05",
     }
+
+
+async def sync_dynamic_tools_for_streamable_http(db: AsyncSession) -> None:
+    """启动时将 DB 中已配置的动态工具注册到各 FastMCP 实例"""
+    repo = MCPDynamicToolRepository(db)
+    for server_name in SERVER_MAP:
+        try:
+            rows = await repo.list_by_server("streamable_http", server_name)
+            server = SERVER_MAP[server_name]
+            for row in rows:
+                if not row.enabled:
+                    continue
+                try:
+                    fn = build_tool_fn(row.tool_type, row.config_json or {})
+                    server.add_tool(
+                        fn,
+                        name=row.tool_key,
+                        description=row.description or "",
+                    )
+                    logger.debug("Registered dynamic tool %s on %s", row.tool_key, server_name)
+                except ValueError as e:
+                    logger.warning(
+                        "Skip dynamic tool %s on %s: %s",
+                        row.tool_key,
+                        server_name,
+                        e,
+                    )
+        except Exception as e:
+            logger.warning("Failed to sync dynamic tools for %s: %s", server_name, e)
+
+
+async def sync_dynamic_prompts_for_streamable_http(db: AsyncSession) -> None:
+    """启动时将 DB 中已配置的动态 Prompts 注册到各 FastMCP 实例"""
+    repo = MCPDynamicPromptRepository(db)
+    for server_name in SERVER_MAP:
+        try:
+            rows = await repo.list_by_server("streamable_http", server_name)
+            server = SERVER_MAP[server_name]
+            for row in rows:
+                if not row.enabled:
+                    continue
+                try:
+                    prompt_obj = build_prompt(
+                        name=row.prompt_key,
+                        template=row.template,
+                        title=row.title,
+                        description=row.description,
+                        arguments_schema=row.arguments_schema or [],
+                    )
+                    server.add_prompt(prompt_obj)
+                    logger.debug("Registered dynamic prompt %s on %s", row.prompt_key, server_name)
+                except ValueError as e:
+                    logger.warning(
+                        "Skip dynamic prompt %s on %s: %s",
+                        row.prompt_key,
+                        server_name,
+                        e,
+                    )
+        except Exception as e:
+            logger.warning("Failed to sync dynamic prompts for %s: %s", server_name, e)

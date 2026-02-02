@@ -5,6 +5,12 @@
 import type {
   ClientDirectMCPServersResponse,
   ClientMCPConfigResponse,
+  DynamicPromptAddRequest,
+  DynamicPromptItem,
+  DynamicPromptUpdateRequest,
+  DynamicToolAddRequest,
+  DynamicToolItem,
+  DynamicToolUpdateRequest,
   MCPServerConfig,
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
@@ -119,6 +125,102 @@ export const mcpApi = {
     return apiClient.put<MCPToolInfo>(
       `/api/v1/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}/enabled`,
       { enabled }
+    )
+  },
+
+  /**
+   * 列出客户端直连 MCP 的动态工具（仅管理员）
+   */
+  async listDynamicTools(serverName: string): Promise<DynamicToolItem[]> {
+    return apiClient.get<DynamicToolItem[]>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`
+    )
+  },
+
+  /**
+   * 添加动态工具（仅管理员）
+   */
+  async addDynamicTool(
+    serverName: string,
+    body: DynamicToolAddRequest
+  ): Promise<DynamicToolItem> {
+    return apiClient.post<DynamicToolItem>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`,
+      body
+    )
+  },
+
+  /**
+   * 更新动态工具（仅管理员）
+   */
+  async updateDynamicTool(
+    serverName: string,
+    toolKey: string,
+    body: DynamicToolUpdateRequest
+  ): Promise<DynamicToolItem> {
+    return apiClient.put<DynamicToolItem>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`,
+      body
+    )
+  },
+
+  /**
+   * 删除动态工具（仅管理员）
+   */
+  async deleteDynamicTool(
+    serverName: string,
+    toolKey: string
+  ): Promise<void> {
+    return apiClient.delete(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`
+    )
+  },
+
+  /**
+   * 列出客户端直连 MCP 的动态 Prompts（仅管理员）
+   */
+  async listDynamicPrompts(serverName: string): Promise<DynamicPromptItem[]> {
+    return apiClient.get<DynamicPromptItem[]>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`
+    )
+  },
+
+  /**
+   * 添加动态 Prompt（仅管理员）
+   */
+  async addDynamicPrompt(
+    serverName: string,
+    body: DynamicPromptAddRequest
+  ): Promise<DynamicPromptItem> {
+    return apiClient.post<DynamicPromptItem>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`,
+      body
+    )
+  },
+
+  /**
+   * 更新动态 Prompt（仅管理员）
+   */
+  async updateDynamicPrompt(
+    serverName: string,
+    promptKey: string,
+    body: DynamicPromptUpdateRequest
+  ): Promise<DynamicPromptItem> {
+    return apiClient.put<DynamicPromptItem>(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`,
+      body
+    )
+  },
+
+  /**
+   * 删除动态 Prompt（仅管理员）
+   */
+  async deleteDynamicPrompt(
+    serverName: string,
+    promptKey: string
+  ): Promise<void> {
+    return apiClient.delete(
+      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`
     )
   },
 }

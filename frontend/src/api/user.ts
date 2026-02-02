@@ -9,6 +9,8 @@ export interface CurrentUser {
   email: string
   name: string
   is_anonymous: boolean
+  /** 用户角色：admin, user, viewer；仅管理员可管理动态工具 */
+  role?: string
 }
 
 export interface LoginParams {

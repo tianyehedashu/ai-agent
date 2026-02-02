@@ -11,7 +11,7 @@
 #
 # ==============================================================================
 
-.PHONY: help install dev test lint format typecheck security check clean db-upgrade db-upgrade-test
+.PHONY: help install dev test lint format typecheck security check clean db-upgrade db-upgrade-test db-reset-test
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -57,6 +57,7 @@ help: ## 显示帮助信息
 	@echo   db-migrate       创建迁移
 	@echo   db-upgrade       开发库升级到最新
 	@echo   db-upgrade-test  测试库升级到最新（开发环境）
+	@echo   db-reset-test    清空测试库后执行迁移（解决表已存在冲突）
 	@echo.
 	@echo SonarCloud 命令:
 	@echo   sonar            运行扫描并下载报告 (推荐)
@@ -265,6 +266,10 @@ db-reset: ## 重置数据库
 db-upgrade-test: ## 对测试数据库执行迁移（开发环境，与 conftest 使用同一测试库）
 	@echo 对测试数据库执行迁移...
 	$(UV) run python scripts/migrate_test_db.py
+
+db-reset-test: ## 清空测试库后执行迁移（解决 relation already exists 等冲突）
+	@echo 清空测试库并执行迁移...
+	$(UV) run python scripts/migrate_test_db.py --reset
 
 # ==============================================================================
 # 文档

@@ -443,6 +443,31 @@ async def auth_headers(test_user: User, db_session: AsyncSession) -> dict[str, s
 
 
 @pytest_asyncio.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """管理员用户 fixture（role=admin，用于需管理员权限的 API 测试）"""
+    user = User(
+        email=f"admin_{uuid.uuid4()}@example.com",
+        hashed_password="hashed_password",
+        name="Admin User",
+        role="admin",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def admin_headers(admin_user: User, db_session: AsyncSession) -> dict[str, str]:
+    """管理员认证头 fixture"""
+    from domains.identity.application import UserUseCase  # pylint: disable=import-outside-toplevel
+
+    user_uc = UserUseCase(db_session)
+    token_pair = await user_uc.create_token(admin_user)
+    return {"Authorization": f"Bearer {token_pair.access_token}"}
+
+
+@pytest_asyncio.fixture
 async def permission_context(test_user: User):
     """权限上下文 fixture - 为测试用户设置权限上下文"""
     from libs.db.permission_context import (

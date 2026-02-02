@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import AgentUseCase, ChatUseCase, SessionUseCase, TitleUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
+from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
 from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.stats_service import StatsService
@@ -33,6 +35,8 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_mcp_dynamic_prompt_service",
+    "get_mcp_dynamic_tool_service",
     "get_mcp_service",
     "get_memory_service",
     "get_sandbox_service",
@@ -127,3 +131,13 @@ async def get_stats_service(db: DbSession) -> StatsService:
 async def get_mcp_service(db: DbSession) -> MCPManagementUseCase:
     """获取 MCP 管理服务"""
     return MCPManagementUseCase(db)
+
+
+async def get_mcp_dynamic_tool_service(db: DbSession) -> MCPDynamicToolUseCase:
+    """获取 MCP 动态工具用例"""
+    return MCPDynamicToolUseCase(db)
+
+
+async def get_mcp_dynamic_prompt_service(db: DbSession) -> MCPDynamicPromptUseCase:
+    """获取 MCP 动态 Prompt 用例"""
+    return MCPDynamicPromptUseCase(db)

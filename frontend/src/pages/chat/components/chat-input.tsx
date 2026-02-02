@@ -51,8 +51,8 @@ export default function ChatInput({
     <>
       <div
         className={cn(
-          'relative flex flex-col rounded-2xl border border-border/60 bg-card/80 shadow-lg backdrop-blur-sm transition-all duration-200',
-          'focus-within:border-primary/40 focus-within:shadow-xl focus-within:shadow-primary/5 dark:focus-within:shadow-primary/20'
+          'relative flex flex-col rounded-2xl border border-blue-200 bg-blue-50/90 shadow-lg backdrop-blur-sm transition-all duration-200 dark:border-blue-800 dark:bg-blue-950/40',
+          'focus-within:border-blue-500 focus-within:shadow-xl focus-within:shadow-blue-500/10 dark:focus-within:border-blue-500 dark:focus-within:shadow-blue-500/20'
         )}
       >
         {/* Text Input */}
@@ -64,7 +64,7 @@ export default function ChatInput({
           }}
           onKeyDown={handleKeyDown}
           placeholder="给 AI Agent 发送消息..."
-          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed placeholder:text-blue-600/70 focus-visible:ring-0 focus-visible:ring-offset-0 dark:placeholder:text-blue-400/60"
           rows={1}
           disabled={isLoading}
         />
