@@ -85,12 +85,14 @@ class UserUseCase:
         user_id: str,
         name: str | None = None,
         avatar_url: str | None = None,
+        vendor_creator_id: int | None = None,
     ) -> User:
         """更新用户信息"""
         user = await self.user_repo.update(
             user_id=uuid.UUID(user_id),
             name=name,
             avatar_url=avatar_url,
+            vendor_creator_id=vendor_creator_id,
         )
         if not user:
             raise NotFoundError("User", user_id)

@@ -11,6 +11,8 @@ export interface CurrentUser {
   is_anonymous: boolean
   /** 用户角色：admin, user, viewer；仅管理员可管理动态工具 */
   role?: string
+  /** 厂商系统操作用户 ID（如 GIIKIN creator_id） */
+  vendor_creator_id?: number | null
 }
 
 export interface LoginParams {
@@ -22,6 +24,12 @@ export interface RegisterParams {
   email: string
   password: string
   name?: string
+}
+
+export interface UpdateUserParams {
+  name?: string
+  avatar_url?: string
+  vendor_creator_id?: number | null
 }
 
 interface LoginResponse {
@@ -71,6 +79,13 @@ export const userApi = {
    */
   async getCurrentUser(): Promise<CurrentUser> {
     return await apiClient.get<CurrentUser>('/api/v1/auth/me')
+  },
+
+  /**
+   * 更新当前用户信息
+   */
+  async updateUser(params: UpdateUserParams): Promise<CurrentUser> {
+    return await apiClient.put<CurrentUser>('/api/v1/auth/me', params)
   },
 
   /**

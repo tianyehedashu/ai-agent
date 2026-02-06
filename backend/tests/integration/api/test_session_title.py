@@ -125,7 +125,7 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "生成的标题"
 
-        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance
@@ -161,7 +161,7 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "第一条消息标题"
 
-        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance
@@ -261,7 +261,7 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "匿名用户标题"
 
-        with patch("domains.agent.application.title_use_case.LLMGateway") as mock_gateway:
+        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
             mock_instance = MagicMock()
             mock_instance.chat = AsyncMock(return_value=mock_title)
             mock_gateway.return_value = mock_instance

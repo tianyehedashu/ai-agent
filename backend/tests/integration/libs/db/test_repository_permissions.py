@@ -4,17 +4,14 @@ Repository 权限过滤集成测试
 测试 Repository 在实际数据库操作中的权限过滤功能。
 """
 
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.agent import Agent
-from domains.agent.infrastructure.models.session import Session
-from domains.agent.infrastructure.repositories import (
-    AgentRepository,
-    SessionRepository,
-)
+from domains.agent.infrastructure.repositories import AgentRepository
 from domains.identity.infrastructure.models.user import User
+from domains.session.infrastructure.models import Session
+from domains.session.infrastructure.repositories import SessionRepository
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -112,9 +109,7 @@ class TestSessionRepositoryPermissions:
             clear_permission_context()
 
     @pytest.mark.asyncio
-    async def test_admin_can_access_all_sessions(
-        self, db_session: AsyncSession, test_user: User
-    ):
+    async def test_admin_can_access_all_sessions(self, db_session: AsyncSession, test_user: User):
         """测试: 管理员可以访问所有会话"""
         # 创建多个用户的会话
         session1 = Session(
@@ -169,9 +164,7 @@ class TestSessionRepositoryPermissions:
             clear_permission_context()
 
     @pytest.mark.asyncio
-    async def test_anonymous_user_filters_by_anonymous_id(
-        self, db_session: AsyncSession
-    ):
+    async def test_anonymous_user_filters_by_anonymous_id(self, db_session: AsyncSession):
         """测试: 匿名用户根据 anonymous_user_id 过滤"""
         anonymous_id1 = "anon-1"
         anonymous_id2 = "anon-2"
@@ -260,9 +253,7 @@ class TestAgentRepositoryPermissions:
             clear_permission_context()
 
     @pytest.mark.asyncio
-    async def test_admin_can_access_all_agents(
-        self, db_session: AsyncSession, test_user: User
-    ):
+    async def test_admin_can_access_all_agents(self, db_session: AsyncSession, test_user: User):
         """测试: 管理员可以访问所有 Agent"""
         # 创建多个用户的 Agent
         agent1 = Agent(

@@ -8,8 +8,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.domain.interfaces.session_repository import SessionRepository
-from domains.agent.infrastructure.models.session import Session
+from domains.session.domain.interfaces import SessionRepositoryInterface as SessionRepository
+from domains.session.infrastructure.models import Session
 from libs.db.base_repository import OwnedRepositoryBase
 from libs.db.permission_context import get_permission_context
 

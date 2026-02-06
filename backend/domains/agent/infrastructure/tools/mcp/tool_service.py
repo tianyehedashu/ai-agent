@@ -8,17 +8,13 @@ MCP 工具服务
 from __future__ import annotations
 
 import re
-from typing import Any
-import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, Any
 
 from domains.agent.domain.config.mcp_config import MCPScope, MCPServerEntityConfig
 from domains.agent.domain.config.templates import get_effective_env_config
 from domains.agent.infrastructure.repositories.mcp_server_repository import (
     MCPServerRepository,
 )
-from domains.agent.infrastructure.tools.base import BaseTool
 from domains.agent.infrastructure.tools.mcp.client import ConfiguredMCPManager
 from domains.agent.infrastructure.tools.mcp.wrapper import wrap_langchain_tools
 from libs.config.execution_config import (
@@ -27,6 +23,13 @@ from libs.config.execution_config import (
     MCPServerConfig,
 )
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.agent.infrastructure.tools.base import BaseTool
 
 logger = get_logger(__name__)
 

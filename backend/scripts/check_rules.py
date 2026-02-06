@@ -36,10 +36,8 @@ def check_architecture():
     # 原因：运行时架构检查，必须在函数内部导入以捕获 ImportError
     try:
         from domains.agent.presentation.chat_router import router as chat_router  # noqa: F401
-        from domains.agent.presentation.session_router import (
-            router as session_router,  # noqa: F401
-        )
         from domains.identity.presentation.router import router as identity_router  # noqa: F401
+        from domains.session.presentation import session_router  # noqa: F401
 
         checks.append(("✓", "Presentation layer imports OK"))
     except ImportError as e:
@@ -49,8 +47,8 @@ def check_architecture():
     # pylint: disable=import-outside-toplevel,unused-import
     try:
         from domains.agent.application.chat_use_case import ChatUseCase  # noqa: F401
-        from domains.agent.application.session_use_case import SessionUseCase  # noqa: F401
         from domains.identity.application.user_use_case import UserUseCase  # noqa: F401
+        from domains.session.application import SessionUseCase  # noqa: F401
 
         checks.append(("✓", "Application layer imports OK"))
     except ImportError as e:
@@ -59,9 +57,9 @@ def check_architecture():
     # Domain layer
     # pylint: disable=import-outside-toplevel,unused-import
     try:
-        from domains.agent.domain.entities.session import SessionDomainService  # noqa: F401
-        from domains.agent.domain.interfaces.session_repository import (
-            SessionRepository,
+        from domains.session.domain.entities import SessionDomainService  # noqa: F401
+        from domains.session.domain.interfaces import (
+            SessionRepositoryInterface as SessionRepository,
         )
 
         checks.append(("✓", "Domain layer imports OK"))

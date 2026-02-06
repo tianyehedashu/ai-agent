@@ -201,17 +201,17 @@ class TestSandboxModeSelection:
 
         assert isinstance(executor, LocalExecutor)
 
-    def test_docker_mode_uses_session_executor(self):
-        """测试 Docker 模式使用会话执行器（默认启用 session）"""
-        from domains.agent.infrastructure.sandbox.executor import SessionDockerExecutor
+    def test_docker_mode_uses_persistent_executor(self):
+        """测试 Docker 模式使用持久化执行器（默认启用 sandbox）"""
+        from domains.agent.infrastructure.sandbox.executor import PersistentDockerExecutor
 
         config = ExecutionConfig(
             sandbox=SandboxConfig(mode=SandboxMode.DOCKER),
         )
         executor = ExecutorFactory.create(config, force_new=True)
 
-        # 默认 session_enabled=True，应该创建 SessionDockerExecutor
-        assert isinstance(executor, SessionDockerExecutor)
+        # 默认 sandbox_enabled=True，应该创建 PersistentDockerExecutor
+        assert isinstance(executor, PersistentDockerExecutor)
 
     def test_remote_mode_not_implemented(self):
         """测试远程模式未实现"""

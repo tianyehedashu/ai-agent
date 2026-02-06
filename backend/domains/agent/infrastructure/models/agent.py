@@ -12,8 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from libs.orm.base import BaseModel, OwnedMixin
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.models.session import Session
     from domains.identity.infrastructure.models.user import User
+    from domains.session.infrastructure.models.session import Session
 
 
 class Agent(BaseModel, OwnedMixin):

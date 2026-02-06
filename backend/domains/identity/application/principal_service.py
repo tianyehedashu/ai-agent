@@ -121,11 +121,22 @@ async def get_principal(
     if user is None:
         # 开发模式下：token 无效时回退到匿名用户（更宽容的处理）
         if settings.is_development:
-            logger.info("Invalid token in dev mode, falling back to anonymous user")
+            logger.warning(
+                "Invalid/expired token in dev mode, falling back to anonymous user. "
+                "User should re-login to restore session access."
+            )
+            # 标记 token 降级，让中间件在响应头中通知前端
+            request.state.token_degraded = True
             if not anonymous_user_id:
                 anonymous_user_id = str(uuid.uuid4())
             request.state.anonymous_user_id = anonymous_user_id
-            return await _get_or_create_anonymous_principal(db, anonymous_user_id)
+            principal = await _get_or_create_anonymous_principal(db, anonymous_user_id)
+            if principal:
+                return principal
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create anonymous user after token degradation.",
+            )
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -139,6 +150,7 @@ async def get_principal(
         name=user.name or "",
         is_anonymous=False,
         role=user.role,  # 从 User 模型获取角色
+        vendor_creator_id=user.vendor_creator_id,
     )
 
 
@@ -164,4 +176,5 @@ async def get_principal_optional(
         name=user.name or "",
         is_anonymous=False,
         role=user.role,  # 从 User 模型获取角色
+        vendor_creator_id=user.vendor_creator_id,
     )

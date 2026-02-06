@@ -25,6 +25,7 @@ vi.mock('@/stores/user', () => ({
     selector({ currentUser: { id: '1', email: 'admin@test.com', name: 'Admin', is_anonymous: false, role: 'admin' } }),
 }))
 
+/* eslint-disable @typescript-eslint/no-unsafe-return -- vi.mock factory returns API shape; mocks return any */
 vi.mock('@/api/mcp', () => ({
   mcpApi: {
     listClientDirectServers: (...args: unknown[]) => mockListClientDirectServers(...args),
@@ -39,7 +40,7 @@ vi.mock('@/api/mcp', () => ({
   },
 }))
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderWithProviders(ui: React.ReactElement): ReturnType<typeof render> {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -158,13 +159,14 @@ describe('SystemMCPPage', () => {
     const submitButton = within(dialog).getByRole('button', { name: /^添加$/ })
     fireEvent.click(submitButton)
     await waitFor(() => {
+      const configMatcher = expect.objectContaining({
+        url: 'https://api.test',
+        method: 'GET',
+      }) as Record<string, unknown>
       expect(mockAddDynamicTool).toHaveBeenCalledWith('llm-server', {
         tool_key: 'new_tool',
         tool_type: 'http_call',
-        config: expect.objectContaining({
-          url: 'https://api.test',
-          method: 'GET',
-        }),
+        config: configMatcher,
         description: 'New',
       })
     })

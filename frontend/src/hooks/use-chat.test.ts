@@ -17,7 +17,10 @@ function createWrapper(): React.FC<{ children: React.ReactNode }> {
   }
 }
 
-const defaultSendMessageImpl = (_req: unknown, onEvent: (event: ChatEvent) => void) => {
+const defaultSendMessageImpl = (
+  _req: unknown,
+  onEvent: (event: ChatEvent) => void
+): Promise<void> => {
   onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
   onEvent({
     type: 'tool_call',
@@ -66,25 +69,28 @@ test.skip('session isolation: events from old stream are not applied after view 
     resolveContinue = r
   })
 
-  vi.mocked(chatApi.sendMessage).mockImplementationOnce(async (_req, onEvent) => {
-    onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
-    resolveFirst()
-    await continueStream
-    onEvent({
-      type: 'tool_call',
-      data: { tool_call_id: 'tc1', tool_name: 'read_file', arguments: {} },
-      timestamp: 't2',
+  /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
+  vi.mocked(chatApi.sendMessage).mockImplementationOnce(
+    vi.fn(async (_req, onEvent) => {
+      onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
+      resolveFirst()
+      await continueStream
+      onEvent({
+        type: 'tool_call',
+        data: { tool_call_id: 'tc1', tool_name: 'read_file', arguments: {} },
+        timestamp: 't2',
+      })
+      onEvent({
+        type: 'tool_result',
+        data: { tool_call_id: 'tc1', success: true, output: 'ok' },
+        timestamp: 't3',
+      })
+      onEvent({ type: 'done', data: { final_message: { content: 'done' } }, timestamp: 't4' })
     })
-    onEvent({
-      type: 'tool_result',
-      data: { tool_call_id: 'tc1', success: true, output: 'ok' },
-      timestamp: 't3',
-    })
-    onEvent({ type: 'done', data: { final_message: { content: 'done' } }, timestamp: 't4' })
-  })
+  )
 
   const { result, rerender } = renderHook(
-    (opts: { sessionId?: string } = {}) => useChat(opts),
+    (opts: { sessionId?: string }) => useChat(opts),
     { initialProps: { sessionId: 'session-a' }, wrapper: createWrapper() }
   )
 
@@ -93,7 +99,7 @@ test.skip('session isolation: events from old stream are not applied after view 
   })
 
   await firstEventFired
-  await act(async () => {
+  act(() => {
     rerender({ sessionId: 'session-b' })
   })
   resolveContinue()
@@ -109,7 +115,9 @@ test.skip('session isolation: events from old stream are not applied after view 
 // Behavior is correct in the app (ChatPage effect runs on navigation). Prefer E2E.
 
 test('first message with session_created: subsequent events still apply to view', async () => {
-  vi.mocked(chatApi.sendMessage).mockImplementationOnce(async (_req, onEvent) => {
+  /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
+  vi.mocked(chatApi.sendMessage).mockImplementationOnce(
+    vi.fn((_req, onEvent) => {
     onEvent({
       type: 'session_created',
       data: { session_id: 'new-session-id' },
@@ -129,6 +137,7 @@ test('first message with session_created: subsequent events still apply to view'
     onEvent({ type: 'done', data: { final_message: { content: 'reply' } }, timestamp: 't4' })
     return Promise.resolve()
   })
+  )
 
   const onSessionCreated = vi.fn()
   const { result } = renderHook(

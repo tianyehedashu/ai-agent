@@ -9,11 +9,11 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.agent.application.session_use_case import SessionUseCase
-from domains.agent.domain.entities.session import SessionDomainService, SessionOwner
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.identity.domain.types import Principal
+from domains.session.application.session_use_case import SessionUseCase
+from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

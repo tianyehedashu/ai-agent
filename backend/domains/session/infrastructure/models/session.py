@@ -14,6 +14,7 @@ from libs.orm.base import BaseModel, OwnedMixin
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.agent import Agent
     from domains.agent.infrastructure.models.message import Message
+    from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
     from domains.identity.infrastructure.models.user import User
 
 
@@ -68,6 +69,12 @@ class Session(BaseModel, OwnedMixin):
         default=0,
         nullable=False,
     )
+    video_task_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="视频任务数量",
+    )
 
     # 关系
     user: Mapped["User"] = relationship(
@@ -81,6 +88,11 @@ class Session(BaseModel, OwnedMixin):
     )
     messages: Mapped[list["Message"]] = relationship(
         "Message",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    video_tasks: Mapped[list["VideoGenTask"]] = relationship(
+        "VideoGenTask",
         back_populates="session",
         cascade="all, delete-orphan",
     )

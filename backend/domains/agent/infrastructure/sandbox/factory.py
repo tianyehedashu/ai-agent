@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, ClassVar
 from domains.agent.infrastructure.sandbox.executor import (
     DockerExecutor,
     LocalExecutor,
+    PersistentDockerExecutor,
     SandboxExecutor,
-    SessionDockerExecutor,
 )
 from libs.config.execution_config import SandboxMode
 
@@ -62,9 +62,9 @@ class ExecutorFactory:
         executor: SandboxExecutor
         if mode == SandboxMode.DOCKER:
             docker_config = config.sandbox.docker
-            if docker_config.session_enabled:
-                # 会话模式：容器保持运行，状态保留
-                executor = SessionDockerExecutor(
+            if docker_config.sandbox_enabled:
+                # 持久化模式：容器保持运行，状态保留
+                executor = PersistentDockerExecutor(
                     image=docker_config.image,
                     workspace_path=docker_config.workspace_volume,
                     container_workspace=docker_config.container_workspace,

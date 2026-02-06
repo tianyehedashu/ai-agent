@@ -25,7 +25,7 @@
 
 ### 工作流程
 
-1. 应用启动时，在 `SessionManager` 启动后调用 `init_default_mcp_servers()`
+1. 应用启动时，在 `SandboxManager` 启动后调用 `init_default_mcp_servers()`
 2. 查询数据库中现有的系统级服务器
 3. 对比默认配置，创建缺失的服务器
 4. 如果服务器已存在，则跳过（幂等操作）

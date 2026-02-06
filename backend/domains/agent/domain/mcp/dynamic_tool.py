@@ -14,6 +14,8 @@ class DynamicToolType(str, Enum):
     """预定义动态工具类型"""
 
     HTTP_CALL = "http_call"
+    AMAZON_VIDEO_SUBMIT = "amazon_video_submit"
+    AMAZON_VIDEO_POLL = "amazon_video_poll"
     # INTERNAL_API = "internal_api"  # 可选二期
 
 

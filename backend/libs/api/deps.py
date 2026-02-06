@@ -15,15 +15,17 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.application import AgentUseCase, ChatUseCase, SessionUseCase, TitleUseCase
+from domains.agent.application import AgentUseCase, ChatUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
 from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
 from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.stats_service import StatsService
+from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.identity.application import UserUseCase
+from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db
 
 if TYPE_CHECKING:
@@ -44,6 +46,7 @@ __all__ = [
     "get_stats_service",
     "get_title_service",
     "get_user_service",
+    "get_video_task_service",
 ]
 
 
@@ -72,8 +75,8 @@ async def get_agent_service(db: DbSession) -> AgentUseCase:
 def get_sandbox_service(request: Request) -> SandboxLifecycleService | None:
     """获取沙箱生命周期服务
 
-    从应用状态中获取 SessionManager，并创建 SandboxLifecycleAdapter。
-    如果 SessionManager 不可用，返回 None。
+    从应用状态中获取 SandboxManager，并创建 SandboxLifecycleAdapter。
+    如果 SandboxManager 不可用，返回 None。
 
     Args:
         request: FastAPI 请求对象
@@ -81,9 +84,9 @@ def get_sandbox_service(request: Request) -> SandboxLifecycleService | None:
     Returns:
         SandboxLifecycleService 实例，如果不可用则返回 None
     """
-    session_manager = getattr(request.app.state, "session_manager", None)
-    if session_manager:
-        return SandboxLifecycleAdapter(session_manager)
+    sandbox_manager = getattr(request.app.state, "sandbox_manager", None)
+    if sandbox_manager:
+        return SandboxLifecycleAdapter(sandbox_manager)
     return None
 
 
@@ -141,3 +144,8 @@ async def get_mcp_dynamic_tool_service(db: DbSession) -> MCPDynamicToolUseCase:
 async def get_mcp_dynamic_prompt_service(db: DbSession) -> MCPDynamicPromptUseCase:
     """获取 MCP 动态 Prompt 用例"""
     return MCPDynamicPromptUseCase(db)
+
+
+async def get_video_task_service(db: DbSession) -> VideoTaskUseCase:
+    """获取视频生成任务服务"""
+    return VideoTaskUseCase(db)

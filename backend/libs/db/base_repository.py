@@ -30,8 +30,8 @@ class OwnedRepositoryBase(ABC, Generic[T]):
     - anonymous_user_id_column: 如果支持匿名用户，返回字段名
 
     Example:
-        from domains.agent.domain.interfaces.session_repository import (
-            SessionRepository as SessionRepositoryInterface,
+        from domains.session.domain.interfaces import (
+            SessionRepositoryInterface,
         )
 
         class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface):
@@ -142,9 +142,7 @@ class OwnedRepositoryBase(ABC, Generic[T]):
         Returns:
             实体或 None（如果不存在或无权限）
         """
-        query = select(self.model_class).where(
-            self.model_class.id == entity_id
-        )
+        query = select(self.model_class).where(self.model_class.id == entity_id)
         query = self._apply_ownership_filter(query)
         result = await self.db.execute(query)
         return result.scalar_one_or_none()

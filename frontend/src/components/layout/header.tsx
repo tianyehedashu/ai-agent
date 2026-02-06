@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 const pageTitles: Partial<Record<string, string>> = {
@@ -21,6 +22,8 @@ const pageTitles: Partial<Record<string, string>> = {
   '/agents': 'Agents 管理',
   '/mcp': 'MCP 服务器',
   '/studio': '工作台',
+  '/video-tasks': '视频任务',
+  '/video-tasks/history': '历史任务',
   '/settings': '设置',
 }
 
@@ -69,18 +72,28 @@ export default function Header(): React.JSX.Element {
           {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
 
-        {/* User Menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src="" alt="用户头像" />
-                <AvatarFallback>
-                  <User className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
+        {/* User Menu：未登录时在顶栏直接显示「未登录」标签，便于区分 */}
+        <div className="flex items-center gap-2">
+          {isAnonymous && (
+            <span className="text-xs text-muted-foreground">未登录</span>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  'relative h-8 w-8 rounded-full',
+                  isAnonymous && 'ring-1 ring-muted-foreground/40 ring-offset-2 ring-offset-background'
+                )}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="" alt="用户头像" />
+                  <AvatarFallback>
+                    <User className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <div className="flex items-center justify-start gap-2 p-2">
               <div className="flex flex-col space-y-1 leading-none">
@@ -110,6 +123,7 @@ export default function Header(): React.JSX.Element {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
     </header>
   )

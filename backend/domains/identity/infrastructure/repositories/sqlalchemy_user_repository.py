@@ -56,6 +56,7 @@ class SQLAlchemyUserRepository(UserRepository):
         name: str | None = None,
         avatar_url: str | None = None,
         hashed_password: str | None = None,
+        vendor_creator_id: int | None = None,
     ) -> User | None:
         """更新用户"""
         user = await self.get_by_id(user_id)
@@ -68,6 +69,8 @@ class SQLAlchemyUserRepository(UserRepository):
             user.avatar_url = avatar_url
         if hashed_password is not None:
             user.hashed_password = hashed_password
+        if vendor_creator_id is not None:
+            user.vendor_creator_id = vendor_creator_id
 
         await self.db.flush()
         await self.db.refresh(user)

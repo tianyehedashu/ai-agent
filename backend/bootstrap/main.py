@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 
 from bootstrap.config import settings
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.sandbox import SessionManager
+from domains.agent.infrastructure.sandbox import SandboxManager, SandboxPolicy
 
 # 从各领域的 presentation 层导入路由
 from domains.agent.presentation.agent_router import router as agent_router
@@ -36,14 +36,15 @@ from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
 from domains.agent.presentation.provider_config_router import router as provider_config_router
-from domains.agent.presentation.session_router import router as session_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
+from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
 from domains.identity.presentation.api_key_router import router as api_key_router
 from domains.identity.presentation.router import router as identity_router
 from domains.identity.presentation.usage_router import router as usage_router
+from domains.session.presentation import session_router
 from domains.studio.presentation.quality_router import router as quality_router
 from domains.studio.presentation.router import router as studio_router
 from exceptions import (
@@ -148,13 +149,13 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Using MemorySaver as fallback for checkpointer")
 
     # 清理孤儿容器（上次异常关闭遗留的）
-    # 在初始化 SessionManager 之前清理，避免冲突
+    # 在初始化 SandboxManager 之前清理，避免冲突
     try:
         from domains.agent.infrastructure.sandbox.executor import (  # pylint: disable=import-outside-toplevel
-            SessionDockerExecutor,
+            PersistentDockerExecutor,
         )
 
-        orphans = await SessionDockerExecutor.cleanup_orphaned_containers(
+        orphans = await PersistentDockerExecutor.cleanup_orphaned_containers(
             max_age_seconds=300  # 清理超过 5 分钟的孤儿容器
         )
         if orphans:
@@ -167,11 +168,26 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         # 清理失败不应阻止应用启动
         logger.warning("Failed to cleanup orphaned containers: %s", e)
 
-    # 初始化并启动会话管理器
-    session_manager = SessionManager.get_instance()
-    await session_manager.start()
-    _fastapi_app.state.session_manager = session_manager
-    logger.info("SessionManager started")
+    # 初始化并启动沙箱管理器（从配置加载策略）
+    try:
+        from libs.config import (  # pylint: disable=import-outside-toplevel
+            get_execution_config_service,
+        )
+
+        config_service = get_execution_config_service()
+        execution_config = config_service.load_for_agent("default")
+        sandbox_policy = SandboxPolicy.from_config(
+            execution_config.sandbox.docker.sandbox_policy,
+        )
+        logger.debug("Loaded SandboxPolicy from config: %s", sandbox_policy)
+    except Exception as e:
+        logger.warning("Failed to load SandboxPolicy from config, using defaults: %s", e)
+        sandbox_policy = None
+
+    sandbox_manager = SandboxManager.get_instance(policy=sandbox_policy)
+    await sandbox_manager.start()
+    _fastapi_app.state.sandbox_manager = sandbox_manager
+    logger.info("SandboxManager started")
 
     # 初始化默认系统级 MCP 服务器
     try:
@@ -208,10 +224,10 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
     # 关闭时
-    # 停止会话管理器（会清理所有会话容器）
-    if hasattr(_fastapi_app.state, "session_manager"):
-        await _fastapi_app.state.session_manager.stop()
-        logger.info("SessionManager stopped")
+    # 停止沙箱管理器（会清理所有沙箱容器）
+    if hasattr(_fastapi_app.state, "sandbox_manager"):
+        await _fastapi_app.state.sandbox_manager.stop()
+        logger.info("SandboxManager stopped")
 
     # 清理 LiteLLM 异步客户端
     try:
@@ -258,6 +274,7 @@ app.add_middleware(
     allow_credentials=True,  # 允许携带 Cookie
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Token-Degraded", "X-Anonymous-User-Id"],  # 允许前端 JS 读取自定义响应头
 )
 
 # 权限上下文中间件（在认证依赖之后设置权限上下文）
@@ -279,6 +296,9 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
 
     当检测到新的匿名用户（request.state.anonymous_user_id 存在）时，
     在响应中设置 Cookie 以便后续请求能够识别同一用户。
+
+    同时检测 token 降级场景：当 JWT token 过期但在开发模式下被静默降级为
+    匿名用户时，在响应头中通知前端清除过期 token。
     """
     response = await call_next(request)
 
@@ -295,6 +315,10 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
             samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
             secure=not settings.is_development,  # 生产环境要求 HTTPS
         )
+
+    # Token 降级通知：JWT 过期后静默降级为匿名用户时，通知前端清除过期 token
+    if getattr(request.state, "token_degraded", False):
+        response.headers["X-Token-Degraded"] = "true"
 
     return response
 
@@ -569,6 +593,13 @@ app.include_router(
     usage_router,
     prefix=f"{api_router_prefix}/usage",
     tags=["Usage"],
+)
+
+# 视频生成任务
+app.include_router(
+    video_task_router,
+    prefix=f"{api_router_prefix}/video-tasks",
+    tags=["Video Tasks"],
 )
 
 

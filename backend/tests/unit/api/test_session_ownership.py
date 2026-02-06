@@ -8,9 +8,9 @@ import uuid
 
 import pytest
 
-from domains.agent.infrastructure.models.session import Session
 from domains.identity.presentation.deps import check_session_ownership
 from domains.identity.presentation.schemas import CurrentUser
+from domains.session.infrastructure.models import Session
 from exceptions import PermissionDeniedError
 
 

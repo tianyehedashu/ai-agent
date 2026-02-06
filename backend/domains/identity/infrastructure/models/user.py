@@ -19,7 +19,7 @@ CASCADE_DELETE_ORPHAN = "all, delete-orphan"
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.agent import Agent
     from domains.agent.infrastructure.models.memory import Memory
-    from domains.agent.infrastructure.models.session import Session
+    from domains.session.infrastructure.models.session import Session
 
 
 class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
@@ -58,6 +58,10 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         default="user",
         server_default="user",
         nullable=False,
+    )
+    vendor_creator_id: Mapped[int | None] = mapped_column(
+        nullable=True,
+        comment="厂商系统操作用户 ID（如 GIIKIN creator_id）",
     )
 
     agents: Mapped[list["Agent"]] = relationship(

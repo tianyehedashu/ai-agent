@@ -54,8 +54,19 @@ export interface Session {
   agentId?: string
   messageCount: number
   tokenCount: number
+  videoTaskCount?: number
   createdAt: string
   updatedAt: string
+}
+
+/** 判断是否为视频会话 */
+export function isVideoSession(session: Session): boolean {
+  return (session.videoTaskCount ?? 0) > 0 && session.messageCount === 0
+}
+
+/** 判断是否为聊天会话 */
+export function isChatSession(session: Session): boolean {
+  return session.messageCount > 0
 }
 
 // ============================================

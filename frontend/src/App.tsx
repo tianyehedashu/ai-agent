@@ -13,6 +13,8 @@ import SystemMCPPage from '@/pages/mcp/system'
 import NotFoundPage from '@/pages/not-found'
 import SettingsPage from '@/pages/settings'
 import StudioPage from '@/pages/studio'
+import VideoTasksPage from '@/pages/video-tasks'
+import VideoTasksHistoryPage from '@/pages/video-tasks/history'
 
 function App(): React.JSX.Element {
   return (
@@ -35,6 +37,9 @@ function App(): React.JSX.Element {
                   <Route path="/mcp" element={<MCPPage />} />
                   <Route path="/mcp/system" element={<SystemMCPPage />} />
                   <Route path="/studio" element={<StudioPage />} />
+                  <Route path="/video-tasks" element={<VideoTasksPage />} />
+                  <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />
+                  <Route path="/video-tasks/:sessionId" element={<VideoTasksPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>

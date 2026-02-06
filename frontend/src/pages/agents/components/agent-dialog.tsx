@@ -94,7 +94,7 @@ export default function AgentDialog({
         description: agent.description ?? '',
         systemPrompt: agent.systemPrompt,
         model: agent.model,
-        tools: agent.tools ?? [],
+        tools: agent.tools,
         temperature: agent.temperature,
         maxTokens: agent.maxTokens,
         maxIterations: agent.maxIterations,

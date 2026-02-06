@@ -15,10 +15,13 @@
 
 import { type ReactNode, useEffect } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Loader2 } from 'lucide-react'
 
+import { ApiError } from '@/api/client'
 import { userApi } from '@/api/user'
+import { useToast } from '@/hooks/use-toast'
+import { getAuthToken, setAuthToken } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
 interface AuthProviderProps {
@@ -27,6 +30,22 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.JSX.Element {
   const setCurrentUser = useUserStore((state) => state.setCurrentUser)
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
+  // 监听 token 降级事件（由 apiClient 检测到 X-Token-Degraded 后发出）
+  useEffect(() => {
+    const handler = (): void => {
+      toast({
+        variant: 'destructive',
+        title: '登录已过期',
+        description: '请重新登录以恢复数据访问',
+      })
+      void queryClient.invalidateQueries()
+    }
+    window.addEventListener('auth:token-degraded', handler)
+    return () => { window.removeEventListener('auth:token-degraded', handler) }
+  }, [toast, queryClient])
 
   // 使用 TanStack Query 获取当前用户信息
   // 这会确保 Cookie 在后续请求之前被设置
@@ -44,8 +63,15 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   })
 
   // 同步用户信息到 Zustand store
+  // 同时检测 token 过期降级：有本地 token 但后端返回匿名用户时，清除过期 token
   useEffect(() => {
     if (isFetched) {
+      if (currentUser?.is_anonymous && getAuthToken()) {
+        // Token 已过期，后端静默降级为匿名用户
+        // 清除过期 token，让后续请求以匿名身份正确运行
+        console.warn('[AuthProvider] Token expired, backend fell back to anonymous. Clearing stale token.')
+        setAuthToken(null)
+      }
       setCurrentUser(currentUser ?? null)
     }
   }, [currentUser, isFetched, setCurrentUser])
@@ -63,8 +89,8 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   }
 
   // 严重错误状态（如服务不可用）- 仅在非 401/403 时显示
-  // 401/403 是正常的未认证状态，不需要显示错误
-  if (error && !error.message.includes('401') && !error.message.includes('403')) {
+  const isAuthError = error instanceof ApiError && (error.status === 401 || error.status === 403)
+  if (error && !isAuthError) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 text-center">

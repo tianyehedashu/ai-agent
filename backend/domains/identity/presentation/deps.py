@@ -79,6 +79,7 @@ async def get_current_user(
         name=principal.name,
         is_anonymous=principal.is_anonymous,
         role=principal.role,
+        vendor_creator_id=principal.vendor_creator_id,
     )
 
     # 设置权限上下文供 Repository 层使用
@@ -118,6 +119,7 @@ async def get_current_user_optional(
         name=principal.name,
         is_anonymous=principal.is_anonymous,
         role=principal.role,
+        vendor_creator_id=principal.vendor_creator_id,
     )
 
 

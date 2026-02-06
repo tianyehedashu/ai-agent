@@ -1,5 +1,7 @@
 # SessionManager 工厂模式重构说明
 
+> **说明**：本文档为历史重构记录。当前实现已迁移至 `SandboxManager` 与 `SandboxExecutorFactory`（见 `sandbox_manager.py`、`sandbox_executor_factory.py`），请以现有代码为准。
+
 ## 重构背景
 
 ### 原有问题

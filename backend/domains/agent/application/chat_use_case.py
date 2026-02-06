@@ -12,9 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.application import AgentUseCase
-from domains.agent.application.session_use_case import SessionUseCase
-from domains.agent.application.title_use_case import TitleUseCase
-from domains.agent.domain.entities.session import SessionOwner
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
@@ -28,10 +25,12 @@ from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraph
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
-from domains.agent.infrastructure.sandbox import SessionManager, SessionRecreationResult
+from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxManager
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
 from domains.identity.domain.types import Principal
+from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.domain.entities import SessionOwner
 from exceptions import NotFoundError
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
@@ -315,15 +314,15 @@ class ChatUseCase:
         session_recreated_event = None
         if (
             execution_config.sandbox.mode.value == "docker"
-            and execution_config.sandbox.docker.session_enabled
+            and execution_config.sandbox.docker.sandbox_enabled
         ):
-            session_manager = SessionManager.get_instance()
-            recreation_result = await session_manager.get_or_create_session_with_info(
+            sandbox_manager = SandboxManager.get_instance()
+            creation_result = await sandbox_manager.get_or_create_with_info(
                 user_id=user_id,
-                conversation_id=session_id,
+                session_id=session_id,
             )
-            if recreation_result.is_recreated and recreation_result.previous_state:
-                session_recreated_event = self._create_session_recreated_event(recreation_result)
+            if creation_result.is_recreated and creation_result.previous_state:
+                session_recreated_event = self._create_sandbox_recreated_event(creation_result)
 
         configured_tool_registry = ConfiguredToolRegistry(config=execution_config)
 
@@ -519,11 +518,15 @@ class ChatUseCase:
             hitl_operations=AgentExecutionLimits.DEFAULT_HITL_OPERATIONS.copy(),
         )
 
-    def _create_session_recreated_event(self, result: SessionRecreationResult) -> AgentEvent:
-        """创建会话重建事件"""
+    def _create_sandbox_recreated_event(self, result: SandboxCreationResult) -> AgentEvent:
+        """创建沙箱重建事件
+        
+        注意：事件类型和字段名使用 session_* 命名（面向用户的接口概念），
+        而不是内部实现的 sandbox_* 命名。
+        """
         previous_state = result.previous_state
         data: dict = {
-            "session_id": result.session.session_id,
+            "session_id": result.sandbox.sandbox_id,
             "is_new": result.is_new,
             "is_recreated": result.is_recreated,
             "message": result.message,
@@ -531,7 +534,7 @@ class ChatUseCase:
 
         if previous_state:
             data["previous_state"] = {
-                "session_id": previous_state.last_session_id,
+                "session_id": previous_state.last_sandbox_id,
                 "cleaned_at": (
                     previous_state.last_cleaned_at.isoformat()
                     if previous_state.last_cleaned_at

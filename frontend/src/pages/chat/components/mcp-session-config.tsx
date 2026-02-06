@@ -14,7 +14,6 @@ import { Check, Plug, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
-import { useChatStore } from '@/stores/chat'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -27,6 +26,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { useChatStore } from '@/stores/chat'
 import type { SessionMCPConfig } from '@/types/mcp'
 
 interface MCPSessionConfigProps {
@@ -45,7 +45,7 @@ export function MCPSessionConfig({
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
   const open = isControlled ? controlledOpen : internalOpen
-  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen
+  const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen
 
   const { pendingMCPConfig, setPendingMCPConfig } = useChatStore()
 
@@ -57,13 +57,18 @@ export function MCPSessionConfig({
 
   const { data: currentConfig, isLoading: configLoading } = useQuery({
     queryKey: ['session-mcp-config', sessionId],
-    queryFn: () => mcpApi.getSessionMCPConfig(sessionId!),
+    queryFn: () => {
+      if (!sessionId) throw new Error('sessionId required')
+      return mcpApi.getSessionMCPConfig(sessionId)
+    },
     enabled: open && !!sessionId,
   })
 
   const updateMutation = useMutation({
-    mutationFn: (config: SessionMCPConfig) =>
-      mcpApi.updateSessionMCPConfig(sessionId!, config),
+    mutationFn: (config: SessionMCPConfig) => {
+      if (!sessionId) throw new Error('sessionId required')
+      return mcpApi.updateSessionMCPConfig(sessionId, config)
+    },
     onSuccess: () => {
       toast.success('对话工具配置已更新')
       setOpen(false)
@@ -185,7 +190,7 @@ export function MCPSessionConfig({
                         </div>
                         <Switch
                           checked={isEnabled}
-                          onCheckedChange={(checked) => handleToggleServer(server.id, checked)}
+                          onCheckedChange={(checked) => { handleToggleServer(server.id, checked); }}
                           disabled={!!sessionId && updateMutation.isPending}
                           className="shrink-0"
                         />
@@ -205,7 +210,7 @@ export function MCPSessionConfig({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setOpen(false)}
+              onClick={() => { setOpen(false); }}
               disabled={!!sessionId && updateMutation.isPending}
             >
               完成

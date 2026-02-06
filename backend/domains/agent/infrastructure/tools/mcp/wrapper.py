@@ -40,7 +40,7 @@ class MCPToolWrapper(BaseTool):
         server_name: str = "",
         tool_name: str = "",
         tool_definition: dict[str, Any] | None = None,
-        langchain_tool: "LangChainBaseTool | None" = None,
+        langchain_tool: LangChainBaseTool | None = None,
     ):
         """
         初始化 MCP 工具包装器。
@@ -80,7 +80,7 @@ class MCPToolWrapper(BaseTool):
 
         self.category = ToolCategory.EXTERNAL
 
-    def _init_schema_from_langchain_tool(self, tool: "LangChainBaseTool") -> None:
+    def _init_schema_from_langchain_tool(self, tool: LangChainBaseTool) -> None:
         """从 LangChain 工具初始化参数 schema。"""
         if hasattr(tool, "args_schema") and tool.args_schema:
             self._tool_schema = {"inputSchema": tool.args_schema.model_json_schema()}
@@ -142,7 +142,7 @@ class MCPToolWrapper(BaseTool):
             )
 
 
-def wrap_langchain_tools(tools: list["LangChainBaseTool"]) -> list[MCPToolWrapper]:
+def wrap_langchain_tools(tools: list[LangChainBaseTool]) -> list[MCPToolWrapper]:
     """
     将 LangChain 工具列表包装为 MCPToolWrapper 列表。
 

@@ -11,6 +11,7 @@ SimpleMem 端到端测试
 运行方式: make test-e2e 或 pytest tests/e2e/test_simplemem_e2e.py -v
 """
 
+import asyncio
 import json
 from typing import Any
 import uuid
@@ -42,65 +43,70 @@ async def send_chat_message(
 ) -> tuple[str | None, str, list[dict[str, Any]]]:
     """发送聊天消息并返回结果
 
+    流式读取时若遇连接被关闭（httpx.ReadError），会自动重试一次，以应对 E2E 环境偶发断开。
+
     Returns:
         tuple: (session_id, final_response, all_events)
     """
-    events = []
+    events: list[dict[str, Any]] = []
     streamed_content = ""  # 收集流式内容
     thinking_content = ""  # 收集推理模型的思考内容
     final_response = ""
     returned_session_id = session_id
 
-    payload = {"message": message}
+    payload: dict[str, Any] = {"message": message}
     if session_id:
         payload["session_id"] = session_id
 
-    async with client.stream(
-        "POST",
-        "/api/v1/chat",
-        json=payload,
-        headers={"Accept": "text/event-stream"},
-    ) as response:
-        if response.status_code != 200:
-            print(f"  ⚠️ HTTP 状态码: {response.status_code}")
-            return None, "", []
+    for attempt in range(2):
+        try:
+            async with client.stream(
+                "POST",
+                "/api/v1/chat",
+                json=payload,
+                headers={"Accept": "text/event-stream"},
+            ) as response:
+                if response.status_code != 200:
+                    print(f"  ⚠️ HTTP 状态码: {response.status_code}")
+                    return None, "", []
 
-        async for line in response.aiter_lines():
-            if line.startswith("data: ") and line != "data: [DONE]":
-                try:
-                    event = json.loads(line[6:])
-                    events.append(event)
+                async for line in response.aiter_lines():
+                    if line.startswith("data: ") and line != "data: [DONE]":
+                        try:
+                            event = json.loads(line[6:])
+                            events.append(event)
 
-                    if event["type"] == "session_created":
-                        returned_session_id = event["data"]["session_id"]
-                    elif event["type"] == "text":
-                        # 收集流式文本内容
-                        text_content = event["data"].get("content", "")
-                        if text_content:
-                            streamed_content += text_content
-                    elif event["type"] == "thinking":
-                        # 收集推理模型的思考内容（deepseek-reasoner 等）
-                        # thinking 事件可能包含 content 字段（推理过程）
-                        thinking_text = event["data"].get("content", "")
-                        if thinking_text:
-                            thinking_content += thinking_text
-                    elif event["type"] == "done":
-                        final_msg = event["data"].get("final_message", {})
-                        # 优先使用 content，如果为空则使用 reasoning_content（推理模型兼容）
-                        final_response = final_msg.get("content") or final_msg.get(
-                            "reasoning_content", ""
-                        )
-                    elif event["type"] == "error":
-                        # 记录错误事件
-                        print(f"  ⚠️ 错误事件: {event['data']}")
-                except json.JSONDecodeError as e:
-                    print(f"  ⚠️ JSON 解析错误: {e}, line: {line[:100]}...")
+                            if event["type"] == "session_created":
+                                returned_session_id = event["data"]["session_id"]
+                            elif event["type"] == "text":
+                                text_content = event["data"].get("content", "")
+                                if text_content:
+                                    streamed_content += text_content
+                            elif event["type"] == "thinking":
+                                thinking_text = event["data"].get("content", "")
+                                if thinking_text:
+                                    thinking_content += thinking_text
+                            elif event["type"] == "done":
+                                final_msg = event["data"].get("final_message", {})
+                                final_response = final_msg.get("content") or final_msg.get(
+                                    "reasoning_content", ""
+                                )
+                            elif event["type"] == "error":
+                                print(f"  ⚠️ 错误事件: {event['data']}")
+                        except json.JSONDecodeError as e:
+                            print(f"  ⚠️ JSON 解析错误: {e}, line: {line[:100]}...")
+            break  # 流式读取完成
+        except httpx.ReadError as e:
+            if attempt == 0:
+                await asyncio.sleep(2)
+                continue
+            raise RuntimeError(
+                "流式读取失败（连接被关闭）。请确认后端已启动且无异常，并查看服务端日志。"
+            ) from e
 
     # 优先使用 done 事件中的完整内容，否则使用流式内容，最后使用思考内容
-    # 对于推理模型（如 deepseek-reasoner），content 可能为空，但 thinking 有内容
     final_response = final_response or streamed_content or thinking_content
 
-    # 调试信息：如果没有响应但有事件，打印事件类型
     if not final_response and events:
         event_types = [e.get("type") for e in events]
         print(f"  ⚠️ 无响应内容，收到的事件类型: {event_types}")

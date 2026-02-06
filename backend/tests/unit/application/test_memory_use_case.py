@@ -35,19 +35,19 @@ class TestMemoryService:
         service = MemoryService(db_session)
         user_id = str(user.id)
 
-        # Act
+        # Act（importance 在 DB 中为 Integer，传整数以保证与迁移一致）
         memory = await service.create(
             user_id=user_id,
             type="fact",
             content="User likes Python",
-            importance=0.8,
+            importance=5,
         )
 
         # Assert
         assert memory.id is not None
         assert memory.type == "fact"
         assert memory.content == "User likes Python"
-        assert memory.importance == 0.8
+        assert memory.importance == 5
         assert memory.user_id == uuid.UUID(user_id)
 
     @pytest.mark.asyncio

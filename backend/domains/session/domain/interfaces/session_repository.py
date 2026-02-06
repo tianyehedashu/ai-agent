@@ -21,6 +21,7 @@ class SessionEntity(Protocol):
     status: str
     message_count: int
     token_count: int
+    video_task_count: int
 
 
 class SessionRepository(ABC):
@@ -130,5 +131,19 @@ class SessionRepository(ABC):
             session_id: 会话 ID
             message_count: 消息增量
             token_count: Token 增量
+        """
+        ...
+
+    @abstractmethod
+    async def increment_video_task_count(
+        self,
+        session_id: uuid.UUID,
+        count: int = 1,
+    ) -> None:
+        """增加视频任务计数
+
+        Args:
+            session_id: 会话 ID
+            count: 视频任务增量
         """
         ...

@@ -51,6 +51,7 @@ class UserRepository(ABC):
         name: str | None = None,
         avatar_url: str | None = None,
         hashed_password: str | None = None,
+        vendor_creator_id: int | None = None,
     ) -> UserEntity | None:
         """更新用户"""
         ...

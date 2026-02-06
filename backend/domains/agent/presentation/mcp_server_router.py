@@ -56,10 +56,15 @@ from domains.agent.infrastructure.repositories.mcp_dynamic_prompt_repository imp
 from domains.agent.infrastructure.repositories.mcp_dynamic_tool_repository import (
     MCPDynamicToolRepository,
 )
+from domains.identity.application import UserUseCase
 from domains.identity.presentation.deps import (
     AdminUser,  # noqa: TC001 - required at runtime for FastAPI Depends()
 )
-from libs.api.deps import get_mcp_dynamic_prompt_service, get_mcp_dynamic_tool_service
+from libs.api.deps import (
+    get_mcp_dynamic_prompt_service,
+    get_mcp_dynamic_tool_service,
+    get_user_service,
+)
 from libs.db.database import get_db
 from utils.logging import get_logger
 
@@ -199,15 +204,24 @@ async def initialize_mcp_servers() -> AsyncIterator[None]:
     logger.info("MCP Streamable HTTP session managers stopped")
 
 
-async def _handle_mcp_request(request: Request, server_name: str, user_id: UUID | None = None):
+async def _handle_mcp_request(
+    request: Request,
+    server_name: str,
+    user_id: UUID | None = None,
+    vendor_creator_id: int | None = None,
+):
     """处理 MCP Streamable HTTP 请求
 
     将请求转发给 FastMCP 的 Streamable HTTP 应用。
-    若有 user_id 则通过 contextvar 传入，供 MCP 工具（如 LLM）使用。
+    若有 user_id / vendor_creator_id 则通过 contextvar 传入，供 MCP 工具（如 LLM、视频任务）使用。
     """
-    from domains.agent.infrastructure.mcp_server.context import set_mcp_user_id
+    from domains.agent.infrastructure.mcp_server.context import (
+        set_mcp_user_id,
+        set_mcp_vendor_creator_id,
+    )
 
-    token = set_mcp_user_id(user_id) if user_id else None
+    token_user = set_mcp_user_id(user_id) if user_id is not None else None
+    token_creator = set_mcp_vendor_creator_id(vendor_creator_id)
     try:
         app = _get_streamable_http_app(server_name)
 
@@ -245,12 +259,15 @@ async def _handle_mcp_request(request: Request, server_name: str, user_id: UUID 
             media_type=headers_dict.get("content-type", "application/json"),
         )
     finally:
-        if token is not None:
-            from domains.agent.infrastructure.mcp_server.context import (
-                mcp_user_id_var,
-            )
+        from domains.agent.infrastructure.mcp_server.context import (
+            mcp_user_id_var,
+            mcp_vendor_creator_id_var,
+        )
 
-            mcp_user_id_var.reset(token)
+        if token_creator is not None:
+            mcp_vendor_creator_id_var.reset(token_creator)
+        if token_user is not None:
+            mcp_user_id_var.reset(token_user)
 
 
 # Cursor mcp.json 中常用的客户端显示名（scope -> 显示名）
@@ -524,6 +541,8 @@ async def mcp_streamable_http_endpoint(
     request: Request,
     server_name: str,
     auth_result: tuple[UUID, UUID, set, str | None] = Depends(verify_mcp_access),
+    db: AsyncSession = Depends(get_db),
+    user_use_case: UserUseCase = Depends(get_user_service),
 ):
     """MCP Streamable HTTP 端点
 
@@ -531,8 +550,16 @@ async def mcp_streamable_http_endpoint(
     - GET: 获取 SSE 事件流
     - POST: 发送 JSON-RPC 请求
     - DELETE: 终止会话
+
+    认证通过后从 identity 应用层解析当前用户的 vendor_creator_id，写入 MCP context，
+    供下游工具（如视频任务）与 Web 端行为一致。
     """
     api_key_id, user_id, _scopes, client_ip = auth_result
+
+    vendor_creator_id: int | None = None
+    if user_id is not None:
+        user = await user_use_case.get_user_by_id(str(user_id))
+        vendor_creator_id = user.vendor_creator_id if user else None
 
     logger.info(
         "MCP Streamable HTTP request: method=%s, server=%s, api_key_id=%s, user_id=%s, client_ip=%s",
@@ -543,7 +570,7 @@ async def mcp_streamable_http_endpoint(
         client_ip,
     )
 
-    return await _handle_mcp_request(request, server_name, user_id)
+    return await _handle_mcp_request(request, server_name, user_id, vendor_creator_id)
 
 
 @router.get("/{server_name}/info", include_in_schema=False)

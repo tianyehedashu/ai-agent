@@ -265,8 +265,8 @@ class OwnedRepositoryBase(ABC, Generic[T]):
 **使用示例**：
 
 ```python
-from domains.agent.domain.interfaces.session_repository import (
-    SessionRepository as SessionRepositoryInterface,
+from domains.session.domain.interfaces import (
+    SessionRepositoryInterface,
 )
 
 class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface):
@@ -819,10 +819,10 @@ domains/agent/
   - 实现：`infrastructure/repositories/session_repository.py` → `SessionRepository`
 - **导入时使用别名**：避免命名冲突
   ```python
-  from domains.agent.domain.interfaces.session_repository import (
-      SessionRepository as SessionRepositoryInterface,
+  from domains.session.domain.interfaces import (
+      SessionRepositoryInterface,
   )
-  from domains.agent.infrastructure.repositories import SessionRepository
+  from domains.session.infrastructure.repositories import SessionRepository
   ```
 
 ## 更新日志

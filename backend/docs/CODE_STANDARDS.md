@@ -84,10 +84,14 @@ from domains.identity.presentation.schemas import CurrentUser
 # ✅ 从 agent 域导入消息/事件类型
 from domains.agent.domain.types import Message, AgentEvent, EventType, AgentConfig, ToolCall
 
+# ✅ 从 session 域导入会话相关组件
+from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.infrastructure.models import Session
+
 # ✅ 从 agent 域导入基础设施组件
 from domains.agent.infrastructure.llm import LLMGateway
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
-from domains.agent.application import ChatUseCase, SessionUseCase, AgentUseCase
+from domains.agent.application import ChatUseCase, AgentUseCase
 
 # ✅ 从 libs 导入纯技术基础设施
 from libs.config import ExecutionConfig

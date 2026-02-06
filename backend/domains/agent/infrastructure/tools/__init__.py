@@ -5,7 +5,12 @@ Tool System - 工具系统
 """
 
 # 导入工具模块以触发注册
-from domains.agent.infrastructure.tools import code_tools, file_tools, search_tools
+from domains.agent.infrastructure.tools import (
+    amazon_video_tools,
+    code_tools,
+    file_tools,
+    search_tools,
+)
 from domains.agent.infrastructure.tools.base import BaseTool, register_tool, tool_registry
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
 
@@ -13,6 +18,7 @@ __all__ = [
     "BaseTool",
     "ConfiguredToolRegistry",
     "ToolRegistry",
+    "amazon_video_tools",
     "code_tools",
     "file_tools",
     "register_tool",

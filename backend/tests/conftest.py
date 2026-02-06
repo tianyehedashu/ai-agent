@@ -69,23 +69,23 @@ def pytest_configure(config):
 # 初始化 JWT Manager（在导入测试模块之前）
 # 注意：这些导入必须在警告过滤器配置之后（见上方 pytest_configure）
 # pylint: disable=wrong-import-position
-from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy import text  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-from sqlalchemy.pool import NullPool  # noqa: E402
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
-from bootstrap.config import settings  # noqa: E402
-from domains.agent.infrastructure.models.user_provider_config import (  # noqa: E402
+from bootstrap.config import settings
+from domains.agent.infrastructure.models.user_provider_config import (
     UserProviderConfig,  # noqa: F401
 )
-from domains.identity.infrastructure.auth.jwt import init_jwt_manager  # noqa: E402
-from domains.identity.infrastructure.models.quota import (  # noqa: E402, F401
+from domains.identity.infrastructure.auth.jwt import init_jwt_manager
+from domains.identity.infrastructure.models.quota import (  # noqa: F401
     QuotaUsageLog,
     UserQuota,
 )
-from domains.identity.infrastructure.models.user import User  # noqa: E402
-from libs.db.database import Base  # noqa: E402
+from domains.identity.infrastructure.models.user import User
+from libs.db.database import Base
 
 # pylint: enable=wrong-import-position
 
@@ -566,7 +566,7 @@ except Exception:
     pass
 
 # 注册 atexit 处理器作为备用
-import atexit  # noqa: E402  # pylint: disable=wrong-import-position,wrong-import-order
+import atexit  # pylint: disable=wrong-import-position,wrong-import-order
 
 atexit.register(_suppress_litellm_atexit_errors)
 
@@ -596,7 +596,7 @@ def cleanup_docker_containers():
     try:
         # pylint: disable=import-outside-toplevel
         from domains.agent.infrastructure.sandbox.executor import (
-            SessionDockerExecutor,
+            PersistentDockerExecutor,
         )
 
         # 清理孤儿容器（已停止的或运行超过 5 分钟的）
@@ -606,12 +606,12 @@ def cleanup_docker_containers():
             # 如果已有事件循环，使用 nest_asyncio
             nest_asyncio.apply()
             cleaned = asyncio.run(
-                SessionDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
+                PersistentDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
             )
         except RuntimeError:
             # 没有运行的事件循环，直接运行
             cleaned = asyncio.run(
-                SessionDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
+                PersistentDockerExecutor.cleanup_orphaned_containers(max_age_seconds=300)
             )
 
         if cleaned:

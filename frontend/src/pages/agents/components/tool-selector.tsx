@@ -25,9 +25,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 function groupByCategory(tools: ToolDefinition[]): Map<string, ToolDefinition[]> {
   const map = new Map<string, ToolDefinition[]>()
   for (const tool of tools) {
-    const cat = tool.category ?? 'system'
-    if (!map.has(cat)) map.set(cat, [])
-    map.get(cat)!.push(tool)
+    const cat = tool.category
+    const list = map.get(cat) ?? []
+    list.push(tool)
+    map.set(cat, list)
   }
   return map
 }

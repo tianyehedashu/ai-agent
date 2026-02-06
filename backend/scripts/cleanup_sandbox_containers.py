@@ -2,10 +2,10 @@
 """
 沙箱容器清理脚本
 
-一键清理所有沙箱容器（仅删除以 session- 开头的容器）
+一键清理所有沙箱容器（仅删除以 sandbox- 开头的容器）
 
 安全保护：
-- 只删除以 "session-" 开头的容器（精确前缀匹配）
+- 只删除以 "sandbox-" 开头的容器（精确前缀匹配）
 - 不会误删其他 Docker 容器（如 postgres、redis、qdrant 等）
 - 在列出和删除时都有安全检查
 
@@ -23,7 +23,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from domains.agent.infrastructure.sandbox.executor import SessionDockerExecutor
+from domains.agent.infrastructure.sandbox.executor import PersistentDockerExecutor
 from utils.logging import get_logger
 
 # 设置标准输出编码为 UTF-8（Windows 兼容）
@@ -38,7 +38,7 @@ sys.path.insert(0, str(project_root))
 
 logger = get_logger(__name__)
 
-CONTAINER_PREFIX = "session-"
+CONTAINER_PREFIX = "sandbox-"
 
 
 def list_containers(include_running: bool = True) -> list[str]:
@@ -70,7 +70,7 @@ def list_containers(include_running: bool = True) -> list[str]:
         logger.warning("Failed to list containers: %s", result.stderr)
         return []
 
-    # 过滤出以 session- 开头的容器（精确匹配前缀）
+    # 过滤出以 sandbox- 开头的容器（精确匹配前缀）
     containers = []
     for line in result.stdout.strip().split("\n"):
         if not line.strip():
@@ -78,7 +78,7 @@ def list_containers(include_running: bool = True) -> list[str]:
         # 格式: "容器名\t状态"
         parts = line.split("\t", 1)
         container_name = parts[0].strip()
-        # 只添加以 session- 开头的容器（精确前缀匹配）
+        # 只添加以 sandbox- 开头的容器（精确前缀匹配）
         if container_name.startswith(CONTAINER_PREFIX):
             containers.append(container_name)
 
@@ -172,12 +172,12 @@ async def cleanup_containers(container_names: list[str], force: bool = False) ->
 
 async def cleanup_all_using_class_method() -> list[str]:
     """
-    使用 SessionDockerExecutor 的类方法清理所有容器
+    使用 PersistentDockerExecutor 的类方法清理所有容器
 
     Returns:
         已清理的容器 ID 列表
     """
-    return await SessionDockerExecutor.cleanup_all_session_containers()
+    return await PersistentDockerExecutor.cleanup_all_sandbox_containers()
 
 
 def print_container_list(containers: list[str], title: str = "沙箱容器列表") -> None:
@@ -198,7 +198,7 @@ def print_container_list(containers: list[str], title: str = "沙箱容器列表
 def _parse_arguments() -> argparse.Namespace:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="清理沙箱容器（session-* 前缀）",
+        description="清理沙箱容器（sandbox-* 前缀）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -225,7 +225,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--use-class-method",
         action="store_true",
-        help="使用 SessionDockerExecutor.cleanup_all_session_containers() 方法清理",
+        help="使用 PersistentDockerExecutor.cleanup_all_sandbox_containers() 方法清理",
     )
 
     args = parser.parse_args()
@@ -249,9 +249,7 @@ def _filter_containers(args: argparse.Namespace) -> list[str]:
 
 def _check_running_containers(containers: list[str], force: bool) -> None:
     """检查并警告运行中的容器"""
-    running_containers = [
-        c for c in containers if get_container_info(c)["status"] == "running"
-    ]
+    running_containers = [c for c in containers if get_container_info(c)["status"] == "running"]
     if running_containers and not force:
         print(f"\n⚠️  警告: 发现 {len(running_containers)} 个运行中的容器:")
         for container in running_containers:
@@ -323,7 +321,7 @@ async def main() -> int:
     # 执行清理
     print("\n🧹 开始清理容器...")
     if args.use_class_method:
-        print("📦 使用 SessionDockerExecutor.cleanup_all_session_containers() 方法")
+        print("📦 使用 PersistentDockerExecutor.cleanup_all_sandbox_containers() 方法")
         cleaned = await cleanup_all_using_class_method()
     else:
         cleaned = await cleanup_containers(containers_to_cleanup, force=args.force)

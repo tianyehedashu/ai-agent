@@ -8,10 +8,10 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.domain.interfaces.session_repository import (
+from domains.session.domain.interfaces.session_repository import (
     SessionRepository as SessionRepositoryInterface,
 )
-from domains.agent.infrastructure.models.session import Session
+from domains.session.infrastructure.models.session import Session
 from libs.db.base_repository import OwnedRepositoryBase
 from libs.db.permission_context import get_permission_context
 
@@ -134,9 +134,7 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         await self.db.refresh(session)
         return session
 
-    async def update_config(
-        self, session_id: uuid.UUID, config_updates: dict
-    ) -> Session | None:
+    async def update_config(self, session_id: uuid.UUID, config_updates: dict) -> Session | None:
         """合并更新会话 config（浅合并，用于 mcp_config 等）
 
         Args:
@@ -179,4 +177,15 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
             session.message_count += message_count
             if token_count:
                 session.token_count += token_count
+            await self.db.flush()
+
+    async def increment_video_task_count(
+        self,
+        session_id: uuid.UUID,
+        count: int = 1,
+    ) -> None:
+        """增加视频任务计数"""
+        session = await self.get_by_id(session_id)
+        if session:
+            session.video_task_count += count
             await self.db.flush()

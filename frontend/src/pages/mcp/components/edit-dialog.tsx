@@ -86,9 +86,7 @@ export function EditDialog({
       })
       const config = server.env_config
       setEnvConfigJson(
-        config && Object.keys(config).length > 0
-          ? JSON.stringify(config, null, 2)
-          : ENV_CONFIG_EMPTY_JSON
+        Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : ENV_CONFIG_EMPTY_JSON
       )
     }
   }, [open, server, form])
@@ -97,10 +95,10 @@ export function EditDialog({
     mutationFn: (data: FormValues & { env_config?: Record<string, unknown> }) =>
       server
         ? mcpApi.updateServer(server.id, {
-            display_name: data.display_name?.trim() || undefined,
+            display_name: data.display_name?.trim() ?? undefined,
             url: data.url.trim(),
             enabled: data.enabled,
-            env_config: data.env_config,
+            env_config: data.env_config as Record<string, string> | undefined,
           })
         : Promise.reject(new Error('No server')),
     onSuccess: () => {
@@ -119,7 +117,7 @@ export function EditDialog({
     const trimmed = envConfigJson.trim()
     if (trimmed) {
       try {
-        const parsed = JSON.parse(trimmed)
+        const parsed: unknown = JSON.parse(trimmed)
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
           toast.error('高级配置必须是 JSON 对象')
           return
@@ -134,7 +132,7 @@ export function EditDialog({
     }
     updateMutation.mutate({
       ...values,
-      display_name: values.display_name?.trim() || undefined,
+      display_name: values.display_name?.trim() ?? undefined,
       url: values.url.trim(),
       env_config,
     })
@@ -219,7 +217,7 @@ export function EditDialog({
                   <textarea
                     className="min-h-[120px] w-full resize-y rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs"
                     value={envConfigJson}
-                    onChange={(e) => setEnvConfigJson(e.target.value)}
+                    onChange={(e) => { setEnvConfigJson(e.target.value); }}
                     placeholder='{"env": {}, "cwd": "."}'
                     spellCheck={false}
                   />

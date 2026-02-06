@@ -8,11 +8,19 @@ backend/
 │   ├── identity/            # 身份认证域
 │   │   ├── domain/types.py  # Principal, ANONYMOUS_*
 │   │   └── presentation/    # 认证依赖、中间件
+│   ├── session/             # 会话域（跨功能共享）
+│   │   ├── domain/
+│   │   │   └── entities/    # SessionDomainService, SessionOwner
+│   │   ├── application/     # SessionUseCase, TitleUseCase
+│   │   ├── infrastructure/
+│   │   │   ├── models/      # Session ORM
+│   │   │   └── repositories/
+│   │   └── presentation/    # /api/v1/sessions
 │   ├── agent/               # Agent 域（核心业务域）
 │   │   ├── domain/
 │   │   │   ├── types.py     # Message, AgentEvent, ToolCall
-│   │   │   └── entities/    # AgentEntity, SessionDomainService
-│   │   ├── application/     # AgentUseCase, ChatUseCase, SessionUseCase
+│   │   │   └── entities/    # AgentEntity
+│   │   ├── application/     # AgentUseCase, ChatUseCase
 │   │   └── infrastructure/
 │   │       ├── llm/         # LLM 网关
 │   │       ├── memory/      # 记忆系统
@@ -45,13 +53,19 @@ from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
 from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_session_ownership
 from domains.identity.presentation.schemas import CurrentUser
 
+# 会话域（Session 相关）
+from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.domain.entities import SessionDomainService, SessionOwner
+from domains.session.infrastructure.models import Session
+from domains.session.infrastructure.repositories import SessionRepository
+
 # Agent 域类型
 from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 
 # Agent 域组件
 from domains.agent.infrastructure.llm import LLMGateway
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
-from domains.agent.application import ChatUseCase, SessionUseCase
+from domains.agent.application import ChatUseCase, AgentUseCase
 
 # 纯技术基础设施
 from libs.config import ExecutionConfig

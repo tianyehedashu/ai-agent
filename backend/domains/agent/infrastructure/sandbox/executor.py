@@ -239,19 +239,19 @@ class DockerExecutor(SandboxExecutor):
         )
 
 
-class SessionDockerExecutor(SandboxExecutor):
+class PersistentDockerExecutor(SandboxExecutor):
     """
-    会话级 Docker 沙箱执行器
+    持久化 Docker 沙箱执行器
 
     特点：
-    - 容器在会话期间保持运行
+    - 容器在沙箱生命周期内保持运行
     - 支持持久化卷，文件跨命令保留
-    - 安装的包在会话内保留
+    - 安装的包在沙箱内保留
     - 支持容器自动过期清理
     """
 
     # 容器名称前缀，用于识别和清理
-    CONTAINER_PREFIX = "session-"
+    CONTAINER_PREFIX = "sandbox-"
 
     def __init__(
         self,
@@ -261,7 +261,7 @@ class SessionDockerExecutor(SandboxExecutor):
         max_idle_seconds: int = 3600,  # 最大空闲时间（默认 1 小时）
     ) -> None:
         """
-        初始化会话执行器
+        初始化沙箱执行器
 
         Args:
             image: Docker 镜像
@@ -274,18 +274,18 @@ class SessionDockerExecutor(SandboxExecutor):
         self.container_workspace = container_workspace
         self.max_idle_seconds = max_idle_seconds
         self._container_id: str | None = None
-        self._session_id: str | None = None
+        self._sandbox_id: str | None = None
         self._last_activity: float = 0
 
     @property
     def is_running(self) -> bool:
-        """检查会话容器是否运行中"""
+        """检查沙箱容器是否运行中"""
         return self._container_id is not None
 
     @property
-    def session_id(self) -> str | None:
-        """获取会话 ID"""
-        return self._session_id
+    def sandbox_id(self) -> str | None:
+        """获取沙箱 ID"""
+        return self._sandbox_id
 
     @property
     def container_id(self) -> str | None:
@@ -294,19 +294,19 @@ class SessionDockerExecutor(SandboxExecutor):
 
     def configure_for_testing(
         self,
-        session_id: str,
+        sandbox_id: str,
         container_id: str,
     ) -> None:
         """
-        配置测试用的模拟会话状态
+        配置测试用的模拟沙箱状态
 
         此方法仅用于单元测试，不启动真实 Docker 容器。
 
         Args:
-            session_id: 模拟会话 ID
+            sandbox_id: 模拟沙箱 ID
             container_id: 模拟容器 ID
         """
-        self._session_id = session_id
+        self._sandbox_id = sandbox_id
         self._container_id = container_id
 
     @classmethod
@@ -315,7 +315,7 @@ class SessionDockerExecutor(SandboxExecutor):
         max_age_seconds: int = 3600,
     ) -> list[str]:
         """
-        清理孤儿容器（运行超过指定时间的会话容器）
+        清理孤儿容器（运行超过指定时间的沙箱容器）
 
         Args:
             max_age_seconds: 容器最大存活时间（秒）
@@ -326,7 +326,7 @@ class SessionDockerExecutor(SandboxExecutor):
 
         # pylint: disable=too-many-branches
         def run() -> list[str]:
-            # 列出所有会话容器
+            # 列出所有沙箱容器
             result = subprocess.run(
                 [
                     "docker",
@@ -395,16 +395,16 @@ class SessionDockerExecutor(SandboxExecutor):
         return await asyncio.to_thread(run)
 
     @classmethod
-    async def cleanup_all_session_containers(cls) -> list[str]:
+    async def cleanup_all_sandbox_containers(cls) -> list[str]:
         """
-        清理所有会话容器（用于重启/关闭时）
+        清理所有沙箱容器（用于重启/关闭时）
 
         Returns:
             已清理的容器名称列表
         """
 
         def run() -> list[str]:
-            # 列出所有会话容器
+            # 列出所有沙箱容器
             result = subprocess.run(
                 [
                     "docker",
@@ -432,28 +432,28 @@ class SessionDockerExecutor(SandboxExecutor):
                     capture_output=True,
                     check=False,
                 )
-                logger.info("Cleaned up %d session containers", len(container_ids))
+                logger.info("Cleaned up %d sandbox containers", len(container_ids))
 
             return container_ids
 
         return await asyncio.to_thread(run)
 
-    async def start_session(
+    async def start(
         self,
         config: SandboxConfig | None = None,
     ) -> str:
         """
-        启动会话容器
+        启动沙箱容器
 
         Returns:
-            session_id: 会话 ID
+            sandbox_id: 沙箱 ID
         """
         if self._container_id:
-            return self._session_id or ""
+            return self._sandbox_id or ""
 
         config = config or SandboxConfig()
-        self._session_id = uuid.uuid4().hex[:12]
-        container_name = f"session-{self._session_id}"
+        self._sandbox_id = uuid.uuid4().hex[:12]
+        container_name = f"sandbox-{self._sandbox_id}"
 
         cmd = [
             "docker",
@@ -485,7 +485,7 @@ class SessionDockerExecutor(SandboxExecutor):
         # 镜像和保持运行的命令
         cmd.extend([self.image, "tail", "-f", "/dev/null"])
 
-        logger.info("Starting session container: %s", container_name)
+        logger.info("Starting sandbox container: %s", container_name)
 
         def run() -> tuple[str, str]:
             result = subprocess.run(
@@ -501,27 +501,27 @@ class SessionDockerExecutor(SandboxExecutor):
         stdout, stderr = await asyncio.to_thread(run)
 
         if stderr and "Error" in stderr:
-            logger.error("Failed to start session: %s", stderr)
-            raise RuntimeError(f"Failed to start session container: {stderr}")
+            logger.error("Failed to start sandbox: %s", stderr)
+            raise RuntimeError(f"Failed to start sandbox container: {stderr}")
 
         self._container_id = stdout[:12] if stdout else container_name
         self._last_activity = time.time()
-        logger.info("Session started: %s (container: %s)", self._session_id, self._container_id)
-        return self._session_id
+        logger.info("Sandbox started: %s (container: %s)", self._sandbox_id, self._container_id)
+        return self._sandbox_id
 
     def is_expired(self) -> bool:
-        """检查会话是否已过期"""
+        """检查沙箱是否已过期"""
         if not self._last_activity:
             return False
         return (time.time() - self._last_activity) > self.max_idle_seconds
 
-    async def stop_session(self) -> None:
-        """停止并清理会话容器"""
+    async def stop(self) -> None:
+        """停止并清理沙箱容器"""
         if not self._container_id:
             return
 
-        container_name = f"session-{self._session_id}"
-        logger.info("Stopping session: %s", self._session_id)
+        container_name = f"sandbox-{self._sandbox_id}"
+        logger.info("Stopping sandbox: %s", self._sandbox_id)
 
         def run() -> None:
             subprocess.run(
@@ -532,16 +532,16 @@ class SessionDockerExecutor(SandboxExecutor):
 
         await asyncio.to_thread(run)
         self._container_id = None
-        self._session_id = None
+        self._sandbox_id = None
 
     async def execute_python(
         self,
         code: str,
         config: SandboxConfig | None = None,
     ) -> ExecutionResult:
-        """在会话容器中执行 Python 代码"""
+        """在沙箱容器中执行 Python 代码"""
         if not self._container_id:
-            await self.start_session(config)
+            await self.start(config)
 
         # 将代码写入容器内的临时文件
         escaped_code = code.replace("'", "'\"'\"'")
@@ -556,9 +556,9 @@ class SessionDockerExecutor(SandboxExecutor):
         command: str,
         config: SandboxConfig | None = None,
     ) -> ExecutionResult:
-        """在会话容器中执行 Shell 命令"""
+        """在沙箱容器中执行 Shell 命令"""
         if not self._container_id:
-            await self.start_session(config)
+            await self.start(config)
 
         return await self._exec_in_container(command, config)
 
@@ -569,7 +569,7 @@ class SessionDockerExecutor(SandboxExecutor):
     ) -> ExecutionResult:
         """在运行中的容器内执行命令"""
         config = config or SandboxConfig()
-        container_name = f"session-{self._session_id}"
+        container_name = f"sandbox-{self._sandbox_id}"
 
         # 更新最后活动时间
         self._last_activity = time.time()
@@ -620,19 +620,19 @@ class SessionDockerExecutor(SandboxExecutor):
             error=error,
         )
 
-    async def __aenter__(self) -> "SessionDockerExecutor":
+    async def __aenter__(self) -> "PersistentDockerExecutor":
         """支持 async with 语法"""
-        await self.start_session()
+        await self.start()
         return self
 
     async def __aexit__(self, *_: object) -> None:
         """退出时自动清理"""
-        await self.stop_session()
+        await self.stop()
 
     def __del__(self) -> None:
         """析构时尝试清理（同步方式，尽力而为）"""
-        if self._container_id and self._session_id:
-            container_name = f"session-{self._session_id}"
+        if self._container_id and self._sandbox_id:
+            container_name = f"sandbox-{self._sandbox_id}"
             with contextlib.suppress(Exception):
                 subprocess.run(
                     ["docker", "rm", "-f", container_name],

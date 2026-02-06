@@ -9,12 +9,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import uuid
 
-from domains.agent.domain.entities.session import SessionDomainService, SessionOwner
 from domains.agent.domain.types import MessageRole
-from domains.agent.infrastructure.repositories import (
-    MessageRepository,
-    SessionRepository,
-)
+from domains.agent.infrastructure.repositories import MessageRepository
+from domains.session.domain.entities.session import SessionDomainService, SessionOwner
+from domains.session.infrastructure.repositories import SessionRepository
 from exceptions import NotFoundError, PermissionDeniedError
 from utils.logging import get_logger
 
@@ -24,12 +22,12 @@ if TYPE_CHECKING:
     from domains.agent.domain.interfaces.message_repository import (
         MessageRepository as MessageRepositoryInterface,
     )
-    from domains.agent.domain.interfaces.session_repository import (
-        SessionRepository as SessionRepositoryInterface,
-    )
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
     from domains.agent.infrastructure.models.message import Message
-    from domains.agent.infrastructure.models.session import Session
+    from domains.session.domain.interfaces.session_repository import (
+        SessionRepository as SessionRepositoryInterface,
+    )
+    from domains.session.infrastructure.models.session import Session
 
 logger = get_logger(__name__)
 
@@ -176,9 +174,7 @@ class SessionUseCase:
             enabled = []
         return {"enabled_servers": [str(s) for s in enabled]}
 
-    async def update_session_mcp_config(
-        self, session_id: str, enabled_servers: list[str]
-    ) -> dict:
+    async def update_session_mcp_config(self, session_id: str, enabled_servers: list[str]) -> dict:
         """更新会话的 MCP 配置（enabled_servers）。"""
         await self.get_session_or_raise(session_id)  # 校验存在
         await self.session_repo.update_config(

@@ -44,6 +44,17 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>
 }
 
+/** API 错误 - 携带 HTTP 状态码，便于上层精确判断 */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -150,8 +161,14 @@ class ApiClient {
       setAnonymousUserId(responseAnonymousId)
     }
 
+    // 检测 token 降级：后端 JWT 过期，开发模式静默降级为匿名用户
+    if (response.headers.get('X-Token-Degraded') === 'true' && token) {
+      console.warn('[ApiClient] Token degraded by backend, clearing expired token')
+      setAuthToken(null)
+      window.dispatchEvent(new Event('auth:token-degraded'))
+    }
+
     if (!response.ok) {
-      // 401 错误时通过 authStore 清除可能无效的 token
       if (response.status === 401) {
         handleUnauthorized()
       }
@@ -160,9 +177,7 @@ class ApiClient {
         detail?: string
         message?: string
       }
-      // 错误消息包含状态码，便于上层识别错误类型（如 401 未授权）
-      const errorMessage = error.detail ?? error.message ?? 'Unknown error'
-      throw new Error(`HTTP ${String(response.status)}: ${errorMessage}`)
+      throw new ApiError(response.status, error.detail ?? error.message ?? 'Unknown error')
     }
 
     return (await response.json()) as T
@@ -257,8 +272,15 @@ class ApiClient {
         setAnonymousUserId(responseAnonymousId)
       }
 
+      // 检测 token 降级（同普通请求）
+      if (response.headers.get('X-Token-Degraded') === 'true' && token) {
+        console.warn('[ApiClient] Token degraded by backend (stream), clearing expired token')
+        setAuthToken(null)
+        window.dispatchEvent(new Event('auth:token-degraded'))
+      }
+
       if (!response.ok) {
-        throw new Error(`HTTP ${String(response.status)}`)
+        throw new ApiError(response.status, `HTTP ${String(response.status)}`)
       }
 
       const reader = response.body?.getReader()

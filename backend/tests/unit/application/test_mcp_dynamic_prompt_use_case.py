@@ -17,9 +17,9 @@ class TestMCPDynamicPromptUseCase:
     """MCP 动态 Prompt 用例测试"""
 
     async def test_list_empty(self, db_session: AsyncSession):
-        """无记录时 list_dynamic_prompts 返回空列表"""
+        """无记录时 list_dynamic_prompts 返回空列表（用无 seed 的 server_id）"""
         use_case = MCPDynamicPromptUseCase(db_session)
-        result = await use_case.list_dynamic_prompts("llm-server")
+        result = await use_case.list_dynamic_prompts("no-prompts-server")
         assert result == []
 
     async def test_add_and_list(self, db_session: AsyncSession):
@@ -37,10 +37,11 @@ class TestMCPDynamicPromptUseCase:
         assert "id" in added
 
         listed = await use_case.list_dynamic_prompts("llm-server")
-        assert len(listed) == 1
-        assert listed[0]["prompt_key"] == "test_prompt"
-        assert listed[0]["title"] == "Test"
-        assert listed[0]["description"] == "Test prompt"
+        assert len(listed) >= 1
+        one = next((p for p in listed if p["prompt_key"] == "test_prompt"), None)
+        assert one is not None
+        assert one["title"] == "Test"
+        assert one["description"] == "Test prompt"
 
     async def test_add_duplicate_prompt_key_conflict(self, db_session: AsyncSession):
         """同 server 下重复 prompt_key 应抛出 ConflictError"""

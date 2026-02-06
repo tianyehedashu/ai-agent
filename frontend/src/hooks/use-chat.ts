@@ -9,8 +9,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { chatApi } from '@/api/chat'
-import { useChatStore } from '@/stores/chat'
 import { generateId } from '@/lib/utils'
+import { useChatStore } from '@/stores/chat'
 import type { ChatEvent, Message, ProcessEvent, SessionRecreationData, ToolCall } from '@/types'
 
 interface UseChatOptions {

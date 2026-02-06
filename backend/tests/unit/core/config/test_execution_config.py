@@ -10,6 +10,7 @@ from libs.config.execution_config import (
     HITLConfig,
     SandboxConfig,
     SandboxMode,
+    SandboxPolicyConfig,
     ShellConfig,
     ToolsConfig,
 )
@@ -41,6 +42,28 @@ class TestExecutionConfig:
         assert config.sandbox.timeout_seconds == 60
         assert config.shell.work_dir == "/app"
         assert "read_file" in config.tools.enabled
+
+
+class TestSandboxPolicyConfig:
+    """沙箱策略配置测试"""
+
+    def test_default_cleanup_workspace_on_sandbox_end(self):
+        """测试: cleanup_workspace_on_sandbox_end 默认为 True"""
+        config = SandboxPolicyConfig()
+        assert config.cleanup_workspace_on_sandbox_end is True
+
+    def test_cleanup_workspace_on_sandbox_end_from_dict(self):
+        """测试: 从字典加载 cleanup_workspace_on_sandbox_end"""
+        data = {"cleanup_workspace_on_sandbox_end": False}
+        config = SandboxPolicyConfig.model_validate(data)
+        assert config.cleanup_workspace_on_sandbox_end is False
+
+    def test_sandbox_policy_config_serialization(self):
+        """测试: SandboxPolicyConfig 序列化包含 cleanup_workspace_on_sandbox_end"""
+        config = SandboxPolicyConfig(cleanup_workspace_on_sandbox_end=False)
+        dumped = config.model_dump()
+        assert "cleanup_workspace_on_sandbox_end" in dumped
+        assert dumped["cleanup_workspace_on_sandbox_end"] is False
 
 
 class TestConfigMerger:

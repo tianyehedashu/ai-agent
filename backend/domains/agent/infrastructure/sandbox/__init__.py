@@ -3,13 +3,13 @@ Sandbox - 沙箱执行系统
 
 提供安全的代码执行环境：
 - DockerExecutor: Docker 容器隔离执行（无状态，每次新容器）
-- SessionDockerExecutor: 会话级容器（状态保持，支持持久化卷）
+- PersistentDockerExecutor: 持久化 Docker 执行器（状态保持，支持持久化卷）
 - LocalExecutor: 本地直接执行（仅开发环境）
 - ExecutorFactory: 根据配置创建正确的执行器
-- SessionManager: 会话生命周期管理
-- SessionExecutorFactory: 会话执行器工厂协议（依赖注入）
-- DefaultSessionExecutorFactory: 默认会话执行器工厂
-- MockSessionExecutorFactory: 测试用模拟工厂
+- SandboxManager: 沙箱生命周期管理
+- SandboxExecutorFactory: 沙箱执行器工厂协议（依赖注入）
+- DefaultSandboxExecutorFactory: 默认沙箱执行器工厂
+- MockSandboxExecutorFactory: 测试用模拟工厂
 - SandboxLifecycleAdapter: 沙箱生命周期适配器（实现领域服务接口）
 """
 
@@ -17,46 +17,46 @@ from domains.agent.infrastructure.sandbox.executor import (
     DockerExecutor,
     ExecutionResult,
     LocalExecutor,
+    PersistentDockerExecutor,
     SandboxConfig,
     SandboxExecutor,
-    SessionDockerExecutor,
 )
 from domains.agent.infrastructure.sandbox.factory import ExecutorFactory
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import (
     SandboxLifecycleAdapter,
 )
-from domains.agent.infrastructure.sandbox.session_executor_factory import (
-    DefaultSessionExecutorFactory,
-    MockSessionExecutorFactory,
-    SessionExecutorFactory,
+from domains.agent.infrastructure.sandbox.sandbox_executor_factory import (
+    DefaultSandboxExecutorFactory,
+    MockSandboxExecutorFactory,
+    SandboxExecutorFactory,
 )
-from domains.agent.infrastructure.sandbox.session_manager import (
+from domains.agent.infrastructure.sandbox.sandbox_manager import (
     CleanupReason,
-    SessionHistory,
-    SessionInfo,
-    SessionManager,
-    SessionPolicy,
-    SessionRecreationResult,
-    SessionState,
+    SandboxContext,
+    SandboxCreationResult,
+    SandboxHistory,
+    SandboxManager,
+    SandboxPolicy,
+    SandboxRunState,
 )
 
 __all__ = [
     "CleanupReason",
-    "DefaultSessionExecutorFactory",
+    "DefaultSandboxExecutorFactory",
     "DockerExecutor",
     "ExecutionResult",
     "ExecutorFactory",
     "LocalExecutor",
-    "MockSessionExecutorFactory",
+    "MockSandboxExecutorFactory",
+    "PersistentDockerExecutor",
     "SandboxConfig",
+    "SandboxContext",
+    "SandboxCreationResult",
     "SandboxExecutor",
+    "SandboxExecutorFactory",
+    "SandboxHistory",
     "SandboxLifecycleAdapter",
-    "SessionDockerExecutor",
-    "SessionExecutorFactory",
-    "SessionHistory",
-    "SessionInfo",
-    "SessionManager",
-    "SessionPolicy",
-    "SessionRecreationResult",
-    "SessionState",
+    "SandboxManager",
+    "SandboxPolicy",
+    "SandboxRunState",
 ]

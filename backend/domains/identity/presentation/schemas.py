@@ -24,6 +24,7 @@ class UserRead(BaseModel):
     is_active: bool = True
     name: str | None = None
     avatar_url: str | None = None
+    vendor_creator_id: int | None = None
 
 
 # =============================================================================
@@ -57,6 +58,7 @@ class UserUpdate(BaseModel):
     password: str | None = None
     name: str | None = Field(default=None, min_length=1, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=500)
+    vendor_creator_id: int | None = Field(default=None, description="厂商系统操作用户 ID")
 
 
 class PasswordChange(BaseModel):
@@ -115,6 +117,7 @@ class CurrentUser(BaseModel):
     name: str
     is_anonymous: bool = False
     role: str = "user"  # 用户角色：admin, user, viewer
+    vendor_creator_id: int | None = None  # 厂商系统操作用户 ID
 
     @property
     def is_admin(self) -> bool:

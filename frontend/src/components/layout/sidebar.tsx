@@ -16,6 +16,7 @@ import {
   Pencil,
   Zap,
   Server,
+  Video,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
@@ -38,11 +39,13 @@ import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
 import type { Session } from '@/types'
+import { isVideoSession } from '@/types'
 
 const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'MCP 服务器', href: '/mcp', icon: Zap },
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
+  { name: '视频', href: '/video-tasks', icon: Video },
   { name: '工作台', href: '/studio', icon: Workflow },
   { name: '设置', href: '/settings', icon: Settings },
 ]
@@ -66,21 +69,27 @@ export default function Sidebar(): React.JSX.Element {
     [sessions]
   )
 
+  // 判断当前是否在聊天页面（会话区域高亮用）
   const isChatActive =
     location.pathname === '/' ||
     location.pathname === '/chat' ||
     location.pathname.startsWith('/chat/')
 
-  // 当前会话（用于侧栏「对话」区显示当前会话标题）
+  // 当前会话（用于侧栏显示当前会话标题，仅聊天页面）
   const { data: currentSession } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => (sessionId ? sessionApi.get(sessionId) : Promise.resolve(null)),
     enabled: !!sessionId && isChatActive,
   })
 
-  // 新建对话：仅导航到无 sessionId 的聊天页，会话在用户发送第一条消息时由后端创建（避免空会话入库）
-  const handleCreateSession = (): void => {
+  // 新建对话
+  const handleCreateChat = (): void => {
     navigate('/chat')
+  }
+
+  // 新建视频
+  const handleCreateVideo = (): void => {
+    navigate('/video-tasks')
   }
 
   return (
@@ -108,28 +117,62 @@ export default function Sidebar(): React.JSX.Element {
           )}
         </div>
 
-        {/* New Chat Button */}
+        {/* New Session Button with Dropdown */}
         <div className="p-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="default"
-                className={cn(
-                  'w-full bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md',
-                  isCollapsed ? 'px-0' : 'justify-start gap-2'
-                )}
-                onClick={handleCreateSession}
-              >
-                <Plus className="h-4 w-4" />
-                {!isCollapsed && <span>新建对话</span>}
-              </Button>
-            </TooltipTrigger>
-            {isCollapsed && <TooltipContent side="right">新建对话</TooltipContent>}
-          </Tooltip>
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="default"
+                      className="w-full bg-primary px-0 text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="right" align="start" className="w-36">
+                    <DropdownMenuItem onClick={handleCreateChat}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      新建对话
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCreateVideo}>
+                      <Video className="mr-2 h-4 w-4" />
+                      新建视频
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent side="right">新建</TooltipContent>
+            </Tooltip>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="default"
+                  className="w-full justify-start gap-2 bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>新建</span>
+                  <ChevronDown className="ml-auto h-3 w-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[calc(var(--radix-dropdown-menu-trigger-width))]">
+                <DropdownMenuItem onClick={handleCreateChat}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  新建对话
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCreateVideo}>
+                  <Video className="mr-2 h-4 w-4" />
+                  新建视频
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <ScrollArea className="flex-1 px-3">
-          {/* Chat History Section */}
+          {/* Session History Section */}
           {!isCollapsed ? (
             <Collapsible open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
               <CollapsibleTrigger asChild>
@@ -143,7 +186,7 @@ export default function Sidebar(): React.JSX.Element {
                 >
                   <MessageSquare className="h-4 w-4 flex-shrink-0" />
                   <span className="flex-1 truncate text-left">
-                    {isChatActive && currentSession?.title ? currentSession.title : '对话'}
+                    {isChatActive && currentSession?.title ? currentSession.title : '会话'}
                   </span>
                   {isHistoryOpen ? (
                     <ChevronDown className="h-3 w-3 opacity-50" />
@@ -158,7 +201,7 @@ export default function Sidebar(): React.JSX.Element {
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
                 ) : sessions.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-muted-foreground">暂无对话记录</p>
+                  <p className="px-3 py-2 text-xs text-muted-foreground">暂无会话记录</p>
                 ) : (
                   <div className="space-y-3 pb-2">
                     {Object.entries(groupedSessions).map(([groupName, groupSessions]) => {
@@ -200,7 +243,7 @@ export default function Sidebar(): React.JSX.Element {
                   <MessageSquare className="h-4 w-4" />
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right">对话</TooltipContent>
+              <TooltipContent side="right">会话</TooltipContent>
             </Tooltip>
           )}
 
@@ -286,11 +329,17 @@ function SessionItem({
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  // 判断会话类型
+  const isVideo = isVideoSession(session)
+  const Icon = isVideo ? Video : MessageSquare
+  const href = isVideo ? `/video-tasks/${session.id}` : `/chat/${session.id}`
+  const defaultTitle = isVideo ? '新视频' : '新对话'
+
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()
     e.stopPropagation()
 
-    if (confirm('确定要删除这个对话吗？')) {
+    if (confirm('确定要删除这个会话吗？')) {
       try {
         await sessionApi.delete(session.id)
         void queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -302,7 +351,7 @@ function SessionItem({
         if (session.id === currentSessionId) {
           useChatStore.getState().setCurrentSession(null)
           useChatStore.getState().clearMessages()
-          navigate('/chat')
+          navigate(isVideo ? '/video-tasks' : '/chat')
         }
       } catch (error) {
         toast({
@@ -316,7 +365,7 @@ function SessionItem({
 
   return (
     <Link
-      to={`/chat/${session.id}`}
+      to={href}
       className={cn(
         'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-150',
         isActive
@@ -330,7 +379,8 @@ function SessionItem({
         setIsHovered(false)
       }}
     >
-      <span className="flex-1 truncate text-[13px]">{session.title ?? '新对话'}</span>
+      <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', isVideo && 'text-purple-500')} />
+      <span className="flex-1 truncate text-[13px]">{session.title ?? defaultTitle}</span>
       {(isHovered || isActive) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

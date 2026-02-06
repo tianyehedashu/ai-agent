@@ -60,10 +60,11 @@ async def update_me(
 ) -> UserRead:
     """更新当前用户"""
     user_service = UserUseCase(session)
-    updated = await user_service.update(
+    updated = await user_service.update_user(
         user_id=str(user.id),
         name=data.name,
         avatar_url=data.avatar_url,
+        vendor_creator_id=data.vendor_creator_id,
     )
     return UserRead.model_validate(updated, from_attributes=True)
 

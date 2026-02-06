@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.agent import Agent
 from domains.agent.infrastructure.models.message import Message
-from domains.agent.infrastructure.models.session import Session
 from domains.identity.infrastructure.models.user import User
+from domains.session.infrastructure.models import Session
 
 
 class StatsService:

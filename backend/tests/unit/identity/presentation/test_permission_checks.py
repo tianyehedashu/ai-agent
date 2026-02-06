@@ -8,7 +8,6 @@ import uuid
 
 import pytest
 
-from domains.agent.infrastructure.models.session import Session
 from domains.identity.presentation.deps import (
     ADMIN_ROLE,
     check_ownership,
@@ -16,6 +15,7 @@ from domains.identity.presentation.deps import (
     check_session_ownership,
 )
 from domains.identity.presentation.schemas import CurrentUser
+from domains.session.infrastructure.models import Session
 from exceptions import PermissionDeniedError
 
 
@@ -144,7 +144,9 @@ class TestCheckOwnershipOrPublic:
         )
 
         # 管理员应该可以访问，不抛出异常
-        check_ownership_or_public(resource_owner_id, admin, is_public=False, resource_name="Resource")
+        check_ownership_or_public(
+            resource_owner_id, admin, is_public=False, resource_name="Resource"
+        )
 
 
 @pytest.mark.unit

@@ -13,8 +13,8 @@ from domains.agent.infrastructure.sandbox.executor import (
     DockerExecutor,
     ExecutionResult,
     LocalExecutor,
+    PersistentDockerExecutor,
     SandboxConfig,
-    SessionDockerExecutor,
 )
 from domains.agent.infrastructure.sandbox.factory import ExecutorFactory
 
@@ -224,19 +224,19 @@ class TestDockerExecutor:
         assert "Hello World" in result.stdout
 
 
-@pytest.mark.xdist_group("docker_session")
-class TestSessionDockerExecutor:
-    """测试会话级 Docker 执行器
+@pytest.mark.xdist_group("docker_sandbox")
+class TestPersistentDockerExecutor:
+    """测试持久化 Docker 执行器
 
     注意：此类中的测试需要使用 xdist_group 标记，
     确保在并行测试时这些测试在同一个 worker 中串行执行，
-    避免 cleanup_all_session_containers 清理正在使用的容器。
+    避免 cleanup_all_sandbox_containers 清理正在使用的容器。
     """
 
     @pytest.fixture
     def executor(self):
-        """创建会话执行器"""
-        return SessionDockerExecutor()
+        """创建持久化执行器"""
+        return PersistentDockerExecutor()
 
     def test_init_default_values(self, executor):
         """测试默认初始化值"""
@@ -246,7 +246,7 @@ class TestSessionDockerExecutor:
 
     def test_init_custom_values(self):
         """测试自定义初始化值"""
-        executor = SessionDockerExecutor(
+        executor = PersistentDockerExecutor(
             image="node:18-slim",
             workspace_path="/host/workspace",
             container_workspace="/app",
@@ -257,33 +257,33 @@ class TestSessionDockerExecutor:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_session_lifecycle(self):
-        """集成测试：会话生命周期（启动、执行、停止）"""
-        executor = SessionDockerExecutor(image="alpine:latest")
+    async def test_sandbox_lifecycle(self):
+        """集成测试：沙箱生命周期（启动、执行、停止）"""
+        executor = PersistentDockerExecutor(image="alpine:latest")
         try:
-            # 启动会话
-            session_id = await executor.start_session()
-            assert session_id is not None
-            assert len(session_id) == 12
+            # 启动沙箱
+            sandbox_id = await executor.start()
+            assert sandbox_id is not None
+            assert len(sandbox_id) == 12
             assert executor.is_running is True
 
             # 执行命令
-            result = await executor.execute_shell("echo 'Hello Session'")
+            result = await executor.execute_shell("echo 'Hello Sandbox'")
             assert result.success is True, f"Execution failed: {result.error}"
-            assert "Hello Session" in result.stdout
+            assert "Hello Sandbox" in result.stdout
 
         finally:
-            # 停止会话
-            await executor.stop_session()
+            # 停止沙箱
+            await executor.stop()
             assert executor.is_running is False
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_session_state_persistence(self):
-        """集成测试：验证会话内状态保持"""
-        executor = SessionDockerExecutor(image="alpine:latest")
+    async def test_sandbox_state_persistence(self):
+        """集成测试：验证沙箱内状态保持"""
+        executor = PersistentDockerExecutor(image="alpine:latest")
         try:
-            await executor.start_session()
+            await executor.start()
 
             # 创建文件
             result1 = await executor.execute_shell("echo 'test content' > /tmp/test.txt")
@@ -295,13 +295,13 @@ class TestSessionDockerExecutor:
             assert "test content" in result2.stdout
 
         finally:
-            await executor.stop_session()
+            await executor.stop()
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_context_manager(self):
         """集成测试：async with 语法支持"""
-        async with SessionDockerExecutor(image="alpine:latest") as executor:
+        async with PersistentDockerExecutor(image="alpine:latest") as executor:
             assert executor.is_running is True
             result = await executor.execute_shell("echo 'context manager'")
             assert result.success is True
@@ -311,15 +311,15 @@ class TestSessionDockerExecutor:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_cleanup_all_session_containers(self):
-        """集成测试：清理所有会话容器"""
-        # 创建一个会话容器
-        executor = SessionDockerExecutor(image="alpine:latest")
-        await executor.start_session()
+    async def test_cleanup_all_sandbox_containers(self):
+        """集成测试：清理所有沙箱容器"""
+        # 创建一个沙箱容器
+        executor = PersistentDockerExecutor(image="alpine:latest")
+        await executor.start()
         assert executor.is_running is True
 
         # 清理所有容器
-        cleaned = await SessionDockerExecutor.cleanup_all_session_containers()
+        cleaned = await PersistentDockerExecutor.cleanup_all_sandbox_containers()
         assert len(cleaned) >= 1
 
         # 容器应该已被删除（executor 对象不知道，但 is_running 仍为 True）
@@ -348,8 +348,8 @@ class TestExecutorFactory:
         executor = ExecutorFactory.create(config, force_new=True)
         assert isinstance(executor, LocalExecutor)
 
-    def test_create_session_docker_executor_default(self):
-        """测试创建会话 Docker 执行器（默认启用 session）"""
+    def test_create_persistent_docker_executor_default(self):
+        """测试创建持久化 Docker 执行器（默认启用 sandbox）"""
         from libs.config.execution_config import (
             ExecutionConfig,
             SandboxConfig,
@@ -360,11 +360,11 @@ class TestExecutorFactory:
             sandbox=SandboxConfig(mode=SandboxMode.DOCKER),
         )
         executor = ExecutorFactory.create(config, force_new=True)
-        # 默认 session_enabled=True，应该创建 SessionDockerExecutor
-        assert isinstance(executor, SessionDockerExecutor)
+        # 默认 sandbox_enabled=True，应该创建 PersistentDockerExecutor
+        assert isinstance(executor, PersistentDockerExecutor)
 
     def test_create_stateless_docker_executor(self):
-        """测试创建无状态 Docker 执行器（禁用 session）"""
+        """测试创建无状态 Docker 执行器（禁用 sandbox）"""
         from libs.config.execution_config import (
             DockerConfig,
             ExecutionConfig,
@@ -375,11 +375,11 @@ class TestExecutorFactory:
         config = ExecutionConfig(
             sandbox=SandboxConfig(
                 mode=SandboxMode.DOCKER,
-                docker=DockerConfig(session_enabled=False),
+                docker=DockerConfig(sandbox_enabled=False),
             ),
         )
         executor = ExecutorFactory.create(config, force_new=True)
-        # session_enabled=False，应该创建 DockerExecutor
+        # sandbox_enabled=False，应该创建 DockerExecutor
         assert isinstance(executor, DockerExecutor)
 
     def test_create_remote_executor_not_implemented(self):

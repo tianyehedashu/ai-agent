@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
-from domains.agent.application.title_use_case import TitleUseCase
 from domains.identity.infrastructure.models.user import User
+from domains.session.application import TitleUseCase
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -233,9 +233,7 @@ class TestTitleUseCase:
 
                 # Assert
                 assert result is True
-                updated_session = await use_case.session_use_case.get_session(
-                    str(session.id)
-                )
+                updated_session = await use_case.session_use_case.get_session(str(session.id))
                 assert updated_session.title == "AI生成的标题"
         finally:
             clear_permission_context()

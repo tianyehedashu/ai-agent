@@ -11,12 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 
-from domains.agent.application import SessionUseCase, TitleUseCase
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.deps import (
     AuthUser,
     check_session_ownership,
 )
+from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.infrastructure.models.session import Session
 from libs.api.deps import get_session_service, get_title_service
 
 router = APIRouter()
@@ -79,6 +80,7 @@ class SessionResponse(BaseModel):
     status: str
     message_count: int
     token_count: int
+    video_task_count: int = 0  # 视频任务数量
     created_at: datetime
     updated_at: datetime
 
@@ -146,6 +148,23 @@ class MessageResponse(BaseModel):
 # =============================================================================
 
 
+def _session_to_response(session: Session) -> SessionResponse:
+    """将 Session 模型转换为响应"""
+    return SessionResponse(
+        id=str(session.id),
+        user_id=str(session.user_id) if session.user_id else None,
+        anonymous_user_id=session.anonymous_user_id,
+        agent_id=str(session.agent_id) if session.agent_id else None,
+        title=session.title,
+        status=session.status,
+        message_count=session.message_count,
+        token_count=session.token_count,
+        video_task_count=session.video_task_count,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
 @router.get("/", response_model=list[SessionResponse])
 async def list_sessions(
     current_user: AuthUser,
@@ -163,7 +182,7 @@ async def list_sessions(
         limit=limit,
         agent_id=agent_id,
     )
-    return [SessionResponse.model_validate(s) for s in sessions]
+    return [_session_to_response(s) for s in sessions]
 
 
 @router.post("/", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
@@ -182,12 +201,13 @@ async def create_session(
             title=data.title,
         )
     except IntegrityError as e:
-        # 捕获外键约束错误（如无效agent_id?        await session_service.db.rollback()
+        # 捕获外键约束错误（如无效agent_id）
+        await session_service.db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid agent_id or other constraint violation",
         ) from e
-    return SessionResponse.model_validate(session)
+    return _session_to_response(session)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -199,7 +219,7 @@ async def get_session(
     """获取会话详情"""
     session = await session_service.get_session_or_raise(session_id)
     check_session_ownership(session, current_user)
-    return SessionResponse.model_validate(session)
+    return _session_to_response(session)
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
@@ -219,14 +239,14 @@ async def update_session(
 
     # Pass ... for fields that weren't provided, and the actual value (including None) for fields that were
     title = provided_fields.get("title", ...)
-    status = provided_fields.get("status", ...)
+    status_value = provided_fields.get("status", ...)
 
     updated_session = await session_service.update_session(
         session_id=session_id,
         title=title,
-        status=status,
+        status=status_value,
     )
-    return SessionResponse.model_validate(updated_session)
+    return _session_to_response(updated_session)
 
 
 @router.post("/{session_id}/generate-title", response_model=SessionResponse)
@@ -267,7 +287,7 @@ async def generate_session_title(
         )
 
     await session_service.db.refresh(session)
-    return SessionResponse.model_validate(session)
+    return _session_to_response(session)
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

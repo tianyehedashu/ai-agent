@@ -94,7 +94,7 @@ class TestBuildToolFn:
 
     def test_http_call_requires_url(self):
         """http_call 类型缺少 url 时应抛出 ValueError"""
-        with pytest.raises(ValueError, match="http_call requires config.url"):
+        with pytest.raises(ValueError, match=r"http_call requires config\.url"):
             build_tool_fn(DynamicToolType.HTTP_CALL.value, {"method": "GET"})
 
     def test_unknown_tool_type_raises(self):

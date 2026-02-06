@@ -81,7 +81,7 @@ export function MCPServerCard({
     mutationFn: () => mcpApi.testConnection(server.id),
     onSuccess: (result) => {
       if (result.success) toast.success(result.message)
-      else toast.error(result.message ?? result.error_details ?? '测试失败')
+      else toast.error(result.message)
       queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }).catch(() => {})
       queryClient.invalidateQueries({ queryKey: ['mcp-server-tools', server.id] }).catch(() => {})
     },
@@ -131,7 +131,7 @@ export function MCPServerCard({
               </div>
               <div
                 className="flex items-center gap-2"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); }}
               >
                 <span className="text-xs text-muted-foreground">启用</span>
                 <Switch
@@ -153,7 +153,7 @@ export function MCPServerCard({
 
       {/* 展开区：测试、编辑、删除、工具列表 */}
       {selected && (
-        <CardContent className="border-t bg-muted/30 pb-5 pt-4" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="border-t bg-muted/30 pb-5 pt-4" onClick={(e) => { e.stopPropagation(); }}>
           <div className="space-y-4">
             {/* 状态与操作 */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/80 px-4 py-3">
@@ -178,7 +178,7 @@ export function MCPServerCard({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => testMutation.mutate()}
+                          onClick={() => { testMutation.mutate(); }}
                           disabled={testMutation.isPending || !server.enabled}
                         >
                           <RefreshCw
@@ -194,7 +194,7 @@ export function MCPServerCard({
                   </Tooltip>
                 </TooltipProvider>
                 {onEdit && (
-                  <Button variant="outline" size="sm" onClick={() => onEdit(server)}>
+                  <Button variant="outline" size="sm" onClick={() => { onEdit(server); }}>
                     <Edit className="mr-1.5 h-4 w-4" />
                     编辑
                   </Button>
@@ -204,7 +204,7 @@ export function MCPServerCard({
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => onDelete(server)}
+                    onClick={() => { onDelete(server); }}
                   >
                     <Trash2 className="mr-1.5 h-4 w-4" />
                     删除
@@ -225,7 +225,7 @@ export function MCPServerCard({
                 <Input
                   placeholder="搜索工具..."
                   value={toolSearch}
-                  onChange={(e) => setToolSearch(e.target.value)}
+                  onChange={(e) => { setToolSearch(e.target.value); }}
                   className="h-8 max-w-[180px] text-xs"
                 />
               </div>
@@ -257,7 +257,7 @@ export function MCPServerCard({
                         <Switch
                           checked={tool.enabled}
                           onCheckedChange={(checked) =>
-                            toggleToolMutation.mutate({ toolName: tool.name, enabled: checked })
+                            { toggleToolMutation.mutate({ toolName: tool.name, enabled: checked }); }
                           }
                           disabled={toggleToolMutation.isPending}
                         />

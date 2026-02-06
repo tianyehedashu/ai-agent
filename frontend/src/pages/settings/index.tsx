@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react'
+
+import { userApi, type UpdateUserParams } from '@/api/user'
 import { useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +15,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useToast } from '@/hooks/use-toast'
+import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
@@ -19,6 +24,77 @@ import { ProviderConfigTab } from './components/provider-config-tab'
 
 export default function SettingsPage(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
+  const { currentUser, setCurrentUser } = useUserStore()
+  const { toast } = useToast()
+
+  // 账户设置状态
+  const [userName, setUserName] = useState('')
+  const [vendorCreatorId, setVendorCreatorId] = useState<string>('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  // 初始化表单值
+  useEffect(() => {
+    if (currentUser) {
+      setUserName(currentUser.name || '')
+      setVendorCreatorId(currentUser.vendor_creator_id?.toString() || '')
+    }
+  }, [currentUser])
+
+  // 保存账户设置
+  const handleSaveAccount = async () => {
+    if (!currentUser || currentUser.is_anonymous) {
+      toast({
+        title: '无法保存',
+        description: '请先登录',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const params: UpdateUserParams = {}
+
+      // 只有当值变化时才提交
+      if (userName !== currentUser.name) {
+        params.name = userName
+      }
+
+      const newVendorId = vendorCreatorId ? parseInt(vendorCreatorId, 10) : null
+      if (newVendorId !== currentUser.vendor_creator_id) {
+        params.vendor_creator_id = newVendorId
+      }
+
+      if (Object.keys(params).length === 0) {
+        toast({
+          title: '无变化',
+          description: '没有需要保存的更改',
+        })
+        return
+      }
+
+      const updatedUser = await userApi.updateUser(params)
+      // 更新本地状态
+      setCurrentUser({
+        ...currentUser,
+        name: updatedUser.name ?? currentUser.name,
+        vendor_creator_id: (updatedUser as { vendor_creator_id?: number | null }).vendor_creator_id,
+      })
+
+      toast({
+        title: '保存成功',
+        description: '账户信息已更新',
+      })
+    } catch (error) {
+      toast({
+        title: '保存失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -102,19 +178,44 @@ export default function SettingsPage(): React.JSX.Element {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label>邮箱</Label>
-                <Input value="user@example.com" disabled />
+                <Input value={currentUser?.email || ''} disabled />
               </div>
 
               <div className="space-y-2">
                 <Label>用户名</Label>
-                <Input defaultValue="User" />
+                <Input
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="请输入用户名"
+                  disabled={currentUser?.is_anonymous}
+                />
               </div>
 
-              <Button>保存更改</Button>
+              <div className="space-y-2">
+                <Label>厂商用户 ID</Label>
+                <Input
+                  type="number"
+                  value={vendorCreatorId}
+                  onChange={(e) => setVendorCreatorId(e.target.value)}
+                  placeholder="用于视频生成等第三方服务追踪"
+                  disabled={currentUser?.is_anonymous}
+                />
+                <p className="text-xs text-muted-foreground">
+                  此 ID 用于 GIIKIN 等视频生成服务的操作追踪，请向服务商获取您的用户 ID
+                </p>
+              </div>
+
+              <Button onClick={handleSaveAccount} disabled={isSaving || currentUser?.is_anonymous}>
+                {isSaving ? '保存中...' : '保存更改'}
+              </Button>
+
+              {currentUser?.is_anonymous && (
+                <p className="text-sm text-muted-foreground">请先登录以修改账户设置</p>
+              )}
 
               <div className="border-t pt-6">
                 <h4 className="mb-2 text-sm font-medium text-destructive">危险区域</h4>
-                <Button variant="destructive" size="sm">
+                <Button variant="destructive" size="sm" disabled={currentUser?.is_anonymous}>
                   删除账户
                 </Button>
               </div>

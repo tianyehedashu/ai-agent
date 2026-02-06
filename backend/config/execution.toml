@@ -56,18 +56,19 @@ image = "ai-agent-sandbox:latest"  # 使用自定义镜像（包含 Node.js + Py
 packages = []                      # 预装 Python 包
 packages_cmd = ""                  # 自定义包安装命令
 
-# 会话模式
-session_enabled = true             # 启用会话容器（状态保持）
+# 沙箱模式
+sandbox_enabled = true             # 启用持久化沙箱（状态保持）
 
-# 会话策略配置
-[sandbox.docker.session_policy]
+# 沙箱策略配置
+[sandbox.docker.sandbox_policy]
 idle_timeout = 7200                # 空闲超时（秒）- 2 小时无活动后清理（更友好）
 disconnect_timeout = 1800          # 断开超时（秒）- 30 分钟后清理（允许临时离开）
 completion_retain = 3600           # 任务完成后保留（秒）- 1 小时后清理
-max_session_duration = 28800       # 最大会话时长（秒）- 8 小时硬性限制（支持长时间工作）
-max_sessions_per_user = 5          # 每用户最大会话数
-max_total_sessions = 200           # 全局最大会话数
-allow_session_reuse = true         # 允许同一对话复用容器
+max_sandbox_duration = 28800       # 最大沙箱时长（秒）- 8 小时硬性限制（支持长时间工作）
+max_sandboxes_per_user = 5         # 每用户最大沙箱数
+max_total_sandboxes = 200          # 全局最大沙箱数
+allow_sandbox_reuse = true         # 允许同一会话复用容器
+cleanup_workspace_on_sandbox_end = true  # 沙箱结束时删除工作目录（默认删除，防止目录爆炸）
 
 # -----------------------------------------------------------------------------
 # Shell 环境配置

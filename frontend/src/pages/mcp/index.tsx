@@ -145,7 +145,7 @@ export default function MCPPage(): React.JSX.Element {
                 selected={isSelected}
                 className={isSelected ? 'md:col-span-2 lg:col-span-3' : ''}
                 onClick={(s) =>
-                  setSelectedServer((prev) => (prev?.id === s.id ? null : s))
+                  { setSelectedServer((prev) => (prev?.id === s.id ? null : s)); }
                 }
                 onToggle={(s, enabled) => {
                   toggleServerMutation.mutate({ id: s.id, enabled })

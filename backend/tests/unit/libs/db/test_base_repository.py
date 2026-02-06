@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.infrastructure.models.session import Session
+from domains.session.infrastructure.models import Session
 from libs.db.base_repository import OwnedRepositoryBase
 from libs.db.permission_context import (
     PermissionContext,

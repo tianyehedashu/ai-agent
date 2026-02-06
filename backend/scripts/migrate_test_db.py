@@ -4,11 +4,14 @@
 测试库 URL 与 tests/conftest.py 一致：由 settings.database_url 派生，
 将库名改为 test_ 前缀（如 ai_agent -> test_ai_agent）。
 
+默认行为：先直接执行迁移；若因「表已存在」等冲突失败，自动清空测试库后重试一次，
+无需手动加 --reset。
+
 使用方式:
-  uv run python scripts/migrate_test_db.py
-  uv run python scripts/migrate_test_db.py --reset   # 先清空测试库再迁移（解决表已存在冲突）
+  uv run python scripts/migrate_test_db.py   # 迁移，冲突时自动清空并重试
+  uv run python scripts/migrate_test_db.py --reset   # 强制先清空再迁移
   或: make db-upgrade-test
-  或: make db-reset-test   # 清空测试库并迁移
+  或: make db-reset-test
 """
 
 import argparse
@@ -46,12 +49,31 @@ async def _reset_test_db(test_url: str) -> None:
     print("已清空测试库 public schema。")
 
 
+def _run_alembic_upgrade(
+    env: dict[str, str], cwd: str, capture: bool = False
+) -> subprocess.CompletedProcess:
+    """执行 alembic upgrade head，capture=True 时捕获输出用于判断是否需 reset。"""
+    return subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        env=env,
+        cwd=cwd,
+        capture_output=capture,
+        text=True,
+    )
+
+
+def _is_conflict_error(result: subprocess.CompletedProcess) -> bool:
+    """是否为「表/关系已存在」类冲突（可通过 reset 解决）。"""
+    out = (result.stderr or "") + (result.stdout or "")
+    return "already exists" in out or "DuplicateTable" in out or "DuplicateObject" in out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="对测试数据库执行 Alembic 迁移")
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="先清空测试库（DROP SCHEMA public CASCADE）再执行迁移，用于解决「表已存在」等冲突",
+        help="强制先清空测试库再执行迁移（跳过首次直接迁移）",
     )
     args = parser.parse_args()
 
@@ -75,18 +97,31 @@ def main() -> int:
     else:
         print(f"对测试数据库执行迁移: {test_url}")
 
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        env=env,
-        cwd=backend_dir,
-    )
-    if result.returncode != 0 and not args.reset:
-        print(
-            "\n若因「relation already exists」等冲突失败，可先清空测试库再迁移：",
-            file=sys.stderr,
-        )
-        print("  uv run python scripts/migrate_test_db.py --reset", file=sys.stderr)
-        print("  或: make db-reset-test", file=sys.stderr)
+    # 默认先捕获输出，以便失败时判断是否为「表已存在」并自动 reset 重试
+    result = _run_alembic_upgrade(env, backend_dir, capture=not args.reset)
+    if result.returncode == 0:
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        return 0
+
+    # 未加 --reset 且失败原因像是「表已存在」时，自动清空并重试一次
+    if not args.reset and _is_conflict_error(result):
+        print("检测到「表已存在」冲突，自动清空测试库并重试...", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        try:
+            asyncio.run(_reset_test_db(test_url))
+        except Exception as e:
+            print(f"ERROR: 清空测试库失败: {e}", file=sys.stderr)
+            return 1
+        result = _run_alembic_upgrade(env, backend_dir, capture=False)
+        if result.returncode == 0:
+            return 0
+
+    if getattr(result, "stderr", None):
+        print(result.stderr, file=sys.stderr)
     return result.returncode
 
 
