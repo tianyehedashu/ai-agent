@@ -6,6 +6,7 @@ Create Date: 2026-01-27 15:00:00.000000
 
 添加 MCP 服务器表（无外键约束）和默认系统级 MCP 服务器
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -14,8 +15,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'd3f606546828'
-down_revision: str | None = '5783302b5009'
+revision: str = "d3f606546828"
+down_revision: str | None = "5783302b5009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -53,8 +54,18 @@ def upgrade() -> None:
             sa.Column("enabled", sa.Boolean(), nullable=False, server_default="true"),
             sa.Column("description", sa.Text(), nullable=True),
             sa.Column("category", sa.String(50), nullable=True),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.text("now()"),
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.text("now()"),
+            ),
             sa.Index("ix_mcp_servers_user_id", "user_id"),
             sa.Index("ix_mcp_servers_name", "name"),
         )

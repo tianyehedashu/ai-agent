@@ -22,6 +22,7 @@ from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_user_id,
     get_mcp_vendor_creator_id,
 )
+from domains.session.application import SessionUseCase
 from libs.config import get_llm_config
 from libs.db.database import get_session_context
 from libs.db.permission_context import (
@@ -56,7 +57,6 @@ async def llm_create(
     """
     config = get_llm_config()
     gateway = LLMGateway(config=config)
-    user_id = get_mcp_user_id()
 
     response = await gateway.chat(
         messages=messages,
@@ -64,7 +64,6 @@ async def llm_create(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
-        user_id=user_id,
     )
     return response.content or ""
 
@@ -116,10 +115,9 @@ async def video_create_task(
     try:
         async with get_session_context() as db:
             vendor_creator_id = get_mcp_vendor_creator_id()
-            use_case = VideoTaskUseCase(db)
+            use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
             task = await use_case.create_task(
-                user_id=user_id,
-                anonymous_user_id=None,
+                principal_id=str(user_id),
                 session_id=None,
                 prompt_text=prompt,
                 prompt_source="agent_generated",
@@ -180,7 +178,7 @@ async def video_poll_task(task_id: str) -> str:
     set_permission_context(PermissionContext(user_id=user_id, anonymous_user_id=None))
     try:
         async with get_session_context() as db:
-            use_case = VideoTaskUseCase(db)
+            use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
             task = await use_case.poll_task(UUID(task_id), once=True)
         return json.dumps(
             {

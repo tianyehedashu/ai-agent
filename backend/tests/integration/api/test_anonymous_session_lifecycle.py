@@ -81,7 +81,7 @@ class TestAnonymousSessionLifecycle:
         for i in range(3):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
-                json={"title": f"Session {i+1}"},
+                json={"title": f"Session {i + 1}"},
             )
             assert create_response.status_code == status.HTTP_201_CREATED
             session_ids.append(create_response.json()["id"])
@@ -153,9 +153,7 @@ class TestAnonymousSessionLifecycle:
             assert session_data["anonymous_user_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_anonymous_user_cookie_persistence_across_sessions(
-        self, dev_client: AsyncClient
-    ):
+    async def test_anonymous_user_cookie_persistence_across_sessions(self, dev_client: AsyncClient):
         """测试: 匿名用户 Cookie 在会话间保持"""
         # Arrange - 首次请求获取 Cookie
         first_response = await dev_client.get("/api/v1/sessions/")

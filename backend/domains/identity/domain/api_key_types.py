@@ -55,12 +55,12 @@ class ApiKeyScope(str, Enum):
     SYSTEM_READ = "system:read"
 
     # MCP 服务器访问
-    MCP_LLM_SERVER = "mcp:llm-server"          # LLM 服务器访问
+    MCP_LLM_SERVER = "mcp:llm-server"  # LLM 服务器访问
     MCP_FILESYSTEM_SERVER = "mcp:filesystem-server"  # 文件系统服务器
-    MCP_MEMORY_SERVER = "mcp:memory-server"    # 记忆系统服务器
+    MCP_MEMORY_SERVER = "mcp:memory-server"  # 记忆系统服务器
     MCP_WORKFLOW_SERVER = "mcp:workflow-server"  # 工作流服务器
-    MCP_CUSTOM_SERVER = "mcp:custom-server"    # 自定义服务器
-    MCP_ALL_SERVERS = "mcp:all"                # 所有 MCP 服务器
+    MCP_CUSTOM_SERVER = "mcp:custom-server"  # 自定义服务器
+    MCP_ALL_SERVERS = "mcp:all"  # 所有 MCP 服务器
 
 
 # 作用域分组（便于快速设置常用组合）

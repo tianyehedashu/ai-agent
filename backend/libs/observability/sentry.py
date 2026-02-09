@@ -2,15 +2,23 @@
 Sentry 集成 - 错误监控和性能追踪
 
 提供 Sentry 错误监控功能，捕获未处理的异常并上报。
+sentry_sdk 为可选依赖，未安装时本模块不报错且初始化逻辑不执行。
 """
 
 from typing import Any
 
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.httpx import HttpxIntegration
-from sentry_sdk.integrations.redis import RedisIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.httpx import HttpxIntegration
+    from sentry_sdk.integrations.redis import RedisIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+    FastApiIntegration = None  # type: ignore[assignment,misc]
+    HttpxIntegration = None  # type: ignore[assignment,misc]
+    RedisIntegration = None  # type: ignore[assignment,misc]
+    SqlalchemyIntegration = None  # type: ignore[assignment,misc]
 
 from utils.logging import get_logger
 
@@ -83,6 +91,10 @@ def init_sentry(
     """
     global _sentry_initialized
 
+    if sentry_sdk is None:
+        logger.info("sentry_sdk not installed, skipping Sentry initialization")
+        return False
+
     if not enabled:
         logger.info("Sentry is disabled")
         return False
@@ -146,7 +158,7 @@ def capture_exception(exception: Exception, level: str | None = None, **tags: st
     Returns:
         Sentry 事件 ID，如果未初始化则返回 None
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return None
 
     with sentry_sdk.push_scope() as scope:
@@ -179,7 +191,7 @@ def capture_message(
     Returns:
         Sentry 事件 ID，如果未初始化则返回 None
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return None
 
     with sentry_sdk.push_scope() as scope:
@@ -201,7 +213,7 @@ def set_user_context(user_id: str, email: str | None = None, **kwargs: str) -> N
         email: 用户邮箱
         **kwargs: 其他用户信息
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return
 
     user_data = {"id": user_id, **kwargs}
@@ -213,7 +225,7 @@ def set_user_context(user_id: str, email: str | None = None, **kwargs: str) -> N
 
 def clear_user_context() -> None:
     """清除用户上下文"""
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return
     sentry_sdk.set_user(None)
 
@@ -225,7 +237,7 @@ def set_tag(key: str, value: str) -> None:
         key: 标签键
         value: 标签值
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return
     sentry_sdk.set_tag(key, value)
 
@@ -237,7 +249,7 @@ def set_context(key: str, value: dict[str, Any]) -> None:
         key: 上下文键
         value: 上下文值
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return
     sentry_sdk.set_context(key, value)
 
@@ -256,7 +268,7 @@ def add_breadcrumb(
         level: 级别
         **data: 附加数据
     """
-    if not _sentry_initialized:
+    if sentry_sdk is None or not _sentry_initialized:
         return
     sentry_sdk.add_breadcrumb(
         {

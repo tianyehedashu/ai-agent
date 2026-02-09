@@ -72,9 +72,7 @@ class MCPToolWrapper(BaseTool):
         elif server_name and tool_name:
             # 通过客户端间接调用
             self.name = f"{server_name}__{tool_name}"
-            self.description = self._tool_schema.get(
-                "description", f"MCP tool: {tool_name}"
-            )
+            self.description = self._tool_schema.get("description", f"MCP tool: {tool_name}")
         else:
             raise ValueError("Must provide either langchain_tool or (server_name + tool_name)")
 

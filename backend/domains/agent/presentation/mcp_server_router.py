@@ -31,7 +31,7 @@ FastMCP 的 session_manager 是惰性创建的，必须先调用 streamable_http
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -47,6 +47,12 @@ from domains.agent.application.mcp_dynamic_tool_use_case import (  # noqa: TC001
 )
 from domains.agent.domain.mcp.scopes import MCPServerScope
 from domains.agent.infrastructure.mcp_server.auth_middleware import verify_mcp_access
+from domains.agent.infrastructure.mcp_server.context import (
+    mcp_user_id_var,
+    mcp_vendor_creator_id_var,
+    set_mcp_user_id,
+    set_mcp_vendor_creator_id,
+)
 from domains.agent.infrastructure.mcp_server.dynamic_prompt_factory import build_prompt
 from domains.agent.infrastructure.mcp_server.dynamic_tool_factory import build_tool_fn
 from domains.agent.infrastructure.mcp_server.servers import llm_server
@@ -56,7 +62,6 @@ from domains.agent.infrastructure.repositories.mcp_dynamic_prompt_repository imp
 from domains.agent.infrastructure.repositories.mcp_dynamic_tool_repository import (
     MCPDynamicToolRepository,
 )
-from domains.identity.application import UserUseCase
 from domains.identity.presentation.deps import (
     AdminUser,  # noqa: TC001 - required at runtime for FastAPI Depends()
 )
@@ -73,6 +78,8 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.identity.application import UserUseCase
 
 logger = get_logger(__name__)
 
@@ -174,8 +181,6 @@ async def initialize_mcp_servers() -> AsyncIterator[None]:
     """
     global _initialized  # pylint: disable=global-statement
 
-    from contextlib import AsyncExitStack
-
     if _initialized:
         logger.warning("MCP servers already initialized, skipping")
         yield
@@ -215,11 +220,6 @@ async def _handle_mcp_request(
     将请求转发给 FastMCP 的 Streamable HTTP 应用。
     若有 user_id / vendor_creator_id 则通过 contextvar 传入，供 MCP 工具（如 LLM、视频任务）使用。
     """
-    from domains.agent.infrastructure.mcp_server.context import (
-        set_mcp_user_id,
-        set_mcp_vendor_creator_id,
-    )
-
     token_user = set_mcp_user_id(user_id) if user_id is not None else None
     token_creator = set_mcp_vendor_creator_id(vendor_creator_id)
     try:
@@ -259,11 +259,6 @@ async def _handle_mcp_request(
             media_type=headers_dict.get("content-type", "application/json"),
         )
     finally:
-        from domains.agent.infrastructure.mcp_server.context import (
-            mcp_user_id_var,
-            mcp_vendor_creator_id_var,
-        )
-
         if token_creator is not None:
             mcp_vendor_creator_id_var.reset(token_creator)
         if token_user is not None:
@@ -346,16 +341,13 @@ async def add_dynamic_tool(
 ) -> dict:
     """添加一条动态工具并注册到 FastMCP（仅管理员）"""
     server = _get_server(server_name)
-    try:
-        record = await use_case.add_dynamic_tool(
-            server_name=server_name,
-            tool_key=body.tool_key.strip(),
-            tool_type=body.tool_type,
-            config=body.config,
-            description=body.description,
-        )
-    except Exception:
-        raise
+    record = await use_case.add_dynamic_tool(
+        server_name=server_name,
+        tool_key=body.tool_key.strip(),
+        tool_type=body.tool_type,
+        config=body.config,
+        description=body.description,
+    )
     try:
         fn = build_tool_fn(body.tool_type, body.config)
         server.add_tool(
@@ -649,10 +641,9 @@ async def mcp_servers_list(db: AsyncSession = Depends(get_db)):
 async def sync_dynamic_tools_for_streamable_http(db: AsyncSession) -> None:
     """启动时将 DB 中已配置的动态工具注册到各 FastMCP 实例"""
     repo = MCPDynamicToolRepository(db)
-    for server_name in SERVER_MAP:
+    for server_name, server in SERVER_MAP.items():
         try:
             rows = await repo.list_by_server("streamable_http", server_name)
-            server = SERVER_MAP[server_name]
             for row in rows:
                 if not row.enabled:
                     continue
@@ -678,10 +669,9 @@ async def sync_dynamic_tools_for_streamable_http(db: AsyncSession) -> None:
 async def sync_dynamic_prompts_for_streamable_http(db: AsyncSession) -> None:
     """启动时将 DB 中已配置的动态 Prompts 注册到各 FastMCP 实例"""
     repo = MCPDynamicPromptRepository(db)
-    for server_name in SERVER_MAP:
+    for server_name, server in SERVER_MAP.items():
         try:
             rows = await repo.list_by_server("streamable_http", server_name)
-            server = SERVER_MAP[server_name]
             for row in rows:
                 if not row.enabled:
                     continue

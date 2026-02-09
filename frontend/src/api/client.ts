@@ -30,8 +30,10 @@
 
 import {
   getAuthToken,
+  getRefreshToken,
   getAnonymousUserId,
   setAuthToken,
+  setRefreshToken,
   setAnonymousUserId,
   clearAuth,
   handleUnauthorized,
@@ -58,8 +60,53 @@ export class ApiError extends Error {
 class ApiClient {
   private baseUrl: string
 
+  /** 正在进行中的 refresh 请求（避免并发重复刷新） */
+  private refreshPromise: Promise<boolean> | null = null
+
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
+  }
+
+  /**
+   * 尝试使用 refresh_token 获取新的 token pair
+   * 返回 true 表示续期成功，false 表示需要重新登录
+   *
+   * 注意：使用原生 fetch 而非 this.request()，避免递归 401 处理
+   */
+  private async tryRefresh(): Promise<boolean> {
+    // 避免并发 refresh 请求
+    if (this.refreshPromise) return this.refreshPromise
+
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) return false
+
+    this.refreshPromise = (async () => {
+      try {
+        const url = this.buildUrl('/api/v1/auth/token/refresh')
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          credentials: 'include',
+        })
+
+        if (!response.ok) return false
+
+        const data = (await response.json()) as {
+          access_token: string
+          refresh_token: string
+        }
+        setAuthToken(data.access_token)
+        setRefreshToken(data.refresh_token)
+        return true
+      } catch {
+        return false
+      } finally {
+        this.refreshPromise = null
+      }
+    })()
+
+    return this.refreshPromise
   }
 
   /**
@@ -122,7 +169,11 @@ class ApiClient {
     return searchParams.toString()
   }
 
-  private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    options: RequestOptions = {},
+    _retried = false,
+  ): Promise<T> {
     const { params, ...fetchOptions } = options
 
     const url = this.buildUrl(path, params)
@@ -143,34 +194,38 @@ class ApiClient {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
     } else if (anonymousUserId) {
-      // 没有 Token 时，添加匿名用户 ID 作为备用认证
-      // 这在 Cookie 丢失时可以帮助后端识别用户
       headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
-      credentials: 'include', // 携带 Cookie，支持匿名用户隔离
+      credentials: 'include',
     })
 
-    // 从响应头中提取并保存 anonymous_user_id（如果存在）
-    // 这样即使 Cookie 丢失，前端仍可通过 authStore 恢复身份
+    // 从响应头中提取并保存 anonymous_user_id
     const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
     if (responseAnonymousId && !token) {
       setAnonymousUserId(responseAnonymousId)
     }
 
-    // 检测 token 降级：后端 JWT 过期，开发模式静默降级为匿名用户
-    if (response.headers.get('X-Token-Degraded') === 'true' && token) {
-      console.warn('[ApiClient] Token degraded by backend, clearing expired token')
-      setAuthToken(null)
-      window.dispatchEvent(new Event('auth:token-degraded'))
-    }
-
     if (!response.ok) {
       if (response.status === 401) {
+        const hadToken = !!token
+
+        // 401 且未重试过：尝试用 refresh_token 自动续期
+        if (hadToken && !_retried) {
+          const refreshed = await this.tryRefresh()
+          if (refreshed) {
+            return this.request<T>(path, options, true)
+          }
+        }
+
+        // refresh 失败或无 token：清除状态并通知
         handleUnauthorized()
+        if (hadToken) {
+          window.dispatchEvent(new Event('auth:session-expired'))
+        }
       }
 
       const error = (await response.json().catch(() => ({ message: 'Unknown error' }))) as {
@@ -237,7 +292,8 @@ class ApiClient {
     onEvent: (event: { type: string; data: unknown }) => void,
     onError?: (error: Error) => void,
     onComplete?: () => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    _retried = false,
   ): Promise<void> {
     const url = this.buildUrl(path)
 
@@ -262,8 +318,8 @@ class ApiClient {
         method: 'POST',
         headers,
         body: JSON.stringify(data),
-        signal, // 支持 AbortController 取消
-        credentials: 'include', // 携带 Cookie，支持匿名用户隔离
+        signal,
+        credentials: 'include',
       })
 
       // 从响应头中提取并保存 anonymous_user_id
@@ -272,14 +328,23 @@ class ApiClient {
         setAnonymousUserId(responseAnonymousId)
       }
 
-      // 检测 token 降级（同普通请求）
-      if (response.headers.get('X-Token-Degraded') === 'true' && token) {
-        console.warn('[ApiClient] Token degraded by backend (stream), clearing expired token')
-        setAuthToken(null)
-        window.dispatchEvent(new Event('auth:token-degraded'))
-      }
-
       if (!response.ok) {
+        if (response.status === 401) {
+          const hadToken = !!token
+
+          // 尝试 refresh 后重试一次
+          if (hadToken && !_retried) {
+            const refreshed = await this.tryRefresh()
+            if (refreshed) {
+              return this.stream(path, data, onEvent, onError, onComplete, signal, true)
+            }
+          }
+
+          handleUnauthorized()
+          if (hadToken) {
+            window.dispatchEvent(new Event('auth:session-expired'))
+          }
+        }
         throw new ApiError(response.status, `HTTP ${String(response.status)}`)
       }
 

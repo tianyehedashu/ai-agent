@@ -5,7 +5,7 @@ Chat Use Case - 对话用例
 """
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,8 @@ from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapte
 from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxManager
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
-from domains.identity.domain.types import Principal
-from domains.session.application import SessionUseCase, TitleUseCase
-from domains.session.domain.entities import SessionOwner
+from domains.session.application import TitleUseCase
+from domains.session.application.ports import SessionApplicationPort
 from exceptions import NotFoundError
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
@@ -49,15 +48,16 @@ class ChatUseCase:
     def __init__(
         self,
         db: AsyncSession,
+        session_use_case: SessionApplicationPort,
+        session_use_case_factory: Callable[[AsyncSession], SessionApplicationPort],
         checkpointer: LangGraphCheckpointer | None = None,
     ) -> None:
         self.db = db
         self.llm_gateway = LLMGateway(config=settings)
         self.tool_registry = ToolRegistry()
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
-
-        # 使用新的 SessionUseCase
-        self.session_use_case = SessionUseCase(db)
+        self.session_use_case = session_use_case
+        self._session_use_case_factory = session_use_case_factory
         self.agent_service = AgentUseCase(db)
 
         self.title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
@@ -209,37 +209,22 @@ class ChatUseCase:
         user_id: str,
         agent_id: str | None,
     ) -> tuple[object | None, str, bool]:
-        """获取或创建会话"""
-        is_anonymous = Principal.is_anonymous_id(user_id)
+        """获取或创建会话（复用 Session 域统一入口）"""
+        try:
+            session, is_new = await self.session_use_case.get_or_create_session_for_principal(
+                principal_id=user_id,
+                session_id=session_id,
+                agent_id=agent_id,
+            )
+        except Exception:
+            raise NotFoundError("Session", session_id or "") from None
 
-        if not session_id:
-            # 创建新对话
-            if is_anonymous:
-                session = await self.session_use_case.create_session(
-                    anonymous_user_id=Principal.extract_anonymous_id(user_id),
-                    agent_id=agent_id,
-                )
-            else:
-                session = await self.session_use_case.create_session(
-                    user_id=user_id,
-                    agent_id=agent_id,
-                )
-            session_id = str(session.id)
+        resolved_session_id = str(session.id)
+        if is_new:
             await self.db.flush()
             await self.db.refresh(session)
             await self.db.commit()
-            return session, session_id, True
-
-        # 验证所有权
-        owner = SessionOwner.from_principal_id(user_id, is_anonymous)
-        try:
-            session = await self.session_use_case.get_session_with_ownership_check(
-                session_id, owner
-            )
-        except Exception:
-            raise NotFoundError("Session", session_id) from None
-
-        return session, session_id, False
+        return session, resolved_session_id, is_new
 
     async def _handle_title_generation(
         self,
@@ -277,8 +262,8 @@ class ChatUseCase:
 
                 # 如果标题生成成功，发送标题更新事件
                 if success:
-                    # 获取更新后的标题
-                    session_use_case = SessionUseCase(db)
+                    # 获取更新后的标题（使用独立 db 的 session 能力）
+                    session_use_case = self._session_use_case_factory(db)
                     session = await session_use_case.get_session(session_id)
                     if session and session.title:
                         # 将事件放入队列（如果队列存在）
@@ -520,7 +505,7 @@ class ChatUseCase:
 
     def _create_sandbox_recreated_event(self, result: SandboxCreationResult) -> AgentEvent:
         """创建沙箱重建事件
-        
+
         注意：事件类型和字段名使用 session_* 命名（面向用户的接口概念），
         而不是内部实现的 sandbox_* 命名。
         """

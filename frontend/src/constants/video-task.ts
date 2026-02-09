@@ -23,3 +23,11 @@ export const VIDEO_TASK_MARKETPLACES: MarketplaceOption[] = [
 export const VIDEO_TASK_MARKETPLACE_FLAGS: Record<string, string> = Object.fromEntries(
   VIDEO_TASK_MARKETPLACES.map((m) => [m.value, m.flag])
 )
+
+/** 示例提示词（简短标签 + 完整描述），用于视频任务页与聊天内视频表单 */
+export const VIDEO_TASK_EXAMPLE_PROMPTS: { short: string; full: string }[] = [
+  { short: '咖啡机', full: '一款精致的咖啡机，展示研磨咖啡豆、萃取浓缩咖啡的全过程' },
+  { short: '智能手表', full: '智能手表在手腕上，展示表盘切换、心率监测、消息提醒功能' },
+  { short: '无线耳机', full: '无线耳机从充电盒中取出，佩戴入耳，展示触控操作和降噪效果' },
+  { short: '护肤精华', full: '护肤精华液滴落在手背，轻柔涂抹，展示吸收过程和肌肤光泽' },
+]

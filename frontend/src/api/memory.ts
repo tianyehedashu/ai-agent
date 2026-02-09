@@ -33,7 +33,7 @@ export const memoryApi = {
    * 获取记忆列表
    */
   list(page = 1, pageSize = 20, typeFilter?: string): Promise<PaginatedResponse<Memory>> {
-    return apiClient.get<PaginatedResponse<Memory>>('/api/v1/memory', {
+    return apiClient.get<PaginatedResponse<Memory>>('/api/v1/memory/', {
       skip: (page - 1) * pageSize,
       limit: pageSize,
       type_filter: typeFilter,
@@ -55,7 +55,7 @@ export const memoryApi = {
    * 创建记忆
    */
   create(data: MemoryCreateRequest): Promise<Memory> {
-    return apiClient.post<Memory>('/api/v1/memory', {
+    return apiClient.post<Memory>('/api/v1/memory/', {
       type: data.type,
       content: data.content,
       importance: data.importance ?? 0.5,

@@ -119,28 +119,10 @@ async def get_principal(
     user_manager = UserManager(user_db)
     user = await strategy.read_token(token, user_manager)
     if user is None:
-        # 开发模式下：token 无效时回退到匿名用户（更宽容的处理）
-        if settings.is_development:
-            logger.warning(
-                "Invalid/expired token in dev mode, falling back to anonymous user. "
-                "User should re-login to restore session access."
-            )
-            # 标记 token 降级，让中间件在响应头中通知前端
-            request.state.token_degraded = True
-            if not anonymous_user_id:
-                anonymous_user_id = str(uuid.uuid4())
-            request.state.anonymous_user_id = anonymous_user_id
-            principal = await _get_or_create_anonymous_principal(db, anonymous_user_id)
-            if principal:
-                return principal
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create anonymous user after token degradation.",
-            )
-
+        logger.warning("Invalid or expired JWT token, returning 401")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

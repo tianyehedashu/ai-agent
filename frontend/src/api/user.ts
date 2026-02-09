@@ -3,6 +3,7 @@
  */
 
 import { apiClient } from './client'
+import { setRefreshToken } from '@/stores/auth'
 
 export interface CurrentUser {
   id: string
@@ -32,9 +33,11 @@ export interface UpdateUserParams {
   vendor_creator_id?: number | null
 }
 
-interface LoginResponse {
+interface TokenPairResponse {
   access_token: string
+  refresh_token: string
   token_type: string
+  expires_in: number
 }
 
 export const userApi = {
@@ -58,17 +61,18 @@ export const userApi = {
   },
 
   /**
-   * 登录
+   * 登录（使用增强 token 端点，返回 access + refresh token）
    */
   async login(params: LoginParams): Promise<CurrentUser> {
-    // 1. 获取 Token
-    const response = await apiClient.postForm<LoginResponse>('/api/v1/auth/jwt/login', {
-      username: params.email, // FastAPI Users 使用 username 字段接收 email
+    // 1. 获取 Token Pair
+    const response = await apiClient.post<TokenPairResponse>('/api/v1/auth/token', {
+      email: params.email,
       password: params.password,
     })
 
-    // 2. 保存 Token
+    // 2. 保存 Token Pair
     apiClient.setToken(response.access_token)
+    setRefreshToken(response.refresh_token)
 
     // 3. 获取并返回用户信息
     return this.getCurrentUser()

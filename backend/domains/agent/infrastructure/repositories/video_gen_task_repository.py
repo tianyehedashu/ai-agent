@@ -7,8 +7,6 @@ Video Gen Task Repository - 视频生成任务仓储
 from typing import Any
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
 from libs.db.base_repository import OwnedRepositoryBase
 
@@ -18,9 +16,6 @@ class VideoGenTaskRepository(OwnedRepositoryBase[VideoGenTask]):
 
     继承 OwnedRepositoryBase 提供自动所有权过滤。
     """
-
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
 
     @property
     def model_class(self) -> type[VideoGenTask]:

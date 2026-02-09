@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+import type { CurrentUser } from '@/api/user'
+
 import SystemMCPPage from '../system'
 
 const mockListClientDirectServers = vi.fn()
@@ -21,8 +23,16 @@ const mockUpdateDynamicPrompt = vi.fn()
 const mockDeleteDynamicPrompt = vi.fn()
 
 vi.mock('@/stores/user', () => ({
-  useUserStore: (selector: (s: { currentUser: { role?: string } | null }) => unknown) =>
-    selector({ currentUser: { id: '1', email: 'admin@test.com', name: 'Admin', is_anonymous: false, role: 'admin' } }),
+  useUserStore: (selector: (s: { currentUser: CurrentUser | null }) => unknown) =>
+    selector({
+      currentUser: {
+        id: '1',
+        email: 'admin@test.com',
+        name: 'Admin',
+        is_anonymous: false,
+        role: 'admin',
+      },
+    }),
 }))
 
 /* eslint-disable @typescript-eslint/no-unsafe-return -- vi.mock factory returns API shape; mocks return any */

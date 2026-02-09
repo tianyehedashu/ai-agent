@@ -82,14 +82,8 @@ export default function Sidebar(): React.JSX.Element {
     enabled: !!sessionId && isChatActive,
   })
 
-  // 新建对话
   const handleCreateChat = (): void => {
     navigate('/chat')
-  }
-
-  // 新建视频
-  const handleCreateVideo = (): void => {
-    navigate('/video-tasks')
   }
 
   return (
@@ -117,57 +111,30 @@ export default function Sidebar(): React.JSX.Element {
           )}
         </div>
 
-        {/* New Session Button with Dropdown */}
+        {/* 新建：直接进入新建对话，不再弹出「对话/视频」选项 */}
         <div className="p-3">
           {isCollapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="default"
-                      className="w-full bg-primary px-0 text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent side="right" align="start" className="w-36">
-                    <DropdownMenuItem onClick={handleCreateChat}>
-                      <MessageSquare className="mr-2 h-4 w-4" />
-                      新建对话
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleCreateVideo}>
-                      <Video className="mr-2 h-4 w-4" />
-                      新建视频
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TooltipTrigger>
-              <TooltipContent side="right">新建</TooltipContent>
-            </Tooltip>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
                 <Button
                   variant="default"
-                  className="w-full justify-start gap-2 bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+                  className="w-full bg-primary px-0 text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+                  onClick={handleCreateChat}
                 >
                   <Plus className="h-4 w-4" />
-                  <span>新建</span>
-                  <ChevronDown className="ml-auto h-3 w-3 opacity-50" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[calc(var(--radix-dropdown-menu-trigger-width))]">
-                <DropdownMenuItem onClick={handleCreateChat}>
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  新建对话
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleCreateVideo}>
-                  <Video className="mr-2 h-4 w-4" />
-                  新建视频
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent side="right">新建对话</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              variant="default"
+              className="w-full justify-start gap-2 bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+              onClick={handleCreateChat}
+            >
+              <Plus className="h-4 w-4" />
+              <span>新建对话</span>
+            </Button>
           )}
         </div>
 
@@ -329,11 +296,13 @@ function SessionItem({
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  // 判断会话类型
+  // 判断会话类型（路由与图标）
   const isVideo = isVideoSession(session)
   const Icon = isVideo ? Video : MessageSquare
   const href = isVideo ? `/video-tasks/${session.id}` : `/chat/${session.id}`
-  const defaultTitle = isVideo ? '新视频' : '新对话'
+  // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
+  const defaultTitle =
+    (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()

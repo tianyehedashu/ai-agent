@@ -31,10 +31,10 @@ backend/
 │   ├── config.py                    # GIIKIN 配置：giikin_client_id, giikin_client_secret, giikin_base_url
 │   └── main.py                      # 挂载 video_task_router → /api/v1/video-tasks
 ├── libs/api/
-│   └── deps.py                      # get_video_task_service(db) → VideoTaskUseCase
+│   └── deps.py                      # get_video_task_service(db, session_service) → VideoTaskUseCase(db, session_use_case=...)
 ├── domains/agent/
 │   ├── application/
-│   │   └── video_task_use_case.py  # 用例：list/get/create/update/submit/poll/cancel
+│   │   └── video_task_use_case.py  # 用例：list/get/create(principal_id,...)/update/submit/poll/cancel，依赖 SessionApplicationPort
 │   ├── infrastructure/
 │   │   ├── models/
 │   │   │   └── video_gen_task.py   # ORM 模型 + video_url 属性（从 result 解析）
@@ -161,9 +161,10 @@ giikin_base_url: str = "https://openapi.giikin.com"
 
 ### 4.5 所有权与依赖
 
-- 所有接口依赖 `AuthUser`；`_get_user_ids(current_user)` 得到 `(user_id, anonymous_user_id)`。
+- 所有接口依赖 `AuthUser`；创建任务时传 `principal_id=current_user.id`，与 Chat 一致；`_get_user_ids(current_user)` 仍用于 `vendor_creator_id`。
+- 会话创建与所有权校验统一走 Session 域：`VideoTaskUseCase` 依赖 `SessionApplicationPort`，由 `get_video_task_service(db, session_service)` 注入 `SessionUseCase`；带 `session_id` 创建时非本人会话返回 403。
 - `VideoGenTaskRepository` 继承 `OwnedRepositoryBase`，自动按 `user_id`/`anonymous_user_id` 过滤。
-- `get_video_task_service(db)` 在 `libs.api.deps` 中定义，由 FastAPI 注入 `DbSession`。
+- `get_video_task_service(db, session_service)` 在 `libs.api.deps` 中定义，由 FastAPI 注入 `DbSession` 与 `get_session_service`。
 
 ---
 

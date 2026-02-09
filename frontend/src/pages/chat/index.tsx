@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-import { History, Sparkles, Wrench } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { History, Wrench } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
+import { videoTaskApi } from '@/api/videoTask'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
 import { SessionNotice } from '@/components/chat/session-notice'
 import { TimeTravelDebugger } from '@/components/chat/time-travel-debugger'
@@ -12,15 +14,21 @@ import { useChat } from '@/hooks/use-chat'
 import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
 
-import ChatInput from './components/chat-input'
 import ChatMessages from './components/chat-messages'
+import UnifiedInputArea, {
+  type UnifiedInputMode,
+  type VideoCreateParams,
+} from './components/unified-input-area'
 import { MCPSessionConfig } from './components/mcp-session-config'
+import ChatSessionVideoTasks from './components/session-video-tasks'
 
 export default function ChatPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const [showDebugger, setShowDebugger] = useState(false)
+  const [inputMode, setInputMode] = useState<UnifiedInputMode>('chat')
   const { setCurrentSession, input, setInput } = useChatStore()
   const [toolConfigOpen, setToolConfigOpen] = useState(false)
 
@@ -79,6 +87,11 @@ export default function ChatPage(): React.JSX.Element {
 
   // 用于判断是「离开/切换会话」还是「新建会话后进入」
   const prevSessionIdRef = useRef<string | undefined>(undefined)
+
+  // 无会话时（新建对话）切回对话模式，避免底部只显示 Tab 不显示输入
+  useEffect(() => {
+    if (!sessionId) setInputMode('chat')
+  }, [sessionId])
 
   // Load session - 当 sessionId 变化时，仅「离开当前会话」或「切换到另一会话」时清除消息；
   // 「无会话 → 新会话」时不清空，保留乐观添加的首条消息
@@ -172,17 +185,19 @@ export default function ChatPage(): React.JSX.Element {
           <span className="hidden sm:inline">对话工具</span>
         </Button>
         {sessionId && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setShowDebugger(true)
-            }}
-            className="h-8 gap-1.5 rounded-full bg-background/80 px-3 text-xs text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
-          >
-            <History className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">时间旅行</span>
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowDebugger(true)
+              }}
+              className="h-8 gap-1.5 rounded-full bg-background/80 px-3 text-xs text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">时间旅行</span>
+            </Button>
+          </>
         )}
       </div>
 
@@ -211,24 +226,24 @@ export default function ChatPage(): React.JSX.Element {
           pendingToolCalls={pendingToolCalls}
           processRuns={processRuns}
           currentRunId={currentRunId}
+          sessionId={sessionId}
         />
       </div>
+
+      {/* 本会话视频任务区块 - 仅当有 session 且有任务时显示 */}
+      <ChatSessionVideoTasks sessionId={sessionId} />
 
       {/* Input Area - Fixed at bottom with centered content */}
       <div className="relative z-10 border-t border-border/40 bg-background/95 pb-4 pt-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-3xl px-4">
-          {/* Subtle branding when empty */}
-          {messages.length === 0 && !isLoading && (
-            <div className="mb-2 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/50">
-              <Sparkles className="h-3 w-3" />
-              <span>AI Agent 助手</span>
-            </div>
-          )}
-          <ChatInput
-            value={input}
-            onChange={setInput}
-            onSend={handleSend}
-            isLoading={isLoading}
+          <UnifiedInputArea
+            mode={inputMode}
+            onModeChange={setInputMode}
+            sessionId={sessionId}
+            chatValue={input}
+            chatOnChange={setInput}
+            chatOnSend={handleSend}
+            chatIsLoading={isLoading}
             toolbarLeftExtra={
               <Button
                 variant="ghost"
@@ -242,6 +257,38 @@ export default function ChatPage(): React.JSX.Element {
                 <Wrench className="h-4 w-4" />
               </Button>
             }
+            onVideoTaskCreated={() => {
+              toast({
+                title: '视频任务已创建',
+                description: '正在跳转到视频任务页',
+              })
+              navigate(`/video-tasks/${sessionId}`)
+              setInputMode('chat')
+            }}
+            onVideoSessionForbidden={() => {
+              navigate('/video-tasks')
+              setInputMode('chat')
+            }}
+            onVideoCreateWithoutSession={async (params: VideoCreateParams) => {
+              const session = await sessionApi.create()
+              await videoTaskApi.create({
+                sessionId: session.id,
+                promptText: params.promptText,
+                promptSource: 'user_provided',
+                marketplace: 'jp',
+                model: params.model,
+                duration: params.duration,
+                referenceImages: params.referenceImages,
+                autoSubmit: true,
+              })
+              void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+              toast({
+                title: '视频任务已创建',
+                description: '正在跳转到视频任务页',
+              })
+              navigate(`/video-tasks/${session.id}`)
+              setInputMode('chat')
+            }}
           />
         </div>
       </div>

@@ -90,7 +90,7 @@ def _setup_litellm_env() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pylint: disable=too-many-statements
     """应用生命周期管理"""
     # 启动时 - 输出环境配置以便调试
     logger.info("=" * 60)
@@ -191,8 +191,8 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 初始化默认系统级 MCP 服务器
     try:
-        from domains.agent.application.mcp_init import (
-            init_default_mcp_servers,  # pylint: disable=import-outside-toplevel
+        from domains.agent.application.mcp_init import (  # pylint: disable=import-outside-toplevel
+            init_default_mcp_servers,
         )
 
         await init_default_mcp_servers()
@@ -274,7 +274,7 @@ app.add_middleware(
     allow_credentials=True,  # 允许携带 Cookie
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Token-Degraded", "X-Anonymous-User-Id"],  # 允许前端 JS 读取自定义响应头
+    expose_headers=["X-Anonymous-User-Id"],  # 允许前端 JS 读取自定义响应头
 )
 
 # 权限上下文中间件（在认证依赖之后设置权限上下文）
@@ -296,9 +296,6 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
 
     当检测到新的匿名用户（request.state.anonymous_user_id 存在）时，
     在响应中设置 Cookie 以便后续请求能够识别同一用户。
-
-    同时检测 token 降级场景：当 JWT token 过期但在开发模式下被静默降级为
-    匿名用户时，在响应头中通知前端清除过期 token。
     """
     response = await call_next(request)
 
@@ -315,10 +312,6 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
             samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
             secure=not settings.is_development,  # 生产环境要求 HTTPS
         )
-
-    # Token 降级通知：JWT 过期后静默降级为匿名用户时，通知前端清除过期 token
-    if getattr(request.state, "token_degraded", False):
-        response.headers["X-Token-Degraded"] = "true"
 
     return response
 

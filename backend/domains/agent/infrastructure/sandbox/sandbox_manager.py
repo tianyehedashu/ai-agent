@@ -635,7 +635,9 @@ class SandboxManager:
         async with self._lock:
             await self._remove_sandbox(sandbox_id, reason)
 
-    async def _remove_sandbox(self, sandbox_id: str, reason: CleanupReason) -> None:
+    async def _remove_sandbox(  # pylint: disable=too-many-branches
+        self, sandbox_id: str, reason: CleanupReason
+    ) -> None:
         """移除沙箱（内部方法，需要在锁内调用）"""
         sandbox = self._sandboxes.pop(sandbox_id, None)
         if not sandbox:

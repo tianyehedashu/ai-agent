@@ -18,9 +18,7 @@ from domains.identity.infrastructure.models.user import User
 async def setup_system_mcp_servers(db_session: AsyncSession):
     """为测试创建默认系统级 MCP 服务器"""
     # 检查是否已存在系统服务器
-    result = await db_session.execute(
-        select(MCPServer).where(MCPServer.scope == "system")
-    )
+    result = await db_session.execute(select(MCPServer).where(MCPServer.scope == "system"))
     existing = result.scalars().all()
 
     if not existing:
@@ -160,9 +158,7 @@ class TestMCPServersAPI:
         assert isinstance(data["user_servers"], list)
 
     @pytest.mark.asyncio
-    async def test_create_server(
-        self, client: AsyncClient, auth_headers: dict, test_user: User
-    ):
+    async def test_create_server(self, client: AsyncClient, auth_headers: dict, test_user: User):
         """测试: 创建 MCP 服务器"""
         # Arrange
         server_data = {
@@ -237,9 +233,7 @@ class TestMCPServersAPI:
         )
 
     @pytest.mark.asyncio
-    async def test_toggle_server(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_toggle_server(self, client: AsyncClient, auth_headers: dict):
         """测试: 切换服务器启用状态"""
         # Arrange - 创建服务器
         server_data = {
@@ -285,9 +279,7 @@ class TestMCPServersAPI:
         )
 
     @pytest.mark.asyncio
-    async def test_delete_server(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_delete_server(self, client: AsyncClient, auth_headers: dict):
         """测试: 删除服务器"""
         # Arrange - 创建服务器
         server_data = {
@@ -321,9 +313,7 @@ class TestMCPServersAPI:
         assert server_id not in server_ids
 
     @pytest.mark.asyncio
-    async def test_update_server(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_update_server(self, client: AsyncClient, auth_headers: dict):
         """测试: 更新服务器配置"""
         # Arrange - 创建服务器
         server_data = {
@@ -366,9 +356,7 @@ class TestMCPServersAPI:
         )
 
     @pytest.mark.asyncio
-    async def test_test_connection(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_test_connection(self, client: AsyncClient, auth_headers: dict):
         """测试: 测试服务器连接"""
         # Arrange - 创建服务器
         server_data = {
@@ -474,9 +462,7 @@ class TestMCPPermissionsAPI:
         )
 
     @pytest.mark.asyncio
-    async def test_user_cannot_delete_system_servers(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_user_cannot_delete_system_servers(self, client: AsyncClient, auth_headers: dict):
         """测试: 普通用户不能删除系统级服务器"""
         # Arrange - 获取系统级服务器的 ID
         list_response = await client.get("/api/v1/mcp/servers", headers=auth_headers)
@@ -494,9 +480,7 @@ class TestMCPPermissionsAPI:
         assert delete_response.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
-    async def test_user_cannot_update_system_servers(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_user_cannot_update_system_servers(self, client: AsyncClient, auth_headers: dict):
         """测试: 普通用户不能更新系统级服务器"""
         # Arrange - 获取系统级服务器的 ID
         list_response = await client.get("/api/v1/mcp/servers", headers=auth_headers)
@@ -601,4 +585,3 @@ class TestMCPPermissionsAPI:
 
         # Assert
         assert delete_response.status_code == status.HTTP_200_OK
-

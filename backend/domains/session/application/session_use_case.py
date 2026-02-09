@@ -11,6 +11,7 @@ import uuid
 
 from domains.agent.domain.types import MessageRole
 from domains.agent.infrastructure.repositories import MessageRepository
+from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.infrastructure.repositories import SessionRepository
 from exceptions import NotFoundError, PermissionDeniedError
@@ -245,6 +246,46 @@ class SessionUseCase:
 
         return session
 
+    async def get_or_create_session_for_principal(
+        self,
+        principal_id: str,
+        session_id: str | None = None,
+        *,
+        title: str | None = None,
+        agent_id: str | None = None,
+    ) -> tuple[Session, bool]:
+        """按 Principal 获取或创建会话（含所有权校验）
+
+        供 Chat、视频任务等用例复用，统一「无 session_id 则创建、有则校验所有权」的逻辑。
+
+        Args:
+            principal_id: 当前用户 Principal ID（与 Chat 一致，含 anonymous- 前缀时表示匿名）
+            session_id: 会话 ID；若为 None 则创建新会话
+            title: 新建会话时的标题（可选）
+            agent_id: 新建会话时关联的 Agent ID（可选）
+
+        Returns:
+            (会话, 是否新建)
+
+        Raises:
+            NotFoundError: session_id 对应会话不存在
+            PermissionDeniedError: session_id 对应会话不属于当前用户
+        """
+        is_anonymous = Principal.is_anonymous_id(principal_id)
+        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+
+        if not session_id:
+            session = await self.create_session(
+                user_id=str(owner.user_id) if owner.user_id else None,
+                anonymous_user_id=owner.anonymous_user_id,
+                agent_id=agent_id,
+                title=title,
+            )
+            return session, True
+
+        session = await self.get_session_with_ownership_check(session_id, owner)
+        return session, False
+
     # =========================================================================
     # Message Management
     # =========================================================================
@@ -307,3 +348,12 @@ class SessionUseCase:
     async def count_messages(self, session_id: str) -> int:
         """统计会话的消息数量"""
         return await self.message_repo.count_by_session(uuid.UUID(session_id))
+
+    async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:
+        """增加会话的视频任务计数
+
+        Args:
+            session_id: 会话 ID
+            count: 视频任务增量
+        """
+        await self.session_repo.increment_video_task_count(uuid.UUID(session_id), count)

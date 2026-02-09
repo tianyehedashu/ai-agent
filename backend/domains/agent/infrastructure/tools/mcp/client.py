@@ -347,7 +347,7 @@ class ConfiguredMCPManager:
         # 查找工具（可能带有服务器前缀）
         full_name = f"{server_name}__{tool_name}"
         tool = next(
-            (t for t in self._tools if t.name == full_name or t.name == tool_name),
+            (t for t in self._tools if t.name in (full_name, tool_name)),
             None,
         )
 

@@ -67,7 +67,9 @@ def upgrade() -> None:
     if "ix_users_email" not in indexes:
         # 检查是否已有唯一约束
         constraints = [
-            c["name"] for c in inspector.get_unique_constraints("users") if "email" in c["column_names"]
+            c["name"]
+            for c in inspector.get_unique_constraints("users")
+            if "email" in c["column_names"]
         ]
         if not constraints:
             op.create_index("ix_users_email", "users", ["email"], unique=True)

@@ -162,7 +162,7 @@ async def create_video_task(
     video_task_service: VideoTaskUseCase = Depends(get_video_task_service),
 ) -> VideoTaskResponse:
     """创建视频生成任务"""
-    user_id, anonymous_user_id, vendor_creator_id = _get_user_ids(current_user)
+    _, _, vendor_creator_id = _get_user_ids(current_user)
 
     session_id = None
     if data.session_id:
@@ -174,8 +174,7 @@ async def create_video_task(
             ) from e
 
     task = await video_task_service.create_task(
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
+        principal_id=current_user.id,
         session_id=session_id,
         prompt_text=data.prompt_text,
         prompt_source=data.prompt_source,

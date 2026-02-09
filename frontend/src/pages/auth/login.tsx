@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Lock, Mail, Terminal } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -36,6 +37,7 @@ export default function LoginPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { login } = useUserStore()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -50,6 +52,8 @@ export default function LoginPage(): React.JSX.Element {
     setIsLoading(true)
     try {
       await login(values)
+      // 清除所有缓存的查询数据，确保使用新身份重新获取
+      await queryClient.invalidateQueries()
       toast({
         title: '登录成功',
         description: '欢迎回来！',

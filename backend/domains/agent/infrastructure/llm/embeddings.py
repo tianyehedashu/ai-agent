@@ -370,12 +370,11 @@ class EmbeddingService:
             # 检查是否是 DashScope 模型（LiteLLM 不支持，需要直接调用）
             # 通过 api_base 判断是否是 DashScope（包含 dashscope 或 embeddings）
             model_lower = model.lower()
-            is_dashscope = (
-                "dashscope" in model_lower
-                or ("text-embedding-v" in model_lower
+            is_dashscope = "dashscope" in model_lower or (
+                "text-embedding-v" in model_lower
                 and api_key
                 and api_base
-                and ("dashscope" in api_base.lower() or "embeddings" in api_base.lower()))
+                and ("dashscope" in api_base.lower() or "embeddings" in api_base.lower())
             )
 
             if is_dashscope:

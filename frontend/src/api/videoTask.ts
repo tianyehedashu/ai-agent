@@ -124,7 +124,7 @@ export const videoTaskApi = {
     if (options?.sessionId) params.session_id = options.sessionId
 
     const backend = await apiClient.get<BackendVideoTaskListResponse>(
-      '/api/v1/video-tasks',
+      '/api/v1/video-tasks/',
       params
     )
 
@@ -149,7 +149,7 @@ export const videoTaskApi = {
    */
   async create(data: VideoTaskCreateInput): Promise<VideoGenTask> {
     const backend = await apiClient.post<BackendVideoTask>(
-      '/api/v1/video-tasks',
+      '/api/v1/video-tasks/',
       toBackendCreateRequest(data)
     )
     return toFrontendVideoTask(backend)

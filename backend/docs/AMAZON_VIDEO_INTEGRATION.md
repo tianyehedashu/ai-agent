@@ -16,7 +16,7 @@
 backend/
 ├── domains/agent/
 │   ├── application/
-│   │   └── video_task_use_case.py      # 视频任务用例
+│   │   └── video_task_use_case.py      # 视频任务用例（依赖 SessionApplicationPort，会话创建/所有权校验走 Session 域）
 │   ├── infrastructure/
 │   │   ├── models/
 │   │   │   └── video_gen_task.py       # 视频任务模型
@@ -118,7 +118,7 @@ POST /api/v1/video-tasks
 - `prompt` (必填): 完整的视频生成提示词
 - `reference_images`: 参考图片 URL 列表
 - `marketplace`: 目标站点 (默认 "jp")
-- `session_id`: 关联会话 ID
+- `session_id`: 关联会话 ID（可选；若提供则校验所有权，非本人会话返回 403）
 
 ### amazon_video_poll
 

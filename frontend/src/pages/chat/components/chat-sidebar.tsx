@@ -170,6 +170,9 @@ function SessionItem({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
+  // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
+  const defaultTitle =
+    (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()
@@ -221,7 +224,7 @@ function SessionItem({
       ) : (
         <>
           <div className="flex-1 overflow-hidden">
-            <p className="truncate font-medium leading-none">{session.title ?? '新对话'}</p>
+            <p className="truncate font-medium leading-none">{session.title ?? defaultTitle}</p>
             <p className="mt-1 truncate text-xs opacity-70">
               {formatRelativeTime(session.updatedAt)}
             </p>
@@ -262,7 +265,7 @@ function SessionItem({
       <Tooltip>
         <TooltipTrigger asChild>{ItemContent}</TooltipTrigger>
         <TooltipContent side="right" className="max-w-[200px] truncate">
-          {session.title ?? '新对话'}
+          {session.title ?? defaultTitle}
         </TooltipContent>
       </Tooltip>
     )

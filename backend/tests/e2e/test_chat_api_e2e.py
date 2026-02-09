@@ -262,9 +262,7 @@ class TestChatAPIE2E:
                         session_id = event["data"]["session_id"]
                     elif event["type"] == "done":
                         final_msg = event["data"].get("final_message", {})
-                        content = final_msg.get("content") or final_msg.get(
-                            "reasoning_content", ""
-                        )
+                        content = final_msg.get("content") or final_msg.get("reasoning_content", "")
                         print(f"  AI: {content[:50]}...")
 
         assert session_id
@@ -281,9 +279,7 @@ class TestChatAPIE2E:
                     event = json.loads(line[6:])
                     if event["type"] == "done":
                         final_msg = event["data"].get("final_message", {})
-                        content = final_msg.get("content") or final_msg.get(
-                            "reasoning_content", ""
-                        )
+                        content = final_msg.get("content") or final_msg.get("reasoning_content", "")
                         print(f"  AI: {content[:50]}...")
 
         # 第三轮: 验证

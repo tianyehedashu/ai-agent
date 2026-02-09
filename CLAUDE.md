@@ -11,7 +11,7 @@ backend/
 │   ├── session/             # 会话域（跨功能共享）
 │   │   ├── domain/
 │   │   │   └── entities/    # SessionDomainService, SessionOwner
-│   │   ├── application/     # SessionUseCase, TitleUseCase
+│   │   ├── application/     # SessionUseCase, TitleUseCase, ports.SessionApplicationPort
 │   │   ├── infrastructure/
 │   │   │   ├── models/      # Session ORM
 │   │   │   └── repositories/
@@ -53,8 +53,9 @@ from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
 from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_session_ownership
 from domains.identity.presentation.schemas import CurrentUser
 
-# 会话域（Session 相关）
+# 会话域（Session 相关；Agent UseCase 依赖 SessionApplicationPort，由 get_session_service 注入 SessionUseCase）
 from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.application.ports import SessionApplicationPort
 from domains.session.domain.entities import SessionDomainService, SessionOwner
 from domains.session.infrastructure.models import Session
 from domains.session.infrastructure.repositories import SessionRepository
@@ -69,7 +70,7 @@ from domains.agent.application import ChatUseCase, AgentUseCase
 
 # 纯技术基础设施
 from libs.config import ExecutionConfig
-from libs.api.deps import get_db, get_session_service  # 服务工厂
+from libs.api.deps import get_db, get_session_service, get_chat_service, get_video_task_service  # 服务工厂（Chat/Video 注入 SessionUseCase）
 from libs.types import Result
 ```
 

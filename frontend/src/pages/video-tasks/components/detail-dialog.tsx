@@ -392,6 +392,8 @@ export default function VideoTaskDetailDialog({
                     {task.runId && (
                       <InfoRow label="Run ID" value={task.runId} copyable onCopy={copyToClipboard} />
                     )}
+                    <InfoRow label="模型" value={task.model} />
+                    <InfoRow label="时长" value={`${task.duration}秒`} />
                     <InfoRow 
                       label="提示词来源" 
                       value={formatPromptSource(task.promptSource)} 
@@ -414,6 +416,12 @@ export default function VideoTaskDetailDialog({
                             `任务 ID: ${task.id}`,
                             task.workflowId ? `Workflow ID: ${task.workflowId}` : null,
                             task.runId ? `Run ID: ${task.runId}` : null,
+                            `模型: ${task.model}`,
+                            `时长: ${task.duration}秒`,
+                            task.promptText ? `提示词: ${task.promptText}` : null,
+                            task.referenceImages.length > 0
+                              ? `参考图片:\n${task.referenceImages.join('\n')}`
+                              : null,
                             `提示词来源: ${formatPromptSource(task.promptSource)}`,
                             `创建时间: ${new Date(task.createdAt).toLocaleString('zh-CN')}`,
                             `更新时间: ${new Date(task.updatedAt).toLocaleString('zh-CN')}`,

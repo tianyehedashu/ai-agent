@@ -60,8 +60,8 @@ test('useChat tracks process timeline and attaches runId', async () => {
 })
 
 test.skip('session isolation: events from old stream are not applied after view session changes', async () => {
-  let resolveFirst: () => void
-  let resolveContinue: () => void
+  let resolveFirst!: () => void
+  let resolveContinue!: () => void
   const firstEventFired = new Promise<void>((r) => {
     resolveFirst = r
   })

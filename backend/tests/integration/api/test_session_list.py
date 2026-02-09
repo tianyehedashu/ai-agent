@@ -26,16 +26,14 @@ class TestSessionList:
         # 新用户可能没有会话，或者有默认会话
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_pagination(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_list_sessions_with_pagination(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 分页获取会话列表"""
         # Arrange - 创建多个会话
         session_ids = []
         for i in range(5):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
-                json={"title": f"Session {i+1}"},
+                json={"title": f"Session {i + 1}"},
                 headers=auth_headers,
             )
             session_ids.append(create_response.json()["id"])
@@ -112,9 +110,7 @@ class TestSessionList:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_list_sessions_skip_validation(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_list_sessions_skip_validation(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: skip 参数验证"""
         # Act - skip 为负数
         response = await dev_client.get("/api/v1/sessions/?skip=-1", headers=auth_headers)
@@ -123,9 +119,7 @@ class TestSessionList:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_list_sessions_response_format(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_list_sessions_response_format(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 会话列表响应格式"""
         # Arrange - 创建会话
         create_response = await dev_client.post(

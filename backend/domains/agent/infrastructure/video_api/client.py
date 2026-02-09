@@ -5,6 +5,7 @@ Video API Client - 视频生成 API 客户端
 """
 
 import asyncio
+import time
 from typing import Any
 
 import httpx
@@ -91,8 +92,6 @@ class VideoAPIClient:
         Raises:
             VideoAPIError: 获取 token 失败
         """
-        import time
-
         # 检查缓存的 token 是否有效（提前 5 分钟过期）
         if self._token and time.time() < self._token_expires_at - 300:
             return self._token
@@ -338,8 +337,6 @@ class VideoAPIClient:
         Raises:
             VideoAPIError: 任务失败或超时
         """
-        import time
-
         # 初始等待
         logger.info(
             "Waiting %d seconds before first poll for workflow_id=%s",

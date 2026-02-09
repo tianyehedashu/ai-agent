@@ -12,11 +12,12 @@ class MCPServerScope(str, Enum):
 
     每个 MCP 服务器封装不同的工具集
     """
-    LLM = "llm-server"                    # LLM 调用服务器
-    FILESYSTEM = "filesystem-server"      # 文件系统服务器
-    MEMORY = "memory-server"              # 记忆系统服务器
-    WORKFLOW = "workflow-server"          # 工作流服务器
-    CUSTOM = "custom-server"              # 自定义服务器
+
+    LLM = "llm-server"  # LLM 调用服务器
+    FILESYSTEM = "filesystem-server"  # 文件系统服务器
+    MEMORY = "memory-server"  # 记忆系统服务器
+    WORKFLOW = "workflow-server"  # 工作流服务器
+    CUSTOM = "custom-server"  # 自定义服务器
 
     @classmethod
     def from_name(cls, name: str) -> "MCPServerScope":

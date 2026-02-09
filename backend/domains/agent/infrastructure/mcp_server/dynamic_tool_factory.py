@@ -6,9 +6,13 @@ MCP Dynamic Tool Factory - 动态工具工厂
 """
 
 from collections.abc import Callable
+import json
 from typing import Any
 
+import httpx
+
 from domains.agent.domain.mcp.dynamic_tool import DynamicToolType
+from domains.agent.infrastructure.video_api.client import VideoAPIClient, VideoAPIError
 
 
 def build_http_call_fn(config: dict[str, Any]) -> Callable[..., Any]:
@@ -26,8 +30,6 @@ def build_http_call_fn(config: dict[str, Any]) -> Callable[..., Any]:
         body: dict[str, Any] | None = None,
         headers_override: dict[str, str] | None = None,
     ) -> str:
-        import httpx
-
         req_headers = dict(headers)
         if headers_override:
             req_headers.update(headers_override)
@@ -62,10 +64,6 @@ def build_amazon_video_submit_fn(config: dict[str, Any]) -> Callable[..., Any]:
         reference_images: list[str] | None = None,
         marketplace: str = "jp",
     ) -> str:
-        import json
-
-        from domains.agent.infrastructure.video_api.client import VideoAPIClient, VideoAPIError
-
         try:
             client = VideoAPIClient()
             workflow_id, run_id = await client.submit(
@@ -113,10 +111,6 @@ def build_amazon_video_poll_fn(config: dict[str, Any]) -> Callable[..., Any]:
         workflow_id: str,
         run_id: str,
     ) -> str:
-        import json
-
-        from domains.agent.infrastructure.video_api.client import VideoAPIClient, VideoAPIError
-
         try:
             client = VideoAPIClient()
             status, result = await client.poll(

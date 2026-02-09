@@ -444,4 +444,3 @@ class TestApiKeyEncryption:
 
         with pytest.raises(ValueError, match="encryption_key is required"):
             generator.decrypt_key("encrypted", None)  # 传入 None 应该触发我们的检查
-

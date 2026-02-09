@@ -59,7 +59,7 @@ backend/
 │   │   ├── domain/
 │   │   │   ├── types.py    # Message, AgentEvent, ToolCall
 │   │   │   └── entities/   # AgentEntity, SessionDomainService
-│   │   ├── application/    # AgentUseCase, ChatUseCase, SessionUseCase
+│   │   ├── application/    # AgentUseCase, ChatUseCase（依赖 SessionApplicationPort）
 │   │   ├── infrastructure/
 │   │   │   ├── llm/        # LLM 网关
 │   │   │   ├── memory/     # 记忆系统
@@ -105,8 +105,10 @@ from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 
 #### 2.3.3 业务组件导入
 ```python
-# Agent 域组件
-from domains.agent.application import ChatUseCase, SessionUseCase
+# Agent 域组件（Chat/Video 依赖 SessionApplicationPort，组合根注入 SessionUseCase）
+from domains.agent.application import ChatUseCase
+from domains.session.application import SessionUseCase
+from domains.session.application.ports import SessionApplicationPort
 from domains.agent.infrastructure.llm import LLMGateway
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
 ```

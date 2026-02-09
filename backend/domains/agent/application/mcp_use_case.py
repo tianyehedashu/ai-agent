@@ -5,10 +5,12 @@ MCP Use Case - MCP 管理用例
 """
 
 from datetime import datetime
+import json
 from typing import Any
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
+import tiktoken
 
 from domains.agent.domain.config.mcp_config import (
     MCPScope,
@@ -44,11 +46,7 @@ class MCPManagementUseCase:
 
     def _calculate_token_count(self, tool_config: Any) -> int:
         """计算工具定义的 Token 占用"""
-        import json
-
         try:
-            import tiktoken
-
             # 使用 GPT-4 的 tokenizer
             encoding = tiktoken.encoding_for_model("gpt-4")
 

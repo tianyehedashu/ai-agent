@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Print configured LLM models (by API keys)."""
+
 from bootstrap.config import settings
 from domains.agent.infrastructure.llm import get_configured_models
 

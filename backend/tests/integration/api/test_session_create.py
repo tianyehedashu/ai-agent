@@ -178,7 +178,7 @@ class TestSessionCreate:
         for i in range(3):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
-                json={"title": f"Session {i+1}"},
+                json={"title": f"Session {i + 1}"},
                 headers=auth_headers,
             )
             assert create_response.status_code == status.HTTP_201_CREATED

@@ -88,10 +88,10 @@ async def verify_mcp_access(
         )
 
     # 验证 API Key（延迟导入避免循环依赖，verify_mcp_access 在请求时调用）
-    from domains.identity.application.api_key_use_case import (
-        ApiKeyUseCase,  # pylint: disable=import-outside-toplevel
-    )
-    from libs.db.database import get_session_context  # pylint: disable=import-outside-toplevel
+    # pylint: disable=import-outside-toplevel
+    from domains.identity.application.api_key_use_case import ApiKeyUseCase
+    from libs.db.database import get_session_context
+    # pylint: enable=import-outside-toplevel
 
     async with get_session_context() as db:
         use_case = ApiKeyUseCase(db)

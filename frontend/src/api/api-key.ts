@@ -27,7 +27,7 @@ export const apiKeyApi = {
     skip?: number
     limit?: number
   }): Promise<ApiKey[]> {
-    return apiClient.get<ApiKey[]>('/api/v1/api-keys', options)
+    return apiClient.get<ApiKey[]>('/api/v1/api-keys/', options)
   },
 
   /**
@@ -37,7 +37,7 @@ export const apiKeyApi = {
    * @returns 包含完整 Key 的响应（仅此机会）
    */
   async create(data: ApiKeyCreateRequest): Promise<ApiKeyCreatedResponse> {
-    return apiClient.post<ApiKeyCreatedResponse>('/api/v1/api-keys', data)
+    return apiClient.post<ApiKeyCreatedResponse>('/api/v1/api-keys/', data)
   },
 
   /**

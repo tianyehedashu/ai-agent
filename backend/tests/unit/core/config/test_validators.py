@@ -2,7 +2,6 @@
 配置验证器单元测试
 """
 
-
 from libs.config.execution_config import (
     DockerConfig,
     ExecutionConfig,

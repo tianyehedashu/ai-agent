@@ -153,7 +153,9 @@ def create_embedding_service_from_settings() -> EmbeddingService:
             key = settings.dashscope_api_key
             api_key = key.get_secret_value() if hasattr(key, "get_secret_value") else key
             # DashScope embedding 使用 OpenAI 兼容模式的 endpoint
-            api_base = settings.dashscope_api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            api_base = (
+                settings.dashscope_api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            )
         elif ("text-embedding" in model_lower or "ada" in model_lower) and settings.openai_api_key:
             key = settings.openai_api_key
             api_key = key.get_secret_value() if hasattr(key, "get_secret_value") else key

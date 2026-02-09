@@ -2,7 +2,6 @@
 ExecutionConfigService 单元测试
 """
 
-
 import pytest
 
 from libs.config.env_resolver import EnvVarResolver

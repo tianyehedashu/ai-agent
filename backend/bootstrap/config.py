@@ -169,7 +169,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"]
     )
 
-    def model_post_init(self, __context: object) -> None:
+    def model_post_init(self, __context: object) -> None:  # pylint: disable=arguments-differ
         """初始化后处理：如果 jwt_secret_key 是默认值，则使用 jwt_secret 的值"""
         super().model_post_init(__context)
         # 如果 jwt_secret_key 仍然是默认值，且 jwt_secret 不是默认值，则使用 jwt_secret 的值

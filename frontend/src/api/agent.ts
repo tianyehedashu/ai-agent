@@ -11,7 +11,7 @@ export const agentApi = {
    * 获取 Agent 列表
    */
   list(page = 1, pageSize = 20): Promise<PaginatedResponse<Agent>> {
-    return apiClient.get<PaginatedResponse<Agent>>('/api/v1/agents', {
+    return apiClient.get<PaginatedResponse<Agent>>('/api/v1/agents/', {
       skip: (page - 1) * pageSize,
       limit: pageSize,
     })
@@ -28,7 +28,7 @@ export const agentApi = {
    * 创建 Agent
    */
   create(data: AgentCreateInput): Promise<Agent> {
-    return apiClient.post<Agent>('/api/v1/agents', data)
+    return apiClient.post<Agent>('/api/v1/agents/', data)
   },
 
   /**

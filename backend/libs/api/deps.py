@@ -110,10 +110,16 @@ async def get_title_service(db: DbSession) -> TitleUseCase:
 async def get_chat_service(
     db: DbSession,
     request: Request,
+    session_service: SessionUseCase = Depends(get_session_service),
 ) -> ChatUseCase:
     """获取对话服务"""
     checkpointer = getattr(request.app.state, "checkpointer", None)
-    return ChatUseCase(db, checkpointer=checkpointer)
+    return ChatUseCase(
+        db,
+        session_use_case=session_service,
+        session_use_case_factory=SessionUseCase,
+        checkpointer=checkpointer,
+    )
 
 
 async def get_checkpoint_service(db: DbSession) -> CheckpointService:
@@ -146,6 +152,9 @@ async def get_mcp_dynamic_prompt_service(db: DbSession) -> MCPDynamicPromptUseCa
     return MCPDynamicPromptUseCase(db)
 
 
-async def get_video_task_service(db: DbSession) -> VideoTaskUseCase:
+async def get_video_task_service(
+    db: DbSession,
+    session_service: SessionUseCase = Depends(get_session_service),
+) -> VideoTaskUseCase:
     """获取视频生成任务服务"""
-    return VideoTaskUseCase(db)
+    return VideoTaskUseCase(db, session_use_case=session_service)

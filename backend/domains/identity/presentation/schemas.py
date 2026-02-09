@@ -130,9 +130,18 @@ class CurrentUser(BaseModel):
         return self.is_admin
 
 
+class RefreshTokenRequest(BaseModel):
+    """Refresh Token 请求"""
+
+    model_config = ConfigDict(strict=True)
+
+    refresh_token: str = Field(..., description="刷新令牌")
+
+
 __all__ = [
     "CurrentUser",
     "PasswordChange",
+    "RefreshTokenRequest",
     "TokenResponse",
     "UserCreate",
     "UserLogin",

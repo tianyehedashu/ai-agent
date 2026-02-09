@@ -78,9 +78,7 @@ async def init_default_mcp_servers() -> None:
     async with get_session_context() as db:
         try:
             # 查询现有的系统级服务器
-            result = await db.execute(
-                select(MCPServer).where(MCPServer.scope == "system")
-            )
+            result = await db.execute(select(MCPServer).where(MCPServer.scope == "system"))
             existing_servers = result.scalars().all()
             existing_names = {server.name for server in existing_servers}
 
@@ -106,9 +104,7 @@ async def init_default_mcp_servers() -> None:
 
             if created_count > 0:
                 await db.commit()
-                logger.info(
-                    "Successfully created %d default MCP server(s)", created_count
-                )
+                logger.info("Successfully created %d default MCP server(s)", created_count)
             else:
                 logger.info("All default MCP servers already exist")
 

@@ -43,9 +43,7 @@ class TestSessionDelete:
         assert get_response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent_session(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_delete_nonexistent_session(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 删除不存在的会话"""
         # Arrange
         nonexistent_id = str(uuid.uuid4())
@@ -135,16 +133,14 @@ class TestSessionDelete:
         assert not any(s["id"] == session_id for s in sessions_after)
 
     @pytest.mark.asyncio
-    async def test_delete_multiple_sessions(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_delete_multiple_sessions(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 删除多个会话"""
         # Arrange - 创建多个会话
         session_ids = []
         for i in range(3):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
-                json={"title": f"Session {i+1}"},
+                json={"title": f"Session {i + 1}"},
                 headers=auth_headers,
             )
             session_ids.append(create_response.json()["id"])
@@ -166,9 +162,7 @@ class TestSessionDelete:
             assert get_response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_delete_session_with_messages(
-        self, dev_client: AsyncClient, auth_headers: dict
-    ):
+    async def test_delete_session_with_messages(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 删除包含消息的会话"""
         # Arrange - 创建会话并添加消息（通过聊天接口）
         create_response = await dev_client.post(

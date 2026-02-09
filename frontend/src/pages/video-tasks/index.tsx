@@ -5,21 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Clock, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
+import { sessionApi } from '@/api/session'
 import { videoTaskApi } from '@/api/videoTask'
+import { VIDEO_TASK_EXAMPLE_PROMPTS } from '@/constants/video-task'
+import { InterruptDialog } from '@/components/chat/interrupt-dialog'
+import { useChat } from '@/hooks/use-chat'
+import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import ChatMessages from '@/pages/chat/components/chat-messages'
+import { useChatStore } from '@/stores/chat'
 import type { VideoGenTask } from '@/types/video-task'
 
 import VideoTaskCreateForm from './components/create-form'
 import VideoTaskDetailDialog from './components/detail-dialog'
 import TaskTimelineCard from './components/task-timeline-card'
-
-/** 示例提示 - 简短、有吸引力 */
-const examplePrompts = [
-  { short: '咖啡机', full: '一款精致的咖啡机，展示研磨咖啡豆、萃取浓缩咖啡的全过程' },
-  { short: '智能手表', full: '智能手表在手腕上，展示表盘切换、心率监测、消息提醒功能' },
-  { short: '无线耳机', full: '无线耳机从充电盒中取出，佩戴入耳，展示触控操作和降噪效果' },
-  { short: '护肤精华', full: '护肤精华液滴落在手背，轻柔涂抹，展示吸收过程和肌肤光泽' },
-]
 
 /**
  * 视频生成页面 - 聊天流布局
@@ -33,10 +32,40 @@ const examplePrompts = [
 export default function VideoTasksPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const navigate = useNavigate()
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+  const { setCurrentSession } = useChatStore()
+
   const [selectedTask, setSelectedTask] = useState<VideoGenTask | null>(null)
   const [selectedExample, setSelectedExample] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const queryClient = useQueryClient()
+  const prevSessionIdRef = useRef<string | undefined>(undefined)
+
+  // 集成 useChat hook - 获取消息状态和发送功能
+  const {
+    messages,
+    isLoading: isChatLoading,
+    streamingContent,
+    pendingToolCalls,
+    interrupt,
+    processRuns,
+    currentRunId,
+    resumeExecution,
+    clearMessages,
+    loadMessages,
+  } = useChat({
+    sessionId,
+    onError: (error) => {
+      toast({
+        title: '错误',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+    onSessionCreated: (id) => {
+      navigate(`/video-tasks/${id}`)
+    },
+  })
 
   // 获取任务列表（仅在有 sessionId 时加载，无 sessionId 为新建页面）
   const { data: tasksData } = useQuery({
@@ -56,6 +85,57 @@ export default function VideoTasksPage(): React.JSX.Element {
       (t.status === 'completed' && !t.videoUrl)
   )
 
+  // 加载会话信息和历史消息
+  useEffect(() => {
+    const prevSessionId = prevSessionIdRef.current
+    prevSessionIdRef.current = sessionId
+
+    // 切换会话时清除消息
+    const isLeavingOrSwitching =
+      prevSessionId !== undefined && (sessionId === undefined || prevSessionId !== sessionId)
+    if (isLeavingOrSwitching) {
+      clearMessages()
+    }
+
+    let cancelled = false
+
+    if (sessionId) {
+      // 加载会话信息
+      sessionApi
+        .get(sessionId)
+        .then((session) => {
+          if (!cancelled) {
+            setCurrentSession(session)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error('Failed to load session:', error)
+          }
+        })
+
+      // 加载历史消息
+      sessionApi
+        .getMessages(sessionId)
+        .then((msgs) => {
+          if (!cancelled) {
+            loadMessages(msgs)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error('Failed to load messages:', error)
+          }
+        })
+    } else {
+      setCurrentSession(null)
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, setCurrentSession, clearMessages, loadMessages])
+
   // 轮询进行中的任务（仅在有 sessionId 时）
   useEffect(() => {
     if (!sessionId || runningTasks.length === 0) return
@@ -68,7 +148,9 @@ export default function VideoTasksPage(): React.JSX.Element {
       })
     }, 5000) // 5秒轮询
 
-    return () => { clearInterval(pollInterval); }
+    return () => {
+      clearInterval(pollInterval)
+    }
   }, [sessionId, runningTasks, queryClient])
 
   // 任务创建后的处理
@@ -80,24 +162,26 @@ export default function VideoTasksPage(): React.JSX.Element {
         // 刷新 sessions 列表（侧栏显示新会话）
         void queryClient.invalidateQueries({ queryKey: ['sessions'] })
       } else if (sessionId) {
-        // 刷新当前会话的任务列表
+        // 刷新当前会话的任务列表和消息
         void queryClient.invalidateQueries({
           queryKey: ['video-tasks', 'session', sessionId],
         })
+        // 重新加载消息（因为后端会保存用户消息）
+        sessionApi.getMessages(sessionId).then(loadMessages).catch(console.error)
       }
 
       // 清空选中的示例
       setSelectedExample(null)
 
-      // 自动滚动到顶部（最新任务）
+      // 自动滚动到底部（最新内容）
       setTimeout(() => {
         scrollContainerRef.current?.scrollTo({
-          top: 0,
+          top: scrollContainerRef.current.scrollHeight,
           behavior: 'smooth',
         })
       }, 100)
     },
-    [queryClient, sessionId, navigate]
+    [queryClient, sessionId, navigate, loadMessages]
   )
 
   // 点击示例填充输入框
@@ -105,7 +189,7 @@ export default function VideoTasksPage(): React.JSX.Element {
     setSelectedExample(prompt)
   }
 
-  const hasRecentTasks = recentTasks.length > 0
+  const hasContent = messages.length > 0 || recentTasks.length > 0
 
   return (
     <div className="relative flex h-[calc(100vh-3.5rem)] flex-col">
@@ -120,45 +204,64 @@ export default function VideoTasksPage(): React.JSX.Element {
         </Link>
       </header>
 
-      {/* 任务列表区 - 可滚动 */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-6 sm:px-6"
-      >
+      {/* 内容区 - 消息和任务混合显示 */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
-          {!hasRecentTasks ? (
-            /* 欢迎状态 - 无任务时显示 */
+          {!hasContent ? (
+            /* 欢迎状态 - 无内容时显示 */
             <WelcomeState
               key="welcome"
               onExampleClick={handleExampleClick}
               selectedExample={selectedExample}
             />
           ) : (
-            /* 任务时间线 */
+            /* 聊天消息和任务卡片 */
             <motion.div
-              key="timeline"
+              key="content"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mx-auto max-w-2xl space-y-4 pb-4 pt-12"
+              className="flex flex-col"
             >
-              {recentTasks.map((task) => (
-                <TaskTimelineCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => { setSelectedTask(task); }}
-                />
-              ))}
+              {/* 消息历史区域 */}
+              {messages.length > 0 && (
+                <div className="flex-1">
+                  <ChatMessages
+                    messages={messages}
+                    streamingContent={streamingContent}
+                    isLoading={isChatLoading}
+                    pendingToolCalls={pendingToolCalls}
+                    processRuns={processRuns}
+                    currentRunId={currentRunId}
+                  />
+                </div>
+              )}
 
-              {/* 加载更多提示 */}
-              <div className="flex justify-center py-4">
-                <Link
-                  to="/video-tasks/history"
-                  className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-                >
-                  查看更多历史 →
-                </Link>
-              </div>
+              {/* 视频任务卡片区域 */}
+              {recentTasks.length > 0 && (
+                <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
+                  <div className="mb-2 text-xs text-muted-foreground/60">视频任务</div>
+                  {recentTasks.map((task) => (
+                    <TaskTimelineCard
+                      key={task.id}
+                      task={task}
+                      onClick={() => {
+                        setSelectedTask(task)
+                      }}
+                    />
+                  ))}
+
+                  {/* 加载更多提示 */}
+                  <div className="flex justify-center py-4">
+                    <Link
+                      to="/video-tasks/history"
+                      className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                    >
+                      查看更多历史 →
+                    </Link>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -167,8 +270,8 @@ export default function VideoTasksPage(): React.JSX.Element {
       {/* 输入框 - 固定底部 */}
       <div className="flex-none border-t border-border/30 bg-background/95 px-4 py-4 backdrop-blur-xl sm:px-6">
         <div className="mx-auto max-w-2xl">
-          {/* 示例提示 - 仅在有任务时显示在输入框上方 */}
-          {hasRecentTasks && (
+          {/* 示例提示 - 仅在有内容时显示在输入框上方 */}
+          {hasContent && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -176,10 +279,12 @@ export default function VideoTasksPage(): React.JSX.Element {
             >
               <span className="text-xs text-muted-foreground/50">试试：</span>
               <div className="flex flex-wrap justify-center gap-1.5">
-                {examplePrompts.map((prompt, i) => (
+                {VIDEO_TASK_EXAMPLE_PROMPTS.map((prompt, i) => (
                   <button
                     key={i}
-                    onClick={() => { handleExampleClick(prompt.full); }}
+                    onClick={() => {
+                      handleExampleClick(prompt.full)
+                    }}
                     className={cn(
                       'rounded-full px-3 py-1 text-xs transition-all duration-200',
                       selectedExample === prompt.full
@@ -196,6 +301,7 @@ export default function VideoTasksPage(): React.JSX.Element {
 
           <VideoTaskCreateForm
             onTaskCreated={handleTaskCreated}
+            onSessionForbidden={() => navigate('/video-tasks')}
             disabled={false}
             initialPrompt={selectedExample ?? undefined}
             sessionId={sessionId}
@@ -211,6 +317,18 @@ export default function VideoTasksPage(): React.JSX.Element {
           if (!open) setSelectedTask(null)
         }}
       />
+
+      {/* HITL 中断对话框 */}
+      {interrupt && (
+        <InterruptDialog
+          open={true}
+          pendingAction={interrupt.pendingAction}
+          reason={interrupt.reason}
+          onApprove={() => resumeExecution('approve')}
+          onReject={() => resumeExecution('reject')}
+          onModify={(args) => resumeExecution('modify', args)}
+        />
+      )}
     </div>
   )
 }
@@ -255,9 +373,7 @@ function WelcomeState({
         <h1 className="mb-3 text-3xl font-semibold tracking-tight text-foreground">
           创造视觉故事
         </h1>
-        <p className="text-base text-muted-foreground/80">
-          描述你的想象，AI 将其转化为视频
-        </p>
+        <p className="text-base text-muted-foreground/80">描述你的想象，AI 将其转化为视频</p>
       </motion.div>
 
       {/* 示例提示 */}
@@ -269,10 +385,12 @@ function WelcomeState({
         <div className="flex flex-col items-center gap-3">
           <span className="text-xs text-muted-foreground/50">或者试试这些：</span>
           <div className="flex flex-wrap justify-center gap-2">
-            {examplePrompts.map((prompt, i) => (
+            {VIDEO_TASK_EXAMPLE_PROMPTS.map((prompt, i) => (
               <button
                 key={i}
-                onClick={() => { onExampleClick(prompt.full); }}
+                onClick={() => {
+                  onExampleClick(prompt.full)
+                }}
                 className={cn(
                   'rounded-full border px-4 py-2 text-sm transition-all duration-200',
                   selectedExample === prompt.full

@@ -6,6 +6,7 @@ Create Date: 2026-01-27 17:00:00.000000
 
 添加 MCP 服务器的 description 和 category 字段
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa

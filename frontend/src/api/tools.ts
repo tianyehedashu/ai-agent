@@ -20,7 +20,7 @@ export const toolsApi = {
    * @param category 可选，按类别筛选（如 code, file, search, external）
    */
   list(category?: string): Promise<ToolDefinition[]> {
-    return apiClient.get<ToolDefinition[]>('/api/v1/tools', category ? { category } : undefined)
+    return apiClient.get<ToolDefinition[]>('/api/v1/tools/', category ? { category } : undefined)
   },
 
   /**

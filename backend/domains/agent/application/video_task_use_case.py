@@ -2,6 +2,7 @@
 Video Task Use Case - 视频生成任务用例
 
 提供视频生成任务的业务逻辑：创建、查询、更新、轮询等。
+会话创建与所有权校验统一通过 SessionUseCase，不直接依赖 Session 的 Infrastructure。
 """
 
 from typing import Any
@@ -9,24 +10,63 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.agent.domain.services.title_rules import is_default_title
+from domains.agent.domain.types import MessageRole
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask, VideoGenTaskStatus
 from domains.agent.infrastructure.repositories.video_gen_task_repository import (
     VideoGenTaskRepository,
 )
-from domains.session.infrastructure.repositories import SessionRepository
+from domains.agent.infrastructure.video_api.client import VideoAPIClient
+from domains.identity.domain.types import Principal
+from domains.session.application.ports import SessionApplicationPort
+from domains.session.domain.entities import SessionOwner
 from exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 视频任务会话默认标题（新建且无 prompt 时使用）
+VIDEO_SESSION_DEFAULT_TITLE = "视频生成"
+
+
+async def _ensure_session_title(
+    session_use_case: SessionApplicationPort,
+    session_id: str,
+    current_title: str | None,
+    *,
+    is_new: bool,
+    prompt_text: str | None,
+) -> None:
+    """在创建视频任务时补全会话标题，避免侧栏一直显示「新对话」。
+
+    - 已有会话且无/默认标题且有 prompt_text：用 prompt 前 50 字作为标题。
+    - 新建会话且无标题（如 prompt 为空）：设为「视频生成」。
+    """
+    if not session_id:
+        return
+    if is_new:
+        if not current_title or not current_title.strip():
+            await session_use_case.update_session(session_id, title=VIDEO_SESSION_DEFAULT_TITLE)
+        return
+    if not prompt_text or not prompt_text.strip():
+        return
+    if current_title and not is_default_title(current_title):
+        return
+    title = prompt_text[:50] + ("..." if len(prompt_text) > 50 else "")
+    await session_use_case.update_session(session_id, title=title)
+
 
 class VideoTaskUseCase:
     """视频生成任务用例"""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        session_use_case: SessionApplicationPort,
+    ) -> None:
         self.db = db
         self.repo = VideoGenTaskRepository(db)
-        self.session_repo = SessionRepository(db)
+        self.session_use_case = session_use_case
 
     async def list_tasks(
         self,
@@ -82,8 +122,7 @@ class VideoTaskUseCase:
 
     async def create_task(
         self,
-        user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
+        principal_id: str,
         session_id: uuid.UUID | None = None,
         prompt_text: str | None = None,
         prompt_source: str | None = None,
@@ -98,9 +137,8 @@ class VideoTaskUseCase:
         """创建视频生成任务
 
         Args:
-            user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
-            session_id: 关联会话 ID（如果未提供且 auto_create_session=True，将自动创建）
+            principal_id: 当前用户 Principal ID（与 Chat 一致，含 anonymous- 前缀时表示匿名）
+            session_id: 关联会话 ID（如果未提供且 auto_create_session=True，将自动创建；若提供则校验所有权）
             prompt_text: 视频生成提示词
             prompt_source: 提示词来源
             reference_images: 参考图片 URL 列表
@@ -109,19 +147,24 @@ class VideoTaskUseCase:
             duration: 视频时长（秒）
             auto_submit: 是否自动提交到厂商
             auto_create_session: 如果未提供 session_id，是否自动创建会话
+            vendor_creator_id: 厂商系统操作用户 ID（可选）
 
         Returns:
             创建的任务
 
         Raises:
             ValidationError: 参数验证失败
+            PermissionDeniedError: 提供的 session_id 不属于当前用户
         """
-        # 验证所有权参数
-        if not user_id and not anonymous_user_id:
+        if not principal_id or not principal_id.strip():
             raise ValidationError(
-                "Either user_id or anonymous_user_id is required",
+                "principal_id is required",
                 code="MISSING_OWNER",
             )
+
+        owner = SessionOwner.from_principal_id(
+            principal_id, Principal.is_anonymous_id(principal_id)
+        )
 
         # 验证 marketplace
         valid_marketplaces = {"jp", "us", "de", "uk", "fr", "it", "es"}
@@ -148,25 +191,34 @@ class VideoTaskUseCase:
                 code="INVALID_DURATION",
             )
 
-        # 如果未提供 session_id 且启用自动创建，创建新会话
-        actual_session_id = session_id
-        if not session_id and auto_create_session:
-            # 生成默认标题（取提示词前 50 字符）
+        # 解析会话：复用 Session 域统一入口（有 session_id 则校验所有权，无则按需创建）
+        actual_session_id: uuid.UUID | None = None
+        if session_id or auto_create_session:
             default_title = None
-            if prompt_text:
+            if not session_id and prompt_text:
                 default_title = prompt_text[:50] + ("..." if len(prompt_text) > 50 else "")
-
-            session = await self.session_repo.create(
-                user_id=user_id,
-                anonymous_user_id=anonymous_user_id,
+            session, is_new = await self.session_use_case.get_or_create_session_for_principal(
+                principal_id=principal_id,
+                session_id=str(session_id) if session_id else None,
                 title=default_title,
             )
             actual_session_id = session.id
-            logger.info("Auto-created session %s for video task", actual_session_id)
+            if is_new:
+                logger.info("Auto-created session %s for video task", actual_session_id)
+
+            # 补全会话标题，避免视频任务对话一直显示「新对话」
+            if actual_session_id:
+                await _ensure_session_title(
+                    self.session_use_case,
+                    str(actual_session_id),
+                    session.title,
+                    is_new=is_new,
+                    prompt_text=prompt_text,
+                )
 
         task = await self.repo.create(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+            user_id=owner.user_id,
+            anonymous_user_id=owner.anonymous_user_id,
             session_id=actual_session_id,
             prompt_text=prompt_text,
             prompt_source=prompt_source,
@@ -176,13 +228,19 @@ class VideoTaskUseCase:
             duration=duration,
         )
 
-        # 更新会话的视频任务计数
         if actual_session_id:
-            await self.session_repo.increment_video_task_count(actual_session_id)
+            await self.session_use_case.increment_video_task_count(str(actual_session_id))
+
+        if prompt_text and actual_session_id:
+            await self.session_use_case.add_message(
+                session_id=str(actual_session_id),
+                role=MessageRole.USER,
+                content=prompt_text,
+                metadata={"source": "video_task", "task_id": str(task.id)},
+            )
 
         await self.db.commit()
 
-        # 如果自动提交，调用提交逻辑
         if auto_submit and prompt_text:
             task = await self._submit_to_vendor(task, vendor_creator_id=vendor_creator_id)
             await self.db.commit()
@@ -266,8 +324,6 @@ class VideoTaskUseCase:
 
         # 如果任务已完成但 video_url 为空，尝试从 result 中提取
         if task.status == VideoGenTaskStatus.COMPLETED and not task.video_url and task.result:
-            from domains.agent.infrastructure.video_api.client import VideoAPIClient
-
             video_url = VideoAPIClient.extract_video_url(task.result)
             if video_url:
                 task.video_url = video_url
@@ -378,8 +434,6 @@ class VideoTaskUseCase:
         self, task: VideoGenTask, vendor_creator_id: int | None = None
     ) -> VideoGenTask:
         """提交任务到厂商（内部方法），通过 VideoAPIClient 调用 GIIKIN API。"""
-        from domains.agent.infrastructure.video_api.client import VideoAPIClient
-
         try:
             client = VideoAPIClient()
             workflow_id, run_id = await client.submit(
@@ -411,8 +465,6 @@ class VideoTaskUseCase:
 
     async def _poll_vendor(self, task: VideoGenTask) -> VideoGenTask:
         """轮询厂商状态（内部方法），通过 VideoAPIClient 查询 GIIKIN 工作流状态。"""
-        from domains.agent.infrastructure.video_api.client import VideoAPIClient
-
         try:
             client = VideoAPIClient()
             status, result = await client.poll(

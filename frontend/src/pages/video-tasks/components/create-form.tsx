@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlus, Loader2, X, AlertCircle, Plus, Sparkles, Clock } from 'lucide-react'
 
+import { ApiError } from '@/api/client'
 import { videoTaskApi } from '@/api/videoTask'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +20,8 @@ import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task
 
 interface VideoTaskCreateFormProps {
   onTaskCreated?: (task: VideoGenTask) => void
+  /** 创建任务因会话无权限（403）时回调，可由父组件用于跳转到新建页 */
+  onSessionForbidden?: () => void
   disabled?: boolean
   initialPrompt?: string
   sessionId?: string
@@ -47,6 +50,7 @@ const getDurations = (model: VideoModel): VideoDuration[] => {
  */
 export default function VideoTaskCreateForm({
   onTaskCreated,
+  onSessionForbidden,
   disabled = false,
   initialPrompt,
   sessionId,
@@ -149,11 +153,21 @@ export default function VideoTaskCreateForm({
       setShowImageInput(false)
     },
     onError: (error) => {
-      toast({
-        variant: 'destructive',
-        title: '创建失败',
-        description: error instanceof Error ? error.message : '未知错误',
-      })
+      const is403 = error instanceof ApiError && error.status === 403
+      if (is403) {
+        toast({
+          variant: 'destructive',
+          title: '无权限使用该会话',
+          description: '请在自己的会话中创建，或前往新建页面创建。',
+        })
+        onSessionForbidden?.()
+      } else {
+        toast({
+          variant: 'destructive',
+          title: '创建失败',
+          description: error instanceof Error ? error.message : '未知错误',
+        })
+      }
     },
   })
 

@@ -17,10 +17,15 @@ import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { ProcessEvent, ProcessEventKind } from '@/types'
 
+import { isVideoTaskToolName, parseVideoTaskOutput } from './tool-block-utils'
+import { VideoTaskBlock } from './video-task-block'
+
 interface ProcessPanelProps {
   events: ProcessEvent[]
   /** 默认是否展开，默认 false（折叠） */
   defaultExpanded?: boolean
+  /** 当前会话 ID，供视频任务块跳转链接使用 */
+  sessionId?: string
 }
 
 type IconType = (props: { className?: string }) => React.JSX.Element
@@ -47,6 +52,9 @@ interface DisplayEvent {
   timestamp: string
   /** 聚合的事件数量（用于连续相同类型事件） */
   count?: number
+  /** 按类型展示：视频任务块，需配合 taskId */
+  customRender?: 'video_task'
+  taskId?: string
 }
 
 /** 将原始事件转换为展示事件，智能聚合 */
@@ -163,12 +171,13 @@ function convertToDisplayEvent(event: ProcessEvent): DisplayEvent | null {
       const output = payload.output
       const error = payload.error
       const toolCallId = payload.tool_call_id ?? payload.toolCallId
+      const toolName = payload.tool_name ?? payload.toolName
       const durationMs = payload.duration_ms
 
       if (success) {
         const outputStr = typeof output === 'string' ? output : ''
         const durationStr = typeof durationMs === 'number' ? ` (${String(durationMs)}ms)` : ''
-        return {
+        const base: DisplayEvent = {
           id: event.id,
           kind: 'tool_result',
           title: `成功${durationStr}`,
@@ -177,6 +186,14 @@ function convertToDisplayEvent(event: ProcessEvent): DisplayEvent | null {
           isSuccess: true,
           timestamp: event.timestamp,
         }
+        const nameStr = typeof toolName === 'string' ? toolName : ''
+        if (isVideoTaskToolName(nameStr)) {
+          const parsed = parseVideoTaskOutput(outputStr)
+          if (parsed) {
+            return { ...base, customRender: 'video_task', taskId: parsed.taskId }
+          }
+        }
+        return base
       } else {
         const errorStr =
           typeof error === 'string' && error
@@ -355,6 +372,7 @@ function ProcessEventItem({
 export function ProcessPanel({
   events,
   defaultExpanded = false,
+  sessionId,
 }: Readonly<ProcessPanelProps>): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [isFullHeight, setIsFullHeight] = useState(false) // 是否展开全部（无高度限制）
@@ -426,14 +444,22 @@ export function ProcessPanel({
             !isFullHeight && 'max-h-64'
           )}
         >
-          {displayEvents.map((event) => (
-            <ProcessEventItem
-              key={event.id}
-              event={event}
-              isCompleted={isCompleted}
-              compact={displayEvents.length > 10 && !isFullHeight}
-            />
-          ))}
+          {displayEvents.map((event) =>
+            event.customRender === 'video_task' && event.taskId ? (
+              <VideoTaskBlock
+                key={event.id}
+                taskId={event.taskId}
+                sessionId={sessionId}
+              />
+            ) : (
+              <ProcessEventItem
+                key={event.id}
+                event={event}
+                isCompleted={isCompleted}
+                compact={displayEvents.length > 10 && !isFullHeight}
+              />
+            )
+          )}
         </div>
       )}
 

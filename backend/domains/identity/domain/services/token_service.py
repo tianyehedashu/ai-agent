@@ -19,6 +19,7 @@ class TokenPair:
     refresh_token: str
     expires_in: int  # 过期时间（秒）
 
+
 class TokenService:
     """Token 领域服务
 
@@ -38,12 +39,14 @@ class TokenService:
         strategy = get_jwt_strategy()
 
         # 使用 FastAPI Users 的 JWT strategy 创建 access token
+        # JWTStrategy 使用 jwt_expire_hours * 3600 作为 lifetime_seconds
         access_token = await strategy.write_token(user)
 
-        # 创建 refresh token
+        # 创建 refresh token（有效期 refresh_token_expire_days）
         refresh_token = create_refresh_token(str(user.id))
 
-        expires_in = settings.access_token_expire_minutes * 60
+        # expires_in 与 JWTStrategy 的实际 lifetime 保持一致
+        expires_in = settings.jwt_expire_hours * 3600
 
         return TokenPair(
             access_token=access_token,

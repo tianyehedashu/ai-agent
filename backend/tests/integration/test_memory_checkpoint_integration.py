@@ -17,7 +17,6 @@ from bootstrap.config import settings
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
-from libs.db.vector import get_vector_store
 
 
 @pytest.fixture
@@ -27,9 +26,11 @@ async def llm_gateway():
 
 
 @pytest.fixture
-async def vector_store():
-    """创建向量存储实例（使用项目默认配置）"""
-    return get_vector_store()
+async def vector_store(tmp_path):
+    """创建向量存储实例。集成测试使用独立目录，避免并行或跨测试污染。"""
+    from libs.db.vector import ChromaStore
+
+    return ChromaStore(persist_directory=str(tmp_path / "chroma"))
 
 
 @pytest.fixture

@@ -4,11 +4,17 @@ Logging Utilities - 日志工具
 架构说明：
 - get_logger() 是无依赖的，可以被任何模块安全导入
 - setup_logging() 需要 settings，在应用启动时调用
+- set_trace_context/clear_trace_context 用于 Trace ID 中间件注入与清理
 """
 
+import contextlib
+import contextvars
 import logging
 import os
 import sys
+
+# 当前请求的 Trace ID，由 TraceIdMiddleware 设置
+_trace_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("trace_id", default=None)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -53,6 +59,22 @@ def setup_logging(
     # 设置第三方库日志级别
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def set_trace_context(trace_id: str | None = None) -> None:
+    """设置当前上下文的 Trace ID（供 TraceIdMiddleware 使用）"""
+    _trace_id_var.set(trace_id)
+
+
+def clear_trace_context() -> None:
+    """清除当前上下文的 Trace ID"""
+    with contextlib.suppress(LookupError):
+        _trace_id_var.set(None)
+
+
+def get_trace_id() -> str | None:
+    """获取当前上下文的 Trace ID"""
+    return _trace_id_var.get()
 
 
 class LoggerMixin:

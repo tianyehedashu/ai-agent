@@ -2,10 +2,9 @@
 MCP Dynamic Tool Factory 单元测试
 
 验证 build_tool_fn 根据 tool_type 与 config 生成可调用的 async 函数。
-闭包内 import httpx，测试通过 patch sys.modules['httpx'] 模拟。
+dynamic_tool_factory 在模块顶层 import httpx，需 patch 其所在模块的 httpx 才能生效。
 """
 
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,9 +15,12 @@ from domains.agent.infrastructure.mcp_server.dynamic_tool_factory import (
     build_tool_fn,
 )
 
+# Patch 目标：实现里在 dynamic_tool_factory 模块内使用 httpx
+_HTTPX_PATCH_TARGET = "domains.agent.infrastructure.mcp_server.dynamic_tool_factory.httpx"
+
 
 def _make_httpx_mock(response_text: str = "ok"):
-    """构造 mock httpx 模块，闭包内 import httpx 会从 sys.modules 取"""
+    """构造 mock httpx 模块，供 patch(_HTTPX_PATCH_TARGET) 使用"""
     mock_response = MagicMock()
     mock_response.text = response_text
     mock_response.raise_for_status = MagicMock()
@@ -47,7 +49,7 @@ class TestBuildHttpCallFn:
     async def test_http_call_get_makes_request(self):
         """http_call GET 请求：mock httpx 断言 url/method"""
         mock_httpx, mock_client = _make_httpx_mock("ok")
-        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+        with patch(_HTTPX_PATCH_TARGET, mock_httpx):
             fn = build_http_call_fn({"url": "https://example.com/api", "method": "GET"})
             result = await fn()
             assert result == "ok"
@@ -57,7 +59,7 @@ class TestBuildHttpCallFn:
     async def test_http_call_post_with_body(self):
         """http_call POST 请求：config 中 body 作为默认 body"""
         mock_httpx, mock_client = _make_httpx_mock("created")
-        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+        with patch(_HTTPX_PATCH_TARGET, mock_httpx):
             fn = build_http_call_fn(
                 {
                     "url": "https://example.com/api",
@@ -75,7 +77,7 @@ class TestBuildHttpCallFn:
     async def test_http_call_headers_from_config(self):
         """http_call 使用 config 中的 headers"""
         mock_httpx, mock_client = _make_httpx_mock("ok")
-        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+        with patch(_HTTPX_PATCH_TARGET, mock_httpx):
             fn = build_http_call_fn(
                 {
                     "url": "https://example.com/api",
@@ -114,7 +116,7 @@ class TestBuildToolFn:
     async def test_http_call_integration_mock(self):
         """build_tool_fn('http_call', config) 生成的函数可正常请求"""
         mock_httpx, mock_client = _make_httpx_mock("pong")
-        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+        with patch(_HTTPX_PATCH_TARGET, mock_httpx):
             fn = build_tool_fn(
                 "http_call",
                 {"url": "https://api.test/ping", "method": "GET"},

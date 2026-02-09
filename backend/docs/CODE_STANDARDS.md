@@ -30,7 +30,7 @@ backend/
 │   │   │   ├── types.py    # Message, AgentEvent, ToolCall
 │   │   │   ├── entities/   # AgentEntity, SessionDomainService
 │   │   │   └── repositories/ # 仓储接口
-│   │   ├── application/    # AgentUseCase, ChatUseCase, SessionUseCase
+│   │   ├── application/    # AgentUseCase, ChatUseCase（依赖 SessionApplicationPort，组合根注入 SessionUseCase）
 │   │   └── infrastructure/
 │   │       ├── llm/        # LLM 网关
 │   │       ├── memory/     # 记忆系统
@@ -84,8 +84,9 @@ from domains.identity.presentation.schemas import CurrentUser
 # ✅ 从 agent 域导入消息/事件类型
 from domains.agent.domain.types import Message, AgentEvent, EventType, AgentConfig, ToolCall
 
-# ✅ 从 session 域导入会话相关组件
+# ✅ 从 session 域导入会话相关组件（Agent UseCase 依赖 SessionApplicationPort，组合根注入 SessionUseCase）
 from domains.session.application import SessionUseCase, TitleUseCase
+from domains.session.application.ports import SessionApplicationPort
 from domains.session.infrastructure.models import Session
 
 # ✅ 从 agent 域导入基础设施组件

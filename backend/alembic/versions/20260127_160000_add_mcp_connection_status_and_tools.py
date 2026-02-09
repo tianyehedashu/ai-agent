@@ -6,6 +6,7 @@ Create Date: 2026-01-27 16:00:00.000000
 
 添加 MCP 服务器连接状态和工具列表字段
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -58,9 +59,7 @@ def upgrade() -> None:
         if "last_error" not in columns:
             op.add_column(
                 "mcp_servers",
-                sa.Column(
-                    "last_error", sa.Text(), nullable=True, comment="最后错误信息"
-                ),
+                sa.Column("last_error", sa.Text(), nullable=True, comment="最后错误信息"),
             )
 
         if "available_tools" not in columns:

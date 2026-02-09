@@ -31,16 +31,18 @@ const AUTH_STORAGE_KEY = 'auth-storage'
 interface AuthState {
   // Token 状态
   token: string | null
+  refreshToken: string | null
   anonymousUserId: string | null
 
   // Token 操作
   setToken: (token: string | null) => void
+  setRefreshToken: (token: string | null) => void
   setAnonymousUserId: (id: string | null) => void
 
   // 清除所有认证信息
   clearAuth: () => void
 
-  // 处理 401 错误（清除 token）
+  // 处理 401 错误（清除 access token，保留 refresh token 供续期）
   handleUnauthorized: () => void
 }
 
@@ -49,11 +51,17 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       // 初始状态
       token: null,
+      refreshToken: null,
       anonymousUserId: null,
 
       // 设置 JWT Token
       setToken: (token) => {
         set({ token })
+      },
+
+      // 设置 Refresh Token
+      setRefreshToken: (token) => {
+        set({ refreshToken: token })
       },
 
       // 设置匿名用户 ID
@@ -63,15 +71,15 @@ export const useAuthStore = create<AuthState>()(
 
       // 清除所有认证信息（用于登出）
       clearAuth: () => {
-        set({ token: null, anonymousUserId: null })
+        set({ token: null, refreshToken: null, anonymousUserId: null })
       },
 
       // 处理 401 错误
-      // 仅在有 token 时清除，避免无限循环
+      // 仅清除 access token，保留 refresh token 供 apiClient 自动续期
       handleUnauthorized: () => {
         const { token } = get()
         if (token) {
-          console.warn('[AuthStore] Received 401, clearing invalid token')
+          console.warn('[AuthStore] Received 401, clearing invalid access token')
           set({ token: null })
         }
       },
@@ -79,9 +87,9 @@ export const useAuthStore = create<AuthState>()(
     {
       name: AUTH_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      // 只持久化 token 和 anonymousUserId
       partialize: (state) => ({
         token: state.token,
+        refreshToken: state.refreshToken,
         anonymousUserId: state.anonymousUserId,
       }),
     }
@@ -90,9 +98,13 @@ export const useAuthStore = create<AuthState>()(
 
 // 导出便捷方法，供非 React 环境使用（如 apiClient）
 export const getAuthToken = (): string | null => useAuthStore.getState().token
+export const getRefreshToken = (): string | null => useAuthStore.getState().refreshToken
 export const getAnonymousUserId = (): string | null => useAuthStore.getState().anonymousUserId
 export const setAuthToken = (token: string | null): void => {
   useAuthStore.getState().setToken(token)
+}
+export const setRefreshToken = (token: string | null): void => {
+  useAuthStore.getState().setRefreshToken(token)
 }
 export const setAnonymousUserId = (id: string | null): void => {
   useAuthStore.getState().setAnonymousUserId(id)

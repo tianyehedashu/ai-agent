@@ -38,7 +38,7 @@ function createMockResponse(overrides: {
 }
 
 // 重新导入以使用 mock
-import { getAuthToken } from '@/stores/auth'
+import { getAuthToken, getRefreshToken, setRefreshToken } from '@/stores/auth'
 
 import { apiClient, ApiError } from './client'
 
@@ -239,36 +239,143 @@ describe('ApiClient', () => {
     })
   })
 
-  describe('Token 降级检测', () => {
-    it('应该在收到 X-Token-Degraded 响应头时清除过期 token 并派发事件', async () => {
-      // Arrange: 设置一个 token（模拟已登录状态）
+  describe('Token 过期与自动续期', () => {
+    afterEach(() => {
+      apiClient.setToken(null)
+      setRefreshToken(null)
+    })
+
+    it('401 + 有 refresh_token 时应自动续期并重试请求', async () => {
+      // Arrange: 设置过期 access_token 和有效 refresh_token
       apiClient.setToken('expired-token')
+      setRefreshToken('valid-refresh-token')
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
 
+      // 第1次 fetch: 原始请求 → 401
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Token expired' }),
+        })
+      )
+      // 第2次 fetch: refresh 请求 → 200 + 新 token pair
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           ok: true,
-          json: () => Promise.resolve({ id: 'anon', is_anonymous: true }),
-          headers: {
-            get: (name: string) =>
-              name === 'X-Token-Degraded' ? 'true' : null,
-          },
-        } as Parameters<typeof createMockResponse>[0])
+          json: () =>
+            Promise.resolve({
+              access_token: 'new-access-token',
+              refresh_token: 'new-refresh-token',
+            }),
+        })
+      )
+      // 第3次 fetch: 重试原始请求 → 200
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          json: () => Promise.resolve({ id: '123', name: 'Leo' }),
+        })
       )
 
       // Act
-      await apiClient.get('/api/v1/auth/me')
+      const result = await apiClient.get('/api/v1/auth/me')
 
-      // Assert: token 应该被清除 + 事件应该被派发
-      expect(getAuthToken()).toBeNull()
-      expect(dispatchSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'auth:token-degraded' })
+      // Assert: 请求成功，token 已更新，无 session-expired 事件
+      expect(result).toEqual({ id: '123', name: 'Leo' })
+      expect(getAuthToken()).toBe('new-access-token')
+      expect(getRefreshToken()).toBe('new-refresh-token')
+      expect(dispatchSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
       )
       dispatchSpy.mockRestore()
     })
 
-    it('没有 X-Token-Degraded 响应头时不应清除 token', async () => {
-      // Arrange: 设置有效 token
+    it('401 + refresh 也失败时应派发 session-expired 事件', async () => {
+      // Arrange
+      apiClient.setToken('expired-token')
+      setRefreshToken('expired-refresh-token')
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+      // 第1次 fetch: 原始请求 → 401
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Token expired' }),
+        })
+      )
+      // 第2次 fetch: refresh 请求 → 401（refresh token 也过期）
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Invalid refresh token' }),
+        })
+      )
+
+      // Act
+      await expect(apiClient.get('/api/v1/auth/me')).rejects.toThrow(ApiError)
+
+      // Assert: token 被清除 + 派发 session-expired
+      expect(getAuthToken()).toBeNull()
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
+      )
+      dispatchSpy.mockRestore()
+    })
+
+    it('401 + 无 refresh_token 时应直接派发 session-expired 事件', async () => {
+      // Arrange: 有 access_token 但无 refresh_token
+      apiClient.setToken('expired-token')
+      setRefreshToken(null)
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Token expired' }),
+        })
+      )
+
+      // Act
+      await expect(apiClient.get('/api/v1/auth/me')).rejects.toThrow(ApiError)
+
+      // Assert: 无 refresh_token 可用，直接提示过期
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
+      )
+      dispatchSpy.mockRestore()
+    })
+
+    it('401 + 无 token 时不应尝试 refresh 也不应派发 session-expired', async () => {
+      // Arrange: 匿名用户，无 token
+      apiClient.setToken(null)
+      setRefreshToken(null)
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Authentication required' }),
+        })
+      )
+
+      // Act
+      await expect(apiClient.get('/api/v1/protected')).rejects.toThrow(ApiError)
+
+      // Assert: 不应有 refresh 调用或 session-expired 事件
+      expect(mockFetch).toHaveBeenCalledTimes(1) // 只有原始请求，无 refresh 调用
+      expect(dispatchSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
+      )
+      dispatchSpy.mockRestore()
+    })
+
+    it('有效 token 的正常请求不应触发任何续期逻辑', async () => {
+      // Arrange
       apiClient.setToken('valid-token')
 
       mockFetch.mockResolvedValueOnce(
@@ -281,30 +388,9 @@ describe('ApiClient', () => {
       // Act
       await apiClient.get('/api/v1/auth/me')
 
-      // Assert: token 应该保持不变
+      // Assert: token 不变，只有一次 fetch 调用
       expect(getAuthToken()).toBe('valid-token')
-    })
-
-    it('没有本地 token 时不应受 X-Token-Degraded 影响', async () => {
-      // Arrange: 确保没有 token
-      apiClient.setToken(null)
-
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          json: () => Promise.resolve({ id: 'anon', is_anonymous: true }),
-          headers: {
-            get: (name: string) =>
-              name === 'X-Token-Degraded' ? 'true' : null,
-          },
-        } as Parameters<typeof createMockResponse>[0])
-      )
-
-      // Act
-      await apiClient.get('/api/v1/test')
-
-      // Assert: 无 token 时不会触发清除逻辑
-      expect(getAuthToken()).toBeNull()
+      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
   })
 

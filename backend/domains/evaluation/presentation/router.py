@@ -105,7 +105,10 @@ async def evaluate_gaia(
     else:
         # 使用默认的 GAIA 基准
         default_path = (
-            Path(__file__).parent.parent.parent.parent / "evaluation" / "benchmarks" / "gaia_sample.yaml"
+            Path(__file__).parent.parent.parent.parent
+            / "evaluation"
+            / "benchmarks"
+            / "gaia_sample.yaml"
         )
         if default_path.exists():
             evaluator.load_benchmark(default_path)

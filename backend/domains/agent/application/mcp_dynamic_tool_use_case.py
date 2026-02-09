@@ -85,9 +85,7 @@ class MCPDynamicToolUseCase:
             "enabled": row.enabled,
         }
 
-    async def update_dynamic_tool(
-        self, server_name: str, tool_key: str, **updates: Any
-    ) -> dict:
+    async def update_dynamic_tool(self, server_name: str, tool_key: str, **updates: Any) -> dict:
         """更新一条动态工具。仅更新请求中传入的字段（exclude_unset）。tool_key 不可改。"""
         existing = await self.repo.get_by_tool_key(
             SERVER_KIND_STREAMABLE_HTTP, server_name, tool_key

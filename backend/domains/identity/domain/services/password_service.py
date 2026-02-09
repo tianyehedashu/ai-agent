@@ -9,7 +9,7 @@ from fastapi_users.password import PasswordHelper
 class PasswordService:
     """密码领域服务
 
-    处理密码的哈希和验证    """
+    处理密码的哈希和验证"""
 
     def __init__(self) -> None:
         self._helper = PasswordHelper()

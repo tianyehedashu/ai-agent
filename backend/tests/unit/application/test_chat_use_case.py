@@ -22,7 +22,12 @@ from libs.db.permission_context import (
 class TestChatUseCase:
     @pytest.fixture
     def service(self, db_session):
-        return ChatUseCase(db_session)
+        session_use_case = SessionUseCase(db_session)
+        return ChatUseCase(
+            db_session,
+            session_use_case=session_use_case,
+            session_use_case_factory=lambda d: SessionUseCase(d),
+        )
 
     async def _create_test_user(self, db_session) -> User:
         user = User(
@@ -292,11 +297,14 @@ class TestChatUseCase:
             async def mock_session_context():
                 yield db_session
 
-            with patch(
-                "domains.agent.application.chat_use_case.LangGraphAgentEngine"
-            ) as mock_engine_class, patch(
-                "domains.agent.application.chat_use_case.get_session_context",
-                new=mock_session_context,
+            with (
+                patch(
+                    "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                ) as mock_engine_class,
+                patch(
+                    "domains.agent.application.chat_use_case.get_session_context",
+                    new=mock_session_context,
+                ),
             ):
                 mock_engine = AsyncMock()
                 mock_engine.run = mock_run_generator
@@ -322,6 +330,7 @@ class TestChatUseCase:
 
                 # 等待后台任务完成
                 import asyncio
+
                 await asyncio.gather(*service._background_tasks, return_exceptions=True)
 
                 # 刷新会话以获取最新数据
@@ -332,7 +341,9 @@ class TestChatUseCase:
                 assert session.title is not None
                 assert session.title != ""
                 # 验证标题是生成的内容（不是默认标题）
-                assert "Python" in session.title or "编程" in session.title or "学习" in session.title
+                assert (
+                    "Python" in session.title or "编程" in session.title or "学习" in session.title
+                )
                 # 验证标题生成服务被调用（通过检查 LLM 是否被调用）
                 # LLM 应该被调用用于生成标题
                 assert service.llm_gateway.chat.called

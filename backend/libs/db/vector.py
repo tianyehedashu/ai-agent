@@ -341,11 +341,22 @@ class ChromaStore(VectorStore):
         # 生成查询向量（使用配置的 EmbeddingService，而不是 Chroma 默认的）
         query_vector = await self._get_embedding(query)
 
+        # Chroma 的 where 需为操作符形式，标量值转为 $eq 以保证兼容性
+        chroma_where = None
+        if query_filter:
+
+            def _to_chroma_value(val: Any) -> Any:
+                if isinstance(val, dict) and any(str(k).startswith("$") for k in val):
+                    return val
+                return {"$eq": val}
+
+            chroma_where = {k: _to_chroma_value(v) for k, v in query_filter.items()}
+
         # 使用自定义 embedding 进行搜索
         results = coll.query(
             query_embeddings=[query_vector],
             n_results=limit,
-            where=query_filter,
+            where=chroma_where,
         )
 
         items = []

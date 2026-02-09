@@ -13,6 +13,9 @@ from pydantic import Field
 
 from domains.agent.domain.types import ToolCategory, ToolResult
 from domains.agent.infrastructure.tools.base import BaseTool, ToolParameters, register_tool
+from domains.identity.domain.types import ANONYMOUS_ID_PREFIX
+from libs.db.database import get_session_factory
+from libs.db.permission_context import get_permission_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -87,10 +90,6 @@ class AmazonVideoSubmitTool(BaseTool):
         params = AmazonVideoSubmitParams(**kwargs)
 
         try:
-            # 获取数据库会话和 UseCase
-            from libs.db.database import get_session_factory
-            from libs.db.permission_context import get_permission_context
-
             ctx = get_permission_context()
             if ctx is None:
                 return ToolResult(
@@ -100,11 +99,20 @@ class AmazonVideoSubmitTool(BaseTool):
                     error="无法获取用户权限上下文",
                 )
 
+            principal_id = (
+                str(ctx.user_id) if ctx.user_id else f"{ANONYMOUS_ID_PREFIX}{ctx.anonymous_user_id}"
+            )
             session_factory = get_session_factory()
             async with session_factory() as db:
-                from domains.agent.application.video_task_use_case import VideoTaskUseCase
+                # 延迟导入避免循环依赖：engine -> tools -> amazon_video_tools -> application -> chat_use_case -> engine
+                from domains.agent.application.video_task_use_case import (
+                    VideoTaskUseCase,  # pylint: disable=import-outside-toplevel
+                )
+                from domains.session.application import (
+                    SessionUseCase,  # pylint: disable=import-outside-toplevel
+                )
 
-                use_case = VideoTaskUseCase(db)
+                use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
 
                 # 解析 session_id
                 session_uuid = None
@@ -114,8 +122,7 @@ class AmazonVideoSubmitTool(BaseTool):
 
                 # 创建任务并自动提交
                 task = await use_case.create_task(
-                    user_id=ctx.user_id,
-                    anonymous_user_id=ctx.anonymous_user_id,
+                    principal_id=principal_id,
                     session_id=session_uuid,
                     prompt_text=params.prompt,
                     prompt_source="agent_generated",
@@ -175,13 +182,16 @@ class AmazonVideoPollTool(BaseTool):
         params = AmazonVideoPollParams(**kwargs)
 
         try:
-            from libs.db.database import get_session_factory
-
             session_factory = get_session_factory()
             async with session_factory() as db:
-                from domains.agent.application.video_task_use_case import VideoTaskUseCase
+                from domains.agent.application.video_task_use_case import (
+                    VideoTaskUseCase,  # pylint: disable=import-outside-toplevel
+                )
+                from domains.session.application import (
+                    SessionUseCase,  # pylint: disable=import-outside-toplevel
+                )
 
-                use_case = VideoTaskUseCase(db)
+                use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
 
                 # 轮询任务
                 task = await use_case.poll_task(

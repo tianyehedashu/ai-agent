@@ -25,7 +25,9 @@ class TestAuthMe:
         response = await dev_client.get("/api/v1/auth/me")
 
         # Assert
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}: {response.text}"
+        )
         data = response.json()
         assert "id" in data
         assert "is_anonymous" in data
@@ -48,6 +50,9 @@ class TestAuthMe:
         # Assert
         assert settings.jwt_secret is not None
         assert settings.jwt_secret_key is not None
-        assert settings.jwt_secret_key != "jwt-secret-change-in-production" or settings.jwt_secret.get_secret_value() != "jwt-secret-change-in-production"
+        assert (
+            settings.jwt_secret_key != "jwt-secret-change-in-production"
+            or settings.jwt_secret.get_secret_value() != "jwt-secret-change-in-production"
+        )
         # jwt_secret_key 应该等于 jwt_secret 的值（如果 JWT_SECRET_KEY 未设置）
         assert settings.jwt_secret_key == settings.jwt_secret.get_secret_value()

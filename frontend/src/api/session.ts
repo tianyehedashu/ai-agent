@@ -118,7 +118,7 @@ export const sessionApi = {
    * 获取会话列表
    */
   async list(page = 1, pageSize = 20): Promise<PaginatedResponse<Session>> {
-    const backendList = await apiClient.get<BackendSession[]>('/api/v1/sessions', {
+    const backendList = await apiClient.get<BackendSession[]>('/api/v1/sessions/', {
       skip: (page - 1) * pageSize,
       limit: pageSize,
     })
@@ -146,7 +146,7 @@ export const sessionApi = {
    */
   async create(options?: { agentId?: string; title?: string }): Promise<Session> {
     const backend = await apiClient.post<BackendSession>(
-      '/api/v1/sessions',
+      '/api/v1/sessions/',
       toBackendCreateRequest(options ?? {})
     )
     return toFrontendSession(backend)
