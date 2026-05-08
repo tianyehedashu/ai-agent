@@ -69,10 +69,11 @@ class LLMGateway:
         # 初始化 Prompt Cache 管理器
         self._cache_manager = get_prompt_cache_manager()
 
-        # 配置 LiteLLM - 禁用回调以避免不必要的日志记录
-        litellm.success_callback = []
-        litellm.failure_callback = []
-        litellm.set_verbose = False
+        # 配置 LiteLLM - 禁用回调以避免不必要的日志记录（litellm 部分符号未导出，用 Any 收窄）
+        litellm_any: Any = litellm
+        litellm_any.success_callback = []
+        litellm_any.failure_callback = []
+        litellm_any.set_verbose = False
 
         # 禁用 LiteLLM 的日志工作线程，避免在程序退出时出现 "I/O operation on closed file" 错误
         # 这会在 atexit 时尝试写入已关闭的日志流
@@ -81,11 +82,11 @@ class LLMGateway:
             if "LITELLM_LOG" not in os.environ:
                 os.environ["LITELLM_LOG"] = "None"
             # 如果日志工作线程已启动，尝试关闭它
-            if hasattr(litellm, "logging_worker") and litellm.logging_worker is not None:
+            if hasattr(litellm_any, "logging_worker") and litellm_any.logging_worker is not None:
                 try:
                     # 停止日志工作线程
-                    if hasattr(litellm.logging_worker, "stop"):
-                        litellm.logging_worker.stop()
+                    if hasattr(litellm_any.logging_worker, "stop"):
+                        litellm_any.logging_worker.stop()
                 except Exception:
                     pass  # 忽略关闭时的错误
         except Exception:
@@ -93,12 +94,14 @@ class LLMGateway:
 
         # 在开发环境下启用调试模式，获取详细的错误信息
         if self._should_enable_debug(config):
-            litellm._turn_on_debug()
+            _turn_on = getattr(litellm_any, "_turn_on_debug", None)
+            if callable(_turn_on):
+                _turn_on()
             logger.info("LiteLLM 调试模式已启用 - 将显示详细的请求/响应和错误信息")
 
         # 设置默认 API Key（仅用于 Anthropic，其他提供商通过 kwargs 传递）
         if config.anthropic_api_key:
-            litellm.api_key = config.anthropic_api_key.get_secret_value()
+            litellm_any.api_key = config.anthropic_api_key.get_secret_value()
 
     def _should_enable_debug(self, config: LLMConfigProtocol) -> bool:
         """

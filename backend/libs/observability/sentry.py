@@ -5,7 +5,8 @@ Sentry 集成 - 错误监控和性能追踪
 sentry_sdk 为可选依赖，未安装时本模块不报错且初始化逻辑不执行。
 """
 
-from typing import Any
+from typing import Any, Literal, cast
+from urllib.parse import parse_qsl, urlencode
 
 try:
     import sentry_sdk
@@ -27,6 +28,38 @@ logger = get_logger(__name__)
 # Sentry 初始化状态
 _sentry_initialized = False
 
+LogLevelStr = Literal["fatal", "error", "warning", "info", "debug"]
+
+_SENSITIVE_QUERY_KEYS = frozenset(
+    {
+        "token",
+        "access_token",
+        "refresh_token",
+        "password",
+        "api_key",
+        "apikey",
+        "key",
+        "secret",
+        "authorization",
+        "auth",
+        "code",  # OAuth code
+    }
+)
+
+
+def _redact_query_string(qs: str) -> str:
+    """脱敏 query string 中的敏感键（大小写不敏感）。"""
+    if not qs.strip():
+        return qs
+    pairs = parse_qsl(qs, keep_blank_values=True)
+    redacted: list[tuple[str, str]] = []
+    for key, val in pairs:
+        if key.lower() in _SENSITIVE_QUERY_KEYS:
+            redacted.append((key, "[REDACTED]"))
+        else:
+            redacted.append((key, val))
+    return urlencode(redacted)
+
 
 def _before_send_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
     """在事件发送前修改事件数据
@@ -38,10 +71,8 @@ def _before_send_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str
     Returns:
         修改后的事件数据，返回 None 则取消发送
     """
-    # 添加自定义标签
-    request_data = event.get("request", {})
-    if request_data:
-        # 移除敏感的请求头（headers 可能缺失或为 None，需避免 AttributeError）
+    request_data = event.get("request")
+    if isinstance(request_data, dict):
         raw_headers = request_data.get("headers")
         if isinstance(raw_headers, dict):
             sensitive_headers = ("authorization", "cookie", "x-api-key", "x-auth-token")
@@ -49,11 +80,9 @@ def _before_send_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str
                 if str(key).lower() in sensitive_headers:
                     raw_headers[key] = "[REDACTED]"
 
-    # 移除敏感的查询参数
-    query_string = request_data.get("query_string", "")
-    if query_string:
-        # 简单处理：可以进一步细化
-        pass
+        qs = request_data.get("query_string")
+        if isinstance(qs, str) and qs:
+            request_data["query_string"] = _redact_query_string(qs)
 
     return event
 
@@ -90,6 +119,8 @@ def init_sentry(
     Returns:
         是否成功初始化
     """
+    # pylint: disable=too-many-return-statements
+    # 各分支语义不同，合并会损害可读性
     global _sentry_initialized
 
     if sentry_sdk is None:
@@ -114,27 +145,26 @@ def init_sentry(
         return True
 
     try:
+        # SDK 期望的处理器类型与我们的窄化 dict 签名不完全一致，运行时兼容
+        _processor = cast("Any", _before_send_event)
+        _tx_processor = cast("Any", _before_send_transaction)
         sentry_sdk.init(
             dsn=dsn,
             environment=environment,
             traces_sample_rate=traces_sample_rate,
             profiles_sample_rate=profiles_sample_rate,
-            before_send=_before_send_event,
-            before_send_transaction=_before_send_transaction,
+            before_send=_processor,
+            before_send_transaction=_tx_processor,
             integrations=[
                 fi(),
                 ri(),
                 si(),
                 hi(),
             ],
-            # 过滤敏感信息
-            send_default_pii=False,  # 不发送个人身份信息
-            # 服务器名称
-            server_name=None,  # 使用 Sentry 默认
-            # 发布版本
-            release=None,  # 可以从环境变量读取
-            # 采样配置
-            sample_rate=1.0,  # 错误采样率
+            send_default_pii=False,
+            server_name=None,
+            release=None,
+            sample_rate=1.0,
         )
         _sentry_initialized = True
         logger.info(
@@ -153,7 +183,11 @@ def is_sentry_initialized() -> bool:
     return _sentry_initialized
 
 
-def capture_exception(exception: Exception, level: str | None = None, **tags: str) -> str | None:
+def capture_exception(
+    exception: Exception,
+    level: LogLevelStr | None = None,
+    **tags: str,
+) -> str | None:
     """捕获异常并发送到 Sentry
 
     Args:
@@ -168,15 +202,12 @@ def capture_exception(exception: Exception, level: str | None = None, **tags: st
         return None
 
     with sentry_sdk.push_scope() as scope:
-        # 添加自定义标签
         for key, value in tags.items():
             scope.set_tag(key, value)
 
-        # 设置级别
-        if level:
-            scope.set_level(level)
+        if level is not None:
+            scope.set_level(cast("Any", level))
 
-        # 发送异常
         event_id = sentry_sdk.capture_exception(exception)
         logger.debug("Exception captured by Sentry: %s", event_id)
         return event_id
@@ -184,7 +215,7 @@ def capture_exception(exception: Exception, level: str | None = None, **tags: st
 
 def capture_message(
     message: str,
-    level: str = "info",
+    level: LogLevelStr = "info",
     **tags: str,
 ) -> str | None:
     """捕获消息并发送到 Sentry
@@ -201,12 +232,10 @@ def capture_message(
         return None
 
     with sentry_sdk.push_scope() as scope:
-        # 添加自定义标签
         for key, value in tags.items():
             scope.set_tag(key, value)
 
-        # 发送消息
-        event_id = sentry_sdk.capture_message(message, level=level)
+        event_id = sentry_sdk.capture_message(message, level=cast("Any", level))
         logger.debug("Message captured by Sentry: %s", event_id)
         return event_id
 

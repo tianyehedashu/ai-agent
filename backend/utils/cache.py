@@ -45,7 +45,7 @@ async def close_redis() -> None:
 def cache_key(prefix: str, *args: Any, **kwargs: Any) -> str:
     """生成缓存键"""
     key_data = json.dumps({"args": args, "kwargs": kwargs}, sort_keys=True, default=str)
-    key_hash = hashlib.md5(key_data.encode()).hexdigest()
+    key_hash = hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
     return f"{prefix}:{key_hash}"
 
 

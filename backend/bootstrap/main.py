@@ -7,6 +7,7 @@ FastAPI 应用入口点
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import inspect
 import os
 import sys
 import traceback
@@ -235,9 +236,11 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     try:
         import litellm  # pylint: disable=import-outside-toplevel
 
-        if hasattr(litellm, "close_litellm_async_clients"):
-            # close_litellm_async_clients 是一个协程，需要 await
-            await litellm.close_litellm_async_clients()
+        _close = getattr(litellm, "close_litellm_async_clients", None)
+        if callable(_close):
+            _maybe = _close()
+            if inspect.isawaitable(_maybe):
+                await _maybe
             logger.info("LiteLLM async clients closed successfully")
     except Exception as e:
         logger.warning("Error closing LiteLLM async clients: %s", e)

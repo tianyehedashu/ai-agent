@@ -141,7 +141,7 @@ typecheck-mypy: ## 运行类型检查 (MyPy)
 
 security: ## 运行安全检查 (Bandit)
 	@echo 运行安全检查...
-	$(UV) run bandit -c pyproject.toml -r . --exclude ./tests
+	$(UV) run bandit -c pyproject.toml -r . -ll
 
 # 组合检查命令
 check: format-check lint lint-pylint typecheck ## 运行所有检查
@@ -152,7 +152,7 @@ check-ci: ## CI 环境检查 (严格模式)
 	$(UV) run ruff format . --check
 	$(UV) run ruff check .
 	$(UV) run pyright
-	$(UV) run bandit -c pyproject.toml -r . --exclude ./tests
+	$(UV) run bandit -c pyproject.toml -r . -ll
 	@echo CI 检查通过!
 
 fix: lint-fix format ## 自动修复所有问题

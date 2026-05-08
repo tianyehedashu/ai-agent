@@ -59,6 +59,7 @@ def _run_alembic_upgrade(
         cwd=cwd,
         capture_output=capture,
         text=True,
+        check=False,
     )
 
 

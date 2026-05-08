@@ -48,9 +48,11 @@ class LLMConfigProtocol(Protocol):
     # Embedding 配置
     embedding_model: str
 
-    # 调试配置
-    debug: bool = False
-    is_development: bool = False
+    # 调试配置（Settings 等为字段；is_development 多为 @property，需与实现一致）
+    debug: bool
+
+    @property
+    def is_development(self) -> bool: ...
 
 
 class SandboxConfigProtocol(Protocol):

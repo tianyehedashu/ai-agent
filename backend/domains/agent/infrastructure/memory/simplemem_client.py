@@ -294,7 +294,10 @@ importance: 1-10，10 最重要""",
                 entities = []
                 importance = 5.0
 
-            atom_id = hashlib.md5(f"{session_id}:{summary[:50]}".encode()).hexdigest()[:12]
+            atom_id = hashlib.md5(
+                f"{session_id}:{summary[:50]}".encode(),
+                usedforsecurity=False,
+            ).hexdigest()[:12]
 
             return MemoryAtom(
                 id=atom_id,

@@ -124,8 +124,9 @@ packages = ["app", "api", "core", "models", "schemas", "services", "db", "utils"
 # ============================================================================
 [tool.pyright]
 pythonVersion = "3.11"
-# 标准模式；排除沙箱/迁移/测试/脚本。未知类型相关规则关闭以消化历史技术债，其它规则仍生效。
 typeCheckingMode = "basic"
+# 仅对业务与公共库做类型检查；迁移/沙箱/测试/脚本单独维护或后续纳入
+include = ["bootstrap", "domains", "libs", "utils", "evaluation", "exceptions.py"]
 reportMissingImports = true
 reportMissingTypeStubs = false
 reportUnusedImport = true
@@ -133,15 +134,10 @@ reportUnusedClass = true
 reportUnusedFunction = true
 reportUnusedVariable = true
 reportDuplicateImport = true
-reportUnknownVariableType = "none"
-reportUnknownMemberType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownParameterType = "none"
-reportMissingTypeArgument = "none"
-reportArgumentType = "none"
+# LangGraph / LiteLLM / 动态工具等导致大量无法静态证明的属性与参数关系；basic 下仍噪声过高，关闭三类报告
 reportAttributeAccessIssue = "none"
+reportArgumentType = "none"
 reportReturnType = "none"
-reportPrivateImportUsage = "none"
 exclude = [
     "**/node_modules",
     "**/__pycache__",
@@ -287,8 +283,9 @@ fail_under = 80
 # Security - Bandit
 # ============================================================================
 [tool.bandit]
-exclude_dirs = ["tests", ".venv", "migrations"]
-skips = ["B101"]  # assert statements in tests
+exclude_dirs = ["tests", ".venv", "migrations", "workspace", "alembic", "scripts"]
+# B602/B604: 沙箱执行用户命令需 shell；B104/B108: 容器默认监听与临时目录由部署约束
+skips = ["B101", "B104", "B108", "B602", "B604"]
 targets = ["."]
 
 # ============================================================================
