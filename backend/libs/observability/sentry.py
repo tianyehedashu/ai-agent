@@ -41,12 +41,13 @@ def _before_send_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str
     # 添加自定义标签
     request_data = event.get("request", {})
     if request_data:
-        # 移除敏感的请求头
-        headers = request_data.get("headers", {})
-        sensitive_headers = ["authorization", "cookie", "x-api-key", "x-auth-token"]
-        for key in list(headers.keys()):
-            if key.lower() in sensitive_headers:
-                headers[key] = "[REDACTED]"
+        # 移除敏感的请求头（headers 可能缺失或为 None，需避免 AttributeError）
+        raw_headers = request_data.get("headers")
+        if isinstance(raw_headers, dict):
+            sensitive_headers = ("authorization", "cookie", "x-api-key", "x-auth-token")
+            for key in list(raw_headers.keys()):
+                if str(key).lower() in sensitive_headers:
+                    raw_headers[key] = "[REDACTED]"
 
     # 移除敏感的查询参数
     query_string = request_data.get("query_string", "")
