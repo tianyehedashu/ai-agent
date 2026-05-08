@@ -35,6 +35,8 @@ from domains.agent.presentation.execution_router import router as execution_rout
 from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
+from domains.agent.presentation.product_info_router import router as product_info_router
+from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.provider_config_router import router as provider_config_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
@@ -310,7 +312,7 @@ async def anonymous_user_cookie_middleware(request: Request, call_next):
             path="/",  # 确保 Cookie 对所有路径有效
             httponly=True,  # 防止 XSS 攻击
             samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
-            secure=not settings.is_development,  # 生产环境要求 HTTPS
+            secure=settings.is_cookie_secure,
         )
 
     return response
@@ -593,6 +595,20 @@ app.include_router(
     video_task_router,
     prefix=f"{api_router_prefix}/video-tasks",
     tags=["Video Tasks"],
+)
+
+# 产品信息工作流
+app.include_router(
+    product_info_router,
+    prefix=f"{api_router_prefix}/product-info",
+    tags=["Product Info"],
+)
+
+# 用户模型管理
+app.include_router(
+    user_model_router,
+    prefix=f"{api_router_prefix}/user-models",
+    tags=["User Models"],
 )
 
 

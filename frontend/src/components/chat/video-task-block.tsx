@@ -11,19 +11,26 @@ import { Clock, CheckCircle2, XCircle, AlertTriangle, Play, ExternalLink } from 
 import { videoTaskApi } from '@/api/videoTask'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { VideoGenTask, VideoTaskStatus } from '@/types/video-task'
+import type { VideoTaskStatus } from '@/types/video-task'
 
 interface VideoTaskBlockProps {
   taskId: string
   sessionId?: string
 }
 
-export function VideoTaskBlock({ taskId, sessionId }: Readonly<VideoTaskBlockProps>): React.JSX.Element {
-  const { data: task, isLoading, isError } = useQuery({
+export function VideoTaskBlock({
+  taskId,
+  sessionId,
+}: Readonly<VideoTaskBlockProps>): React.JSX.Element {
+  const {
+    data: task,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['video-task', taskId],
     queryFn: () => videoTaskApi.get(taskId),
     refetchInterval: (query) => {
-      const t = query.state.data as VideoGenTask | undefined
+      const t = query.state.data
       if (t?.status === 'pending' || t?.status === 'running') return 2000
       return false
     },
@@ -56,7 +63,7 @@ export function VideoTaskBlock({ taskId, sessionId }: Readonly<VideoTaskBlockPro
   return (
     <div
       className={cn(
-        'rounded-md border bg-card overflow-hidden',
+        'overflow-hidden rounded-md border bg-card',
         isProcessing && 'border-blue-500/20'
       )}
     >
@@ -79,7 +86,7 @@ export function VideoTaskBlock({ taskId, sessionId }: Readonly<VideoTaskBlockPro
       ) : (
         <div className="flex aspect-video items-center justify-center bg-muted/20">
           {isProcessing ? (
-            <Clock className="h-8 w-8 text-blue-500/60 animate-pulse" />
+            <Clock className="h-8 w-8 animate-pulse text-blue-500/60" />
           ) : task.status === 'failed' ? (
             <XCircle className="h-8 w-8 text-red-500/60" />
           ) : (

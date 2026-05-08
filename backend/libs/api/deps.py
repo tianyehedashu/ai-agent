@@ -21,6 +21,14 @@ from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicProm
 from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
 from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.application.memory_service import MemoryService
+from domains.agent.application.product_image_gen_task_use_case import (
+    ProductImageGenTaskUseCase,
+)
+from domains.agent.application.product_info_prompt_service import (
+    ProductInfoPromptTemplateUseCase,
+)
+from domains.agent.application.product_info_use_case import ProductInfoUseCase
+from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.stats_service import StatsService
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
@@ -41,10 +49,14 @@ __all__ = [
     "get_mcp_dynamic_tool_service",
     "get_mcp_service",
     "get_memory_service",
+    "get_product_image_gen_task_service",
+    "get_product_info_prompt_service",
+    "get_product_info_service",
     "get_sandbox_service",
     "get_session_service",
     "get_stats_service",
     "get_title_service",
+    "get_user_model_service",
     "get_user_service",
     "get_video_task_service",
 ]
@@ -158,3 +170,27 @@ async def get_video_task_service(
 ) -> VideoTaskUseCase:
     """获取视频生成任务服务"""
     return VideoTaskUseCase(db, session_use_case=session_service)
+
+
+async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:
+    """获取产品信息工作流服务"""
+    return ProductInfoUseCase(db)
+
+
+async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTaskUseCase:
+    """获取 8 图生成任务服务（注入 ImageGenerator）"""
+    from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
+    from domains.agent.infrastructure.llm.image_generator import ImageGenerator  # pylint: disable=import-outside-toplevel
+
+    image_generator = ImageGenerator(settings)
+    return ProductImageGenTaskUseCase(db, image_generator=image_generator)
+
+
+async def get_product_info_prompt_service(db: DbSession) -> ProductInfoPromptTemplateUseCase:
+    """获取产品信息提示词模板服务"""
+    return ProductInfoPromptTemplateUseCase(db)
+
+
+async def get_user_model_service(db: DbSession) -> UserModelUseCase:
+    """获取用户模型管理服务"""
+    return UserModelUseCase(db)

@@ -1,74 +1,65 @@
-# AI Agent Backend Dockerfile
-# 多阶段构建
+# syntax=docker/dockerfile:1
+# AI Agent Backend Dockerfile — 基于预构建 base 镜像
+# 前置条件: 需先构建 base 镜像 (docker build -f Dockerfile.base -t ai-agent-backend-base .)
+# 日常部署只执行本文件，无需重复下载系统包和 uv
+# 优化: --mount=type=cache 持久化 uv/pip 下载缓存，依赖变更时跳过已下载的包
+
+ARG BASE_IMAGE=ai-agent-backend-base:latest
 
 # ============================================
-# Stage 1: Base
+# Stage 1: Dependencies — Python packages
+# 仅当 pyproject.toml / uv.lock 变化时才重新构建
+# cache mount 使得即使该层重建，已下载的 wheel 仍可复用
 # ============================================
-FROM python:3.11-slim as base
+FROM ${BASE_IMAGE} AS dependencies
+
+ARG UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV UV_INDEX_URL=${UV_INDEX_URL}
+
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+# ============================================
+# Stage 2: Development
+# ============================================
+FROM dependencies AS development
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --all-extras
+COPY . .
+
+EXPOSE 8000
+CMD ["uvicorn", "bootstrap.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ============================================
+# Stage 3: Production — 最小运行时镜像
+# 从 dependencies 拷贝已安装的 .venv，不携带构建工具
+# ============================================
+ARG REGISTRY_PREFIX=""
+FROM ${REGISTRY_PREFIX}python:3.11-slim AS production
+
+ARG APT_MIRROR=""
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONHASHSEED=random \
-    UV_LINK_MODE=copy \
     LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    LC_ALL=C.UTF-8 \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+RUN if [ -n "$APT_MIRROR" ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash appuser
 
-# 设置 PATH 以包含 uv 虚拟环境
-ENV PATH="/app/.venv/bin:$PATH"
-
-# ============================================
-# Stage 2: Dependencies
-# ============================================
-FROM base as dependencies
-
-# 安装 uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-RUN chmod +x /usr/local/bin/uv
-
-# 复制项目文件
-COPY pyproject.toml uv.lock ./
-
-# 使用 uv 安装生产依赖
-RUN uv sync --frozen --no-dev
-
-# ============================================
-# Stage 3: Development
-# ============================================
-FROM dependencies as development
-
-# 使用 uv 安装开发依赖
-RUN uv sync --frozen --all-extras
-
+COPY --from=dependencies /app/.venv /app/.venv
 COPY . .
-
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-
-# ============================================
-# Stage 4: Production
-# ============================================
-FROM dependencies as production
-
-# 创建非 root 用户
-RUN useradd --create-home --shell /bin/bash appuser
-
-COPY . .
-
-# 更改文件所有权
 RUN chown -R appuser:appuser /app
 
 USER appuser
-
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "bootstrap.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

@@ -7,8 +7,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { videoTaskApi } from '@/api/videoTask'
-import { VIDEO_TASK_EXAMPLE_PROMPTS } from '@/constants/video-task'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
+import { VIDEO_TASK_EXAMPLE_PROMPTS } from '@/constants/video-task'
 import { useChat } from '@/hooks/use-chat'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -80,9 +80,7 @@ export default function VideoTasksPage(): React.JSX.Element {
   // 筛选进行中的任务
   const runningTasks = recentTasks.filter(
     (t) =>
-      t.status === 'pending' ||
-      t.status === 'running' ||
-      (t.status === 'completed' && !t.videoUrl)
+      t.status === 'pending' || t.status === 'running' || (t.status === 'completed' && !t.videoUrl)
   )
 
   // 加载会话信息和历史消息
@@ -301,7 +299,9 @@ export default function VideoTasksPage(): React.JSX.Element {
 
           <VideoTaskCreateForm
             onTaskCreated={handleTaskCreated}
-            onSessionForbidden={() => navigate('/video-tasks')}
+            onSessionForbidden={() => {
+              navigate('/video-tasks')
+            }}
             disabled={false}
             initialPrompt={selectedExample ?? undefined}
             sessionId={sessionId}
@@ -370,9 +370,7 @@ function WelcomeState({
         transition={{ delay: 0.2, duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
         className="mb-12 text-center"
       >
-        <h1 className="mb-3 text-3xl font-semibold tracking-tight text-foreground">
-          创造视觉故事
-        </h1>
+        <h1 className="mb-3 text-3xl font-semibold tracking-tight text-foreground">创造视觉故事</h1>
         <p className="text-base text-muted-foreground/80">描述你的想象，AI 将其转化为视频</p>
       </motion.div>
 

@@ -17,6 +17,7 @@ import {
   Zap,
   Server,
   Video,
+  Package,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
@@ -46,6 +47,7 @@ const navigation = [
   { name: 'MCP 服务器', href: '/mcp', icon: Zap },
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '视频', href: '/video-tasks', icon: Video },
+  { name: '产品信息', href: '/product-info', icon: Package },
   { name: '工作台', href: '/studio', icon: Workflow },
   { name: '设置', href: '/settings', icon: Settings },
 ]
@@ -64,10 +66,7 @@ export default function Sidebar(): React.JSX.Element {
   })
 
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
-  const groupedSessions = useMemo(
-    () => groupSessionsByDate(sessions),
-    [sessions]
-  )
+  const groupedSessions = useMemo(() => groupSessionsByDate(sessions), [sessions])
 
   // 判断当前是否在聊天页面（会话区域高亮用）
   const isChatActive =
@@ -301,8 +300,7 @@ function SessionItem({
   const Icon = isVideo ? Video : MessageSquare
   const href = isVideo ? `/video-tasks/${session.id}` : `/chat/${session.id}`
   // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
-  const defaultTitle =
-    (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
+  const defaultTitle = (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()

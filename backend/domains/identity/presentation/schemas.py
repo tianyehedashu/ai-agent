@@ -7,6 +7,7 @@ Identity Presentation Schemas - 身份认证表示层模式
 from datetime import datetime
 import uuid
 
+from fastapi_users.schemas import BaseUser, BaseUserCreate
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 # =============================================================================
@@ -14,14 +15,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 # =============================================================================
 
 
-class UserRead(BaseModel):
+class UserRead(BaseUser[uuid.UUID]):
     """用户读取模式（用于 FastAPI Users）"""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    email: str
-    is_active: bool = True
     name: str | None = None
     avatar_url: str | None = None
     vendor_creator_id: int | None = None
@@ -32,13 +30,9 @@ class UserRead(BaseModel):
 # =============================================================================
 
 
-class UserCreate(BaseModel):
-    """用户注册请求"""
+class UserCreate(BaseUserCreate):
+    """用户注册请求（继承 BaseUserCreate 以兼容 fastapi-users 注册路由）"""
 
-    model_config = ConfigDict(strict=True)
-
-    email: EmailStr = Field(..., description="邮箱地址")
-    password: str = Field(..., min_length=8, max_length=100, description="密码")
     name: str | None = Field(default=None, min_length=1, max_length=100, description="用户名")
 
 

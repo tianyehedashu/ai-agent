@@ -50,7 +50,7 @@ interface RequestOptions extends RequestInit {
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
-    message: string,
+    message: string
   ) {
     super(message)
     this.name = 'ApiError'
@@ -172,7 +172,7 @@ class ApiClient {
   private async request<T>(
     path: string,
     options: RequestOptions = {},
-    _retried = false,
+    _retried = false
   ): Promise<T> {
     const { params, ...fetchOptions } = options
 
@@ -285,6 +285,38 @@ class ApiClient {
     return this.request<T>(path, { method: 'DELETE' })
   }
 
+  /**
+   * 上传文件（multipart/form-data），不设置 Content-Type，由浏览器自动带 boundary
+   */
+  async upload<T>(path: string, formData: FormData): Promise<T> {
+    const url = this.buildUrl(path)
+    const headers: Record<string, string> = {}
+    const token = getAuthToken()
+    const anonymousUserId = getAnonymousUserId()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    else if (anonymousUserId) headers['X-Anonymous-User-Id'] = anonymousUserId
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+    })
+
+    const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
+    if (responseAnonymousId && !token) {
+      setAnonymousUserId(responseAnonymousId)
+    }
+
+    if (!response.ok) {
+      const error = (await response.json().catch(() => ({ detail: 'Unknown error' }))) as {
+        detail?: string
+      }
+      throw new ApiError(response.status, error.detail ?? 'Upload failed')
+    }
+    return response.json() as Promise<T>
+  }
+
   // SSE 流式请求（支持取消）
   async stream(
     path: string,
@@ -293,7 +325,7 @@ class ApiClient {
     onError?: (error: Error) => void,
     onComplete?: () => void,
     signal?: AbortSignal,
-    _retried = false,
+    _retried = false
   ): Promise<void> {
     const url = this.buildUrl(path)
 
@@ -336,7 +368,8 @@ class ApiClient {
           if (hadToken && !_retried) {
             const refreshed = await this.tryRefresh()
             if (refreshed) {
-              return this.stream(path, data, onEvent, onError, onComplete, signal, true)
+              await this.stream(path, data, onEvent, onError, onComplete, signal, true)
+              return
             }
           }
 

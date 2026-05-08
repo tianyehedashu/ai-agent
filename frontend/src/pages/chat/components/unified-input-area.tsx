@@ -9,10 +9,8 @@ import { MessageSquare, Video } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-
-import type { VideoModel, VideoDuration } from '@/types/video-task'
-
 import VideoTaskCreateFormCompact from '@/pages/video-tasks/components/create-form-compact'
+import type { VideoModel, VideoDuration } from '@/types/video-task'
 
 import ChatInput from './chat-input'
 
@@ -77,7 +75,7 @@ export default function UnifiedInputArea({
       onVideoCreateWithoutSession={onVideoCreateWithoutSession}
       disabled={chatIsLoading}
     />
-  ) : null;
+  ) : null
 
   return (
     <div className="space-y-2">
@@ -85,7 +83,9 @@ export default function UnifiedInputArea({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onModeChange('chat')}
+          onClick={() => {
+            onModeChange('chat')
+          }}
           className={cn(
             'h-7 rounded-full px-3 text-xs font-medium',
             isChat
@@ -99,7 +99,9 @@ export default function UnifiedInputArea({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onModeChange('video')}
+          onClick={() => {
+            onModeChange('video')
+          }}
           className={cn(
             'h-7 rounded-full px-3 text-xs font-medium',
             isVideo
@@ -115,7 +117,9 @@ export default function UnifiedInputArea({
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => onModeChange('chat')}
+            onClick={() => {
+              onModeChange('chat')
+            }}
             className="text-xs text-muted-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
           >
             切回对话

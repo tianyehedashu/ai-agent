@@ -11,27 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 
-from domains.identity.domain.types import Principal
 from domains.identity.presentation.deps import (
     AuthUser,
     check_session_ownership,
+    get_owned_user_ids,
 )
 from domains.session.application import SessionUseCase, TitleUseCase
 from domains.session.infrastructure.models.session import Session
 from libs.api.deps import get_session_service, get_title_service
 
 router = APIRouter()
-
-
-def _get_user_ids(current_user: AuthUser) -> tuple[str | None, str | None]:
-    """从当前用户获取 user_id 或 anonymous_user_id
-
-    Returns:
-        (user_id, anonymous_user_id) 元组，根据用户类型只有一个不为 None
-    """
-    if current_user.is_anonymous:
-        return None, Principal.extract_anonymous_id(current_user.id)
-    return current_user.id, None
 
 
 # =============================================================================
@@ -174,9 +163,10 @@ async def list_sessions(
     agent_id: str | None = None,
 ) -> list[SessionResponse]:
     """获取用户的会话列表"""
-    user_id, anonymous_user_id = _get_user_ids(current_user)
+    user_id, anonymous_user_id = get_owned_user_ids(current_user)
+    user_id_str = str(user_id) if user_id else None
     sessions = await session_service.list_sessions(
-        user_id=user_id,
+        user_id=user_id_str,
         anonymous_user_id=anonymous_user_id,
         skip=skip,
         limit=limit,
@@ -192,10 +182,11 @@ async def create_session(
     session_service: SessionUseCase = Depends(get_session_service),
 ) -> SessionResponse:
     """创建新会话"""
-    user_id, anonymous_user_id = _get_user_ids(current_user)
+    user_id, anonymous_user_id = get_owned_user_ids(current_user)
+    user_id_str = str(user_id) if user_id else None
     try:
         session = await session_service.create_session(
-            user_id=user_id,
+            user_id=user_id_str,
             anonymous_user_id=anonymous_user_id,
             agent_id=data.agent_id,
             title=data.title,

@@ -112,6 +112,7 @@ api_base = "${ZHIPUAI_API_BASE:https://open.bigmodel.cn/api/paas/v4}"
 api_key = "${VOLCENGINE_API_KEY:}"
 api_base = "${VOLCENGINE_API_BASE:https://ark.cn-beijing.volces.com/api/v3}"
 chat_endpoint_id = "${VOLCENGINE_CHAT_ENDPOINT_ID:}"
+image_endpoint_id = "${VOLCENGINE_IMAGE_ENDPOINT_ID:}"
 
 # 本地模型 (Ollama)
 [llm.local]
@@ -211,6 +212,7 @@ output_price = 16.0
 supports_vision = false
 supports_tools = false  # R1 暂不支持 tool calling
 supports_reasoning = true
+supports_json_mode = false  # 推理模型不支持 response_format
 recommended_for = ["reasoning", "math", "logic"]
 description = "复杂推理，输出思维链"
 
@@ -280,6 +282,7 @@ output_price = 0.006
 supports_vision = false
 supports_tools = false
 supports_reasoning = true
+supports_json_mode = false  # 推理模型不支持 response_format
 recommended_for = ["reasoning"]
 description = "推理增强，类似 o1/R1"
 
@@ -408,6 +411,37 @@ supports_vision = true
 supports_tools = true
 recommended_for = ["code", "quality"]
 description = "代码能力强，长上下文"
+
+# -----------------------------------------------------------------------------
+# 图像生成模型
+# -----------------------------------------------------------------------------
+[[models.available]]
+id = "volcengine/seedream"
+name = "Seedream 3.0"
+provider = "volcengine"
+litellm_model = ""
+context_window = 0
+input_price = 0.04        # ¥/张
+output_price = 0.0
+supports_vision = false
+supports_tools = false
+supports_image_gen = true
+recommended_for = ["image_gen"]
+description = "火山引擎图像生成（1920×1920）"
+
+[[models.available]]
+id = "openai/dall-e-3"
+name = "DALL-E 3"
+provider = "openai"
+litellm_model = ""
+context_window = 0
+input_price = 0.04        # $/张（Standard 1024x1024）
+output_price = 0.0
+supports_vision = false
+supports_tools = false
+supports_image_gen = true
+recommended_for = ["image_gen"]
+description = "OpenAI 图像生成（1024×1024）"
 
 # -----------------------------------------------------------------------------
 # Agent 执行配置

@@ -15,6 +15,7 @@ from litellm import acompletion, aembedding  # pylint: disable=import-error
 from pydantic import BaseModel
 import tiktoken
 
+from bootstrap.config_loader import get_app_config
 from domains.agent.domain.types import Message, ToolCall
 from domains.agent.infrastructure.llm.message_formatter import (
     format_messages as format_messages_util,
@@ -236,6 +237,46 @@ class LLMGateway:
             "deepseek" in model_lower and "reasoner" in model_lower
         )
 
+    def _resolve_model_info(self, model: str, normalized_model: str) -> Any:
+        """根据模型名称解析 ModelInfo，用于参数适配。未知模型返回 None。"""
+        models_config = get_app_config().models
+        info = models_config.get_model(model)
+        if info:
+            return info
+        if normalized_model != model:
+            return models_config.get_model(normalized_model)
+        return None
+
+    def _adapt_params(self, model_info: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """根据模型能力适配请求参数，跳过模型不支持的参数。返回适配后的 kwargs。"""
+        if not model_info:
+            return kwargs
+
+        adapted = dict(kwargs)
+
+        # 推理模型：不支持 response_format，temperature 固定
+        if getattr(model_info, "supports_reasoning", False):
+            if adapted.pop("response_format", None):
+                logger.warning(
+                    "模型 %s 为推理模型，已跳过 response_format",
+                    getattr(model_info, "id", "unknown"),
+                )
+            adapted["temperature"] = 1.0
+        # 不支持 json_mode：移除 response_format
+        elif not getattr(model_info, "supports_json_mode", True):
+            if adapted.pop("response_format", None):
+                logger.warning(
+                    "模型 %s 不支持 json_mode，已跳过 response_format",
+                    getattr(model_info, "id", "unknown"),
+                )
+
+        # 不支持工具调用：移除 tools
+        if not getattr(model_info, "supports_tools", True):
+            adapted.pop("tools", None)
+            adapted.pop("tool_choice", None)
+
+        return adapted
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -245,6 +286,9 @@ class LLMGateway:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict | None = None,
         stream: bool = False,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMResponse | AsyncGenerator[StreamChunk, None]:
         """
         聊天补全
@@ -257,6 +301,9 @@ class LLMGateway:
             tools: 工具定义列表
             tool_choice: 工具选择策略
             stream: 是否流式输出
+            api_key: 可选，覆盖系统 API Key（用户自定义模型）
+            api_base: 可选，覆盖系统 API 端点（用户自定义模型）
+            response_format: 可选，输出格式约束，如 {"type": "json_object"}
 
         Returns:
             LLMResponse 或流式生成器
@@ -264,7 +311,12 @@ class LLMGateway:
         model = model or self.config.default_model
 
         # 获取 API Key 配置（需要在规范化之前，因为火山引擎需要 endpoint_id）
-        api_config = self._get_api_key(model)
+        if api_key:
+            api_config: dict[str, Any] = {"api_key": api_key}
+            if api_base:
+                api_config["api_base"] = api_base
+        else:
+            api_config = self._get_api_key(model)
 
         # 规范化模型名称（转换为 litellm 需要的格式）
         # 对于火山引擎，如果配置了 endpoint_id，使用 endpoint_id 作为模型名称
@@ -303,6 +355,14 @@ class LLMGateway:
             kwargs["tools"] = tools
             if tool_choice:
                 kwargs["tool_choice"] = tool_choice
+
+        # 添加输出格式约束（如 JSON Mode）
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        # 根据模型能力适配参数（跳过不支持的 response_format / tools 等）
+        model_info = self._resolve_model_info(model, normalized_model)
+        kwargs = self._adapt_params(model_info, kwargs)
 
         # 添加 API Key 配置
         kwargs.update(api_config)

@@ -8,18 +8,22 @@
  * 1. 使用 TanStack Query 与项目其他数据获取保持一致
  * 2. 阻塞渲染直到 Cookie 建立完成
  * 3. 同步用户信息到 Zustand store 供全局访问
- * 4. 监听 token 过期事件，自动 toast 提示并切换到匿名身份
+ * 4. 监听 token 过期事件，自动 toast 提示并重定向到登录页
+ * 5. 未认证用户自动重定向到 /login（公开路由除外）
  */
 
 import { type ReactNode, useEffect } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/client'
 import { userApi } from '@/api/user'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
+
+const PUBLIC_PATHS = ['/login', '/register']
 
 interface AuthProviderProps {
   children: ReactNode
@@ -29,6 +33,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   const setCurrentUser = useUserStore((state) => state.setCurrentUser)
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const location = useLocation()
 
   const {
     data: currentUser,
@@ -55,7 +60,9 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
       void refetch()
     }
     window.addEventListener('auth:session-expired', handler)
-    return () => { window.removeEventListener('auth:session-expired', handler) }
+    return () => {
+      window.removeEventListener('auth:session-expired', handler)
+    }
   }, [toast, queryClient, refetch])
 
   // 同步用户信息到 Zustand store
@@ -76,8 +83,10 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     )
   }
 
-  // 严重错误状态（如服务不可用）- 401/403 是正常的未登录状态
   const isAuthError = error instanceof ApiError && (error.status === 401 || error.status === 403)
+  const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
+
+  // 严重错误状态（如服务不可用）- 401/403 是正常的未登录状态
   if (error && !isAuthError) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -96,6 +105,11 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
         </div>
       </div>
     )
+  }
+
+  // 未认证 + 不在公开页面 → 重定向到登录页（保留原始路径以便登录后跳回）
+  if (!currentUser && isFetched && !isOnPublicPath) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
   return <>{children}</>

@@ -50,7 +50,8 @@ export default function VideoTaskDetailDialog({
   // 实时获取最新任务数据
   const { data: liveTask, isLoading } = useQuery({
     queryKey: ['video-task', initialTask?.id],
-    queryFn: () => (initialTask ? videoTaskApi.get(initialTask.id) : Promise.reject()),
+    queryFn: () =>
+      initialTask ? videoTaskApi.get(initialTask.id) : Promise.reject(new Error('missing task')),
     enabled: open && !!initialTask,
     // 进行中的任务自动轮询
     refetchInterval: (query) => {
@@ -144,7 +145,9 @@ export default function VideoTaskDetailDialog({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xl"
-          onClick={() => { onOpenChange(false); }}
+          onClick={() => {
+            onOpenChange(false)
+          }}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -152,12 +155,16 @@ export default function VideoTaskDetailDialog({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
             className="relative mx-4 max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-3xl border border-border/30 bg-card shadow-2xl"
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
           >
             {/* 关闭按钮 */}
             <button
               type="button"
-              onClick={() => { onOpenChange(false); }}
+              onClick={() => {
+                onOpenChange(false)
+              }}
               aria-label="关闭"
               className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -184,7 +191,7 @@ export default function VideoTaskDetailDialog({
                         src={task.videoUrl}
                         controls
                         autoPlay
-                        className="h-auto w-full max-h-[50vh]"
+                        className="h-auto max-h-[50vh] w-full"
                         preload="auto"
                         playsInline
                       >
@@ -196,19 +203,15 @@ export default function VideoTaskDetailDialog({
                     <div className="mb-4 text-center">
                       <h2 className="mb-1 text-lg font-medium text-foreground">创作完成</h2>
                       <p className="text-sm text-muted-foreground">
-                        {VIDEO_TASK_MARKETPLACES.find((m) => m.value === task.marketplace)?.label ?? task.marketplace}
+                        {VIDEO_TASK_MARKETPLACES.find((m) => m.value === task.marketplace)?.label ??
+                          task.marketplace}
                       </p>
                     </div>
 
                     {/* 操作按钮 */}
                     <div className="flex flex-wrap justify-center gap-2">
                       <Button variant="outline" size="sm" className="gap-2" asChild>
-                        <a
-                          href={task.videoUrl}
-                          download
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
+                        <a href={task.videoUrl} download target="_blank" rel="noopener noreferrer">
                           <Download className="h-4 w-4" />
                           下载
                         </a>
@@ -217,7 +220,9 @@ export default function VideoTaskDetailDialog({
                         variant="ghost"
                         size="sm"
                         className="gap-2"
-                        onClick={() => { copyToClipboard(task.videoUrl ?? ''); }}
+                        onClick={() => {
+                          copyToClipboard(task.videoUrl ?? '')
+                        }}
                       >
                         <Copy className="h-4 w-4" />
                         复制链接
@@ -258,7 +263,9 @@ export default function VideoTaskDetailDialog({
                         disabled={pollMutation.isPending}
                         className="gap-2 rounded-full"
                       >
-                        <RotateCw className={cn('h-4 w-4', pollMutation.isPending && 'animate-spin')} />
+                        <RotateCw
+                          className={cn('h-4 w-4', pollMutation.isPending && 'animate-spin')}
+                        />
                         刷新状态
                       </Button>
                     </div>
@@ -276,7 +283,8 @@ export default function VideoTaskDetailDialog({
                         <StatusTitle status={task.status} />
                       </h2>
                       <p className="text-sm text-muted-foreground">
-                        {VIDEO_TASK_MARKETPLACES.find((m) => m.value === task.marketplace)?.label ?? task.marketplace}
+                        {VIDEO_TASK_MARKETPLACES.find((m) => m.value === task.marketplace)?.label ??
+                          task.marketplace}
                       </p>
                     </div>
 
@@ -300,7 +308,9 @@ export default function VideoTaskDetailDialog({
                             disabled={pollMutation.isPending}
                             className="gap-2 rounded-full"
                           >
-                            <RotateCw className={cn('h-4 w-4', pollMutation.isPending && 'animate-spin')} />
+                            <RotateCw
+                              className={cn('h-4 w-4', pollMutation.isPending && 'animate-spin')}
+                            />
                             刷新
                           </Button>
                           <Button
@@ -331,7 +341,9 @@ export default function VideoTaskDetailDialog({
                           disabled={retryMutation.isPending}
                           className="gap-2 rounded-full px-6"
                         >
-                          <RotateCw className={cn('h-4 w-4', retryMutation.isPending && 'animate-spin')} />
+                          <RotateCw
+                            className={cn('h-4 w-4', retryMutation.isPending && 'animate-spin')}
+                          />
                           重试
                         </Button>
                       )}
@@ -353,7 +365,9 @@ export default function VideoTaskDetailDialog({
                 <Section title="创作描述">
                   <div className="rounded-2xl bg-muted/30 p-4">
                     <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
-                      {task.promptText || '暂无描述'}
+                      {task.promptText !== undefined && task.promptText !== ''
+                        ? task.promptText
+                        : '暂无描述'}
                     </p>
                   </div>
                 </Section>
@@ -387,17 +401,24 @@ export default function VideoTaskDetailDialog({
                   <div className="mt-4 space-y-3 rounded-2xl bg-muted/20 p-4 text-xs">
                     <InfoRow label="任务 ID" value={task.id} copyable onCopy={copyToClipboard} />
                     {task.workflowId && (
-                      <InfoRow label="Workflow ID" value={task.workflowId} copyable onCopy={copyToClipboard} />
+                      <InfoRow
+                        label="Workflow ID"
+                        value={task.workflowId}
+                        copyable
+                        onCopy={copyToClipboard}
+                      />
                     )}
                     {task.runId && (
-                      <InfoRow label="Run ID" value={task.runId} copyable onCopy={copyToClipboard} />
+                      <InfoRow
+                        label="Run ID"
+                        value={task.runId}
+                        copyable
+                        onCopy={copyToClipboard}
+                      />
                     )}
                     <InfoRow label="模型" value={task.model} />
-                    <InfoRow label="时长" value={`${task.duration}秒`} />
-                    <InfoRow 
-                      label="提示词来源" 
-                      value={formatPromptSource(task.promptSource)} 
-                    />
+                    <InfoRow label="时长" value={`${String(task.duration)}秒`} />
+                    <InfoRow label="提示词来源" value={formatPromptSource(task.promptSource)} />
                     <InfoRow
                       label="创建时间"
                       value={new Date(task.createdAt).toLocaleString('zh-CN')}
@@ -406,9 +427,9 @@ export default function VideoTaskDetailDialog({
                       label="更新时间"
                       value={new Date(task.updatedAt).toLocaleString('zh-CN')}
                     />
-                    
+
                     {/* 复制全部按钮 */}
-                    <div className="pt-2 border-t border-border/30">
+                    <div className="border-t border-border/30 pt-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -417,7 +438,7 @@ export default function VideoTaskDetailDialog({
                             task.workflowId ? `Workflow ID: ${task.workflowId}` : null,
                             task.runId ? `Run ID: ${task.runId}` : null,
                             `模型: ${task.model}`,
-                            `时长: ${task.duration}秒`,
+                            `时长: ${String(task.duration)}秒`,
                             task.promptText ? `提示词: ${task.promptText}` : null,
                             task.referenceImages.length > 0
                               ? `参考图片:\n${task.referenceImages.join('\n')}`
@@ -425,10 +446,12 @@ export default function VideoTaskDetailDialog({
                             `提示词来源: ${formatPromptSource(task.promptSource)}`,
                             `创建时间: ${new Date(task.createdAt).toLocaleString('zh-CN')}`,
                             `更新时间: ${new Date(task.updatedAt).toLocaleString('zh-CN')}`,
-                          ].filter(Boolean).join('\n')
+                          ]
+                            .filter(Boolean)
+                            .join('\n')
                           copyToClipboard(info)
                         }}
-                        className="flex items-center gap-1.5 text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                        className="flex items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-muted-foreground"
                       >
                         <Copy className="h-3 w-3" />
                         复制全部
@@ -541,7 +564,9 @@ function InfoRow({
         {copyable && onCopy && (
           <button
             type="button"
-            onClick={() => { onCopy(value); }}
+            onClick={() => {
+              onCopy(value)
+            }}
             aria-label={`复制 ${label}`}
             className="rounded p-1 text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground"
           >

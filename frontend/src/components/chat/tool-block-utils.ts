@@ -6,10 +6,7 @@
  */
 
 /** 返回 JSON 中带 task_id 的视频类工具名 */
-export const VIDEO_TASK_TOOL_NAMES = [
-  'amazon_video_submit',
-  'amazon_video_poll',
-] as const
+export const VIDEO_TASK_TOOL_NAMES = ['amazon_video_submit', 'amazon_video_poll'] as const
 
 export type VideoTaskToolName = (typeof VIDEO_TASK_TOOL_NAMES)[number]
 
@@ -22,7 +19,7 @@ export function parseVideoTaskOutput(output: string): { taskId: string } | null 
   if (typeof output !== 'string' || !output.trim()) return null
   try {
     const data = JSON.parse(output) as Record<string, unknown>
-    const taskId = data?.task_id
+    const taskId = data.task_id
     if (typeof taskId === 'string' && taskId) return { taskId }
     return null
   } catch {

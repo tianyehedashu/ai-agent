@@ -106,9 +106,27 @@ class ModelInfo:
     supports_vision: bool = False
     supports_tools: bool = True
     supports_reasoning: bool = False  # 是否支持推理/思维链
+    supports_json_mode: bool = True  # 是否支持 response_format=json_object
+    supports_image_gen: bool = False  # 是否为图像生成模型
     litellm_model: str = ""  # LiteLLM 调用格式 (如 deepseek/deepseek-chat)
     recommended_for: list[str] = field(default_factory=list)  # 推荐使用场景
     description: str = ""  # 模型描述
+
+    @property
+    def features(self) -> frozenset[str]:
+        """返回该模型支持的特性名集合，用于能力-模型匹配。"""
+        result: set[str] = set()
+        if self.supports_vision:
+            result.add("vision")
+        if self.supports_tools:
+            result.add("tools")
+        if self.supports_reasoning:
+            result.add("reasoning")
+        if self.supports_json_mode:
+            result.add("json_mode")
+        if self.supports_image_gen:
+            result.add("image_gen")
+        return frozenset(result)
 
 
 @dataclass
@@ -286,6 +304,7 @@ class VolcengineConfig:
     api_key: str = ""
     api_base: str = "https://ark.cn-beijing.volces.com/api/v3"
     chat_endpoint_id: str = ""
+    image_endpoint_id: str = ""
 
 
 @dataclass

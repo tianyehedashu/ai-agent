@@ -406,3 +406,71 @@ class TestLLMGateway:
 
         # Assert
         assert api_config == {}
+
+    # ========================================================================
+    # 模型能力参数适配 (_adapt_params)
+    # ========================================================================
+
+    def test_adapt_params_none_model_info_unchanged(self, gateway):
+        """测试: model_info 为 None 时 kwargs 不变"""
+        kwargs = {"temperature": 0.5, "response_format": {"type": "json_object"}}
+        result = gateway._adapt_params(None, kwargs)
+        assert result == kwargs
+        assert "response_format" in result
+
+    def test_adapt_params_reasoning_model_removes_response_format(self, gateway):
+        """测试: 推理模型移除 response_format，temperature 固定为 1.0"""
+        model_info = type("ModelInfo", (), {
+            "supports_reasoning": True,
+            "supports_json_mode": True,
+            "supports_tools": True,
+        })()
+        kwargs = {"temperature": 0.3, "response_format": {"type": "json_object"}}
+        result = gateway._adapt_params(model_info, kwargs)
+        assert "response_format" not in result
+        assert result["temperature"] == 1.0
+
+    def test_adapt_params_no_json_mode_removes_response_format(self, gateway):
+        """测试: supports_json_mode=False 时移除 response_format"""
+        model_info = type("ModelInfo", (), {
+            "supports_reasoning": False,
+            "supports_json_mode": False,
+            "supports_tools": True,
+        })()
+        kwargs = {"temperature": 0.5, "response_format": {"type": "json_object"}}
+        result = gateway._adapt_params(model_info, kwargs)
+        assert "response_format" not in result
+        assert result["temperature"] == 0.5
+
+    def test_adapt_params_no_tools_removes_tools(self, gateway):
+        """测试: supports_tools=False 时移除 tools 和 tool_choice"""
+        model_info = type("ModelInfo", (), {
+            "supports_reasoning": False,
+            "supports_json_mode": True,
+            "supports_tools": False,
+        })()
+        kwargs = {"tools": [{"type": "function"}], "tool_choice": "auto"}
+        result = gateway._adapt_params(model_info, kwargs)
+        assert "tools" not in result
+        assert "tool_choice" not in result
+
+    def test_adapt_params_normal_model_keeps_all(self, gateway):
+        """测试: 普通模型保留所有参数"""
+        model_info = type("ModelInfo", (), {
+            "supports_reasoning": False,
+            "supports_json_mode": True,
+            "supports_tools": True,
+        })()
+        kwargs = {"temperature": 0.7, "response_format": {"type": "json_object"}, "tools": []}
+        result = gateway._adapt_params(model_info, kwargs)
+        assert result["response_format"] == {"type": "json_object"}
+        assert result["temperature"] == 0.7
+        assert "tools" in result
+
+    def test_resolve_model_info_returns_none_for_unknown(self, gateway):
+        """测试: 未知模型返回 None"""
+        mock_models = type("Models", (), {"get_model": lambda self, m: None})()
+        mock_config = type("Config", (), {"models": mock_models})()
+        with patch("domains.agent.infrastructure.llm.gateway.get_app_config", return_value=mock_config):
+            result = gateway._resolve_model_info("unknown-model", "unknown-model")
+        assert result is None

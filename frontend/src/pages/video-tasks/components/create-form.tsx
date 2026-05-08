@@ -1,8 +1,18 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ImagePlus, Loader2, X, AlertCircle, Plus, Sparkles, Clock } from 'lucide-react'
+import {
+  ImagePlus,
+  Loader2,
+  X,
+  AlertCircle,
+  Plus,
+  Sparkles,
+  Clock,
+  Wand2,
+  Settings2,
+} from 'lucide-react'
 
 import { ApiError } from '@/api/client'
 import { videoTaskApi } from '@/api/videoTask'
@@ -13,10 +23,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { VIDEO_TASK_MARKETPLACES } from '@/constants/video-task'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { VIDEO_TASK_MARKETPLACES, VIDEO_MODELS, getVideoDurations } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { getAnonymousUserId } from '@/stores/auth'
+import { useUserStore } from '@/stores/user'
+import { useVideoSettingsStore } from '@/stores/video-settings'
 import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
+
+import { PromptOptimizeDialog } from './prompt-optimize-dialog'
 
 interface VideoTaskCreateFormProps {
   onTaskCreated?: (task: VideoGenTask) => void
@@ -25,19 +41,6 @@ interface VideoTaskCreateFormProps {
   disabled?: boolean
   initialPrompt?: string
   sessionId?: string
-}
-
-const models: { value: VideoModel; label: string; description: string }[] = [
-  { value: 'openai::sora1.0', label: 'Sora 1.0', description: '快速生成' },
-  { value: 'openai::sora2.0', label: 'Sora 2.0', description: '高质量' },
-]
-
-// 根据模型获取可用时长
-const getDurations = (model: VideoModel): VideoDuration[] => {
-  if (model === 'openai::sora2.0') {
-    return [5, 10, 15]
-  }
-  return [5, 10, 15, 20]
 }
 
 /**
@@ -62,18 +65,34 @@ export default function VideoTaskCreateForm({
   const [referenceImages, setReferenceImages] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
+  const [showSystemPromptDialog, setShowSystemPromptDialog] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
+  const currentUser = useUserStore((s) => s.currentUser)
+  const userKey = currentUser?.id ?? getAnonymousUserId() ?? 'default'
+  const { setSystemPrompt, clearSystemPrompt } = useVideoSettingsStore()
+  const systemPrompt = useVideoSettingsStore((s) => s.userPrompts[userKey] ?? '')
+  const handleSystemPromptChange = useCallback(
+    (value: string) => {
+      if (value) {
+        setSystemPrompt(userKey, value)
+      } else {
+        clearSystemPrompt(userKey)
+      }
+    },
+    [userKey, setSystemPrompt, clearSystemPrompt]
+  )
+
   const selectedMarketplace = VIDEO_TASK_MARKETPLACES.find((m) => m.value === marketplace)
-  const selectedModel = models.find((m) => m.value === model)
-  const availableDurations = useMemo(() => getDurations(model), [model])
+  const selectedModel = VIDEO_MODELS.find((m) => m.value === model)
+  const availableDurations = useMemo(() => getVideoDurations(model), [model])
 
   // 当模型变化时，确保时长在可用范围内
   useEffect(() => {
-    const durations = getDurations(model)
+    const durations = getVideoDurations(model)
     if (!durations.includes(duration)) {
       setDuration(durations[0])
     }
@@ -102,7 +121,7 @@ export default function VideoTaskCreateForm({
     const textarea = textareaRef.current
     if (textarea) {
       textarea.style.height = 'auto'
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+      textarea.style.height = `${String(Math.min(textarea.scrollHeight, 160))}px`
     }
   }, [promptText])
 
@@ -128,6 +147,27 @@ export default function VideoTaskCreateForm({
   const handleImageError = (url: string): void => {
     setImageStates((prev) => ({ ...prev, [url]: 'error' }))
   }
+
+  const optimizeMutation = useMutation({
+    mutationFn: () =>
+      videoTaskApi.optimizePrompt({
+        userText: promptText || undefined,
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+        systemPrompt: systemPrompt || undefined,
+        marketplace,
+      }),
+    onSuccess: (result) => {
+      setPromptText(result.optimizedPrompt)
+      toast({ title: '提示词已优化', description: '已生成优化后的视频提示词' })
+    },
+    onError: (error) => {
+      toast({
+        variant: 'destructive',
+        title: '优化失败',
+        description: error instanceof Error ? error.message : '未知错误',
+      })
+    },
+  })
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -170,6 +210,12 @@ export default function VideoTaskCreateForm({
       }
     },
   })
+
+  const handleOptimize = (): void => {
+    if ((!promptText.trim() && imageUrls.length === 0) || disabled || optimizeMutation.isPending)
+      return
+    void optimizeMutation.mutateAsync()
+  }
 
   const handleSubmit = (): void => {
     if (!promptText.trim() || disabled || createMutation.isPending) return
@@ -223,13 +269,18 @@ export default function VideoTaskCreateForm({
                         )}
                         <img
                           src={url}
-                          alt={`参考图 ${index + 1}`}
+                          alt={`参考图 ${String(index + 1)}`}
                           className={cn(
                             'h-full w-full object-cover',
                             imageStates[url] === 'loaded' ? 'opacity-100' : 'opacity-0'
                           )}
-                          onLoad={() => { handleImageLoad(url); }}
-                          onError={() => { handleImageError(url); }}
+                          referrerPolicy="no-referrer"
+                          onLoad={() => {
+                            handleImageLoad(url)
+                          }}
+                          onError={() => {
+                            handleImageError(url)
+                          }}
                         />
                       </>
                     ) : (
@@ -240,8 +291,10 @@ export default function VideoTaskCreateForm({
                   </div>
                   <button
                     type="button"
-                    onClick={() => { removeImage(url); }}
-                    aria-label={`移除参考图 ${index + 1}`}
+                    onClick={() => {
+                      removeImage(url)
+                    }}
+                    aria-label={`移除参考图 ${String(index + 1)}`}
                     className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background opacity-0 transition-opacity group-hover:opacity-100"
                   >
                     <X className="h-2.5 w-2.5" />
@@ -251,7 +304,9 @@ export default function VideoTaskCreateForm({
               {/* 添加更多 */}
               <button
                 type="button"
-                onClick={() => { setShowImageInput(true); }}
+                onClick={() => {
+                  setShowImageInput(true)
+                }}
                 aria-label="添加参考图"
                 className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border/50 text-muted-foreground/40 transition-colors hover:border-border hover:text-muted-foreground"
               >
@@ -268,9 +323,15 @@ export default function VideoTaskCreateForm({
           ref={textareaRef}
           placeholder="描述你想创造的视频..."
           value={promptText}
-          onChange={(e) => { setPromptText(e.target.value); }}
-          onFocus={() => { setIsFocused(true); }}
-          onBlur={() => { setIsFocused(false); }}
+          onChange={(e) => {
+            setPromptText(e.target.value)
+          }}
+          onFocus={() => {
+            setIsFocused(true)
+          }}
+          onBlur={() => {
+            setIsFocused(false)
+          }}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           maxLength={2000}
@@ -309,7 +370,9 @@ export default function VideoTaskCreateForm({
               {VIDEO_TASK_MARKETPLACES.map((m) => (
                 <DropdownMenuItem
                   key={m.value}
-                  onClick={() => { setMarketplace(m.value); }}
+                  onClick={() => {
+                    setMarketplace(m.value)
+                  }}
                   className={cn('text-sm', marketplace === m.value && 'bg-accent')}
                 >
                   {m.label}
@@ -332,10 +395,12 @@ export default function VideoTaskCreateForm({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[140px]">
-              {models.map((m) => (
+              {VIDEO_MODELS.map((m) => (
                 <DropdownMenuItem
                   key={m.value}
-                  onClick={() => { setModel(m.value); }}
+                  onClick={() => {
+                    setModel(m.value)
+                  }}
                   className={cn('text-sm', model === m.value && 'bg-accent')}
                 >
                   <div className="flex flex-col">
@@ -353,7 +418,7 @@ export default function VideoTaskCreateForm({
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label={`时长：${duration} 秒`}
+                aria-label={`时长：${String(duration)} 秒`}
                 className="h-7 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground/60 hover:text-foreground"
               >
                 <Clock className="h-3 w-3" />
@@ -364,7 +429,9 @@ export default function VideoTaskCreateForm({
               {availableDurations.map((d) => (
                 <DropdownMenuItem
                   key={d}
-                  onClick={() => { setDuration(d); }}
+                  onClick={() => {
+                    setDuration(d)
+                  }}
                   className={cn('text-sm', duration === d && 'bg-accent')}
                 >
                   {d} 秒
@@ -378,7 +445,9 @@ export default function VideoTaskCreateForm({
             variant="ghost"
             size="sm"
             aria-label={showImageInput ? '收起参考图输入' : '添加参考图'}
-            onClick={() => { setShowImageInput(!showImageInput); }}
+            onClick={() => {
+              setShowImageInput(!showImageInput)
+            }}
             className={cn(
               'h-7 w-7 rounded-lg p-0 text-muted-foreground/60 hover:text-foreground',
               showImageInput && 'text-foreground'
@@ -386,6 +455,60 @@ export default function VideoTaskCreateForm({
           >
             <ImagePlus className="h-4 w-4" />
           </Button>
+
+          <div className="mx-1 h-4 w-px bg-border/40" />
+
+          {/* 提示词优化 */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="AI 优化提示词"
+                  onClick={handleOptimize}
+                  disabled={
+                    (!promptText.trim() && imageUrls.length === 0) ||
+                    disabled ||
+                    optimizeMutation.isPending
+                  }
+                  className="h-7 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground/60 hover:text-foreground disabled:opacity-40"
+                >
+                  {optimizeMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>优化</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>AI 分析图片和描述，生成英文视频提示词</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* 系统提示词设置 */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="编辑优化提示词的系统指令"
+                  onClick={() => {
+                    setShowSystemPromptDialog(true)
+                  }}
+                  className="h-7 w-7 rounded-lg p-0 text-muted-foreground/60 hover:text-foreground"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>编辑系统指令</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* 发送按钮 */}
@@ -400,11 +523,7 @@ export default function VideoTaskCreateForm({
               : 'bg-muted text-muted-foreground'
           )}
         >
-          {createMutation.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            '创建'
-          )}
+          {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '创建'}
         </Button>
       </div>
 
@@ -423,7 +542,9 @@ export default function VideoTaskCreateForm({
                 ref={imageInputRef}
                 placeholder="粘贴图片链接（每行一个）"
                 value={referenceImages}
-                onChange={(e) => { setReferenceImages(e.target.value); }}
+                onChange={(e) => {
+                  setReferenceImages(e.target.value)
+                }}
                 rows={2}
                 className="w-full resize-none bg-transparent text-sm placeholder:text-muted-foreground/40 focus:outline-none"
               />
@@ -431,6 +552,14 @@ export default function VideoTaskCreateForm({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 系统提示词编辑对话框 */}
+      <PromptOptimizeDialog
+        open={showSystemPromptDialog}
+        onOpenChange={setShowSystemPromptDialog}
+        value={systemPrompt}
+        onChange={handleSystemPromptChange}
+      />
     </div>
   )
 }

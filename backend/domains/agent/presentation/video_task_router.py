@@ -9,30 +9,42 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from domains.agent.application.video_prompt_optimize_use_case import (
+    DEFAULT_VIDEO_PROMPT_SYSTEM_TEMPLATE,
+    VideoPromptOptimizeUseCase,
+)
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
-from domains.identity.domain.types import Principal
 from domains.identity.presentation.deps import AuthUser
 from libs.api.deps import get_video_task_service
+from libs.api.params import parse_optional_uuid
 
 router = APIRouter()
-
-
-def _get_user_ids(
-    current_user: AuthUser,
-) -> tuple[uuid.UUID | None, str | None, int | None]:
-    """从当前用户获取 user_id、anonymous_user_id 和 vendor_creator_id
-
-    Returns:
-        (user_id, anonymous_user_id, vendor_creator_id) 元组
-    """
-    if current_user.is_anonymous:
-        return None, Principal.extract_anonymous_id(current_user.id), None
-    return uuid.UUID(current_user.id), None, current_user.vendor_creator_id
 
 
 # =============================================================================
 # Request/Response Schemas
 # =============================================================================
+
+
+class VideoPromptOptimizeRequest(BaseModel):
+    """视频提示词优化请求"""
+
+    user_text: str | None = Field(default=None, max_length=2000, description="用户输入的文字描述")
+    image_urls: list[str] = Field(default_factory=list, description="产品图片URL列表")
+    system_prompt: str | None = Field(default=None, max_length=10000, description="自定义系统提示词")
+    marketplace: str = Field(default="jp", description="目标站点")
+
+
+class VideoPromptOptimizeResponse(BaseModel):
+    """视频提示词优化响应"""
+
+    optimized_prompt: str = Field(description="优化后的视频提示词")
+
+
+class VideoPromptTemplateResponse(BaseModel):
+    """视频提示词模板响应"""
+
+    system_prompt: str = Field(description="系统提示词模板")
 
 
 class VideoTaskCreate(BaseModel):
@@ -41,7 +53,7 @@ class VideoTaskCreate(BaseModel):
     model_config = ConfigDict(strict=True)
 
     session_id: str | None = Field(default=None, description="关联会话ID")
-    prompt_text: str | None = Field(default=None, max_length=2000, description="视频生成提示词")
+    prompt_text: str | None = Field(default=None, max_length=4000, description="视频生成提示词")
     prompt_source: str | None = Field(default=None, description="提示词来源")
     reference_images: list[str] = Field(default_factory=list, description="参考图片URL列表")
     marketplace: str = Field(default="jp", description="目标站点")
@@ -124,6 +136,36 @@ class VideoTaskListResponse(BaseModel):
 # =============================================================================
 
 
+@router.get("/prompt-template", response_model=VideoPromptTemplateResponse)
+async def get_prompt_template(
+    current_user: AuthUser,
+) -> VideoPromptTemplateResponse:
+    """获取视频提示词优化的系统提示词模板"""
+    return VideoPromptTemplateResponse(system_prompt=DEFAULT_VIDEO_PROMPT_SYSTEM_TEMPLATE)
+
+
+@router.post("/optimize-prompt", response_model=VideoPromptOptimizeResponse)
+async def optimize_prompt(
+    data: VideoPromptOptimizeRequest,
+    current_user: AuthUser,
+) -> VideoPromptOptimizeResponse:
+    """利用 LLM 分析用户输入和图片，生成优化的视频提示词"""
+    if not data.user_text and not data.image_urls:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="至少需要提供文字描述或图片",
+        )
+
+    use_case = VideoPromptOptimizeUseCase()
+    result = await use_case.optimize(
+        user_text=data.user_text,
+        image_urls=data.image_urls,
+        system_prompt=data.system_prompt,
+        marketplace=data.marketplace,
+    )
+    return VideoPromptOptimizeResponse(optimized_prompt=result)
+
+
 @router.get("/", response_model=VideoTaskListResponse)
 async def list_video_tasks(
     current_user: AuthUser,
@@ -132,20 +174,16 @@ async def list_video_tasks(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     task_status: Annotated[str | None, Query(alias="status")] = None,
     session_id: Annotated[str | None, Query(description="按会话筛选")] = None,
+    prompt_source: Annotated[str | None, Query(description="按提示词来源筛选")] = None,
 ) -> VideoTaskListResponse:
     """获取用户的视频任务列表"""
-    session_uuid = None
-    if session_id:
-        try:
-            session_uuid = uuid.UUID(session_id)
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=f"Invalid session_id: {session_id}") from e
-
+    session_uuid = parse_optional_uuid(session_id, "session_id")
     tasks, total = await video_task_service.list_tasks(
         skip=skip,
         limit=limit,
         status=task_status,
         session_id=session_uuid,
+        prompt_source=prompt_source,
     )
     return VideoTaskListResponse(
         items=[VideoTaskResponse.model_validate(t) for t in tasks],
@@ -162,20 +200,12 @@ async def create_video_task(
     video_task_service: VideoTaskUseCase = Depends(get_video_task_service),
 ) -> VideoTaskResponse:
     """创建视频生成任务"""
-    _, _, vendor_creator_id = _get_user_ids(current_user)
-
-    session_id = None
-    if data.session_id:
-        try:
-            session_id = uuid.UUID(data.session_id)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=422, detail=f"Invalid session_id: {data.session_id}"
-            ) from e
+    vendor_creator_id = current_user.vendor_creator_id
+    session_uuid = parse_optional_uuid(data.session_id, "session_id")
 
     task = await video_task_service.create_task(
         principal_id=current_user.id,
-        session_id=session_id,
+        session_id=session_uuid,
         prompt_text=data.prompt_text,
         prompt_source=data.prompt_source,
         reference_images=data.reference_images,

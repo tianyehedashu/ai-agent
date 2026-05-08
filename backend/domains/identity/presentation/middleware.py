@@ -42,7 +42,7 @@ async def anonymous_user_cookie_middleware(request: Request, call_next) -> Respo
             max_age=ANONYMOUS_COOKIE_MAX_AGE,
             path="/",  # 确保 Cookie 对所有路径有            httponly=True,
             samesite="lax",
-            secure=not settings.is_development,
+            secure=settings.is_cookie_secure,
         )
         # 同时在响应头中返回，让前端可以保存到 localStorage
         # 这样即使 Cookie 丢失，前端也能通过 Header 发送

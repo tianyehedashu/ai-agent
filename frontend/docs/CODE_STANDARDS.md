@@ -90,17 +90,19 @@ export const UserCard = ({ user, onSelect }: UserCardProps) => {
 
 ```
 stores/
-├── auth.ts      # 认证状态（token、anonymousUserId）- 持久化到 localStorage
-├── user.ts      # 用户信息（currentUser、登录/注册/登出操作）
-├── chat.ts      # 聊天状态（messages、session、streaming）
-└── sidebar.ts   # 侧边栏 UI 状态
+├── auth.ts          # 认证状态（token、anonymousUserId）- 持久化到 localStorage
+├── user.ts          # 用户信息（currentUser、登录/注册/登出操作）
+├── chat.ts          # 聊天状态（messages、session、streaming）
+├── sidebar.ts       # 侧边栏 UI 状态
+└── product-info.ts  # 产品信息草稿状态（lastJobId、draftInputs）
 ```
 
-| Store       | 职责               | 持久化          |
-| ----------- | ------------------ | --------------- |
-| `authStore` | Token、匿名用户 ID | ✅ localStorage |
-| `userStore` | 用户信息、认证操作 | ❌              |
-| `chatStore` | 会话消息、流式内容 | ❌              |
+| Store              | 职责                  | 持久化          |
+| ------------------ | --------------------- | --------------- |
+| `authStore`        | Token、匿名用户 ID    | ✅ localStorage |
+| `userStore`        | 用户信息、认证操作    | ❌              |
+| `chatStore`        | 会话消息、流式内容    | ❌              |
+| `productInfoStore` | 草稿输入、最近任务 ID | ✅ localStorage |
 
 ### 认证状态管理
 

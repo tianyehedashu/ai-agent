@@ -59,7 +59,9 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
   const { toast } = useToast()
 
   // 切换筛选时重置分页
-  useEffect(() => { setDisplayLimit(12) }, [statusFilter])
+  useEffect(() => {
+    setDisplayLimit(12)
+  }, [statusFilter])
 
   const { data: tasksData, isLoading } = useQuery({
     queryKey: ['video-tasks', 'history', statusFilter, displayLimit],
@@ -83,7 +85,9 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
         })
       })
     }, 15000)
-    return () => { clearInterval(pollInterval); }
+    return () => {
+      clearInterval(pollInterval)
+    }
   }, [runningTasks, queryClient])
 
   const cancelMutation = useMutation({
@@ -143,13 +147,14 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
             <span>返回</span>
           </Link>
-
           {/* 筛选标签 - 药丸式设计 */}
           <div className="flex items-center gap-1 rounded-full bg-muted/50 p-1">
             {statusFilters.map((filter) => (
               <button
                 key={filter.value}
-                onClick={() => { setStatusFilter(filter.value); }}
+                onClick={() => {
+                  setStatusFilter(filter.value)
+                }}
                 className={cn(
                   'rounded-full px-4 py-1.5 text-sm transition-all duration-200',
                   statusFilter === filter.value
@@ -161,7 +166,6 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
               </button>
             ))}
           </div>
-
           <div className="w-16" /> {/* 平衡布局 */}
         </div>
       </header>
@@ -190,7 +194,9 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
                   >
                     <TaskCard
                       task={task}
-                      onView={() => { setSelectedTask(task); }}
+                      onView={() => {
+                        setSelectedTask(task)
+                      }}
                       onSubmit={() => void submitMutation.mutateAsync(task.id)}
                       onCancel={() => void cancelMutation.mutateAsync(task.id)}
                       onDelete={() => {
@@ -205,7 +211,9 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
               {tasks.length < (tasksData?.total ?? 0) && (
                 <div className="flex justify-center py-8">
                   <button
-                    onClick={() => { setDisplayLimit((l) => l + 12); }}
+                    onClick={() => {
+                      setDisplayLimit((l) => l + 12)
+                    }}
                     className="text-sm text-muted-foreground/60 transition-colors hover:text-foreground"
                   >
                     加载更多
@@ -238,10 +246,7 @@ function LoadingState(): React.JSX.Element {
       className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
     >
       {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div
-          key={i}
-          className="animate-pulse rounded-2xl border border-border/30 bg-card p-5"
-        >
+        <div key={i} className="animate-pulse rounded-2xl border border-border/30 bg-card p-5">
           <div className="mb-4 h-4 w-2/3 rounded-full bg-muted" />
           <div className="mb-2 h-3 w-full rounded-full bg-muted/60" />
           <div className="h-3 w-4/5 rounded-full bg-muted/40" />
@@ -267,9 +272,7 @@ function EmptyState({ statusFilter }: { statusFilter: string }): React.JSX.Eleme
         {statusFilter === 'all' ? '还没有创作' : '没有匹配的任务'}
       </h2>
       <p className="mb-6 max-w-xs text-sm text-muted-foreground">
-        {statusFilter === 'all'
-          ? '开始你的第一个视频创作吧'
-          : '试试切换其他筛选条件'}
+        {statusFilter === 'all' ? '开始你的第一个视频创作吧' : '试试切换其他筛选条件'}
       </p>
       {statusFilter === 'all' && (
         <Button asChild className="rounded-full px-6">
@@ -310,7 +313,12 @@ function TaskCard({
       <div className="mb-4 flex items-start justify-between">
         <StatusBadge status={task.status} />
         <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => { e.stopPropagation(); }}>
+          <DropdownMenuTrigger
+            asChild
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
             <Button
               variant="ghost"
               size="icon"
@@ -319,7 +327,13 @@ function TaskCard({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[140px]" onClick={(e) => { e.stopPropagation(); }}>
+          <DropdownMenuContent
+            align="end"
+            className="min-w-[140px]"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
             {task.status === 'pending' && (
               <DropdownMenuItem onClick={onSubmit}>
                 <Play className="mr-2 h-4 w-4" />
@@ -353,7 +367,10 @@ function TaskCard({
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-destructive focus:text-destructive"
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               删除
             </DropdownMenuItem>
@@ -363,7 +380,7 @@ function TaskCard({
 
       {/* 内容预览 */}
       <p className="mb-4 line-clamp-2 min-h-[40px] text-sm leading-relaxed text-foreground/80">
-        {task.promptText || '暂无描述'}
+        {task.promptText !== undefined && task.promptText !== '' ? task.promptText : '暂无描述'}
       </p>
 
       {/* 底部：时间 + 站点 */}
@@ -382,13 +399,14 @@ function TaskCard({
 
 /** 状态徽章 - 简约的圆点设计 */
 function StatusBadge({ status }: { status: VideoTaskStatus }): React.JSX.Element {
-  const config: Record<VideoTaskStatus, { color: string; icon: React.ElementType; label: string }> = {
-    pending: { color: 'bg-yellow-500', icon: Clock, label: '等待中' },
-    running: { color: 'bg-blue-500', icon: Clock, label: '生成中' },
-    completed: { color: 'bg-green-500', icon: CheckCircle2, label: '已完成' },
-    failed: { color: 'bg-red-500', icon: AlertTriangle, label: '失败' },
-    cancelled: { color: 'bg-gray-400', icon: XCircle, label: '已取消' },
-  }
+  const config: Record<VideoTaskStatus, { color: string; icon: React.ElementType; label: string }> =
+    {
+      pending: { color: 'bg-yellow-500', icon: Clock, label: '等待中' },
+      running: { color: 'bg-blue-500', icon: Clock, label: '生成中' },
+      completed: { color: 'bg-green-500', icon: CheckCircle2, label: '已完成' },
+      failed: { color: 'bg-red-500', icon: AlertTriangle, label: '失败' },
+      cancelled: { color: 'bg-gray-400', icon: XCircle, label: '已取消' },
+    }
 
   const { color, label } = config[status]
   const isAnimating = status === 'pending' || status === 'running'
@@ -397,7 +415,12 @@ function StatusBadge({ status }: { status: VideoTaskStatus }): React.JSX.Element
     <div className="flex items-center gap-2">
       <span className="relative flex h-2 w-2">
         {isAnimating && (
-          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', color)} />
+          <span
+            className={cn(
+              'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+              color
+            )}
+          />
         )}
         <span className={cn('relative inline-flex h-2 w-2 rounded-full', color)} />
       </span>
@@ -416,8 +439,8 @@ function formatRelativeTime(dateStr: string): string {
   const diffDays = Math.floor(diffMs / 86400000)
 
   if (diffMins < 1) return '刚刚'
-  if (diffMins < 60) return `${diffMins} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 7) return `${diffDays} 天前`
+  if (diffMins < 60) return `${String(diffMins)} 分钟前`
+  if (diffHours < 24) return `${String(diffHours)} 小时前`
+  if (diffDays < 7) return `${String(diffDays)} 天前`
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }

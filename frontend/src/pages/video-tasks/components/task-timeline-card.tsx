@@ -1,13 +1,5 @@
 import { motion } from 'framer-motion'
-import {
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Play,
-  Sparkles,
-  RotateCw,
-} from 'lucide-react'
+import { Clock, CheckCircle2, XCircle, AlertTriangle, Play, Sparkles, RotateCw } from 'lucide-react'
 
 import { VIDEO_TASK_MARKETPLACE_FLAGS } from '@/constants/video-task'
 import { cn } from '@/lib/utils'
@@ -139,32 +131,26 @@ export default function TaskTimelineCard({
         <div className="mb-2 flex items-center justify-between">
           <StatusBadge status={task.status} />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {task.model && (
-              <span className="flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                {task.model.split('::')[1] || task.model}
-              </span>
-            )}
+            <span className="flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              {task.model.split('::')[1] ?? task.model}
+            </span>
             <span>{flag}</span>
           </div>
         </div>
 
         {/* 提示词文本 */}
         <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-foreground/80">
-          {task.promptText || '暂无描述'}
+          {task.promptText !== undefined && task.promptText !== '' ? task.promptText : '暂无描述'}
         </p>
 
         {/* 错误信息 */}
         {task.status === 'failed' && task.errorMessage && (
-          <p className="mb-2 line-clamp-1 text-xs text-red-500/70">
-            {task.errorMessage}
-          </p>
+          <p className="mb-2 line-clamp-1 text-xs text-red-500/70">{task.errorMessage}</p>
         )}
 
         {/* 时间 */}
-        <div className="text-xs text-muted-foreground/60">
-          {formatRelativeTime(task.createdAt)}
-        </div>
+        <div className="text-xs text-muted-foreground/60">{formatRelativeTime(task.createdAt)}</div>
       </div>
 
       {/* 进行中的边框动画 */}
@@ -218,8 +204,8 @@ function formatRelativeTime(dateStr: string): string {
   const diffDays = Math.floor(diffMs / 86400000)
 
   if (diffMins < 1) return '刚刚'
-  if (diffMins < 60) return `${diffMins} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 7) return `${diffDays} 天前`
+  if (diffMins < 60) return `${String(diffMins)} 分钟前`
+  if (diffHours < 24) return `${String(diffHours)} 小时前`
+  if (diffDays < 7) return `${String(diffDays)} 天前`
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }

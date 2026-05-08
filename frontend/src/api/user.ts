@@ -2,8 +2,9 @@
  * User API
  */
 
-import { apiClient } from './client'
 import { setRefreshToken } from '@/stores/auth'
+
+import { apiClient } from './client'
 
 export interface CurrentUser {
   id: string

@@ -32,6 +32,7 @@ __all__ = [
     "ANONYMOUS_USER_COOKIE",
     "AdminUser",
     "AuthUser",
+    "OptionalAuthUser",
     "OptionalUser",
     "RequiredAuthUser",
     "SessionLike",
@@ -40,6 +41,7 @@ __all__ = [
     "check_session_ownership",
     "get_current_user",
     "get_current_user_optional",
+    "get_owned_user_ids",
     "get_user_uuid",
     "require_auth",
     "require_role",
@@ -123,6 +125,51 @@ async def get_current_user_optional(
     )
 
 
+async def get_current_user_optional_with_anonymous(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
+    anonymous_user_id: str | None = Cookie(default=None, alias=ANONYMOUS_USER_COOKIE),
+) -> CurrentUser | None:
+    """获取当前用户（可选，开发环境支持匿名，生产环境无凭证时返回 None 不抛 401）
+
+    用于需要公开访问的接口（如可用模型列表），无认证时返回 None 而非 401。
+    """
+    try:
+        principal = await get_principal(request, credentials, db, anonymous_user_id)
+    except HTTPException as e:
+        if e.status_code == status.HTTP_401_UNAUTHORIZED:
+            return None
+        raise
+
+    current_user = CurrentUser(
+        id=principal.id,
+        email=principal.email,
+        name=principal.name,
+        is_anonymous=principal.is_anonymous,
+        role=principal.role,
+        vendor_creator_id=principal.vendor_creator_id,
+    )
+
+    # 设置权限上下文（与 get_current_user 一致）
+    user_id = None
+    anonymous_id = None
+    if principal.is_anonymous:
+        anonymous_id = Principal.extract_anonymous_id(principal.id)
+    else:
+        with suppress(ValueError, AttributeError):
+            user_id = uuid.UUID(principal.id)
+
+    ctx = PermissionContext(
+        user_id=user_id,
+        anonymous_user_id=anonymous_id,
+        role=principal.role,
+    )
+    set_permission_context(ctx)
+
+    return current_user
+
+
 async def require_auth(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
@@ -179,12 +226,29 @@ def require_role(*roles: str):
 AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 RequiredAuthUser = Annotated[CurrentUser, Depends(require_auth)]
 OptionalUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
+OptionalAuthUser = Annotated[
+    CurrentUser | None, Depends(get_current_user_optional_with_anonymous)
+]
 AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
 
 
 def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
     """从当前用户获取 UUID（用于需要注册用户 ID 的 API）"""
     return uuid.UUID(current_user.id)
+
+
+def get_owned_user_ids(
+    current_user: CurrentUser,
+) -> tuple[uuid.UUID | None, str | None]:
+    """从当前用户获取所有权 ID，供 Repository 过滤使用。
+
+    Returns:
+        (user_id, anonymous_user_id)：匿名用户为 (None, anonymous_id)，
+        注册用户为 (uuid, None)。
+    """
+    if current_user.is_anonymous:
+        return None, Principal.extract_anonymous_id(current_user.id)
+    return uuid.UUID(current_user.id), None
 
 
 # =============================================================================

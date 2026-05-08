@@ -11,6 +11,9 @@ import ChatPage from '@/pages/chat'
 import MCPPage from '@/pages/mcp'
 import SystemMCPPage from '@/pages/mcp/system'
 import NotFoundPage from '@/pages/not-found'
+import ProductInfoPage from '@/pages/product-info'
+import ProductInfoHistoryPage from '@/pages/product-info/history'
+import ProductInfoHistoryDetailPage from '@/pages/product-info/history-detail'
 import SettingsPage from '@/pages/settings'
 import StudioPage from '@/pages/studio'
 import VideoTasksPage from '@/pages/video-tasks'
@@ -40,6 +43,12 @@ function App(): React.JSX.Element {
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />
                   <Route path="/video-tasks/:sessionId" element={<VideoTasksPage />} />
+                  <Route path="/product-info/:jobId?" element={<ProductInfoPage />} />
+                  <Route path="/product-info/history" element={<ProductInfoHistoryPage />} />
+                  <Route
+                    path="/product-info/history/:id"
+                    element={<ProductInfoHistoryDetailPage />}
+                  />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>

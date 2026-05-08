@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Lock, Mail, Terminal } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -35,10 +35,13 @@ const formSchema = z.object({
 
 export default function LoginPage(): React.JSX.Element {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useUserStore()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
+  const navState = location.state as { from?: string } | null | undefined
+  const from = navState?.from ?? '/'
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -58,7 +61,7 @@ export default function LoginPage(): React.JSX.Element {
         title: '登录成功',
         description: '欢迎回来！',
       })
-      navigate('/')
+      navigate(from, { replace: true })
     } catch (error) {
       toast({
         title: '登录失败',

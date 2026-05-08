@@ -20,6 +20,7 @@ import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
+import { ModelTab } from './components/model-tab'
 import { ProviderConfigTab } from './components/provider-config-tab'
 
 export default function SettingsPage(): React.JSX.Element {
@@ -35,13 +36,17 @@ export default function SettingsPage(): React.JSX.Element {
   // 初始化表单值
   useEffect(() => {
     if (currentUser) {
-      setUserName(currentUser.name || '')
-      setVendorCreatorId(currentUser.vendor_creator_id?.toString() || '')
+      setUserName(currentUser.name)
+      setVendorCreatorId(
+        currentUser.vendor_creator_id !== undefined && currentUser.vendor_creator_id !== null
+          ? String(currentUser.vendor_creator_id)
+          : ''
+      )
     }
   }, [currentUser])
 
   // 保存账户设置
-  const handleSaveAccount = async () => {
+  const handleSaveAccount = async (): Promise<void> => {
     if (!currentUser || currentUser.is_anonymous) {
       toast({
         title: '无法保存',
@@ -77,8 +82,8 @@ export default function SettingsPage(): React.JSX.Element {
       // 更新本地状态
       setCurrentUser({
         ...currentUser,
-        name: updatedUser.name ?? currentUser.name,
-        vendor_creator_id: (updatedUser as { vendor_creator_id?: number | null }).vendor_creator_id,
+        name: updatedUser.name,
+        vendor_creator_id: updatedUser.vendor_creator_id,
       })
 
       toast({
@@ -104,6 +109,7 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
+          <TabsTrigger value="models">我的模型</TabsTrigger>
           <TabsTrigger value="providers">大模型配置</TabsTrigger>
           <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
@@ -161,6 +167,10 @@ export default function SettingsPage(): React.JSX.Element {
           <ApiKeyTab />
         </TabsContent>
 
+        <TabsContent value="models">
+          <ModelTab />
+        </TabsContent>
+
         <TabsContent value="providers">
           <ProviderConfigTab />
         </TabsContent>
@@ -178,14 +188,16 @@ export default function SettingsPage(): React.JSX.Element {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label>邮箱</Label>
-                <Input value={currentUser?.email || ''} disabled />
+                <Input value={currentUser?.email ?? ''} disabled />
               </div>
 
               <div className="space-y-2">
                 <Label>用户名</Label>
                 <Input
                   value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
+                  onChange={(e) => {
+                    setUserName(e.target.value)
+                  }}
                   placeholder="请输入用户名"
                   disabled={currentUser?.is_anonymous}
                 />
@@ -196,7 +208,9 @@ export default function SettingsPage(): React.JSX.Element {
                 <Input
                   type="number"
                   value={vendorCreatorId}
-                  onChange={(e) => setVendorCreatorId(e.target.value)}
+                  onChange={(e) => {
+                    setVendorCreatorId(e.target.value)
+                  }}
                   placeholder="用于视频生成等第三方服务追踪"
                   disabled={currentUser?.is_anonymous}
                 />

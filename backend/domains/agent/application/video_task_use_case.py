@@ -74,6 +74,7 @@ class VideoTaskUseCase:
         limit: int = 20,
         status: str | None = None,
         session_id: uuid.UUID | None = None,
+        prompt_source: str | None = None,
     ) -> tuple[list[dict], int]:
         """列出当前用户的视频生成任务
 
@@ -82,6 +83,7 @@ class VideoTaskUseCase:
             limit: 返回记录数
             status: 按状态过滤（可选）
             session_id: 按会话过滤（可选）
+            prompt_source: 按提示词来源过滤（可选，精确匹配）
 
         Returns:
             (任务列表, 总数)
@@ -91,6 +93,8 @@ class VideoTaskUseCase:
             filters["status"] = status
         if session_id:
             filters["session_id"] = session_id
+        if prompt_source:
+            filters["prompt_source"] = prompt_source
 
         tasks = await self.repo.find_owned(
             skip=skip,

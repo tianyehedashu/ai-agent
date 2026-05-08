@@ -10,6 +10,9 @@ import type {
   VideoTaskStatus,
   VideoModel,
   VideoDuration,
+  VideoPromptOptimizeInput,
+  VideoPromptOptimizeResult,
+  VideoPromptTemplate,
 } from '@/types/video-task'
 
 import { apiClient } from './client'
@@ -116,12 +119,14 @@ export const videoTaskApi = {
     limit?: number
     status?: VideoTaskStatus
     sessionId?: string
+    promptSource?: string
   }): Promise<VideoTaskListResponse> {
     const params: Record<string, string | number | boolean | undefined> = {}
     if (options?.skip !== undefined) params.skip = options.skip
     if (options?.limit !== undefined) params.limit = options.limit
     if (options?.status) params.status = options.status
     if (options?.sessionId) params.session_id = options.sessionId
+    if (options?.promptSource) params.prompt_source = options.promptSource
 
     const backend = await apiClient.get<BackendVideoTaskListResponse>(
       '/api/v1/video-tasks/',
@@ -209,5 +214,31 @@ export const videoTaskApi = {
    */
   async delete(id: string): Promise<void> {
     await apiClient.delete<Record<string, never>>(`/api/v1/video-tasks/${id}`)
+  },
+
+  /**
+   * 获取视频提示词优化的系统提示词模板
+   */
+  async getPromptTemplate(): Promise<VideoPromptTemplate> {
+    const resp = await apiClient.get<{ system_prompt: string }>(
+      '/api/v1/video-tasks/prompt-template'
+    )
+    return { systemPrompt: resp.system_prompt }
+  },
+
+  /**
+   * 利用 LLM 优化视频提示词
+   */
+  async optimizePrompt(data: VideoPromptOptimizeInput): Promise<VideoPromptOptimizeResult> {
+    const resp = await apiClient.post<{ optimized_prompt: string }>(
+      '/api/v1/video-tasks/optimize-prompt',
+      {
+        user_text: data.userText,
+        image_urls: data.imageUrls ?? [],
+        system_prompt: data.systemPrompt,
+        marketplace: data.marketplace ?? 'jp',
+      }
+    )
+    return { optimizedPrompt: resp.optimized_prompt }
   },
 }

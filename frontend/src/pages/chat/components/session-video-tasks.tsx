@@ -12,10 +12,9 @@ import { Link } from 'react-router-dom'
 
 import { videoTaskApi } from '@/api/videoTask'
 import { cn } from '@/lib/utils'
-import type { VideoGenTask } from '@/types/video-task'
-
-import TaskTimelineCard from '@/pages/video-tasks/components/task-timeline-card'
 import VideoTaskDetailDialog from '@/pages/video-tasks/components/detail-dialog'
+import TaskTimelineCard from '@/pages/video-tasks/components/task-timeline-card'
+import type { VideoGenTask } from '@/types/video-task'
 
 interface ChatSessionVideoTasksProps {
   sessionId: string | undefined
@@ -53,9 +52,7 @@ export default function ChatSessionVideoTasks({
     <div className={cn('border-t border-border/30 bg-muted/5', className)}>
       <div className="mx-auto max-w-3xl px-4 py-4">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground/80">
-            本会话视频任务
-          </span>
+          <span className="text-xs font-medium text-muted-foreground/80">本会话视频任务</span>
           <Link
             to={sessionId ? `/video-tasks/${sessionId}` : '/video-tasks'}
             className="text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
@@ -68,7 +65,9 @@ export default function ChatSessionVideoTasks({
             <TaskTimelineCard
               key={task.id}
               task={task}
-              onClick={() => setSelectedTask(task)}
+              onClick={() => {
+                setSelectedTask(task)
+              }}
             />
           ))}
         </div>

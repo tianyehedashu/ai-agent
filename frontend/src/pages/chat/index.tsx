@@ -15,12 +15,12 @@ import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
 
 import ChatMessages from './components/chat-messages'
+import { MCPSessionConfig } from './components/mcp-session-config'
+import ChatSessionVideoTasks from './components/session-video-tasks'
 import UnifiedInputArea, {
   type UnifiedInputMode,
   type VideoCreateParams,
 } from './components/unified-input-area'
-import { MCPSessionConfig } from './components/mcp-session-config'
-import ChatSessionVideoTasks from './components/session-video-tasks'
 
 export default function ChatPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
@@ -262,7 +262,9 @@ export default function ChatPage(): React.JSX.Element {
                 title: '视频任务已创建',
                 description: '正在跳转到视频任务页',
               })
-              navigate(`/video-tasks/${sessionId}`)
+              if (sessionId) {
+                navigate(`/video-tasks/${sessionId}`)
+              }
               setInputMode('chat')
             }}
             onVideoSessionForbidden={() => {

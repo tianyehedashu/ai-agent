@@ -60,6 +60,25 @@ export interface VideoTaskUpdateInput {
 }
 
 // ============================================
+// Prompt Optimization Types
+// ============================================
+
+export interface VideoPromptOptimizeInput {
+  userText?: string
+  imageUrls?: string[]
+  systemPrompt?: string
+  marketplace?: string
+}
+
+export interface VideoPromptOptimizeResult {
+  optimizedPrompt: string
+}
+
+export interface VideoPromptTemplate {
+  systemPrompt: string
+}
+
+// ============================================
 // API Response Types
 // ============================================
 

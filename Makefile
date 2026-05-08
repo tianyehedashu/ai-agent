@@ -9,7 +9,7 @@
 #   make check       - 运行所有检查
 # ==============================================================================
 
-.PHONY: help install install-backend install-frontend dev dev-backend dev-frontend test test-backend test-frontend check check-backend check-frontend clean clean-backend clean-frontend sonar sonar-backend docker-up docker-down docker-logs docker-restart docker-services docker-ps
+.PHONY: help install install-backend install-frontend dev dev-backend dev-frontend test test-backend test-frontend check check-backend check-frontend clean clean-backend clean-frontend sonar sonar-backend docker-up docker-down docker-logs docker-restart docker-services docker-ps deploy deploy-rebuild deploy-quick deploy-status deploy-logs deploy-stop deploy-setup deploy-sync
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -54,6 +54,17 @@ help: ## 显示帮助信息
 	@echo   make docker-logs      查看服务日志
 	@echo   make docker-restart   重启所有服务
 	@echo   make docker-ps        查看运行中的容器
+	@echo.
+	@echo 部署 (远程 web01):
+	@echo   make deploy           完整部署到 web01（同步代码 + 构建 + 启动）
+	@echo   make deploy-rebuild   强制重新构建并部署（--no-cache）
+	@echo   make deploy-quick     快速部署（同步代码 + 重启，跳过构建）
+	@echo   make deploy-sync      仅同步代码（不构建不启动）
+	@echo   make deploy-build-base 重建后端基础镜像（python + uv + git）
+	@echo   make deploy-status    查看远程服务状态
+	@echo   make deploy-logs      查看远程服务日志
+	@echo   make deploy-stop      停止远程服务
+	@echo   make deploy-setup     首次部署：初始化远程环境
 	@echo.
 	@echo 清理:
 	@echo   make clean            清理所有临时文件
@@ -233,3 +244,37 @@ clean-frontend: ## 清理前端临时文件
 	@echo   清理前端临时文件
 	@echo ==========================================
 	-@powershell -Command "cd frontend; @('node_modules/.vite', 'dist', 'coverage', '.turbo') | ForEach-Object { if (Test-Path $$_) { Remove-Item -Recurse -Force $$_ } }"
+
+# ==============================================================================
+# 部署 (远程 web01)
+# ==============================================================================
+
+deploy: ## 完整部署到 web01（同步代码 + 构建 + 启动）
+	@echo ==========================================
+	@echo   部署到 web01
+	@echo ==========================================
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action deploy
+
+deploy-rebuild: ## 强制重新构建并部署到 web01（--no-cache）
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action rebuild
+
+deploy-quick: ## 快速部署到 web01（同步代码 + 重启，跳过构建）
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action quick
+
+deploy-sync: ## 仅同步代码到 web01（不构建不启动）
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action sync
+
+deploy-build-base: ## 重建 web01 后端基础镜像（python + uv + git）
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action build-base
+
+deploy-status: ## 查看 web01 服务状态
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action status
+
+deploy-logs: ## 查看 web01 服务日志
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action logs
+
+deploy-stop: ## 停止 web01 服务
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action stop
+
+deploy-setup: ## 首次部署：初始化 web01 远程环境（安装 Docker 等）
+	@powershell -ExecutionPolicy Bypass -File deploy/remote-deploy.ps1 -Action setup

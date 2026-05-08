@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     debug: bool = True
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"))
     api_prefix: str = "/api/v1"
+    cookie_secure: bool | None = None  # None = 自动（生产 HTTPS 时 True）；内网 HTTP 部署设为 False
 
     # ========================================================================
     # 服务器配置
@@ -282,6 +283,13 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """是否为生产环境"""
         return self.app_env == "production"
+
+    @property
+    def is_cookie_secure(self) -> bool:
+        """Cookie 是否要求 HTTPS。显式设置时使用配置值，否则非开发环境默认 True。"""
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return not self.is_development
 
 
 @lru_cache

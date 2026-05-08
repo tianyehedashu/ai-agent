@@ -88,7 +88,7 @@ export default function VideoTaskCreateFormCompact({
     const el = textareaRef.current
     if (el) {
       el.style.height = 'auto'
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+      el.style.height = `${String(Math.min(el.scrollHeight, 120))}px`
     }
   }, [promptText])
 
@@ -123,9 +123,10 @@ export default function VideoTaskCreateFormCompact({
   )
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      videoTaskApi.create({
-        sessionId: sessionId!,
+    mutationFn: () => {
+      if (!sessionId) throw new Error('session id required')
+      return videoTaskApi.create({
+        sessionId,
         promptText: promptText.trim() || undefined,
         promptSource: 'user_provided',
         marketplace: 'jp',
@@ -133,7 +134,8 @@ export default function VideoTaskCreateFormCompact({
         duration,
         referenceImages: refImages,
         autoSubmit: true,
-      }),
+      })
+    },
     onSuccess: (task) => {
       void queryClient.invalidateQueries({ queryKey: ['video-tasks'] })
       toast({ title: '开始创作', description: '视频正在生成中' })
@@ -193,7 +195,7 @@ export default function VideoTaskCreateFormCompact({
   const handleKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      handleSubmit()
+      void handleSubmit()
     }
   }
 
@@ -237,13 +239,18 @@ export default function VideoTaskCreateFormCompact({
                         )}
                         <img
                           src={url}
-                          alt={`参考图 ${index + 1}`}
+                          alt={`参考图 ${String(index + 1)}`}
                           className={cn(
                             'h-full w-full object-cover',
                             imageStates[url] === 'loaded' ? 'opacity-100' : 'opacity-0'
                           )}
-                          onLoad={() => handleImageLoad(url)}
-                          onError={() => handleImageError(url)}
+                          referrerPolicy="no-referrer"
+                          onLoad={() => {
+                            handleImageLoad(url)
+                          }}
+                          onError={() => {
+                            handleImageError(url)
+                          }}
                         />
                       </>
                     ) : (
@@ -254,8 +261,10 @@ export default function VideoTaskCreateFormCompact({
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeImage(url)}
-                    aria-label={`移除参考图 ${index + 1}`}
+                    onClick={() => {
+                      removeImage(url)
+                    }}
+                    aria-label={`移除参考图 ${String(index + 1)}`}
                     className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-foreground text-background opacity-0 transition-opacity group-hover:opacity-100"
                   >
                     <X className="h-2 w-2" />
@@ -264,7 +273,9 @@ export default function VideoTaskCreateFormCompact({
               ))}
               <button
                 type="button"
-                onClick={() => setShowImageInput(true)}
+                onClick={() => {
+                  setShowImageInput(true)
+                }}
                 aria-label="添加参考图"
                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border/50 text-muted-foreground/40 transition-colors hover:border-border hover:text-muted-foreground"
               >
@@ -283,7 +294,9 @@ export default function VideoTaskCreateFormCompact({
             <button
               key={i}
               type="button"
-              onClick={() => setPromptText(prompt.full)}
+              onClick={() => {
+                setPromptText(prompt.full)
+              }}
               className={cn(
                 'rounded-full px-2.5 py-0.5 text-[11px] transition-all duration-200',
                 promptText === prompt.full
@@ -302,7 +315,9 @@ export default function VideoTaskCreateFormCompact({
           ref={textareaRef}
           placeholder="描述你想创造的视频..."
           value={promptText}
-          onChange={(e) => setPromptText(e.target.value)}
+          onChange={(e) => {
+            setPromptText(e.target.value)
+          }}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           maxLength={2000}
@@ -317,7 +332,9 @@ export default function VideoTaskCreateFormCompact({
             variant="ghost"
             size="sm"
             aria-label={showImageInput ? '收起参考图输入' : '添加参考图'}
-            onClick={() => setShowImageInput((v) => !v)}
+            onClick={() => {
+              setShowImageInput((v) => !v)
+            }}
             className={cn(
               'h-8 w-8 rounded-lg p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground',
               showImageInput && 'text-foreground'
@@ -341,7 +358,9 @@ export default function VideoTaskCreateFormCompact({
               {MODELS.map((m) => (
                 <DropdownMenuItem
                   key={m.value}
-                  onClick={() => setModel(m.value)}
+                  onClick={() => {
+                    setModel(m.value)
+                  }}
                   className={cn('text-sm', model === m.value && 'bg-accent')}
                 >
                   {m.label}
@@ -354,7 +373,7 @@ export default function VideoTaskCreateFormCompact({
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label={`时长：${duration} 秒`}
+                aria-label={`时长：${String(duration)} 秒`}
                 className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
               >
                 <Clock className="h-3.5 w-3.5" />
@@ -365,7 +384,9 @@ export default function VideoTaskCreateFormCompact({
               {availableDurations.map((d) => (
                 <DropdownMenuItem
                   key={d}
-                  onClick={() => setDuration(d)}
+                  onClick={() => {
+                    setDuration(d)
+                  }}
                   className={cn('text-sm', duration === d && 'bg-accent')}
                 >
                   {d} 秒
@@ -385,11 +406,7 @@ export default function VideoTaskCreateFormCompact({
               : 'bg-muted text-muted-foreground/50'
           )}
         >
-          {isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            '创建'
-          )}
+          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '创建'}
         </Button>
       </div>
 
@@ -408,7 +425,9 @@ export default function VideoTaskCreateFormCompact({
                 ref={imageInputRef}
                 placeholder="粘贴图片链接（每行一个）"
                 value={referenceImages}
-                onChange={(e) => setReferenceImages(e.target.value)}
+                onChange={(e) => {
+                  setReferenceImages(e.target.value)
+                }}
                 rows={2}
                 className="w-full resize-none bg-transparent text-sm placeholder:text-muted-foreground/40 focus:outline-none"
               />
