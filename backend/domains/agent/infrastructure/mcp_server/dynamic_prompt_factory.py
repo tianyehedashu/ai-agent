@@ -8,12 +8,8 @@ MCP Dynamic Prompt Factory - 动态 Prompt 工厂
 import re
 from typing import Any
 
-from mcp.server.fastmcp.prompts.base import (
-    Prompt,
-    PromptArgument,
-    TextContent,
-    UserMessage,
-)
+from mcp.server.fastmcp.prompts.base import Prompt, PromptArgument, UserMessage
+from mcp.types import TextContent
 
 
 def _render_template(template: str, arguments: dict[str, Any]) -> str:
@@ -74,4 +70,5 @@ def build_prompt(
         description=description or "",
         arguments=mcp_args if mcp_args else None,
         fn=_async_fn,
+        context_kwarg=None,
     )

@@ -26,7 +26,12 @@ class TestCapabilityConfig:
 
     def test_text_capabilities_no_vision_required(self):
         """测试: 纯文本能力不要求 vision"""
-        text_caps = ["product_link_analysis", "competitor_link_analysis", "video_script", "image_gen_prompts"]
+        text_caps = [
+            "product_link_analysis",
+            "competitor_link_analysis",
+            "video_script",
+            "image_gen_prompts",
+        ]
         for cap_id in text_caps:
             cfg = CAPABILITIES.get(cap_id)
             assert cfg is not None
@@ -40,7 +45,9 @@ class TestCapabilityConfig:
     def test_capability_order_derived_from_config(self):
         """测试: CAPABILITY_ORDER 从 CAPABILITIES 派生且有序"""
         sorted_ids = [cid for _, cid in sorted(CAPABILITY_ORDER, key=lambda x: x[0])]
-        assert sorted_ids == [c.id for c in sorted(CAPABILITIES.values(), key=lambda x: x.sort_order)]
+        assert sorted_ids == [
+            c.id for c in sorted(CAPABILITIES.values(), key=lambda x: x.sort_order)
+        ]
 
     def test_capability_dependencies_derived(self):
         """测试: CAPABILITY_DEPENDENCIES 与 CapabilityConfig 一致"""
@@ -55,7 +62,15 @@ class TestCapabilityConfig:
 
     def test_capability_config_has_required_fields(self):
         """测试: 每个 CapabilityConfig 包含必要字段"""
-        required_attrs = ["id", "name", "sort_order", "output_key", "dependencies", "input_fields", "required_features"]
+        required_attrs = [
+            "id",
+            "name",
+            "sort_order",
+            "output_key",
+            "dependencies",
+            "input_fields",
+            "required_features",
+        ]
         for cfg in CAPABILITIES.values():
             for attr in required_attrs:
                 assert hasattr(cfg, attr), f"CapabilityConfig {cfg.id} 缺少 {attr}"

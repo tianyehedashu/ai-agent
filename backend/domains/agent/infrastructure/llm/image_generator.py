@@ -56,7 +56,7 @@ class ImageGenerationResult(BaseModel):
 class ImageGenerator:
     """图像生成服务 - 统一多提供商接口，支持 txt2img / img2img"""
 
-    def __init__(self, config: "ImageGeneratorConfigProtocol") -> None:
+    def __init__(self, config: ImageGeneratorConfigProtocol) -> None:
         self.config = config
         self.timeout = 120.0
 
@@ -153,15 +153,14 @@ class ImageGenerator:
     ) -> ImageGenerationResult:
         """火山引擎 Seedream txt2img / img2img，支持异步轮询"""
         api_key, api_base, endpoint_id = self._resolve_volcengine_credentials(
-            api_key_override, api_base_override,
+            api_key_override,
+            api_base_override,
         )
 
         if not api_key:
             return ImageGenerationResult(success=False, error="VOLCENGINE_API_KEY 未配置")
         if not endpoint_id and not model:
-            return ImageGenerationResult(
-                success=False, error="VOLCENGINE_IMAGE_ENDPOINT_ID 未配置"
-            )
+            return ImageGenerationResult(success=False, error="VOLCENGINE_IMAGE_ENDPOINT_ID 未配置")
 
         try:
             _width, _height = map(int, size.split("x"))
@@ -274,7 +273,8 @@ class ImageGenerator:
     ) -> ImageGenerationResult:
         """OpenAI DALL-E txt2img / img2img (edits)"""
         api_key, api_base = self._resolve_openai_credentials(
-            api_key_override, api_base_override,
+            api_key_override,
+            api_base_override,
         )
         if not api_key:
             return ImageGenerationResult(success=False, error="OPENAI_API_KEY 未配置")

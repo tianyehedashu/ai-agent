@@ -56,10 +56,12 @@ async def _generate_images_background(
     api_base_override: str | None = None,
 ) -> None:
     """后台异步生成 8 张图片，逐条调用 ImageGenerator 并更新数据库。"""
-    set_permission_context(PermissionContext(
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
-    ))
+    set_permission_context(
+        PermissionContext(
+            user_id=user_id,
+            anonymous_user_id=anonymous_user_id,
+        )
+    )
     session_factory = get_session_factory()
     async with session_factory() as db:
         repo = ProductImageGenTaskRepository(db)
@@ -125,7 +127,9 @@ async def _generate_images_background(
             await db.commit()
             logger.info(
                 "Image gen task %s finished: status=%s, images=%d",
-                task_id, final_status, sum(1 for i in result_images if i.get("url")),
+                task_id,
+                final_status,
+                sum(1 for i in result_images if i.get("url")),
             )
 
         except Exception as e:

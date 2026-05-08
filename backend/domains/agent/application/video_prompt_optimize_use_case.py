@@ -106,7 +106,9 @@ class VideoPromptOptimizeUseCase:
         if accessible_urls:
             for url in accessible_urls:
                 user_content.append({"type": "image_url", "image_url": {"url": url}})
-            user_content.append({"type": "text", "text": "请根据以上图片和文字描述生成视频提示词。"})
+            user_content.append(
+                {"type": "text", "text": "请根据以上图片和文字描述生成视频提示词。"}
+            )
         elif user_text:
             user_content.append({"type": "text", "text": "请根据以上产品描述生成视频提示词。"})
 
@@ -151,8 +153,7 @@ class VideoPromptOptimizeUseCase:
         if image_urls and not accessible_urls:
             result = (
                 f"[注意：提供的 {len(image_urls)} 张图片均无法访问，"
-                "已仅基于文字描述生成。请确认图片链接为公网可直接访问的 URL。]\n\n"
-                + result
+                "已仅基于文字描述生成。请确认图片链接为公网可直接访问的 URL。]\n\n" + result
             )
 
         return result

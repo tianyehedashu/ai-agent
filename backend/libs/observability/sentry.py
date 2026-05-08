@@ -95,6 +95,11 @@ def init_sentry(
         logger.info("sentry_sdk not installed, skipping Sentry initialization")
         return False
 
+    fi, ri, si, hi = FastApiIntegration, RedisIntegration, SqlalchemyIntegration, HttpxIntegration
+    if fi is None or ri is None or si is None or hi is None:
+        logger.info("sentry_sdk integrations unavailable, skipping Sentry initialization")
+        return False
+
     if not enabled:
         logger.info("Sentry is disabled")
         return False
@@ -116,10 +121,10 @@ def init_sentry(
             before_send=_before_send_event,
             before_send_transaction=_before_send_transaction,
             integrations=[
-                FastApiIntegration(),
-                RedisIntegration(),
-                SqlalchemyIntegration(),
-                HttpxIntegration(),
+                fi(),
+                ri(),
+                si(),
+                hi(),
             ],
             # 过滤敏感信息
             send_default_pii=False,  # 不发送个人身份信息

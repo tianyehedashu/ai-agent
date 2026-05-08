@@ -226,9 +226,7 @@ def require_role(*roles: str):
 AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 RequiredAuthUser = Annotated[CurrentUser, Depends(require_auth)]
 OptionalUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
-OptionalAuthUser = Annotated[
-    CurrentUser | None, Depends(get_current_user_optional_with_anonymous)
-]
+OptionalAuthUser = Annotated[CurrentUser | None, Depends(get_current_user_optional_with_anonymous)]
 AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
 
 

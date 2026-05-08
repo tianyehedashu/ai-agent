@@ -81,6 +81,7 @@ dev = [
     { name = "pytest-xdist" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "sentry-sdk", extra = ["fastapi"] },
 ]
 
 [package.dev-dependencies]
@@ -150,6 +151,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0" },
     { name = "rich", marker = "extra == 'dev'", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.2.0" },
+    { name = "sentry-sdk", extras = ["fastapi"], marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "sse-starlette", specifier = ">=1.8.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
@@ -4860,6 +4862,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/02/bb3ff8b6e6d02ce9e3740f4c17dfbbfb55f34c789c139e9cd91985f356c7/ruff-0.14.11-py3-none-win32.whl", hash = "sha256:337c5dd11f16ee52ae217757d9b82a26400be7efac883e9e852646f1557ed841", size = 12851094, upload-time = "2026-01-08T19:11:45.163Z" },
     { url = "https://files.pythonhosted.org/packages/58/f1/90ddc533918d3a2ad628bc3044cdfc094949e6d4b929220c3f0eb8a1c998/ruff-0.14.11-py3-none-win_amd64.whl", hash = "sha256:f981cea63d08456b2c070e64b79cb62f951aa1305282974d4d5216e6e0178ae6", size = 14001379, upload-time = "2026-01-08T19:11:52.591Z" },
     { url = "https://files.pythonhosted.org/packages/c4/1c/1dbe51782c0e1e9cfce1d1004752672d2d4629ea46945d19d731ad772b3b/ruff-0.14.11-py3-none-win_arm64.whl", hash = "sha256:649fb6c9edd7f751db276ef42df1f3df41c38d67d199570ae2a7bd6cbc3590f0", size = 12938644, upload-time = "2026-01-08T19:11:50.027Z" },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.59.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/65/e0/9bf5e5fc7442b10880f3ec0eff0ef4208b84a099606f343ec4f5445227fb/sentry_sdk-2.59.0.tar.gz", hash = "sha256:cd265808ef8bf3f3edf69b527c0a0b2b6b1322762679e55b8987db2e9584aec1", size = 447331, upload-time = "2026-05-04T12:19:06.538Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/00/b8cc413748fb6383d1582e7cda51314f99743351c462a92dc690d5b5853b/sentry_sdk-2.59.0-py2.py3-none-any.whl", hash = "sha256:abcf65ee9a9d9cdebf9ad369782408ecca9c1c792686ef06ba34f5ab233527fe", size = 468432, upload-time = "2026-05-04T12:19:04.741Z" },
+]
+
+[package.optional-dependencies]
+fastapi = [
+    { name = "fastapi" },
 ]
 
 [[package]]

@@ -4,7 +4,7 @@ Cache Utilities - 缓存工具
 提供 Redis 缓存装饰器和工具函数
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from functools import wraps
 import hashlib
@@ -16,7 +16,7 @@ from redis.asyncio import Redis
 from bootstrap.config import settings
 
 P = ParamSpec("P")
-T = TypeVar("T")
+R = TypeVar("R")
 
 _redis_client: Redis | None = None
 
@@ -63,9 +63,9 @@ def cached(ttl: int = 300, key_prefix: str = "cache"):
             ...
     """
 
-    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @wraps(func)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             redis = await get_redis()
             key = cache_key(f"{key_prefix}:{func.__name__}", *args, **kwargs)
 

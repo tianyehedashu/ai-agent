@@ -222,7 +222,7 @@ class TestProductInfoRunStepApi:
 
 
 @pytest.mark.integration
-class TestProductInfoRunStepApi:
+class TestProductInfoStepAndOptimizeApi:
     """步骤执行与提示词优化 API（mock LLM）"""
 
     async def _create_job(self, dev_client: AsyncClient, auth_headers: dict) -> str:
@@ -236,7 +236,9 @@ class TestProductInfoRunStepApi:
 
     @pytest.mark.asyncio
     async def test_run_step_renders_and_executes(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """run_step 渲染提示词后直接执行，status=completed"""
         job_id = await self._create_job(dev_client, auth_headers)
@@ -258,16 +260,15 @@ class TestProductInfoRunStepApi:
                 headers=auth_headers,
             )
         assert r.status_code == status.HTTP_200_OK
-        step = next(
-            s for s in r.json()["steps"]
-            if s["capability_id"] == "product_link_analysis"
-        )
+        step = next(s for s in r.json()["steps"] if s["capability_id"] == "product_link_analysis")
         assert step["status"] == "completed"
         assert "https://a.com" in step["output_snapshot"]["product_info"]["prompt_received"]
 
     @pytest.mark.asyncio
     async def test_optimize_prompt_endpoint(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """optimize-prompt 返回优化后的提示词"""
         job_id = await self._create_job(dev_client, auth_headers)
@@ -295,7 +296,9 @@ class TestProductInfoRunStepApi:
 
     @pytest.mark.asyncio
     async def test_step_response_includes_prompt_fields(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """响应 JSON 中包含 meta_prompt 和 prompt_used 字段"""
         job_id = await self._create_job(dev_client, auth_headers)

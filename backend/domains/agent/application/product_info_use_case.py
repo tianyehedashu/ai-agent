@@ -126,7 +126,10 @@ class ProductInfoUseCase:
     # ─── 内部工具 ─────────────────────────────────────────────────────
 
     def _build_full_input(
-        self, job: ProductInfoJob, capability_id: str, user_input: dict[str, Any],
+        self,
+        job: ProductInfoJob,
+        capability_id: str,
+        user_input: dict[str, Any],
     ) -> dict[str, Any]:
         """构建完整输入：注入所有已完成前序步骤的 output，再用 user_input 覆盖（用户编辑优先）。"""
         current_order = _sort_order_for_capability(capability_id)
@@ -141,7 +144,9 @@ class ProductInfoUseCase:
         return full_input
 
     async def _resolve_model_override(
-        self, capability_id: str, model_id: str | None,
+        self,
+        capability_id: str,
+        model_id: str | None,
     ) -> dict[str, Any]:
         """解析用户模型配置，校验能力所需特性。"""
         effective_model_id = model_id
@@ -149,7 +154,8 @@ class ProductInfoUseCase:
             effective_model_id = settings.vision_model
             logger.info(
                 "capability %s requires vision, using vision_model=%s",
-                capability_id, effective_model_id,
+                capability_id,
+                effective_model_id,
             )
 
         resolved = await self._user_model_uc.resolve_model(effective_model_id)
@@ -198,8 +204,11 @@ class ProductInfoUseCase:
         model_override = await self._resolve_model_override(capability_id, model_id)
 
         return await optimize_prompt_for_capability(
-            capability_id, resolved_meta, full_input,
-            self._llm_gateway, model_override=model_override,
+            capability_id,
+            resolved_meta,
+            full_input,
+            self._llm_gateway,
+            model_override=model_override,
         )
 
     # ─── 步骤执行 ─────────────────────────────────────────────────────
@@ -265,7 +274,9 @@ class ProductInfoUseCase:
 
         try:
             output = await runner(
-                full_input, prompt_to_use, self._llm_gateway,
+                full_input,
+                prompt_to_use,
+                self._llm_gateway,
                 model_override=model_override,
             )
         except ValueError as e:
@@ -400,7 +411,8 @@ async def run_pipeline_async(
                 except Exception:
                     logger.exception(
                         "Pipeline step %s failed for job %s",
-                        cap_id, job_id,
+                        cap_id,
+                        job_id,
                     )
                     return False
 
@@ -438,9 +450,11 @@ async def run_pipeline_async(
                 ok = await _execute_one(runnable[0][1])
                 results = [ok]
             else:
-                results = list(await asyncio.gather(
-                    *[_execute_one(cap_id) for _, cap_id in runnable],
-                ))
+                results = list(
+                    await asyncio.gather(
+                        *[_execute_one(cap_id) for _, cap_id in runnable],
+                    )
+                )
 
             for (_, cap_id), ok in zip(runnable, results, strict=True):
                 if ok:

@@ -8,8 +8,8 @@ libs/crypto Fernet 加密工具单元测试
 - 错误密钥解密失败
 """
 
-import pytest
 from cryptography.fernet import InvalidToken
+import pytest
 
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value, mask_api_key
 

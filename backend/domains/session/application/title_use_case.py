@@ -193,10 +193,12 @@ class TitleUseCase:
             )
             return True
 
+        raw_title = session.title or ""
+        preview = raw_title[:20] if len(raw_title) > 20 else raw_title
         logger.debug(
             "Session %s already has custom title '%s', skipping auto-generation",
             session_id[:8],
-            session.title[:20] if len(session.title) > 20 else session.title,
+            preview,
         )
         return False
 

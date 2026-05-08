@@ -445,11 +445,13 @@ class ChatUseCase:
     ) -> None:
         """后台任务：提取记忆（使用独立的数据库会话）"""
         try:
+            sm = self.simplemem
+            assert sm is not None
             # 使用独立的数据库会话上下文，确保后台任务不会与主请求会话冲突
             # 虽然 SimpleMem 和 LongTermMemoryStore 使用自己的数据库连接，
             # 但为了保持一致性和安全性，我们仍然使用独立的会话上下文
             async with get_session_context():
-                atoms = await self.simplemem.process_and_store(
+                atoms = await sm.process_and_store(
                     messages=messages,
                     user_id=user_id,
                     session_id=session_id,

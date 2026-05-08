@@ -76,7 +76,9 @@ async def optimize_prompt_for_capability(
     if capability_id in CAPABILITIES_REQUIRING_VISION:
         if not image_urls:
             raise ValueError("图片分析需要至少提供一张图片（image_urls 为空）")
-        user_content: str | list[dict[str, Any]] = _build_vision_user_content(text_content, image_urls)
+        user_content: str | list[dict[str, Any]] = _build_vision_user_content(
+            text_content, image_urls
+        )
     else:
         user_content = text_content
 
@@ -86,7 +88,9 @@ async def optimize_prompt_for_capability(
     ]
     extra = _build_model_kwargs(model_override)
     try:
-        response = await llm_gateway.chat(messages=messages, temperature=0.3, max_tokens=4096, **extra)
+        response = await llm_gateway.chat(
+            messages=messages, temperature=0.3, max_tokens=4096, **extra
+        )
         content = (response.content or "").strip()
         if getattr(response, "finish_reason", None) == "length":
             logger.warning(
@@ -157,7 +161,8 @@ def _build_context_text(inputs: dict[str, Any]) -> str:
 
 
 def _build_vision_user_content(
-    text: str, image_urls: list[str],
+    text: str,
+    image_urls: list[str],
 ) -> list[dict[str, Any]]:
     """构建 Vision 多模态 content：text + image_url blocks，让 LLM 真正看到图片"""
     parts: list[dict[str, Any]] = [{"type": "text", "text": text}]
@@ -303,9 +308,7 @@ def _post_process_video_script(data: Any, text: str) -> dict[str, Any]:
 
     if not video_prompt.strip() and shots:
         prompts = [
-            str(s.get("prompt", ""))
-            for s in shots
-            if isinstance(s, dict) and s.get("prompt")
+            str(s.get("prompt", "")) for s in shots if isinstance(s, dict) and s.get("prompt")
         ]
         video_prompt = " ".join(prompts)
 
@@ -353,7 +356,12 @@ def _make_runner(
         model_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return await _run_capability(
-            config, inputs, prompt, llm_gateway, model_override, post_process,
+            config,
+            inputs,
+            prompt,
+            llm_gateway,
+            model_override,
+            post_process,
         )
 
     return _run
@@ -366,6 +374,5 @@ _POST_PROCESSORS: dict[str, Callable[[Any, str], dict[str, Any]]] = {
 }
 
 RUNNERS: dict[str, Any] = {
-    cap_id: _make_runner(cfg, _POST_PROCESSORS.get(cap_id))
-    for cap_id, cfg in CAPABILITIES.items()
+    cap_id: _make_runner(cfg, _POST_PROCESSORS.get(cap_id)) for cap_id, cfg in CAPABILITIES.items()
 }

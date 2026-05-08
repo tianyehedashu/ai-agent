@@ -29,17 +29,19 @@ def list_capabilities() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for cfg in sorted(CAPABILITIES.values(), key=lambda c: c.sort_order):
         model_type = "image" if "vision" in cfg.required_features else "text"
-        result.append({
-            "id": cfg.id,
-            "name": cfg.name,
-            "sort_order": cfg.sort_order,
-            "model_type": model_type,
-            "output_key": cfg.output_key,
-            "dependencies": list(cfg.dependencies),
-            "input_fields": list(cfg.input_fields),
-            "meta_prompt_params": [{"key": k, "label": lb} for k, lb in cfg.meta_prompt_params],
-            "required_features": list(cfg.required_features),
-        })
+        result.append(
+            {
+                "id": cfg.id,
+                "name": cfg.name,
+                "sort_order": cfg.sort_order,
+                "model_type": model_type,
+                "output_key": cfg.output_key,
+                "dependencies": list(cfg.dependencies),
+                "input_fields": list(cfg.input_fields),
+                "meta_prompt_params": [{"key": k, "label": lb} for k, lb in cfg.meta_prompt_params],
+                "required_features": list(cfg.required_features),
+            }
+        )
     return result
 
 

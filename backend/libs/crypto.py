@@ -10,7 +10,7 @@ from __future__ import annotations
 from base64 import b64decode, b64encode
 import hashlib
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 
 def derive_encryption_key(secret: str) -> str:

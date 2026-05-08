@@ -18,9 +18,9 @@ from bootstrap.config import settings
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
 from domains.agent.infrastructure.models.memory import Memory  # noqa: F401
 from domains.agent.infrastructure.models.message import Message  # noqa: F401
+from domains.agent.infrastructure.models.user_model import UserModel  # noqa: F401
 from domains.identity.infrastructure.models.user import User  # noqa: F401
 from domains.session.infrastructure.models.session import Session  # noqa: F401
-from domains.agent.infrastructure.models.user_model import UserModel  # noqa: F401
 from domains.studio.infrastructure.models.workflow import Workflow, WorkflowVersion  # noqa: F401
 
 # 导入所有模型以确保它们被注册

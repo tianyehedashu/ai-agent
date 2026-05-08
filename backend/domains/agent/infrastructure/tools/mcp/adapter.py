@@ -58,15 +58,19 @@ class MCPAdapter(BaseTool):
         Returns:
             ToolResult: 执行结果
         """
+        tool_call_id = str(kwargs.get("tool_call_id", "") or "")
         try:
-            result = await self.mcp_client.call_tool(self._tool_name, kwargs)
+            call_kwargs = {k: v for k, v in kwargs.items() if k != "tool_call_id"}
+            result = await self.mcp_client.call_tool(self._tool_name, call_kwargs)
             return ToolResult(
+                tool_call_id=tool_call_id,
                 success=True,
                 output=str(result.get("result", "")),
             )
         except Exception as e:
             logger.exception("MCP tool execution failed: %s", e)
             return ToolResult(
+                tool_call_id=tool_call_id,
                 success=False,
                 output="",
                 error=str(e),

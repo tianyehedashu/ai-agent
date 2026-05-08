@@ -255,7 +255,7 @@ class TieredMemoryManager:
         elif tier == MemoryTier.SHORT_TERM:
             return await self._recall_short_term(session_id, query, limit)
         elif tier == MemoryTier.LONG_TERM:
-            return await self._recall_long_term(user_id, query, limit)
+            return await self._recall_long_term(session_id, query, limit)
         return []
 
     def _recall_working_memory(
@@ -312,7 +312,7 @@ class TieredMemoryManager:
 
     async def _recall_long_term(
         self,
-        user_id: str,
+        session_id: str,
         query: str,
         limit: int,
     ) -> list[tuple[MemoryItem, float]]:
@@ -323,7 +323,7 @@ class TieredMemoryManager:
         """
         try:
             results = await self.long_term_store.search(
-                user_id=user_id,
+                session_id=session_id,
                 query=query,
                 limit=limit,
             )
@@ -375,7 +375,7 @@ class TieredMemoryManager:
         if memory.tier == MemoryTier.WORKING:
             return self._store_working_memory(session_id, memory)
         elif memory.tier == MemoryTier.LONG_TERM:
-            return await self._store_long_term(user_id, memory)
+            return await self._store_long_term(user_id, session_id, memory)
         # 短期记忆通过 checkpointer 自动管理
         return memory.id
 
@@ -407,6 +407,7 @@ class TieredMemoryManager:
     async def _store_long_term(
         self,
         user_id: str,
+        session_id: str,
         memory: MemoryItem,
     ) -> str:
         """存储长期记忆"""
@@ -421,11 +422,12 @@ class TieredMemoryManager:
 
         try:
             memory_id = await self.long_term_store.put(
-                user_id=user_id,
+                session_id=session_id,
                 memory_type=memory.type.value,
                 content=memory.content,
                 importance=memory.importance,
                 metadata=memory.metadata,
+                user_id=user_id,
             )
             logger.info(
                 "Stored long-term memory: %s (user=%s, type=%s, importance=%.1f)",
@@ -488,7 +490,7 @@ class TieredMemoryManager:
                     self.config.long_term_importance_threshold,
                 )
                 # 存储到长期记忆
-                new_id = await self._store_long_term(user_id, memory)
+                new_id = await self._store_long_term(user_id, session_id, memory)
                 # 从工作记忆中移除
                 self._working_memory[session_id].pop(i)
                 logger.info(

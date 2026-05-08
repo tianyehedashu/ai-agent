@@ -28,8 +28,8 @@ from domains.agent.application.product_info_prompt_service import (
     ProductInfoPromptTemplateUseCase,
 )
 from domains.agent.application.product_info_use_case import ProductInfoUseCase
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.stats_service import StatsService
+from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.identity.application import UserUseCase
@@ -180,7 +180,9 @@ async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:
 async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTaskUseCase:
     """获取 8 图生成任务服务（注入 ImageGenerator）"""
     from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
-    from domains.agent.infrastructure.llm.image_generator import ImageGenerator  # pylint: disable=import-outside-toplevel
+    from domains.agent.infrastructure.llm.image_generator import (
+        ImageGenerator,  # pylint: disable=import-outside-toplevel
+    )
 
     image_generator = ImageGenerator(settings)
     return ProductImageGenTaskUseCase(db, image_generator=image_generator)

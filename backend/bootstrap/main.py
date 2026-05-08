@@ -36,10 +36,10 @@ from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
 from domains.agent.presentation.product_info_router import router as product_info_router
-from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.provider_config_router import router as provider_config_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
+from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager

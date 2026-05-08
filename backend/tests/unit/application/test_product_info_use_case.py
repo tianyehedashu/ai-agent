@@ -252,24 +252,36 @@ class TestProductInfoUseCase:
             mock_config = type("AppConfig", (), {"models": mock_models})()
 
             with (
-                patch.object(use_case._user_model_uc, "resolve_model", new_callable=AsyncMock) as mock_resolve,
-                patch("domains.agent.application.product_info_use_case.get_app_config", return_value=mock_config),
+                patch.object(
+                    use_case._user_model_uc, "resolve_model", new_callable=AsyncMock
+                ) as mock_resolve,
+                patch(
+                    "domains.agent.application.product_info_use_case.get_app_config",
+                    return_value=mock_config,
+                ),
                 patch.dict(
                     "domains.agent.application.product_info_use_case.RUNNERS",
                     {"image_analysis": AsyncMock(return_value={"image_descriptions": []})},
                 ),
             ):
-                mock_resolve.return_value = type("ResolvedModel", (), {
-                    "model": "deepseek-chat",
-                    "api_key": None,
-                    "api_base": None,
-                })()
+                mock_resolve.return_value = type(
+                    "ResolvedModel",
+                    (),
+                    {
+                        "model": "deepseek-chat",
+                        "api_key": None,
+                        "api_base": None,
+                    },
+                )()
 
                 with pytest.raises(ValidationError) as exc_info:
                     await use_case.run_step(
                         job_id=job_id,
                         capability_id="image_analysis",
-                        user_input={"image_urls": ["https://example.com/img.jpg"], "product_name": "Test"},
+                        user_input={
+                            "image_urls": ["https://example.com/img.jpg"],
+                            "product_name": "Test",
+                        },
                         model_id="deepseek-chat",
                     )
 

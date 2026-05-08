@@ -83,7 +83,9 @@ async def list_models(
 ) -> dict[str, Any]:
     """列出当前用户的模型"""
     items, total = await service.list_models(
-        model_type=model_type, skip=skip, limit=limit,
+        model_type=model_type,
+        skip=skip,
+        limit=limit,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
 

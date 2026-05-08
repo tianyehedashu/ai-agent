@@ -55,8 +55,14 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
         if not model:
             return None
         allowed = {
-            "display_name", "provider", "model_id", "api_key_encrypted",
-            "api_base", "model_types", "config", "is_active",
+            "display_name",
+            "provider",
+            "model_id",
+            "api_key_encrypted",
+            "api_base",
+            "model_types",
+            "config",
+            "is_active",
         }
         for field, value in kwargs.items():
             if field in allowed and value is not None:

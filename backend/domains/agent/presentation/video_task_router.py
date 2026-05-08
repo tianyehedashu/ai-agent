@@ -31,7 +31,9 @@ class VideoPromptOptimizeRequest(BaseModel):
 
     user_text: str | None = Field(default=None, max_length=2000, description="用户输入的文字描述")
     image_urls: list[str] = Field(default_factory=list, description="产品图片URL列表")
-    system_prompt: str | None = Field(default=None, max_length=10000, description="自定义系统提示词")
+    system_prompt: str | None = Field(
+        default=None, max_length=10000, description="自定义系统提示词"
+    )
     marketplace: str = Field(default="jp", description="目标站点")
 
 

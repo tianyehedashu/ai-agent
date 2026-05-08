@@ -84,15 +84,16 @@ class LSPProxy:
 
         diagnostics = []
 
-        # Pyright 诊断
-        if not isinstance(results[0], Exception):
-            for d in results[0]:
+        # Pyright 诊断（gather(..., return_exceptions=True) 可能返回异常或列表）
+        pyright_res = results[0]
+        if isinstance(pyright_res, list):
+            for d in pyright_res:
                 d["source"] = "pyright"
                 diagnostics.append(d)
 
-        # Ruff 诊断
-        if not isinstance(results[1], Exception):
-            for d in results[1]:
+        ruff_res = results[1]
+        if isinstance(ruff_res, list):
+            for d in ruff_res:
                 d["source"] = "ruff"
                 diagnostics.append(d)
 

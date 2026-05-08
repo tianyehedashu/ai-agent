@@ -7,15 +7,12 @@ CRUD、连接测试、模型解析（系统模型 + 用户模型统一查询）�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import ModelInfo, app_config
 from domains.agent.infrastructure.llm.gateway import LLMGateway
-from domains.agent.infrastructure.models.user_model import UserModel
 from domains.agent.infrastructure.repositories.user_model_repository import (
     UserModelRepository,
 )
@@ -23,12 +20,22 @@ from exceptions import NotFoundError, ValidationError
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value, mask_api_key
 from utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.agent.infrastructure.models.user_model import UserModel
+
 logger = get_logger(__name__)
 
 VALID_MODEL_TYPES = {"text", "image", "image_gen", "video"}
 VALID_PROVIDERS = {
-    "openai", "deepseek", "dashscope", "anthropic",
-    "zhipuai", "volcengine", "custom",
+    "openai",
+    "deepseek",
+    "dashscope",
+    "anthropic",
+    "zhipuai",
+    "volcengine",
+    "custom",
 }
 
 
@@ -59,9 +66,7 @@ class UserModelUseCase:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.repo = UserModelRepository(db)
-        self._encryption_key = derive_encryption_key(
-            settings.secret_key.get_secret_value()
-        )
+        self._encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
 
     async def create(
         self,
@@ -122,9 +127,13 @@ class UserModelUseCase:
 
     async def update(self, model_id: uuid.UUID, **kwargs: Any) -> dict[str, Any]:
         """更新模型"""
-        if "model_types" in kwargs and kwargs["model_types"]:
+        if kwargs.get("model_types"):
             self._validate_model_types(kwargs["model_types"])
-        if "provider" in kwargs and kwargs["provider"] and kwargs["provider"] not in VALID_PROVIDERS:
+        if (
+            "provider" in kwargs
+            and kwargs["provider"]
+            and kwargs["provider"] not in VALID_PROVIDERS
+        ):
             raise ValidationError(f"不支持的提供商: {kwargs['provider']}")
 
         if "api_key" in kwargs:
@@ -282,7 +291,8 @@ class UserModelUseCase:
             return ResolvedImageGenModel(provider="volcengine")
 
         system_image_models = {
-            m.id: m.provider for m in app_config.models.available
+            m.id: m.provider
+            for m in app_config.models.available
             if getattr(m, "supports_image_gen", False)
         }
         if model_ref in system_image_models:

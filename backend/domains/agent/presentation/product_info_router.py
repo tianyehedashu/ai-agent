@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 from domains.agent.application.product_image_gen_task_use_case import (
     ProductImageGenTaskUseCase,
 )
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.product_info_prompt_service import (
     ProductInfoPromptTemplateUseCase,
     get_default_prompt,
@@ -25,6 +24,7 @@ from domains.agent.application.product_info_use_case import (
     ProductInfoUseCase,
     run_pipeline_async,
 )
+from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.identity.presentation.deps import AuthUser, get_owned_user_ids
 from exceptions import NotFoundError, ValidationError
 from libs.api.deps import (
@@ -161,7 +161,7 @@ async def run_step(
         try:
             template_uuid = uuid.UUID(body.prompt_template_id)
         except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid prompt_template_id")
+            raise HTTPException(status_code=422, detail="Invalid prompt_template_id") from None
     try:
         return await service.run_step(
             job_id=job_id,
@@ -196,8 +196,6 @@ async def optimize_prompt(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # =============================================================================
@@ -366,7 +364,7 @@ async def run_pipeline(
     )
     job_id = job["id"]
 
-    asyncio.create_task(
+    pipeline_bg_task = asyncio.create_task(
         run_pipeline_async(
             job_id=uuid.UUID(job_id),
             user_id=user_id,
@@ -375,6 +373,7 @@ async def run_pipeline(
             steps=body.steps,
         )
     )
+    pipeline_bg_task.set_name(f"product-info-pipeline:{job_id}")
 
     return {
         "job_id": job_id,
@@ -485,13 +484,17 @@ async def get_image_gen_providers() -> dict[str, Any]:
     providers = []
     for pid in SUPPORTED_PROVIDERS:
         defaults = PROVIDER_DEFAULTS.get(pid, {})
-        providers.append({
-            "id": pid,
-            "name": {"volcengine": "火山引擎 Seedream", "openai": "OpenAI DALL-E 3"}.get(pid, pid),
-            "default_size": defaults.get("size", "1024x1024"),
-            "sizes": PROVIDER_SIZE_OPTIONS.get(pid, []),
-            "supports_reference_image": True,
-        })
+        providers.append(
+            {
+                "id": pid,
+                "name": {"volcengine": "火山引擎 Seedream", "openai": "OpenAI DALL-E 3"}.get(
+                    pid, pid
+                ),
+                "default_size": defaults.get("size", "1024x1024"),
+                "sizes": PROVIDER_SIZE_OPTIONS.get(pid, []),
+                "supports_reference_image": True,
+            }
+        )
     return {"providers": providers}
 
 
@@ -516,7 +519,9 @@ async def get_image_gen_task(
 @router.get("/images/{filename}")
 async def serve_image(filename: str) -> FileResponse:
     """提供本地存储的生成图片"""
-    from libs.storage.local_image_store import get_image_path  # pylint: disable=import-outside-toplevel
+    from libs.storage.local_image_store import (
+        get_image_path,  # pylint: disable=import-outside-toplevel
+    )
 
     path = get_image_path(filename)
     if not path:

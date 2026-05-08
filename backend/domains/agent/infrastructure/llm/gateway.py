@@ -729,8 +729,9 @@ class LLMGateway:
         try:
             response = await acompletion(**kwargs)
             tool_calls_buffer: dict[int, dict[str, Any]] = {}
-
-            async for chunk in response:
+            # acompletion 流式返回类型在 stubs 中不统一，用 Any 收窄给 async-for
+            stream: Any = response
+            async for chunk in stream:
                 chunk_dict = self._extract_chunk_dict(chunk)
                 stream_chunk = self._process_stream_chunk(chunk_dict, tool_calls_buffer)
                 if stream_chunk:

@@ -15,7 +15,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_create_model_succeeds(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """创建用户模型成功"""
         r = await dev_client.post(
@@ -42,7 +44,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_create_model_invalid_provider_returns_400(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """不支持的 provider 返回 400"""
         r = await dev_client.post(
@@ -58,7 +62,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_create_model_invalid_type_returns_400(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """无效的 model_types 返回 400"""
         r = await dev_client.post(
@@ -75,7 +81,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_create_model_missing_name_returns_422(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """缺少必填字段返回 422"""
         r = await dev_client.post(
@@ -87,7 +95,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_list_models(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """列表返回正确结构"""
         await dev_client.post(
@@ -113,7 +123,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_list_models_filter_by_type(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """按 type 过滤"""
         await dev_client.post(
@@ -137,7 +149,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_get_model_detail(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """获取模型详情"""
         cr = await dev_client.post(
@@ -160,7 +174,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_get_model_not_found(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """不存在的模型返回 404"""
         r = await dev_client.get(
@@ -171,7 +187,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_update_model(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """更新模型部分字段"""
         cr = await dev_client.post(
@@ -196,7 +214,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_update_model_not_found(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """更新不存在的模型返回 404"""
         r = await dev_client.patch(
@@ -208,7 +228,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_delete_model(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """删除模型"""
         cr = await dev_client.post(
@@ -236,7 +258,9 @@ class TestUserModelCrudApi:
 
     @pytest.mark.asyncio
     async def test_delete_model_not_found(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """删除不存在的模型返回 404"""
         r = await dev_client.delete(
@@ -252,7 +276,9 @@ class TestUserModelAvailableApi:
 
     @pytest.mark.asyncio
     async def test_available_returns_both_groups(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """available 同时返回 system_models 和 user_models"""
         await dev_client.post(
@@ -278,7 +304,9 @@ class TestUserModelAvailableApi:
 
     @pytest.mark.asyncio
     async def test_available_system_models_are_flagged(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """系统模型 is_system=True"""
         r = await dev_client.get(
@@ -290,7 +318,9 @@ class TestUserModelAvailableApi:
 
     @pytest.mark.asyncio
     async def test_available_filter_by_type(
-        self, dev_client: AsyncClient, auth_headers: dict,
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
     ):
         """available 支持 type 过滤"""
         r = await dev_client.get(
@@ -304,7 +334,8 @@ class TestUserModelAvailableApi:
 
     @pytest.mark.asyncio
     async def test_available_without_auth_returns_system_models(
-        self, client: AsyncClient,
+        self,
+        client: AsyncClient,
     ):
         """无认证时 /available 返回 200，仅含系统模型（不抛 401）"""
         r = await client.get("/api/v1/user-models/available")
@@ -329,7 +360,8 @@ class TestUserModelAuthApi:
 
     @pytest.mark.asyncio
     async def test_unauthenticated_returns_401(
-        self, client: AsyncClient,
+        self,
+        client: AsyncClient,
     ):
         """未认证请求返回 401"""
         r = await client.get("/api/v1/user-models/")
@@ -337,7 +369,8 @@ class TestUserModelAuthApi:
 
     @pytest.mark.asyncio
     async def test_create_unauthenticated_returns_401(
-        self, client: AsyncClient,
+        self,
+        client: AsyncClient,
     ):
         """未认证创建返回 401"""
         r = await client.post(

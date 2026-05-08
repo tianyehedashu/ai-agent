@@ -93,9 +93,12 @@ class TestRenderMetaPrompt:
         assert out == "a and "
 
     def test_dict_value_json_serialized(self):
-        out = render_meta_prompt("产品信息：{{product_info}}", {
-            "product_info": {"name": "X", "price": 99},
-        })
+        out = render_meta_prompt(
+            "产品信息：{{product_info}}",
+            {
+                "product_info": {"name": "X", "price": 99},
+            },
+        )
         assert "name" in out and "X" in out and "99" in out
 
     def test_empty_context(self):
@@ -116,12 +119,14 @@ class TestBuildContextText:
         assert _build_context_text({}) == "（无额外输入）"
 
     def test_scalar_fields(self):
-        text = _build_context_text({
-            "product_link": "https://a.com",
-            "competitor_link": "https://b.com",
-            "product_name": "Widget",
-            "keywords": "k1, k2",
-        })
+        text = _build_context_text(
+            {
+                "product_link": "https://a.com",
+                "competitor_link": "https://b.com",
+                "product_name": "Widget",
+                "keywords": "k1, k2",
+            }
+        )
         assert "产品链接: https://a.com" in text
         assert "竞品链接: https://b.com" in text
         assert "产品名称: Widget" in text
@@ -133,13 +138,15 @@ class TestBuildContextText:
         assert "https://img1.jpg" in text
 
     def test_structured_deps(self):
-        text = _build_context_text({
-            "product_info": {"category": "Electronics"},
-            "competitor_info": {"name": "Rival"},
-            "image_descriptions": [{"desc": "img"}],
-            "video_script": {"scenes": 5},
-            "prompts": ["p1", "p2"],
-        })
+        text = _build_context_text(
+            {
+                "product_info": {"category": "Electronics"},
+                "competitor_info": {"name": "Rival"},
+                "image_descriptions": [{"desc": "img"}],
+                "video_script": {"scenes": 5},
+                "prompts": ["p1", "p2"],
+            }
+        )
         assert "产品信息（前步结果）" in text
         assert "竞品信息（前步结果）" in text
         assert "图片描述（前步结果）" in text
@@ -147,10 +154,12 @@ class TestBuildContextText:
         assert "图片生成提示词（前步结果）" in text
 
     def test_unknown_keys_included_as_fallback(self):
-        text = _build_context_text({
-            "some_new_output": {"x": 1},
-            "plain_value": "hello",
-        })
+        text = _build_context_text(
+            {
+                "some_new_output": {"x": 1},
+                "plain_value": "hello",
+            }
+        )
         assert "some_new_output（前步结果）" in text
         assert "plain_value: hello" in text
 
@@ -170,7 +179,10 @@ class TestBuildFullInput:
     """依赖注入逻辑：deps 先注入、user_input 后覆盖"""
 
     def _build(
-        self, job, capability_id: str, user_input: dict[str, Any],
+        self,
+        job,
+        capability_id: str,
+        user_input: dict[str, Any],
     ) -> dict[str, Any]:
         from domains.agent.application.product_info_use_case import ProductInfoUseCase
 
@@ -185,10 +197,14 @@ class TestBuildFullInput:
 
     def test_deps_injected_for_video_script(self):
         """video_script 依赖 product_link_analysis + competitor_link_analysis 输出"""
-        job = _fake_job([
-            _fake_step("product_link_analysis", output_snapshot={"product_info": {"k": "v"}}),
-            _fake_step("competitor_link_analysis", output_snapshot={"competitor_info": {"c": 1}}),
-        ])
+        job = _fake_job(
+            [
+                _fake_step("product_link_analysis", output_snapshot={"product_info": {"k": "v"}}),
+                _fake_step(
+                    "competitor_link_analysis", output_snapshot={"competitor_info": {"c": 1}}
+                ),
+            ]
+        )
         result = self._build(job, "video_script", {"product_name": "X"})
         assert result["product_info"] == {"k": "v"}
         assert result["competitor_info"] == {"c": 1}
@@ -196,34 +212,45 @@ class TestBuildFullInput:
 
     def test_user_input_overrides_deps(self):
         """user_input 中的同名字段应覆盖 deps 注入"""
-        job = _fake_job([
-            _fake_step("product_link_analysis", output_snapshot={
-                "product_info": {"auto": True},
-            }),
-        ])
+        job = _fake_job(
+            [
+                _fake_step(
+                    "product_link_analysis",
+                    output_snapshot={
+                        "product_info": {"auto": True},
+                    },
+                ),
+            ]
+        )
         user_edited = {"product_info": {"user_edited": True}}
         result = self._build(job, "video_script", user_edited)
         assert result["product_info"] == {"user_edited": True}
 
     def test_uncompleted_deps_not_injected(self):
         """未完成的依赖步骤不注入"""
-        job = _fake_job([
-            _fake_step(
-                "product_link_analysis",
-                status=ProductInfoJobStepStatus.RUNNING,
-                output_snapshot={"product_info": {"should_not": True}},
-            ),
-        ])
+        job = _fake_job(
+            [
+                _fake_step(
+                    "product_link_analysis",
+                    status=ProductInfoJobStepStatus.RUNNING,
+                    output_snapshot={"product_info": {"should_not": True}},
+                ),
+            ]
+        )
         result = self._build(job, "video_script", {"product_name": "Z"})
         assert "product_info" not in result
 
     def test_all_prior_steps_injected(self):
         """所有已完成前序步骤的输出均注入"""
-        job = _fake_job([
-            _fake_step("image_analysis", output_snapshot={"image_descriptions": ["img1"]}),
-            _fake_step("product_link_analysis", output_snapshot={"product_info": {"k": "v"}}),
-            _fake_step("competitor_link_analysis", output_snapshot={"competitor_info": {"c": 1}}),
-        ])
+        job = _fake_job(
+            [
+                _fake_step("image_analysis", output_snapshot={"image_descriptions": ["img1"]}),
+                _fake_step("product_link_analysis", output_snapshot={"product_info": {"k": "v"}}),
+                _fake_step(
+                    "competitor_link_analysis", output_snapshot={"competitor_info": {"c": 1}}
+                ),
+            ]
+        )
         result = self._build(job, "video_script", {"product_name": "X"})
         assert result["image_descriptions"] == ["img1"]
         assert result["product_info"] == {"k": "v"}
@@ -232,17 +259,21 @@ class TestBuildFullInput:
 
     def test_later_steps_not_injected(self):
         """后序步骤的输出不注入"""
-        job = _fake_job([
-            _fake_step("video_script", output_snapshot={"video_script": {"scenes": 5}}),
-        ])
+        job = _fake_job(
+            [
+                _fake_step("video_script", output_snapshot={"video_script": {"scenes": 5}}),
+            ]
+        )
         result = self._build(job, "product_link_analysis", {"product_link": "x"})
         assert "video_script" not in result
 
     def test_deps_with_no_output_snapshot_skipped(self):
         """completed 但 output_snapshot 为 None 的步骤跳过"""
-        job = _fake_job([
-            _fake_step("product_link_analysis", output_snapshot=None),
-        ])
+        job = _fake_job(
+            [
+                _fake_step("product_link_analysis", output_snapshot=None),
+            ]
+        )
         result = self._build(job, "video_script", {})
         assert result == {}
 
@@ -269,7 +300,11 @@ class TestOptimizePromptForCapability:
         )
         assert result == "Optimized prompt"
         call_kwargs = mock_gw.chat.call_args
-        messages = call_kwargs.kwargs.get("messages") or call_kwargs[1].get("messages") or call_kwargs[0][0]
+        messages = (
+            call_kwargs.kwargs.get("messages")
+            or call_kwargs[1].get("messages")
+            or call_kwargs[0][0]
+        )
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
         assert "用户提示词" in messages[1]["content"]
@@ -299,9 +334,14 @@ class TestOptimizePromptForCapability:
         mock_gw.chat.return_value = SimpleNamespace(content="result")
 
         await optimize_prompt_for_capability(
-            "image_analysis", "meta", {"image_urls": ["https://img.jpg"]}, mock_gw,
+            "image_analysis",
+            "meta",
+            {"image_urls": ["https://img.jpg"]},
+            mock_gw,
         )
-        messages = mock_gw.chat.call_args.kwargs.get("messages") or mock_gw.chat.call_args[1]["messages"]
+        messages = (
+            mock_gw.chat.call_args.kwargs.get("messages") or mock_gw.chat.call_args[1]["messages"]
+        )
         assert messages[0]["content"] == OPTIMIZE_SYSTEM_PROMPTS["image_analysis"]
 
     @pytest.mark.asyncio
@@ -310,9 +350,14 @@ class TestOptimizePromptForCapability:
         mock_gw.chat.return_value = SimpleNamespace(content="ok")
 
         await optimize_prompt_for_capability(
-            "unknown_cap", "meta", {}, mock_gw,
+            "unknown_cap",
+            "meta",
+            {},
+            mock_gw,
         )
-        messages = mock_gw.chat.call_args.kwargs.get("messages") or mock_gw.chat.call_args[1]["messages"]
+        messages = (
+            mock_gw.chat.call_args.kwargs.get("messages") or mock_gw.chat.call_args[1]["messages"]
+        )
         assert messages[0]["content"] == OPTIMIZE_SYSTEM_PROMPT
 
     @pytest.mark.asyncio
@@ -321,7 +366,10 @@ class TestOptimizePromptForCapability:
         mock_gw.chat.return_value = SimpleNamespace(content="  hello  \n  ")
 
         result = await optimize_prompt_for_capability(
-            "image_analysis", "meta", {"image_urls": ["https://x.jpg"]}, mock_gw,
+            "image_analysis",
+            "meta",
+            {"image_urls": ["https://x.jpg"]},
+            mock_gw,
         )
         assert result == "hello"
 
@@ -332,7 +380,10 @@ class TestOptimizePromptForCapability:
 
         with pytest.raises(RuntimeError, match="LLM down"):
             await optimize_prompt_for_capability(
-                "image_analysis", "meta", {"image_urls": ["https://x.jpg"]}, mock_gw,
+                "image_analysis",
+                "meta",
+                {"image_urls": ["https://x.jpg"]},
+                mock_gw,
             )
 
 

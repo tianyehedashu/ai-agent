@@ -31,6 +31,7 @@ from libs.db.permission_context import (
 def _uc_module():
     """延迟导入 user_model_use_case 模块，绕过 __init__.py 链式导入 MCP"""
     import importlib
+
     return importlib.import_module("domains.agent.application.user_model_use_case")
 
 
@@ -46,11 +47,19 @@ class TestUserModelValidation:
             _uc_module().UserModelUseCase._validate_model_types(["text", "audio"])
 
     def test_valid_model_types_exhaustive(self):
-        assert _uc_module().VALID_MODEL_TYPES == {"text", "image", "video"}
+        assert {"text", "image", "video"} == _uc_module().VALID_MODEL_TYPES
 
     def test_valid_providers_cover_all(self):
-        expected = {"openai", "deepseek", "dashscope", "anthropic", "zhipuai", "volcengine", "custom"}
-        assert _uc_module().VALID_PROVIDERS == expected
+        expected = {
+            "openai",
+            "deepseek",
+            "dashscope",
+            "anthropic",
+            "zhipuai",
+            "volcengine",
+            "custom",
+        }
+        assert expected == _uc_module().VALID_PROVIDERS
 
 
 @pytest.mark.unit
@@ -65,7 +74,9 @@ class TestBuildLitellmModel:
         assert self._cls._build_litellm_model("openai", "openai/gpt-4o") == "openai/gpt-4o"
 
     def test_deepseek(self):
-        assert self._cls._build_litellm_model("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"
+        assert (
+            self._cls._build_litellm_model("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"
+        )
 
     def test_dashscope(self):
         assert self._cls._build_litellm_model("dashscope", "qwen-max") == "dashscope/qwen-max"
@@ -170,12 +181,16 @@ class TestUserModelUseCaseCRUD:
     async def test_list_models(self, db_session):
         """列出当前用户模型"""
         await self.uc.create(
-            user_id=self.user.id, display_name="M1",
-            provider="openai", model_id="gpt-4o",
+            user_id=self.user.id,
+            display_name="M1",
+            provider="openai",
+            model_id="gpt-4o",
         )
         await self.uc.create(
-            user_id=self.user.id, display_name="M2",
-            provider="deepseek", model_id="deepseek-chat",
+            user_id=self.user.id,
+            display_name="M2",
+            provider="deepseek",
+            model_id="deepseek-chat",
         )
         items, total = await self.uc.list_models()
         assert total >= 2
@@ -187,12 +202,18 @@ class TestUserModelUseCaseCRUD:
     async def test_list_models_filter_by_type(self, db_session):
         """按类型过滤"""
         await self.uc.create(
-            user_id=self.user.id, display_name="TextOnly",
-            provider="openai", model_id="gpt-4o", model_types=["text"],
+            user_id=self.user.id,
+            display_name="TextOnly",
+            provider="openai",
+            model_id="gpt-4o",
+            model_types=["text"],
         )
         await self.uc.create(
-            user_id=self.user.id, display_name="ImageModel",
-            provider="dashscope", model_id="qwen-vl", model_types=["image"],
+            user_id=self.user.id,
+            display_name="ImageModel",
+            provider="dashscope",
+            model_id="qwen-vl",
+            model_types=["image"],
         )
         text_items, _ = await self.uc.list_models(model_type="text")
         image_items, _ = await self.uc.list_models(model_type="image")
@@ -203,11 +224,14 @@ class TestUserModelUseCaseCRUD:
     async def test_update_display_name(self, db_session):
         """更新显示名称"""
         created = await self.uc.create(
-            user_id=self.user.id, display_name="Old",
-            provider="openai", model_id="gpt-4o",
+            user_id=self.user.id,
+            display_name="Old",
+            provider="openai",
+            model_id="gpt-4o",
         )
         updated = await self.uc.update(
-            uuid.UUID(created["id"]), display_name="New Name",
+            uuid.UUID(created["id"]),
+            display_name="New Name",
         )
         assert updated["display_name"] == "New Name"
 
@@ -215,12 +239,15 @@ class TestUserModelUseCaseCRUD:
     async def test_update_api_key_re_encrypts(self, db_session):
         """更新 api_key 会重新加密"""
         created = await self.uc.create(
-            user_id=self.user.id, display_name="ReKey",
-            provider="openai", model_id="gpt-4o",
+            user_id=self.user.id,
+            display_name="ReKey",
+            provider="openai",
+            model_id="gpt-4o",
             api_key="sk-old-key-1234567",
         )
         updated = await self.uc.update(
-            uuid.UUID(created["id"]), api_key="sk-new-key-9876543",
+            uuid.UUID(created["id"]),
+            api_key="sk-new-key-9876543",
         )
         assert updated["has_api_key"] is True
         assert "new" not in updated.get("api_key_masked", "")
@@ -235,8 +262,10 @@ class TestUserModelUseCaseCRUD:
     async def test_delete(self, db_session):
         """删除模型"""
         created = await self.uc.create(
-            user_id=self.user.id, display_name="ToDelete",
-            provider="openai", model_id="gpt-4o",
+            user_id=self.user.id,
+            display_name="ToDelete",
+            provider="openai",
+            model_id="gpt-4o",
         )
         await self.uc.delete(uuid.UUID(created["id"]))
         with pytest.raises(NotFoundError):
@@ -288,8 +317,10 @@ class TestResolveModel:
     async def test_user_model_uuid(self, db_session):
         """用户模型 UUID → 解密 API Key 返回"""
         created = await self.uc.create(
-            user_id=self.user.id, display_name="Resolvable",
-            provider="deepseek", model_id="deepseek-chat",
+            user_id=self.user.id,
+            display_name="Resolvable",
+            provider="deepseek",
+            model_id="deepseek-chat",
             api_key="sk-resolve-me-12345",
         )
         resolved = await self.uc.resolve_model(created["id"])
