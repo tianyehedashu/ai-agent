@@ -336,11 +336,18 @@ class TestProductInfoRunPipelineApi:
         auth_headers: dict,
     ):
         """一键执行返回 202 与 job_id"""
-        r = await dev_client.post(
-            "/api/v1/product-info/run",
-            json={"inputs": {"product_name": "test"}},
-            headers=auth_headers,
-        )
+        async def _noop_pipeline(**_kwargs: object) -> None:
+            return None
+
+        with patch(
+            "domains.agent.presentation.product_info_router.run_pipeline_async",
+            _noop_pipeline,
+        ):
+            r = await dev_client.post(
+                "/api/v1/product-info/run",
+                json={"inputs": {"product_name": "test"}},
+                headers=auth_headers,
+            )
         assert r.status_code == status.HTTP_202_ACCEPTED
         data = r.json()
         assert "job_id" in data

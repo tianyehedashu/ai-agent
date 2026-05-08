@@ -41,7 +41,11 @@ from domains.agent.infrastructure.repositories.product_info_job_step_repository 
 )
 from exceptions import NotFoundError, ValidationError
 from libs.db.database import get_session_context
-from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -313,10 +317,23 @@ class ProductInfoUseCase:
         if not job:
             return
         statuses = [s.status for s in job.steps]
+        if not statuses:
+            return
+        terminal = {
+            ProductInfoJobStepStatus.COMPLETED,
+            ProductInfoJobStepStatus.FAILED,
+        }
         if all(s == ProductInfoJobStepStatus.COMPLETED for s in statuses):
             await self.job_repo.update(job_id, status=ProductInfoJobStatus.COMPLETED)
-        elif any(s == ProductInfoJobStepStatus.FAILED for s in statuses):
+        elif all(s in terminal for s in statuses):
+            # 含失败的全终态，或全为 FAILED
             await self.job_repo.update(job_id, status=ProductInfoJobStatus.PARTIAL)
+        elif any(s in terminal for s in statuses):
+            # 仍有 PENDING / RUNNING：未跑完
+            await self.job_repo.update(job_id, status=ProductInfoJobStatus.PARTIAL)
+        else:
+            # 全部未进入终态（例如仅 PENDING）
+            await self.job_repo.update(job_id, status=ProductInfoJobStatus.FAILED)
         await self.db.flush()
 
     def get_default_prompt(self, capability_id: str) -> str:
@@ -354,6 +371,22 @@ def _build_execution_layers(
         remaining = still_remaining
 
     return layers
+
+
+async def _finalize_product_info_pipeline_job(job_id: uuid.UUID) -> None:
+    """将仍为 RUNNING 的步骤标为失败，并据步骤状态聚合 Job（用于异常/关闭收尾）。"""
+    async with get_session_context() as db:
+        uc = ProductInfoUseCase(db)
+        job = await uc.job_repo.get_with_steps(job_id)
+        if job:
+            for step in job.steps:
+                if step.status == ProductInfoJobStepStatus.RUNNING:
+                    await uc.step_repo.update(
+                        step.id,
+                        status=ProductInfoJobStepStatus.FAILED,
+                        error_message="流水线中断或未正常结束",
+                    )
+        await uc._sync_job_status(job_id)
 
 
 async def run_pipeline_async(
@@ -460,11 +493,21 @@ async def run_pipeline_async(
                 if ok:
                     completed_caps.add(cap_id)
 
-        async with get_session_context() as db:
-            uc = ProductInfoUseCase(db)
-            await uc._sync_job_status(job_id)
+    except asyncio.CancelledError:
+        logger.warning("Product info pipeline cancelled (job_id=%s)", job_id)
+        raise
+    except Exception:
+        logger.exception("Product info pipeline crashed (job_id=%s)", job_id)
+        raise
     finally:
-        set_permission_context(None)
+        try:
+            await _finalize_product_info_pipeline_job(job_id)
+        except Exception:
+            logger.exception(
+                "Failed to finalize product info pipeline job %s",
+                job_id,
+            )
+        clear_permission_context()
 
 
 def _job_to_dict(job: ProductInfoJob) -> dict[str, Any]:

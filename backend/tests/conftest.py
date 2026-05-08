@@ -369,6 +369,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         ) as ac:
             yield ac
 
+        from libs.background_tasks import shutdown_app_background_tasks
+
+        await shutdown_app_background_tasks(app)
         app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 
@@ -414,6 +417,9 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
+        from libs.background_tasks import shutdown_app_background_tasks
+
+        await shutdown_app_background_tasks(app)
         app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 

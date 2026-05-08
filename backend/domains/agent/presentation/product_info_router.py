@@ -7,7 +7,7 @@ import mimetypes
 from typing import Annotated, Any
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,7 @@ from libs.api.deps import (
     get_user_model_service,
 )
 from libs.api.params import parse_optional_uuid
+from libs.background_tasks import register_app_background_task
 
 router = APIRouter()
 
@@ -341,6 +342,7 @@ async def delete_template(
 
 @router.post("/run", status_code=status.HTTP_202_ACCEPTED)
 async def run_pipeline(
+    request: Request,
     current_user: AuthUser,
     service: ProductInfoUseCase = Depends(get_product_info_service),
     body: RunPipelineBody | None = None,
@@ -374,6 +376,7 @@ async def run_pipeline(
         )
     )
     pipeline_bg_task.set_name(f"product-info-pipeline:{job_id}")
+    register_app_background_task(request.app, pipeline_bg_task)
 
     return {
         "job_id": job_id,

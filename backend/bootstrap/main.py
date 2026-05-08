@@ -63,6 +63,7 @@ from exceptions import (
     ToolExecutionError,
     ValidationError,
 )
+from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
 from libs.db.database import init_db
 from libs.db.redis import close_redis, init_redis
 from libs.middleware.permission import PermissionContextMiddleware
@@ -192,6 +193,8 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     _fastapi_app.state.sandbox_manager = sandbox_manager
     logger.info("SandboxManager started")
 
+    init_background_tasks(_fastapi_app)
+
     # 初始化默认系统级 MCP 服务器
     try:
         from domains.agent.application.mcp_init import (  # pylint: disable=import-outside-toplevel
@@ -227,6 +230,8 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
         yield
 
     # 关闭时
+    await shutdown_app_background_tasks(_fastapi_app)
+
     # 停止沙箱管理器（会清理所有沙箱容器）
     if hasattr(_fastapi_app.state, "sandbox_manager"):
         await _fastapi_app.state.sandbox_manager.stop()
