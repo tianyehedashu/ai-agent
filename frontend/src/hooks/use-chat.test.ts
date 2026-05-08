@@ -89,10 +89,10 @@ test.skip('session isolation: events from old stream are not applied after view 
     })
   )
 
-  const { result, rerender } = renderHook(
-    (opts: { sessionId?: string }) => useChat(opts),
-    { initialProps: { sessionId: 'session-a' }, wrapper: createWrapper() }
-  )
+  const { result, rerender } = renderHook((opts: { sessionId?: string }) => useChat(opts), {
+    initialProps: { sessionId: 'session-a' },
+    wrapper: createWrapper(),
+  })
 
   const sendPromise = act(async () => {
     await result.current.sendMessage('hi')
@@ -118,32 +118,31 @@ test('first message with session_created: subsequent events still apply to view'
   /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
   vi.mocked(chatApi.sendMessage).mockImplementationOnce(
     vi.fn((_req, onEvent) => {
-    onEvent({
-      type: 'session_created',
-      data: { session_id: 'new-session-id' },
-      timestamp: 't0',
+      onEvent({
+        type: 'session_created',
+        data: { session_id: 'new-session-id' },
+        timestamp: 't0',
+      })
+      onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
+      onEvent({
+        type: 'tool_call',
+        data: { tool_call_id: 'tc1', tool_name: 'read_file', arguments: {} },
+        timestamp: 't2',
+      })
+      onEvent({
+        type: 'tool_result',
+        data: { tool_call_id: 'tc1', success: true, output: 'ok' },
+        timestamp: 't3',
+      })
+      onEvent({ type: 'done', data: { final_message: { content: 'reply' } }, timestamp: 't4' })
+      return Promise.resolve()
     })
-    onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
-    onEvent({
-      type: 'tool_call',
-      data: { tool_call_id: 'tc1', tool_name: 'read_file', arguments: {} },
-      timestamp: 't2',
-    })
-    onEvent({
-      type: 'tool_result',
-      data: { tool_call_id: 'tc1', success: true, output: 'ok' },
-      timestamp: 't3',
-    })
-    onEvent({ type: 'done', data: { final_message: { content: 'reply' } }, timestamp: 't4' })
-    return Promise.resolve()
-  })
   )
 
   const onSessionCreated = vi.fn()
-  const { result } = renderHook(
-    () => useChat({ sessionId: undefined, onSessionCreated }),
-    { wrapper: createWrapper() }
-  )
+  const { result } = renderHook(() => useChat({ sessionId: undefined, onSessionCreated }), {
+    wrapper: createWrapper(),
+  })
 
   await act(async () => {
     await result.current.sendMessage('hi')

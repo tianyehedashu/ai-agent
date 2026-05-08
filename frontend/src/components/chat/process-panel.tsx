@@ -446,11 +446,7 @@ export function ProcessPanel({
         >
           {displayEvents.map((event) =>
             event.customRender === 'video_task' && event.taskId ? (
-              <VideoTaskBlock
-                key={event.id}
-                taskId={event.taskId}
-                sessionId={sessionId}
-              />
+              <VideoTaskBlock key={event.id} taskId={event.taskId} sessionId={sessionId} />
             ) : (
               <ProcessEventItem
                 key={event.id}

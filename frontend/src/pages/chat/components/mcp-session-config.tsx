@@ -82,12 +82,16 @@ export function MCPSessionConfig({
     if (sessionId) {
       const enabledServers = currentConfig?.enabled_servers ?? []
       const newEnabledServers = enabled
-        ? (enabledServers.includes(serverId) ? enabledServers : [...enabledServers, serverId])
+        ? enabledServers.includes(serverId)
+          ? enabledServers
+          : [...enabledServers, serverId]
         : enabledServers.filter((id) => id !== serverId)
       updateMutation.mutate({ enabled_servers: newEnabledServers })
     } else {
       const newEnabledServers = enabled
-        ? (pendingMCPConfig.includes(serverId) ? pendingMCPConfig : [...pendingMCPConfig, serverId])
+        ? pendingMCPConfig.includes(serverId)
+          ? pendingMCPConfig
+          : [...pendingMCPConfig, serverId]
         : pendingMCPConfig.filter((id) => id !== serverId)
       setPendingMCPConfig(newEnabledServers)
     }
@@ -125,7 +129,8 @@ export function MCPSessionConfig({
             对话工具与 MCP
           </SheetTitle>
           <SheetDescription>
-            选择在本对话中可用的工具来源：内置工具由 Agent 配置决定，下方可启用 MCP 服务器以扩展工具。
+            选择在本对话中可用的工具来源：内置工具由 Agent 配置决定，下方可启用 MCP
+            服务器以扩展工具。
           </SheetDescription>
         </SheetHeader>
 
@@ -175,22 +180,34 @@ export function MCPSessionConfig({
                       >
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{server.display_name ?? server.name}</span>
-                            <Badge variant={server.scope === 'system' ? 'default' : 'secondary'} className="text-xs">
+                            <span className="font-medium">
+                              {server.display_name ?? server.name}
+                            </span>
+                            <Badge
+                              variant={server.scope === 'system' ? 'default' : 'secondary'}
+                              className="text-xs"
+                            >
                               {server.scope === 'system' ? '系统' : '用户'}
                             </Badge>
                             {isEnabled && (
-                              <Badge variant="outline" className="border-green-600 text-xs text-green-600 dark:text-green-400">
+                              <Badge
+                                variant="outline"
+                                className="border-green-600 text-xs text-green-600 dark:text-green-400"
+                              >
                                 <Check className="mr-1 h-3 w-3" />
                                 已启用
                               </Badge>
                             )}
                           </div>
-                          <p className="truncate font-mono text-xs text-muted-foreground">{server.url}</p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {server.url}
+                          </p>
                         </div>
                         <Switch
                           checked={isEnabled}
-                          onCheckedChange={(checked) => { handleToggleServer(server.id, checked); }}
+                          onCheckedChange={(checked) => {
+                            handleToggleServer(server.id, checked)
+                          }}
                           disabled={!!sessionId && updateMutation.isPending}
                           className="shrink-0"
                         />
@@ -210,7 +227,9 @@ export function MCPSessionConfig({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setOpen(false); }}
+              onClick={() => {
+                setOpen(false)
+              }}
               disabled={!!sessionId && updateMutation.isPending}
             >
               完成

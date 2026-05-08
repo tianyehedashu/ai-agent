@@ -40,10 +40,7 @@ export default function ChatSidebar(): React.JSX.Element {
 
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
 
-  const groupedSessions = useMemo(
-    () => groupSessionsByDate(sessions),
-    [sessions]
-  )
+  const groupedSessions = useMemo(() => groupSessionsByDate(sessions), [sessions])
 
   // 新建对话：仅导航到无 sessionId 的聊天页，会话在用户发送第一条消息时由后端创建（避免空会话入库）
   const handleCreateSession = (): void => {
@@ -171,8 +168,7 @@ function SessionItem({
   const navigate = useNavigate()
   const { toast } = useToast()
   // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
-  const defaultTitle =
-    (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
+  const defaultTitle = (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
   const handleDelete = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault()

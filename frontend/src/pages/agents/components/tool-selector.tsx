@@ -46,7 +46,11 @@ export function ToolSelector({
   disabled = false,
   className,
 }: Readonly<ToolSelectorProps>): React.JSX.Element {
-  const { data: tools = [], isLoading, error } = useQuery({
+  const {
+    data: tools = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['built-in-tools'],
     queryFn: () => toolsApi.list(),
   })
@@ -73,7 +77,12 @@ export function ToolSelector({
 
   if (isLoading) {
     return (
-      <div className={cn('rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground', className)}>
+      <div
+        className={cn(
+          'rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground',
+          className
+        )}
+      >
         加载工具列表中...
       </div>
     )
@@ -81,7 +90,12 @@ export function ToolSelector({
 
   if (error) {
     return (
-      <div className={cn('rounded-md border border-destructive/50 bg-destructive/5 p-4 text-center text-sm text-destructive', className)}>
+      <div
+        className={cn(
+          'rounded-md border border-destructive/50 bg-destructive/5 p-4 text-center text-sm text-destructive',
+          className
+        )}
+      >
         加载失败，请稍后重试
       </div>
     )
@@ -89,16 +103,27 @@ export function ToolSelector({
 
   if (tools.length === 0) {
     return (
-      <div className={cn('rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground', className)}>
+      <div
+        className={cn(
+          'rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground',
+          className
+        )}
+      >
         暂无内置工具
       </div>
     )
   }
 
   const byCategory = groupByCategory(tools)
-  const orderedCategories = ['code', 'file', 'search', 'database', 'network', 'system', 'external'].filter((c) =>
-    byCategory.has(c)
-  )
+  const orderedCategories = [
+    'code',
+    'file',
+    'search',
+    'database',
+    'network',
+    'system',
+    'external',
+  ].filter((c) => byCategory.has(c))
   const restCategories = Array.from(byCategory.keys()).filter((c) => !orderedCategories.includes(c))
   const categoryOrder = [...orderedCategories, ...restCategories]
 
@@ -125,7 +150,7 @@ export function ToolSelector({
                 />
                 <label
                   htmlFor={`cat-${category}`}
-                  className="text-sm font-medium cursor-pointer select-none"
+                  className="cursor-pointer select-none text-sm font-medium"
                 >
                   {label}
                 </label>

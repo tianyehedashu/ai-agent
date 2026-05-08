@@ -57,9 +57,7 @@ function renderWithProviders(ui: React.ReactElement): ReturnType<typeof render> 
       mutations: { retry: false },
     },
   })
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-  )
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
 describe('SystemMCPPage', () => {
@@ -200,9 +198,7 @@ describe('SystemMCPPage', () => {
           tool_count: 0,
           tools: [],
           prompt_count: 1,
-          prompts: [
-            { name: 'p1', title: 'P1', description: 'First prompt' },
-          ],
+          prompts: [{ name: 'p1', title: 'P1', description: 'First prompt' }],
         },
       ],
       transport: 'Streamable HTTP',

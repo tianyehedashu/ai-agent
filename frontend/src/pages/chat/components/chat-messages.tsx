@@ -48,9 +48,7 @@ export default function ChatMessages({
           <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             有什么我可以帮你的？
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            直接输入你的问题或需求即可
-          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">直接输入你的问题或需求即可</p>
         </div>
       </div>
     )
@@ -121,10 +119,7 @@ export default function ChatMessages({
                 currentRunId in processRuns &&
                 processRuns[currentRunId].length > 0 && (
                   <div className="mt-3">
-                    <ProcessPanel
-                      events={processRuns[currentRunId]}
-                      sessionId={sessionId}
-                    />
+                    <ProcessPanel events={processRuns[currentRunId]} sessionId={sessionId} />
                   </div>
                 )}
 

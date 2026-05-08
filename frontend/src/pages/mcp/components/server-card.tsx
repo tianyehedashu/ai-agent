@@ -17,12 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { MCPServerConfig } from '@/types/mcp'
 
 interface MCPServerCardProps {
@@ -73,9 +68,7 @@ export function MCPServerCard({
   const tools = toolsData?.tools ?? []
   const enabledCount = toolsData?.enabled_count ?? 0
   const totalTokens = toolsData?.total_tokens ?? 0
-  const filteredTools = tools.filter((t) =>
-    t.name.toLowerCase().includes(toolSearch.toLowerCase())
-  )
+  const filteredTools = tools.filter((t) => t.name.toLowerCase().includes(toolSearch.toLowerCase()))
 
   const testMutation = useMutation({
     mutationFn: () => mcpApi.testConnection(server.id),
@@ -101,7 +94,7 @@ export function MCPServerCard({
 
   return (
     <Card
-      className={`overflow-hidden transition-all duration-200 ${selected ? 'ring-2 ring-primary/50 shadow-lg' : 'hover:shadow-md hover:border-muted-foreground/20'} ${className}`}
+      className={`overflow-hidden transition-all duration-200 ${selected ? 'shadow-lg ring-2 ring-primary/50' : 'hover:border-muted-foreground/20 hover:shadow-md'} ${className}`}
       onClick={() => onClick?.(server)}
     >
       {/* 头部：始终展示 */}
@@ -131,7 +124,9 @@ export function MCPServerCard({
               </div>
               <div
                 className="flex items-center gap-2"
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
               >
                 <span className="text-xs text-muted-foreground">启用</span>
                 <Switch
@@ -142,18 +137,19 @@ export function MCPServerCard({
             </div>
           </div>
           <div className="shrink-0 text-muted-foreground">
-            {selected ? (
-              <ChevronDown className="h-5 w-5" />
-            ) : (
-              <ChevronRight className="h-5 w-5" />
-            )}
+            {selected ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </div>
         </div>
       </CardHeader>
 
       {/* 展开区：测试、编辑、删除、工具列表 */}
       {selected && (
-        <CardContent className="border-t bg-muted/30 pb-5 pt-4" onClick={(e) => { e.stopPropagation(); }}>
+        <CardContent
+          className="border-t bg-muted/30 pb-5 pt-4"
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+        >
           <div className="space-y-4">
             {/* 状态与操作 */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/80 px-4 py-3">
@@ -178,7 +174,9 @@ export function MCPServerCard({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => { testMutation.mutate(); }}
+                          onClick={() => {
+                            testMutation.mutate()
+                          }}
                           disabled={testMutation.isPending || !server.enabled}
                         >
                           <RefreshCw
@@ -194,7 +192,13 @@ export function MCPServerCard({
                   </Tooltip>
                 </TooltipProvider>
                 {onEdit && (
-                  <Button variant="outline" size="sm" onClick={() => { onEdit(server); }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onEdit(server)
+                    }}
+                  >
                     <Edit className="mr-1.5 h-4 w-4" />
                     编辑
                   </Button>
@@ -204,7 +208,9 @@ export function MCPServerCard({
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => { onDelete(server); }}
+                    onClick={() => {
+                      onDelete(server)
+                    }}
                   >
                     <Trash2 className="mr-1.5 h-4 w-4" />
                     删除
@@ -225,7 +231,9 @@ export function MCPServerCard({
                 <Input
                   placeholder="搜索工具..."
                   value={toolSearch}
-                  onChange={(e) => { setToolSearch(e.target.value); }}
+                  onChange={(e) => {
+                    setToolSearch(e.target.value)
+                  }}
                   className="h-8 max-w-[180px] text-xs"
                 />
               </div>
@@ -256,9 +264,9 @@ export function MCPServerCard({
                         </div>
                         <Switch
                           checked={tool.enabled}
-                          onCheckedChange={(checked) =>
-                            { toggleToolMutation.mutate({ toolName: tool.name, enabled: checked }); }
-                          }
+                          onCheckedChange={(checked) => {
+                            toggleToolMutation.mutate({ toolName: tool.name, enabled: checked })
+                          }}
                           disabled={toggleToolMutation.isPending}
                         />
                       </li>

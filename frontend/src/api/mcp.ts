@@ -140,10 +140,7 @@ export const mcpApi = {
   /**
    * 添加动态工具（仅管理员）
    */
-  async addDynamicTool(
-    serverName: string,
-    body: DynamicToolAddRequest
-  ): Promise<DynamicToolItem> {
+  async addDynamicTool(serverName: string, body: DynamicToolAddRequest): Promise<DynamicToolItem> {
     return apiClient.post<DynamicToolItem>(
       `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`,
       body
@@ -167,10 +164,7 @@ export const mcpApi = {
   /**
    * 删除动态工具（仅管理员）
    */
-  async deleteDynamicTool(
-    serverName: string,
-    toolKey: string
-  ): Promise<void> {
+  async deleteDynamicTool(serverName: string, toolKey: string): Promise<void> {
     return apiClient.delete(
       `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`
     )
@@ -215,10 +209,7 @@ export const mcpApi = {
   /**
    * 删除动态 Prompt（仅管理员）
    */
-  async deleteDynamicPrompt(
-    serverName: string,
-    promptKey: string
-  ): Promise<void> {
+  async deleteDynamicPrompt(serverName: string, promptKey: string): Promise<void> {
     return apiClient.delete(
       `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`
     )

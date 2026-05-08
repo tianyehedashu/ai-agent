@@ -74,16 +74,15 @@ export default function Header(): React.JSX.Element {
 
         {/* User Menu：未登录时在顶栏直接显示「未登录」标签，便于区分 */}
         <div className="flex items-center gap-2">
-          {isAnonymous && (
-            <span className="text-xs text-muted-foreground">未登录</span>
-          )}
+          {isAnonymous && <span className="text-xs text-muted-foreground">未登录</span>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 className={cn(
                   'relative h-8 w-8 rounded-full',
-                  isAnonymous && 'ring-1 ring-muted-foreground/40 ring-offset-2 ring-offset-background'
+                  isAnonymous &&
+                    'ring-1 ring-muted-foreground/40 ring-offset-2 ring-offset-background'
                 )}
               >
                 <Avatar className="h-8 w-8">
@@ -94,35 +93,35 @@ export default function Header(): React.JSX.Element {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <div className="flex items-center justify-start gap-2 p-2">
-              <div className="flex flex-col space-y-1 leading-none">
-                <p className="font-medium">{displayName}</p>
-                <p className="text-xs text-muted-foreground">{displayEmail}</p>
-                {isAnonymous && <p className="text-xs italic text-muted-foreground">匿名用户</p>}
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="flex items-center justify-start gap-2 p-2">
+                <div className="flex flex-col space-y-1 leading-none">
+                  <p className="font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{displayEmail}</p>
+                  {isAnonymous && <p className="text-xs italic text-muted-foreground">匿名用户</p>}
+                </div>
               </div>
-            </div>
-            <DropdownMenuSeparator />
-            {isAnonymous && (
-              <>
-                <DropdownMenuItem
-                  onClick={() => {
-                    navigate('/login')
-                  }}
-                >
-                  <span className="font-semibold text-primary">登录账号</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem>个人资料</DropdownMenuItem>
-            <DropdownMenuItem>API 密钥</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuSeparator />
+              {isAnonymous && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      navigate('/login')
+                    }}
+                  >
+                    <span className="font-semibold text-primary">登录账号</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem>个人资料</DropdownMenuItem>
+              <DropdownMenuItem>API 密钥</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

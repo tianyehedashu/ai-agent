@@ -82,9 +82,7 @@ export default function MCPPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">MCP 服务器</h1>
-          <p className="mt-2 text-muted-foreground">
-            管理和配置 MCP 服务器
-          </p>
+          <p className="mt-2 text-muted-foreground">管理和配置 MCP 服务器</p>
         </div>
         <Button
           onClick={() => {
@@ -144,9 +142,9 @@ export default function MCPPage(): React.JSX.Element {
                 server={server}
                 selected={isSelected}
                 className={isSelected ? 'md:col-span-2 lg:col-span-3' : ''}
-                onClick={(s) =>
-                  { setSelectedServer((prev) => (prev?.id === s.id ? null : s)); }
-                }
+                onClick={(s) => {
+                  setSelectedServer((prev) => (prev?.id === s.id ? null : s))
+                }}
                 onToggle={(s, enabled) => {
                   toggleServerMutation.mutate({ id: s.id, enabled })
                 }}

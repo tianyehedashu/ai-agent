@@ -8,15 +8,7 @@
 import { useEffect, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertCircle,
-  Copy,
-  Pencil,
-  Plus,
-  Server,
-  Settings2,
-  Trash2,
-} from 'lucide-react'
+import { AlertCircle, Copy, Pencil, Plus, Server, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
@@ -47,12 +39,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUserStore } from '@/stores/user'
 import type {
   ClientDirectMCPServer,
@@ -162,7 +149,9 @@ function ServerConfigCard({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { onManageDynamicTools(server); }}
+            onClick={() => {
+              onManageDynamicTools(server)
+            }}
             className="gap-1"
           >
             <Settings2 className="h-4 w-4" />
@@ -171,7 +160,9 @@ function ServerConfigCard({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { onManagePrompts(server); }}
+            onClick={() => {
+              onManagePrompts(server)
+            }}
             className="gap-1"
           >
             <Settings2 className="h-4 w-4" />
@@ -187,7 +178,9 @@ function ServerConfigCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { copyToClipboard(snippetJson); }}
+              onClick={() => {
+                copyToClipboard(snippetJson)
+              }}
               className="gap-1"
             >
               <Copy className="h-4 w-4" />
@@ -313,7 +306,9 @@ function AddToolDialog({
             <Input
               id="add-tool-key"
               value={toolKey}
-              onChange={(e) => { setToolKey(e.target.value); }}
+              onChange={(e) => {
+                setToolKey(e.target.value)
+              }}
               placeholder="my_http_tool"
               maxLength={100}
             />
@@ -323,7 +318,9 @@ function AddToolDialog({
             <Input
               id="add-tool-desc"
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value)
+              }}
               placeholder="调用指定 HTTP 接口"
             />
           </div>
@@ -333,7 +330,9 @@ function AddToolDialog({
               id="add-tool-url"
               type="url"
               value={url}
-              onChange={(e) => { setUrl(e.target.value); }}
+              onChange={(e) => {
+                setUrl(e.target.value)
+              }}
               placeholder="https://api.example.com/action"
             />
           </div>
@@ -357,7 +356,9 @@ function AddToolDialog({
             <Textarea
               id="add-tool-headers"
               value={headersJson}
-              onChange={(e) => { setHeadersJson(e.target.value); }}
+              onChange={(e) => {
+                setHeadersJson(e.target.value)
+              }}
               placeholder='{"Authorization": "Bearer xxx"}'
               rows={2}
               className="font-mono text-sm"
@@ -368,14 +369,22 @@ function AddToolDialog({
             <Textarea
               id="add-tool-body"
               value={bodyJson}
-              onChange={(e) => { setBodyJson(e.target.value); }}
+              onChange={(e) => {
+                setBodyJson(e.target.value)
+              }}
               placeholder='{"key": "value"}'
               rows={3}
               className="font-mono text-sm"
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { handleOpenChange(false); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                handleOpenChange(false)
+              }}
+            >
               取消
             </Button>
             <Button type="submit" disabled={submitting}>
@@ -402,8 +411,7 @@ function configToFormState(config: Record<string, unknown>): {
     url,
     method: HTTP_METHODS.includes(method as (typeof HTTP_METHODS)[number]) ? method : 'GET',
     headersJson: Object.keys(headers).length ? JSON.stringify(headers, null, 2) : '{}',
-    bodyJson:
-      body !== undefined && body !== null ? JSON.stringify(body, null, 2) : '',
+    bodyJson: body !== undefined && body !== null ? JSON.stringify(body, null, 2) : '',
   }
 }
 
@@ -520,7 +528,9 @@ function EditToolDialog({
             <Input
               id="edit-tool-desc"
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value)
+              }}
               placeholder="调用指定 HTTP 接口"
             />
           </div>
@@ -530,7 +540,9 @@ function EditToolDialog({
               id="edit-tool-url"
               type="url"
               value={url}
-              onChange={(e) => { setUrl(e.target.value); }}
+              onChange={(e) => {
+                setUrl(e.target.value)
+              }}
               placeholder="https://api.example.com/action"
             />
           </div>
@@ -554,7 +566,9 @@ function EditToolDialog({
             <Textarea
               id="edit-tool-headers"
               value={headersJson}
-              onChange={(e) => { setHeadersJson(e.target.value); }}
+              onChange={(e) => {
+                setHeadersJson(e.target.value)
+              }}
               placeholder='{"Authorization": "Bearer xxx"}'
               rows={2}
               className="font-mono text-sm"
@@ -565,14 +579,22 @@ function EditToolDialog({
             <Textarea
               id="edit-tool-body"
               value={bodyJson}
-              onChange={(e) => { setBodyJson(e.target.value); }}
+              onChange={(e) => {
+                setBodyJson(e.target.value)
+              }}
               placeholder='{"key": "value"}'
               rows={3}
               className="font-mono text-sm"
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { handleOpenChange(false); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                handleOpenChange(false)
+              }}
+            >
               取消
             </Button>
             <Button type="submit" disabled={submitting}>
@@ -667,7 +689,9 @@ function AddPromptDialog({
             <Input
               id="add-prompt-key"
               value={promptKey}
-              onChange={(e) => { setPromptKey(e.target.value); }}
+              onChange={(e) => {
+                setPromptKey(e.target.value)
+              }}
               placeholder="e.g. summarize"
               required
             />
@@ -677,7 +701,9 @@ function AddPromptDialog({
             <Input
               id="add-prompt-title"
               value={title}
-              onChange={(e) => { setTitle(e.target.value); }}
+              onChange={(e) => {
+                setTitle(e.target.value)
+              }}
               placeholder="显示名称"
             />
           </div>
@@ -686,7 +712,9 @@ function AddPromptDialog({
             <Input
               id="add-prompt-desc"
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value)
+              }}
               placeholder="描述"
             />
           </div>
@@ -695,7 +723,9 @@ function AddPromptDialog({
             <Textarea
               id="add-prompt-template"
               value={template}
-              onChange={(e) => { setTemplate(e.target.value); }}
+              onChange={(e) => {
+                setTemplate(e.target.value)
+              }}
               placeholder="请总结：{{content}}"
               rows={4}
               required
@@ -706,7 +736,9 @@ function AddPromptDialog({
             <Textarea
               id="add-prompt-args"
               value={argumentsJson}
-              onChange={(e) => { setArgumentsJson(e.target.value); }}
+              onChange={(e) => {
+                setArgumentsJson(e.target.value)
+              }}
               placeholder='[{"name":"content","description":"要总结的文本","required":true}]'
               rows={3}
               className="font-mono text-sm"
@@ -718,7 +750,13 @@ function AddPromptDialog({
             </Alert>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { handleOpenChange(false); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                handleOpenChange(false)
+              }}
+            >
               取消
             </Button>
             <Button type="submit" disabled={submitting}>
@@ -749,8 +787,8 @@ function EditPromptDialog({
   const [title, setTitle] = useState(tool.title ?? '')
   const [description, setDescription] = useState(tool.description ?? '')
   const [template, setTemplate] = useState(tool.template)
-  const [argumentsJson, setArgumentsJson] = useState(
-    () => JSON.stringify(tool.arguments_schema, null, 2)
+  const [argumentsJson, setArgumentsJson] = useState(() =>
+    JSON.stringify(tool.arguments_schema, null, 2)
   )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -811,7 +849,9 @@ function EditPromptDialog({
             <Input
               id="edit-prompt-title"
               value={title}
-              onChange={(e) => { setTitle(e.target.value); }}
+              onChange={(e) => {
+                setTitle(e.target.value)
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -819,7 +859,9 @@ function EditPromptDialog({
             <Input
               id="edit-prompt-desc"
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value)
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -827,7 +869,9 @@ function EditPromptDialog({
             <Textarea
               id="edit-prompt-template"
               value={template}
-              onChange={(e) => { setTemplate(e.target.value); }}
+              onChange={(e) => {
+                setTemplate(e.target.value)
+              }}
               rows={4}
               required
             />
@@ -837,7 +881,9 @@ function EditPromptDialog({
             <Textarea
               id="edit-prompt-args"
               value={argumentsJson}
-              onChange={(e) => { setArgumentsJson(e.target.value); }}
+              onChange={(e) => {
+                setArgumentsJson(e.target.value)
+              }}
               rows={3}
               className="font-mono text-sm"
             />
@@ -848,7 +894,13 @@ function EditPromptDialog({
             </Alert>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                onOpenChange(false)
+              }}
+            >
               取消
             </Button>
             <Button type="submit" disabled={submitting}>
@@ -878,7 +930,11 @@ function DynamicPromptsSheet({
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<DynamicPromptItem | null>(null)
 
-  const { data: prompts = [], isLoading, error } = useQuery({
+  const {
+    data: prompts = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['mcp-dynamic-prompts', server.scope],
     queryFn: () => mcpApi.listDynamicPrompts(server.scope),
     enabled: open && isAdmin,
@@ -922,7 +978,9 @@ function DynamicPromptsSheet({
                   variant="outline"
                   size="sm"
                   className="w-fit gap-1"
-                  onClick={() => { setAddDialogOpen(true); }}
+                  onClick={() => {
+                    setAddDialogOpen(true)
+                  }}
                 >
                   <Plus className="h-4 w-4" />
                   添加 Prompt
@@ -937,7 +995,9 @@ function DynamicPromptsSheet({
                 {isLoading ? (
                   <p className="text-sm text-muted-foreground">加载中…</p>
                 ) : prompts.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">暂无 Prompt，点击「添加 Prompt」创建</p>
+                  <p className="text-sm text-muted-foreground">
+                    暂无 Prompt，点击「添加 Prompt」创建
+                  </p>
                 ) : (
                   <ul className="space-y-2">
                     {prompts.map((p: DynamicPromptItem) => (
@@ -955,7 +1015,9 @@ function DynamicPromptsSheet({
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => { setEditingPrompt(p); }}
+                            onClick={() => {
+                              setEditingPrompt(p)
+                            }}
                             title="编辑"
                           >
                             <Pencil className="h-4 w-4" />
@@ -965,7 +1027,9 @@ function DynamicPromptsSheet({
                             variant="ghost"
                             size="icon"
                             className="text-destructive hover:text-destructive"
-                            onClick={() => { deleteMutation.mutate(p.prompt_key); }}
+                            onClick={() => {
+                              deleteMutation.mutate(p.prompt_key)
+                            }}
                             disabled={deleteMutation.isPending}
                             title="删除"
                           >
@@ -995,8 +1059,8 @@ function DynamicPromptsSheet({
           tool={editingPrompt}
           open={!!editingPrompt}
           onOpenChange={(open) => {
-                if (!open) setEditingPrompt(null)
-              }}
+            if (!open) setEditingPrompt(null)
+          }}
           onSuccess={onAddSuccess}
         />
       ) : null}
@@ -1021,7 +1085,11 @@ function DynamicToolsSheet({
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editingTool, setEditingTool] = useState<DynamicToolItem | null>(null)
 
-  const { data: tools = [], isLoading, error } = useQuery({
+  const {
+    data: tools = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['mcp-dynamic-tools', server.scope],
     queryFn: () => mcpApi.listDynamicTools(server.scope),
     enabled: open && isAdmin,
@@ -1065,7 +1133,9 @@ function DynamicToolsSheet({
                   variant="outline"
                   size="sm"
                   className="w-fit gap-1"
-                  onClick={() => { setAddDialogOpen(true); }}
+                  onClick={() => {
+                    setAddDialogOpen(true)
+                  }}
                 >
                   <Plus className="h-4 w-4" />
                   添加工具
@@ -1080,45 +1150,51 @@ function DynamicToolsSheet({
                 {isLoading ? (
                   <p className="text-sm text-muted-foreground">加载中…</p>
                 ) : tools.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">暂无动态工具，点击「添加工具」创建</p>
+                  <p className="text-sm text-muted-foreground">
+                    暂无动态工具，点击「添加工具」创建
+                  </p>
                 ) : (
-              <ul className="space-y-2">
-                {tools.map((t: DynamicToolItem) => (
-                  <li
-                    key={t.id}
-                    className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 p-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-sm font-medium">{t.tool_key}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {t.description ?? t.tool_type}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => { setEditingTool(t); }}
-                        title="编辑"
+                  <ul className="space-y-2">
+                    {tools.map((t: DynamicToolItem) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 p-3"
                       >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">编辑</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => { deleteMutation.mutate(t.tool_key); }}
-                        disabled={deleteMutation.isPending}
-                        title="删除"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">删除</span>
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-sm font-medium">{t.tool_key}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {t.description ?? t.tool_type}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setEditingTool(t)
+                            }}
+                            title="编辑"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">编辑</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              deleteMutation.mutate(t.tool_key)
+                            }}
+                            disabled={deleteMutation.isPending}
+                            title="删除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">删除</span>
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </>
             )}
@@ -1138,8 +1214,8 @@ function DynamicToolsSheet({
           tool={editingTool}
           open={!!editingTool}
           onOpenChange={(open) => {
-                if (!open) setEditingTool(null)
-              }}
+            if (!open) setEditingTool(null)
+          }}
           onSuccess={onAddSuccess}
         />
       ) : null}
@@ -1148,10 +1224,10 @@ function DynamicToolsSheet({
 }
 
 export default function SystemMCPPage(): React.JSX.Element {
-  const [dynamicToolsServer, setDynamicToolsServer] =
-    useState<ClientDirectMCPServer | null>(null)
-  const [dynamicPromptsServer, setDynamicPromptsServer] =
-    useState<ClientDirectMCPServer | null>(null)
+  const [dynamicToolsServer, setDynamicToolsServer] = useState<ClientDirectMCPServer | null>(null)
+  const [dynamicPromptsServer, setDynamicPromptsServer] = useState<ClientDirectMCPServer | null>(
+    null
+  )
 
   const {
     data: listData,
@@ -1168,7 +1244,7 @@ export default function SystemMCPPage(): React.JSX.Element {
   })
 
   const servers = listData?.servers ?? []
-  const mcpServers = (configData)?.mcpServers ?? {}
+  const mcpServers = configData?.mcpServers ?? {}
 
   return (
     <div className="container mx-auto p-6">

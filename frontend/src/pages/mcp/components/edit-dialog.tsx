@@ -17,11 +17,7 @@ import { z } from 'zod'
 
 import { mcpApi } from '@/api/mcp'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -59,11 +55,7 @@ interface EditDialogProps {
 
 const ENV_CONFIG_EMPTY_JSON = '{}'
 
-export function EditDialog({
-  open,
-  onOpenChange,
-  server,
-}: EditDialogProps): React.ReactElement {
+export function EditDialog({ open, onOpenChange, server }: EditDialogProps): React.ReactElement {
   const queryClient = useQueryClient()
   const [envConfigJson, setEnvConfigJson] = useState(ENV_CONFIG_EMPTY_JSON)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -184,9 +176,7 @@ export function EditDialog({
                 <FormItem className="flex flex-row items-center justify-between space-x-2 rounded-lg border p-4">
                   <div className="space-y-0.5">
                     <FormLabel>启用</FormLabel>
-                    <FormDescription>
-                      禁用后，该服务器及其工具将不可用
-                    </FormDescription>
+                    <FormDescription>禁用后，该服务器及其工具将不可用</FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -200,7 +190,12 @@ export function EditDialog({
             />
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
               <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="w-full justify-start gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                >
                   {advancedOpen ? (
                     <ChevronDown className="h-4 w-4" />
                   ) : (
@@ -212,12 +207,15 @@ export function EditDialog({
               <CollapsibleContent>
                 <div className="space-y-2 rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">
-                    环境变量、工作目录等，以 JSON 对象编辑，与后端存储一致。留空或 {'{}'} 表示无额外配置。
+                    环境变量、工作目录等，以 JSON 对象编辑，与后端存储一致。留空或 {'{}'}{' '}
+                    表示无额外配置。
                   </p>
                   <textarea
                     className="min-h-[120px] w-full resize-y rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs"
                     value={envConfigJson}
-                    onChange={(e) => { setEnvConfigJson(e.target.value); }}
+                    onChange={(e) => {
+                      setEnvConfigJson(e.target.value)
+                    }}
                     placeholder='{"env": {}, "cwd": "."}'
                     spellCheck={false}
                   />
