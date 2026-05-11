@@ -9,7 +9,7 @@ AI Agent 系统后端服务，基于 FastAPI 构建。
 - **数据库**: PostgreSQL + SQLAlchemy 2.0
 - **缓存**: Redis
 - **向量数据库**: Qdrant
-- **任务队列**: Celery
+- **后台任务**: FastAPI 应用生命周期 + 应用内后台任务调度
 - **LLM 网关**: LiteLLM
 - **类型检查**: Pyright
 - **代码规范**: Ruff
@@ -19,17 +19,23 @@ AI Agent 系统后端服务，基于 FastAPI 构建。
 ```
 backend/
 ├── alembic/              # 数据库迁移
-├── api/                  # API 路由
-│   └── v1/              # API v1 版本
-├── app/                  # 应用配置
-├── core/                 # 核心类型定义
-├── db/                   # 数据库连接
-├── models/               # SQLAlchemy 模型
-├── schemas/              # Pydantic schemas
-├── services/             # 业务服务
-├── tools/                # Agent 工具
+├── bootstrap/            # FastAPI 入口、生命周期、路由注册
+├── domains/              # 业务域
+│   ├── identity/         # 身份认证、用户、API Key、权限
+│   ├── session/          # 会话、标题、会话归属
+│   ├── agent/            # Agent 对话、工具、记忆、MCP、沙箱、垂直任务
+│   ├── gateway/          # AI Gateway、OpenAI 兼容入口、团队/预算/日志
+│   ├── studio/           # 工作台、工作流、代码质量、LSP
+│   └── evaluation/       # 评估接口
+├── libs/                 # 纯技术基础设施
+│   ├── api/              # 服务工厂、通用 API 依赖
+│   ├── config/           # 配置管理
+│   ├── db/               # 数据库、Redis、向量库
+│   ├── middleware/       # 中间件
+│   ├── observability/    # 日志、指标、追踪、Sentry
+│   └── types/            # 通用工具类型
 ├── utils/                # 工具函数
-├── workers/              # Celery 任务
+├── scripts/              # 维护脚本
 └── tests/                # 测试文件
 ```
 
@@ -85,7 +91,7 @@ make db-upgrade
 ```bash
 make dev
 # 或者使用 uv:
-# uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# uv run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 运行测试
@@ -96,6 +102,11 @@ make test-cov  # 带覆盖率
 # 或者使用 uv:
 # uv run pytest
 ```
+
+## 架构文档（节选）
+
+- [AI Gateway 领域架构与工程实践](docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md) — `domains/gateway` 分层、认证、数据要点、测试与前后端契约
+- [LLM Gateway 架构设计说明](docs/LLM_GATEWAY_ARCHITECTURE.md) — LiteLLM 选型与本项目 Gateway 抽象
 
 ## API 文档
 
