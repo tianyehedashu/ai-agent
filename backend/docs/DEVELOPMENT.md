@@ -118,21 +118,23 @@ pre-commit run --all-files
 
 ## 项目结构
 
+现行后端以 **`domains/` + `bootstrap/` + `libs/`** 为主（与根目录 `AGENTS.md` 一致），勿对照旧版 `api/`、`core/`、`services/` 树。
+
 ```
 backend/
-├── api/          # API 路由层
-├── app/          # 应用核心
-├── core/         # 核心类型定义
-├── models/       # 数据模型
-├── schemas/      # 请求/响应 Schema
-├── services/     # 业务服务
-├── db/           # 数据库
-├── tools/        # Agent 工具
-└── tests/        # 测试
+├── bootstrap/     # FastAPI 入口、路由挂载、生命周期
+├── domains/       # 业务域：identity, session, agent, gateway, studio, evaluation
+├── libs/          # 数据库、配置、中间件、可观测性等非业务基础设施
+├── alembic/
+├── utils/
+└── tests/
 ```
+
+详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 与 [CODE_STANDARDS.md](./CODE_STANDARDS.md)。
 
 ## 相关文档
 
-- [代码规范](./CODE_STANDARDS.md) - 详细的代码规范说明
-- [API 文档](http://localhost:8000/docs) - 启动服务后访问
-- [系统架构](../AI-Agent系统架构设计文档.md) - 系统设计文档
+- [代码规范](./CODE_STANDARDS.md) — 代码与 DDD 分层约定
+- [后端架构](./ARCHITECTURE.md) — 现行目录与模块索引
+- [API 文档](http://localhost:8000/docs) — 启动服务后访问
+- 根目录 `AI-Agent系统架构设计文档.md` 等为产品/需求向历史材料，**实现以 `domains/` 代码为准**
