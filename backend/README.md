@@ -39,6 +39,8 @@ backend/
 └── tests/                # 测试文件
 ```
 
+**规范与域文档**：仓库根 [AGENTS.md](../AGENTS.md)；后端分层见 [docs/CODE_STANDARDS.md](./docs/CODE_STANDARDS.md)；Gateway 见 [docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)。`docs/DIRECTORY_STRUCTURE_ANALYSIS.md` 为旧版目录归档说明，勿作现行树来源。
+
 ## 快速开始
 
 ### 环境要求

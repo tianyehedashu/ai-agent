@@ -8,6 +8,15 @@ import AgentsPage from '@/pages/agents'
 import LoginPage from '@/pages/auth/login'
 import RegisterPage from '@/pages/auth/register'
 import ChatPage from '@/pages/chat'
+import GatewayLayout from '@/pages/gateway/_layout'
+import GatewayAlertsPage from '@/pages/gateway/alerts'
+import GatewayBudgetsPage from '@/pages/gateway/budgets'
+import GatewayCredentialsPage from '@/pages/gateway/credentials'
+import GatewayKeysPage from '@/pages/gateway/keys'
+import GatewayLogsPage from '@/pages/gateway/logs'
+import GatewayModelsPage from '@/pages/gateway/models'
+import GatewayOverviewPage from '@/pages/gateway/overview'
+import GatewayTeamsPage from '@/pages/gateway/teams'
 import MCPPage from '@/pages/mcp'
 import SystemMCPPage from '@/pages/mcp/system'
 import NotFoundPage from '@/pages/not-found'
@@ -50,6 +59,17 @@ function App(): React.JSX.Element {
                     element={<ProductInfoHistoryDetailPage />}
                   />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/gateway/*" element={<GatewayLayout />}>
+                    <Route index element={<GatewayOverviewPage />} />
+                    <Route path="overview" element={<GatewayOverviewPage />} />
+                    <Route path="keys" element={<GatewayKeysPage />} />
+                    <Route path="credentials" element={<GatewayCredentialsPage />} />
+                    <Route path="models" element={<GatewayModelsPage />} />
+                    <Route path="budgets" element={<GatewayBudgetsPage />} />
+                    <Route path="logs" element={<GatewayLogsPage />} />
+                    <Route path="alerts" element={<GatewayAlertsPage />} />
+                    <Route path="teams" element={<GatewayTeamsPage />} />
+                  </Route>
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </Layout>

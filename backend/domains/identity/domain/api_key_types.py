@@ -62,6 +62,11 @@ class ApiKeyScope(str, Enum):
     MCP_CUSTOM_SERVER = "mcp:custom-server"  # 自定义服务器
     MCP_ALL_SERVERS = "mcp:all"  # 所有 MCP 服务器
 
+    # AI Gateway 访问
+    GATEWAY_PROXY = "gateway:proxy"  # 调用 OpenAI 兼容入口 /v1/*
+    GATEWAY_ADMIN = "gateway:admin"  # 管理团队/Key/路由/预算
+    GATEWAY_READ = "gateway:read"  # 只读仪表盘/日志
+
 
 # 作用域分组（便于快速设置常用组合）
 API_KEY_SCOPE_GROUPS: dict[str, set[ApiKeyScope]] = {
@@ -103,6 +108,14 @@ API_KEY_SCOPE_GROUPS: dict[str, set[ApiKeyScope]] = {
     },
     "mcp_full": {
         ApiKeyScope.MCP_ALL_SERVERS,
+    },
+    "gateway_proxy": {
+        ApiKeyScope.GATEWAY_PROXY,
+    },
+    "gateway_full": {
+        ApiKeyScope.GATEWAY_PROXY,
+        ApiKeyScope.GATEWAY_ADMIN,
+        ApiKeyScope.GATEWAY_READ,
     },
 }
 

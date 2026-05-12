@@ -274,6 +274,28 @@ class Settings(BaseSettings):
     tracing_enabled: bool = False
     jaeger_endpoint: str | None = None
 
+    # ========================================================================
+    # AI Gateway 配置
+    # ========================================================================
+    # 总开关：内部模块（chat/agent/...）调用是否走 Gateway 桥接（全量统计）
+    gateway_internal_proxy_enabled: bool = True
+    # 默认 PII Guardrail 是否生效（vkey 可单独开关）
+    gateway_default_guardrail_enabled: bool = True
+    # 默认是否在日志中存完整 prompt/response（vkey 可覆盖）
+    gateway_default_store_full_messages: bool = False
+    # Router 启用 cooldown 的失败次数阈值（与 LiteLLM 默认一致）
+    gateway_router_cooldown_threshold: int = 5
+    # Router 单次 cooldown 时长（秒）
+    gateway_router_cooldown_seconds: int = 60
+    # 跨进程 cooldown / TPM-RPM 共享 Redis URL（默认复用主 redis）
+    gateway_router_redis_url: str | None = None
+    # rollup 任务间隔（秒）
+    gateway_rollup_interval_seconds: int = 300
+    # 告警检查间隔（秒）
+    gateway_alert_interval_seconds: int = 60
+    # 月分区维护间隔（秒）
+    gateway_partition_interval_seconds: int = 86400
+
     @property
     def is_development(self) -> bool:
         """是否为开发环境"""

@@ -1,0 +1,65 @@
+/**
+ * AI Gateway 二级布局：左侧二级导航 + 右侧 Outlet
+ */
+
+import {
+  AlertTriangle,
+  BarChart3,
+  Database,
+  FileText,
+  Key,
+  Network,
+  Receipt,
+  Server,
+  Users,
+} from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
+
+import { cn } from '@/lib/utils'
+
+const items = [
+  { to: 'overview', label: '概览', icon: BarChart3 },
+  { to: 'keys', label: '虚拟 Key', icon: Key },
+  { to: 'credentials', label: '凭据', icon: Database },
+  { to: 'models', label: '模型与路由', icon: Network },
+  { to: 'budgets', label: '预算配额', icon: Receipt },
+  { to: 'logs', label: '调用日志', icon: FileText },
+  { to: 'alerts', label: '告警规则', icon: AlertTriangle },
+  { to: 'teams', label: '团队成员', icon: Users },
+] as const
+
+export default function GatewayLayout(): React.JSX.Element {
+  return (
+    <div className="flex h-full min-h-0">
+      <aside className="flex w-56 flex-col border-r border-border/40 bg-background/60 px-3 py-4">
+        <div className="mb-3 flex items-center gap-2 px-2 text-sm font-semibold tracking-tight">
+          <Server className="h-4 w-4 text-primary" />
+          AI Gateway
+        </div>
+        <nav className="flex flex-col gap-1">
+          {items.map((it) => (
+            <NavLink
+              key={it.to}
+              to={it.to}
+              end={it.to === 'overview'}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )
+              }
+            >
+              <it.icon className="h-4 w-4" />
+              <span>{it.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+      <section className="flex-1 overflow-y-auto px-6 py-6">
+        <Outlet />
+      </section>
+    </div>
+  )
+}

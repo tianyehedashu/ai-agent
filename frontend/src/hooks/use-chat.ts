@@ -255,9 +255,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
 
         case 'done': {
-          const doneData = event.data as { final_message?: { content?: string } }
+          const doneData = event.data as {
+            final_message?: { content?: string }
+            total_tokens?: number
+            usage?: Record<string, unknown>
+            model?: string
+          }
           const finalContent = doneData.final_message?.content ?? ''
           const runId = currentRunIdRef.current
+          const metadata: Record<string, unknown> = runId ? { runId } : {}
+          if (doneData.usage) metadata.usage = doneData.usage
+          if (doneData.model) metadata.model = doneData.model
+          if (typeof doneData.total_tokens === 'number') {
+            metadata.totalTokens = doneData.total_tokens
+          }
 
           // 添加助手消息
           if (finalContent) {
@@ -265,7 +276,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
               id: generateId(),
               role: 'assistant',
               content: finalContent,
-              metadata: runId ? { runId } : undefined,
+              metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+              tokenCount:
+                typeof doneData.total_tokens === 'number' ? doneData.total_tokens : undefined,
               createdAt: new Date().toISOString(),
             }
             setMessages((prev) => [...prev, assistantMessage])

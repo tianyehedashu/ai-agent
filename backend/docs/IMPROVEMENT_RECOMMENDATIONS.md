@@ -161,7 +161,7 @@ backend/
 
 ## 📝 详细分析
 
-请参考: [DIRECTORY_STRUCTURE_ANALYSIS.md](./DIRECTORY_STRUCTURE_ANALYSIS.md)
+目录与分层以 **[AGENTS.md](../../AGENTS.md)**、[CODE_STANDARDS.md](./CODE_STANDARDS.md) 及仓库内 `domains/` 为准；[DIRECTORY_STRUCTURE_ANALYSIS.md](./DIRECTORY_STRUCTURE_ANALYSIS.md) 仅为旧版结构归档说明。
 
 ---
 

@@ -51,6 +51,8 @@ class AgentState(TypedDict):
     iteration: int
     tool_iteration: int  # 工具调用迭代计数
     total_tokens: int
+    usage_totals: dict[str, int]
+    last_model: str | None
     recalled_memories: list[dict[str, Any]]
     pending_tool_calls: list[dict[str, Any]]  # 待处理的工具调用
     tool_results: list[dict[str, Any]]  # 工具执行结果
@@ -111,6 +113,16 @@ class StateView:
     def total_tokens(self) -> int:
         """总 Token 数"""
         return self._state["total_tokens"]
+
+    @property
+    def usage_totals(self) -> dict[str, int]:
+        """累计 LLM 用量"""
+        return self._state["usage_totals"]
+
+    @property
+    def last_model(self) -> str | None:
+        """最后一次 LLM 调用模型"""
+        return self._state["last_model"]
 
     @property
     def recalled_memories(self) -> list[dict[str, Any]]:
@@ -363,6 +375,8 @@ class LangGraphAgentEngine:
             max_tokens=self.config.max_tokens,
             tools=tools,
         )
+        usage = response.usage or {}
+        usage_totals = _merge_usage(view.usage_totals, usage)
 
         # 解析响应
         # 优先使用 content，若为空则使用 reasoning_content（推理模型兼容）
@@ -391,6 +405,9 @@ class LangGraphAgentEngine:
                 "pending_tool_calls": tool_calls_dict,
                 "tool_iteration": view.tool_iteration + 1,
                 "reasoning_content": reasoning_content,  # 传递推理内容
+                "total_tokens": usage_totals["total_tokens"],
+                "usage_totals": usage_totals,
+                "last_model": response.model or self.config.model,
             }
 
         # 返回纯文本响应，清空待处理的工具调用
@@ -398,6 +415,9 @@ class LangGraphAgentEngine:
             "messages": [AIMessage(content=final_content)],
             "pending_tool_calls": [],
             "reasoning_content": reasoning_content,  # 传递推理内容
+            "total_tokens": usage_totals["total_tokens"],
+            "usage_totals": usage_totals,
+            "last_model": response.model or self.config.model,
         }
 
     async def _execute_tools(self, state: AgentState) -> dict[str, Any]:
@@ -668,6 +688,12 @@ class LangGraphAgentEngine:
             "iteration": 0,
             "tool_iteration": 0,
             "total_tokens": 0,
+            "usage_totals": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            },
+            "last_model": None,
             "recalled_memories": [],
             "pending_tool_calls": [],
             "tool_results": [],
@@ -722,6 +748,8 @@ class LangGraphAgentEngine:
                 iterations=current_iteration,
                 tool_iterations=final_result.get("tool_iteration", 0),
                 total_tokens=final_result.get("total_tokens", 0),
+                usage=final_result.get("usage_totals"),
+                model=final_result.get("last_model"),
             )
 
         except TimeoutError as e:
@@ -729,3 +757,19 @@ class LangGraphAgentEngine:
         except Exception as e:
             logger.exception("Agent execution error: %s", e)
             yield AgentEvent.error(str(e))
+
+
+def _merge_usage(current: dict[str, int], new_usage: dict[str, int]) -> dict[str, int]:
+    """合并本轮 LLM token 用量。"""
+    prompt = current.get("prompt_tokens", 0) + int(new_usage.get("prompt_tokens", 0) or 0)
+    completion = current.get("completion_tokens", 0) + int(
+        new_usage.get("completion_tokens", 0) or 0
+    )
+    total = current.get("total_tokens", 0) + int(new_usage.get("total_tokens", 0) or 0)
+    if total == current.get("total_tokens", 0):
+        total = prompt + completion
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+    }

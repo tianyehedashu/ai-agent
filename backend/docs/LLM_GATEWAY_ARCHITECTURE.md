@@ -302,3 +302,13 @@ Gateway: 隔离和转换层（我们的代码）
 - LiteLLM 负责**统一接口**
 - Gateway 负责**隔离和转换**
 - 业务层**永远不直接接触 LiteLLM 对象**
+
+---
+
+## 六、与 `domains/gateway` 领域实现的关系
+
+上述文档侧重 **LiteLLM + 隔离层** 的概念与动机。当前代码库中，完整的 **AI Gateway 产品化实现**（团队/虚拟 Key、管理 API、OpenAI 兼容 `/v1/*`、Router 单例、预算、日志分区表、内部桥接等）位于 `domains/gateway/`，并有单独的领域架构与工程实践说明：
+
+→ **[AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./AI_GATEWAY_DOMAIN_ARCHITECTURE.md)**
+
+阅读顺序建议：本文 **§一～五**（LiteLLM/Gateway 抽象）→ **AI_GATEWAY_DOMAIN_ARCHITECTURE**（落地模块与运维要点）。

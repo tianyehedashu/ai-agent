@@ -45,7 +45,7 @@ class UserUseCase:
         password: str,
         name: str,
     ) -> User:
-        """创建用户
+        """创建用户（注册成功后自动创建 personal team）
 
         Args:
             email: 邮箱地址
@@ -62,6 +62,20 @@ class UserUseCase:
             hashed_password=hashed_password,
             name=name,
         )
+
+        # 自动创建 personal team（默认归属，供 AI Gateway 使用）
+        try:
+            from domains.gateway.application.team_service import (  # pylint: disable=import-outside-toplevel
+                TeamService,
+            )
+
+            await TeamService(self.db).ensure_personal_team(
+                user.id,
+                display_name=name or (email.split("@")[0] if email else None),
+            )
+        except Exception:  # pragma: no cover
+            # 注册流程不应因为 team 创建失败而中断；后续登录时也会兜底创建
+            pass
 
         return user
 

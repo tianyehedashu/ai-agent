@@ -29,6 +29,12 @@ cp .env.example .env
 VITE_API_URL=http://localhost:8000
 ```
 
+## AI Gateway 控制台（可选）
+
+管理端页面位于 `src/pages/gateway/`，团队上下文由 `src/stores/gateway-team.ts` 写入 **`X-Team-Id`**。后端领域架构、RBAC 与分区表注意事项见仓库根目录下后端文档：
+
+[`backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`](../../backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)
+
 ## 常用命令
 
 ```bash
@@ -68,18 +74,18 @@ src/
 
 ## 技术栈
 
-| 技术 | 用途 |
-|------|------|
-| React 18 | UI 框架 |
-| TypeScript | 类型安全 |
-| Vite | 构建工具 |
-| Tailwind CSS | 样式 |
-| Radix UI | 无样式组件 |
-| Zustand | 状态管理 |
-| React Query | 数据获取 |
-| React Router | 路由 |
-| Zod | 表单验证 |
-| Vitest | 测试 |
+| 技术         | 用途       |
+| ------------ | ---------- |
+| React 18     | UI 框架    |
+| TypeScript   | 类型安全   |
+| Vite         | 构建工具   |
+| Tailwind CSS | 样式       |
+| Radix UI     | 无样式组件 |
+| Zustand      | 状态管理   |
+| React Query  | 数据获取   |
+| React Router | 路由       |
+| Zod          | 表单验证   |
+| Vitest       | 测试       |
 
 ## 添加新组件
 
@@ -117,7 +123,7 @@ export default function NewPage() {
 }
 
 // 在 App.tsx 中添加路由
-<Route path="/new-page" element={<NewPage />} />
+;<Route path="/new-page" element={<NewPage />} />
 ```
 
 ## 状态管理

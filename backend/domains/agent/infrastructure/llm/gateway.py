@@ -2,6 +2,12 @@
 LLM Gateway - LLM 网关实现
 
 使用 LiteLLM 统一多模型接口
+
+注意：
+- 当 settings.gateway_internal_proxy_enabled=True 时，本类会优先把调用
+  转发到 AI Gateway 桥接层（domains.gateway.application.internal_bridge.GatewayBridge），
+  以便统一统计、预算与 Guardrail。
+- 直接 LiteLLM 调用作为回退路径（开发或 Gateway 故障时）。
 """
 
 from collections.abc import AsyncGenerator
@@ -9,12 +15,14 @@ from contextlib import suppress
 import json
 import os
 from typing import Any
+import uuid
 
 import litellm  # pylint: disable=import-error
 from litellm import acompletion, aembedding  # pylint: disable=import-error
 from pydantic import BaseModel
 import tiktoken
 
+from bootstrap.config import settings as _global_settings
 from bootstrap.config_loader import get_app_config
 from domains.agent.domain.types import Message, ToolCall
 from domains.agent.infrastructure.llm.message_formatter import (
@@ -23,6 +31,7 @@ from domains.agent.infrastructure.llm.message_formatter import (
 from domains.agent.infrastructure.llm.prompt_cache import get_prompt_cache_manager
 from domains.agent.infrastructure.llm.providers import get_provider
 from libs.config.interfaces import LLMConfigProtocol
+from libs.db.permission_context import get_permission_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,6 +45,7 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] | None = None
     finish_reason: str | None = None
     usage: dict[str, int] | None = None
+    model: str | None = None
 
 
 class StreamChunk(BaseModel):
@@ -45,6 +55,7 @@ class StreamChunk(BaseModel):
     reasoning_content: str | None = None  # 推理模型的思考过程
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str | None = None
+    usage: dict[str, int] | None = None
 
 
 class LLMGateway:
@@ -313,6 +324,29 @@ class LLMGateway:
         """
         model = model or self.config.default_model
 
+        # ==== 新版 AI Gateway 内部桥接：当配置开关打开且能确定 user_id 时，
+        # 改走 GatewayBridge 走全套统计/预算/Guardrail/路由能力 ====
+        if (
+            getattr(_global_settings, "gateway_internal_proxy_enabled", False)
+            and not api_key  # 显式自定义 key 时不走 Gateway，保留用户私钥语义
+        ):
+            ctx = get_permission_context()
+            user_id = getattr(ctx, "user_id", None) if ctx else None
+            if isinstance(user_id, uuid.UUID):
+                bridged = await self._maybe_call_via_gateway(
+                    user_id=user_id,
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    response_format=response_format,
+                )
+                if bridged is not None:
+                    return bridged
+
         # 获取 API Key 配置（需要在规范化之前，因为火山引擎需要 endpoint_id）
         if api_key:
             api_config: dict[str, Any] = {"api_key": api_key}
@@ -430,6 +464,8 @@ class LLMGateway:
             # 提取 usage
             if hasattr(response, "usage") and response.usage:
                 response_dict["usage"] = self._extract_usage(response.usage)
+            if hasattr(response, "model") and response.model:
+                response_dict["model"] = str(response.model)
         except Exception as e:
             logger.error("Failed to manually extract response data: %s", e, exc_info=True)
             # 如果手动提取失败，尝试 model_dump 作为备用
@@ -535,6 +571,7 @@ class LLMGateway:
             if isinstance(choice, dict) and choice.get("finish_reason")
             else None,
             usage=usage_dict,
+            model=str(response_dict.get("model")) if response_dict.get("model") else None,
         )
 
     def _parse_tool_calls_from_dict(self, message: dict[str, Any]) -> list[ToolCall] | None:
@@ -569,6 +606,106 @@ class LLMGateway:
             "total_tokens": int(usage.get("total_tokens", 0)),
         }
 
+    async def _maybe_call_via_gateway(
+        self,
+        *,
+        user_id: uuid.UUID,
+        messages: list[dict[str, Any]],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict | None,
+        stream: bool,
+        response_format: dict[str, Any] | None,
+    ) -> LLMResponse | AsyncGenerator[StreamChunk, None] | None:
+        """通过 AI Gateway 桥接执行调用。失败返回 None 由调用方走旧路径。"""
+        try:
+            from domains.gateway.application.internal_bridge import (  # pylint: disable=import-outside-toplevel
+                get_gateway_bridge,
+            )
+            from libs.gateway.protocol import (  # pylint: disable=import-outside-toplevel
+                GatewayCallContext,
+                GatewayStreamChunk,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("Gateway bridge unavailable, fallback to direct LiteLLM: %s", exc)
+            return None
+
+        try:
+            bridge = get_gateway_bridge()
+            ctx = GatewayCallContext(user_id=user_id)
+            extra: dict[str, Any] = {}
+            if tools:
+                extra["tools"] = tools
+            if tool_choice is not None:
+                extra["tool_choice"] = tool_choice
+            if response_format is not None:
+                extra["response_format"] = response_format
+
+            if stream:
+                stream_iter = await bridge.chat_completion(
+                    messages=messages,
+                    ctx=ctx,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    **extra,
+                )
+
+                async def _wrap() -> AsyncGenerator[StreamChunk, None]:
+                    async for chunk in stream_iter:  # type: ignore[union-attr]
+                        chunk_obj: GatewayStreamChunk = chunk
+                        yield StreamChunk(
+                            content=chunk_obj.content,
+                            reasoning_content=chunk_obj.reasoning_content,
+                            tool_calls=chunk_obj.tool_calls,
+                            finish_reason=chunk_obj.finish_reason,
+                            usage=chunk_obj.usage,
+                        )
+
+                return _wrap()
+
+            result = await bridge.chat_completion(
+                messages=messages,
+                ctx=ctx,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=False,
+                **extra,
+            )
+            return LLMResponse(
+                content=result.content,
+                reasoning_content=result.reasoning_content,
+                tool_calls=(
+                    [
+                        ToolCall(
+                            id=str(tc.get("id", "")),
+                            name=str(tc.get("function", {}).get("name", ""))
+                            if isinstance(tc.get("function"), dict)
+                            else str(tc.get("name", "")),
+                            arguments=self._parse_arguments(
+                                str(tc.get("function", {}).get("arguments", ""))
+                                if isinstance(tc.get("function"), dict)
+                                else str(tc.get("arguments", ""))
+                            ),
+                        )
+                        for tc in result.tool_calls
+                        if isinstance(tc, dict)
+                    ]
+                    if result.tool_calls
+                    else None
+                ),
+                finish_reason=result.finish_reason,
+                usage=result.usage,
+                model=result.model or model,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Gateway bridge call failed, fallback to direct LiteLLM: %s", exc)
+            return None
+
     async def _chat(self, **kwargs: Any) -> LLMResponse:
         """非流式调用
 
@@ -578,6 +715,7 @@ class LLMGateway:
         try:
             response = await acompletion(**kwargs)
             response_dict = self._extract_response_dict(response)
+            response_dict.setdefault("model", model)
 
             # 更新 Prompt Cache 统计（如果提供商支持）
             usage = response_dict.get("usage")

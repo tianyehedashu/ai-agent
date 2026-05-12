@@ -18,6 +18,7 @@ import {
   Server,
   Video,
   Package,
+  Network,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
@@ -39,11 +40,21 @@ import { groupSessionsByDate } from '@/lib/session-utils'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
+import { useUserStore } from '@/stores/user'
 import type { Session } from '@/types'
 import { isVideoSession } from '@/types'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: typeof Bot
+  /** 仅登录用户可见 */
+  requiresAuth?: boolean
+}
+
+const navigation: NavItem[] = [
   { name: 'Agents', href: '/agents', icon: Bot },
+  { name: 'AI 网关', href: '/gateway', icon: Network, requiresAuth: true },
   { name: 'MCP 服务器', href: '/mcp', icon: Zap },
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '视频', href: '/video-tasks', icon: Video },
@@ -58,6 +69,12 @@ export default function Sidebar(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { isCollapsed, toggle } = useSidebarStore()
   const [isHistoryOpen, setIsHistoryOpen] = useState(true)
+  const { currentUser } = useUserStore()
+  const isAnonymous = currentUser?.is_anonymous ?? true
+  const visibleNavigation = useMemo(
+    () => navigation.filter((item) => !item.requiresAuth || !isAnonymous),
+    [isAnonymous]
+  )
 
   // Fetch sessions
   const { data: sessionsData, isLoading: isLoadingSessions } = useQuery({
@@ -218,7 +235,7 @@ export default function Sidebar(): React.JSX.Element {
 
           {/* Other Navigation */}
           <nav className="space-y-1">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive =
                 location.pathname === item.href ||
                 (item.href !== '/' && location.pathname.startsWith(item.href))

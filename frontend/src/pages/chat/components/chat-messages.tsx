@@ -163,6 +163,7 @@ function MessageBubble({
   const isUser = message.role === 'user'
   const runId = message.metadata?.runId as string | undefined
   const runEvents = runId ? processRuns[runId] : undefined
+  const usage = getMessageUsage(message)
 
   if (isUser) {
     return (
@@ -230,6 +231,21 @@ function MessageBubble({
           </ReactMarkdown>
         </div>
 
+        {usage && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {usage.model && <span className="font-mono">{usage.model}</span>}
+            {usage.promptTokens !== undefined && (
+              <span>输入 {usage.promptTokens.toLocaleString()}</span>
+            )}
+            {usage.completionTokens !== undefined && (
+              <span>输出 {usage.completionTokens.toLocaleString()}</span>
+            )}
+            {usage.totalTokens !== undefined && (
+              <span>总计 {usage.totalTokens.toLocaleString()} tokens</span>
+            )}
+          </div>
+        )}
+
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mt-4 space-y-2 border-l-2 border-border/50 pl-4">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
@@ -262,4 +278,52 @@ function MessageBubble({
       </div>
     </div>
   )
+}
+
+interface UsageSummary {
+  model?: string
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
+}
+
+function getMessageUsage(message: Message): UsageSummary | null {
+  const metadata = message.metadata
+  const usage =
+    metadata?.usage && typeof metadata.usage === 'object' && !Array.isArray(metadata.usage)
+      ? (metadata.usage as Record<string, unknown>)
+      : undefined
+
+  const model = typeof metadata?.model === 'string' ? metadata.model : undefined
+  const promptTokens = usage ? readNumber(usage, 'prompt_tokens') : undefined
+  const completionTokens = usage ? readNumber(usage, 'completion_tokens') : undefined
+  const usageTotal = usage ? readNumber(usage, 'total_tokens') : undefined
+  const metadataTotal = metadata ? readNumber(metadata, 'totalTokens') : undefined
+  const totalTokens = message.tokenCount ?? usageTotal ?? metadataTotal
+
+  if (
+    !model &&
+    totalTokens === undefined &&
+    promptTokens === undefined &&
+    completionTokens === undefined
+  ) {
+    return null
+  }
+
+  return {
+    model,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  }
+}
+
+function readNumber(source: Record<string, unknown>, key: string): number | undefined {
+  const value = source[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
 }

@@ -973,7 +973,7 @@ sandbox_config = {
 ### D. 相关文档
 
 - [代码规范](CODE_STANDARDS.md)
-- [目录结构分析](DIRECTORY_STRUCTURE_ANALYSIS.md)
+- [目录结构（归档说明）](DIRECTORY_STRUCTURE_ANALYSIS.md)（旧版树已废止；以 [AGENTS.md](../../AGENTS.md) 与 `domains/` 为准）
 - [开发指南](DEVELOPMENT.md)
 
 ---

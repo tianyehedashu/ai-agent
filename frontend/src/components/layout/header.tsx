@@ -3,6 +3,7 @@ import { Moon, Sun, User } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
+import TeamSwitcher from '@/components/layout/team-switcher'
 import { useTheme } from '@/components/theme-provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -61,6 +62,9 @@ export default function Header(): React.JSX.Element {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
+        {/* Team Switcher（匿名用户隐藏） */}
+        <TeamSwitcher />
+
         {/* Theme Toggle */}
         <Button
           variant="ghost"

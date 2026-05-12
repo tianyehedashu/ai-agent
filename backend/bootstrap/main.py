@@ -43,6 +43,8 @@ from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
+from domains.gateway.presentation.management_router import router as gateway_mgmt_router
+from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
 from domains.identity.presentation.api_key_router import router as api_key_router
 from domains.identity.presentation.router import router as identity_router
@@ -194,6 +196,24 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     logger.info("SandboxManager started")
 
     init_background_tasks(_fastapi_app)
+
+    # 初始化 AI Gateway：Router 单例 + 后台任务
+    try:
+        from domains.gateway.application.jobs import (  # pylint: disable=import-outside-toplevel
+            schedule_gateway_jobs,
+        )
+        from domains.gateway.infrastructure.router_singleton import (  # pylint: disable=import-outside-toplevel
+            get_router,
+        )
+        from libs.db.database import get_session_factory  # pylint: disable=import-outside-toplevel
+
+        gw_factory = get_session_factory()
+        async with gw_factory() as db:
+            await get_router(db)
+        schedule_gateway_jobs(_fastapi_app)
+        logger.info("AI Gateway initialized: Router + background jobs scheduled")
+    except Exception as e:
+        logger.warning("Failed to initialize AI Gateway: %s", e)
 
     # 初始化默认系统级 MCP 服务器
     try:
@@ -618,6 +638,12 @@ app.include_router(
     prefix=f"{api_router_prefix}/user-models",
     tags=["User Models"],
 )
+
+# AI Gateway 管理 API：/api/v1/gateway/*
+app.include_router(gateway_mgmt_router, tags=["AI Gateway"])
+
+# AI Gateway OpenAI 兼容入口：根路径下的 /v1/*（与 OpenAI 客户端默认 base_url 一致）
+app.include_router(openai_compat_router, tags=["OpenAI Compat"])
 
 
 @app.get("/")

@@ -60,8 +60,22 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         request: Request | None = None,
     ) -> None:
-        """用户注册后回调：迁移匿名数据到新账号"""
+        """用户注册后回调：创建 personal team + 迁移匿名数据"""
         logger.info("User %s has registered.", user.id)
+
+        # 自动创建 personal team
+        try:
+            from domains.gateway.application.team_service import (  # pylint: disable=import-outside-toplevel
+                TeamService,
+            )
+
+            await TeamService(self.user_db.session).ensure_personal_team(
+                user.id,
+                display_name=user.name or (user.email.split("@")[0] if user.email else None),
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to ensure personal team for %s: %s", user.id, exc)
+
         await self._migrate_anonymous_data(user, request)
 
     async def on_after_login(

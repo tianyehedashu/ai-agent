@@ -19,9 +19,8 @@ import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
+import { CredentialsTab } from './components/credentials-tab'
 import { MCPTab } from './components/mcp-tab'
-import { ModelTab } from './components/model-tab'
-import { ProviderConfigTab } from './components/provider-config-tab'
 
 export default function SettingsPage(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
@@ -109,8 +108,7 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
-          <TabsTrigger value="models">我的模型</TabsTrigger>
-          <TabsTrigger value="providers">大模型配置</TabsTrigger>
+          <TabsTrigger value="credentials">我的凭据</TabsTrigger>
           <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
         </TabsList>
@@ -167,12 +165,8 @@ export default function SettingsPage(): React.JSX.Element {
           <ApiKeyTab />
         </TabsContent>
 
-        <TabsContent value="models">
-          <ModelTab />
-        </TabsContent>
-
-        <TabsContent value="providers">
-          <ProviderConfigTab />
+        <TabsContent value="credentials">
+          <CredentialsTab />
         </TabsContent>
 
         <TabsContent value="mcp">

@@ -20,15 +20,19 @@ class PermissionContext:
         user_id: 注册用户 ID（如果是注册用户）
         anonymous_user_id: 匿名用户 ID（如果是匿名用户）
         role: 用户角色（admin, user, viewer）
+        team_id: 当前团队 ID（Gateway 域使用，向后兼容可选）
+        team_role: 当前团队角色（owner/admin/member），仅 team_id 非空时有意义
     """
 
     user_id: uuid.UUID | None = None
     anonymous_user_id: str | None = None
     role: str = "user"
+    team_id: uuid.UUID | None = None
+    team_role: str | None = None
 
     @property
     def is_admin(self) -> bool:
-        """是否为管理员"""
+        """是否为平台管理员"""
         return self.role == "admin"
 
     @property
@@ -40,6 +44,35 @@ class PermissionContext:
     def has_identity(self) -> bool:
         """是否有有效身份"""
         return self.user_id is not None or self.anonymous_user_id is not None
+
+    @property
+    def has_team(self) -> bool:
+        """是否已附加团队上下文"""
+        return self.team_id is not None
+
+    @property
+    def is_team_admin(self) -> bool:
+        """是否为团队管理员或所有者（不含平台 admin）"""
+        return self.team_role in {"owner", "admin"}
+
+    @property
+    def is_team_owner(self) -> bool:
+        """是否为团队所有者"""
+        return self.team_role == "owner"
+
+    def with_team(
+        self,
+        team_id: uuid.UUID,
+        team_role: str,
+    ) -> "PermissionContext":
+        """返回附加了团队上下文的新实例（不可变）"""
+        return PermissionContext(
+            user_id=self.user_id,
+            anonymous_user_id=self.anonymous_user_id,
+            role=self.role,
+            team_id=team_id,
+            team_role=team_role,
+        )
 
 
 # 使用 ContextVar 在请求生命周期内传递权限上下文

@@ -336,11 +336,13 @@ class ChatUseCase:
     ) -> AsyncGenerator[AgentEvent, None]:
         """执行 Agent 并保存结果，同时监听事件队列"""
         final_content = ""
+        final_token_count = 0
+        final_metadata: dict[str, object] = {}
         engine_done = False
 
         # 创建引擎任务
         async def engine_task():
-            nonlocal final_content, engine_done
+            nonlocal final_content, final_metadata, final_token_count, engine_done
             try:
                 async for event in engine.run(
                     session_id=session_id,
@@ -360,6 +362,15 @@ class ChatUseCase:
                             msg_content = final_msg.content or final_msg.reasoning_content
                             if msg_content:
                                 final_content = msg_content
+                        usage = event.data.get("usage")
+                        model = event.data.get("model")
+                        total_tokens = event.data.get("total_tokens")
+                        if isinstance(total_tokens, int):
+                            final_token_count = total_tokens
+                        if isinstance(usage, dict):
+                            final_metadata["usage"] = usage
+                        if isinstance(model, str) and model:
+                            final_metadata["model"] = model
                 engine_done = True
                 # 发送结束标记
                 await event_queue.put(None)
@@ -386,7 +397,13 @@ class ChatUseCase:
 
             if final_content:
                 await self._save_assistant_message_and_memory(
-                    session_id, message, final_content, user_id, session
+                    session_id,
+                    message,
+                    final_content,
+                    user_id,
+                    session,
+                    metadata=final_metadata,
+                    token_count=final_token_count,
                 )
 
         except Exception as e:
@@ -418,12 +435,16 @@ class ChatUseCase:
         final_content: str,
         user_id: str,
         session: object | None,
+        metadata: dict[str, object] | None = None,
+        token_count: int | None = None,
     ) -> None:
         """保存助手消息并提取记忆"""
         await self.session_use_case.add_message(
             session_id=session_id,
             role=MessageRole.ASSISTANT,
             content=final_content,
+            metadata=metadata,
+            token_count=token_count,
         )
 
         if self.simplemem and session:

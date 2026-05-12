@@ -108,6 +108,8 @@ class DoneEventData(BaseModel):
     iterations: int = 1
     tool_iterations: int = 0
     total_tokens: int = 0
+    usage: dict[str, int] | None = None
+    model: str | None = None
     final_message: FinalMessage
 
 
@@ -235,6 +237,8 @@ class AgentEvent(BaseModel):
         iterations: int = 1,
         tool_iterations: int = 0,
         total_tokens: int = 0,
+        usage: dict[str, int] | None = None,
+        model: str | None = None,
     ) -> AgentEvent:
         return cls(
             type=EventType.DONE,
@@ -242,6 +246,8 @@ class AgentEvent(BaseModel):
                 iterations=iterations,
                 tool_iterations=tool_iterations,
                 total_tokens=total_tokens,
+                usage=usage,
+                model=model,
                 final_message=FinalMessage(content=content, reasoning_content=reasoning_content),
             ).model_dump(),
         )

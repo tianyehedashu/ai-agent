@@ -109,6 +109,7 @@ function toFrontendMessage(backend: BackendMessage): Message {
     toolCalls,
     toolCallId: backend.tool_call_id ?? undefined,
     metadata: backend.metadata,
+    tokenCount: backend.token_count ?? undefined,
     createdAt: backend.created_at,
   }
 }

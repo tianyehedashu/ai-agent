@@ -88,6 +88,7 @@ export interface Message {
   toolCalls?: ToolCall[]
   toolCallId?: string
   metadata?: Record<string, unknown>
+  tokenCount?: number
   createdAt: string
 }
 
@@ -166,6 +167,12 @@ export interface DoneEventData {
   content: string
   totalTokens: number
   iterations: number
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
+  model?: string
 }
 
 export interface ErrorEventData {
