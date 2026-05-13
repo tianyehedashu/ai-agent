@@ -25,18 +25,22 @@ description: 对修改的代码进行全面检查,确保符合项目规范和质
 - [ ] 业务类型在 `domains/`,纯技术基础设施在 `libs/`
 
 ### 1.3 模块职责检查
-- [ ] 启动/配置代码放在 `bootstrap/`(FastAPI 入口、配置加载)
+- [ ] 启动/配置代码放在 `bootstrap/`（FastAPI 入口、配置加载）
 - [ ] Agent 引擎代码放在 `domains/agent/infrastructure/llm/`
 - [ ] 推理策略代码放在 `domains/agent/infrastructure/reasoning/`
 - [ ] 工具相关代码放在 `domains/agent/infrastructure/tools/`
 - [ ] 记忆相关代码放在 `domains/agent/infrastructure/memory/`
 - [ ] 认证相关代码放在 `domains/identity/domain/types.py` 和 `presentation/deps.py`
+- [ ] 会话应用端口 `SessionApplicationPort` 在 `domains/session/application/ports.py`（**不在** `libs/`）
+- [ ] Gateway 内部桥接端口 `GatewayProxyProtocol`、`GatewayCallContext` 等在 `domains/gateway/application/ports.py`；工厂 `get_gateway_proxy` 在 `gateway_proxy_factory.py`（**不在** `libs/gateway`，该路径已废弃）
+- [ ] 团队/成员权威在 `domains/tenancy/`；Gateway 管理面经 `TeamService` / 仓储访问团队，不复制 tenancy 规则
 - [ ] ORM 模型放在 `domains/*/infrastructure/models/`
-- [ ] Pydantic Schema 放在 `domains/*/presentation/schemas.py`
+- [ ] Pydantic Schema 放在 `domains/*/presentation/schemas.py` 或 `presentation/schemas/` 分包
 - [ ] 数据库连接/会话工厂放在 `libs/db/`
 - [ ] 通用类型定义放在 `libs/types/`
 - [ ] 配置管理放在 `libs/config/`
 - [ ] API 服务工厂/依赖注入放在 `libs/api/deps.py`
+- [ ] 跨域 IAM 抽象（如 `MembershipPort`）在 `libs/iam/`，业务团队规则不在 `libs`
 
 ## 2. 目录规范检查
 
@@ -46,44 +50,39 @@ description: 对修改的代码进行全面检查,确保符合项目规范和质
 - [ ] 测试文件: `test_<module>.py`,放在 `tests/` 对应目录
 
 ### 2.2 目录结构规范
+
+（细目以 `backend/docs/CODE_STANDARDS.md` 为准；下列为检查用缩略树。）
+
 ```
 backend/
-├── domains/                # 业务领域 (DDD)
-│   ├── identity/           # 身份认证域
-│   │   ├── domain/
-│   │   │   └── types.py    # Principal, ANONYMOUS_*
-│   │   ├── application/    # 认证用例
-│   │   ├── infrastructure/ # 认证基础设施
-│   │   └── presentation/   # 路由、依赖、Schema
-│   ├── agent/              # Agent 域(核心业务)
-│   │   ├── domain/
-│   │   │   ├── types.py    # Message, AgentEvent, ToolCall
-│   │   │   └── entities/   # AgentEntity, SessionDomainService
-│   │   ├── application/    # AgentUseCase, ChatUseCase（依赖 SessionApplicationPort）
-│   │   ├── infrastructure/
-│   │   │   ├── llm/        # LLM 网关
-│   │   │   ├── memory/     # 记忆系统
-│   │   │   ├── tools/      # 工具系统
-│   │   │   └── reasoning/  # 推理策略
-│   │   └── presentation/   # 路由 + Schema
-│   ├── studio/             # 工作室域(工作流)
-│   └── evaluation/         # 评估域
-├── libs/                   # 纯技术基础设施(非业务)
-│   ├── types/              # 通用工具类型 (Result[T])
-│   ├── config/             # 配置管理 (ExecutionConfig)
-│   ├── db/                 # 数据库组件 (会话工厂)
-│   ├── api/                # 服务工厂、错误常量、依赖注入
-│   ├── middleware/         # 中间件
-│   └── observability/      # 可观测性
-├── bootstrap/              # 应用启动
-│   └── main.py             # FastAPI 应用入口
-└── tests/                  # 测试目录
+├── domains/                      # 业务限界上下文
+│   ├── identity/                 # 身份、JWT、API Key
+│   ├── session/                  # 会话；application/ports.py = SessionApplicationPort
+│   ├── tenancy/                  # 团队与成员权威
+│   ├── gateway/                  # AI Gateway；application/ports.py = GatewayProxyProtocol 等
+│   │   └── application/
+│   │       ├── ports.py
+│   │       ├── gateway_proxy_factory.py
+│   │       ├── internal_bridge.py
+│   │       ├── management/       # 管理面 CQRS 读写
+│   │       └── ...
+│   ├── agent/                    # Agent 核心
+│   │   ├── application/
+│   │   ├── infrastructure/llm/   # 可依赖 domains.gateway.application.ports（不依赖 gateway 实现细节）
+│   │   └── presentation/
+│   ├── studio/
+│   └── evaluation/
+├── libs/                         # 纯技术：db、config、api、exceptions、iam、middleware、observability、orm…
+├── bootstrap/
+└── tests/                        # unit / integration / e2e
 ```
 
-**目录说明**:
-- `domains/*/` - 业务域,每个域独立完整的 DDD 4层架构
-- `libs/` - 纯技术基础设施,无业务逻辑,可被所有域复用
-- `bootstrap/` - 启动层,负责初始化 FastAPI 应用、配置和生命周期管理
+**目录说明**：
+
+- `domains/*/`：每域四层齐全时，保持 **presentation → application → domain ← infrastructure**。
+- **`application/ports.py`**：跨域 **应用端口（Protocol）** 的默认落点之一（与 gateway 分散的 `ports.py` + 桥接辅助模块同属应用层约定）。
+- `libs/`：无业务规则；**不**新增「某 BC 的业务协议包」到 `libs/`。
+- `bootstrap/`：组装与进程生命周期。
 
 ### 2.3 导入规范
 
@@ -111,6 +110,10 @@ from domains.session.application import SessionUseCase
 from domains.session.application.ports import SessionApplicationPort
 from domains.agent.infrastructure.llm import LLMGateway
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
+
+# 内部 LLM 走 Gateway 桥接时（端口在 gateway 应用层）
+from domains.gateway.application.ports import GatewayCallContext, GatewayProxyProtocol
+from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 ```
 
 #### 2.3.4 技术基础设施导入
@@ -198,8 +201,8 @@ from libs.types import Result
 ### 4.4 业务/技术分离
 - [ ] 业务逻辑放在 `domains/`
 - [ ] 纯技术工具放在 `libs/`
-- [ ] `libs/` 中不包含业务概念
-- [ ] `domains/` 中不包含通用技术实现
+- [ ] `libs/` 中不包含业务概念；**跨域应用端口（Protocol + 业务相关 DTO）** 放在 **`domains/<provider>/application/`**，不放入 `libs/` 以免与「纯技术」混淆
+- [ ] `domains/` 中避免复制 `libs` 已有能力（DB 会话、通用 Result 等应复用 `libs`）
 
 ## 5. 代码复用检查
 
