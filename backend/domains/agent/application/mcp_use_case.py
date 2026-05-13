@@ -31,7 +31,7 @@ from domains.agent.presentation.schemas.mcp_schemas import (
     MCPToolsListResponse,
 )
 from domains.identity.presentation.schemas import CurrentUser
-from exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
+from libs.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

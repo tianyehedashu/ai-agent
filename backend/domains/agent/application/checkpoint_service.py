@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.domain.types import AgentState, Checkpoint
 from domains.agent.infrastructure.memory import CheckpointCache
-from exceptions import CheckpointError
+from libs.exceptions import CheckpointError
 
 
 class CheckpointService:

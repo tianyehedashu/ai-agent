@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field
 
 from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.identity.presentation.deps import AuthUser, OptionalAuthUser, get_owned_user_ids
-from exceptions import NotFoundError, ValidationError
 from libs.api.deps import get_user_model_service
+from libs.exceptions import NotFoundError, ValidationError
 
 router = APIRouter()
 

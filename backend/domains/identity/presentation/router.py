@@ -25,8 +25,8 @@ from domains.identity.presentation.schemas import (
     UserRead,
     UserUpdate,
 )
-from exceptions import AuthenticationError
 from libs.db.database import get_db
+from libs.exceptions import AuthenticationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

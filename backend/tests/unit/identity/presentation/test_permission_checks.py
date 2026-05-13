@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 
+from domains.identity.domain.types import Principal
 from domains.identity.presentation.deps import (
     ADMIN_ROLE,
     check_ownership,
@@ -16,7 +17,7 @@ from domains.identity.presentation.deps import (
 )
 from domains.identity.presentation.schemas import CurrentUser
 from domains.session.infrastructure.models import Session
-from exceptions import PermissionDeniedError
+from libs.exceptions import PermissionDeniedError
 
 
 @pytest.mark.unit
@@ -85,6 +86,51 @@ class TestCheckOwnership:
 
 
 @pytest.mark.unit
+class TestCheckOwnershipAnonymousUser:
+    """匿名主体与资源所有者 ID（裸 UUID 或带前缀）的一致性。"""
+
+    def _anon_user(self, raw_id: str) -> CurrentUser:
+        return CurrentUser(
+            id=Principal.make_anonymous_id(raw_id),
+            email=Principal.make_anonymous_email(raw_id),
+            name="Anonymous",
+            is_anonymous=True,
+            role="user",
+        )
+
+    def test_anonymous_owner_raw_storage_id(self):
+        raw = str(uuid.uuid4())
+        user = self._anon_user(raw)
+        check_ownership(raw, user, "Resource")
+
+    def test_anonymous_owner_prefixed_storage_id(self):
+        raw = str(uuid.uuid4())
+        user = self._anon_user(raw)
+        check_ownership(Principal.make_anonymous_id(raw), user, "Resource")
+
+    def test_anonymous_non_owner_raw(self):
+        raw_a = str(uuid.uuid4())
+        raw_b = str(uuid.uuid4())
+        user = self._anon_user(raw_a)
+        with pytest.raises(PermissionDeniedError):
+            check_ownership(raw_b, user, "Resource")
+
+    def test_principal_resource_owner_matches_symmetry(self):
+        raw = str(uuid.uuid4())
+        pid = Principal.make_anonymous_id(raw)
+        assert Principal.resource_owner_matches_principal(
+            resource_owner_id=raw,
+            principal_id=pid,
+            principal_is_anonymous=True,
+        )
+        assert Principal.resource_owner_matches_principal(
+            resource_owner_id=pid,
+            principal_id=pid,
+            principal_is_anonymous=True,
+        )
+
+
+@pytest.mark.unit
 class TestCheckOwnershipOrPublic:
     """check_ownership_or_public 测试"""
 
@@ -147,6 +193,42 @@ class TestCheckOwnershipOrPublic:
         check_ownership_or_public(
             resource_owner_id, admin, is_public=False, resource_name="Resource"
         )
+
+    def test_anonymous_owner_private_raw_id(self):
+        raw = str(uuid.uuid4())
+        user = CurrentUser(
+            id=Principal.make_anonymous_id(raw),
+            email=Principal.make_anonymous_email(raw),
+            name="Anonymous",
+            is_anonymous=True,
+            role="user",
+        )
+        check_ownership_or_public(raw, user, is_public=False, resource_name="Resource")
+
+    def test_anonymous_non_owner_private(self):
+        raw_a = str(uuid.uuid4())
+        raw_b = str(uuid.uuid4())
+        user = CurrentUser(
+            id=Principal.make_anonymous_id(raw_a),
+            email=Principal.make_anonymous_email(raw_a),
+            name="Anonymous",
+            is_anonymous=True,
+            role="user",
+        )
+        with pytest.raises(PermissionDeniedError):
+            check_ownership_or_public(raw_b, user, is_public=False, resource_name="Resource")
+
+    def test_anonymous_non_owner_but_public(self):
+        raw_a = str(uuid.uuid4())
+        raw_b = str(uuid.uuid4())
+        user = CurrentUser(
+            id=Principal.make_anonymous_id(raw_a),
+            email=Principal.make_anonymous_email(raw_a),
+            name="Anonymous",
+            is_anonymous=True,
+            role="user",
+        )
+        check_ownership_or_public(raw_b, user, is_public=True, resource_name="Resource")
 
 
 @pytest.mark.unit
@@ -217,6 +299,15 @@ class TestCheckSessionOwnership:
         user = self._create_anonymous_user(anonymous_id)
         session = self._create_session(anonymous_user_id=anonymous_id)
 
+        check_session_ownership(session, user)
+
+    def test_anonymous_user_owns_session_prefixed_column_value(self):
+        """会话表若误存带前缀 ID，仍能与 Principal 匹配"""
+        anonymous_id = str(uuid.uuid4())
+        user = self._create_anonymous_user(anonymous_id)
+        session = self._create_session(
+            anonymous_user_id=Principal.make_anonymous_id(anonymous_id),
+        )
         check_session_ownership(session, user)
 
     def test_anonymous_user_cannot_access_other_session(self):

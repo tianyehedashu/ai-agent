@@ -13,12 +13,12 @@ from domains.agent.domain.product_info.constants import (
     DEFAULT_PROMPTS,
 )
 from domains.identity.infrastructure.models.user import User
-from exceptions import NotFoundError, ValidationError
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
+from libs.exceptions import NotFoundError, ValidationError
 
 
 @pytest.mark.unit

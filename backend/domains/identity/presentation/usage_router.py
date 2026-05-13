@@ -2,22 +2,19 @@
 Usage Router - 配额与用量 API（兼容层）
 
 历史接口 /api/v1/usage/quota 与 /api/v1/usage/logs 保留以避免破坏前端。
-内部已切换为读取新的 GatewayBudget 与 GatewayRequestLog 表。
+只读数据经 GatewayUsageReadService，不直连 gateway ORM。
 
 新代码请直接使用 /api/v1/gateway/budgets 与 /api/v1/gateway/logs。
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 
-from domains.gateway.infrastructure.models.budget import GatewayBudget
-from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
-from domains.gateway.infrastructure.models.team import Team
+from domains.gateway.application.management import GatewayUsageReadService
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.deps import DbSession
 
@@ -76,38 +73,19 @@ async def get_quota_status(
 ) -> QuotaStatusResponse | None:
     """获取当前用户的配额状态（聚合 daily/monthly Budget）"""
     user_id = get_user_uuid(current_user)
-
-    # 取 user 维度的 daily / monthly budget
-    daily = (
-        await db.execute(
-            select(GatewayBudget).where(
-                GatewayBudget.scope == "user",
-                GatewayBudget.scope_id == user_id,
-                GatewayBudget.period == "daily",
-            )
-        )
-    ).scalar_one_or_none()
-    monthly = (
-        await db.execute(
-            select(GatewayBudget).where(
-                GatewayBudget.scope == "user",
-                GatewayBudget.scope_id == user_id,
-                GatewayBudget.period == "monthly",
-            )
-        )
-    ).scalar_one_or_none()
-
-    if daily is None and monthly is None:
+    svc = GatewayUsageReadService(db)
+    snap = await svc.get_user_quota_snapshot(user_id)
+    if snap is None:
         return None
 
     return QuotaStatusResponse(
-        user_id=user_id,
-        daily_text_requests=daily.limit_requests if daily else None,
-        monthly_token_limit=monthly.limit_tokens if monthly else None,
-        current_daily_text=daily.current_requests if daily else 0,
-        current_monthly_tokens=monthly.current_tokens if monthly else 0,
-        daily_reset_at=daily.reset_at if daily else None,
-        monthly_reset_at=monthly.reset_at if monthly else None,
+        user_id=snap.user_id,
+        daily_text_requests=snap.daily_text_requests,
+        monthly_token_limit=snap.monthly_token_limit,
+        current_daily_text=snap.current_daily_text,
+        current_monthly_tokens=snap.current_monthly_tokens,
+        daily_reset_at=snap.daily_reset_at,
+        monthly_reset_at=snap.monthly_reset_at,
     )
 
 
@@ -124,33 +102,24 @@ async def get_usage_logs(
 ) -> list[UsageLogResponse]:
     """获取当前用户的用量日志（从 GatewayRequestLog 读）"""
     user_id = get_user_uuid(current_user)
-    # 取该用户名下任一团队的日志（personal 团队优先）
-    team_ids_subq = select(Team.id).where(Team.owner_user_id == user_id)
-    stmt = (
-        select(GatewayRequestLog)
-        .where(
-            (GatewayRequestLog.user_id == user_id)
-            | (GatewayRequestLog.team_id.in_(team_ids_subq))
-        )
-        .where(GatewayRequestLog.created_at >= datetime.now(UTC) - timedelta(days=90))
-        .order_by(GatewayRequestLog.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+    svc = GatewayUsageReadService(db)
+    rows = await svc.list_recent_usage_logs_for_user(
+        user_id,
+        limit=limit,
+        offset=offset,
     )
-    result = await db.execute(stmt)
-    logs = list(result.scalars().all())
     return [
         UsageLogResponse(
-            id=log.id,
-            capability=log.capability,
-            provider=log.provider or "unknown",
-            model=log.real_model,
-            key_source="vkey" if log.vkey_id else "system",
-            input_tokens=log.input_tokens,
-            output_tokens=log.output_tokens,
-            image_count=None,
-            cost_estimate=log.cost_usd,
-            created_at=log.created_at,
+            id=r.id,
+            capability=r.capability,
+            provider=r.provider,
+            model=r.model,
+            key_source=r.key_source,
+            input_tokens=r.input_tokens,
+            output_tokens=r.output_tokens,
+            image_count=r.image_count,
+            cost_estimate=r.cost_estimate,
+            created_at=r.created_at,
         )
-        for log in logs
+        for r in rows
     ]

@@ -15,27 +15,58 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from bootstrap.config import settings
-from domains.gateway.infrastructure.models.gateway_model import GatewayModel
-from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
-from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from libs.crypto import decrypt_value, derive_encryption_key
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from litellm.router import Router  # type: ignore[import-not-found]
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+    from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+    from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 
 logger = get_logger(__name__)
 
 
-_router_instance: "Router | None" = None
+_router_instance: Router | None = None
 _router_lock = asyncio.Lock()
+_pii_guardrail_instance: Any | None = None
 
 
 def _get_encryption_key() -> str:
     return derive_encryption_key(settings.secret_key.get_secret_value())
+
+
+def ensure_gateway_callbacks() -> None:
+    """注册 Gateway LiteLLM callbacks，供 Router 与内部直连兜底共用。"""
+    import litellm
+
+    from domains.gateway.infrastructure.callbacks.custom_logger import (
+        get_logger_singleton,
+    )
+    from domains.gateway.infrastructure.guardrails.pii_guardrail import (
+        _build_pii_guardrail_instance,
+    )
+
+    global _pii_guardrail_instance  # pylint: disable=global-statement
+    callbacks = list(litellm.callbacks or [])
+
+    gateway_logger = get_logger_singleton()
+    if gateway_logger not in callbacks:
+        callbacks.append(gateway_logger)
+
+    if settings.gateway_default_guardrail_enabled:
+        if _pii_guardrail_instance is None:
+            _pii_guardrail_instance = _build_pii_guardrail_instance(
+                guardrail_name="gateway_pii",
+                default_enabled=True,
+            )
+        if _pii_guardrail_instance not in callbacks:
+            callbacks.append(_pii_guardrail_instance)
+
+    litellm.callbacks = callbacks
 
 
 def _build_litellm_params(
@@ -149,10 +180,10 @@ async def _build_router_kwargs(
     db: AsyncSession,
 ) -> dict[str, Any]:
     """从数据库拼装 Router 构造参数"""
-    from domains.gateway.infrastructure.repositories.credential_repository import (  # noqa: PLC0415
+    from domains.gateway.infrastructure.repositories.credential_repository import (
         ProviderCredentialRepository,
     )
-    from domains.gateway.infrastructure.repositories.model_repository import (  # noqa: PLC0415
+    from domains.gateway.infrastructure.repositories.model_repository import (
         GatewayModelRepository,
         GatewayRouteRepository,
     )
@@ -194,7 +225,7 @@ async def _build_router_kwargs(
     return kwargs
 
 
-async def get_router(db: AsyncSession | None = None) -> "Router":
+async def get_router(db: AsyncSession | None = None) -> Router:
     """获取全局 Router 单例（懒加载）
 
     Args:
@@ -211,29 +242,10 @@ async def get_router(db: AsyncSession | None = None) -> "Router":
             raise RuntimeError(
                 "Router not initialized. First call get_router(db) during app startup."
             )
-        import litellm  # noqa: PLC0415
-        from litellm.router import Router  # noqa: PLC0415
-
-        from domains.gateway.infrastructure.callbacks.custom_logger import (  # noqa: PLC0415
-            get_logger_singleton,
-        )
-        from domains.gateway.infrastructure.guardrails.pii_guardrail import (  # noqa: PLC0415
-            _build_pii_guardrail_instance,
-        )
+        from litellm.router import Router
 
         # 注册全局回调（仅注册一次）
-        gateway_logger = get_logger_singleton()
-        if gateway_logger not in (litellm.callbacks or []):
-            litellm.callbacks = list(litellm.callbacks or []) + [gateway_logger]
-
-        # 默认 PII Guardrail
-        if settings.gateway_default_guardrail_enabled:
-            pii = _build_pii_guardrail_instance(
-                guardrail_name="gateway_pii",
-                default_enabled=True,
-            )
-            if pii not in (litellm.callbacks or []):
-                litellm.callbacks = list(litellm.callbacks or []) + [pii]
+        ensure_gateway_callbacks()
 
         kwargs = await _build_router_kwargs(db)
         _router_instance = Router(**kwargs)
@@ -245,7 +257,7 @@ async def get_router(db: AsyncSession | None = None) -> "Router":
     return _router_instance
 
 
-async def reload_router(db: AsyncSession) -> "Router":
+async def reload_router(db: AsyncSession) -> Router:
     """热重载：重新拼装 model_list 并 set_model_list
 
     LiteLLM Router 提供 set_model_list 用于运行时无重启更新。
@@ -253,8 +265,9 @@ async def reload_router(db: AsyncSession) -> "Router":
     """
     global _router_instance
     kwargs = await _build_router_kwargs(db)
+    ensure_gateway_callbacks()
     if _router_instance is None:
-        from litellm.router import Router  # noqa: PLC0415
+        from litellm.router import Router
 
         _router_instance = Router(**kwargs)
         logger.info(
@@ -284,7 +297,7 @@ async def reload_router(db: AsyncSession) -> "Router":
     return _router_instance
 
 
-def get_router_sync() -> "Router | None":
+def get_router_sync() -> Router | None:
     """同步获取已初始化的 Router；未初始化返回 None（用于回调中查询）"""
     return _router_instance
 
@@ -296,6 +309,7 @@ def reset_router() -> None:
 
 
 __all__ = [
+    "ensure_gateway_callbacks",
     "get_router",
     "get_router_sync",
     "reload_router",

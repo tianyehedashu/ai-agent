@@ -1,19 +1,10 @@
-"""Gateway 管理面读模型（CQRS Query）"""
+"""Gateway 管理面只读应用服务（CQRS 读侧的工程分包；对外语义见架构文档术语表）。"""
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from domains.gateway.application.team_service import TeamService
 from domains.gateway.domain.errors import TeamPermissionDeniedError
-from domains.gateway.domain.types import ManagementTeamContext
-from domains.gateway.infrastructure.models.alert import GatewayAlertRule
-from domains.gateway.infrastructure.models.team import Team, TeamMember
-from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -26,18 +17,37 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )
-from domains.gateway.infrastructure.repositories.team_repository import TeamMemberRepository
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.tenancy.application.team_service import TeamService
+from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
+from libs.iam.tenancy import MembershipPort
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.infrastructure.models.alert import GatewayAlertRule
+    from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
+    from domains.tenancy.domain.management_context import ManagementTeamContext
+    from domains.tenancy.infrastructure.models.team import Team, TeamMember
 
 
-class GatewayManagementQueryService:
+class GatewayManagementReadService:
     """管理 API 只读用例，经仓储访问数据"""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._teams = TeamService(session)
-        self._members = TeamMemberRepository(session)
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        membership: MembershipPort | None = None,
+    ) -> None:
+        self._session = session
+        self._membership = membership or TenancyMembershipAdapter()
+        self._teams = TeamService(session, membership=self._membership)
         self._vkeys = VirtualKeyRepository(session)
         self._creds = ProviderCredentialRepository(session)
         self._models = GatewayModelRepository(session)
@@ -49,18 +59,13 @@ class GatewayManagementQueryService:
     async def list_teams_with_roles_for_user(
         self, user_id: uuid.UUID
     ) -> list[tuple[Team, str | None]]:
-        teams = await self._teams.list_user_teams(user_id)
-        items: list[tuple[Team, str | None]] = []
-        for t in teams:
-            member = await self._members.get(t.id, user_id)
-            items.append((t, member.role if member else None))
-        return items
+        return await self._teams.list_teams_with_roles_for_user(user_id)
 
     async def get_team(self, team_id: uuid.UUID) -> Team | None:
         return await self._teams.get_team(team_id)
 
     async def list_team_members(self, team_id: uuid.UUID) -> list[TeamMember]:
-        return await self._members.list_by_team(team_id)
+        return await self._teams.list_team_members(team_id)
 
     async def list_virtual_keys_for_team(
         self, team_id: uuid.UUID
@@ -97,6 +102,7 @@ class GatewayManagementQueryService:
         self,
         ctx: ManagementTeamContext,
         *,
+        scope: str,
         page: int,
         page_size: int,
         start: datetime | None,
@@ -105,18 +111,31 @@ class GatewayManagementQueryService:
         capability: str | None,
         vkey_id: uuid.UUID | None,
     ) -> tuple[list[Any], int]:
-        items, total = await self._logs.list_for_team(
-            ctx.team_id,
-            start=start,
-            end=end,
-            status=status_filter,
-            capability=capability,
-            vkey_id=vkey_id,
-            page=page,
-            page_size=page_size,
-        )
+        if scope == "personal":
+            items, total = await self._logs.list_for_user(
+                ctx.user_id,
+                start=start,
+                end=end,
+                status=status_filter,
+                capability=capability,
+                vkey_id=vkey_id,
+                page=page,
+                page_size=page_size,
+            )
+        else:
+            items, total = await self._logs.list_for_team(
+                ctx.team_id,
+                start=start,
+                end=end,
+                status=status_filter,
+                capability=capability,
+                vkey_id=vkey_id,
+                page=page,
+                page_size=page_size,
+            )
         if (
-            not ctx.is_platform_admin
+            scope == "team"
+            and not ctx.is_platform_admin
             and ctx.team_role == "member"
             and vkey_id is None
         ):
@@ -129,9 +148,12 @@ class GatewayManagementQueryService:
             items = [i for i in items if i.vkey_id in my_ids]
         return items, total
 
-    async def get_request_log_for_team(
-        self, ctx: ManagementTeamContext, log_id: uuid.UUID
+    async def get_request_log(
+        self, ctx: ManagementTeamContext, log_id: uuid.UUID, *, scope: str
     ) -> Any | None:
+        if scope == "personal":
+            return await self._logs.get_for_user(log_id, ctx.user_id)
+
         record = await self._logs.get_for_team(log_id, ctx.team_id)
         if record is None:
             return None
@@ -146,10 +168,17 @@ class GatewayManagementQueryService:
                 raise TeamPermissionDeniedError(str(ctx.team_id))
         return record
 
+    async def get_request_log_for_team(
+        self, ctx: ManagementTeamContext, log_id: uuid.UUID
+    ) -> Any | None:
+        return await self.get_request_log(ctx, log_id, scope="team")
+
     async def aggregate_request_log_summary(
-        self, team_id: uuid.UUID, start: datetime, end: datetime
+        self, ctx: ManagementTeamContext, start: datetime, end: datetime, *, scope: str
     ) -> dict[str, Any]:
-        return await self._logs.aggregate_summary(team_id, start, end)
+        if scope == "personal":
+            return await self._logs.aggregate_summary_for_user(ctx.user_id, start, end)
+        return await self._logs.aggregate_summary(ctx.team_id, start, end)
 
     async def list_alert_rules(self, team_id: uuid.UUID) -> list[GatewayAlertRule]:
         return await self._alerts.list_rules_by_team(team_id)
@@ -174,4 +203,4 @@ class GatewayManagementQueryService:
         ]
 
 
-__all__ = ["GatewayManagementQueryService"]
+__all__ = ["GatewayManagementReadService"]

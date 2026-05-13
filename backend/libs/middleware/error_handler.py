@@ -10,7 +10,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from exceptions import AIAgentError
+from libs.exceptions import AIAgentError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

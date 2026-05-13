@@ -23,9 +23,9 @@ from domains.identity.application import (
 )
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
-from exceptions import PermissionDeniedError
 from libs.db.database import get_db
 from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.exceptions import PermissionDeniedError
 
 __all__ = [
     "ADMIN_ROLE",
@@ -273,7 +273,11 @@ def check_ownership(
     if current_user.role == ADMIN_ROLE:
         return
 
-    if str(resource_user_id) != current_user.id:
+    if not Principal.resource_owner_matches_principal(
+        resource_owner_id=str(resource_user_id),
+        principal_id=current_user.id,
+        principal_is_anonymous=current_user.is_anonymous,
+    ):
         raise PermissionDeniedError(
             message=f"You don't have permission to access this {resource_name.lower()}",
             resource=resource_name,
@@ -301,7 +305,14 @@ def check_ownership_or_public(
     if current_user.role == ADMIN_ROLE:
         return
 
-    if str(resource_user_id) != current_user.id and not is_public:
+    if (
+        not Principal.resource_owner_matches_principal(
+            resource_owner_id=str(resource_user_id),
+            principal_id=current_user.id,
+            principal_is_anonymous=current_user.is_anonymous,
+        )
+        and not is_public
+    ):
         raise PermissionDeniedError(
             message=f"You don't have permission to access this {resource_name.lower()}",
             resource=resource_name,
@@ -326,8 +337,11 @@ def check_session_ownership(
         return
 
     if current_user.is_anonymous:
-        user_anonymous_id = Principal.extract_anonymous_id(current_user.id)
-        if session.anonymous_user_id != user_anonymous_id:
+        if session.anonymous_user_id is None or not Principal.resource_owner_matches_principal(
+            resource_owner_id=session.anonymous_user_id,
+            principal_id=current_user.id,
+            principal_is_anonymous=True,
+        ):
             raise PermissionDeniedError(
                 message="You don't have permission to access this session",
                 resource="Session",

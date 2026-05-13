@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         ImageGeneratorConfigProtocol,
         LLMConfigProtocol,
     )
+    from libs.gateway.protocol import GatewayProxyProtocol
 
 __all__ = [
     # Embedding Service（本地 + API 统一接口）
@@ -82,7 +83,10 @@ __all__ = [
 ]
 
 
-def create_llm_gateway(config: "LLMConfigProtocol") -> LLMGateway:
+def create_llm_gateway(
+    config: "LLMConfigProtocol",
+    gateway_proxy: "GatewayProxyProtocol | None" = None,
+) -> LLMGateway:
     """
     创建 LLM Gateway 实例
 
@@ -91,11 +95,12 @@ def create_llm_gateway(config: "LLMConfigProtocol") -> LLMGateway:
 
     Args:
         config: LLM 配置
+        gateway_proxy: 可选；默认进程内 Gateway 桥接
 
     Returns:
         LLMGateway 实例
     """
-    return LLMGateway(config=config)
+    return LLMGateway(config=config, gateway_proxy=gateway_proxy)
 
 
 def create_image_generator(config: "ImageGeneratorConfigProtocol") -> ImageGenerator:
@@ -140,6 +145,10 @@ def create_embedding_service_from_settings() -> EmbeddingService:
     api_key = None
     api_base = None
 
+    from libs.gateway.factory import get_gateway_proxy  # pylint: disable=import-outside-toplevel
+
+    gateway_proxy = get_gateway_proxy()
+
     if provider == "api":
         # 根据模型名称确定 API 配置
         model_lower = model.lower()
@@ -174,4 +183,5 @@ def create_embedding_service_from_settings() -> EmbeddingService:
         api_key=api_key,
         api_base=api_base,
         dimension=dimension,
+        gateway_proxy=gateway_proxy,
     )

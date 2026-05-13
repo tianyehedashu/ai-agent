@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.agent.infrastructure.repositories.mcp_dynamic_prompt_repository import (
     MCPDynamicPromptRepository,
 )
-from exceptions import ConflictError, NotFoundError, ValidationError
+from libs.exceptions import ConflictError, NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

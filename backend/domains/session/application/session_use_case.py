@@ -14,7 +14,7 @@ from domains.agent.infrastructure.repositories import MessageRepository
 from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.infrastructure.repositories import SessionRepository
-from exceptions import NotFoundError, PermissionDeniedError
+from libs.exceptions import NotFoundError, PermissionDeniedError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:

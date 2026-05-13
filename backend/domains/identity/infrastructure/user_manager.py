@@ -9,12 +9,17 @@ import uuid
 
 from fastapi import Request, Response
 from fastapi_users import BaseUserManager, UUIDIDMixin
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
 from domains.identity.application.session_migration_service import (
     migrate_anonymous_data_on_auth,
 )
+from domains.identity.infrastructure.default_tenant_lifecycle import (
+    provision_default_tenant_for_new_user,
+)
 from domains.identity.infrastructure.models.user import User
+from libs.iam.tenancy import DefaultTenantProvisionerPort
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -23,11 +28,31 @@ logger = get_logger(__name__)
 _ANONYMOUS_USER_COOKIE = "anonymous_user_id"
 
 
+def _default_tenant_provisioner() -> DefaultTenantProvisionerPort:
+    from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
+        GatewayDefaultTenantProvisioner,
+    )
+
+    return GatewayDefaultTenantProvisioner()
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     """用户管理器"""
 
     reset_password_token_secret = settings.jwt_secret_key
     verification_token_secret = settings.jwt_secret_key
+
+    def __init__(
+        self,
+        user_db: SQLAlchemyUserDatabase[User, uuid.UUID],
+        *,
+        tenant_provisioner: DefaultTenantProvisionerPort | None = None,
+    ) -> None:
+        super().__init__(user_db)
+        self._tenant_provisioner = tenant_provisioner
+
+    def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
+        return self._tenant_provisioner or _default_tenant_provisioner()
 
     async def _migrate_anonymous_data(
         self,
@@ -63,18 +88,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """用户注册后回调：创建 personal team + 迁移匿名数据"""
         logger.info("User %s has registered.", user.id)
 
-        # 自动创建 personal team
-        try:
-            from domains.gateway.application.team_service import (  # pylint: disable=import-outside-toplevel
-                TeamService,
-            )
-
-            await TeamService(self.user_db.session).ensure_personal_team(
-                user.id,
-                display_name=user.name or (user.email.split("@")[0] if user.email else None),
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.warning("Failed to ensure personal team for %s: %s", user.id, exc)
+        await provision_default_tenant_for_new_user(
+            session=self.user_db.session,
+            provisioner=self._tenant_provisioner_or_default(),
+            user_id=user.id,
+            display_name=user.name or (user.email.split("@")[0] if user.email else None),
+            log=logger,
+        )
 
         await self._migrate_anonymous_data(user, request)
 
@@ -84,8 +104,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         request: Request | None = None,
         response: Response | None = None,
     ) -> None:
-        """用户登录后回调：迁移匿名数据到登录账号"""
+        """用户登录后回调：迁移匿名数据；幂等补齐 personal team（存量修复）。"""
         await self._migrate_anonymous_data(user, request)
+        await provision_default_tenant_for_new_user(
+            session=self.user_db.session,
+            provisioner=self._tenant_provisioner_or_default(),
+            user_id=user.id,
+            display_name=user.name or (user.email.split("@")[0] if user.email else None),
+            log=logger,
+        )
 
     async def on_after_forgot_password(
         self,

@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { gatewayApi } from '@/api/gateway'
+import { gatewayApi, type GatewayUsageScope } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -20,11 +20,12 @@ const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] 
 
 export default function GatewayOverviewPage(): React.JSX.Element {
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
+  const [scope, setScope] = useState<GatewayUsageScope>('personal')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['gateway', 'dashboard', days],
-    queryFn: () => gatewayApi.dashboard({ days }),
+    queryKey: ['gateway', 'dashboard', scope, days],
+    queryFn: () => gatewayApi.dashboard({ days, scope }),
   })
 
   const totalTokens = useMemo(() => {
@@ -34,22 +35,39 @@ export default function GatewayOverviewPage(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">概览</h2>
-        <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-          {RANGE_DAYS.map((r) => (
-            <Button
-              key={r.value}
-              size="sm"
-              variant={range === r.value ? 'default' : 'ghost'}
-              className="h-7 px-3 text-xs"
-              onClick={() => {
-                setRange(r.value)
-              }}
-            >
-              {r.label}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
+            {(['personal', 'team'] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={scope === value ? 'default' : 'ghost'}
+                className="h-7 px-3 text-xs"
+                onClick={() => {
+                  setScope(value)
+                }}
+              >
+                {value === 'personal' ? '个人' : '当前团队'}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
+            {RANGE_DAYS.map((r) => (
+              <Button
+                key={r.value}
+                size="sm"
+                variant={range === r.value ? 'default' : 'ghost'}
+                className="h-7 px-3 text-xs"
+                onClick={() => {
+                  setRange(r.value)
+                }}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 

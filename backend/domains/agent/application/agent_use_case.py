@@ -11,7 +11,7 @@ from domains.agent.domain.interfaces.agent_repository import (
 )
 from domains.agent.infrastructure.models.agent import Agent
 from domains.agent.infrastructure.repositories import AgentRepository
-from exceptions import NotFoundError
+from libs.exceptions import NotFoundError
 
 
 def _safe_uuid(value: str | None) -> uuid.UUID | None:

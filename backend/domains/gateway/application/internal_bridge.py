@@ -12,17 +12,18 @@ Internal Bridge - GatewayProxyProtocol 的实现
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.application.team_service import TeamService
 from domains.gateway.domain.types import (
     GatewayCapability,
     VirtualKeyPrincipal,
@@ -31,6 +32,7 @@ from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.db.database import get_session_context
 from libs.gateway.protocol import (
@@ -138,6 +140,10 @@ class GatewayBridge:
         if response_format:
             body["response_format"] = response_format
         body.update(kwargs)
+        if api_key is not None:
+            body["api_key"] = api_key
+        if api_base is not None:
+            body["api_base"] = api_base
 
         async with _session_scope() as session:
             team_id = ctx.team_id
@@ -191,6 +197,8 @@ class GatewayBridge:
         *,
         ctx: GatewayCallContext,
         model: str | None = None,
+        api_key: str | None = None,
+        api_base: str | None = None,
         **kwargs: Any,
     ) -> list[list[float]]:
         body: dict[str, Any] = {
@@ -198,6 +206,10 @@ class GatewayBridge:
             "input": inputs,
         }
         body.update(kwargs)
+        if api_key is not None:
+            body["api_key"] = api_key
+        if api_base is not None:
+            body["api_base"] = api_base
         async with _session_scope() as session:
             team_id = ctx.team_id
             if team_id is None:
@@ -221,13 +233,13 @@ class GatewayBridge:
 
     async def count_tokens(self, text: str, model: str | None = None) -> int:
         try:
-            from litellm import token_counter  # noqa: PLC0415
+            from litellm import token_counter
 
             return int(
                 token_counter(model=model or "gpt-4", text=text)
             )
         except Exception:
-            import tiktoken  # noqa: PLC0415
+            import tiktoken
 
             try:
                 enc = tiktoken.encoding_for_model(model or "gpt-4")

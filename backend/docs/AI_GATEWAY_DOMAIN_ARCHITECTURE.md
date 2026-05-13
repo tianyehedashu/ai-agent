@@ -1,6 +1,6 @@
 # AI Gateway 领域架构与工程实践
 
-> **适用范围**：`domains/gateway`、`libs/gateway`、OpenAI 兼容入口、管理 API、内部 LLM 桥接及相关前端。  
+> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`libs/gateway`、OpenAI 兼容入口、管理 API、内部 LLM 桥接及相关前端。  
 > **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)。
 
 ---
@@ -18,37 +18,67 @@
 ## 2. 分层结构（DDD + CQRS）
 
 ```
+domains/tenancy/                  # 团队与成员：权威 ORM 与 TeamService（Gateway / Identity 经此域）
+├── application/
+│   ├── team_service.py
+│   └── management_team_resolve_use_case.py  # 管理面团队上下文（MembershipPort）
+├── domain/management_context.py   # ManagementTeamContext；`gateway.domain.types` 再导出以保持既有 import
+├── presentation/
+│   ├── team_dependencies.py       # CurrentTeam / RequiredTeam*（管理面依赖）
+│   ├── teams_router.py            # /teams* HTTP（前缀在 bootstrap 挂载为 /api/v1/gateway）
+│   └── schemas/teams.py
+└── infrastructure/
+    ├── membership_adapter.py      # MembershipPort 实现
+    ├── models/team.py
+    └── repositories/team_repository.py
+
 domains/gateway/
 ├── presentation/                 # HTTP：路由、Schema、依赖；禁止直连仓储
 │   ├── http_error_map.py       # 领域异常 → HTTPException
 │   └── deps.py                 # 鉴权：GatewayAccessUseCase
 ├── application/
-│   ├── gateway_access_use_case.py   # 鉴权 + 团队上下文（含 vkey touch）
-│   ├── queries/                   # 管理面读：GatewayManagementQueryService
-│   ├── commands/                  # 管理面写：GatewayManagementCommandService
-│   ├── team_service.py
+│   ├── gateway_access_use_case.py   # Bearer vkey、代理团队解析、vkey touch；成员角色经 MembershipPort
+│   ├── management/                # 管理面读写分包（与 CQRS 读/写侧对应）
+│   │   ├── reads.py               # GatewayManagementReadService
+│   │   ├── writes.py              # GatewayManagementWriteService
+│   │   └── usage_reads.py         # GatewayUsageReadService（兼容用量 API）
 │   ├── proxy_use_case.py          # OpenAI 兼容代理
 │   └── jobs.py                    # 后台循环；rollup SQL 在 infrastructure 仓储
 ├── domain/                       # 类型、虚拟 Key 算法、领域错误、ManagementTeamContext
-└── infrastructure/               # ORM、仓储、Router 单例、回调、护栏
+└── infrastructure/             # ORM、仓储、Router 单例、回调、护栏
+    └── models/__init__.py        # 再导出 Team / TeamMember（与 Alembic 聚合 import），权威定义在 tenancy
 
 libs/gateway/protocol.py          # GatewayProxyProtocol（agent 域依赖倒置）
+libs/gateway/factory.py           # get_gateway_proxy()，集中获取桥接实现
+libs/gateway/internal_actor.py    # resolve_internal_gateway_user_id()
 domains/agent/infrastructure/llm/gateway.py   # LLMGateway
 ```
 
 **依赖方向**
 
-- `presentation → application（UseCase + 管理面 queries/commands）→ domain`
+- `presentation → application（UseCase + 管理面 management 读写服务）→ domain`
 - `infrastructure` 由 application 经仓储调用；**禁止** domain 依赖 infrastructure。
+- **团队与成员**：`domains.gateway.application` 使用 `domains.tenancy` 的 `TeamService` / `TeamRepository` 与 `Team` ORM；**成员角色**经 `libs.iam.tenancy.MembershipPort`（默认 `TenancyMembershipAdapter`），**禁止**在 Gateway 应用层直接使用 `TeamMemberRepository`。`gateway.infrastructure.models` 仅再导出 `Team` / `TeamMember` 供 Alembic 聚合 import。团队管理 HTTP 在 `domains.tenancy.presentation.teams_router`（仅依赖 `TeamService` 与 identity 依赖，**不**引用 `domains.gateway.application`）。
+- **可映射 HTTP 的领域错误**：`TeamNotFoundError`、`TeamPermissionDeniedError`、`PersonalTeamNotInitializedError` 与基类 `HttpMappableDomainError` 定义在 **`libs.exceptions`**；`libs/iam/team_http.map_team_access_exception_to_http` 负责上述团队错误的 HTTP 映射。`GatewayError` 继承 `HttpMappableDomainError`；`gateway.presentation.http_error_map` 先委托团队映射再处理其余 Gateway 异常。`tenancy.presentation.team_dependencies` **不**依赖 `domains.gateway.presentation`。
 
 **CQRS（管理面）**
 
-- `/api/v1/gateway/*` 的 **读** → `GatewayManagementQueryService`；**写** → `GatewayManagementCommandService`。路由与 `deps` 不 `new *Repository`。
+- `/api/v1/gateway/*` 的 **读** → `GatewayManagementReadService`；**写** → `GatewayManagementWriteService`。路由与 `deps` 不 `new *Repository`。
 
 **UseCase 与 CQRS**
 
 - **UseCase**：按场景端到端（如 `ProxyUseCase`、`GatewayAccessUseCase`），可多次读、少量写。
 - **CQRS 拆分**：适合管理面 CRUD 大、读写易分叉；鉴权 + `touch` 收拢为 `GatewayAccessUseCase`，不为单行写单独建 Command 文件。
+
+**术语对照（Query / Command 与业务命名）**
+
+| 工程/CQRS 惯用名 | 类名（业务语感） | 说明 |
+|------------------|------------------|------|
+| Query 侧（只读） | `GatewayManagementReadService` | 管理 API 列表/详情/聚合读模型 |
+| Command 侧（变更） | `GatewayManagementWriteService` | 管理 API 创建/更新/删除 |
+| 用量只读（兼容层） | `GatewayUsageReadService` | Identity `/usage/*` 等，不暴露 Gateway ORM |
+
+实现分包目录为 `application/management/`（`reads.py` / `writes.py` / `usage_reads.py`），与「Query/Command」一一对应，便于团队沟通时口头用「管理读服务 / 管理写服务」指代两侧。
 
 **后台任务**：`jobs.py` 调度；rollup 实现在 `infrastructure/repositories/metrics_rollup_repository.py`。
 
@@ -71,19 +101,35 @@ flowchart TB
     Router[LiteLLM Router Singleton]
     Budget[BudgetService / Redis]
     Access[GatewayAccessUseCase]
-    QSvc[GatewayManagementQueryService]
-    CSvc[GatewayManagementCommandService]
+    ReadSvc[GatewayManagementReadService]
+    WriteSvc[GatewayManagementWriteService]
   end
   UI --> Mgmt
   Ext --> V1
-  Agent -->|internal_proxy| Bridge[internal_bridge]
-  Bridge --> V1
-  Mgmt --> Access & QSvc & CSvc
+  Agent -->|internal_proxy| Bridge[GatewayBridge]
+  Bridge --> ProxyUC[ProxyUseCase进程内]
+  ProxyUC --> Router
+  Mgmt --> Access & ReadSvc & WriteSvc
   V1 --> Access
   V1 --> Router
   Router --> Budget
   Router --> LogRepo[RequestLogRepository]
 ```
+
+说明：**`GatewayBridge` 不经过 HTTP 再打 `/v1`**，而是在同一进程内 `AsyncSession` 上直接调用 `ProxyUseCase`，与 OpenAI 兼容路由共享同一套代理与计量逻辑；上图单独画出 `V1` 表示外部客户端入口，与内部桥并列。
+
+### 3.1 本地开发与运行模式
+
+| 模式 | 依赖 | `gateway_internal_proxy_enabled` | 行为 |
+|------|------|-----------------------------------|------|
+| **完整 Gateway（对齐生产）** | 已执行 gateway 相关 DB 迁移；Redis 可用（Router 冷却/共享）；请求内能解析归因 `user_id` **或** 配置了委派 UUID | `True`（默认） | `LLMGateway` / `EmbeddingService`（API）优先经 `GatewayBridge` → `ProxyUseCase`，写入请求日志与预算链路。 |
+| **轻量直连（刻意降级）** | 可无 Redis / 未迁库；仅验证 Agent 逻辑 | `False` | 直连 LiteLLM，**不**走 Gateway 观测闭环；与生产口径不同，勿误以为本地通过即线上管控完备。 |
+
+**纯本地向量（FastEmbed）**：不经 Gateway，无供应商 API，属刻意设计。
+
+**无注册用户上下文**：若未配置 `gateway_internal_proxy_delegate_user_id`，内部桥无法归因，将回退直连（除非 `gateway_internal_proxy_fail_closed=True`，此时桥接失败会抛错而非静默回退）。
+
+**推荐**：CI 或合并前至少保留一条「开桥 + 已解析 user_id 或委派 ID」的集成路径，避免生产专用代码腐烂。
 
 ---
 
@@ -92,7 +138,7 @@ flowchart TB
 | 入口 | 鉴权 | 团队 |
 |------|------|------|
 | `/v1/*` | `sk-gw-*` 或 `sk-*` + `gateway:proxy` | `X-Team-Id` 可选；缺省 personal team |
-| `/api/v1/gateway/*` | JWT（`RequiredAuthUser`），匿名 **401** | `X-Team-Id` 优先，否则 personal team（`GatewayAccessUseCase.resolve_management_team`） |
+| `/api/v1/gateway/*` | JWT（`RequiredAuthUser`），匿名 **401** | `X-Team-Id` 优先，否则 personal team（`TenancyManagementTeamResolveUseCase` + `MembershipPort`） |
 
 RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseCase`**。
 
@@ -119,11 +165,14 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_api.py -q
 ```
 
-### 6.2 配置（示例）
+### 6.2 配置（与 `bootstrap/config.py` 字段一致）
 
-- `gateway.internal_proxy_enabled`
-- `gateway_router_redis_url` 或全局 `redis_url`  
-以 `bootstrap/config.py` 为准。
+环境变量由 Pydantic Settings 推导（通常为 **大写 + 下划线**，例如 `GATEWAY_INTERNAL_PROXY_ENABLED`），以下列出 **Settings 属性名**：
+
+- `gateway_internal_proxy_enabled`：内部 Chat/Embedding（API）是否优先走 `GatewayBridge`。
+- `gateway_internal_proxy_fail_closed`：桥接异常时是否**禁止**静默回退直连（`True` 则抛出）。
+- `gateway_internal_proxy_delegate_user_id`：无 `PermissionContext.user_id` 时用于 Gateway 归因的委派 UUID（后台任务、worker 等）。
+- `gateway_router_redis_url`：Router 跨进程状态；缺省可复用全局 `redis_url`。
 
 ### 6.3 前后端契约
 

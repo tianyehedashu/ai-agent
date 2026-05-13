@@ -13,10 +13,22 @@ from domains.identity.domain.repositories.user_repository import UserRepository
 from domains.identity.domain.services.password_service import PasswordService
 from domains.identity.domain.services.token_service import TokenPair, TokenService
 from domains.identity.infrastructure.authentication import get_jwt_strategy
+from domains.identity.infrastructure.default_tenant_lifecycle import (
+    provision_default_tenant_for_new_user,
+)
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
 from domains.identity.infrastructure.user_manager import UserManager
-from exceptions import AuthenticationError, NotFoundError
+from libs.exceptions import AuthenticationError, NotFoundError
+from libs.iam.tenancy import DefaultTenantProvisionerPort
+
+
+def _default_tenant_provisioner() -> DefaultTenantProvisionerPort:
+    from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
+        GatewayDefaultTenantProvisioner,
+    )
+
+    return GatewayDefaultTenantProvisioner()
 
 
 class UserUseCase:
@@ -29,11 +41,17 @@ class UserUseCase:
         self,
         db: AsyncSession,
         user_repo: UserRepository | None = None,
+        *,
+        tenant_provisioner: DefaultTenantProvisionerPort | None = None,
     ) -> None:
         self.db = db
         self.user_repo = user_repo or SQLAlchemyUserRepository(db)
         self.password_service = PasswordService()
         self.token_service = TokenService()
+        self._tenant_provisioner = tenant_provisioner
+
+    def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
+        return self._tenant_provisioner or _default_tenant_provisioner()
 
     # =========================================================================
     # User CRUD
@@ -45,7 +63,11 @@ class UserUseCase:
         password: str,
         name: str,
     ) -> User:
-        """创建用户（注册成功后自动创建 personal team）
+        """创建用户并在落库后幂等创建默认 personal team（租户作用域）。
+
+        HTTP 自助注册由 FastAPI Users 处理，走 ``UserManager.on_after_register``；
+        本方法用于程序化管理、测试或直接写入用户表等路径。二者均调用
+        ``provision_default_tenant_for_new_user``，依赖 ``ensure_personal_team`` 幂等。
 
         Args:
             email: 邮箱地址
@@ -63,19 +85,12 @@ class UserUseCase:
             name=name,
         )
 
-        # 自动创建 personal team（默认归属，供 AI Gateway 使用）
-        try:
-            from domains.gateway.application.team_service import (  # pylint: disable=import-outside-toplevel
-                TeamService,
-            )
-
-            await TeamService(self.db).ensure_personal_team(
-                user.id,
-                display_name=name or (email.split("@")[0] if email else None),
-            )
-        except Exception:  # pragma: no cover
-            # 注册流程不应因为 team 创建失败而中断；后续登录时也会兜底创建
-            pass
+        await provision_default_tenant_for_new_user(
+            session=self.db,
+            provisioner=self._tenant_provisioner_or_default(),
+            user_id=user.id,
+            display_name=name or (email.split("@")[0] if email else None),
+        )
 
         return user
 

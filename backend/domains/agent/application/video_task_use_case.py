@@ -20,7 +20,7 @@ from domains.agent.infrastructure.video_api.client import VideoAPIClient
 from domains.identity.domain.types import Principal
 from domains.session.application.ports import SessionApplicationPort
 from domains.session.domain.entities import SessionOwner
-from exceptions import NotFoundError, ValidationError
+from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

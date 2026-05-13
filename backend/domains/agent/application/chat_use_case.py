@@ -30,10 +30,10 @@ from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
 from domains.session.application import TitleUseCase
 from domains.session.application.ports import SessionApplicationPort
-from exceptions import NotFoundError
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
 from libs.db.vector import get_vector_store
+from libs.exceptions import NotFoundError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

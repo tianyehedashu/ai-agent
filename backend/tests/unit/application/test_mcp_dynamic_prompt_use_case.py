@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
-from exceptions import ConflictError, NotFoundError, ValidationError
+from libs.exceptions import ConflictError, NotFoundError, ValidationError
 
 
 @pytest.mark.asyncio

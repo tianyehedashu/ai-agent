@@ -155,7 +155,7 @@ from libs.types import Result
 
 ### 3.3 错误处理
 - [ ] 使用 `Result[T]` 类型处理可能失败的操作
-- [ ] 自定义异常继承自 `AIAgentError`(在 `exceptions.py`)
+- [ ] 自定义异常继承自 `AIAgentError`（定义在 `libs/exceptions`）
 - [ ] 常用异常类型:
   - `ValidationError` - 验证失败
   - `NotFoundError` - 资源不存在

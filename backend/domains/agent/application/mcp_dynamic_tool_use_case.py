@@ -12,7 +12,7 @@ from domains.agent.domain.mcp.dynamic_tool import DynamicToolType
 from domains.agent.infrastructure.repositories.mcp_dynamic_tool_repository import (
     MCPDynamicToolRepository,
 )
-from exceptions import ConflictError, NotFoundError, ValidationError
+from libs.exceptions import ConflictError, NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

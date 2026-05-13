@@ -15,7 +15,7 @@ from domains.agent.domain.types import (
     Message,
     MessageRole,
 )
-from exceptions import CheckpointError
+from libs.exceptions import CheckpointError
 
 
 @pytest.mark.unit

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 import uuid
 
 from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.metrics_hourly import GatewayMetricsHourly
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class GatewayMetricsRollupRepository:

@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.application.team_service import TeamService
 from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.tenancy.application.team_service import TeamService
 
 
 @pytest.mark.unit

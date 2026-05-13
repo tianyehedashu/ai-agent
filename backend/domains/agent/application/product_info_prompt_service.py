@@ -18,7 +18,7 @@ from domains.agent.domain.product_info.constants import (
 from domains.agent.infrastructure.repositories.product_info_prompt_template_repository import (
     ProductInfoPromptTemplateRepository,
 )
-from exceptions import NotFoundError
+from libs.exceptions import NotFoundError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

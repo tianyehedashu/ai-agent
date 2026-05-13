@@ -11,9 +11,9 @@ import uuid
 from httpx import AsyncClient
 import pytest
 
-from domains.gateway.application.team_service import TeamService
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.identity.infrastructure.models.user import User
+from domains.tenancy.application.team_service import TeamService
 
 
 @pytest.mark.integration
@@ -78,3 +78,114 @@ class TestGatewayManagementApi:
         body = r.json()
         assert body["id"] == str(log_id)
         assert body["team_id"] == str(team.id)
+
+    @pytest.mark.asyncio
+    async def test_personal_log_scope_uses_current_user_not_selected_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        personal = await TeamService(db_session).ensure_personal_team(test_user.id)
+        shared = await TeamService(db_session).create_team(
+            name="Shared Stats Team",
+            owner_user_id=test_user.id,
+        )
+        now = datetime.now(UTC)
+        personal_log_id = uuid.uuid4()
+        shared_log_id = uuid.uuid4()
+        other_log_id = uuid.uuid4()
+        db_session.add_all(
+            [
+                GatewayRequestLog(
+                    id=personal_log_id,
+                    created_at=now,
+                    team_id=personal.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=10,
+                    output_tokens=5,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=100,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id="req-personal",
+                ),
+                GatewayRequestLog(
+                    id=shared_log_id,
+                    created_at=now,
+                    team_id=shared.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=3,
+                    output_tokens=2,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=120,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id="req-shared",
+                ),
+                GatewayRequestLog(
+                    id=other_log_id,
+                    created_at=now,
+                    team_id=shared.id,
+                    user_id=uuid.uuid4(),
+                    vkey_id=None,
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=100,
+                    output_tokens=50,
+                    cached_tokens=0,
+                    cost_usd=Decimal("1"),
+                    latency_ms=150,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id="req-other",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        headers = {**auth_headers, "X-Team-Id": str(shared.id)}
+        logs = await dev_client.get(
+            "/api/v1/gateway/logs?scope=personal&page_size=10",
+            headers=headers,
+        )
+        assert logs.status_code == 200, logs.text
+        ids = {item["id"] for item in logs.json()["items"]}
+        assert str(personal_log_id) in ids
+        assert str(shared_log_id) in ids
+        assert str(other_log_id) not in ids
+
+        detail = await dev_client.get(
+            f"/api/v1/gateway/logs/{personal_log_id}?scope=personal",
+            headers=headers,
+        )
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["id"] == str(personal_log_id)
+
+        summary = await dev_client.get(
+            "/api/v1/gateway/dashboard/summary?scope=personal&days=1",
+            headers=headers,
+        )
+        assert summary.status_code == 200, summary.text
+        body = summary.json()
+        assert body["total_requests"] == 2
+        assert body["total_input_tokens"] == 13
+        assert body["total_output_tokens"] == 7

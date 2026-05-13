@@ -1,7 +1,7 @@
 """
-Exceptions - 自定义异常类
+跨域共享异常（纯技术基础设施）
 
-提供统一的异常层次结构，便于错误处理和 API 响应。
+与业务域解耦：各 ``domains.*`` 与 ``bootstrap`` 统一 ``from libs.exceptions import ...``。
 """
 
 from typing import Any
@@ -83,7 +83,7 @@ class PermissionDeniedError(AIAgentError):
         action: str | None = None,
         resource: str | None = None,
     ) -> None:
-        details = {}
+        details: dict[str, str] = {}
         if action:
             details["action"] = action
         if resource:
@@ -206,3 +206,57 @@ class CheckpointError(AIAgentError):
     ) -> None:
         details = {"checkpoint_id": checkpoint_id} if checkpoint_id else {}
         super().__init__(message, code, details)
+
+
+# =============================================================================
+# HTTP 可映射领域错误（Gateway / 租户等 Presentation 统一转 HTTPException）
+# =============================================================================
+
+
+class HttpMappableDomainError(AIAgentError):
+    """可由 Presentation 映射为 HTTP 的领域错误基类。"""
+
+
+class TeamNotFoundError(HttpMappableDomainError):
+    """团队不存在"""
+
+    def __init__(self, team_id: str) -> None:
+        super().__init__(f"团队不存在: {team_id}")
+        self.team_id = team_id
+
+
+class TeamPermissionDeniedError(HttpMappableDomainError):
+    """团队权限不足"""
+
+    def __init__(self, team_id: str, required_role: str | None = None) -> None:
+        msg = f"团队 {team_id} 权限不足"
+        if required_role:
+            msg += f"，需要角色: {required_role}"
+        super().__init__(msg)
+        self.team_id = team_id
+
+
+class PersonalTeamNotInitializedError(HttpMappableDomainError):
+    """用户 personal team 未初始化（管理面）"""
+
+    def __init__(self) -> None:
+        super().__init__("Personal team not initialized; please contact admin")
+
+
+__all__ = [
+    "AIAgentError",
+    "AuthenticationError",
+    "CheckpointError",
+    "ConflictError",
+    "ExternalServiceError",
+    "HttpMappableDomainError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "PersonalTeamNotInitializedError",
+    "RateLimitError",
+    "TeamNotFoundError",
+    "TeamPermissionDeniedError",
+    "TokenError",
+    "ToolExecutionError",
+    "ValidationError",
+]

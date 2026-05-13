@@ -16,6 +16,8 @@ backend/
 │   │   │   ├── models/      # Session ORM
 │   │   │   └── repositories/
 │   │   └── presentation/    # /api/v1/sessions
+│   ├── tenancy/             # 租户与团队（Team/TeamMember ORM、TeamService 权威）
+│   ├── gateway/             # AI Gateway（代理、预算、虚拟 Key；管理面 CQRS；团队经 tenancy）
 │   ├── agent/               # Agent 域（核心业务域）
 │   │   ├── domain/
 │   │   │   ├── types.py     # Message, AgentEvent, ToolCall
@@ -32,6 +34,8 @@ backend/
 │   ├── types/               # 通用工具类型 (Result[T])
 │   ├── config/              # 配置管理
 │   ├── db/                  # 数据库组件
+│   ├── iam/                  # 跨域 IAM 抽象（如 TenantId、DefaultTenantProvisionerPort）
+│   ├── exceptions/           # 共享异常层次（AIAgentError、HttpMappableDomainError、团队错误等）
 │   └── api/                 # 服务工厂、错误常量
 └── bootstrap/               # 应用启动
 ```
@@ -60,6 +64,10 @@ from domains.session.domain.entities import SessionDomainService, SessionOwner
 from domains.session.infrastructure.models import Session
 from domains.session.infrastructure.repositories import SessionRepository
 
+# 租户与团队（权威在 tenancy；Gateway 管理 API 经 TeamService / 仓储访问）
+from domains.tenancy.application import TeamService
+from domains.tenancy.infrastructure.models.team import Team, TeamMember
+
 # Agent 域类型
 from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 
@@ -71,13 +79,14 @@ from domains.agent.application import ChatUseCase, AgentUseCase
 # 纯技术基础设施
 from libs.config import ExecutionConfig
 from libs.api.deps import get_db, get_session_service, get_chat_service, get_video_task_service  # 服务工厂（Chat/Video 注入 SessionUseCase）
+from libs.exceptions import NotFoundError, ValidationError  # 跨域共享异常
 from libs.types import Result
 ```
 
 ## 原则
 
 - **DRY** - 复用现有类型和工具函数
-- **分层** - Presentation / Application / Domain / Infrastructure；Gateway **管理面**在 Application 内按 CQRS 拆 `queries/`（读）与 `commands/`（写）；**鉴权与团队解析**用单一 `GatewayAccessUseCase`（与 CQRS 互补，见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md`）
+- **分层** - Presentation / Application / Domain / Infrastructure；Gateway **管理面**在 Application 内以 `management/` 分包读写（`GatewayManagementReadService` / `GatewayManagementWriteService`，与 CQRS 读/写侧对应）；**鉴权与团队解析**用单一 `GatewayAccessUseCase`（与上述服务互补，见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md`）
 - **业务/技术分离** - 业务类型在 `domains/`，纯技术基础设施在 `libs/`
 
 ## 详细规范

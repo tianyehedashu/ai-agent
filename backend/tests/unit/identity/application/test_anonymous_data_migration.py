@@ -204,11 +204,18 @@ class TestUserManagerMigrationHooks:
 
         manager = UserManager(mock_user_db)
 
-        with patch(
-            "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
-            new_callable=AsyncMock,
-            return_value=MigrationResult(sessions=1, video_tasks=2),
-        ) as mock_migrate:
+        with (
+            patch(
+                "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
+                new_callable=AsyncMock,
+                return_value=MigrationResult(sessions=1, video_tasks=2),
+            ) as mock_migrate,
+            patch(
+                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_prov,
+        ):
             await manager.on_after_login(user, request=request)
 
             mock_migrate.assert_called_once_with(
@@ -216,6 +223,7 @@ class TestUserManagerMigrationHooks:
                 user.id,
                 anonymous_id,
             )
+            mock_prov.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_on_after_login_no_cookie_skips_migration(self):
@@ -228,13 +236,21 @@ class TestUserManagerMigrationHooks:
         mock_user_db = MagicMock()
         manager = UserManager(mock_user_db)
 
-        with patch(
-            "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
-            new_callable=AsyncMock,
-        ) as mock_migrate:
+        with (
+            patch(
+                "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
+                new_callable=AsyncMock,
+            ) as mock_migrate,
+            patch(
+                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_prov,
+        ):
             await manager.on_after_login(user, request=request)
 
             mock_migrate.assert_not_called()
+            mock_prov.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_on_after_login_no_request_skips_migration(self):
@@ -245,13 +261,21 @@ class TestUserManagerMigrationHooks:
         mock_user_db = MagicMock()
         manager = UserManager(mock_user_db)
 
-        with patch(
-            "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
-            new_callable=AsyncMock,
-        ) as mock_migrate:
+        with (
+            patch(
+                "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
+                new_callable=AsyncMock,
+            ) as mock_migrate,
+            patch(
+                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_prov,
+        ):
             await manager.on_after_login(user, request=None)
 
             mock_migrate.assert_not_called()
+            mock_prov.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_on_after_register_triggers_migration(self):
@@ -267,11 +291,18 @@ class TestUserManagerMigrationHooks:
 
         manager = UserManager(mock_user_db)
 
-        with patch(
-            "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
-            new_callable=AsyncMock,
-            return_value=MigrationResult(sessions=2, video_tasks=0),
-        ) as mock_migrate:
+        with (
+            patch(
+                "domains.identity.infrastructure.user_manager.migrate_anonymous_data_on_auth",
+                new_callable=AsyncMock,
+                return_value=MigrationResult(sessions=2, video_tasks=0),
+            ) as mock_migrate,
+            patch(
+                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_prov,
+        ):
             await manager.on_after_register(user, request=request)
 
             mock_migrate.assert_called_once_with(
@@ -279,3 +310,4 @@ class TestUserManagerMigrationHooks:
                 user.id,
                 anonymous_id,
             )
+            mock_prov.assert_called_once()

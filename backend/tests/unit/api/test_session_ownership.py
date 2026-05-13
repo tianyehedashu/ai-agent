@@ -11,7 +11,7 @@ import pytest
 from domains.identity.presentation.deps import check_session_ownership
 from domains.identity.presentation.schemas import CurrentUser
 from domains.session.infrastructure.models import Session
-from exceptions import PermissionDeniedError
+from libs.exceptions import PermissionDeniedError
 
 
 @pytest.mark.unit

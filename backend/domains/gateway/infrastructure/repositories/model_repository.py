@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class GatewayModelRepository:

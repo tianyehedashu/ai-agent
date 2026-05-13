@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.alert import GatewayAlertEvent, GatewayAlertRule
+
+if TYPE_CHECKING:
+    from decimal import Decimal
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class GatewayAlertRepository:

@@ -151,7 +151,7 @@ backend/
   shared/
     kernel/
       types.py
-      exceptions.py
+      libs/exceptions/   # 或 monorepo 下 backend/libs/exceptions（共享异常）
       contracts.py
     infrastructure/
       database.py

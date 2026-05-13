@@ -45,7 +45,7 @@ def _redis_keys(team_id: str | None, vkey_id: str | None, user_id: str | None) -
 
 
 def _import_custom_logger() -> Any:
-    from litellm.integrations.custom_logger import CustomLogger  # noqa: PLC0415
+    from litellm.integrations.custom_logger import CustomLogger
 
     return CustomLogger
 
@@ -64,7 +64,7 @@ def get_logger_singleton() -> Any:
 class GatewayCustomLogger:
     """工厂入口（与 GatewayPiiGuardrail 一致，避免 import-time 加载 litellm）"""
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> Any:  # noqa: PYI034
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
         return _build_logger_instance(*args, **kwargs)
 
 
@@ -146,7 +146,7 @@ def _to_uuid(value: Any) -> uuid.UUID | None:
 def _calc_cost(kwargs: dict[str, Any], response_obj: Any) -> Decimal:
     """优先使用 LiteLLM 的 completion_cost；失败回退 0"""
     try:
-        from litellm import completion_cost  # noqa: PLC0415
+        from litellm import completion_cost
 
         cost = completion_cost(
             completion_response=response_obj,
@@ -162,14 +162,16 @@ def _extract_usage(response_obj: Any) -> tuple[int, int, int]:
     if response_obj is None:
         return 0, 0, 0
     usage = getattr(response_obj, "usage", None) or {}
-    if isinstance(usage, dict):
-        get = usage.get
-    else:
-        get = lambda k, d=None: getattr(usage, k, d)  # type: ignore[assignment]  # noqa: E731
-    input_tokens = int(get("prompt_tokens", 0) or 0)
-    output_tokens = int(get("completion_tokens", 0) or 0)
+
+    def _usage_get(key: str, default: Any = None) -> Any:
+        if isinstance(usage, dict):
+            return usage.get(key, default)
+        return getattr(usage, key, default)
+
+    input_tokens = int(_usage_get("prompt_tokens", 0) or 0)
+    output_tokens = int(_usage_get("completion_tokens", 0) or 0)
     cached_tokens = 0
-    cache_details = get("prompt_tokens_details", None)
+    cache_details = _usage_get("prompt_tokens_details", None)
     if isinstance(cache_details, dict):
         cached_tokens = int(cache_details.get("cached_tokens", 0) or 0)
     return input_tokens, output_tokens, cached_tokens
@@ -225,10 +227,7 @@ async def _persist_event(
 
     start_dt = _safe_dt(start_time)
     end_dt = _safe_dt(end_time) or datetime.now(UTC)
-    if start_dt:
-        latency_ms = int((end_dt - start_dt).total_seconds() * 1000)
-    else:
-        latency_ms = 0
+    latency_ms = int((end_dt - start_dt).total_seconds() * 1000) if start_dt else 0
     ttfb_ms = metadata.get("gateway_ttfb_ms")
     if ttfb_ms is not None:
         with suppress(TypeError, ValueError):
@@ -263,7 +262,7 @@ async def _persist_event(
 
     # ---------- 写 DB ----------
     try:
-        from domains.gateway.infrastructure.repositories.request_log_repository import (  # noqa: PLC0415
+        from domains.gateway.infrastructure.repositories.request_log_repository import (
             RequestLogRepository,
         )
 

@@ -170,6 +170,8 @@ export interface DashboardSummary {
   success_rate: number
 }
 
+export type GatewayUsageScope = 'personal' | 'team'
+
 export interface GatewayLogItem {
   id: string
   created_at: string
@@ -274,6 +276,7 @@ export const gatewayApi = {
   deleteBudget: (id: string) => apiClient.delete<unknown>(`${base}/budgets/${id}`),
 
   listLogs: (params?: {
+    scope?: GatewayUsageScope
     page?: number
     page_size?: number
     capability?: string
@@ -288,9 +291,10 @@ export const gatewayApi = {
       page: number
       page_size: number
     }>(`${base}/logs`, params),
-  getLog: (id: string) => apiClient.get<GatewayLogItem>(`${base}/logs/${id}`),
+  getLog: (id: string, params?: { scope?: GatewayUsageScope }) =>
+    apiClient.get<GatewayLogItem>(`${base}/logs/${id}`, params),
 
-  dashboard: (params?: { days?: number }) =>
+  dashboard: (params?: { days?: number; scope?: GatewayUsageScope }) =>
     apiClient.get<DashboardSummary>(`${base}/dashboard/summary`, params),
 
   listAlerts: () => apiClient.get<AlertRule[]>(`${base}/alerts/rules`),

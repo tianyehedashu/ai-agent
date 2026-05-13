@@ -1,22 +1,16 @@
-"""Gateway 管理面写模型（CQRS Command）"""
+"""Gateway 管理面变更应用服务（CQRS 写侧的工程分包；对外语义见架构文档术语表）。"""
 
 from __future__ import annotations
 
-from datetime import datetime
-from decimal import Decimal
-from typing import Any
-import uuid
+from contextlib import suppress
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from domains.gateway.application.team_service import TeamService
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
-from domains.gateway.infrastructure.models.alert import GatewayAlertRule
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -29,9 +23,19 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.tenancy.application.team_service import TeamService
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from decimal import Decimal
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.infrastructure.models.alert import GatewayAlertRule
 
 
-class GatewayManagementCommandService:
+class GatewayManagementWriteService:
     """管理 API 状态变更，经仓储与领域服务落库"""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -103,9 +107,12 @@ class GatewayManagementCommandService:
         record = await self._vkeys.get(key_id)
         if record is None or record.team_id != team_id:
             raise VirtualKeyNotFoundError(str(key_id))
-        if not is_platform_admin and team_role == "member":
-            if record.created_by_user_id != actor_user_id:
-                raise TeamPermissionDeniedError(str(team_id))
+        if (
+            not is_platform_admin
+            and team_role == "member"
+            and record.created_by_user_id != actor_user_id
+        ):
+            raise TeamPermissionDeniedError(str(team_id))
         await self._vkeys.revoke(key_id)
 
     async def create_team_credential(
@@ -296,12 +303,10 @@ class GatewayManagementCommandService:
         await repo.delete(route_id)
 
     async def reload_litellm_router(self) -> None:
-        from domains.gateway.infrastructure.router_singleton import reload_router  # noqa: PLC0415
+        from domains.gateway.infrastructure.router_singleton import reload_router
 
-        try:
+        with suppress(Exception):  # pragma: no cover
             await reload_router(self._session)
-        except Exception:  # pragma: no cover
-            pass
 
     async def upsert_budget(
         self,
@@ -367,4 +372,4 @@ class GatewayManagementCommandService:
         await self._alerts.delete_rule(rule)
 
 
-__all__ = ["GatewayManagementCommandService"]
+__all__ = ["GatewayManagementWriteService"]

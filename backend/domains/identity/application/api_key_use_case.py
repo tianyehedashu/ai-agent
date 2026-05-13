@@ -22,7 +22,7 @@ from domains.identity.domain.services.api_key_service import (
 from domains.identity.infrastructure.repositories.api_key_repository import (
     ApiKeyRepository,
 )
-from exceptions import NotFoundError, ValidationError
+from libs.exceptions import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     import uuid

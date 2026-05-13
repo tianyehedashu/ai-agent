@@ -13,12 +13,12 @@ from domains.agent.application.product_info_prompt_service import (
     list_capabilities,
 )
 from domains.identity.infrastructure.models.user import User
-from exceptions import NotFoundError
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
+from libs.exceptions import NotFoundError
 
 
 @pytest.mark.unit

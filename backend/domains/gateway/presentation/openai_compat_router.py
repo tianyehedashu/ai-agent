@@ -22,6 +22,7 @@ from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.errors import (
     BudgetExceededError,
@@ -29,9 +30,6 @@ from domains.gateway.domain.errors import (
     GuardrailBlockedError,
     ModelNotAllowedError,
     RateLimitExceededError,
-)
-from domains.gateway.application.queries.gateway_management_queries import (
-    GatewayManagementQueryService,
 )
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
@@ -267,8 +265,8 @@ async def list_models(
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
-    queries = GatewayManagementQueryService(db)
-    models = await queries.list_gateway_models(principal.team_id, only_enabled=True)
+    reads = GatewayManagementReadService(db)
+    models = await reads.list_gateway_models(principal.team_id, only_enabled=True)
     if principal.vkey and principal.vkey.allowed_models:
         allowed = set(principal.vkey.allowed_models)
         models = [m for m in models if m.name in allowed]

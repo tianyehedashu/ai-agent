@@ -110,7 +110,7 @@ def redact_messages(messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]
 
 def _import_custom_guardrail() -> Any:
     """延迟导入避免顶层依赖 litellm"""
-    from litellm.integrations.custom_guardrail import CustomGuardrail  # noqa: PLC0415
+    from litellm.integrations.custom_guardrail import CustomGuardrail
 
     return CustomGuardrail
 
@@ -118,7 +118,7 @@ def _import_custom_guardrail() -> Any:
 class GatewayPiiGuardrail:  # 在初始化时返回真正继承 CustomGuardrail 的实例
     """工厂入口：返回真实 PiiGuardrail 实例（懒加载基类）"""
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> Any:  # noqa: PYI034
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
         return _build_pii_guardrail_instance(*args, **kwargs)
 
 

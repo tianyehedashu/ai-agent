@@ -13,6 +13,7 @@ Application Configuration Management
 
 from functools import lru_cache
 from typing import Literal
+import uuid
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -170,6 +171,14 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"]
     )
 
+    # ========================================================================
+    # 外部联邦身份（可选；OIDC / introspection 等为适配器，见 libs/iam/federation）
+    # ========================================================================
+    federation_mode: Literal["none", "oidc", "oauth2_introspection"] = "none"
+    oidc_issuer_url: str | None = None
+    oidc_audience: str | None = None
+    oauth2_introspection_url: str | None = None
+
     def model_post_init(self, __context: object) -> None:  # pylint: disable=arguments-differ
         """初始化后处理：如果 jwt_secret_key 是默认值，则使用 jwt_secret 的值"""
         super().model_post_init(__context)
@@ -279,6 +288,10 @@ class Settings(BaseSettings):
     # ========================================================================
     # 总开关：内部模块（chat/agent/...）调用是否走 Gateway 桥接（全量统计）
     gateway_internal_proxy_enabled: bool = True
+    # 无注册用户上下文时，是否将桥接失败视为致命（True=禁止静默回退直连）
+    gateway_internal_proxy_fail_closed: bool = False
+    # 无 PermissionContext.user_id 时用于 Gateway 归因的委派用户（如系统账号 UUID）
+    gateway_internal_proxy_delegate_user_id: uuid.UUID | None = None
     # 默认 PII Guardrail 是否生效（vkey 可单独开关）
     gateway_default_guardrail_enabled: bool = True
     # 默认是否在日志中存完整 prompt/response（vkey 可覆盖）

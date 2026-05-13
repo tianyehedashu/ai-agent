@@ -4,17 +4,18 @@ LLM Gateway - LLM 网关实现
 使用 LiteLLM 统一多模型接口
 
 注意：
-- 当 settings.gateway_internal_proxy_enabled=True 时，本类会优先把调用
-  转发到 AI Gateway 桥接层（domains.gateway.application.internal_bridge.GatewayBridge），
-  以便统一统计、预算与 Guardrail。
-- 直接 LiteLLM 调用作为回退路径（开发或 Gateway 故障时）。
+- 当 settings.gateway_internal_proxy_enabled=True 且能解析到归因 user_id 时，
+  本类会优先把调用转发到 AI Gateway 桥接层（GatewayProxyProtocol / GatewayBridge），
+  以便统一统计、预算与 Guardrail（含 BYOK 时传入的 api_key/api_base）。
+- 直接 LiteLLM 调用作为回退路径（显式关闭 internal proxy、无归因用户、或
+  gateway_internal_proxy_fail_closed=False 时桥接失败）。
 """
 
 from collections.abc import AsyncGenerator
 from contextlib import suppress
 import json
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 import litellm  # pylint: disable=import-error
@@ -31,8 +32,21 @@ from domains.agent.infrastructure.llm.message_formatter import (
 from domains.agent.infrastructure.llm.prompt_cache import get_prompt_cache_manager
 from domains.agent.infrastructure.llm.providers import get_provider
 from libs.config.interfaces import LLMConfigProtocol
-from libs.db.permission_context import get_permission_context
+from libs.gateway.factory import get_gateway_proxy
+from libs.gateway.internal_actor import resolve_internal_gateway_user_id
+from libs.gateway.litellm_payload import (
+    split_chat_completion_for_bridge,
+    split_embedding_for_bridge,
+)
+from libs.gateway.protocol import (
+    GatewayCallContext,
+    GatewayResponse,
+    GatewayStreamChunk,
+)
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from libs.gateway.protocol import GatewayProxyProtocol
 
 logger = get_logger(__name__)
 
@@ -69,14 +83,20 @@ class LLMGateway:
     - 重试与 Fallback
     """
 
-    def __init__(self, config: LLMConfigProtocol) -> None:
+    def __init__(
+        self,
+        config: LLMConfigProtocol,
+        gateway_proxy: "GatewayProxyProtocol | None" = None,
+    ) -> None:
         """
         初始化 LLM Gateway
 
         Args:
             config: LLM 配置（通过依赖注入传入，避免依赖应用层）
+            gateway_proxy: 可选；默认使用 ``get_gateway_proxy()`` 进程内桥接
         """
         self.config = config
+        self._gateway_proxy = gateway_proxy or get_gateway_proxy()
         # 初始化 Prompt Cache 管理器
         self._cache_manager = get_prompt_cache_manager()
 
@@ -291,6 +311,63 @@ class LLMGateway:
 
         return adapted
 
+    def _compose_chat_completion_kwargs(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict | None,
+        stream: bool,
+        api_key: str | None,
+        api_base: str | None,
+        response_format: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """构建与直连 LiteLLM 完全一致的 acompletion 参数（桥接与直连共用）。"""
+        if api_key:
+            api_config: dict[str, Any] = {"api_key": api_key}
+            if api_base:
+                api_config["api_base"] = api_base
+        else:
+            api_config = self._get_api_key(model)
+
+        if "endpoint_id" in api_config:
+            normalized_model = f"volcengine/{api_config['endpoint_id']}"
+        else:
+            normalized_model = self._normalize_model_name(model)
+
+        max_tokens_adj = self._validate_max_tokens(normalized_model, max_tokens)
+        processed_messages = self._preprocess_messages(normalized_model, messages)
+        cached_messages = self._cache_manager.prepare_cacheable_messages(processed_messages, model)
+
+        kwargs: dict[str, Any] = {
+            "model": normalized_model,
+            "messages": cached_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens_adj,
+            "stream": stream,
+        }
+
+        if self._cache_manager.is_cache_supported(model):
+            provider = self._cache_manager.get_provider_from_model(model)
+            if provider == "anthropic":
+                kwargs["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
+
+        if tools:
+            kwargs["tools"] = tools
+            if tool_choice:
+                kwargs["tool_choice"] = tool_choice
+
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        model_info = self._resolve_model_info(model, normalized_model)
+        kwargs = self._adapt_params(model_info, kwargs)
+        kwargs.update(api_config)
+        return kwargs
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -323,91 +400,31 @@ class LLMGateway:
             LLMResponse 或流式生成器
         """
         model = model or self.config.default_model
+        litellm_kwargs = self._compose_chat_completion_kwargs(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=stream,
+            api_key=api_key,
+            api_base=api_base,
+            response_format=response_format,
+        )
 
-        # ==== 新版 AI Gateway 内部桥接：当配置开关打开且能确定 user_id 时，
-        # 改走 GatewayBridge 走全套统计/预算/Guardrail/路由能力 ====
-        if (
-            getattr(_global_settings, "gateway_internal_proxy_enabled", False)
-            and not api_key  # 显式自定义 key 时不走 Gateway，保留用户私钥语义
-        ):
-            ctx = get_permission_context()
-            user_id = getattr(ctx, "user_id", None) if ctx else None
-            if isinstance(user_id, uuid.UUID):
-                bridged = await self._maybe_call_via_gateway(
-                    user_id=user_id,
-                    messages=messages,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=stream,
-                    response_format=response_format,
-                )
-                if bridged is not None:
-                    return bridged
+        bridge_uid = resolve_internal_gateway_user_id()
+        if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
+            bridged = await self._maybe_call_via_gateway_litellm(
+                user_id=bridge_uid,
+                litellm_kwargs=litellm_kwargs,
+            )
+            if bridged is not None:
+                return bridged
 
-        # 获取 API Key 配置（需要在规范化之前，因为火山引擎需要 endpoint_id）
-        if api_key:
-            api_config: dict[str, Any] = {"api_key": api_key}
-            if api_base:
-                api_config["api_base"] = api_base
-        else:
-            api_config = self._get_api_key(model)
-
-        # 规范化模型名称（转换为 litellm 需要的格式）
-        # 对于火山引擎，如果配置了 endpoint_id，使用 endpoint_id 作为模型名称
-        if "endpoint_id" in api_config:
-            normalized_model = f"volcengine/{api_config['endpoint_id']}"
-        else:
-            normalized_model = self._normalize_model_name(model)
-
-        # 验证并限制 max_tokens 根据模型提供商
-        max_tokens = self._validate_max_tokens(normalized_model, max_tokens)
-
-        # 预处理消息（处理模型特定的格式要求）
-        processed_messages = self._preprocess_messages(normalized_model, messages)
-
-        # 应用 Prompt Caching（对支持的提供商添加缓存标记）
-        cached_messages = self._cache_manager.prepare_cacheable_messages(processed_messages, model)
-
-        # 构建请求参数
-        kwargs: dict[str, Any] = {
-            "model": normalized_model,
-            "messages": cached_messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": stream,
-        }
-
-        # 添加 Anthropic 特定的缓存 header
-        if self._cache_manager.is_cache_supported(model):
-            provider = self._cache_manager.get_provider_from_model(model)
-            if provider == "anthropic":
-                # Anthropic 需要 beta header 来启用缓存
-                kwargs["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
-
-        # 添加工具
-        if tools:
-            kwargs["tools"] = tools
-            if tool_choice:
-                kwargs["tool_choice"] = tool_choice
-
-        # 添加输出格式约束（如 JSON Mode）
-        if response_format:
-            kwargs["response_format"] = response_format
-
-        # 根据模型能力适配参数（跳过不支持的 response_format / tools 等）
-        model_info = self._resolve_model_info(model, normalized_model)
-        kwargs = self._adapt_params(model_info, kwargs)
-
-        # 添加 API Key 配置
-        kwargs.update(api_config)
-
-        if stream:
-            return self._stream_chat(**kwargs)
-        else:
-            return await self._chat(**kwargs)
+        if litellm_kwargs["stream"]:
+            return self._stream_chat(**litellm_kwargs)
+        return await self._chat(**litellm_kwargs)
 
     def _extract_primitive_value(self, value: Any) -> Any:
         """
@@ -606,52 +623,66 @@ class LLMGateway:
             "total_tokens": int(usage.get("total_tokens", 0)),
         }
 
-    async def _maybe_call_via_gateway(
+    def _llm_response_from_gateway_chat(self, result: GatewayResponse, model_fallback: str) -> LLMResponse:
+        """将桥接层 ``GatewayResponse`` 转为领域 ``LLMResponse``。"""
+        tool_calls_raw = result.tool_calls
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            parsed: list[ToolCall] = []
+            for tc in tool_calls_raw:
+                if not isinstance(tc, dict):
+                    continue
+                parsed.append(
+                    ToolCall(
+                        id=str(tc.get("id", "")),
+                        name=str(tc.get("function", {}).get("name", ""))
+                        if isinstance(tc.get("function"), dict)
+                        else str(tc.get("name", "")),
+                        arguments=self._parse_arguments(
+                            str(tc.get("function", {}).get("arguments", ""))
+                            if isinstance(tc.get("function"), dict)
+                            else str(tc.get("arguments", ""))
+                        ),
+                    )
+                )
+            tool_calls = parsed or None
+        return LLMResponse(
+            content=result.content,
+            reasoning_content=result.reasoning_content,
+            tool_calls=tool_calls,
+            finish_reason=result.finish_reason,
+            usage=result.usage,
+            model=result.model or model_fallback,
+        )
+
+    async def _maybe_call_via_gateway_litellm(
         self,
         *,
         user_id: uuid.UUID,
-        messages: list[dict[str, Any]],
-        model: str,
-        temperature: float,
-        max_tokens: int,
-        tools: list[dict[str, Any]] | None,
-        tool_choice: str | dict | None,
-        stream: bool,
-        response_format: dict[str, Any] | None,
+        litellm_kwargs: dict[str, Any],
     ) -> LLMResponse | AsyncGenerator[StreamChunk, None] | None:
-        """通过 AI Gateway 桥接执行调用。失败返回 None 由调用方走旧路径。"""
-        try:
-            from domains.gateway.application.internal_bridge import (  # pylint: disable=import-outside-toplevel
-                get_gateway_bridge,
-            )
-            from libs.gateway.protocol import (  # pylint: disable=import-outside-toplevel
-                GatewayCallContext,
-                GatewayStreamChunk,
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.debug("Gateway bridge unavailable, fallback to direct LiteLLM: %s", exc)
+        """通过 AI Gateway 桥接执行调用，参数与 ``acompletion`` 一致。失败返回 None（除非 fail_closed）。"""
+        payload = split_chat_completion_for_bridge(litellm_kwargs)
+        if payload is None:
             return None
-
         try:
-            bridge = get_gateway_bridge()
-            ctx = GatewayCallContext(user_id=user_id)
-            extra: dict[str, Any] = {}
-            if tools:
-                extra["tools"] = tools
-            if tool_choice is not None:
-                extra["tool_choice"] = tool_choice
-            if response_format is not None:
-                extra["response_format"] = response_format
+            bridge = self._gateway_proxy
+            ctx = GatewayCallContext(user_id=user_id, capability="chat")
 
-            if stream:
+            if payload.stream:
                 stream_iter = await bridge.chat_completion(
-                    messages=messages,
+                    payload.messages,
                     ctx=ctx,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+                    model=payload.model,
+                    temperature=payload.temperature,
+                    max_tokens=payload.max_tokens,
+                    tools=payload.tools,
+                    tool_choice=payload.tool_choice,
                     stream=True,
-                    **extra,
+                    response_format=payload.response_format,
+                    api_key=payload.api_key,
+                    api_base=payload.api_base,
+                    **payload.extras,
                 )
 
                 async def _wrap() -> AsyncGenerator[StreamChunk, None]:
@@ -668,42 +699,63 @@ class LLMGateway:
                 return _wrap()
 
             result = await bridge.chat_completion(
-                messages=messages,
+                payload.messages,
                 ctx=ctx,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                model=payload.model,
+                temperature=payload.temperature,
+                max_tokens=payload.max_tokens,
+                tools=payload.tools,
+                tool_choice=payload.tool_choice,
                 stream=False,
-                **extra,
+                response_format=payload.response_format,
+                api_key=payload.api_key,
+                api_base=payload.api_base,
+                **payload.extras,
             )
-            return LLMResponse(
-                content=result.content,
-                reasoning_content=result.reasoning_content,
-                tool_calls=(
-                    [
-                        ToolCall(
-                            id=str(tc.get("id", "")),
-                            name=str(tc.get("function", {}).get("name", ""))
-                            if isinstance(tc.get("function"), dict)
-                            else str(tc.get("name", "")),
-                            arguments=self._parse_arguments(
-                                str(tc.get("function", {}).get("arguments", ""))
-                                if isinstance(tc.get("function"), dict)
-                                else str(tc.get("arguments", ""))
-                            ),
-                        )
-                        for tc in result.tool_calls
-                        if isinstance(tc, dict)
-                    ]
-                    if result.tool_calls
-                    else None
-                ),
-                finish_reason=result.finish_reason,
-                usage=result.usage,
-                model=result.model or model,
-            )
+            return self._llm_response_from_gateway_chat(result, payload.model)
         except Exception as exc:  # pragma: no cover
+            if _global_settings.gateway_internal_proxy_fail_closed:
+                raise
             logger.warning("Gateway bridge call failed, fallback to direct LiteLLM: %s", exc)
+            return None
+
+    def _compose_embedding_litellm_kwargs(self, texts: list[str], model: str) -> dict[str, Any]:
+        """构建与直连 ``aembedding`` 一致的参数。"""
+        api_config = self._get_embedding_api_config(model)
+        return {
+            "model": model,
+            "input": texts,
+            **api_config,
+        }
+
+    async def _maybe_embed_via_gateway_litellm(
+        self,
+        *,
+        user_id: uuid.UUID,
+        litellm_kwargs: dict[str, Any],
+    ) -> list[list[float]] | None:
+        """经 Gateway 批量 embedding，参数与 ``aembedding`` 一致。"""
+        parsed = split_embedding_for_bridge(litellm_kwargs)
+        if parsed is None:
+            return None
+        try:
+            rows = await self._gateway_proxy.embedding(
+                parsed.inputs,
+                ctx=GatewayCallContext(user_id=user_id, capability="embedding"),
+                model=parsed.model,
+                api_key=parsed.api_key,
+                api_base=parsed.api_base,
+                **parsed.extras,
+            )
+            if not rows:
+                return None
+            if any(r is None for r in rows):
+                return None
+            return [list(r) for r in rows if r is not None]
+        except Exception as exc:  # pragma: no cover
+            if _global_settings.gateway_internal_proxy_fail_closed:
+                raise
+            logger.warning("Gateway bridge embedding failed, fallback to direct LiteLLM: %s", exc)
             return None
 
     async def _chat(self, **kwargs: Any) -> LLMResponse:
@@ -1012,16 +1064,18 @@ class LLMGateway:
             嵌入向量（浮点数列表）
         """
         model = model or self.config.embedding_model
-
-        # 获取 API 配置
-        api_config = self._get_embedding_api_config(model)
+        litellm_kwargs = self._compose_embedding_litellm_kwargs([text], model)
+        bridge_uid = resolve_internal_gateway_user_id()
+        if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
+            bridged = await self._maybe_embed_via_gateway_litellm(
+                user_id=bridge_uid,
+                litellm_kwargs=litellm_kwargs,
+            )
+            if bridged is not None and len(bridged) > 0 and bridged[0] is not None:
+                return list(bridged[0])
 
         try:
-            response = await aembedding(
-                model=model,
-                input=[text],
-                **api_config,
-            )
+            response = await aembedding(**litellm_kwargs)
             return response.data[0]["embedding"]
         except Exception as e:
             logger.error("Embedding failed for model %s: %s", model, e)
@@ -1039,16 +1093,20 @@ class LLMGateway:
             嵌入向量列表
         """
         model = model or self.config.embedding_model
-
-        # 获取 API 配置
-        api_config = self._get_embedding_api_config(model)
+        if not texts:
+            return []
+        litellm_kwargs = self._compose_embedding_litellm_kwargs(texts, model)
+        bridge_uid = resolve_internal_gateway_user_id()
+        if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
+            bridged = await self._maybe_embed_via_gateway_litellm(
+                user_id=bridge_uid,
+                litellm_kwargs=litellm_kwargs,
+            )
+            if bridged is not None and len(bridged) == len(texts):
+                return bridged
 
         try:
-            response = await aembedding(
-                model=model,
-                input=texts,
-                **api_config,
-            )
+            response = await aembedding(**litellm_kwargs)
             return [item["embedding"] for item in response.data]
         except Exception as e:
             logger.error("Batch embedding failed for model %s: %s", model, e)

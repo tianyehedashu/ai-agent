@@ -18,6 +18,7 @@ backend/
 │   ├── config/             # 配置管理
 │   ├── db/                 # 数据库组件
 │   ├── api/                # 共享 API 工具（服务工厂、错误常量）
+│   ├── exceptions/         # 跨域共享异常（AIAgentError、HttpMappableDomainError 等）
 │   ├── middleware/         # 通用中间件（日志、限流、错误处理）
 │   ├── observability/      # 可观测性
 │   └── orm/                # ORM 基类
@@ -39,10 +40,11 @@ backend/
 │   │       └── models/     # ORM 模型
 │   ├── evaluation/         # 评估领域
 │   ├── studio/             # 工作室领域
+│   ├── tenancy/            # 租户与团队（Team/TeamMember ORM、TeamService、成员仓储权威）
 │   └── gateway/            # AI Gateway 域
 │       ├── presentation/   # 管理/OpenAI 兼容路由、deps（不直连仓储）
 │       ├── application/    # UseCase：gateway_access_use_case、proxy_use_case、jobs；
-│       │                     管理面 CQRS：queries/、commands/；team_service 等
+│       │                     管理面：`management/`（reads / writes / usage_reads；团队逻辑委托 tenancy）
 │       ├── domain/
 │       └── infrastructure/ # ORM、仓储、Router 单例、回调
 ├── bootstrap/              # 启动层
@@ -56,7 +58,8 @@ backend/
 - `libs/` - 纯技术基础设施，与业务无关的通用组件
 - `domains/identity/` - 身份认证域，包含认证依赖、中间件、用户相关类型
 - `domains/agent/` - Agent 域，包含 Agent 配置、会话、执行、记忆、工具等核心功能
-- `domains/gateway/` - AI Gateway（管理 API、OpenAI 兼容入口；应用层含 `gateway_access_use_case` 与管理面 `queries`/`commands`）
+- `domains/tenancy/` - 团队与成员（ORM 与 `TeamService` 权威；Gateway / Identity 经此域访问）
+- `domains/gateway/` - AI Gateway（管理 API、OpenAI 兼容入口；应用层含 `gateway_access_use_case` 与管理面 `management/` 读写服务）
 - 每个域有自己的 `types.py` 放域特有类型
 
 | 层级 | 职责 | 依赖 |

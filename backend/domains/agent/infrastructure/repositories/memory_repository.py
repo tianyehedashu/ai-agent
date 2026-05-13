@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.memory import Memory
-from exceptions import NotFoundError
+from libs.exceptions import NotFoundError
 
 
 def _safe_uuid(value: str | None) -> uuid.UUID | None:

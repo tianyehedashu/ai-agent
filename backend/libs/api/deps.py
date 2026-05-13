@@ -35,6 +35,8 @@ from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecy
 from domains.identity.application import UserUseCase
 from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db
+from libs.iam.deps import get_default_tenant_provisioner
+from libs.iam.tenancy import DefaultTenantProvisionerPort
 
 if TYPE_CHECKING:
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
@@ -74,9 +76,14 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 # =============================================================================
 
 
-async def get_user_service(db: DbSession) -> UserUseCase:
+async def get_user_service(
+    db: DbSession,
+    tenant_provisioner: Annotated[
+        DefaultTenantProvisionerPort, Depends(get_default_tenant_provisioner)
+    ],
+) -> UserUseCase:
     """获取用户服务"""
-    return UserUseCase(db)
+    return UserUseCase(db, tenant_provisioner=tenant_provisioner)
 
 
 async def get_agent_service(db: DbSession) -> AgentUseCase:

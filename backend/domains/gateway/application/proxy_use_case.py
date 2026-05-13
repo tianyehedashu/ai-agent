@@ -14,14 +14,11 @@ ProxyUseCase - 网关调用编排
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
@@ -37,11 +34,24 @@ from domains.gateway.domain.errors import (
 )
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
-from domains.gateway.infrastructure.repositories.team_repository import TeamRepository
+from domains.gateway.infrastructure.repositories.model_repository import (
+    GatewayModelRepository,
+    GatewayRouteRepository,
+)
 from domains.gateway.infrastructure.router_singleton import get_router
+from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
+from libs.db.database import get_session_context
 from utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, AsyncIterator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = get_logger(__name__)
+
+
+BudgetReservation = tuple[str, str | None, str]
 
 
 @dataclass
@@ -78,9 +88,12 @@ class ProxyUseCase:
 
     def _check_capability(self, ctx: ProxyContext) -> None:
         vkey = ctx.vkey
-        if vkey and vkey.allowed_capabilities:
-            if ctx.capability not in vkey.allowed_capabilities:
-                raise CapabilityNotAllowedError(ctx.capability.value)
+        if (
+            vkey
+            and vkey.allowed_capabilities
+            and ctx.capability not in vkey.allowed_capabilities
+        ):
+            raise CapabilityNotAllowedError(ctx.capability.value)
 
     async def _check_limits(
         self, ctx: ProxyContext, estimate_tokens: int = 0
@@ -96,7 +109,18 @@ class ProxyUseCase:
             )
         # team 维度（从团队设置中读 rpm/tpm，简化：通过 GatewayBudget 表表示）
 
-    async def _check_budget(self, ctx: ProxyContext) -> None:
+    async def _release_budget_reservations(
+        self, reservations: list[BudgetReservation]
+    ) -> None:
+        for scope, scope_id, period in reservations:
+            with suppress(Exception):
+                await self._budget.release(
+                    scope=scope,
+                    scope_id=scope_id,
+                    period=period,
+                )
+
+    async def _check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
         """检查 vkey/team/user 三级预算"""
         repo = BudgetRepository(self._session)
         scopes_to_check: list[tuple[str, uuid.UUID | None]] = [
@@ -107,6 +131,7 @@ class ProxyUseCase:
         if ctx.vkey:
             scopes_to_check.append(("key", ctx.vkey.vkey_id))
 
+        reservations: list[BudgetReservation] = []
         for scope, scope_id in scopes_to_check:
             for period in (PERIOD_DAILY, PERIOD_MONTHLY):
                 budget = await repo.get_for(scope, scope_id, period)
@@ -121,6 +146,7 @@ class ProxyUseCase:
                     limit_requests=budget.limit_requests,
                 )
                 if not check.allowed:
+                    await self._release_budget_reservations(reservations)
                     raise BudgetExceededError(
                         scope=scope,
                         period=period,
@@ -134,12 +160,19 @@ class ProxyUseCase:
                         ),
                     )
                 if budget.limit_requests:
-                    await self._budget.reserve(
-                        scope=scope,
-                        scope_id=str(scope_id) if scope_id else None,
-                        period=period,
-                        limit_requests=budget.limit_requests,
-                    )
+                    scope_id_str = str(scope_id) if scope_id else None
+                    try:
+                        await self._budget.reserve(
+                            scope=scope,
+                            scope_id=scope_id_str,
+                            period=period,
+                            limit_requests=budget.limit_requests,
+                        )
+                    except Exception:
+                        await self._release_budget_reservations(reservations)
+                        raise
+                    reservations.append((scope, scope_id_str, period))
+        return reservations
 
     # ---------------------------------------------------------------------
     # Metadata 注入
@@ -170,6 +203,59 @@ class ProxyUseCase:
                 meta.update({k: v for k, v in user_meta.items() if k not in meta})
         return meta
 
+    async def _should_use_internal_direct_litellm(
+        self, ctx: ProxyContext, model: str
+    ) -> bool:
+        """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
+        if ctx.vkey is None or not ctx.vkey.is_system:
+            return False
+
+        model_record = await GatewayModelRepository(self._session).get_by_name(
+            ctx.team_id, model
+        )
+        if model_record is not None and model_record.enabled:
+            return False
+
+        route = await GatewayRouteRepository(self._session).get_by_virtual_model(
+            ctx.team_id, model
+        )
+        return route is None
+
+    @staticmethod
+    def _is_router_model_miss(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(
+            marker in message
+            for marker in (
+                "no deployments available",
+                "no deployment",
+                "no models available",
+                "unable to find deployment",
+                "model not found",
+                "could not find model",
+            )
+        )
+
+    async def _direct_chat_completion(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import acompletion
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await acompletion(**kwargs)
+
+    async def _direct_embedding(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import aembedding
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await aembedding(**kwargs)
+
     # ---------------------------------------------------------------------
     # 主入口
     # ---------------------------------------------------------------------
@@ -192,25 +278,32 @@ class ProxyUseCase:
             len(str(m.get("content", ""))) for m in (body.get("messages") or [])
         ) // 4 + int(body.get("max_tokens") or 0)
         await self._check_limits(ctx, estimate_tokens=estimate_tokens)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
 
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
 
-        router = await get_router(self._session)
         stream = bool(body.get("stream"))
         try:
-            response = await router.acompletion(**kwargs)
-        except Exception:
-            with suppress(Exception):
-                await self._budget.release(
-                    scope="team",
-                    scope_id=str(ctx.team_id),
-                    period=PERIOD_DAILY,
-                )
-            raise
-
+            if await self._should_use_internal_direct_litellm(ctx, model):
+                response = await self._direct_chat_completion(kwargs)
+            else:
+                router = await get_router(self._session)
+                response = await router.acompletion(**kwargs)
+        except Exception as exc:
+            if (
+                self._is_router_model_miss(exc)
+                and await self._should_use_internal_direct_litellm(ctx, model)
+            ):
+                try:
+                    response = await self._direct_chat_completion(kwargs)
+                except Exception:
+                    await self._release_budget_reservations(reservations)
+                    raise
+            else:
+                await self._release_budget_reservations(reservations)
+                raise
         if stream:
             return _adapt_stream(response, ctx, self._budget)
         return _adapt_response(response, ctx, self._budget)
@@ -227,13 +320,20 @@ class ProxyUseCase:
         self._check_model(model, ctx)
         self._check_capability(ctx)
         await self._check_limits(ctx)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
 
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
-        router = await get_router(self._session)
-        response = await router.aembedding(**kwargs)
+        try:
+            if await self._should_use_internal_direct_litellm(ctx, model):
+                response = await self._direct_embedding(kwargs)
+            else:
+                router = await get_router(self._session)
+                response = await router.aembedding(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
         return _adapt_response(response, ctx, self._budget)
 
     async def image_generation(
@@ -244,12 +344,16 @@ class ProxyUseCase:
         ctx.capability = GatewayCapability.IMAGE
         self._check_capability(ctx)
         await self._check_limits(ctx)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
-        router = await get_router(self._session)
-        response = await router.aimage_generation(**kwargs)
+        try:
+            router = await get_router(self._session)
+            response = await router.aimage_generation(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
         return _adapt_response(response, ctx, self._budget)
 
     async def audio_transcription(
@@ -260,12 +364,16 @@ class ProxyUseCase:
         ctx.capability = GatewayCapability.AUDIO_TRANSCRIPTION
         self._check_capability(ctx)
         await self._check_limits(ctx)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
-        router = await get_router(self._session)
-        response = await router.atranscription(**kwargs)
+        try:
+            router = await get_router(self._session)
+            response = await router.atranscription(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
         return _adapt_response(response, ctx, self._budget)
 
     async def audio_speech(
@@ -276,14 +384,18 @@ class ProxyUseCase:
         ctx.capability = GatewayCapability.AUDIO_SPEECH
         self._check_capability(ctx)
         await self._check_limits(ctx)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
         # 使用全局 litellm.aspeech 因为 Router 不一定暴露 aspeech
-        from litellm import aspeech  # noqa: PLC0415
+        from litellm import aspeech
 
-        return await aspeech(**kwargs)
+        try:
+            return await aspeech(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
 
     async def rerank(
         self,
@@ -293,13 +405,17 @@ class ProxyUseCase:
         ctx.capability = GatewayCapability.RERANK
         self._check_capability(ctx)
         await self._check_limits(ctx)
-        await self._check_budget(ctx)
+        reservations = await self._check_budget(ctx)
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
-        from litellm import arerank  # noqa: PLC0415
+        from litellm import arerank
 
-        return await arerank(**kwargs)
+        try:
+            return await arerank(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
 
 
 # =============================================================================
@@ -325,36 +441,18 @@ def _adapt_response(
 ) -> dict[str, Any]:
     data = _to_dict(response)
     usage = data.get("usage") or {}
-    if isinstance(usage, dict):
-        tokens = int(usage.get("total_tokens", 0) or 0)
-    else:
-        tokens = 0
+    tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
     cost = _calc_cost(response)
 
     # 异步结算（不 await 失败也不影响响应）
-    import asyncio  # noqa: PLC0415
+    import asyncio
 
     async def _settle() -> None:
-        for scope, scope_id in (
-            ("team", str(ctx.team_id)),
-            ("user", str(ctx.user_id) if ctx.user_id else None),
-            ("key", str(ctx.vkey.vkey_id) if ctx.vkey else None),
-        ):
-            if scope_id is None:
-                continue
-            for period in (PERIOD_DAILY, PERIOD_MONTHLY):
-                with suppress(Exception):
-                    await budget.commit(
-                        scope=scope,
-                        scope_id=scope_id,
-                        period=period,
-                        delta_cost=cost,
-                        delta_tokens=tokens,
-                    )
+        await _settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=1)
 
     with suppress(RuntimeError):
-        loop = asyncio.get_running_loop()
-        loop.create_task(_settle())
+        settle_task = asyncio.create_task(_settle())
+        settle_task.add_done_callback(lambda _t: None)
     return data
 
 
@@ -376,11 +474,23 @@ async def _adapt_stream(
     if last_usage:
         total_tokens = int(last_usage.get("total_tokens", 0) or 0)
     cost = Decimal("0")  # 流式 cost 由 callbacks 落账
-    for scope, scope_id in (
+    await _settle_usage(ctx, budget, tokens=total_tokens, cost=cost, requests=1)
+
+
+async def _settle_usage(
+    ctx: ProxyContext,
+    budget: BudgetService,
+    *,
+    tokens: int,
+    cost: Decimal,
+    requests: int,
+) -> None:
+    scope_items = (
         ("team", str(ctx.team_id)),
         ("user", str(ctx.user_id) if ctx.user_id else None),
         ("key", str(ctx.vkey.vkey_id) if ctx.vkey else None),
-    ):
+    )
+    for scope, scope_id in scope_items:
         if scope_id is None:
             continue
         for period in (PERIOD_DAILY, PERIOD_MONTHLY):
@@ -390,13 +500,31 @@ async def _adapt_stream(
                     scope_id=scope_id,
                     period=period,
                     delta_cost=cost,
-                    delta_tokens=total_tokens,
+                    delta_tokens=tokens,
                 )
+
+    with suppress(Exception):
+        async with get_session_context() as session:
+            repo = BudgetRepository(session)
+            for scope, scope_id in scope_items:
+                if scope_id is None:
+                    continue
+                scope_uuid = uuid.UUID(scope_id)
+                for period in (PERIOD_DAILY, PERIOD_MONTHLY):
+                    record = await repo.get_for(scope, scope_uuid, period)
+                    if record is None:
+                        continue
+                    await repo.settle_usage(
+                        record.id,
+                        delta_usd=cost,
+                        delta_tokens=tokens,
+                        delta_requests=requests,
+                    )
 
 
 def _calc_cost(response: Any) -> Decimal:
     try:
-        from litellm import completion_cost  # noqa: PLC0415
+        from litellm import completion_cost
 
         cost = completion_cost(completion_response=response)
         return Decimal(str(cost or 0))

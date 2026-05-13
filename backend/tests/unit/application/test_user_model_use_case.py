@@ -20,12 +20,12 @@ import uuid
 import pytest
 
 from domains.identity.infrastructure.models.user import User
-from exceptions import NotFoundError, ValidationError
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
+from libs.exceptions import NotFoundError, ValidationError
 
 
 def _uc_module():
@@ -47,7 +47,7 @@ class TestUserModelValidation:
             _uc_module().UserModelUseCase._validate_model_types(["text", "audio"])
 
     def test_valid_model_types_exhaustive(self):
-        assert {"text", "image", "video"} == _uc_module().VALID_MODEL_TYPES
+        assert {"text", "image", "image_gen", "video"} == _uc_module().VALID_MODEL_TYPES
 
     def test_valid_providers_cover_all(self):
         expected = {

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class VirtualKeyRepository:

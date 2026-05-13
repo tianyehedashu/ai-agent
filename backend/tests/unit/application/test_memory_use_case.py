@@ -8,7 +8,7 @@ import pytest
 
 from domains.agent.application.memory_service import MemoryService
 from domains.identity.infrastructure.models.user import User
-from exceptions import NotFoundError
+from libs.exceptions import NotFoundError
 
 
 @pytest.mark.unit

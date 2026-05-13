@@ -22,9 +22,9 @@ from domains.agent.infrastructure.models.product_image_gen_task import (
 from domains.agent.infrastructure.repositories.product_image_gen_task_repository import (
     ProductImageGenTaskRepository,
 )
-from exceptions import NotFoundError
 from libs.db.database import get_session_factory
 from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.exceptions import NotFoundError
 from libs.storage.local_image_store import save_or_passthrough
 from utils.logging import get_logger
 

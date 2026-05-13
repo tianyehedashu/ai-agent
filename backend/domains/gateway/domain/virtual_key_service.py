@@ -13,7 +13,6 @@ import hashlib
 import hmac
 import secrets
 
-
 VKEY_PREFIX = "sk-gw-"
 VKEY_KEY_ID_LENGTH = 16
 VKEY_SECRET_LENGTH = 32

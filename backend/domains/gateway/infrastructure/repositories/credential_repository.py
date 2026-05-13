@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ProviderCredentialRepository:

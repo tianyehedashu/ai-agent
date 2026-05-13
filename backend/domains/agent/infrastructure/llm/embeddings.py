@@ -14,11 +14,19 @@ Embedding Service - 统一的文本向量化服务
 
 from abc import ABC, abstractmethod
 import asyncio
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
+from bootstrap.config import settings as app_settings
+from libs.gateway.factory import get_gateway_proxy
+from libs.gateway.internal_actor import resolve_internal_gateway_user_id
+from libs.gateway.litellm_payload import split_embedding_for_bridge
+from libs.gateway.protocol import GatewayCallContext
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from libs.gateway.protocol import GatewayProxyProtocol
 
 logger = get_logger(__name__)
 
@@ -203,43 +211,82 @@ class APIEmbedding(EmbeddingProvider):
         api_key: str | None = None,
         api_base: str | None = None,
         dimension: int = 1536,
+        gateway_proxy: "GatewayProxyProtocol | None" = None,
     ):
         self.model = model
         self.api_key = api_key
         self.api_base = api_base
         self._dimension = dimension
+        self._gateway_proxy = gateway_proxy
 
-    @property
-    def dimension(self) -> int:
-        return self._dimension
+    def _litellm_embedding_kwargs(self, texts: list[str]) -> dict[str, Any]:
+        """与直连 ``aembedding`` 一致的参数字典。"""
+        payload: dict[str, Any] = {"model": self.model, "input": texts}
+        if self.api_key:
+            payload["api_key"] = self.api_key
+        if self.api_base:
+            payload["api_base"] = self.api_base
+        return payload
+
+    async def _try_embed_via_gateway(self, texts: list[str]) -> list[list[float]] | None:
+        if not app_settings.gateway_internal_proxy_enabled:
+            return None
+        user_id = resolve_internal_gateway_user_id()
+        if user_id is None:
+            return None
+        proxy = self._gateway_proxy or get_gateway_proxy()
+        kw = self._litellm_embedding_kwargs(texts)
+        parsed = split_embedding_for_bridge(kw)
+        if parsed is None:
+            return None
+        try:
+            rows = await proxy.embedding(
+                parsed.inputs,
+                ctx=GatewayCallContext(user_id=user_id, capability="embedding"),
+                model=parsed.model,
+                api_key=parsed.api_key,
+                api_base=parsed.api_base,
+                **parsed.extras,
+            )
+        except Exception as exc:
+            if app_settings.gateway_internal_proxy_fail_closed:
+                raise
+            logger.warning(
+                "Embedding API gateway bridge skipped, fallback to LiteLLM: %s",
+                exc,
+            )
+            return None
+        if not rows or len(rows) != len(texts):
+            return None
+        if any(r is None for r in rows):
+            return None
+        return [list(r) for r in rows if r is not None]
 
     async def embed(self, text: str) -> list[float]:
         """通过 API 生成嵌入"""
+        bridged = await self._try_embed_via_gateway([text])
+        if bridged is not None and bridged and bridged[0] is not None:
+            return list(bridged[0])
+
         if aembedding is None:
             raise ImportError("LiteLLM not installed. Run: pip install litellm")
 
-        # 直接使用模型名称（已经在 create_embedding_service_from_settings 中处理好了）
-        kwargs: dict[str, Any] = {"model": self.model, "input": [text]}
-        if self.api_key:
-            kwargs["api_key"] = self.api_key
-        if self.api_base:
-            kwargs["api_base"] = self.api_base
-
+        kwargs = self._litellm_embedding_kwargs([text])
         response = await aembedding(**kwargs)
         return response.data[0]["embedding"]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """批量通过 API 生成嵌入"""
+        if not texts:
+            return []
+        bridged = await self._try_embed_via_gateway(texts)
+        if bridged is not None and len(bridged) == len(texts):
+            return bridged
+
         if aembedding is None:
             raise ImportError("LiteLLM not installed. Run: pip install litellm")
 
-        # 直接使用模型名称（已经在 create_embedding_service_from_settings 中处理好了）
-        kwargs: dict[str, Any] = {"model": self.model, "input": texts}
-        if self.api_key:
-            kwargs["api_key"] = self.api_key
-        if self.api_base:
-            kwargs["api_base"] = self.api_base
-
+        kwargs = self._litellm_embedding_kwargs(texts)
         response = await aembedding(**kwargs)
         return [item["embedding"] for item in response.data]
 
@@ -330,6 +377,7 @@ class EmbeddingService:
         api_key: str | None = None,
         api_base: str | None = None,
         dimension: int | None = None,
+        gateway_proxy: "GatewayProxyProtocol | None" = None,
     ):
         """
         初始化 Embedding 服务
@@ -342,8 +390,10 @@ class EmbeddingService:
             api_key: API 密钥（仅 API 模式）
             api_base: API 基础 URL（仅 API 模式）
             dimension: 向量维度（可选，自动检测）
+            gateway_proxy: 可选；API 模式经 Gateway 桥接时使用
         """
         self.provider_type = provider
+        self._gateway_proxy = gateway_proxy
 
         if provider == "local":
             # 解析本地模型名称
@@ -405,6 +455,7 @@ class EmbeddingService:
                     api_key=api_key,
                     api_base=api_base,
                     dimension=dimension,
+                    gateway_proxy=gateway_proxy,
                 )
                 self._dimension = dimension
                 logger.info(

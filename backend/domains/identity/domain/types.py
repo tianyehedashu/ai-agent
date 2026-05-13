@@ -70,6 +70,26 @@ class Principal:
         """创建匿名用户的邮箱"""
         return f"{ANONYMOUS_ID_PREFIX}{anonymous_user_id}{ANONYMOUS_EMAIL_SUFFIX}"
 
+    @staticmethod
+    def resource_owner_matches_principal(
+        *,
+        resource_owner_id: str,
+        principal_id: str,
+        principal_is_anonymous: bool,
+    ) -> bool:
+        """判断资源上的所有者标识是否与当前主体为同一人。
+
+        匿名主体在应用层使用 ``anonymous-{uuid}`` 的 ``principal_id``，而持久化层
+        （如 ``sessions.anonymous_user_id``）通常存裸 UUID；本方法在两侧统一比较。
+        ``resource_owner_id`` 也可为带前缀形式，均会先规范化再比较。
+        """
+        stored = str(resource_owner_id)
+        if principal_is_anonymous:
+            return Principal.extract_anonymous_id(principal_id) == Principal.extract_anonymous_id(
+                stored
+            )
+        return stored == principal_id
+
     def get_anonymous_user_id(self) -> str | None:
         """获取原始匿名用户 ID（用于数据库查询）"""
         if self.is_anonymous:

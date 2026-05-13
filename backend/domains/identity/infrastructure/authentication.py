@@ -25,6 +25,8 @@ from bootstrap.config import settings
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.user_manager import UserManager
 from libs.db.database import get_db
+from libs.iam.deps import get_default_tenant_provisioner
+from libs.iam.tenancy import DefaultTenantProvisionerPort
 
 # 密码哈希上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -73,9 +75,10 @@ async def get_user_db(
 
 async def get_user_manager(
     user_db: SQLAlchemyUserDatabase = Depends(get_user_db),
+    tenant_provisioner: DefaultTenantProvisionerPort = Depends(get_default_tenant_provisioner),
 ) -> AsyncGenerator[UserManager, None]:
     """获取用户管理器"""
-    yield UserManager(user_db)
+    yield UserManager(user_db, tenant_provisioner=tenant_provisioner)
 
 
 # FastAPI Users 实例

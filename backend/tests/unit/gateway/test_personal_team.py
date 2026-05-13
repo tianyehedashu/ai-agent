@@ -8,12 +8,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.team_service import TeamService
-from domains.gateway.infrastructure.repositories.team_repository import (
+from domains.identity.application.user_use_case import UserUseCase
+from domains.tenancy.application.team_service import TeamService
+from domains.tenancy.infrastructure.repositories.team_repository import (
     TeamMemberRepository,
     TeamRepository,
 )
-from domains.identity.application.user_use_case import UserUseCase
 
 
 @pytest.mark.unit

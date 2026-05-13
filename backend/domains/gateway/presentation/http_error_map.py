@@ -8,15 +8,16 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
-    PersonalTeamNotInitializedError,
-    TeamNotFoundError,
-    TeamPermissionDeniedError,
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
 )
+from libs.iam.team_http import map_team_access_exception_to_http
 
 
 def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
+    team_http = map_team_access_exception_to_http(exc)
+    if team_http is not None:
+        return team_http
     if isinstance(exc, VirtualKeyInvalidError):
         return HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -25,17 +26,10 @@ def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
         )
     if isinstance(exc, NoPersonalTeamForProxyError):
         return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if isinstance(exc, (TeamNotFoundError, VirtualKeyNotFoundError)):
+    if isinstance(exc, VirtualKeyNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, TeamPermissionDeniedError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, PersonalTeamNotInitializedError):
-        return HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        )
     return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 

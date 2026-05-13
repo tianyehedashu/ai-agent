@@ -1,14 +1,17 @@
-"""TeamRepository / TeamMemberRepository"""
+"""TeamRepository / TeamMemberRepository（租户权威数据访问）。"""
 
 from __future__ import annotations
 
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.infrastructure.models.team import Team, TeamMember
+from domains.tenancy.infrastructure.models.team import Team, TeamMember
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TeamRepository:
@@ -36,7 +39,7 @@ class TeamRepository:
                 TeamMember.user_id == user_id,
                 Team.is_active.is_(True),
             )
-            .order_by(Team.kind.desc(), Team.created_at)  # personal 在前
+            .order_by(Team.kind.desc(), Team.created_at)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().unique().all())
@@ -95,9 +98,7 @@ class TeamMemberRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def get(
-        self, team_id: uuid.UUID, user_id: uuid.UUID
-    ) -> TeamMember | None:
+    async def get(self, team_id: uuid.UUID, user_id: uuid.UUID) -> TeamMember | None:
         stmt = select(TeamMember).where(
             and_(
                 TeamMember.team_id == team_id,
@@ -116,9 +117,7 @@ class TeamMemberRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def add(
-        self, team_id: uuid.UUID, user_id: uuid.UUID, role: str
-    ) -> TeamMember:
+    async def add(self, team_id: uuid.UUID, user_id: uuid.UUID, role: str) -> TeamMember:
         member = TeamMember(team_id=team_id, user_id=user_id, role=role)
         self._session.add(member)
         await self._session.flush()

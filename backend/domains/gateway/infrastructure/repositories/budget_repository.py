@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.budget import GatewayBudget
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BudgetRepository:

@@ -12,11 +12,13 @@ Gateway Proxy Protocol - AI Gateway 代理协议
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from decimal import Decimal
-from typing import Any, Protocol
-import uuid
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+    from decimal import Decimal
+    import uuid
 
 
 @dataclass
@@ -27,7 +29,9 @@ class GatewayCallContext:
     正确的 system vkey 与 personal team 进行归账。
 
     Attributes:
-        user_id: 调用者注册用户 ID（必填，匿名用户禁用 Gateway）
+        user_id: 归因用注册用户 UUID；通常来自 PermissionContext。无登录态时
+            可由 ``resolve_internal_gateway_user_id`` 使用配置项
+            ``gateway_internal_proxy_delegate_user_id`` 得到委派 ID。
         team_id: 显式指定的团队 ID；为空则使用 user 的 personal team
         capability: 调用能力（chat/embedding/...）
         metadata: 任意业务元数据，会原样写入日志便于排查
@@ -101,6 +105,8 @@ class GatewayProxyProtocol(Protocol):
         *,
         ctx: GatewayCallContext,
         model: str | None = None,
+        api_key: str | None = None,
+        api_base: str | None = None,
         **kwargs: Any,
     ) -> list[list[float]]:
         """embedding 调用入口"""

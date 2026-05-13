@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from domains.identity.application.user_use_case import UserUseCase
-from exceptions import AuthenticationError
+from libs.exceptions import AuthenticationError
 
 
 @pytest.mark.unit

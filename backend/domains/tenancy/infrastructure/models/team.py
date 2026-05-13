@@ -1,7 +1,8 @@
 """
-Team / TeamMember Models - 团队与成员
+Team / TeamMember ORM - 租户与成员（权威定义于 domains.tenancy）
 
 每个用户注册时自动创建 personal team；用户也可创建 shared team 邀请他人加入。
+表名保持 gateway_teams / gateway_team_members 以兼容既有迁移。
 """
 
 from __future__ import annotations
@@ -17,14 +18,7 @@ from libs.orm.base import BaseModel
 
 
 class Team(BaseModel):
-    """团队
-
-    Attributes:
-        kind: personal / shared
-        owner_user_id: 团队所有者 ID
-        slug: URL 友好标识（同一所有者下唯一）
-        settings: 团队级默认设置（如默认 routing_strategy、default guardrail）
-    """
+    """团队 / 租户作用域（存储层沿用 Team 命名）。"""
 
     __tablename__ = "gateway_teams"
 
@@ -56,7 +50,7 @@ class Team(BaseModel):
 
 
 class TeamMember(BaseModel):
-    """团队成员"""
+    """团队成员。"""
 
     __tablename__ = "gateway_team_members"
 

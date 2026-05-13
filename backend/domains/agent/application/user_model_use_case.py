@@ -16,8 +16,8 @@ from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.repositories.user_model_repository import (
     UserModelRepository,
 )
-from exceptions import NotFoundError, ValidationError
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value, mask_api_key
+from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:

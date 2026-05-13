@@ -7,7 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 
-import { gatewayApi, type GatewayLogItem } from '@/api/gateway'
+import { gatewayApi, type GatewayLogItem, type GatewayUsageScope } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -23,12 +23,13 @@ const PAGE_SIZE = 100
 export default function GatewayLogsPage(): React.JSX.Element {
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [scope, setScope] = useState<GatewayUsageScope>('personal')
 
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
-    queryKey: ['gateway', 'logs'],
+    queryKey: ['gateway', 'logs', scope],
     initialPageParam: 1,
     queryFn: ({ pageParam }: { pageParam: number }) =>
-      gatewayApi.listLogs({ page: pageParam, page_size: PAGE_SIZE }),
+      gatewayApi.listLogs({ scope, page: pageParam, page_size: PAGE_SIZE }),
     getNextPageParam: (lastPage, all) => {
       const fetched = all.reduce((sum, p) => sum + p.items.length, 0)
       return fetched < lastPage.total ? all.length + 1 : undefined
@@ -51,19 +52,35 @@ export default function GatewayLogsPage(): React.JSX.Element {
   }
 
   const { data: detail } = useQuery({
-    queryKey: ['gateway', 'log', selectedId],
-    queryFn: () => (selectedId ? gatewayApi.getLog(selectedId) : null),
+    queryKey: ['gateway', 'log', selectedId, scope],
+    queryFn: () => (selectedId ? gatewayApi.getLog(selectedId, { scope }) : null),
     enabled: !!selectedId,
   })
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">调用日志</h2>
           <p className="text-sm text-muted-foreground">
             按月分区表 + 虚拟滚动，最近 {items.length.toLocaleString()} 条
           </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
+          {(['personal', 'team'] as const).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={scope === value ? 'default' : 'ghost'}
+              className="h-7 px-3 text-xs"
+              onClick={() => {
+                setScope(value)
+                setSelectedId(null)
+              }}
+            >
+              {value === 'personal' ? '个人' : '当前团队'}
+            </Button>
+          ))}
         </div>
       </div>
 

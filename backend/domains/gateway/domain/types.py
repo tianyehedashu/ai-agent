@@ -7,12 +7,15 @@ Gateway Domain Types - 领域类型定义
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
+from domains.tenancy.domain.management_context import ManagementTeamContext
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    import uuid
 
 # =============================================================================
 # 枚举
@@ -127,17 +130,6 @@ class TeamContext:
     team_id: uuid.UUID
     team_role: TeamRole
     team_kind: TeamKind = TeamKind.PERSONAL
-
-
-@dataclass(frozen=True)
-class ManagementTeamContext:
-    """管理面 `/api/v1/gateway/*` 解析后的团队上下文（应用层产出，Presentation 消费）"""
-
-    team_id: uuid.UUID
-    team_kind: str
-    team_role: str
-    user_id: uuid.UUID
-    is_platform_admin: bool
 
 
 @dataclass(frozen=True)

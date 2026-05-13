@@ -14,7 +14,7 @@ LLM Key Service - LLM Key 选择与配额管理服务
 from typing import Protocol
 from uuid import UUID
 
-from exceptions import AIAgentError
+from libs.exceptions import AIAgentError
 
 
 class NoKeyConfiguredError(AIAgentError):

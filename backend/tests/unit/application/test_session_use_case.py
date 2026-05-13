@@ -9,12 +9,12 @@ import pytest
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from domains.session.domain.entities import SessionOwner
-from exceptions import NotFoundError
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
+from libs.exceptions import NotFoundError
 
 
 @pytest.mark.unit

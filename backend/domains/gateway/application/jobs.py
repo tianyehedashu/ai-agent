@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.gateway.infrastructure.models.alert import (
@@ -26,6 +26,9 @@ from domains.gateway.infrastructure.repositories.metrics_rollup_repository impor
 )
 from libs.db.database import get_session_context
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -164,7 +167,7 @@ async def _evaluate_rule(
 
 async def _send_webhook(url: str, payload: dict[str, Any]) -> None:
     try:
-        import httpx  # noqa: PLC0415
+        import httpx
 
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(url, json=payload)
@@ -233,7 +236,7 @@ async def gateway_alert_loop() -> None:
 
 def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
-    from libs.background_tasks import register_app_background_task  # noqa: PLC0415
+    from libs.background_tasks import register_app_background_task
 
     register_app_background_task(app, asyncio.create_task(gateway_rollup_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
