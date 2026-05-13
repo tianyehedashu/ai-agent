@@ -315,6 +315,24 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await connection.close()
 
 
+def _asgi_app_with_streaming_spec(app: object) -> object:
+    """为 HTTP scope 补充 ``asgi.spec_version >= 2.4``。
+
+    httpx.ASGITransport 默认未设置 ``spec_version``，Starlette 按 2.0 处理时会为
+    ``StreamingResponse`` 启用 disconnect 与 body 并行的 task-group，易在流式
+    请求结束时产生取消竞态，进而污染同一测试 fixture 复用的 DB 会话。
+    """
+
+    async def wrapped(scope: dict[str, object], receive: object, send: object) -> None:
+        if scope.get("type") == "http":
+            base_asgi = dict(scope.get("asgi") or {})  # type: ignore[arg-type]
+            base_asgi.setdefault("spec_version", "2.4")
+            scope = {**scope, "asgi": base_asgi}
+        await app(scope, receive, send)  # type: ignore[misc]
+
+    return wrapped
+
+
 def _apply_db_overrides(app: object, db_session: AsyncSession) -> None:
     """统一为 app 注入测试用 DB 会话（仅覆盖 get_db；get_session 由 patch get_session_factory 间接满足）。"""
     # pylint: disable=import-outside-toplevel
@@ -364,7 +382,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
             app.state.checkpointer = test_checkpointer
 
         async with AsyncClient(
-            transport=ASGITransport(app=app),
+            transport=ASGITransport(app=_asgi_app_with_streaming_spec(app)),
             base_url="http://test",
         ) as ac:
             yield ac
@@ -412,7 +430,7 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
             app.state.checkpointer = test_checkpointer
 
         async with AsyncClient(
-            transport=ASGITransport(app=app),
+            transport=ASGITransport(app=_asgi_app_with_streaming_spec(app)),
             base_url="http://test",
         ) as ac:
             yield ac

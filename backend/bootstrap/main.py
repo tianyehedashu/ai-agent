@@ -52,7 +52,11 @@ from domains.identity.presentation.usage_router import router as usage_router
 from domains.session.presentation import session_router
 from domains.studio.presentation.quality_router import router as quality_router
 from domains.studio.presentation.router import router as studio_router
-from exceptions import (
+from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
+from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
+from libs.db.database import init_db
+from libs.db.redis import close_redis, init_redis
+from libs.exceptions import (
     AIAgentError,
     AuthenticationError,
     CheckpointError,
@@ -65,10 +69,8 @@ from exceptions import (
     ToolExecutionError,
     ValidationError,
 )
-from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
-from libs.db.database import init_db
-from libs.db.redis import close_redis, init_redis
-from libs.middleware.permission import PermissionContextMiddleware
+from libs.middleware.anonymous_cookie_asgi import AnonymousCookieASGIMiddleware
+from libs.middleware.permission import PermissionContextASGIMiddleware
 from utils.logging import get_logger, setup_logging
 
 # pylint: enable=wrong-import-position
@@ -307,43 +309,9 @@ app.add_middleware(
     expose_headers=["X-Anonymous-User-Id"],  # 允许前端 JS 读取自定义响应头
 )
 
-# 权限上下文中间件（在认证依赖之后设置权限上下文）
-app.add_middleware(PermissionContextMiddleware)
-
-
-# =============================================================================
-# 匿名用户 Cookie 中间件
-# =============================================================================
-
-# 匿名用户 Cookie 配置
-ANONYMOUS_USER_COOKIE = "anonymous_user_id"
-ANONYMOUS_COOKIE_MAX_AGE = 365 * 24 * 60 * 60  # 1 年
-
-
-@app.middleware("http")
-async def anonymous_user_cookie_middleware(request: Request, call_next):
-    """为匿名用户设置持久化 Cookie
-
-    当检测到新的匿名用户（request.state.anonymous_user_id 存在）时，
-    在响应中设置 Cookie 以便后续请求能够识别同一用户。
-    """
-    response = await call_next(request)
-
-    # 检查是否需要设置匿名用户 Cookie
-    if hasattr(request.state, "anonymous_user_id"):
-        anonymous_id = request.state.anonymous_user_id
-        # 设置持久化 Cookie（1 年有效期）
-        response.set_cookie(
-            key=ANONYMOUS_USER_COOKIE,
-            value=anonymous_id,
-            max_age=ANONYMOUS_COOKIE_MAX_AGE,
-            path="/",  # 确保 Cookie 对所有路径有效
-            httponly=True,  # 防止 XSS 攻击
-            samesite="lax",  # 防止 CSRF 攻击，但允许顶级导航
-            secure=settings.is_cookie_secure,
-        )
-
-    return response
+# 纯 ASGI 中间件（与 SSE/StreamingResponse 兼容；勿改用 @app.middleware + BaseHTTPMiddleware）
+app.add_middleware(PermissionContextASGIMiddleware)
+app.add_middleware(AnonymousCookieASGIMiddleware)
 
 
 # =============================================================================
@@ -637,6 +605,13 @@ app.include_router(
     user_model_router,
     prefix=f"{api_router_prefix}/user-models",
     tags=["User Models"],
+)
+
+# AI Gateway 团队 API（/api/v1/gateway/teams*，由 tenancy 域实现）
+app.include_router(
+    tenancy_teams_router,
+    prefix=f"{api_router_prefix}/gateway",
+    tags=["Tenancy / Teams"],
 )
 
 # AI Gateway 管理 API：/api/v1/gateway/*

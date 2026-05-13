@@ -8,6 +8,7 @@ Chat API 集成测试
 4. 多轮对话
 """
 
+import asyncio
 import json
 
 from fastapi import status
@@ -128,41 +129,21 @@ class TestChatAPI:
 
     @pytest.mark.asyncio
     async def test_chat_with_existing_session(self, client: AsyncClient, auth_headers: dict):
-        """测试: 使用已存在的会话进行对话"""
-        # 先创建一个会话
-        session_id = None
-        async with client.stream(
-            "POST",
-            "/api/v1/chat",
-            json={
-                "message": "First message",
-            },
+        """测试: 使用已存在的会话进行对话（先 REST 创建会话，避免双段流式 + SAVEPOINT 下重复 commit 的 asyncpg 状态问题）"""
+        create_response = await client.post(
+            "/api/v1/sessions/",
+            json={"title": "Integration chat preset"},
             headers=auth_headers,
-        ) as response:
-            assert response.status_code == status.HTTP_200_OK
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        event_data = json.loads(data_str)
-                        if event_data.get("type") == "session_created":
-                            session_id = event_data.get("data", {}).get("session_id")
-                            break
-                    except json.JSONDecodeError:
-                        pass
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        session_id = create_response.json()["id"]
 
-        # 必须获取到 session_id
-        assert session_id is not None, "Should receive session_id from session_created event"
-
-        # 使用已存在的会话发送第二条消息
         async with client.stream(
             "POST",
             "/api/v1/chat",
             json={
                 "session_id": session_id,
-                "message": "Second message",
+                "message": "Message in existing session",
             },
             headers=auth_headers,
         ) as response:
@@ -170,7 +151,6 @@ class TestChatAPI:
             content_type = response.headers.get("content-type", "")
             assert "text/event-stream" in content_type
 
-            # 验证第二条消息不会再收到 session_created 事件
             events = []
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
@@ -183,6 +163,8 @@ class TestChatAPI:
                     except json.JSONDecodeError:
                         pass
 
-            event_types = [e.get("type") for e in events]
-            # 已有会话不应该再创建新会话
-            assert "session_created" not in event_types, "Should NOT create new session"
+        event_types = [e.get("type") for e in events]
+        assert "session_created" not in event_types, "Should NOT create new session"
+
+        # Agent/LLM 链路上可能有异步收尾；与 conftest 单连接回滚竞态时短暂等待避免 teardown 报错
+        await asyncio.sleep(0.5)
