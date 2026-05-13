@@ -4,8 +4,13 @@ Chat API 端到端测试
 真正调用后端 API（不使用 Mock），验证完整的对话流程。
 
 测试类型: API E2E (也叫 API Integration Tests / Functional Tests)
-运行条件: 需要启动完整环境 (docker-compose + backend server)
-运行方式: make test-e2e
+运行条件: 需要启动完整环境 (docker-compose 基础服务 + 本机 uvicorn 监听 8000)。
+
+运行方式:
+
+- Windows 一键: 仓库根目录 ``scripts/run-e2e.ps1``（或 ``scripts/run-e2e.ps1 -Slow`` 含慢用例）
+- 手动: ``docker compose up -d db redis qdrant`` → ``alembic upgrade head`` → ``uvicorn bootstrap.main:app --host 127.0.0.1 --port 8000`` → ``pytest tests/e2e -m "e2e and not slow"``
+- API 根地址可通过环境变量 ``E2E_API_BASE_URL`` 覆盖（默认 ``http://localhost:8000``）
 
 API 实现说明:
 ============
@@ -42,8 +47,7 @@ from typing import Any
 import httpx
 import pytest
 
-# 后端 API 地址
-API_BASE_URL = "http://localhost:8000"
+from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:

@@ -19,8 +19,7 @@ import uuid
 import httpx
 import pytest
 
-# 后端 API 地址
-API_BASE_URL = "http://localhost:8000"
+from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
