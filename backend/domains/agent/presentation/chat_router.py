@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from domains.agent.application import ChatUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.identity.presentation.deps import AuthUser
+from domains.tenancy.presentation.team_dependencies import AttachOptionalTeamContext
 from libs.api.deps import get_chat_service, get_checkpoint_service
 from utils.serialization import Serializer
 
@@ -106,6 +107,7 @@ class DiffResponse(BaseModel):
 @router.post("")
 async def chat(
     request: ChatRequest,
+    _: AttachOptionalTeamContext,
     current_user: AuthUser,
     chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:
@@ -156,6 +158,7 @@ async def chat(
 @router.post("/resume")
 async def resume_execution(
     request: ResumeRequest,
+    _: AttachOptionalTeamContext,
     current_user: AuthUser,
     chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:

@@ -141,7 +141,7 @@ class TestSessionOwnership:
             check_session_ownership(session, user)
 
     def test_anonymous_user_with_none_session_anonymous_id(self):
-        """Test: Anonymous user accessing session with anonymous_user_id=None (registered user session)."""
+        """匿名用户访问 anonymous_user_id=None 的会话（注册用户会话）。"""
         # Arrange
         anonymous_id = str(uuid.uuid4())
         user = self._create_anonymous_user(anonymous_id)

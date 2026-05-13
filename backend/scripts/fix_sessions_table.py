@@ -50,7 +50,8 @@ async def check_and_fix_updated_at_fields(conn):
                 text(
                     f"""
                     ALTER TABLE {table_name}
-                    ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE
+                    NOT NULL DEFAULT CURRENT_TIMESTAMP;
                 """
                 )
             )
@@ -104,7 +105,8 @@ async def fix_sessions_metadata_to_context(conn, has_metadata, has_context):
             )
             await conn.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_sessions_context_gin ON sessions USING GIN (context)"
+                    "CREATE INDEX IF NOT EXISTS idx_sessions_context_gin "
+                    "ON sessions USING GIN (context)"
                 )
             )
             print("✓ metadata 已重命名为 context")

@@ -17,12 +17,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
 from bootstrap.config import settings
+from domains.gateway.application.ports import (
+    GatewayCallContext,
+    GatewayResponse,
+    GatewayStreamChunk,
+)
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import (
     GatewayCapability,
@@ -35,11 +35,11 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.db.database import get_session_context
-from libs.gateway.protocol import (
-    GatewayCallContext,
-    GatewayResponse,
-    GatewayStreamChunk,
-)
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _encryption_key() -> str:
@@ -108,7 +108,7 @@ def _to_gateway_response(data: dict[str, Any]) -> GatewayResponse:
 
 
 class GatewayBridge:
-    """libs.gateway.GatewayProxyProtocol 的具体实现（结构化兼容）"""
+    """``GatewayProxyProtocol`` 的具体实现（见 ``application.ports``）。"""
 
     async def chat_completion(
         self,
@@ -164,10 +164,7 @@ class GatewayBridge:
                 ),
                 guardrail_enabled=vkey.guardrail_enabled,
             )
-            try:
-                result = await ProxyUseCase(session).chat_completion(proxy_ctx, body)
-            except Exception:
-                raise
+            result = await ProxyUseCase(session).chat_completion(proxy_ctx, body)
 
         if stream:
             async def _wrap() -> AsyncGenerator[GatewayStreamChunk, None]:

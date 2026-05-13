@@ -7,6 +7,7 @@ UseCase 层在操作 Step 前必须先校验 Job 归属权限。
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.product_info_job_step import ProductInfoJobStep
@@ -53,8 +54,6 @@ class ProductInfoJobStepRepository:
         job_id: uuid.UUID,
         sort_order: int,
     ) -> ProductInfoJobStep | None:
-        from sqlalchemy import select
-
         q = select(ProductInfoJobStep).where(
             ProductInfoJobStep.job_id == job_id,
             ProductInfoJobStep.sort_order == sort_order,
@@ -63,8 +62,6 @@ class ProductInfoJobStepRepository:
         return result.scalar_one_or_none()
 
     async def list_by_job_id(self, job_id: uuid.UUID) -> list[ProductInfoJobStep]:
-        from sqlalchemy import select
-
         q = (
             select(ProductInfoJobStep)
             .where(ProductInfoJobStep.job_id == job_id)
@@ -78,8 +75,6 @@ class ProductInfoJobStepRepository:
         step_id: uuid.UUID,
         **kwargs,
     ) -> ProductInfoJobStep | None:
-        from sqlalchemy import select
-
         q = select(ProductInfoJobStep).where(ProductInfoJobStep.id == step_id)
         result = await self.db.execute(q)
         step = result.scalar_one_or_none()

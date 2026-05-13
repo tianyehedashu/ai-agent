@@ -21,10 +21,14 @@ from pathlib import Path
 import subprocess
 import sys
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+
+from bootstrap.config import settings
+
 
 def _get_test_url() -> str:
-    from bootstrap.config import settings
-
     url = settings.database_url
     parts = url.rsplit("/", maxsplit=1)
     if len(parts) != 2:
@@ -34,10 +38,6 @@ def _get_test_url() -> str:
 
 async def _reset_test_db(test_url: str) -> None:
     """清空测试库：DROP SCHEMA public CASCADE 并重建，便于从零执行迁移。"""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy.pool import NullPool
-
     engine = create_async_engine(test_url, poolclass=NullPool)
     try:
         async with engine.begin() as conn:

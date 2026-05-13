@@ -13,7 +13,8 @@ import uuid
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.presentation.deps import RequiredAuthUser
+from domains.identity.presentation.deps import RequiredAuthUser, get_current_user
+from domains.identity.presentation.schemas import CurrentUser
 from domains.tenancy.application.management_team_resolve_use_case import (
     TenancyManagementTeamResolveUseCase,
 )
@@ -28,12 +29,14 @@ from libs.exceptions import (
 from libs.iam.team_http import map_team_access_exception_to_http
 
 __all__ = [
+    "AttachOptionalTeamContext",
     "CurrentTeam",
     "RequiredGatewayAdmin",
     "RequiredTeamAdmin",
     "RequiredTeamMember",
     "RequiredTeamOwner",
     "ResolvedTeam",
+    "attach_optional_team_from_header",
     "resolve_current_team",
 ]
 
@@ -92,6 +95,57 @@ async def resolve_current_team(
 
 
 CurrentTeam = Annotated[ManagementTeamContext, Depends(resolve_current_team)]
+
+
+async def attach_optional_team_from_header(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
+) -> None:
+    """将 ``X-Team-Id`` 写入 ``PermissionContext``，供内部 Gateway 桥接按当前团队归账。
+
+    未带头或匿名会话时不修改上下文（桥接仍用 personal team）。
+    解析与成员校验与 ``resolve_current_team`` 一致。
+    """
+    if current_user.is_anonymous:
+        return
+    trimmed = (x_team_id or "").strip()
+    if not trimmed:
+        return
+    user_id = uuid.UUID(current_user.id)
+    resolver = TenancyManagementTeamResolveUseCase(db)
+    try:
+        resolved = await resolver.resolve_management_team(
+            user_id=user_id,
+            platform_user_role=current_user.role,
+            x_team_id=trimmed,
+            path_team_id=None,
+        )
+    except (
+        TeamNotFoundError,
+        TeamPermissionDeniedError,
+        PersonalTeamNotInitializedError,
+    ) as exc:
+        http_exc = map_team_access_exception_to_http(exc)
+        if http_exc is None:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unmapped team access error",
+            ) from exc
+        raise http_exc from exc
+
+    set_permission_context(
+        PermissionContext(
+            user_id=user_id,
+            anonymous_user_id=None,
+            role=current_user.role,
+            team_id=resolved.team_id,
+            team_role=resolved.team_role,
+        )
+    )
+
+
+AttachOptionalTeamContext = Annotated[None, Depends(attach_optional_team_from_header)]
 
 
 def _require_team_role(*roles: str):

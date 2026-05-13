@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
@@ -32,13 +32,17 @@ class GatewayModelRepository:
         clauses = []
         if team_id is None:
             clauses.append(GatewayModel.team_id.is_(None))
+            order_by = (GatewayModel.name,)
         else:
             clauses.append(or_(GatewayModel.team_id == team_id, GatewayModel.team_id.is_(None)))
+            # 同名时团队行优先于全局行，避免 limit/去重语义不确定
+            team_first = case((GatewayModel.team_id == team_id, 0), else_=1)
+            order_by = (team_first, GatewayModel.name)
         if only_enabled:
             clauses.append(GatewayModel.enabled.is_(True))
         if capability:
             clauses.append(GatewayModel.capability == capability)
-        stmt = select(GatewayModel).where(*clauses).order_by(GatewayModel.name)
+        stmt = select(GatewayModel).where(*clauses).order_by(*order_by)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -47,15 +51,20 @@ class GatewayModelRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_by_name(
-        self, team_id: uuid.UUID | None, name: str
-    ) -> GatewayModel | None:
+    async def get_by_name(self, team_id: uuid.UUID | None, name: str) -> GatewayModel | None:
         clauses = [GatewayModel.name == name]
         if team_id is None:
             clauses.append(GatewayModel.team_id.is_(None))
+            stmt = select(GatewayModel).where(*clauses).limit(1)
         else:
             clauses.append(or_(GatewayModel.team_id == team_id, GatewayModel.team_id.is_(None)))
-        stmt = select(GatewayModel).where(*clauses).limit(1)
+            team_first = case((GatewayModel.team_id == team_id, 0), else_=1)
+            stmt = (
+                select(GatewayModel)
+                .where(*clauses)
+                .order_by(team_first, GatewayModel.name)
+                .limit(1)
+            )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -98,7 +107,9 @@ class GatewayModelRepository:
         if model is None:
             return None
         for key, value in fields.items():
-            if hasattr(model, key) and value is not None:
+            if not hasattr(model, key):
+                continue
+            if isinstance(value, bool) or value is not None:
                 setattr(model, key, value)
         await self._session.flush()
         return model
@@ -150,14 +161,16 @@ class GatewayRouteRepository:
         ]
         if team_id is None:
             clauses.append(GatewayRoute.team_id.is_(None))
+            stmt = select(GatewayRoute).where(*clauses).limit(1)
         else:
             clauses.append(or_(GatewayRoute.team_id == team_id, GatewayRoute.team_id.is_(None)))
-        stmt = (
-            select(GatewayRoute)
-            .where(*clauses)
-            .order_by(GatewayRoute.team_id.desc().nullslast())
-            .limit(1)
-        )
+            team_first = case((GatewayRoute.team_id == team_id, 0), else_=1)
+            stmt = (
+                select(GatewayRoute)
+                .where(*clauses)
+                .order_by(team_first, GatewayRoute.virtual_model)
+                .limit(1)
+            )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 

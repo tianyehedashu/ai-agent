@@ -1,13 +1,8 @@
 """
-Gateway Proxy Protocol - AI Gateway 代理协议
+Gateway 应用端口 — 内部桥接与跨域调用的抽象
 
-定义跨域使用 AI Gateway 的抽象接口，避免 agent/session/studio 等域
-直接依赖 gateway 域的具体实现。
-
-设计原则（与 libs/llm/protocol.py 对齐）：
-- 这是结构化类型（Protocol），任何实现这些方法的类都兼容
-- 不暴露 LiteLLM 内部对象，只用基础类型与本协议自有 dataclass
-- 由 gateway 域的 ProxyUseCase 实现
+与 ``domains.session.application.ports`` 一致：由 **gateway 域** 声明协议与 DTO，
+其它域（agent 等）依赖本模块类型，具体实现见 ``internal_bridge``。
 """
 
 from __future__ import annotations
@@ -23,20 +18,21 @@ if TYPE_CHECKING:
 
 @dataclass
 class GatewayCallContext:
-    """Gateway 调用上下文
-
-    用于内部模块调用 Gateway 时携带身份与团队信息，桥接层据此选择
-    正确的 system vkey 与 personal team 进行归账。
+    """内部模块经 ``GatewayBridge`` 调用 Gateway 时的上下文。
 
     Attributes:
-        user_id: 归因用注册用户 UUID；通常来自 PermissionContext。无登录态时
-            可由 ``resolve_internal_gateway_user_id`` 使用配置项
-            ``gateway_internal_proxy_delegate_user_id`` 得到委派 ID。
-        team_id: 显式指定的团队 ID；为空则使用 user 的 personal team
+        user_id: **Actor**（操作者）— 写入日志 ``gateway_user_id`` 的注册用户 UUID。
+        team_id: **计费工作区**（BillingWorkspace）— 与 ``gateway_request_logs.team_id``、
+            LiteLLM metadata ``gateway_team_id`` 一致；可为 **personal 或 shared** 工作区的
+            ``Team.id``。若为 ``None``，``GatewayBridge`` 对该用户执行 ``ensure_personal_team``
+            后归账到其 personal team。
         capability: 调用能力（chat/embedding/...）
         metadata: 任意业务元数据，会原样写入日志便于排查
         request_id: 客户端传入的 request_id（可选，用于跨服务关联）
         store_full_messages: 是否在日志中保存完整 prompt/response（覆盖 vkey 默认）
+
+    注意：HTTP 查询 ``usage_aggregation``（管理面读模型）**不**在此类型中表达；其仅影响
+    ``GET /dashboard/summary`` 等聚合接口的切片方式。
     """
 
     user_id: uuid.UUID
@@ -77,7 +73,7 @@ class GatewayProxyProtocol(Protocol):
     """Gateway 代理协议
 
     跨域调用入口。所有内部模块（chat/agent/product-info/video 等）应通过
-    依赖注入获取此协议实现，而不是直接 import gateway 域。
+    依赖注入获取此协议实现，而不是直接 import ``GatewayBridge`` 实现类。
     """
 
     async def chat_completion(

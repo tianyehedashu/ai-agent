@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.errors import TeamPermissionDeniedError
+from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -102,7 +103,7 @@ class GatewayManagementReadService:
         self,
         ctx: ManagementTeamContext,
         *,
-        scope: str,
+        usage_aggregation: UsageAggregation,
         page: int,
         page_size: int,
         start: datetime | None,
@@ -111,7 +112,7 @@ class GatewayManagementReadService:
         capability: str | None,
         vkey_id: uuid.UUID | None,
     ) -> tuple[list[Any], int]:
-        if scope == "personal":
+        if usage_aggregation == UsageAggregation.USER:
             items, total = await self._logs.list_for_user(
                 ctx.user_id,
                 start=start,
@@ -134,7 +135,7 @@ class GatewayManagementReadService:
                 page_size=page_size,
             )
         if (
-            scope == "team"
+            usage_aggregation == UsageAggregation.WORKSPACE
             and not ctx.is_platform_admin
             and ctx.team_role == "member"
             and vkey_id is None
@@ -149,9 +150,13 @@ class GatewayManagementReadService:
         return items, total
 
     async def get_request_log(
-        self, ctx: ManagementTeamContext, log_id: uuid.UUID, *, scope: str
+        self,
+        ctx: ManagementTeamContext,
+        log_id: uuid.UUID,
+        *,
+        usage_aggregation: UsageAggregation,
     ) -> Any | None:
-        if scope == "personal":
+        if usage_aggregation == UsageAggregation.USER:
             return await self._logs.get_for_user(log_id, ctx.user_id)
 
         record = await self._logs.get_for_team(log_id, ctx.team_id)
@@ -171,12 +176,19 @@ class GatewayManagementReadService:
     async def get_request_log_for_team(
         self, ctx: ManagementTeamContext, log_id: uuid.UUID
     ) -> Any | None:
-        return await self.get_request_log(ctx, log_id, scope="team")
+        return await self.get_request_log(
+            ctx, log_id, usage_aggregation=UsageAggregation.WORKSPACE
+        )
 
     async def aggregate_request_log_summary(
-        self, ctx: ManagementTeamContext, start: datetime, end: datetime, *, scope: str
+        self,
+        ctx: ManagementTeamContext,
+        start: datetime,
+        end: datetime,
+        *,
+        usage_aggregation: UsageAggregation,
     ) -> dict[str, Any]:
-        if scope == "personal":
+        if usage_aggregation == UsageAggregation.USER:
             return await self._logs.aggregate_summary_for_user(ctx.user_id, start, end)
         return await self._logs.aggregate_summary(ctx.team_id, start, end)
 

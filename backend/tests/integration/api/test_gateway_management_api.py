@@ -80,7 +80,7 @@ class TestGatewayManagementApi:
         assert body["team_id"] == str(team.id)
 
     @pytest.mark.asyncio
-    async def test_personal_log_scope_uses_current_user_not_selected_team(
+    async def test_user_aggregation_uses_current_user_not_selected_team(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
@@ -164,7 +164,7 @@ class TestGatewayManagementApi:
 
         headers = {**auth_headers, "X-Team-Id": str(shared.id)}
         logs = await dev_client.get(
-            "/api/v1/gateway/logs?scope=personal&page_size=10",
+            "/api/v1/gateway/logs?usage_aggregation=user&page_size=10",
             headers=headers,
         )
         assert logs.status_code == 200, logs.text
@@ -174,14 +174,14 @@ class TestGatewayManagementApi:
         assert str(other_log_id) not in ids
 
         detail = await dev_client.get(
-            f"/api/v1/gateway/logs/{personal_log_id}?scope=personal",
+            f"/api/v1/gateway/logs/{personal_log_id}?usage_aggregation=user",
             headers=headers,
         )
         assert detail.status_code == 200, detail.text
         assert detail.json()["id"] == str(personal_log_id)
 
         summary = await dev_client.get(
-            "/api/v1/gateway/dashboard/summary?scope=personal&days=1",
+            "/api/v1/gateway/dashboard/summary?usage_aggregation=user&days=1",
             headers=headers,
         )
         assert summary.status_code == 200, summary.text

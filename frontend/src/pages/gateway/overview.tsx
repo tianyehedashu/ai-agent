@@ -1,14 +1,14 @@
 /**
  * AI Gateway · 概览
  *
- * 团队维度 KPI（与 /dashboard/summary 对齐；时间序列可后续接 metrics_hourly）。
+ * 用量 KPI（与 GET /dashboard/summary 对齐；usage_aggregation=user|workspace）。
  */
 
 import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { gatewayApi, type GatewayUsageScope } from '@/api/gateway'
+import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -18,19 +18,29 @@ const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] 
   { value: '30d', days: 30, label: '30 天' },
 ]
 
+/** 与后端 Decimal / JSON 数字字符串等对齐，避免对非 number 调用 toFixed */
+function coalesceNumber(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return 0
+}
+
 export default function GatewayOverviewPage(): React.JSX.Element {
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
-  const [scope, setScope] = useState<GatewayUsageScope>('personal')
+  const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['gateway', 'dashboard', scope, days],
-    queryFn: () => gatewayApi.dashboard({ days, scope }),
+    queryKey: ['gateway', 'dashboard', usageAggregation, days],
+    queryFn: () => gatewayApi.dashboard({ days, usage_aggregation: usageAggregation }),
   })
 
   const totalTokens = useMemo(() => {
     if (!data) return 0
-    return data.total_input_tokens + data.total_output_tokens
+    return coalesceNumber(data.total_input_tokens) + coalesceNumber(data.total_output_tokens)
   }, [data])
 
   return (
@@ -39,17 +49,17 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         <h2 className="text-2xl font-semibold tracking-tight">概览</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-            {(['personal', 'team'] as const).map((value) => (
+            {(['user', 'workspace'] as const).map((value) => (
               <Button
                 key={value}
                 size="sm"
-                variant={scope === value ? 'default' : 'ghost'}
+                variant={usageAggregation === value ? 'default' : 'ghost'}
                 className="h-7 px-3 text-xs"
                 onClick={() => {
-                  setScope(value)
+                  setUsageAggregation(value)
                 }}
               >
-                {value === 'personal' ? '个人' : '当前团队'}
+                {value === 'user' ? '按账号' : '当前工作区'}
               </Button>
             ))}
           </div>
@@ -76,7 +86,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         <Kpi title="Token 总数" value={totalTokens} loading={isLoading} format="kmb" />
         <Kpi
           title="累计成本（USD）"
-          value={data?.total_cost_usd ?? 0}
+          value={data?.total_cost_usd}
           loading={isLoading}
           format="money"
         />
@@ -114,17 +124,18 @@ function Kpi({
   format,
 }: Readonly<{
   title: string
-  value: number
+  value: number | string | null | undefined
   loading?: boolean
   format?: 'kmb' | 'money' | 'percent' | 'int'
 }>): React.JSX.Element {
-  let display: string = String(value)
-  if (format === 'money') display = `$${value.toFixed(4)}`
-  else if (format === 'percent') display = `${(value * 100).toFixed(2)}%`
-  else if (format === 'int') display = String(Math.round(value))
+  const n = coalesceNumber(value)
+  let display: string = String(n)
+  if (format === 'money') display = `$${n.toFixed(4)}`
+  else if (format === 'percent') display = `${(n * 100).toFixed(2)}%`
+  else if (format === 'int') display = String(Math.round(n))
   else if (format === 'kmb') {
-    if (value >= 1_000_000) display = `${(value / 1_000_000).toFixed(2)}M`
-    else if (value >= 1_000) display = `${(value / 1_000).toFixed(2)}K`
+    if (n >= 1_000_000) display = `${(n / 1_000_000).toFixed(2)}M`
+    else if (n >= 1_000) display = `${(n / 1_000).toFixed(2)}K`
   }
   return (
     <Card>

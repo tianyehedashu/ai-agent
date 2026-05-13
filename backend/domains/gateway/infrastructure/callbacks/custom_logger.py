@@ -8,8 +8,8 @@ GatewayCustomLogger - LiteLLM CustomLogger 实现
 - Fallback 链路
 
 每条记录写入：
-- gateway_request_logs（按月分区）
-- Redis 实时计数（用于 dashboard 与 budget）
+- gateway_request_logs（按月分区；成功请求可按配置采样）
+- Redis 实时计数（用于 dashboard 与 budget；不受采样影响）
 """
 
 from __future__ import annotations
@@ -21,6 +21,10 @@ import time
 from typing import Any
 import uuid
 
+from bootstrap.config import settings
+from domains.gateway.infrastructure.gateway_log_sampling import (
+    should_persist_request_log_row,
+)
 from libs.db.database import get_session_context
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
@@ -115,6 +119,10 @@ def _build_logger_instance() -> Any:
             response: Any,
         ) -> None:
             """流式末帧：通过 success_event 兜底，这里仅记录 ttfb"""
+            return None
+
+        async def async_dataset_hook(self, *args: Any, **kwargs: Any) -> None:
+            """LiteLLM CustomLogger 抽象钩子；Gateway 不落 dataset。"""
             return None
 
     return _Impl()
@@ -260,44 +268,58 @@ async def _persist_event(
     }
     metadata_extra = extra_metadata or None
 
-    # ---------- 写 DB ----------
-    try:
-        from domains.gateway.infrastructure.repositories.request_log_repository import (
-            RequestLogRepository,
-        )
+    litellm_call = kwargs.get("litellm_call_id")
+    litellm_call_str = str(litellm_call) if litellm_call is not None else None
+    request_id_str = str(request_id) if request_id else None
+    persist_row = should_persist_request_log_row(
+        status=status,
+        cost_usd=float(cost_usd),
+        request_id=request_id_str,
+        litellm_call_id=litellm_call_str,
+        success_sample_rate=settings.gateway_request_log_success_sample_rate,
+        always_persist_non_success=settings.gateway_request_log_always_persist_non_success,
+        always_persist_cost_above_usd=settings.gateway_request_log_always_persist_cost_above_usd,
+    )
 
-        async with get_session_context() as session:
-            await RequestLogRepository(session).insert(
-                team_id=team_id,
-                user_id=user_id,
-                vkey_id=vkey_id,
-                team_snapshot=team_snapshot,
-                user_email_snapshot=user_email_snapshot,
-                vkey_name_snapshot=vkey_name_snapshot,
-                route_snapshot=route_snapshot,
-                capability=capability,
-                route_name=str(route_name) if route_name else None,
-                real_model=str(real_model) if real_model else None,
-                provider=str(provider) if provider else None,
-                status=status,
-                error_code=error_code,
-                error_message=error_message,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cached_tokens=cached_tokens,
-                cost_usd=cost_usd,
-                latency_ms=latency_ms,
-                ttfb_ms=ttfb_ms if isinstance(ttfb_ms, int) else None,
-                cache_hit=cache_hit,
-                fallback_chain=fallback_chain,
-                request_id=str(request_id) if request_id else None,
-                prompt_hash=str(prompt_hash) if prompt_hash else None,
-                prompt_redacted=prompt_redacted,
-                response_summary=response_summary,
-                metadata_extra=metadata_extra,
+    # ---------- 写 DB ----------
+    if persist_row:
+        try:
+            from domains.gateway.infrastructure.repositories.request_log_repository import (
+                RequestLogRepository,
             )
-    except Exception as exc:  # pragma: no cover
-        logger.warning("Failed to persist gateway request log: %s", exc)
+
+            async with get_session_context() as session:
+                await RequestLogRepository(session).insert(
+                    team_id=team_id,
+                    user_id=user_id,
+                    vkey_id=vkey_id,
+                    team_snapshot=team_snapshot,
+                    user_email_snapshot=user_email_snapshot,
+                    vkey_name_snapshot=vkey_name_snapshot,
+                    route_snapshot=route_snapshot,
+                    capability=capability,
+                    route_name=str(route_name) if route_name else None,
+                    real_model=str(real_model) if real_model else None,
+                    provider=str(provider) if provider else None,
+                    status=status,
+                    error_code=error_code,
+                    error_message=error_message,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cached_tokens=cached_tokens,
+                    cost_usd=cost_usd,
+                    latency_ms=latency_ms,
+                    ttfb_ms=ttfb_ms if isinstance(ttfb_ms, int) else None,
+                    cache_hit=cache_hit,
+                    fallback_chain=fallback_chain,
+                    request_id=request_id_str,
+                    prompt_hash=str(prompt_hash) if prompt_hash else None,
+                    prompt_redacted=prompt_redacted,
+                    response_summary=response_summary,
+                    metadata_extra=metadata_extra,
+                )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to persist gateway request log: %s", exc)
 
     # ---------- 写 Redis 实时计数 ----------
     with suppress(Exception):

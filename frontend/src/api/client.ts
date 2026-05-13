@@ -352,6 +352,11 @@ class ApiClient {
       headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
+    const teamId = getCurrentTeamId()
+    if (teamId && !headers['X-Team-Id']) {
+      headers['X-Team-Id'] = teamId
+    }
+
     try {
       const response = await fetch(url, {
         method: 'POST',

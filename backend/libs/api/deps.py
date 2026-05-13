@@ -32,6 +32,7 @@ from domains.agent.application.stats_service import StatsService
 from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application import UserUseCase
 from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db
@@ -133,11 +134,13 @@ async def get_chat_service(
 ) -> ChatUseCase:
     """获取对话服务"""
     checkpointer = getattr(request.app.state, "checkpointer", None)
+    catalog = get_model_catalog_adapter(db)
     return ChatUseCase(
         db,
         session_use_case=session_service,
         session_use_case_factory=SessionUseCase,
         checkpointer=checkpointer,
+        model_catalog=catalog,
     )
 
 
@@ -181,7 +184,8 @@ async def get_video_task_service(
 
 async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:
     """获取产品信息工作流服务"""
-    return ProductInfoUseCase(db)
+    catalog = get_model_catalog_adapter(db)
+    return ProductInfoUseCase(db, catalog=catalog)
 
 
 async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTaskUseCase:
@@ -202,4 +206,4 @@ async def get_product_info_prompt_service(db: DbSession) -> ProductInfoPromptTem
 
 async def get_user_model_service(db: DbSession) -> UserModelUseCase:
     """获取用户模型管理服务"""
-    return UserModelUseCase(db)
+    return UserModelUseCase(db, catalog=get_model_catalog_adapter(db))

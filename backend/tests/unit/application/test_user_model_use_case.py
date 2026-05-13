@@ -129,7 +129,14 @@ class TestUserModelUseCaseCRUD:
         self.user = user
         self.ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(self.ctx)
-        self.uc = _uc_module().UserModelUseCase(db_session)
+        from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        self.uc = _uc_module().UserModelUseCase(
+            db_session, catalog=get_model_catalog_adapter(db_session)
+        )
         yield
         clear_permission_context()
 
@@ -295,7 +302,14 @@ class TestResolveModel:
         self.user = user
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
-        self.uc = _uc_module().UserModelUseCase(db_session)
+        from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        self.uc = _uc_module().UserModelUseCase(
+            db_session, catalog=get_model_catalog_adapter(db_session)
+        )
         yield
         clear_permission_context()
 
@@ -343,7 +357,7 @@ class TestResolveModel:
 
 @pytest.mark.unit
 class TestGetAvailableModels:
-    """get_available_models 系统模型列表"""
+    """list_available_system_models 系统模型列表"""
 
     @pytest.fixture(autouse=True)
     async def _setup(self, db_session):
@@ -357,23 +371,32 @@ class TestGetAvailableModels:
         await db_session.refresh(user)
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
-        self.uc = _uc_module().UserModelUseCase(db_session)
+        from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        self.uc = _uc_module().UserModelUseCase(
+            db_session, catalog=get_model_catalog_adapter(db_session)
+        )
         yield
         clear_permission_context()
 
-    def test_returns_list(self):
+    @pytest.mark.asyncio
+    async def test_returns_list(self):
         """返回系统模型列表"""
-        models = self.uc.get_available_models()
+        models = await self.uc.list_available_system_models()
         assert isinstance(models, list)
         for m in models:
             assert m["is_system"] is True
             assert "id" in m
             assert "model_types" in m
 
-    def test_filter_by_type(self):
+    @pytest.mark.asyncio
+    async def test_filter_by_type(self):
         """按类型过滤系统模型"""
-        all_models = self.uc.get_available_models()
-        text_models = self.uc.get_available_models(model_type="text")
+        all_models = await self.uc.list_available_system_models()
+        text_models = await self.uc.list_available_system_models(model_type="text")
         assert len(text_models) <= len(all_models)
         for m in text_models:
             assert "text" in m["model_types"]

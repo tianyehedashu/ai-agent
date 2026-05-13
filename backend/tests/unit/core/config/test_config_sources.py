@@ -129,4 +129,4 @@ class TestConfigSourceInterface:
     def test_is_abstract(self):
         """测试: ConfigSource 是抽象类"""
         with pytest.raises(TypeError):
-            ConfigSource()  # type: ignore
+            ConfigSource()  # pylint: disable=abstract-class-instantiated

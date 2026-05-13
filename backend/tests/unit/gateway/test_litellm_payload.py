@@ -1,4 +1,4 @@
-"""``libs.gateway.litellm_payload`` 拆分逻辑单测。"""
+"""``domains.gateway.application.litellm_bridge_payload`` 拆分逻辑单测。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from libs.gateway.litellm_payload import (
+from domains.gateway.application.litellm_bridge_payload import (
     split_chat_completion_for_bridge,
     split_embedding_for_bridge,
 )

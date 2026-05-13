@@ -121,7 +121,7 @@ lint-fix: ## 运行代码检查并自动修复
 
 lint-pylint: ## 运行 Pylint 检查
 	@echo 运行 Pylint 检查...
-	-$(UV) run pylint domains libs bootstrap scripts utils exceptions evaluation --output-format=parseable
+	-$(UV) run pylint domains libs bootstrap scripts utils evaluation --output-format=parseable
 
 format: ## 格式化代码
 	@echo 格式化代码...

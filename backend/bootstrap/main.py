@@ -43,6 +43,8 @@ from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
+from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+from domains.gateway.infrastructure.router_singleton import reload_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
@@ -54,7 +56,7 @@ from domains.studio.presentation.quality_router import router as quality_router
 from domains.studio.presentation.router import router as studio_router
 from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
 from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
-from libs.db.database import init_db
+from libs.db.database import get_session_context, init_db
 from libs.db.redis import close_redis, init_redis
 from libs.exceptions import (
     AIAgentError,
@@ -134,6 +136,15 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
 
     # 初始化数据库
     await init_db()
+
+    if settings.gateway_catalog_sync_on_startup:
+        try:
+            async with get_session_context() as session:
+                await sync_app_config_gateway_catalog(session)
+                await session.commit()
+                await reload_router(session)
+        except Exception as exc:
+            logger.warning("Gateway catalog startup sync failed: %s", exc, exc_info=True)
 
     # 初始化 Redis
     try:
@@ -253,6 +264,11 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
 
     # 关闭时
     await shutdown_app_background_tasks(_fastapi_app)
+    from domains.gateway.application.proxy_use_case import (  # pylint: disable=import-outside-toplevel
+        shutdown_proxy_deferred_tasks,
+    )
+
+    await shutdown_proxy_deferred_tasks()
 
     # 停止沙箱管理器（会清理所有沙箱容器）
     if hasattr(_fastapi_app.state, "sandbox_manager"):

@@ -48,3 +48,24 @@ async def test_completed_task_removed_from_set() -> None:
             break
         await asyncio.sleep(0)
     assert len(app.state.background_tasks) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_shutdown_proxy_deferred_tasks() -> None:
+    from domains.gateway.application.proxy_use_case import (
+        register_proxy_deferred_task,
+        shutdown_proxy_deferred_tasks,
+    )
+
+    gate = asyncio.Event()
+
+    async def long_running() -> None:
+        gate.set()
+        await asyncio.sleep(3600)
+
+    task = asyncio.create_task(long_running())
+    register_proxy_deferred_task(task)
+    await asyncio.wait_for(gate.wait(), timeout=2.0)
+    await shutdown_proxy_deferred_tasks()
+    assert task.cancelled()

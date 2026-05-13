@@ -4,6 +4,7 @@ Gateway Background Jobs
 - gateway_rollup_job: 5 分钟一次，把 GatewayRequestLog 聚合写入 gateway_metrics_hourly
 - gateway_alert_job: 1 分钟一次，扫规则、写事件、发 webhook + 站内通知
 - gateway_partition_job: 每天一次，确保下两个月的分区表存在
+- gateway_request_log_retention_loop: 按配置间隔删除早于保留期的整月分区
 """
 
 from __future__ import annotations
@@ -11,8 +12,10 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import re
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from sqlalchemy import func, select, text
 
 from bootstrap.config import settings
@@ -24,6 +27,7 @@ from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.metrics_rollup_repository import (
     GatewayMetricsRollupRepository,
 )
+from libs.background_tasks import register_app_background_task
 from libs.db.database import get_session_context
 from utils.logging import get_logger
 
@@ -50,8 +54,6 @@ async def gateway_rollup_loop() -> None:
                 repo = GatewayMetricsRollupRepository(session)
                 count = await repo.rollup_window(since, until)
                 logger.debug("gateway_rollup_job: upserted %d rows", count)
-        except asyncio.CancelledError:
-            raise
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_rollup_job error: %s", exc)
         await asyncio.sleep(interval)
@@ -93,10 +95,75 @@ async def gateway_partition_loop() -> None:
                         day=1
                     )
                     await _ensure_partition(session, target.year, target.month)
-        except asyncio.CancelledError:
-            raise
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_partition_job error: %s", exc)
+        await asyncio.sleep(interval)
+
+
+_PARTITION_NAME = re.compile(r"^gateway_request_logs_y(\d{4})m(\d{2})$")
+_SAFE_SQL_IDENT = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _month_partition_upper_bound(year: int, month: int) -> datetime:
+    if month == 12:
+        return datetime(year + 1, 1, 1, tzinfo=UTC)
+    return datetime(year, month + 1, 1, tzinfo=UTC)
+
+
+async def _drop_expired_request_log_partitions(
+    session: AsyncSession, retention_days: int
+) -> int:
+    """删除「分区上界」不晚于 cutoff 的整月子分区（数据全部早于保留窗口）。"""
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+    stmt = text(
+        """
+        SELECT n.nspname AS schema_name, c.relname AS partition_name
+        FROM pg_inherits i
+        JOIN pg_class c ON c.oid = i.inhrelid
+        JOIN pg_class p ON p.oid = i.inhparent
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE p.relname = 'gateway_request_logs'
+        """
+    )
+    rows = (await session.execute(stmt)).mappings().all()
+    dropped = 0
+    for row in rows:
+        schema_name = str(row["schema_name"])
+        partition_name = str(row["partition_name"])
+        if not _SAFE_SQL_IDENT.match(schema_name):
+            continue
+        match = _PARTITION_NAME.match(partition_name)
+        if not match:
+            continue
+        year, month = int(match.group(1)), int(match.group(2))
+        upper = _month_partition_upper_bound(year, month)
+        if upper > cutoff:
+            continue
+        await session.execute(
+            text(f'DROP TABLE IF EXISTS "{schema_name}"."{partition_name}"')
+        )
+        dropped += 1
+        logger.info(
+            "gateway_request_log_retention: dropped partition %s.%s (upper=%s <= cutoff=%s)",
+            schema_name,
+            partition_name,
+            upper.isoformat(),
+            cutoff.isoformat(),
+        )
+    return dropped
+
+
+async def gateway_request_log_retention_loop() -> None:
+    """按 ``gateway_request_log_retention_interval_seconds`` 清理过期明细分区。"""
+    interval = settings.gateway_request_log_retention_interval_seconds
+    while True:
+        try:
+            retention = settings.gateway_request_log_retention_days
+            if retention is not None and retention > 0:
+                async with get_session_context() as session:
+                    await _drop_expired_request_log_partitions(session, retention)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("gateway_request_log_retention_loop error: %s", exc)
         await asyncio.sleep(interval)
 
 
@@ -167,8 +234,6 @@ async def _evaluate_rule(
 
 async def _send_webhook(url: str, payload: dict[str, Any]) -> None:
     try:
-        import httpx
-
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(url, json=payload)
     except Exception as exc:  # pragma: no cover
@@ -227,8 +292,6 @@ async def gateway_alert_loop() -> None:
                         await _send_webhook(channels["webhook"], payload)
                     event.notified = True
                 await session.commit()
-        except asyncio.CancelledError:
-            raise
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_alert_job error: %s", exc)
         await asyncio.sleep(interval)
@@ -236,16 +299,18 @@ async def gateway_alert_loop() -> None:
 
 def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
-    from libs.background_tasks import register_app_background_task
-
     register_app_background_task(app, asyncio.create_task(gateway_rollup_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
+    register_app_background_task(
+        app, asyncio.create_task(gateway_request_log_retention_loop())
+    )
     register_app_background_task(app, asyncio.create_task(gateway_alert_loop()))
 
 
 __all__ = [
     "gateway_alert_loop",
     "gateway_partition_loop",
+    "gateway_request_log_retention_loop",
     "gateway_rollup_loop",
     "schedule_gateway_jobs",
 ]

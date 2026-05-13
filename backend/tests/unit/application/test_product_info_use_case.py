@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from domains.agent.application.product_info_use_case import ProductInfoUseCase
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.agent.domain.product_info.constants import (
     CAPABILITY_IDS,
     CAPABILITY_ORDER,
@@ -63,7 +64,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -82,7 +83,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -105,7 +106,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             with pytest.raises(NotFoundError):
                 await use_case.get_job(uuid.uuid4())
         finally:
@@ -117,7 +118,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -136,7 +137,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -154,7 +155,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -177,7 +178,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -208,7 +209,7 @@ class TestProductInfoUseCase:
 
     @pytest.mark.asyncio
     async def test_get_default_prompt(self, db_session):
-        use_case = ProductInfoUseCase(db_session)
+        use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
         content = use_case.get_default_prompt("product_link_analysis")
         assert isinstance(content, str)
         assert len(content) > 0
@@ -225,7 +226,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,
@@ -298,7 +299,7 @@ class TestProductInfoUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = ProductInfoUseCase(db_session)
+            use_case = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 user_id=user.id,

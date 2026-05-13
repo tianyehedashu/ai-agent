@@ -69,6 +69,22 @@ class ProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_system_by_provider_and_name(
+        self, provider: str, name: str
+    ) -> ProviderCredential | None:
+        stmt = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.scope == "system",
+                ProviderCredential.scope_id.is_(None),
+                ProviderCredential.provider == provider,
+                ProviderCredential.name == name,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         *,

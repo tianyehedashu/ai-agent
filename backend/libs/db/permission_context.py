@@ -20,7 +20,10 @@ class PermissionContext:
         user_id: 注册用户 ID（如果是注册用户）
         anonymous_user_id: 匿名用户 ID（如果是匿名用户）
         role: 用户角色（admin, user, viewer）
-        team_id: 当前团队 ID（Gateway 域使用，向后兼容可选）
+        team_id: 当前 **工作区租户**（Tenancy ``Team.id``），通常由 ``X-Team-Id`` 与
+            ``TenancyManagementTeamResolveUseCase`` 写入；可为 **personal**（``kind=personal``）
+            或 **shared** 团队。内部 Gateway 桥接的计费 ``team_id`` 可与本字段对齐
+            （见 ``domains.gateway.application.bridge_attribution``）。**非**管理面 ``usage_aggregation`` 枚举。
         team_role: 当前团队角色（owner/admin/member），仅 team_id 非空时有意义
     """
 

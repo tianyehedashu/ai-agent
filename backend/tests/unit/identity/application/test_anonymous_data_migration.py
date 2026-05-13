@@ -211,7 +211,8 @@ class TestUserManagerMigrationHooks:
                 return_value=MigrationResult(sessions=1, video_tasks=2),
             ) as mock_migrate,
             patch(
-                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                "domains.identity.infrastructure.user_manager."
+                "provision_default_tenant_for_new_user",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_prov,
@@ -242,7 +243,8 @@ class TestUserManagerMigrationHooks:
                 new_callable=AsyncMock,
             ) as mock_migrate,
             patch(
-                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                "domains.identity.infrastructure.user_manager."
+                "provision_default_tenant_for_new_user",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_prov,
@@ -267,7 +269,8 @@ class TestUserManagerMigrationHooks:
                 new_callable=AsyncMock,
             ) as mock_migrate,
             patch(
-                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                "domains.identity.infrastructure.user_manager."
+                "provision_default_tenant_for_new_user",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_prov,
@@ -298,7 +301,8 @@ class TestUserManagerMigrationHooks:
                 return_value=MigrationResult(sessions=2, video_tasks=0),
             ) as mock_migrate,
             patch(
-                "domains.identity.infrastructure.user_manager.provision_default_tenant_for_new_user",
+                "domains.identity.infrastructure.user_manager."
+                "provision_default_tenant_for_new_user",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_prov,

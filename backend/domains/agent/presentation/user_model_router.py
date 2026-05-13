@@ -101,10 +101,10 @@ async def list_available_models(
     无认证时仅返回系统模型，不抛 401，便于产品信息等场景展示模型选择器。
     返回 default_for_text / default_for_vision 供前端展示「默认（模型名）」。
     """
-    system_models = service.get_available_models(model_type=model_type)
-    default_for_text = service.get_default_for_type("text")
-    default_for_vision = service.get_default_for_type("image")
-    default_for_image_gen = service.get_default_for_type("image_gen")
+    system_models = await service.list_available_system_models(model_type=model_type)
+    default_for_text = await service.get_default_for_type_async("text")
+    default_for_vision = await service.get_default_for_type_async("image")
+    default_for_image_gen = await service.get_default_for_type_async("image_gen")
     if current_user is None:
         return {
             "system_models": system_models,

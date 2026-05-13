@@ -118,3 +118,30 @@ class TestVirtualKeyRepository:
 
         items_with_sys = await repo.list_by_team(team.id, include_system=True)
         assert any(v.is_system for v in items_with_sys)
+
+    @pytest.mark.asyncio
+    async def test_remove_model_names_from_allowed_lists(self, db_session, test_user):
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        repo = VirtualKeyRepository(db_session)
+        _, k1, h1 = generate_vkey()
+        await repo.create(
+            team_id=team.id,
+            created_by_user_id=test_user.id,
+            name="prune-me",
+            description=None,
+            key_id_str=k1,
+            key_hash=h1,
+            encrypted_key="enc",
+            allowed_models=["gone-model", "keep-model"],
+            allowed_capabilities=[],
+            rpm_limit=None,
+            tpm_limit=None,
+            store_full_messages=False,
+            guardrail_enabled=False,
+        )
+        await db_session.flush()
+        n = await repo.remove_model_names_from_all_allowed_lists(frozenset({"gone-model"}))
+        assert n == 1
+        found = await repo.get_by_hash(h1)
+        assert found is not None
+        assert found.allowed_models == ["keep-model"]

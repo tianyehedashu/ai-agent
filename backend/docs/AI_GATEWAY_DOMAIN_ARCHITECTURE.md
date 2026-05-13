@@ -1,6 +1,6 @@
 # AI Gateway 领域架构与工程实践
 
-> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`libs/gateway`、OpenAI 兼容入口、管理 API、内部 LLM 桥接及相关前端。  
+> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、OpenAI 兼容入口、管理 API、内部 LLM 桥接及相关前端。  
 > **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)。
 
 ---
@@ -11,7 +11,7 @@
 |------|------|
 | **业务目标** | 统一多模型调用入口（LiteLLM Router）、团队/虚拟 Key、凭据池、预算与限流、可观测（日志/告警/rollup）。 |
 | **边界** | **Inbound**：`/v1/*`（Bearer `sk-gw-*` 或带 scope 的 `sk-*`）、`/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
-| **与 Agent 域关系** | Agent 通过 `LLMGateway` + `GatewayProxyProtocol`（`libs/gateway/protocol.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
+| **与 Agent 域关系** | Agent 通过 `LLMGateway` + `GatewayProxyProtocol`（`domains/gateway/application/ports.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
 
 ---
 
@@ -38,6 +38,12 @@ domains/gateway/
 │   └── deps.py                 # 鉴权：GatewayAccessUseCase
 ├── application/
 │   ├── gateway_access_use_case.py   # Bearer vkey、代理团队解析、vkey touch；成员角色经 MembershipPort
+│   ├── ports.py                     # GatewayProxyProtocol、GatewayCallContext（跨域依赖倒置）
+│   ├── gateway_proxy_factory.py     # get_gateway_proxy() → GatewayBridge 单例
+│   ├── internal_bridge_actor.py     # resolve_internal_gateway_user_id / team_id
+│   ├── bridge_attribution.py        # GatewayBridgeAttribution（内部桥接计费工作区）
+│   ├── litellm_bridge_payload.py    # LiteLLM kwargs → 桥接参数拆分
+│   ├── internal_bridge.py           # GatewayBridge 实现
 │   ├── management/                # 管理面读写分包（与 CQRS 读/写侧对应）
 │   │   ├── reads.py               # GatewayManagementReadService
 │   │   ├── writes.py              # GatewayManagementWriteService
@@ -48,9 +54,7 @@ domains/gateway/
 └── infrastructure/             # ORM、仓储、Router 单例、回调、护栏
     └── models/__init__.py        # 再导出 Team / TeamMember（与 Alembic 聚合 import），权威定义在 tenancy
 
-libs/gateway/protocol.py          # GatewayProxyProtocol（agent 域依赖倒置）
-libs/gateway/factory.py           # get_gateway_proxy()，集中获取桥接实现
-libs/gateway/internal_actor.py    # resolve_internal_gateway_user_id()
+domains/gateway/domain/usage_read_model.py  # UsageAggregation（管理面日志/大盘读模型）
 domains/agent/infrastructure/llm/gateway.py   # LLMGateway
 ```
 
@@ -142,6 +146,31 @@ flowchart TB
 
 RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseCase`**。
 
+### 4.1 域划分、术语与用量读模型（`UsageAggregation`）
+
+| 域 / 层 | 职责 | 与本节相关类型 |
+|---------|------|----------------|
+| **Tenancy** | `Team`（`kind=personal|shared`）、成员、`ManagementTeamContext`；**personal team 仍是 `Team` 表的一行**，用户通过成员关系属于该工作区。 | `Team.id` 可作为当前工作区 ID。 |
+| **Gateway 管理读** | 请求日志列表/详情/大盘摘要的**切片维度**；**不**改变 Tenancy 实体。 | `UsageAggregation`（`domains/gateway/domain/usage_read_model.py`）。 |
+| **Identity** | JWT 主体 `user_id`。 | 与 `usage_aggregation=user` 聚合键一致。 |
+| **Gateway 应用（内部桥接）** | `GatewayCallContext`、`GatewayBridgeAttribution`：内部桥接的 **Actor** 与 **计费工作区**（日志 `team_id`）。 | 与 HTTP `usage_aggregation` **正交**（桥接不携带该查询参数）。 |
+
+**`usage_aggregation`（查询参数，默认 `workspace`）**
+
+| 取值 | 含义 |
+|------|------|
+| `workspace` | 按 **`X-Team-Id` → CurrentTeam.team_id`** 过滤/聚合；该 ID 可为 **personal** 或 **shared** 工作区。 |
+| `user` | 按当前登录 **`user_id`** 跨工作区聚合/过滤（与日志行 `user_id` 对齐）；**不**表示「无团队用户」。 |
+
+**与预算 `BudgetUpsert.scope`（`system|team|key|user`）正交**：后者表示预算作用域类型，禁止与 `UsageAggregation` 混用同一组字面量。
+
+**破坏性变更（已无兼容）**：`GET /logs`、`GET /logs/{log_id}`、`GET /dashboard/summary` **已移除**查询参数 `scope=team|personal`，客户端必须改用 **`usage_aggregation=workspace|user`**。
+
+### 4.2 仪表盘与明细日志的数据源
+
+- **`GET /dashboard/summary`**：聚合自 **`gateway_request_logs`**（PostgreSQL），受成功请求采样配置 `gateway_request_log_success_sample_rate` 影响（见 `domains/gateway/infrastructure/gateway_log_sampling.py` 与 `custom_logger` 注释）。
+- **Redis 计数**（`gateway:metrics:*`）：CustomLogger 中可与 DB 写入路径不同步；**管理面大盘以 DB 为准**。
+
 ---
 
 ## 5. 数据与持久化要点
@@ -176,7 +205,7 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ### 6.3 前后端契约
 
-- `frontend/src/api/gateway.ts` 与后端 `schemas/common.py` 对齐。
+- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
 
 ### 6.4 已知风险

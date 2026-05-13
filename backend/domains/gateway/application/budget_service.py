@@ -159,7 +159,7 @@ class BudgetService:
         used_tokens = int(values[1].decode() if values[1] else "0")
         used_requests = int(values[2].decode() if values[2] else "0")
 
-        if limit_usd is not None and limit_usd > 0 and used_cost >= limit_usd:
+        if limit_usd is not None and 0 < limit_usd <= used_cost:
             return BudgetCheckResult(
                 allowed=False,
                 reason="usd",
@@ -167,7 +167,7 @@ class BudgetService:
                 used_tokens=used_tokens,
                 used_requests=used_requests,
             )
-        if limit_tokens and limit_tokens > 0 and used_tokens >= limit_tokens:
+        if limit_tokens and 0 < limit_tokens <= used_tokens:
             return BudgetCheckResult(
                 allowed=False,
                 reason="tokens",
@@ -175,11 +175,7 @@ class BudgetService:
                 used_tokens=used_tokens,
                 used_requests=used_requests,
             )
-        if (
-            limit_requests
-            and limit_requests > 0
-            and used_requests >= limit_requests
-        ):
+        if limit_requests and 0 < limit_requests <= used_requests:
             return BudgetCheckResult(
                 allowed=False,
                 reason="requests",

@@ -163,14 +163,20 @@ export interface DashboardSummary {
   total_requests: number
   total_input_tokens: number
   total_output_tokens: number
-  total_cost_usd: number
+  /** 后端 Decimal 序列化常为 JSON 字符串 */
+  total_cost_usd: number | string
   success_count: number
   failure_count: number
   avg_latency_ms: number
   success_rate: number
 }
 
-export type GatewayUsageScope = 'personal' | 'team'
+/**
+ * 管理面日志/大盘用量切片（与 Tenancy Team.kind、预算 BudgetUpsert.scope 无关）。
+ * - workspace：按当前 X-Team-Id 工作区（含 personal/shared）过滤/聚合。
+ * - user：按当前登录用户跨工作区聚合。
+ */
+export type GatewayUsageAggregation = 'workspace' | 'user'
 
 export interface GatewayLogItem {
   id: string
@@ -276,7 +282,8 @@ export const gatewayApi = {
   deleteBudget: (id: string) => apiClient.delete<unknown>(`${base}/budgets/${id}`),
 
   listLogs: (params?: {
-    scope?: GatewayUsageScope
+    /** 默认 workspace */
+    usage_aggregation?: GatewayUsageAggregation
     page?: number
     page_size?: number
     capability?: string
@@ -291,10 +298,10 @@ export const gatewayApi = {
       page: number
       page_size: number
     }>(`${base}/logs`, params),
-  getLog: (id: string, params?: { scope?: GatewayUsageScope }) =>
+  getLog: (id: string, params?: { usage_aggregation?: GatewayUsageAggregation }) =>
     apiClient.get<GatewayLogItem>(`${base}/logs/${id}`, params),
 
-  dashboard: (params?: { days?: number; scope?: GatewayUsageScope }) =>
+  dashboard: (params?: { days?: number; usage_aggregation?: GatewayUsageAggregation }) =>
     apiClient.get<DashboardSummary>(`${base}/dashboard/summary`, params),
 
   listAlerts: () => apiClient.get<AlertRule[]>(`${base}/alerts/rules`),

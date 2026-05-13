@@ -10,6 +10,7 @@ import contextlib
 import logging
 import os
 from pathlib import Path
+import subprocess
 import sys
 from urllib.parse import urlparse
 import uuid
@@ -39,6 +40,11 @@ warnings.filterwarnings(
 # 这些警告在 Python 解释器关闭时产生，pytest 的过滤器无法捕获
 if "PYTHONWARNINGS" not in os.environ:
     os.environ["PYTHONWARNINGS"] = "ignore::RuntimeWarning,ignore::UserWarning"
+
+
+# LiteLLM / Gateway 异步回调与 db_session 竞态：原为固定 0.35s；流式用例需要短 grace。
+# 可通过环境变量 PYTEST_CLIENT_TEARDOWN_SLEEP（秒）调大，例如 0.35。
+_CLIENT_TEARDOWN_SLEEP = float(os.environ.get("PYTEST_CLIENT_TEARDOWN_SLEEP", "0.15"))
 
 
 # 使用 pytest 的配置钩子进一步抑制警告
@@ -76,16 +82,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from bootstrap.config import settings
-from domains.agent.infrastructure.models.user_provider_config import (
-    UserProviderConfig,  # noqa: F401
-)
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
-from domains.identity.infrastructure.models.quota import (  # noqa: F401
-    QuotaUsageLog,
-    UserQuota,
-)
 from domains.identity.infrastructure.models.user import User
 from libs.db.database import Base
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 
 # pylint: enable=wrong-import-position
 
@@ -111,8 +115,6 @@ def _run_test_db_migrations() -> None:
 
     使用子进程执行，避免与 pytest-asyncio 的事件循环冲突。
     """
-    import subprocess
-
     backend_dir = Path(__file__).resolve().parent.parent
     if not (backend_dir / "alembic.ini").is_file():
         return
@@ -125,6 +127,7 @@ def _run_test_db_migrations() -> None:
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
     if result.returncode != 0:
         logging.getLogger(__name__).warning("Test DB migration failed (stderr): %s", result.stderr)
@@ -352,7 +355,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     from unittest.mock import AsyncMock, MagicMock, patch
 
     # Mock init_db 和 init_redis 以避免在测试时初始化
-    # 同时 mock get_session_factory 和 get_async_session 以支持直接调用
+    # get_session_factory / get_async_session 必须仍 yield 同一 db_session，
+    # 否则 ChatUseCase 等经 get_session_context 的路径看不到 get_db 未提交的数据（会 422）。
     mock_factory = MagicMock()
     mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -362,8 +366,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         patch("libs.db.redis.init_redis"),
         patch("libs.db.database.get_session_factory", return_value=mock_factory),
         patch("libs.db.database.get_async_session", new=mock_factory),
-        # 在测试环境中禁用开发模式的匿名用户功能，确保认证测试正常工作
-        # patch app_env 属性，这样 is_development property 会返回 False
         patch("bootstrap.config.settings.app_env", "production"),
     ):
         # 这些导入必须在 patch 生效后才能执行
@@ -374,9 +376,18 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
         _apply_db_overrides(app, db_session)
 
+        from domains.gateway.application.config_catalog_sync import (
+            sync_app_config_gateway_catalog,
+        )
+        from domains.gateway.infrastructure.router_singleton import reload_router
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        with contextlib.suppress(Exception):
+            await reload_router(db_session)
+
         # 确保 checkpointer 在测试环境中已初始化
         if not hasattr(app.state, "checkpointer"):
-            # 在测试环境中使用 MemorySaver（更快，不需要数据库表）
             test_checkpointer = LangGraphCheckpointer(storage_type="memory")
             await test_checkpointer.setup()
             app.state.checkpointer = test_checkpointer
@@ -387,6 +398,14 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         ) as ac:
             yield ac
 
+        # LiteLLM / Gateway 异步 success 回调可能仍占用 db_session；先收口代理 fire-and-forget 任务。
+        from domains.gateway.application.proxy_use_case import shutdown_proxy_deferred_tasks
+
+        await shutdown_proxy_deferred_tasks()
+
+        # LiteLLM / Gateway 异步 success 回调可能仍占用 db_session；短等待再关 fixture，避免 teardown 上
+        # asyncpg "another operation is in progress"（见 test_chat_api 流式用例）。时长见 PYTEST_CLIENT_TEARDOWN_SLEEP。
+        await asyncio.sleep(_CLIENT_TEARDOWN_SLEEP)
         from libs.background_tasks import shutdown_app_background_tasks
 
         await shutdown_app_background_tasks(app)
@@ -400,8 +419,6 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
     # pylint: disable=import-outside-toplevel
     from unittest.mock import AsyncMock, MagicMock, patch
 
-    # Mock init_db 和 init_redis 以避免在测试时初始化
-    # 同时 mock get_session_factory 和 get_async_session 以支持直接调用
     mock_factory = MagicMock()
     mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -411,7 +428,6 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         patch("libs.db.redis.init_redis"),
         patch("libs.db.database.get_session_factory", return_value=mock_factory),
         patch("libs.db.database.get_async_session", new=mock_factory),
-        # 保持开发模式以启用匿名用户功能
         patch("bootstrap.config.settings.app_env", "development"),
     ):
         # 这些导入必须在 patch 生效后才能执行
@@ -422,9 +438,17 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
 
         _apply_db_overrides(app, db_session)
 
-        # 确保 checkpointer 在测试环境中已初始化
+        from domains.gateway.application.config_catalog_sync import (
+            sync_app_config_gateway_catalog,
+        )
+        from domains.gateway.infrastructure.router_singleton import reload_router
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        with contextlib.suppress(Exception):
+            await reload_router(db_session)
+
         if not hasattr(app.state, "checkpointer"):
-            # 在测试环境中使用 MemorySaver（更快，不需要数据库表）
             test_checkpointer = LangGraphCheckpointer(storage_type="memory")
             await test_checkpointer.setup()
             app.state.checkpointer = test_checkpointer
@@ -435,6 +459,12 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
+        from domains.gateway.application.proxy_use_case import shutdown_proxy_deferred_tasks
+
+        await shutdown_proxy_deferred_tasks()
+
+        # 与 client fixture 相同：短 grace + 关闭后台任务（见 PYTEST_CLIENT_TEARDOWN_SLEEP）。
+        await asyncio.sleep(_CLIENT_TEARDOWN_SLEEP)
         from libs.background_tasks import shutdown_app_background_tasks
 
         await shutdown_app_background_tasks(app)
@@ -494,12 +524,6 @@ async def admin_headers(admin_user: User, db_session: AsyncSession) -> dict[str,
 @pytest_asyncio.fixture
 async def permission_context(test_user: User):
     """权限上下文 fixture - 为测试用户设置权限上下文"""
-    from libs.db.permission_context import (
-        PermissionContext,
-        clear_permission_context,
-        set_permission_context,
-    )
-
     ctx = PermissionContext(user_id=test_user.id, role="user")
     set_permission_context(ctx)
     try:

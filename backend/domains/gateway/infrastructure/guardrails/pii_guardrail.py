@@ -182,6 +182,10 @@ def _build_pii_guardrail_instance(
                 )
             return None
 
+        async def async_dataset_hook(self, *args: Any, **kwargs: Any) -> None:
+            """LiteLLM 基类抽象钩子；Gateway Guardrail 不使用 dataset。"""
+            return None
+
     return _Impl()
 
 

@@ -8,6 +8,18 @@ from bootstrap.config import settings
 from libs.db.permission_context import get_permission_context
 
 
+def resolve_internal_gateway_team_id() -> uuid.UUID | None:
+    """解析内部 Gateway 归账用 ``team_id``（与 ``X-Team-Id`` 注入的权限上下文对齐）。
+
+    若当前 ``PermissionContext`` 未带 ``team_id``（例如未解析团队头），返回 ``None``，
+    ``GatewayBridge`` 将回退为该用户的 personal team。
+    """
+    ctx = get_permission_context()
+    if ctx is not None and isinstance(ctx.team_id, uuid.UUID):
+        return ctx.team_id
+    return None
+
+
 def resolve_internal_gateway_user_id() -> uuid.UUID | None:
     """解析可写入 Gateway 归因的 user_id。
 
@@ -25,3 +37,9 @@ def resolve_internal_gateway_user_id() -> uuid.UUID | None:
     if delegate is not None:
         return delegate
     return None
+
+
+__all__ = [
+    "resolve_internal_gateway_team_id",
+    "resolve_internal_gateway_user_id",
+]

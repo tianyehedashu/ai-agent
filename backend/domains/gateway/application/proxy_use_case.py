@@ -14,12 +14,14 @@ ProxyUseCase - 网关调用编排
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from bootstrap.config import settings
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
     PERIOD_MONTHLY,
@@ -50,13 +52,47 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# 代理侧 fire-and-forget 任务（如非流式响应后的异步结算），不进入 app.state.background_tasks。
+_proxy_deferred_tasks: set[asyncio.Task[Any]] = set()
+
+
+def register_proxy_deferred_task(task: asyncio.Task[Any]) -> None:
+    """登记须在进程/测试 teardown 时取消并等待的代理后台任务。"""
+    _proxy_deferred_tasks.add(task)
+
+    def _done(t: asyncio.Task[Any]) -> None:
+        _proxy_deferred_tasks.discard(t)
+
+    task.add_done_callback(_done)
+
+
+async def shutdown_proxy_deferred_tasks() -> None:
+    """取消并等待所有已登记的代理延迟任务（用于应用关闭与 ASGI 测试 fixture 收尾）。"""
+    pending = [t for t in list(_proxy_deferred_tasks) if not t.done()]
+    for t in pending:
+        t.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
 
 BudgetReservation = tuple[str, str | None, str]
 
 
 @dataclass
 class ProxyContext:
-    """单次代理调用的上下文"""
+    """单次 OpenAI 兼容代理调用的上下文。
+
+    Attributes:
+        team_id: **计费工作区**（与日志 ``gateway_team_id``、``gateway_request_logs.team_id``
+            一致），为一次调用归属的租户键。
+        user_id: 触发用户（可为 None，视入口而定）。
+        vkey: 虚拟 Key 主体；内部 system vkey 走同字段。
+        capability: 网关能力枚举。
+        request_id: 关联 ID。
+        store_full_messages / guardrail_enabled: 日志与护栏策略。
+
+    与 ``BudgetUpsert.scope``（system/team/key/user）及 HTTP ``usage_aggregation`` 正交。
+    """
 
     team_id: uuid.UUID
     user_id: uuid.UUID | None
@@ -207,6 +243,8 @@ class ProxyUseCase:
         self, ctx: ProxyContext, model: str
     ) -> bool:
         """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
+        if settings.gateway_proxy_disable_internal_direct_litellm:
+            return False
         if ctx.vkey is None or not ctx.vkey.is_system:
             return False
 
@@ -444,15 +482,13 @@ def _adapt_response(
     tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
     cost = _calc_cost(response)
 
-    # 异步结算（不 await 失败也不影响响应）
-    import asyncio
-
+    # 异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。
     async def _settle() -> None:
         await _settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=1)
 
     with suppress(RuntimeError):
         settle_task = asyncio.create_task(_settle())
-        settle_task.add_done_callback(lambda _t: None)
+        register_proxy_deferred_task(settle_task)
     return data
 
 

@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
-from bootstrap.config_loader import ModelInfo, app_config
+from bootstrap.config_loader import app_config
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.repositories.user_model_repository import (
     UserModelRepository,
 )
+from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value, mask_api_key
 from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
@@ -23,6 +25,7 @@ from utils.logging import get_logger
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
     from domains.agent.infrastructure.models.user_model import UserModel
 
 logger = get_logger(__name__)
@@ -63,9 +66,10 @@ class ResolvedImageGenModel:
 class UserModelUseCase:
     """用户模型管理"""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, catalog: ModelCatalogPort) -> None:
         self.db = db
         self.repo = UserModelRepository(db)
+        self._catalog = catalog
         self._encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
 
     async def create(
@@ -166,7 +170,7 @@ class UserModelUseCase:
 
         litellm_model = self._build_litellm_model(model.provider, model.model_id)
 
-        gateway = LLMGateway(config=settings)
+        gateway = LLMGateway(config=settings, model_catalog=self._catalog)
 
         try:
             response = await gateway.chat(
@@ -231,52 +235,45 @@ class UserModelUseCase:
             is_system=False,
         )
 
-    def get_available_models(self, model_type: str | None = None) -> list[dict[str, Any]]:
-        """获取系统预置模型列表（从 app.toml 读取）"""
-        models = []
-        for m in app_config.models.available:
-            item = {
-                "id": m.id,
-                "display_name": m.name,
-                "provider": m.provider,
-                "model_id": m.id,
-                "model_types": self._infer_system_model_types(m),
-                "is_system": True,
-                "config": {
-                    "context_window": m.context_window,
-                    "supports_vision": m.supports_vision,
-                    "supports_tools": m.supports_tools,
-                    "supports_reasoning": m.supports_reasoning,
-                    "input_price": m.input_price,
-                    "output_price": m.output_price,
-                    "description": m.description,
-                },
-            }
-            if model_type and model_type not in item["model_types"]:
-                continue
-            models.append(item)
-        return models
+    async def list_available_system_models(
+        self, model_type: str | None = None
+    ) -> list[dict[str, Any]]:
+        """系统预置模型列表（以 Gateway 目录为准；匿名仅全局）。"""
+        team_id = resolve_internal_gateway_team_id()
+        return await self._catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type=model_type,
+        )
 
-    def get_default_for_type(self, model_type: str) -> dict[str, str] | None:
-        """获取指定类型的默认模型信息（用于前端展示「默认（模型名）」）。
-
-        model_type:
-        - 'text' -> default_model
-        - 'image' -> vision_model
-        - 'image_gen' -> 首个 image_gen 系统模型
-        """
+    async def get_default_for_type_async(self, model_type: str) -> dict[str, str] | None:
+        """获取指定类型的默认模型信息（用于前端展示「默认（模型名）」）。"""
+        team_id = resolve_internal_gateway_team_id()
         if model_type == "image":
             model_id = settings.vision_model
-        elif model_type == "image_gen":
-            available = self.get_available_models(model_type="image_gen")
+            items = await self._catalog.list_visible_models(
+                billing_team_id=team_id,
+                model_type="image",
+            )
+            for m in items:
+                if m["id"] == model_id:
+                    return {"id": model_id, "display_name": str(m["display_name"])}
+            return {"id": model_id, "display_name": model_id}
+        if model_type == "image_gen":
+            available = await self._catalog.list_visible_models(
+                billing_team_id=team_id,
+                model_type="image_gen",
+            )
             if available:
                 return {"id": available[0]["id"], "display_name": available[0]["display_name"]}
             return None
-        else:
-            model_id = settings.default_model
-        for m in self.get_available_models(model_type=model_type):
+        model_id = settings.default_model
+        items = await self._catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type="text",
+        )
+        for m in items:
             if m["id"] == model_id:
-                return {"id": model_id, "display_name": m["display_name"]}
+                return {"id": model_id, "display_name": str(m["display_name"])}
         return {"id": model_id, "display_name": model_id}
 
     async def resolve_image_gen_model(self, model_ref: str | None) -> ResolvedImageGenModel:
@@ -289,6 +286,11 @@ class UserModelUseCase:
         """
         if not model_ref:
             return ResolvedImageGenModel(provider="volcengine")
+
+        repo = GatewayModelRepository(self.db)
+        row = await repo.get_by_name(None, model_ref)
+        if row is not None and bool((row.tags or {}).get("supports_image_gen")):
+            return ResolvedImageGenModel(provider=row.provider, is_system=True)
 
         system_image_models = {
             m.id: m.provider
@@ -327,16 +329,6 @@ class UserModelUseCase:
             api_base=model.api_base,
             is_system=False,
         )
-
-    @staticmethod
-    def _infer_system_model_types(model_info: ModelInfo) -> list[str]:
-        """推断系统模型的类型标签"""
-        if getattr(model_info, "supports_image_gen", False):
-            return ["image_gen"]
-        types = ["text"]
-        if getattr(model_info, "supports_vision", False):
-            types.append("image")
-        return types
 
     @staticmethod
     def _is_system_model(model_ref: str) -> bool:

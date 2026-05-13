@@ -35,7 +35,7 @@ backend/
 │   ├── gateway/        # AI Gateway（/api/v1/gateway/*、/v1/* OpenAI 兼容）
 │   ├── studio/         # 工作台、工作流、代码质量
 │   └── evaluation/     # 评估
-├── libs/               # 与业务无关的基础设施（db、config、middleware、observability、gateway 协议等）
+├── libs/               # 与业务无关的基础设施（db、config、middleware、observability 等）
 ├── alembic/            # 数据库迁移
 ├── utils/              # 通用工具
 └── tests/              # 单元与集成测试
@@ -69,7 +69,7 @@ infrastructure 实现持久化与外部系统，由 application 调用；domain 
 | 记忆 | `domains/agent/infrastructure/memory/` |
 | 沙箱 | `domains/agent/infrastructure/sandbox/` |
 | AI Gateway（LiteLLM、团队、凭据、日志） | `domains/gateway/`；设计说明见 [AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./AI_GATEWAY_DOMAIN_ARCHITECTURE.md) |
-| Gateway 与 Agent 解耦协议 | `libs/gateway/protocol.py` |
+| Gateway 与 Agent 解耦协议 | `domains/gateway/application/ports.py`（`GatewayProxyProtocol` 等） |
 | 会话域 | `domains/session/` |
 | 身份域 | `domains/identity/` |
 | Studio | `domains/studio/` |

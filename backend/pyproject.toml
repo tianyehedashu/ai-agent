@@ -256,6 +256,9 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
+    # Windows 上 pytest 默认使用 %TEMP%/pytest-of-*，atexit 清理时易被杀毒/权限打断
+    #（PermissionError）；basetemp 放到仓库 build/（已在 .gitignore）可减少干扰
+    "--basetemp=build/pytest-basetemp",
     "-W", "ignore::RuntimeWarning",
     "-W", "ignore::UserWarning:pydantic",
     "-W", "ignore::DeprecationWarning:aiohttp",

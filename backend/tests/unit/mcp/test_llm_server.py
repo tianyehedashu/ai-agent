@@ -10,7 +10,7 @@ import pytest
 
 # 未安装 mcp 时跳过本模块；安装后预加载 mcp_server 子包，使 patch("...mcp_server.servers.llm_server...") 能解析
 pytest.importorskip("mcp")
-import domains.agent.infrastructure.mcp_server  # noqa: F401
+import domains.agent.infrastructure.mcp_server  # noqa: F401  # pylint: disable=unused-import,wrong-import-position
 
 
 class TestLLMServerTools:

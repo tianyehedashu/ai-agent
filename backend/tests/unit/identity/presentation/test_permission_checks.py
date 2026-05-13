@@ -264,7 +264,6 @@ class TestCheckSessionOwnership:
         """创建匿名用户"""
         if anonymous_id is None:
             anonymous_id = str(uuid.uuid4())
-        from domains.identity.domain.types import Principal
 
         principal_id = Principal.make_anonymous_id(anonymous_id)
         return CurrentUser(

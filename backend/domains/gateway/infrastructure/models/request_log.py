@@ -1,11 +1,13 @@
 """
 GatewayRequestLog - 调用日志（按月分区）
 
-每次 LiteLLM 调用都写一条。冗余存储 user/team/vkey/route 快照，避免删除/改名后失真。
+每次 LiteLLM 调用可写一条（成功请求受 ``gateway_request_log_success_sample_rate`` 等配置约束）。
+冗余存储 user/team/vkey/route 快照，避免删除/改名后失真。
 
 注意：
 - 主表 `gateway_request_logs` 由 alembic 创建为按 created_at 月分区的 PARTITION BY RANGE 表
 - 子分区表由 `gateway_partition_job` 后台任务每月维护
+- 早于 ``gateway_request_log_retention_days`` 的整月分区由 `gateway_request_log_retention_loop` 删除（若配置）
 """
 
 from __future__ import annotations

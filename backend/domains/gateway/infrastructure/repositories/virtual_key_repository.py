@@ -147,5 +147,25 @@ class VirtualKeyRepository:
             )
         )
 
+    async def remove_model_names_from_all_allowed_lists(self, model_names: frozenset[str]) -> int:
+        """从所有激活 vkey 的 ``allowed_models`` 中移除给定虚拟模型名（配置下线托管模型后修剪）。"""
+        if not model_names:
+            return 0
+        stmt = select(GatewayVirtualKey).where(GatewayVirtualKey.is_active.is_(True))
+        result = await self._session.execute(stmt)
+        keys = list(result.scalars().all())
+        changed = 0
+        for key in keys:
+            allowed = list(key.allowed_models or ())
+            if not allowed:
+                continue
+            new_allowed = [m for m in allowed if m not in model_names]
+            if new_allowed != allowed:
+                key.allowed_models = new_allowed
+                changed += 1
+        if changed:
+            await self._session.flush()
+        return changed
+
 
 __all__ = ["VirtualKeyRepository"]

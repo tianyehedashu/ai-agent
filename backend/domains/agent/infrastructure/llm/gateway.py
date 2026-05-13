@@ -16,7 +16,6 @@ from contextlib import suppress
 import json
 import os
 from typing import TYPE_CHECKING, Any
-import uuid
 
 import litellm  # pylint: disable=import-error
 from litellm import acompletion, aembedding  # pylint: disable=import-error
@@ -31,22 +30,24 @@ from domains.agent.infrastructure.llm.message_formatter import (
 )
 from domains.agent.infrastructure.llm.prompt_cache import get_prompt_cache_manager
 from domains.agent.infrastructure.llm.providers import get_provider
-from libs.config.interfaces import LLMConfigProtocol
-from libs.gateway.factory import get_gateway_proxy
-from libs.gateway.internal_actor import resolve_internal_gateway_user_id
-from libs.gateway.litellm_payload import (
+from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
+from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
+from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
+from domains.gateway.application.litellm_bridge_payload import (
     split_chat_completion_for_bridge,
     split_embedding_for_bridge,
 )
-from libs.gateway.protocol import (
+from domains.gateway.application.ports import (
     GatewayCallContext,
     GatewayResponse,
     GatewayStreamChunk,
 )
+from libs.config.interfaces import LLMConfigProtocol
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from libs.gateway.protocol import GatewayProxyProtocol
+    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
+    from domains.gateway.application.ports import GatewayProxyProtocol
 
 logger = get_logger(__name__)
 
@@ -87,6 +88,7 @@ class LLMGateway:
         self,
         config: LLMConfigProtocol,
         gateway_proxy: "GatewayProxyProtocol | None" = None,
+        model_catalog: "ModelCatalogPort | None" = None,
     ) -> None:
         """
         初始化 LLM Gateway
@@ -97,6 +99,7 @@ class LLMGateway:
         """
         self.config = config
         self._gateway_proxy = gateway_proxy or get_gateway_proxy()
+        self._model_catalog = model_catalog
         # 初始化 Prompt Cache 管理器
         self._cache_manager = get_prompt_cache_manager()
 
@@ -324,6 +327,7 @@ class LLMGateway:
         api_key: str | None,
         api_base: str | None,
         response_format: dict[str, Any] | None,
+        precomputed_model_info: Any | None = None,
     ) -> dict[str, Any]:
         """构建与直连 LiteLLM 完全一致的 acompletion 参数（桥接与直连共用）。"""
         if api_key:
@@ -363,10 +367,57 @@ class LLMGateway:
         if response_format:
             kwargs["response_format"] = response_format
 
-        model_info = self._resolve_model_info(model, normalized_model)
+        if precomputed_model_info is not None:
+            model_info = precomputed_model_info
+        else:
+            model_info = self._resolve_model_info(model, normalized_model)
         kwargs = self._adapt_params(model_info, kwargs)
         kwargs.update(api_config)
         return kwargs
+
+    async def _compose_chat_completion_kwargs_async(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict | None,
+        stream: bool,
+        api_key: str | None,
+        api_base: str | None,
+        response_format: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """构建 kwargs；能力元数据优先从 Gateway catalog（异步）解析。"""
+        precomputed: Any | None = None
+        if self._model_catalog is not None:
+            if api_key:
+                api_cfg: dict[str, Any] = {"api_key": api_key}
+                if api_base:
+                    api_cfg["api_base"] = api_base
+            else:
+                api_cfg = self._get_api_key(model)
+            if "endpoint_id" in api_cfg:
+                normalized = f"volcengine/{api_cfg['endpoint_id']}"
+            else:
+                normalized = self._normalize_model_name(model)
+            precomputed = await self._model_catalog.resolve_capabilities(model)
+            if precomputed is None and normalized != model:
+                precomputed = await self._model_catalog.resolve_capabilities(normalized)
+        return self._compose_chat_completion_kwargs(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=stream,
+            api_key=api_key,
+            api_base=api_base,
+            response_format=response_format,
+            precomputed_model_info=precomputed,
+        )
 
     async def chat(
         self,
@@ -400,7 +451,7 @@ class LLMGateway:
             LLMResponse 或流式生成器
         """
         model = model or self.config.default_model
-        litellm_kwargs = self._compose_chat_completion_kwargs(
+        litellm_kwargs = await self._compose_chat_completion_kwargs_async(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -416,7 +467,6 @@ class LLMGateway:
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
             bridged = await self._maybe_call_via_gateway_litellm(
-                user_id=bridge_uid,
                 litellm_kwargs=litellm_kwargs,
             )
             if bridged is not None:
@@ -658,7 +708,6 @@ class LLMGateway:
     async def _maybe_call_via_gateway_litellm(
         self,
         *,
-        user_id: uuid.UUID,
         litellm_kwargs: dict[str, Any],
     ) -> LLMResponse | AsyncGenerator[StreamChunk, None] | None:
         """通过 AI Gateway 桥接执行调用，参数与 ``acompletion`` 一致。失败返回 None（除非 fail_closed）。"""
@@ -667,7 +716,12 @@ class LLMGateway:
             return None
         try:
             bridge = self._gateway_proxy
-            ctx = GatewayCallContext(user_id=user_id, capability="chat")
+            attr = resolve_gateway_bridge_attribution()
+            ctx = GatewayCallContext(
+                user_id=attr.actor_user_id,
+                team_id=attr.billing_team_id,
+                capability="chat",
+            )
 
             if payload.stream:
                 stream_iter = await bridge.chat_completion(
@@ -731,7 +785,6 @@ class LLMGateway:
     async def _maybe_embed_via_gateway_litellm(
         self,
         *,
-        user_id: uuid.UUID,
         litellm_kwargs: dict[str, Any],
     ) -> list[list[float]] | None:
         """经 Gateway 批量 embedding，参数与 ``aembedding`` 一致。"""
@@ -739,9 +792,14 @@ class LLMGateway:
         if parsed is None:
             return None
         try:
+            attr = resolve_gateway_bridge_attribution()
             rows = await self._gateway_proxy.embedding(
                 parsed.inputs,
-                ctx=GatewayCallContext(user_id=user_id, capability="embedding"),
+                ctx=GatewayCallContext(
+                    user_id=attr.actor_user_id,
+                    team_id=attr.billing_team_id,
+                    capability="embedding",
+                ),
                 model=parsed.model,
                 api_key=parsed.api_key,
                 api_base=parsed.api_base,
@@ -1068,7 +1126,6 @@ class LLMGateway:
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
             bridged = await self._maybe_embed_via_gateway_litellm(
-                user_id=bridge_uid,
                 litellm_kwargs=litellm_kwargs,
             )
             if bridged is not None and len(bridged) > 0 and bridged[0] is not None:
@@ -1099,7 +1156,6 @@ class LLMGateway:
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
             bridged = await self._maybe_embed_via_gateway_litellm(
-                user_id=bridge_uid,
                 litellm_kwargs=litellm_kwargs,
             )
             if bridged is not None and len(bridged) == len(texts):

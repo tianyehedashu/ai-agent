@@ -346,7 +346,7 @@ class TestUserModelAvailableApi:
         assert isinstance(data["system_models"], list)
         assert isinstance(data["user_models"], list)
         assert len(data["user_models"]) == 0
-        # 系统模型来自 app.toml 配置
+        # system_models 来自网关 DB（app.toml 经启动/测试 catalog 同步后的全局目录）
         if data["system_models"]:
             for sm in data["system_models"]:
                 assert sm.get("is_system") is True

@@ -11,7 +11,7 @@ import pytest
 
 # 预先导入所有模型以初始化 SQLAlchemy 注册表
 # 这是必要的，因为 User 模型有对 Agent、Session、Memory 的关系引用
-from domains.agent.infrastructure.models import Agent, Memory, Session  # noqa: F401
+from domains.agent.infrastructure.models import Agent, Memory, Session  # pylint: disable=unused-import
 from domains.identity.infrastructure.models.quota import QuotaUsageLog, UserQuota
 
 

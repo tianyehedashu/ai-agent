@@ -22,6 +22,8 @@ from domains.agent.application.product_info_capability_runners import (
     optimize_prompt_for_capability,
     render_meta_prompt,
 )
+from domains.agent.application.product_info_use_case import ProductInfoUseCase
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.agent.domain.product_info.constants import (
     CAPABILITY_DEPENDENCIES,
     CAPABILITY_IDS,
@@ -440,7 +442,7 @@ class TestRunStep:
         try:
             from domains.agent.application.product_info_use_case import ProductInfoUseCase
 
-            uc = ProductInfoUseCase(db_session)
+            uc = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Test")
             job_id = uuid.UUID(job["id"])
 
@@ -479,7 +481,7 @@ class TestRunStep:
         try:
             from domains.agent.application.product_info_use_case import ProductInfoUseCase
 
-            uc = ProductInfoUseCase(db_session)
+            uc = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Default")
             job_id = uuid.UUID(job["id"])
 
@@ -513,7 +515,7 @@ class TestRunStep:
         try:
             from domains.agent.application.product_info_use_case import ProductInfoUseCase
 
-            uc = ProductInfoUseCase(db_session)
+            uc = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Fail")
             job_id = uuid.UUID(job["id"])
 
@@ -549,7 +551,7 @@ class TestRunStep:
         try:
             from domains.agent.application.product_info_use_case import ProductInfoUseCase
 
-            uc = ProductInfoUseCase(db_session)
+            uc = ProductInfoUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Ser")
             job_id = uuid.UUID(job["id"])
 

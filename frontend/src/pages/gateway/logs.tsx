@@ -7,7 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 
-import { gatewayApi, type GatewayLogItem, type GatewayUsageScope } from '@/api/gateway'
+import { gatewayApi, type GatewayLogItem, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -23,13 +23,17 @@ const PAGE_SIZE = 100
 export default function GatewayLogsPage(): React.JSX.Element {
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [scope, setScope] = useState<GatewayUsageScope>('personal')
+  const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
 
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
-    queryKey: ['gateway', 'logs', scope],
+    queryKey: ['gateway', 'logs', usageAggregation],
     initialPageParam: 1,
     queryFn: ({ pageParam }: { pageParam: number }) =>
-      gatewayApi.listLogs({ scope, page: pageParam, page_size: PAGE_SIZE }),
+      gatewayApi.listLogs({
+        usage_aggregation: usageAggregation,
+        page: pageParam,
+        page_size: PAGE_SIZE,
+      }),
     getNextPageParam: (lastPage, all) => {
       const fetched = all.reduce((sum, p) => sum + p.items.length, 0)
       return fetched < lastPage.total ? all.length + 1 : undefined
@@ -52,8 +56,9 @@ export default function GatewayLogsPage(): React.JSX.Element {
   }
 
   const { data: detail } = useQuery({
-    queryKey: ['gateway', 'log', selectedId, scope],
-    queryFn: () => (selectedId ? gatewayApi.getLog(selectedId, { scope }) : null),
+    queryKey: ['gateway', 'log', selectedId, usageAggregation],
+    queryFn: () =>
+      selectedId ? gatewayApi.getLog(selectedId, { usage_aggregation: usageAggregation }) : null,
     enabled: !!selectedId,
   })
 
@@ -67,18 +72,18 @@ export default function GatewayLogsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-          {(['personal', 'team'] as const).map((value) => (
+          {(['user', 'workspace'] as const).map((value) => (
             <Button
               key={value}
               size="sm"
-              variant={scope === value ? 'default' : 'ghost'}
+              variant={usageAggregation === value ? 'default' : 'ghost'}
               className="h-7 px-3 text-xs"
               onClick={() => {
-                setScope(value)
+                setUsageAggregation(value)
                 setSelectedId(null)
               }}
             >
-              {value === 'personal' ? '个人' : '当前团队'}
+              {value === 'user' ? '按账号' : '当前工作区'}
             </Button>
           ))}
         </div>

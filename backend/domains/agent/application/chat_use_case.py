@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.application import AgentUseCase
+from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
@@ -51,9 +52,10 @@ class ChatUseCase:
         session_use_case: SessionApplicationPort,
         session_use_case_factory: Callable[[AsyncSession], SessionApplicationPort],
         checkpointer: LangGraphCheckpointer | None = None,
+        model_catalog: ModelCatalogPort | None = None,
     ) -> None:
         self.db = db
-        self.llm_gateway = LLMGateway(config=settings)
+        self.llm_gateway = LLMGateway(config=settings, model_catalog=model_catalog)
         self.tool_registry = ToolRegistry()
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_use_case = session_use_case

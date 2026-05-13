@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import get_app_config
+from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 from domains.agent.application.product_info_capability_runners import (
     RUNNERS,
     optimize_prompt_for_capability,
@@ -39,6 +40,7 @@ from domains.agent.infrastructure.repositories.product_info_job_repository impor
 from domains.agent.infrastructure.repositories.product_info_job_step_repository import (
     ProductInfoJobStepRepository,
 )
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from libs.db.database import get_session_context
 from libs.db.permission_context import (
     PermissionContext,
@@ -61,12 +63,13 @@ def _sort_order_for_capability(capability_id: str) -> int:
 class ProductInfoUseCase:
     """产品信息工作流用例"""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, catalog: ModelCatalogPort) -> None:
         self.db = db
+        self._catalog = catalog
         self.job_repo = ProductInfoJobRepository(db)
         self.step_repo = ProductInfoJobStepRepository(db)
-        self._llm_gateway = LLMGateway(config=settings)
-        self._user_model_uc = UserModelUseCase(db)
+        self._llm_gateway = LLMGateway(config=settings, model_catalog=catalog)
+        self._user_model_uc = UserModelUseCase(db, catalog)
 
     # ─── Job CRUD ────────────────────────────────────────────────────
 
@@ -171,9 +174,13 @@ class ProductInfoUseCase:
 
         cap_config = CAPABILITIES.get(capability_id)
         if cap_config and cap_config.required_features:
-            model_info = get_app_config().models.get_model(resolved.model)
-            if model_info:
-                missing = cap_config.required_features - model_info.features
+            features = await self._catalog.model_features(resolved.model)
+            if features is None:
+                model_info = get_app_config().models.get_model(resolved.model)
+                if model_info is not None:
+                    features = model_info.features
+            if features is not None:
+                missing = cap_config.required_features - features
                 if missing:
                     raise ValidationError(
                         f"模型 {resolved.model} 缺少能力「{cap_config.name}」所需的特性: {sorted(missing)}。"
@@ -289,7 +296,7 @@ class ProductInfoUseCase:
                 status=ProductInfoJobStepStatus.FAILED,
                 error_message=str(e),
             )
-            await self._sync_job_status(job_id)
+            await self.sync_job_status(job_id)
             raise ValidationError(str(e)) from e
         except Exception as e:
             logger.exception("run_step(%s) failed: %s", capability_id, e)
@@ -298,7 +305,7 @@ class ProductInfoUseCase:
                 status=ProductInfoJobStepStatus.FAILED,
                 error_message=str(e),
             )
-            await self._sync_job_status(job_id)
+            await self.sync_job_status(job_id)
             raise
 
         await self.step_repo.update(
@@ -308,10 +315,10 @@ class ProductInfoUseCase:
             error_message=None,
         )
         await self.db.flush()
-        await self._sync_job_status(job_id)
+        await self.sync_job_status(job_id)
         return await self.get_job(job_id)
 
-    async def _sync_job_status(self, job_id: uuid.UUID) -> None:
+    async def sync_job_status(self, job_id: uuid.UUID) -> None:
         """根据所有 steps 的状态更新 Job 状态。"""
         job = await self.job_repo.get_with_steps(job_id)
         if not job:
@@ -376,7 +383,7 @@ def _build_execution_layers(
 async def _finalize_product_info_pipeline_job(job_id: uuid.UUID) -> None:
     """将仍为 RUNNING 的步骤标为失败，并据步骤状态聚合 Job（用于异常/关闭收尾）。"""
     async with get_session_context() as db:
-        uc = ProductInfoUseCase(db)
+        uc = ProductInfoUseCase(db, catalog=get_model_catalog_adapter(db))
         job = await uc.job_repo.get_with_steps(job_id)
         if job:
             for step in job.steps:
@@ -386,7 +393,7 @@ async def _finalize_product_info_pipeline_job(job_id: uuid.UUID) -> None:
                         status=ProductInfoJobStepStatus.FAILED,
                         error_message="流水线中断或未正常结束",
                     )
-        await uc._sync_job_status(job_id)
+        await uc.sync_job_status(job_id)
 
 
 async def run_pipeline_async(
@@ -433,7 +440,7 @@ async def run_pipeline_async(
         async def _execute_one(cap_id: str) -> bool:
             """在独立 session 中执行单步，返回是否成功。"""
             async with get_session_context() as db:
-                uc = ProductInfoUseCase(db)
+                uc = ProductInfoUseCase(db, catalog=get_model_catalog_adapter(db))
                 try:
                     await uc.run_step(
                         job_id=job_id,

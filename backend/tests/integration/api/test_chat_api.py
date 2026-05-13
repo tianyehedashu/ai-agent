@@ -8,7 +8,6 @@ Chat API 集成测试
 4. 多轮对话
 """
 
-import asyncio
 import json
 
 from fastapi import status
@@ -71,7 +70,7 @@ class TestChatAPI:
             headers=auth_headers,
         ) as response:
             # Assert
-            assert response.status_code == status.HTTP_200_OK
+            assert response.status_code == status.HTTP_200_OK, response.text
             content_type = response.headers.get("content-type", "")
             assert "text/event-stream" in content_type
 
@@ -94,18 +93,31 @@ class TestChatAPI:
 
     @pytest.mark.asyncio
     async def test_chat_returns_sse_stream(self, client: AsyncClient, auth_headers: dict):
-        """测试: 返回 SSE 流式响应"""
+        """测试: 返回 SSE 流式响应。
+
+        先 REST 创建会话再带 ``session_id`` 走流式，与同文件 ``test_chat_with_existing_session`` 一致，
+        避免「流式响应期间再创建会话 + SAVEPOINT」与 fixture 单连接叠用时的 asyncpg teardown 竞态。
+        """
+        create_response = await client.post(
+            "/api/v1/sessions/",
+            json={"title": "SSE format check"},
+            headers=auth_headers,
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        session_id = create_response.json()["id"]
+
         # Act
         async with client.stream(
             "POST",
             "/api/v1/chat",
             json={
+                "session_id": session_id,
                 "message": "Hello, please respond briefly",
             },
             headers=auth_headers,
         ) as response:
             # Assert
-            assert response.status_code == status.HTTP_200_OK
+            assert response.status_code == status.HTTP_200_OK, response.text
             content_type = response.headers.get("content-type", "")
             assert "text/event-stream" in content_type
 
@@ -147,7 +159,7 @@ class TestChatAPI:
             },
             headers=auth_headers,
         ) as response:
-            assert response.status_code == status.HTTP_200_OK
+            assert response.status_code == status.HTTP_200_OK, response.text
             content_type = response.headers.get("content-type", "")
             assert "text/event-stream" in content_type
 
@@ -165,6 +177,3 @@ class TestChatAPI:
 
         event_types = [e.get("type") for e in events]
         assert "session_created" not in event_types, "Should NOT create new session"
-
-        # Agent/LLM 链路上可能有异步收尾；与 conftest 单连接回滚竞态时短暂等待避免 teardown 报错
-        await asyncio.sleep(0.5)

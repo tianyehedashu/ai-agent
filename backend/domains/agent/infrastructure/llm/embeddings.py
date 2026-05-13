@@ -19,14 +19,15 @@ from typing import TYPE_CHECKING, Any, Literal
 import httpx
 
 from bootstrap.config import settings as app_settings
-from libs.gateway.factory import get_gateway_proxy
-from libs.gateway.internal_actor import resolve_internal_gateway_user_id
-from libs.gateway.litellm_payload import split_embedding_for_bridge
-from libs.gateway.protocol import GatewayCallContext
+from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
+from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
+from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
+from domains.gateway.application.litellm_bridge_payload import split_embedding_for_bridge
+from domains.gateway.application.ports import GatewayCallContext
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from libs.gateway.protocol import GatewayProxyProtocol
+    from domains.gateway.application.ports import GatewayProxyProtocol
 
 logger = get_logger(__name__)
 
@@ -219,6 +220,10 @@ class APIEmbedding(EmbeddingProvider):
         self._dimension = dimension
         self._gateway_proxy = gateway_proxy
 
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
     def _litellm_embedding_kwargs(self, texts: list[str]) -> dict[str, Any]:
         """与直连 ``aembedding`` 一致的参数字典。"""
         payload: dict[str, Any] = {"model": self.model, "input": texts}
@@ -240,9 +245,14 @@ class APIEmbedding(EmbeddingProvider):
         if parsed is None:
             return None
         try:
+            attr = resolve_gateway_bridge_attribution()
             rows = await proxy.embedding(
                 parsed.inputs,
-                ctx=GatewayCallContext(user_id=user_id, capability="embedding"),
+                ctx=GatewayCallContext(
+                    user_id=attr.actor_user_id,
+                    team_id=attr.billing_team_id,
+                    capability="embedding",
+                ),
                 model=parsed.model,
                 api_key=parsed.api_key,
                 api_base=parsed.api_base,

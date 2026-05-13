@@ -290,6 +290,14 @@ class Settings(BaseSettings):
     gateway_internal_proxy_enabled: bool = True
     # 无注册用户上下文时，是否将桥接失败视为致命（True=禁止静默回退直连）
     gateway_internal_proxy_fail_closed: bool = False
+    # 启动时是否将 app.toml 中 models.available 幂等同步到 gateway_models（team_id NULL）
+    gateway_catalog_sync_on_startup: bool = True
+    # 同步时是否用配置覆盖 tags（GitOps：配置声明优先于 UI 对托管行的修改）
+    gateway_catalog_config_overwrites_managed: bool = True
+    # 配置移除某托管模型后是否从各 vkey 的 allowed_models 中剔除该虚拟名（False=不修改白名单）
+    gateway_catalog_prune_vkey_allowed_models: bool = False
+    # system vkey 是否禁止在 Router 无部署时走 LiteLLM 直连兜底（True=强制经 Router，便于统计一致）
+    gateway_proxy_disable_internal_direct_litellm: bool = True
     # 无 PermissionContext.user_id 时用于 Gateway 归因的委派用户（如系统账号 UUID）
     gateway_internal_proxy_delegate_user_id: uuid.UUID | None = None
     # 默认 PII Guardrail 是否生效（vkey 可单独开关）
@@ -308,6 +316,16 @@ class Settings(BaseSettings):
     gateway_alert_interval_seconds: int = 60
     # 月分区维护间隔（秒）
     gateway_partition_interval_seconds: int = 86400
+    # 请求明细表按月分区：保留最近 N 天以外的整月分区将自动 DROP；None=不自动删除
+    gateway_request_log_retention_days: int | None = None
+    # 过期分区清理任务间隔（秒）
+    gateway_request_log_retention_interval_seconds: int = 86400
+    # 成功请求写入明细的采样率 0.0~1.0（1.0=全量）；低于 1 时 ``gateway_metrics_hourly`` 与基于日志的告警可能低估成功量
+    gateway_request_log_success_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    # 非 success 是否始终写明细
+    gateway_request_log_always_persist_non_success: bool = True
+    # 成功请求 cost(USD) 不低于该阈值时始终写明细；None=不按金额
+    gateway_request_log_always_persist_cost_above_usd: float | None = None
 
     @property
     def is_development(self) -> bool:

@@ -32,13 +32,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import get_app_config
+from domains.gateway.application.config_catalog_sync import (
+    MANAGED_BY_KEY,
+    MANAGED_CONFIG,
+    sync_app_config_gateway_catalog,
+)
 from domains.gateway.application.management import (
     GatewayManagementReadService,
     GatewayManagementWriteService,
 )
+from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.domain.virtual_key_service import (
     generate_vkey,
 )
+from domains.gateway.infrastructure.router_singleton import reload_router
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
@@ -68,6 +75,7 @@ from domains.gateway.presentation.schemas.common import (
     VirtualKeyCreateResponse,
     VirtualKeyResponse,
 )
+from domains.identity.presentation.deps import AdminUser
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.db.database import get_db
 from libs.exceptions import HttpMappableDomainError
@@ -312,9 +320,35 @@ def _infer_preset_capability(model: Any) -> str:
 @router.get("/models/presets", response_model=list[GatewayModelPresetResponse])
 async def list_model_presets(
     team: CurrentTeam,
+    reads: MgmtReads,
 ) -> list[GatewayModelPresetResponse]:
-    """返回系统配置中的常用模型目录，供 Gateway 页面快速注册。"""
+    """返回已同步到 DB 的配置托管全局模型目录；若无则回退 app.toml（兼容旧环境）。"""
     _ = team
+    models = await reads.list_gateway_models(team.team_id, only_enabled=True)
+    cfg_rows = [
+        m
+        for m in models
+        if m.team_id is None and (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG
+    ]
+    if cfg_rows:
+        return [
+            GatewayModelPresetResponse(
+                id=m.name,
+                name=str((m.tags or {}).get("display_name") or m.name),
+                provider=m.provider,
+                real_model=m.real_model,
+                capability=m.capability,
+                context_window=int((m.tags or {}).get("context_window") or 0),
+                input_price=float((m.tags or {}).get("input_price") or 0.0),
+                output_price=float((m.tags or {}).get("output_price") or 0.0),
+                supports_vision=bool((m.tags or {}).get("supports_vision", False)),
+                supports_tools=bool((m.tags or {}).get("supports_tools", True)),
+                supports_reasoning=bool((m.tags or {}).get("supports_reasoning", False)),
+                recommended_for=list((m.tags or {}).get("recommended_for") or []),
+                description=str((m.tags or {}).get("description") or ""),
+            )
+            for m in cfg_rows
+        ]
     return [
         GatewayModelPresetResponse(
             id=model.id,
@@ -334,6 +368,18 @@ async def list_model_presets(
         for model in get_app_config().models.available
         if model.litellm_model or model.id
     ]
+
+
+@router.post("/catalog/reload-from-config")
+async def reload_gateway_catalog_from_config(
+    _: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """平台管理员：从 app.toml 重新同步全局模型目录并重载 LiteLLM Router。"""
+    stats = await sync_app_config_gateway_catalog(db)
+    await db.commit()
+    await reload_router(db)
+    return {"ok": True, **stats}
 
 
 @router.get("/models", response_model=list[GatewayModelResponse])
@@ -521,7 +567,13 @@ async def list_logs(
     reads: MgmtReads,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    scope: str = Query("team", pattern="^(team|personal)$"),
+    usage_aggregation: UsageAggregation = Query(
+        UsageAggregation.WORKSPACE,
+        description=(
+            "用量切片：workspace=按当前 X-Team-Id 工作区（含 personal/shared）；"
+            "user=按当前登录用户跨工作区。"
+        ),
+    ),
     start: datetime | None = None,
     end: datetime | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
@@ -530,7 +582,7 @@ async def list_logs(
 ) -> RequestLogListResponse:
     items, total = await reads.list_request_logs(
         team,
-        scope=scope,
+        usage_aggregation=usage_aggregation,
         page=page,
         page_size=page_size,
         start=start,
@@ -552,10 +604,17 @@ async def get_log_detail(
     log_id: uuid.UUID,
     team: CurrentTeam,
     reads: MgmtReads,
-    scope: str = Query("team", pattern="^(team|personal)$"),
+    usage_aggregation: UsageAggregation = Query(
+        UsageAggregation.WORKSPACE,
+        description=(
+            "用量切片：workspace=按当前工作区 team_id；user=仅当日志 user_id 为当前用户时可见。"
+        ),
+    ),
 ) -> RequestLogResponse:
     try:
-        record = await reads.get_request_log(team, log_id, scope=scope)
+        record = await reads.get_request_log(
+            team, log_id, usage_aggregation=usage_aggregation
+        )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     if record is None:
@@ -573,11 +632,18 @@ async def dashboard_summary(
     team: CurrentTeam,
     reads: MgmtReads,
     days: int = Query(7, ge=1, le=90),
-    scope: str = Query("team", pattern="^(team|personal)$"),
+    usage_aggregation: UsageAggregation = Query(
+        UsageAggregation.WORKSPACE,
+        description=(
+            "用量切片：workspace=按当前工作区聚合；user=按当前用户跨工作区聚合。"
+        ),
+    ),
 ) -> DashboardSummaryResponse:
     end = datetime.now(UTC)
     start = end - timedelta(days=days)
-    summary = await reads.aggregate_request_log_summary(team, start, end, scope=scope)
+    summary = await reads.aggregate_request_log_summary(
+        team, start, end, usage_aggregation=usage_aggregation
+    )
     total = summary["total"]
     success = summary["success"]
     return DashboardSummaryResponse(
