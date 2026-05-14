@@ -1,16 +1,17 @@
 /**
  * 大模型提供商配置标签页
  *
- * 配置/测试各提供商的 API Key（用户 Key 优先于系统 Key，不计入配额）
+ * 多账号：调用 Gateway ``/my-credentials``（user scope）；与旧版 ``/settings/providers`` 测试接口兼容。
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type React from 'react'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Trash2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
 import {
   AlertDialog,
@@ -26,41 +27,93 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { ProviderConfig } from '@/types/provider-config'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PROVIDER_LABELS } from '@/types/provider-config'
 
 const SUPPORTED_PROVIDERS = Object.keys(PROVIDER_LABELS)
 
 export function ProviderConfigTab(): React.ReactElement {
   const queryClient = useQueryClient()
-  const [editingProvider, setEditingProvider] = useState<string | null>(null)
-  const [apiKey, setApiKey] = useState('')
-  const [apiBase, setApiBase] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
+  const [formProvider, setFormProvider] = useState('openai')
+  const [formName, setFormName] = useState('')
+  const [formApiKey, setFormApiKey] = useState('')
+  const [formApiBase, setFormApiBase] = useState('')
 
-  const { data: configs = [], isLoading } = useQuery({
-    queryKey: ['provider-configs'],
-    queryFn: () => providerConfigApi.list(),
+  const { data: credentials = [], isLoading } = useQuery({
+    queryKey: ['gateway', 'my-credentials'],
+    queryFn: () => gatewayApi.listMyCredentials(),
+  })
+
+  const byProvider = useMemo(() => {
+    const m = new Map<string, ProviderCredential[]>()
+    for (const c of credentials) {
+      const list = m.get(c.provider) ?? []
+      list.push(c)
+      m.set(c.provider, list)
+    }
+    for (const [, list] of m) {
+      list.sort((a, b) => a.name.localeCompare(b.name))
+    }
+    return m
+  }, [credentials])
+
+  const invalidate = (): void => {
+    void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
+    void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
+    void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+  }
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      gatewayApi.createMyCredential({
+        provider: formProvider,
+        name: formName.trim() || 'default',
+        api_key: formApiKey.trim(),
+        api_base: formApiBase.trim() || null,
+      }),
+    onSuccess: () => {
+      invalidate()
+      setAddOpen(false)
+      resetForm()
+      toast.success('凭据已添加')
+    },
+    onError: (e: Error) => {
+      toast.error(`添加失败: ${e.message}`)
+    },
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      provider,
-      api_key,
-      api_base,
-    }: {
-      provider: string
-      api_key: string
-      api_base?: string | null
-    }) => providerConfigApi.update(provider, { api_key, api_base: api_base ?? undefined }),
+    mutationFn: () => {
+      if (!editCred) throw new Error('no credential')
+      return gatewayApi.updateMyCredential(editCred.id, {
+        name: formName.trim() || editCred.name,
+        ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
+        api_base: formApiBase.trim() || null,
+      })
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['provider-configs'] }).catch(() => {})
-      setEditingProvider(null)
-      setApiKey('')
-      setApiBase('')
-      toast.success('配置已保存')
+      invalidate()
+      setEditCred(null)
+      resetForm()
+      toast.success('已保存')
     },
     onError: (e: Error) => {
       toast.error(`保存失败: ${e.message}`)
@@ -68,10 +121,10 @@ export function ProviderConfigTab(): React.ReactElement {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (provider: string) => providerConfigApi.delete(provider),
+    mutationFn: (id: string) => gatewayApi.deleteMyCredential(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['provider-configs'] }).catch(() => {})
-      toast.success('配置已删除')
+      invalidate()
+      toast.success('已删除')
     },
     onError: (e: Error) => {
       toast.error(`删除失败: ${e.message}`)
@@ -89,25 +142,47 @@ export function ProviderConfigTab(): React.ReactElement {
     },
   })
 
-  const configByProvider = new Map<string, ProviderConfig>(configs.map((c) => [c.provider, c]))
-
-  const startEdit = (provider: string): void => {
-    setEditingProvider(provider)
-    setApiKey('')
-    const existing = configByProvider.get(provider)
-    setApiBase(existing?.api_base ?? '')
+  const resetForm = (): void => {
+    setFormProvider('openai')
+    setFormName('')
+    setFormApiKey('')
+    setFormApiBase('')
+    setShowKey(false)
   }
 
-  const submitEdit = (): void => {
-    if (!editingProvider || !apiKey.trim()) {
+  const openAdd = (provider?: string): void => {
+    resetForm()
+    if (provider) setFormProvider(provider)
+    setAddOpen(true)
+  }
+
+  const openEdit = (c: ProviderCredential): void => {
+    setEditCred(c)
+    setFormProvider(c.provider)
+    setFormName(c.name)
+    setFormApiKey('')
+    setFormApiBase(c.api_base ?? '')
+    setShowKey(false)
+  }
+
+  const submitAdd = (): void => {
+    if (!formApiKey.trim()) {
       toast.error('请输入 API Key')
       return
     }
-    updateMutation.mutate({
-      provider: editingProvider,
-      api_key: apiKey.trim(),
-      api_base: apiBase.trim() || null,
-    })
+    createMutation.mutate()
+  }
+
+  const submitEdit = (): void => {
+    if (!editCred) return
+    const nameUnchanged = formName.trim() === editCred.name
+    const baseUnchanged = formApiBase.trim() === (editCred.api_base ?? '').trim()
+    const keyEmpty = !formApiKey.trim()
+    if (keyEmpty && nameUnchanged && baseUnchanged) {
+      toast.error('请至少修改名称、Base 或填写新 API Key')
+      return
+    }
+    updateMutation.mutate()
   }
 
   if (isLoading) {
@@ -121,64 +196,102 @@ export function ProviderConfigTab(): React.ReactElement {
   return (
     <div className="space-y-6 p-6">
       <Card>
-        <CardHeader>
-          <CardTitle>大模型提供商 Key</CardTitle>
-          <CardDescription>
-            配置您自己的 API Key 后，将优先使用您的 Key 调用，且不计入系统配额
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>大模型提供商凭据（多账号）</CardTitle>
+            <CardDescription>
+              同一提供商可保存多条命名凭据，供 Gateway 模型绑定与导入团队使用。验证 Key
+              仍走设置侧测试接口（按提供商解析优先账号）。
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              openAdd()
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            添加凭据
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {SUPPORTED_PROVIDERS.map((provider) => {
-            const config = configByProvider.get(provider)
-            const isEditing = editingProvider === provider
-
+            const rows = byProvider.get(provider) ?? []
             return (
-              <div key={provider} className="flex flex-col gap-2 rounded-lg border p-4">
+              <div key={provider} className="flex flex-col gap-3 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Key className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">{PROVIDER_LABELS[provider] ?? provider}</span>
-                    {config ? (
-                      <Badge variant="secondary">已配置</Badge>
-                    ) : (
-                      <Badge variant="outline">未配置</Badge>
-                    )}
+                    <Badge variant={rows.length > 0 ? 'secondary' : 'outline'}>
+                      {rows.length > 0 ? `${String(rows.length)} 条凭据` : '未配置'}
+                    </Badge>
                   </div>
-                  {!isEditing && (
-                    <div className="flex gap-2">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        openAdd(provider)
+                      }}
+                    >
+                      添加账号
+                    </Button>
+                    {rows.length > 0 && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          startEdit(provider)
+                          testMutation.mutate(provider)
                         }}
+                        disabled={testMutation.isPending}
                       >
-                        {config ? '更新 Key' : '配置 Key'}
+                        {testMutation.isPending ? '验证中…' : '验证该提供商'}
                       </Button>
-                      {config && (
-                        <>
+                    )}
+                  </div>
+                </div>
+                {rows.length > 0 && (
+                  <ul className="divide-y rounded-md border">
+                    {rows.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                      >
+                        <div>
+                          <span className="font-medium">{c.name}</span>
+                          {c.api_base ? (
+                            <span className="ml-2 text-muted-foreground">{c.api_base}</span>
+                          ) : null}
+                          {!c.is_active ? (
+                            <Badge variant="outline" className="ml-2">
+                              已停用
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="flex gap-1">
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
-                              testMutation.mutate(provider)
+                              openEdit(c)
                             }}
-                            disabled={testMutation.isPending}
+                            aria-label="编辑"
                           >
-                            {testMutation.isPending ? '验证中…' : '验证 Key'}
+                            <Pencil className="h-4 w-4" />
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="icon" aria-label="删除">
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>删除配置</AlertDialogTitle>
+                                <AlertDialogTitle>删除凭据</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  确定要删除 {PROVIDER_LABELS[provider]} 的 Key
-                                  配置吗？删除后将使用系统 Key 并受配额限制。
+                                  确定删除「{PROVIDER_LABELS[c.provider] ?? c.provider} / {c.name}
+                                  」？若仍被网关模型引用将返回 409。
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -186,7 +299,7 @@ export function ProviderConfigTab(): React.ReactElement {
                                 <AlertDialogAction
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                   onClick={() => {
-                                    deleteMutation.mutate(provider)
+                                    deleteMutation.mutate(c.id)
                                   }}
                                 >
                                   删除
@@ -194,75 +307,173 @@ export function ProviderConfigTab(): React.ReactElement {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {isEditing && (
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr,auto]">
-                    <div className="space-y-2">
-                      <Label>API Key</Label>
-                      <div className="relative flex gap-2">
-                        <Input
-                          type={showKey ? 'text' : 'password'}
-                          value={apiKey}
-                          onChange={(e) => {
-                            setApiKey(e.target.value)
-                          }}
-                          placeholder="输入 API Key（保存后加密存储）"
-                          className="pr-10"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                          onClick={() => {
-                            setShowKey(!showKey)
-                          }}
-                        >
-                          {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>API Base（可选）</Label>
-                      <Input
-                        type="url"
-                        value={apiBase}
-                        onChange={(e) => {
-                          setApiBase(e.target.value)
-                        }}
-                        placeholder="自定义 API 地址"
-                      />
-                    </div>
-                    <div className="flex gap-2 sm:col-span-2">
-                      <Button
-                        onClick={submitEdit}
-                        disabled={updateMutation.isPending || !apiKey.trim()}
-                      >
-                        {updateMutation.isPending ? '保存中…' : '保存'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setEditingProvider(null)
-                          setApiKey('')
-                          setApiBase('')
-                        }}
-                      >
-                        取消
-                      </Button>
-                    </div>
-                  </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )
           })}
         </CardContent>
       </Card>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加凭据</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-2">
+              <Label>提供商</Label>
+              <Select value={formProvider} onValueChange={setFormProvider}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUPPORTED_PROVIDERS.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {PROVIDER_LABELS[p] ?? p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>账号名称</Label>
+              <Input
+                value={formName}
+                onChange={(e) => {
+                  setFormName(e.target.value)
+                }}
+                placeholder="例如 work、personal、default"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <div className="relative">
+                <Input
+                  type={showKey ? 'text' : 'password'}
+                  value={formApiKey}
+                  onChange={(e) => {
+                    setFormApiKey(e.target.value)
+                  }}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                  onClick={() => {
+                    setShowKey(!showKey)
+                  }}
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>API Base（可选）</Label>
+              <Input
+                type="url"
+                value={formApiBase}
+                onChange={(e) => {
+                  setFormApiBase(e.target.value)
+                }}
+                placeholder="自定义 API 地址"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddOpen(false)
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={submitAdd} disabled={createMutation.isPending}>
+              {createMutation.isPending ? '保存中…' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editCred !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditCred(null)
+            resetForm()
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑凭据</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-2">
+              <Label>账号名称</Label>
+              <Input
+                value={formName}
+                onChange={(e) => {
+                  setFormName(e.target.value)
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>新 API Key（留空则不变）</Label>
+              <div className="relative">
+                <Input
+                  type={showKey ? 'text' : 'password'}
+                  value={formApiKey}
+                  onChange={(e) => {
+                    setFormApiKey(e.target.value)
+                  }}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                  onClick={() => {
+                    setShowKey(!showKey)
+                  }}
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>API Base</Label>
+              <Input
+                type="url"
+                value={formApiBase}
+                onChange={(e) => {
+                  setFormApiBase(e.target.value)
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditCred(null)
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={submitEdit} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? '保存中…' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
@@ -73,6 +73,27 @@ class GatewayCapability(str, Enum):
     RERANK = "rerank"
 
 
+def allowed_capabilities_from_storage(
+    raw: list[str] | tuple[str, ...] | None,
+) -> tuple[GatewayCapability, ...]:
+    """将存储层/请求中的能力字符串列规范为 ``GatewayCapability`` 元组。
+
+    空值与纯空白项跳过；无法解析为枚举的值抛出 ``ValueError``。
+    """
+    if not raw:
+        return ()
+    out: list[GatewayCapability] = []
+    for item in raw:
+        key = str(item).strip()
+        if not key:
+            continue
+        try:
+            out.append(GatewayCapability(key))
+        except ValueError as exc:
+            raise ValueError(f"invalid gateway capability: {key!r}") from exc
+    return tuple(out)
+
+
 class RoutingStrategy(str, Enum):
     """路由策略（对齐 LiteLLM Router）"""
 
@@ -116,6 +137,10 @@ class AlertChannel(str, Enum):
     WEBHOOK = "webhook"
     INAPP = "inapp"
     EMAIL = "email"
+
+
+# 入站鉴权路径：虚拟 Key（sk-gw-*）或 Identity 平台 Key（sk-* + gateway:proxy）
+GatewayInboundVia = Literal["vkey", "apikey"]
 
 
 # =============================================================================
@@ -206,7 +231,15 @@ class TimeSeriesPoint:
     errors: int
 
 
+# 用户 BYOK：``/my-credentials`` 与设置页 ``provider_config`` 双写所支持的提供商标识（与路由/LiteLLM 对齐）。
+# 刻意 **不含** ``custom``：用户凭据需绑定具体云厂商端点；``custom`` 仅用于 Agent 域 ``UserModel``（自定义 base + model）。
+USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
+    {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
+)
+
+
 __all__ = [
+    "USER_GATEWAY_CREDENTIAL_PROVIDERS",
     "AlertChannel",
     "AlertMetric",
     "BudgetPeriod",
@@ -215,6 +248,7 @@ __all__ = [
     "DashboardSummary",
     "FallbackKind",
     "GatewayCapability",
+    "GatewayInboundVia",
     "ManagementTeamContext",
     "RequestStatus",
     "RouteConfig",
@@ -225,4 +259,5 @@ __all__ = [
     "TimeSeriesPoint",
     "UsageRecord",
     "VirtualKeyPrincipal",
+    "allowed_capabilities_from_storage",
 ]

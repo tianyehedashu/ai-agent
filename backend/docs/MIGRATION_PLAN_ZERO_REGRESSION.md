@@ -32,8 +32,8 @@
   - `GET /api/v1/tools`
   - `GET /api/v1/tools/{tool_name}`
   - `POST /api/v1/tools/{tool_name}/test`
-- **Studio / System / Evaluation**
-  - 现有接口保持可用（不作为本次 P0 主链路，但不允许“跑不起来”）
+- **System / Evaluation**
+  - 系统与评估接口保持可用（不作为 P0 主链路）
 
 ### 1.2 必须保持的运行时行为（关键语义）
 
@@ -53,13 +53,14 @@
 
 ### 2.1 Bounded Context（终局边界）
 
-固定为 5 个上下文（避免过度拆分）：
+固定为 4 个核心上下文（避免过度拆分）：
 
 - **Identity**：用户、认证（未来 FastAPI Users）、权限、匿名策略
 - **AgentCatalog**：Agent 定义/管理/版本/发布/安装（“下载并运行”的定义与分发在此）
 - **Runtime**：对话、会话、工具、沙箱、检查点、上下文管理（包含 memory 作为 context 子系统）
-- **Studio**：工作台/工作流
 - **Evaluation**：评估/基准
+
+> **更新（2026-05）**：原计划的 **Studio（工作台）** 域已从本仓库移除；`/api/v1/studio/*` 与 `/api/v1/quality/*` 不再提供。下文章节中若仍出现 `studio/` 字样，视为历史迁移草稿。
 
 > 说明：`memory` **不独立成域**，按当前定位归属 **Runtime 的上下文管理子系统**。
 
@@ -145,7 +146,6 @@ backend/
         vector_store.py
         repo.py
 
-    studio/...
     evaluation/...
 
   shared/
@@ -205,9 +205,10 @@ backend/
 
 验收：Session/Memory/Tools 行为正确、匿名隔离正确。
 
-### 阶段 F：Studio/Evaluation/System 归位（后置）
+### 阶段 F：Evaluation / System 归位（后置）
 
-- 迁移或保持薄转发均可（不影响 P0 主链路）
+- **Studio**：已从本仓库移除；不再作为迁移阶段目标。
+- Evaluation / System：迁移或保持薄转发均可（不影响 P0 主链路）
 
 验收：相关接口仍可用。
 
@@ -225,7 +226,7 @@ backend/
 ### P0（必须：主链路零回退）
 
 - **P0-01**：冻结核心对外契约并补齐最小回归用例（chat SSE/HITL、匿名隔离、agents/sessions/memory/tools）
-- **P0-02**：建立终局目录骨架：`backend/domains/{identity,agent_catalog,runtime,studio,evaluation}` + `backend/shared/{kernel,infrastructure}`
+- **P0-02**：建立终局目录骨架：`backend/domains/{identity,agent_catalog,runtime,evaluation}` + `backend/shared/{kernel,infrastructure}`（`studio` 已从本仓库移除，见上文说明）
 - **P0-03**：匿名用户能力收拢到 Identity 策略（cookie + 落库隔离），对外行为不变
 - **P0-04**：Runtime 迁移 Chat（保持 SSE headers、`[DONE]`、序列化语义）
 - **P0-05**：Runtime 迁移 Checkpoint/HITL（resume/checkpoints/state/diff）

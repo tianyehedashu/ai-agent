@@ -177,9 +177,7 @@ def _build_pii_guardrail_instance(
             call_type: str,
         ) -> Any:
             with suppress(Exception):
-                return await self.async_pre_call_hook(
-                    user_api_key_dict, None, data, call_type
-                )
+                return await self.async_pre_call_hook(user_api_key_dict, None, data, call_type)
             return None
 
         async def async_dataset_hook(self, *args: Any, **kwargs: Any) -> None:

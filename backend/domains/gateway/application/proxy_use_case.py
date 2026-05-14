@@ -25,6 +25,7 @@ from bootstrap.config import settings
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
     PERIOD_MONTHLY,
+    PERIOD_TOTAL,
     BudgetService,
 )
 from domains.gateway.domain.errors import (
@@ -34,8 +35,16 @@ from domains.gateway.domain.errors import (
     ModelNotAllowedError,
     RateLimitExceededError,
 )
-from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
+from domains.gateway.domain.types import (
+    GatewayCapability,
+    GatewayInboundVia,
+    VirtualKeyPrincipal,
+)
+from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
+from domains.gateway.infrastructure.repositories.credential_repository import (
+    ProviderCredentialRepository,
+)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -75,7 +84,7 @@ async def shutdown_proxy_deferred_tasks() -> None:
         await asyncio.gather(*pending, return_exceptions=True)
 
 
-BudgetReservation = tuple[str, str | None, str]
+BudgetReservation = tuple[str, str | None, str, str | None]
 
 
 @dataclass
@@ -86,10 +95,14 @@ class ProxyContext:
         team_id: **计费工作区**（与日志 ``gateway_team_id``、``gateway_request_logs.team_id``
             一致），为一次调用归属的租户键。
         user_id: 触发用户（可为 None，视入口而定）。
-        vkey: 虚拟 Key 主体；内部 system vkey 走同字段。
+        vkey: 虚拟 Key 主体；内部 system vkey 走同字段；平台 ``sk-*`` 入站时可为 None。
         capability: 网关能力枚举。
         request_id: 关联 ID。
         store_full_messages / guardrail_enabled: 日志与护栏策略。
+        budget_model: 请求体中的 ``model`` 字符串（与 ``gateway_budgets.model_name`` 对齐），
+            用于模型级预算；未设置时仅校验/结算「全模型」汇总行（``model_name IS NULL``）。
+        inbound_via: 入站鉴权路径 ``vkey``（``sk-gw-*``）或 ``apikey``（平台 ``sk-*`` + ``gateway:proxy``）。
+        platform_api_key_id: 当 ``inbound_via=apikey`` 时为 Identity API Key 主键；否则为 ``None``。
 
     与 ``BudgetUpsert.scope``（system/team/key/user）及 HTTP ``usage_aggregation`` 正交。
     """
@@ -101,6 +114,9 @@ class ProxyContext:
     request_id: str
     store_full_messages: bool
     guardrail_enabled: bool
+    budget_model: str | None = None
+    inbound_via: GatewayInboundVia = "vkey"
+    platform_api_key_id: uuid.UUID | None = None
 
 
 class ProxyUseCase:
@@ -124,16 +140,10 @@ class ProxyUseCase:
 
     def _check_capability(self, ctx: ProxyContext) -> None:
         vkey = ctx.vkey
-        if (
-            vkey
-            and vkey.allowed_capabilities
-            and ctx.capability not in vkey.allowed_capabilities
-        ):
+        if vkey and vkey.allowed_capabilities and ctx.capability not in vkey.allowed_capabilities:
             raise CapabilityNotAllowedError(ctx.capability.value)
 
-    async def _check_limits(
-        self, ctx: ProxyContext, estimate_tokens: int = 0
-    ) -> None:
+    async def _check_limits(self, ctx: ProxyContext, estimate_tokens: int = 0) -> None:
         """vkey + team 维度限流"""
         if ctx.vkey is not None:
             await self._budget.check_rate_limit(
@@ -145,19 +155,18 @@ class ProxyUseCase:
             )
         # team 维度（从团队设置中读 rpm/tpm，简化：通过 GatewayBudget 表表示）
 
-    async def _release_budget_reservations(
-        self, reservations: list[BudgetReservation]
-    ) -> None:
-        for scope, scope_id, period in reservations:
+    async def _release_budget_reservations(self, reservations: list[BudgetReservation]) -> None:
+        for scope, scope_id, period, budget_model_name in reservations:
             with suppress(Exception):
                 await self._budget.release(
                     scope=scope,
                     scope_id=scope_id,
                     period=period,
+                    budget_model_name=budget_model_name,
                 )
 
     async def _check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
-        """检查 vkey/team/user 三级预算"""
+        """检查 team/user/key 维度预算（含全模型汇总行与可选模型行）。"""
         repo = BudgetRepository(self._session)
         scopes_to_check: list[tuple[str, uuid.UUID | None]] = [
             ("team", ctx.team_id),
@@ -168,51 +177,92 @@ class ProxyUseCase:
             scopes_to_check.append(("key", ctx.vkey.vkey_id))
 
         reservations: list[BudgetReservation] = []
+        periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
         for scope, scope_id in scopes_to_check:
-            for period in (PERIOD_DAILY, PERIOD_MONTHLY):
-                budget = await repo.get_for(scope, scope_id, period)
-                if budget is None:
-                    continue
-                check = await self._budget.check_budget(
-                    scope=scope,
-                    scope_id=str(scope_id) if scope_id else None,
-                    period=period,
-                    limit_usd=budget.limit_usd,
-                    limit_tokens=budget.limit_tokens,
-                    limit_requests=budget.limit_requests,
-                )
-                if not check.allowed:
-                    await self._release_budget_reservations(reservations)
-                    raise BudgetExceededError(
+            for period in periods:
+                rows: list[GatewayBudget] = []
+                agg = await repo.get_for(scope, scope_id, period, model_name=None)
+                if agg is not None:
+                    rows.append(agg)
+                if ctx.budget_model:
+                    spec = await repo.get_for(scope, scope_id, period, model_name=ctx.budget_model)
+                    if spec is not None:
+                        rows.append(spec)
+                for budget in rows:
+                    check = await self._budget.check_budget(
                         scope=scope,
+                        scope_id=str(scope_id) if scope_id else None,
                         period=period,
-                        limit=float(budget.limit_usd or budget.limit_tokens or budget.limit_requests or 0),
-                        used=float(
-                            check.used_usd
-                            if check.reason == "usd"
-                            else check.used_tokens
-                            if check.reason == "tokens"
-                            else check.used_requests
-                        ),
+                        limit_usd=budget.limit_usd,
+                        limit_tokens=budget.limit_tokens,
+                        limit_requests=budget.limit_requests,
+                        budget_model_name=budget.model_name,
                     )
-                if budget.limit_requests:
-                    scope_id_str = str(scope_id) if scope_id else None
-                    try:
-                        await self._budget.reserve(
-                            scope=scope,
-                            scope_id=scope_id_str,
-                            period=period,
-                            limit_requests=budget.limit_requests,
-                        )
-                    except Exception:
+                    if not check.allowed:
                         await self._release_budget_reservations(reservations)
-                        raise
-                    reservations.append((scope, scope_id_str, period))
+                        raise BudgetExceededError(
+                            scope=scope,
+                            period=period,
+                            limit=float(
+                                budget.limit_usd
+                                or budget.limit_tokens
+                                or budget.limit_requests
+                                or 0
+                            ),
+                            used=float(
+                                check.used_usd
+                                if check.reason == "usd"
+                                else check.used_tokens
+                                if check.reason == "tokens"
+                                else check.used_requests
+                            ),
+                        )
+                    if budget.limit_requests:
+                        scope_id_str = str(scope_id) if scope_id else None
+                        try:
+                            await self._budget.reserve(
+                                scope=scope,
+                                scope_id=scope_id_str,
+                                period=period,
+                                limit_requests=budget.limit_requests,
+                                budget_model_name=budget.model_name,
+                            )
+                        except Exception:
+                            await self._release_budget_reservations(reservations)
+                            raise
+                        reservations.append((scope, scope_id_str, period, budget.model_name))
         return reservations
+
+    @staticmethod
+    def _optional_body_model(body: dict[str, Any]) -> str | None:
+        raw = body.get("model")
+        if raw is None:
+            return None
+        s = str(raw).strip()
+        return s or None
 
     # ---------------------------------------------------------------------
     # Metadata 注入
     # ---------------------------------------------------------------------
+
+    async def _credential_metadata_for_virtual_model(
+        self, team_id: uuid.UUID, virtual_model: str | None
+    ) -> dict[str, Any]:
+        """按虚拟模型名解析 GatewayModel → 凭据，供日志归因（与 Router deployment model_info 对齐）。"""
+        if not virtual_model:
+            return {}
+        record = await GatewayModelRepository(self._session).get_by_name(team_id, virtual_model)
+        if record is None:
+            return {}
+        cred = await ProviderCredentialRepository(self._session).get(record.credential_id)
+        if cred is None:
+            return {}
+        return {
+            "gateway_credential_id": str(cred.id),
+            "gateway_credential_name_snapshot": cred.name,
+            "gateway_credential_scope": cred.scope,
+            "gateway_provider": record.provider,
+        }
 
     async def _build_metadata(
         self,
@@ -221,42 +271,58 @@ class ProxyUseCase:
         user_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         team = await TeamRepository(self._session).get(ctx.team_id)
+        verbose_log = bool(ctx.store_full_messages)
         meta: dict[str, Any] = {
             "gateway_team_id": str(ctx.team_id),
             "gateway_user_id": str(ctx.user_id) if ctx.user_id else None,
             "gateway_vkey_id": str(ctx.vkey.vkey_id) if ctx.vkey else None,
+            "gateway_inbound_via": ctx.inbound_via,
+            "gateway_platform_api_key_id": (
+                str(ctx.platform_api_key_id) if ctx.platform_api_key_id else None
+            ),
             "gateway_capability": ctx.capability.value,
             "gateway_request_id": ctx.request_id,
-            "gateway_team_snapshot": (
-                {"name": team.name, "kind": team.kind} if team else None
-            ),
+            "gateway_team_snapshot": ({"name": team.name, "kind": team.kind} if team else None),
             "gateway_vkey_name_snapshot": ctx.vkey.vkey_name if ctx.vkey else None,
             "guardrail_enabled": ctx.guardrail_enabled,
+            "gateway_store_full_messages": verbose_log,
+            "gateway_log_prompt_max_chars": int(settings.gateway_request_log_prompt_max_chars),
+            "gateway_log_response_max_chars": int(
+                settings.gateway_request_log_response_verbose_max_chars
+                if verbose_log
+                else settings.gateway_request_log_response_preview_max_chars
+            ),
         }
         if user_kwargs:
             user_meta = user_kwargs.get("metadata") or {}
             if isinstance(user_meta, dict):
-                meta.update({k: v for k, v in user_meta.items() if k not in meta})
+                meta.update(
+                    {
+                        k: v
+                        for k, v in user_meta.items()
+                        if k not in meta and not str(k).startswith("gateway_")
+                    }
+                )
+            raw_model = user_kwargs.get("model")
+            virtual_model = str(raw_model).strip() if raw_model is not None else None
+            if virtual_model:
+                meta.update(
+                    await self._credential_metadata_for_virtual_model(ctx.team_id, virtual_model)
+                )
         return meta
 
-    async def _should_use_internal_direct_litellm(
-        self, ctx: ProxyContext, model: str
-    ) -> bool:
+    async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
         """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
         if settings.gateway_proxy_disable_internal_direct_litellm:
             return False
         if ctx.vkey is None or not ctx.vkey.is_system:
             return False
 
-        model_record = await GatewayModelRepository(self._session).get_by_name(
-            ctx.team_id, model
-        )
+        model_record = await GatewayModelRepository(self._session).get_by_name(ctx.team_id, model)
         if model_record is not None and model_record.enabled:
             return False
 
-        route = await GatewayRouteRepository(self._session).get_by_virtual_model(
-            ctx.team_id, model
-        )
+        route = await GatewayRouteRepository(self._session).get_by_virtual_model(ctx.team_id, model)
         return route is None
 
     @staticmethod
@@ -308,6 +374,7 @@ class ProxyUseCase:
         model = str(body.get("model", "")).strip()
         if not model:
             raise ValueError("model is required")
+        ctx.budget_model = model
 
         self._check_model(model, ctx)
         self._check_capability(ctx)
@@ -330,9 +397,8 @@ class ProxyUseCase:
                 router = await get_router(self._session)
                 response = await router.acompletion(**kwargs)
         except Exception as exc:
-            if (
-                self._is_router_model_miss(exc)
-                and await self._should_use_internal_direct_litellm(ctx, model)
+            if self._is_router_model_miss(exc) and await self._should_use_internal_direct_litellm(
+                ctx, model
             ):
                 try:
                     response = await self._direct_chat_completion(kwargs)
@@ -355,6 +421,7 @@ class ProxyUseCase:
         model = str(body.get("model", "")).strip()
         if not model:
             raise ValueError("model is required")
+        ctx.budget_model = model
         self._check_model(model, ctx)
         self._check_capability(ctx)
         await self._check_limits(ctx)
@@ -380,6 +447,7 @@ class ProxyUseCase:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.IMAGE
+        ctx.budget_model = self._optional_body_model(body)
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
@@ -400,6 +468,7 @@ class ProxyUseCase:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.AUDIO_TRANSCRIPTION
+        ctx.budget_model = self._optional_body_model(body)
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
@@ -420,6 +489,7 @@ class ProxyUseCase:
         body: dict[str, Any],
     ) -> dict[str, Any] | bytes:
         ctx.capability = GatewayCapability.AUDIO_SPEECH
+        ctx.budget_model = self._optional_body_model(body)
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
@@ -430,10 +500,19 @@ class ProxyUseCase:
         from litellm import aspeech
 
         try:
-            return await aspeech(**kwargs)
+            result = await aspeech(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
             raise
+        # TTS 多为二进制返回，无 usage；仍结算请求/占位 token 与 DB 用量，与 limit_requests 预扣对齐
+        _schedule_settle_usage(
+            ctx,
+            self._budget,
+            tokens=0,
+            cost=Decimal("0"),
+            requests=1,
+        )
+        return result
 
     async def rerank(
         self,
@@ -441,6 +520,7 @@ class ProxyUseCase:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.RERANK
+        ctx.budget_model = self._optional_body_model(body)
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
@@ -450,10 +530,11 @@ class ProxyUseCase:
         from litellm import arerank
 
         try:
-            return await arerank(**kwargs)
+            response = await arerank(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
             raise
+        return _adapt_response(response, ctx, self._budget)
 
 
 # =============================================================================
@@ -481,14 +562,7 @@ def _adapt_response(
     usage = data.get("usage") or {}
     tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
     cost = _calc_cost(response)
-
-    # 异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。
-    async def _settle() -> None:
-        await _settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=1)
-
-    with suppress(RuntimeError):
-        settle_task = asyncio.create_task(_settle())
-        register_proxy_deferred_task(settle_task)
+    _schedule_settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=1)
     return data
 
 
@@ -526,18 +600,25 @@ async def _settle_usage(
         ("user", str(ctx.user_id) if ctx.user_id else None),
         ("key", str(ctx.vkey.vkey_id) if ctx.vkey else None),
     )
+    periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
+    model_keys: list[str | None] = [None]
+    if ctx.budget_model:
+        model_keys.append(ctx.budget_model)
+
     for scope, scope_id in scope_items:
         if scope_id is None:
             continue
-        for period in (PERIOD_DAILY, PERIOD_MONTHLY):
-            with suppress(Exception):
-                await budget.commit(
-                    scope=scope,
-                    scope_id=scope_id,
-                    period=period,
-                    delta_cost=cost,
-                    delta_tokens=tokens,
-                )
+        for period in periods:
+            for mk in model_keys:
+                with suppress(Exception):
+                    await budget.commit(
+                        scope=scope,
+                        scope_id=scope_id,
+                        period=period,
+                        delta_cost=cost,
+                        delta_tokens=tokens,
+                        budget_model_name=mk,
+                    )
 
     with suppress(Exception):
         async with get_session_context() as session:
@@ -546,16 +627,35 @@ async def _settle_usage(
                 if scope_id is None:
                     continue
                 scope_uuid = uuid.UUID(scope_id)
-                for period in (PERIOD_DAILY, PERIOD_MONTHLY):
-                    record = await repo.get_for(scope, scope_uuid, period)
-                    if record is None:
-                        continue
-                    await repo.settle_usage(
-                        record.id,
-                        delta_usd=cost,
-                        delta_tokens=tokens,
-                        delta_requests=requests,
-                    )
+                for period in periods:
+                    for mk in model_keys:
+                        record = await repo.get_for(scope, scope_uuid, period, model_name=mk)
+                        if record is None:
+                            continue
+                        await repo.settle_usage(
+                            record.id,
+                            delta_usd=cost,
+                            delta_tokens=tokens,
+                            delta_requests=requests,
+                        )
+
+
+def _schedule_settle_usage(
+    ctx: ProxyContext,
+    budget: BudgetService,
+    *,
+    tokens: int,
+    cost: Decimal,
+    requests: int,
+) -> None:
+    """异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。"""
+
+    async def _settle() -> None:
+        await _settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=requests)
+
+    with suppress(RuntimeError):
+        settle_task = asyncio.create_task(_settle())
+        register_proxy_deferred_task(settle_task)
 
 
 def _calc_cost(response: Any) -> Decimal:

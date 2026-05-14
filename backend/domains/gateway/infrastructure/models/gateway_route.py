@@ -62,9 +62,7 @@ class GatewayRoute(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "team_id", "virtual_model", name="uq_gateway_routes_team_virtual_model"
-        ),
+        UniqueConstraint("team_id", "virtual_model", name="uq_gateway_routes_team_virtual_model"),
     )
 
     def __repr__(self) -> str:

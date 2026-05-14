@@ -49,7 +49,7 @@ backend/
 │   │   ├── infrastructure/models/
 │   │   └── presentation/          # 管理面团队解析、X-Team-Id 依赖
 │   │
-│   ├── gateway/                   # AI Gateway：虚拟 Key、预算、OpenAI 兼容代理、管理面 CQRS
+│   ├── gateway/                   # AI Gateway、/v1 OpenAI + Anthropic、团队/预算/日志
 │   │   ├── presentation/          # /api/v1/gateway/*、/v1/* 路由与 deps（不直连仓储）
 │   │   ├── application/
 │   │   │   ├── ports.py                    # GatewayProxyProtocol、GatewayCallContext 等（跨域内部桥接契约）
@@ -79,7 +79,6 @@ backend/
 │   │   │   └── models/
 │   │   └── presentation/
 │   │
-│   ├── studio/                    # 工作室 / 工作流
 │   └── evaluation/                # 评估
 │
 ├── bootstrap/                     # 进程入口：FastAPI app、生命周期、路由挂载、全局中间件
@@ -116,7 +115,7 @@ backend/
 - **`domains/identity/`**：认证主体、JWT、API Key、用户模型与登录相关 HTTP。
 - **`domains/session/`**：会话生命周期、消息持久化、标题；对外端口 `SessionApplicationPort`。
 - **`domains/tenancy/`**：团队与成员关系的**权威**数据与服务；Gateway 管理面通过 TeamService / 仓储访问团队，不复制团队规则。
-- **`domains/gateway/`**：多模型路由、虚拟 Key、预算、日志与护栏；**内部 LLM 走 Gateway 桥接**的契约与实现均在 `application/` 上述文件中，与 OpenAI 兼容入口共用领域模型。
+- **`domains/gateway/`**：多模型路由、虚拟 Key、预算、日志与护栏；**内部 LLM 走 Gateway 桥接**的契约与实现均在 `application/` 上述文件中，与 **根路径 `/v1/*` 对外代理**（OpenAI 形与 Anthropic Messages）共用领域模型与 `ProxyUseCase`。
 - **`domains/agent/`**：对话编排、工具、记忆、沙箱等；LLM 调用可通过端口走 Gateway 或直连 LiteLLM（由配置与归因决定）。
 - **`bootstrap/`**：唯一进程入口侧组装；各域保持可测试的纯函数与可注入依赖。
 

@@ -2,10 +2,10 @@
  * AI Gateway · 模型与路由
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Route, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Route, Trash2, Zap } from 'lucide-react'
 
 import {
   gatewayApi,
@@ -16,6 +16,7 @@ import {
   type GatewayRouteCreateBody,
   type ProviderCredential,
 } from '@/api/gateway'
+import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -38,6 +39,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
+import { MODEL_PROVIDERS } from '@/types/user-model'
 
 const MANUAL_PRESET = '__manual__'
 const NO_CREDENTIAL = '__none__'
@@ -50,6 +53,9 @@ const CAPABILITIES = [
   'audio_speech',
   'rerank',
 ] as const
+
+/** 与后端 ``_TEST_SUPPORTED_CAPABILITIES`` 保持一致；其它 capability 第一版禁用按钮。 */
+const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(['chat', 'embedding'])
 
 const ROUTING_STRATEGIES = [
   'simple-shuffle',
@@ -126,14 +132,37 @@ function ModelsTable(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
+  const [providerFilter, setProviderFilter] = useState<string>('')
+  const [providerChoices, setProviderChoices] = useState<string[]>(() =>
+    MODEL_PROVIDERS.map((p) => p.id)
+  )
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['gateway', 'models'],
-    queryFn: () => gatewayApi.listModels(),
+    queryKey: ['gateway', 'models', providerFilter],
+    queryFn: () =>
+      providerFilter
+        ? gatewayApi.listModels({ provider: providerFilter })
+        : gatewayApi.listModels(),
   })
+
+  useEffect(() => {
+    if (providerFilter !== '' || !items?.length) return
+    const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
+    for (const m of items) {
+      s.add(m.provider)
+    }
+    setProviderChoices(Array.from(s).sort())
+  }, [items, providerFilter])
+
+  function channelLabel(id: string): string {
+    return MODEL_PROVIDERS.find((p) => p.id === id)?.name ?? id
+  }
   const { data: presets } = useQuery({
-    queryKey: ['gateway', 'models', 'presets'],
-    queryFn: () => gatewayApi.listModelPresets(),
+    queryKey: ['gateway', 'models', 'presets', providerFilter],
+    queryFn: () =>
+      providerFilter
+        ? gatewayApi.listModelPresets({ provider: providerFilter })
+        : gatewayApi.listModelPresets(),
   })
   const { data: credentials } = useQuery({
     queryKey: ['gateway', 'credentials'],
@@ -158,16 +187,57 @@ function ModelsTable(): React.JSX.Element {
       toast({ title: '已删除' })
     },
   })
+  const testMutation = useMutation({
+    mutationFn: (id: string) => gatewayApi.testModel(id),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+      if (result.success) {
+        toast({ title: '连接成功', description: result.message })
+      } else {
+        toast({ variant: 'destructive', title: '连接失败', description: result.message })
+      }
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '测试出错', description: e.message })
+    },
+  })
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          已注册模型会被 Gateway Router 拉取；聊天默认模型名匹配后会进入统一用量日志
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">
+            已注册模型会被 Gateway Router 拉取；聊天默认模型名匹配后会进入统一用量日志
+          </p>
+          <div className="flex max-w-xs flex-col gap-1">
+            <Label htmlFor="gw-model-channel" className="text-xs">
+              按接入通道筛选
+            </Label>
+            <Select
+              value={providerFilter || '__all__'}
+              onValueChange={(v) => {
+                setProviderFilter(v === '__all__' ? '' : v)
+              }}
+            >
+              <SelectTrigger id="gw-model-channel" className="h-8 w-full sm:w-[220px]">
+                <SelectValue placeholder="全部" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">全部</SelectItem>
+                {providerChoices.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {channelLabel(id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_GATEWAY}</p>
+          </div>
+        </div>
         {canWrite && (
           <Button
             size="sm"
+            className="shrink-0 self-start sm:self-auto"
             onClick={() => {
               setOpen(true)
             }}
@@ -188,55 +258,97 @@ function ModelsTable(): React.JSX.Element {
                 <th className="px-4 py-2 text-left font-medium">真实模型</th>
                 <th className="px-4 py-2 text-left font-medium">提供商</th>
                 <th className="px-4 py-2 text-left font-medium">权重</th>
-                <th className="px-4 py-2 text-left font-medium">RPM/TPM</th>
+                <th className="px-4 py-2 text-left font-medium">每分钟请求 / 每分钟令牌</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
+                <th className="px-4 py-2 text-left font-medium">连通性</th>
                 <th className="px-4 py-2 text-left font-medium" />
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
                     加载中...
                   </td>
                 </tr>
               )}
               {!isLoading && (items?.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
                     暂无注册模型
                   </td>
                 </tr>
               )}
-              {items?.map((m: GatewayModel) => (
-                <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
-                  <td className="px-4 py-2 font-mono text-xs">{m.name}</td>
-                  <td className="px-4 py-2 text-xs">
-                    <Badge variant="outline">{m.capability}</Badge>
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs">{m.real_model}</td>
-                  <td className="px-4 py-2 text-xs">{m.provider}</td>
-                  <td className="px-4 py-2 text-xs tabular-nums">{m.weight}</td>
-                  <td className="px-4 py-2 text-xs tabular-nums">
-                    {`${String(m.rpm_limit ?? '∞')} / ${String(m.tpm_limit ?? '∞')}`}
-                  </td>
-                  <td className="px-4 py-2 text-xs">{m.enabled ? '启用' : '禁用'}</td>
-                  <td className="px-4 py-2">
-                    {canWrite && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          if (confirm(`删除 ${m.name}?`)) deleteMutation.mutate(m.id)
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {items?.map((m: GatewayModel) => {
+                const isTestable = TESTABLE_CAPABILITIES.has(m.capability)
+                const isTesting = testMutation.isPending && testMutation.variables === m.id
+                return (
+                  <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
+                    <td className="px-4 py-2 font-mono text-xs">{m.name}</td>
+                    <td className="px-4 py-2 text-xs">
+                      <Badge variant="outline">{m.capability}</Badge>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs">{m.real_model}</td>
+                    <td className="px-4 py-2 text-xs">{m.provider}</td>
+                    <td className="px-4 py-2 text-xs tabular-nums">{m.weight}</td>
+                    <td className="px-4 py-2 text-xs tabular-nums">
+                      {`${String(m.rpm_limit ?? '∞')} / ${String(m.tpm_limit ?? '∞')}`}
+                    </td>
+                    <td className="px-4 py-2 text-xs">{m.enabled ? '启用' : '禁用'}</td>
+                    <td className="max-w-[min(24rem,40vw)] px-4 py-2 align-top">
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <ModelStatusBadge
+                          status={m.last_test_status}
+                          testedAt={m.last_tested_at}
+                          reason={m.last_test_reason}
+                        />
+                        {m.last_test_status === 'failed' && m.last_test_reason ? (
+                          <p
+                            className="line-clamp-3 text-xs text-destructive/90 [overflow-wrap:anywhere]"
+                            title={m.last_test_reason}
+                          >
+                            {m.last_test_reason}
+                          </p>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1">
+                        {canWrite && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            disabled={!isTestable || isTesting}
+                            title={isTestable ? '测试连通性' : '该 capability 暂不支持连通性测试'}
+                            onClick={() => {
+                              testMutation.mutate(m.id)
+                            }}
+                          >
+                            {isTesting ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Zap className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        )}
+                        {canWrite && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              if (confirm(`删除 ${m.name}?`)) deleteMutation.mutate(m.id)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </CardContent>
@@ -557,7 +669,7 @@ function CreateModelDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>RPM</Label>
+              <Label>每分钟请求数</Label>
               <Input
                 inputMode="numeric"
                 value={values.rpmLimit}
@@ -568,7 +680,7 @@ function CreateModelDialog({
               />
             </div>
             <div>
-              <Label>TPM</Label>
+              <Label>每分钟令牌数</Label>
               <Input
                 inputMode="numeric"
                 value={values.tpmLimit}

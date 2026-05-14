@@ -16,7 +16,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,7 +30,7 @@ class GatewayBudget(BaseModel):
     业务规则：
     - scope: system / team / key / user
     - period: daily / monthly / total
-    - 同 scope + scope_id + period 唯一
+    - 同 scope + scope_id + period + model_name 语义唯一（汇总行 model_name IS NULL）
     - limit_* NULL 表示该维度无限制
     """
 
@@ -43,6 +43,7 @@ class GatewayBudget(BaseModel):
         index=True,
     )
     period: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # 限额
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
@@ -67,14 +68,29 @@ class GatewayBudget(BaseModel):
     reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "scope", "scope_id", "period", name="uq_gateway_budgets_scope_period"
+        Index(
+            "uq_gateway_budgets_scope_period_agg",
+            "scope",
+            "scope_id",
+            "period",
+            unique=True,
+            postgresql_where=text("model_name IS NULL"),
+        ),
+        Index(
+            "uq_gateway_budgets_scope_period_model",
+            "scope",
+            "scope_id",
+            "period",
+            "model_name",
+            unique=True,
+            postgresql_where=text("model_name IS NOT NULL"),
         ),
         Index("ix_gateway_budgets_lookup", "scope", "scope_id"),
     )
 
     def __repr__(self) -> str:
-        return f"<GatewayBudget {self.scope}:{self.scope_id} {self.period}>"
+        m = self.model_name or "*"
+        return f"<GatewayBudget {self.scope}:{self.scope_id} {self.period} model={m!r}>"
 
 
 __all__ = ["GatewayBudget"]

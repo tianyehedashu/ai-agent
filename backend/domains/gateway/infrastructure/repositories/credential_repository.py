@@ -38,6 +38,37 @@ class ProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_user_by_provider(
+        self, user_id: uuid.UUID, provider: str
+    ) -> list[ProviderCredential]:
+        stmt = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.scope == "user",
+                ProviderCredential.scope_id == user_id,
+                ProviderCredential.provider == provider,
+            )
+            .order_by(ProviderCredential.name)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_user_by_provider_and_name(
+        self, user_id: uuid.UUID, provider: str, name: str
+    ) -> ProviderCredential | None:
+        stmt = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.scope == "user",
+                ProviderCredential.scope_id == user_id,
+                ProviderCredential.provider == provider,
+                ProviderCredential.name == name,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_for_team(
         self,
         team_id: uuid.UUID,

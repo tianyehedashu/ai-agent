@@ -45,6 +45,7 @@ from domains.agent.presentation.video_task_router import router as video_task_ro
 from domains.evaluation.presentation.router import router as evaluation_router
 from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
 from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
@@ -52,8 +53,6 @@ from domains.identity.presentation.api_key_router import router as api_key_route
 from domains.identity.presentation.router import router as identity_router
 from domains.identity.presentation.usage_router import router as usage_router
 from domains.session.presentation import session_router
-from domains.studio.presentation.quality_router import router as quality_router
-from domains.studio.presentation.router import router as studio_router
 from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
 from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
 from libs.db.database import get_session_context, init_db
@@ -566,12 +565,6 @@ app.include_router(tools_router, prefix=api_router_prefix, tags=["Tools"])
 # 记忆管理
 app.include_router(memory_router, prefix=f"{api_router_prefix}/memory", tags=["Memory"])
 
-# 工作台 (Studio)
-app.include_router(studio_router, prefix=api_router_prefix, tags=["Studio"])
-
-# 代码质量
-app.include_router(quality_router, prefix=api_router_prefix, tags=["Quality"])
-
 # 系统接口
 app.include_router(system_router, prefix=f"{api_router_prefix}/system", tags=["System"])
 
@@ -635,6 +628,8 @@ app.include_router(gateway_mgmt_router, tags=["AI Gateway"])
 
 # AI Gateway OpenAI 兼容入口：根路径下的 /v1/*（与 OpenAI 客户端默认 base_url 一致）
 app.include_router(openai_compat_router, tags=["OpenAI Compat"])
+# Anthropic Messages API：/v1/messages（与 Anthropic SDK base_url 对齐）
+app.include_router(anthropic_compat_router, tags=["Anthropic Compat"])
 
 
 @app.get("/")

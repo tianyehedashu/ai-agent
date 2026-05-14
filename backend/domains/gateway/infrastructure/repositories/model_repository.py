@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, func, or_, select
 
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
@@ -28,6 +28,7 @@ class GatewayModelRepository:
         *,
         only_enabled: bool = True,
         capability: str | None = None,
+        provider: str | None = None,
     ) -> list[GatewayModel]:
         clauses = []
         if team_id is None:
@@ -42,6 +43,8 @@ class GatewayModelRepository:
             clauses.append(GatewayModel.enabled.is_(True))
         if capability:
             clauses.append(GatewayModel.capability == capability)
+        if provider is not None:
+            clauses.append(GatewayModel.provider == provider)
         stmt = select(GatewayModel).where(*clauses).order_by(*order_by)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -109,10 +112,20 @@ class GatewayModelRepository:
         for key, value in fields.items():
             if not hasattr(model, key):
                 continue
-            if isinstance(value, bool) or value is not None:
+            # last_test_reason=None 表示成功测试后清空上次失败说明
+            if key == "last_test_reason" or isinstance(value, bool) or value is not None:
                 setattr(model, key, value)
         await self._session.flush()
         return model
+
+    async def count_by_credential_id(self, credential_id: uuid.UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(GatewayModel)
+            .where(GatewayModel.credential_id == credential_id)
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one() or 0)
 
     async def delete(self, model_id: uuid.UUID) -> bool:
         model = await self.get(model_id)

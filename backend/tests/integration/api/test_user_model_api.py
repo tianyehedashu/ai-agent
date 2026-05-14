@@ -148,6 +148,58 @@ class TestUserModelCrudApi:
             assert "video" in item["model_types"]
 
     @pytest.mark.asyncio
+    async def test_list_models_invalid_provider_returns_400(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """列表查询非法 provider 返回 400"""
+        r = await dev_client.get(
+            "/api/v1/user-models/",
+            params={"provider": "not_a_real_provider"},
+            headers=auth_headers,
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_list_models_filter_by_provider(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """按 provider 过滤用户模型列表"""
+        await dev_client.post(
+            "/api/v1/user-models/",
+            json={
+                "display_name": "POpen",
+                "provider": "openai",
+                "model_id": "gpt-4o",
+            },
+            headers=auth_headers,
+        )
+        await dev_client.post(
+            "/api/v1/user-models/",
+            json={
+                "display_name": "PDeep",
+                "provider": "deepseek",
+                "model_id": "deepseek-chat",
+            },
+            headers=auth_headers,
+        )
+        r = await dev_client.get(
+            "/api/v1/user-models/",
+            params={"provider": "deepseek", "limit": 100},
+            headers=auth_headers,
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        for item in data["items"]:
+            assert item["provider"] == "deepseek"
+        names = {item["display_name"] for item in data["items"]}
+        assert "PDeep" in names
+        assert "POpen" not in names
+
+    @pytest.mark.asyncio
     async def test_get_model_detail(
         self,
         dev_client: AsyncClient,
@@ -331,6 +383,46 @@ class TestUserModelAvailableApi:
         assert r.status_code == status.HTTP_200_OK
         for sm in r.json()["system_models"]:
             assert "text" in sm["model_types"]
+
+    @pytest.mark.asyncio
+    async def test_available_invalid_provider_returns_400(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        r = await dev_client.get(
+            "/api/v1/user-models/available",
+            params={"provider": "bad_vendor"},
+            headers=auth_headers,
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_available_filter_by_provider(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        await dev_client.post(
+            "/api/v1/user-models/",
+            json={
+                "display_name": "Avail DS",
+                "provider": "deepseek",
+                "model_id": "deepseek-chat",
+            },
+            headers=auth_headers,
+        )
+        r = await dev_client.get(
+            "/api/v1/user-models/available",
+            params={"type": "text", "provider": "deepseek"},
+            headers=auth_headers,
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        for sm in data["system_models"]:
+            assert sm["provider"] == "deepseek"
+        for um in data["user_models"]:
+            assert um["provider"] == "deepseek"
 
     @pytest.mark.asyncio
     async def test_available_without_auth_returns_system_models(

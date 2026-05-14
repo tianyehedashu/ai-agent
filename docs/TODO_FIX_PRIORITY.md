@@ -11,7 +11,7 @@
 |------|------|
 | **DRY** | 复用现有类型、组件、工具函数；不重复造轮子。 |
 | **用框架** | 项目已有的技术栈必须沿用：前端 `react-hook-form` + `zod` + `@/components/ui/form` 做表单；后端按 `domains/` 分层、`libs/` 基础设施。 |
-| **选型需确认** | 涉及**库/协议/实现选型**（如 MCP Client 用官方 SDK 还是自研、Studio 执行器用 LangGraph 还是其他）时，**先列出可选方案与优劣，再与负责人确认**，不得直接实现。 |
+| **选型需确认** | 涉及**库/协议/实现选型**（如 MCP Client 用官方 SDK 还是自研）时，**先列出可选方案与优劣，再与负责人确认**，不得直接实现。 |
 
 ---
 
@@ -22,7 +22,7 @@
 | 事项 | 可选方向 | 说明 |
 |------|----------|------|
 | **P1 MCP Client** | ✅ **已选：LangChain `langchain-mcp-adapters`**（见下方选型结论）。对接：`parse_url_to_connection` + `MCPServerConfig` → `connections`；LangChain Tool 薄包装为 BaseTool 后注册。 |
-| **P2 Studio 测试执行** | ① LangGraph / 现有 Agent 引擎 ② 专用工作流运行时 ③ 仅前端 mock + 后端占位 | 须明确：是否复用现有 LangGraph 图、事件格式与前端约定。 |
+| **P2 Studio 测试执行** | ~~已取消~~（2026-05：内置工作台 `domains/studio` 与前端 `/studio` 已从仓库移除；下表 **4–5**、**10** 不再适用。） |
 | **P3 远程沙箱** | ① 某云/自建 API ② 不做，保留 `NotImplementedError` | 若做，须明确调用方、计费与隔离边界。 |
 | **P3 A2A Client** | ① HTTP/gRPC 调用远端 Agent ② 消息队列 ③ 不做，保留 stub | 若做，须明确协议与发现机制。 |
 
@@ -99,27 +99,12 @@
 
 ---
 
-## P2：Studio 测试运行
+## ~~P2：Studio 测试运行~~（已取消，2026-05）
 
-### 4. Studio 后端测试执行
+内置工作台已从本仓库移除；以下条目仅作历史记录，**不再排期**。
 
-| 项目 | 说明 |
-|------|------|
-| **位置** | `backend/domains/studio/presentation/router.py` → `POST /test/run` |
-| **现状** | 仅 `event_generator()` 模拟固定 SSE 事件 |
-| **⏸ 选型确认** | 见上文 **选型确认 checkpoint**「P2 Studio 测试执行」。确认后再实现。 |
-| **修复** | 按确认方案对接工作流执行：解析 `workflow_id` / 图定义，真实跑图，将 `node_enter` / `node_exit` / `completed` 等以 SSE 推送 |
-| **产出** | 测试运行 API 返回真实执行事件 |
-
-### 5. Studio 前端测试运行
-
-| 项目 | 说明 |
-|------|------|
-| **位置** | `frontend/src/pages/studio/index.tsx` → `runTest` |
-| **现状** | 只有 `setIsLoading` + TODO，未调后端 |
-| **修复** | `runTest` 内 `fetch` `/api/v1/studio/.../test/run`（或项目内实际路径），消费 SSE，更新 UI（进度、节点状态、结果）；与 **4** 对齐事件格式 |
-| **依赖** | 可与 **4** 并行开发，最终对接 **4** |
-| **产出** | 用户点击运行即触发真实工作流并在前端看到执行过程 |
+- ~~4. Studio 后端测试执行~~（`domains/studio` 已删除）
+- ~~5. Studio 前端测试运行~~（`frontend/src/pages/studio` 已删除）
 
 ---
 
@@ -163,16 +148,9 @@
 
 ---
 
-## 可选：消除 Sonar 等 TODO 告警
+## ~~可选：Codegen 占位 TODO~~（已随 Studio 移除）
 
-### 10. Codegen 占位 TODO
-
-| 项目 | 说明 |
-|------|------|
-| **位置** | `backend/domains/studio/infrastructure/studio/codegen.py`：生成代码中的 `# TODO: 实现节点逻辑`、`# TODO: 实现路由逻辑` |
-| **现状** | 设计如此，为用户填写占位 |
-| **修复** | 改为非 TODO 注释，如 `# 在此实现节点逻辑`、`# 在此实现路由逻辑`，避免被 Sonar 识别为 TODO |
-| **产出** | 减少误报，不改变生成逻辑 |
+原 `domains/studio/.../codegen.py` 已删除；本节不再适用。
 
 ---
 
@@ -180,12 +158,12 @@
 
 1. **P0**：MCP 编辑对话框 ✅ 已完成（含 EditDialog 使用 react-hook-form + zod + Form 的重构）。
 2. **P1**：MCP Client 真实协议 → MCP 连接测试。
-3. **P2**：Studio 后端测试执行 + 前端测试运行（可部分并行）。
+3. ~~**P2**：Studio 测试~~ — 已随工作台移除取消。
 4. **P3**：按产品需求择机做 Evaluation、远程沙箱、TieredMemory 短期召回、A2A。
-5. **可选**：codegen 注释替换，在需消警时做。
+5. ~~**可选**：codegen 注释替换~~ — 已随 Studio 移除，不再适用。
 
 ---
 
 ## 非真 TODO（不修复）
 
-- **codegen 占位**：生成模板内的 “实现节点/路由逻辑” 为刻意占位，非遗漏实现；若仅消警见 **10**。
+- **codegen 占位**：原 Studio 代码生成器已移除；若未来重新引入类似能力，再在模板注释中避免 Sonar TODO 误报即可。

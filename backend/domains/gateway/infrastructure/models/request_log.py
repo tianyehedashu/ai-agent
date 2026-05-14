@@ -54,21 +54,18 @@ class GatewayRequestLog(Base):
     )
 
     # 归属（删除原实体时置 NULL，保留快照）
-    team_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
-    vkey_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    vkey_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # 快照（防止级联删除/改名导致历史失真）
     team_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     user_email_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     vkey_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
     route_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    credential_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # 调用信息
     capability: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
@@ -101,9 +98,7 @@ class GatewayRequestLog(Base):
     )
 
     # 性能
-    latency_ms: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0", default=0
-    )
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     ttfb_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # 缓存与回退
@@ -125,6 +120,7 @@ class GatewayRequestLog(Base):
         Index("ix_gateway_request_logs_team_time", "team_id", "created_at"),
         Index("ix_gateway_request_logs_user_time", "user_id", "created_at"),
         Index("ix_gateway_request_logs_vkey_time", "vkey_id", "created_at"),
+        Index("ix_gateway_request_logs_credential_time", "credential_id", "created_at"),
         Index("ix_gateway_request_logs_status_time", "status", "created_at"),
         # 分区配置（在 alembic 中显式声明 PARTITION BY RANGE (created_at)）
         {"postgresql_partition_by": "RANGE (created_at)"},

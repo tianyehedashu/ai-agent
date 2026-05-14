@@ -23,9 +23,7 @@ class BudgetRepository:
     async def get(self, budget_id: uuid.UUID) -> GatewayBudget | None:
         return await self._session.get(GatewayBudget, budget_id)
 
-    async def list_for_scope(
-        self, scope: str, scope_id: uuid.UUID | None
-    ) -> list[GatewayBudget]:
+    async def list_for_scope(self, scope: str, scope_id: uuid.UUID | None) -> list[GatewayBudget]:
         stmt = select(GatewayBudget).where(
             and_(GatewayBudget.scope == scope, GatewayBudget.scope_id == scope_id)
         )
@@ -33,13 +31,23 @@ class BudgetRepository:
         return list(result.scalars().all())
 
     async def get_for(
-        self, scope: str, scope_id: uuid.UUID | None, period: str
+        self,
+        scope: str,
+        scope_id: uuid.UUID | None,
+        period: str,
+        *,
+        model_name: str | None = None,
     ) -> GatewayBudget | None:
+        if model_name is None:
+            model_clause = GatewayBudget.model_name.is_(None)
+        else:
+            model_clause = GatewayBudget.model_name == model_name
         stmt = select(GatewayBudget).where(
             and_(
                 GatewayBudget.scope == scope,
                 GatewayBudget.scope_id == scope_id,
                 GatewayBudget.period == period,
+                model_clause,
             )
         )
         result = await self._session.execute(stmt)
@@ -51,17 +59,19 @@ class BudgetRepository:
         scope: str,
         scope_id: uuid.UUID | None,
         period: str,
+        model_name: str | None = None,
         limit_usd: Decimal | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
         reset_at: datetime | None = None,
     ) -> GatewayBudget:
-        existing = await self.get_for(scope, scope_id, period)
+        existing = await self.get_for(scope, scope_id, period, model_name=model_name)
         if existing is None:
             budget = GatewayBudget(
                 scope=scope,
                 scope_id=scope_id,
                 period=period,
+                model_name=model_name,
                 limit_usd=limit_usd,
                 limit_tokens=limit_tokens,
                 limit_requests=limit_requests,

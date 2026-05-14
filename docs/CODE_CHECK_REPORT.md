@@ -22,7 +22,6 @@
 | `backend/bootstrap/config.py` / `llm/__init__.py` / `embeddings.py` | `dashscope_api_base` 使用 dashscope 兼容模式 URL，属供应商兼容配置 |
 | `backend/domains/identity/infrastructure/authentication.py` | `CryptContext(..., deprecated="auto")` 为 passlib 推荐用法 |
 | `backend/alembic/versions/20260128_add_encrypted_key.py` | 迁移中 `encrypted_key = 'legacy_key'` 为历史数据兼容，保留即可 |
-| `backend/domains/studio/application/workflow_use_case.py` | `# Backward compatibility alias` 显式标注兼容别名，可保留 |
 
 ---
 
@@ -57,11 +56,8 @@
 |------|------|
 | `video_task_use_case.py` | ~~`_submit_to_vendor` / `_poll_vendor` TODO~~ — 已更新为「通过 VideoAPIClient 调用 GIIKIN API」说明 |
 | `amazon_video_tools.py` | 产品调研、竞品调研的「TODO: 实现真实…」 |
-| `studio/presentation/router.py` | 测试执行的 TODO |
 | `evaluation/presentation/router.py` | 完整评估流程的 TODO |
-| `studio/infrastructure/studio/codegen.py` | 节点/路由逻辑的 TODO |
 | `langgraph_store.py` / `tiered_memory.py` | 与 checkpointer/会话历史相关的 TODO |
-| `frontend/src/pages/studio/index.tsx` | 「TODO: 实现测试运行」 |
 
 ---
 

@@ -11,9 +11,7 @@ def deterministic_success_sample(*, request_key: str, sample_rate: float) -> boo
         return True
     if sample_rate <= 0.0:
         return False
-    digest = hashlib.sha256(
-        request_key.encode("utf-8", errors="replace")
-    ).digest()
+    digest = hashlib.sha256(request_key.encode("utf-8", errors="replace")).digest()
     val = int.from_bytes(digest[:4], "big") % 10_000
     return val < int(sample_rate * 10_000)
 
@@ -27,8 +25,11 @@ def should_persist_request_log_row(
     success_sample_rate: float,
     always_persist_non_success: bool,
     always_persist_cost_above_usd: float | None,
+    force_persist: bool = False,
 ) -> bool:
     """是否写入 ``gateway_request_logs`` 行（Redis 计数仍可单独更新）。"""
+    if force_persist:
+        return True
     if status != "success":
         return always_persist_non_success
     if always_persist_cost_above_usd is not None and cost_usd >= float(

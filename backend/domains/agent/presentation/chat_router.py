@@ -12,20 +12,47 @@ import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import ChatUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.application.user_model_use_case import UserModelUseCase
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.presentation.deps import AuthUser
+from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import AttachOptionalTeamContext
-from libs.api.deps import get_chat_service, get_checkpoint_service
+from libs.api.deps import get_checkpoint_service, get_sandbox_service
+from libs.db.database import get_session_context
+from libs.db.permission_context import (
+    PermissionContext,
+    get_permission_context,
+    set_permission_context,
+)
 from utils.serialization import Serializer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+
+def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
+    """为 SSE 生成器创建独立 ChatUseCase，避免复用 FastAPI 依赖 session。"""
+    sandbox_service = get_sandbox_service(request)
+    session_service = SessionUseCase(db, sandbox_service=sandbox_service)
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    catalog = get_model_catalog_adapter(db)
+    user_models = UserModelUseCase(db, catalog=catalog)
+    return ChatUseCase(
+        db,
+        session_use_case=session_service,
+        session_use_case_factory=SessionUseCase,
+        checkpointer=checkpointer,
+        model_catalog=catalog,
+        user_model_use_case=user_models,
+    )
 
 
 # =============================================================================
@@ -50,6 +77,15 @@ class ChatRequest(BaseModel):
     session_id: str | None = Field(default=None, description="会话 ID（可选）")
     agent_id: str | None = Field(default=None, description="Agent ID（可选）")
     mcp_config: MCPConfigInput | None = Field(default=None, description="MCP 配置（仅新会话生效）")
+    model_ref: str | None = Field(
+        default=None,
+        max_length=300,
+        description="系统模型 id（如 provider/model）或用户模型 UUID；省略则使用会话已存或 Agent 默认",
+    )
+    gateway_verbose_request_log: bool | None = Field(
+        default=None,
+        description="True 且服务端允许时本请求启用网关详细日志（仍截断）；None=仅会话/vkey",
+    )
 
     @field_validator("session_id")
     @classmethod
@@ -107,9 +143,9 @@ class DiffResponse(BaseModel):
 @router.post("")
 async def chat(
     request: ChatRequest,
+    http_request: Request,
     _: AttachOptionalTeamContext,
     current_user: AuthUser,
-    chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
     发送消息并获取流式响应
@@ -117,27 +153,35 @@ async def chat(
     使用 Server-Sent Events (SSE) 返回事件流
     """
 
+    permission_context = get_permission_context()
+
     async def event_generator():
         try:
-            mcp_config_dict = (
-                {"enabled_servers": request.mcp_config.enabled_servers}
-                if request.mcp_config
-                else None
-            )
-            async for event in chat_service.chat(
-                session_id=request.session_id,
-                message=request.message,
-                agent_id=request.agent_id,
-                user_id=current_user.id,
-                mcp_config=mcp_config_dict,
-            ):
-                try:
-                    event_dict = event.model_dump(mode="json", warnings="error")
-                except Exception:
-                    logger.error("⚠️ Pydantic 序列化错误！完整堆栈", exc_info=True)
-                    event_dict = Serializer.serialize_dict(event.model_dump())
-                serialized_data = Serializer.serialize(event_dict)
-                yield f"data: {json.dumps(serialized_data)}\n\n"
+            if isinstance(permission_context, PermissionContext):
+                set_permission_context(permission_context)
+            async with get_session_context() as db:
+                chat_service = _build_stream_chat_service(db, http_request)
+                mcp_config_dict = (
+                    {"enabled_servers": request.mcp_config.enabled_servers}
+                    if request.mcp_config
+                    else None
+                )
+                async for event in chat_service.chat(
+                    session_id=request.session_id,
+                    message=request.message,
+                    agent_id=request.agent_id,
+                    user_id=current_user.id,
+                    mcp_config=mcp_config_dict,
+                    model_ref=request.model_ref,
+                    gateway_verbose_request_log=request.gateway_verbose_request_log,
+                ):
+                    try:
+                        event_dict = event.model_dump(mode="json", warnings="error")
+                    except Exception:
+                        logger.error("⚠️ Pydantic 序列化错误！完整堆栈", exc_info=True)
+                        event_dict = Serializer.serialize_dict(event.model_dump())
+                    serialized_data = Serializer.serialize(event_dict)
+                    yield f"data: {json.dumps(serialized_data)}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as e:
@@ -158,9 +202,9 @@ async def chat(
 @router.post("/resume")
 async def resume_execution(
     request: ResumeRequest,
+    http_request: Request,
     _: AttachOptionalTeamContext,
     current_user: AuthUser,
-    chat_service: ChatUseCase = Depends(get_chat_service),
 ) -> StreamingResponse:
     """
     恢复中断的执行
@@ -168,18 +212,24 @@ async def resume_execution(
     用于 Human-in-the-Loop 场景
     """
 
+    permission_context = get_permission_context()
+
     async def event_generator():
         try:
-            async for event in chat_service.resume(
-                session_id=request.session_id,
-                checkpoint_id=request.checkpoint_id,
-                action=request.action,
-                modified_args=request.modified_args,
-                user_id=current_user.id,
-            ):
-                event_dict = event.model_dump(mode="json")
-                serialized_data = Serializer.serialize(event_dict)
-                yield f"data: {json.dumps(serialized_data)}\n\n"
+            if isinstance(permission_context, PermissionContext):
+                set_permission_context(permission_context)
+            async with get_session_context() as db:
+                chat_service = _build_stream_chat_service(db, http_request)
+                async for event in chat_service.resume(
+                    session_id=request.session_id,
+                    checkpoint_id=request.checkpoint_id,
+                    action=request.action,
+                    modified_args=request.modified_args,
+                    user_id=current_user.id,
+                ):
+                    event_dict = event.model_dump(mode="json")
+                    serialized_data = Serializer.serialize(event_dict)
+                    yield f"data: {json.dumps(serialized_data)}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as e:

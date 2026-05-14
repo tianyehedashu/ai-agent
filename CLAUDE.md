@@ -26,7 +26,6 @@ backend/
 │   │       ├── memory/      # 记忆系统
 │   │       ├── tools/       # 工具系统
 │   │       └── reasoning/   # 推理策略
-│   ├── studio/              # 工作室域（工作流）
 │   └── evaluation/          # 评估域
 ├── libs/                    # 纯技术基础设施（非业务）
 │   ├── types/               # 通用工具类型 (Result[T])

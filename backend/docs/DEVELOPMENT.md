@@ -123,7 +123,7 @@ pre-commit run --all-files
 ```
 backend/
 ├── bootstrap/     # FastAPI 入口、路由挂载、生命周期
-├── domains/       # 业务域：identity, session, agent, gateway, studio, evaluation
+├── domains/       # 业务域：identity, session, tenancy, agent, gateway, evaluation
 ├── libs/          # 数据库、配置、中间件、可观测性等非业务基础设施
 ├── alembic/
 ├── utils/

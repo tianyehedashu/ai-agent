@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Zap, Pencil, Loader2 } from 'lucide-react'
 
 import { userModelApi } from '@/api/userModel'
+import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import type {
   UserModel,
   CreateUserModelBody,
@@ -49,16 +51,24 @@ const EMPTY_FORM: CreateUserModelBody = {
   model_types: ['text'],
 }
 
+/** 列表筛选：全部接入通道 */
+const LIST_CHANNEL_ALL = '__all__'
+
 export function ModelTab(): React.JSX.Element {
   const { toast } = useToast()
   const qc = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<CreateUserModelBody>({ ...EMPTY_FORM })
+  const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['user-models'],
-    queryFn: () => userModelApi.list({ limit: 100 }),
+    queryKey: ['user-models', listChannel],
+    queryFn: () =>
+      userModelApi.list({
+        limit: 100,
+        provider: listChannel === LIST_CHANNEL_ALL ? undefined : listChannel,
+      }),
   })
 
   const createMut = useMutation({
@@ -102,6 +112,7 @@ export function ModelTab(): React.JSX.Element {
   const testMut = useMutation({
     mutationFn: (id: string) => userModelApi.testConnection(id),
     onSuccess: (result) => {
+      void qc.invalidateQueries({ queryKey: ['user-models'] })
       if (result.success) {
         toast({ title: '连接成功', description: result.message })
       } else {
@@ -179,6 +190,31 @@ export function ModelTab(): React.JSX.Element {
       </CardHeader>
 
       <CardContent>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="grid max-w-xs gap-1.5">
+            <Label htmlFor="model-list-channel">按接入通道筛选</Label>
+            <Select
+              value={listChannel}
+              onValueChange={(v) => {
+                setListChannel(v)
+              }}
+            >
+              <SelectTrigger id="model-list-channel" className="w-full sm:w-[220px]">
+                <SelectValue placeholder="全部" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={LIST_CHANNEL_ALL}>全部</SelectItem>
+                {MODEL_PROVIDERS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -190,10 +226,15 @@ export function ModelTab(): React.JSX.Element {
         ) : (
           <div className="space-y-3">
             {items.map((m) => (
-              <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
+              <div key={m.id} className="flex items-start justify-between rounded-lg border p-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate font-medium">{m.display_name}</span>
+                    <ModelStatusBadge
+                      status={m.last_test_status}
+                      testedAt={m.last_tested_at}
+                      reason={m.last_test_reason}
+                    />
                     <Badge variant="outline" className="shrink-0 text-xs">
                       {MODEL_PROVIDERS.find((p) => p.id === m.provider)?.name ?? m.provider}
                     </Badge>
@@ -208,9 +249,17 @@ export function ModelTab(): React.JSX.Element {
                     {m.api_key_masked ? ` · Key: ${m.api_key_masked}` : ''}
                     {m.api_base ? ` · ${m.api_base}` : ''}
                   </p>
+                  {m.last_test_status === 'failed' && m.last_test_reason ? (
+                    <p
+                      className="mt-1 line-clamp-4 text-xs text-destructive/90 [overflow-wrap:anywhere]"
+                      title={m.last_test_reason}
+                    >
+                      {m.last_test_reason}
+                    </p>
+                  ) : null}
                 </div>
 
-                <div className="ml-2 flex shrink-0 items-center gap-1">
+                <div className="ml-2 flex shrink-0 items-start gap-1 pt-0.5">
                   <Button
                     variant="ghost"
                     size="icon"

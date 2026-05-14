@@ -58,8 +58,9 @@ class SessionApplicationPort(Protocol):
         session_id: str,
         title: str | None = ...,
         status: str | None = ...,
+        gateway_verbose_request_log: bool | None = ...,
     ) -> Any:
-        """更新会话（如标题、状态）。"""
+        """更新会话（如标题、状态、网关详细请求日志开关）。"""
         ...
 
     async def add_message(
@@ -81,6 +82,12 @@ class SessionApplicationPort(Protocol):
 
     async def update_session_mcp_config(self, session_id: str, enabled_servers: list[str]) -> dict:
         """更新会话的 MCP 配置"""
+        ...
+
+    async def update_session_chat_model_ref(
+        self, session_id: str, model_ref: str | None, *, flush: bool = True
+    ) -> None:
+        """合并写入会话 config.chat_model_ref（None 表示清除）。"""
         ...
 
     async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:

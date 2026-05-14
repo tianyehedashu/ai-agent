@@ -55,6 +55,10 @@ export interface Session {
   messageCount: number
   tokenCount: number
   videoTaskCount?: number
+  /** 对话模型引用（系统 id 或用户模型 UUID） */
+  chatModelRef?: string | null
+  /** 本会话是否扩展记录网关调用日志（提示词/响应摘要，仍截断） */
+  gatewayVerboseRequestLog?: boolean
   createdAt: string
   updatedAt: string
 }

@@ -124,6 +124,9 @@ packages = ["bootstrap", "domains", "evaluation", "libs", "utils"]
 # ============================================================================
 [tool.pyright]
 pythonVersion = "3.11"
+# 与本地/CI 一致：从 backend/.venv 解析 litellm 等已安装依赖，避免 reportMissingImports 误报
+venvPath = "."
+venv = ".venv"
 typeCheckingMode = "basic"
 # 仅对业务与公共库做类型检查；迁移/沙箱/测试/脚本单独维护或后续纳入
 include = ["bootstrap", "domains", "libs", "utils", "evaluation"]

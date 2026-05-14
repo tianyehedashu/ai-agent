@@ -1,7 +1,7 @@
 # AI Agent 后端架构
 
 > **版本**: 2.0  
-> **更新**: 2026-05-12  
+> **更新**: 2026-05-14  
 > **适用范围**: `backend/` 现行实现与目录事实。
 
 本文已替换早期基于 `api/`、`core/`、`services/` 等**旧目录**的长篇叙述；能力说明以 **`domains/` + `bootstrap/` + `libs/`** 为准。
@@ -16,8 +16,8 @@
 - **工具与 MCP**：内置工具、MCP 服务与动态工具
 - **沙箱**：隔离执行环境（Docker 等，见 Agent 基础设施）
 - **会话与身份**：用户、JWT、API Key、会话归属
-- **AI Gateway**：多模型路由（LiteLLM）、团队/虚拟 Key、凭据与预算、OpenAI 兼容入口
-- **工作室与评估**：Studio 工作流、评估接口
+- **AI Gateway**：多模型路由（LiteLLM）、团队/虚拟 Key、凭据与预算、**根路径 `/v1/*` 双协议对外代理**（OpenAI 兼容 + Anthropic `POST /v1/messages`）
+- **评估**：基准与评估接口（`domains/evaluation/`）
 
 ---
 
@@ -32,8 +32,7 @@ backend/
 │   ├── identity/       # 认证、用户、API Key
 │   ├── session/        # 会话、标题
 │   ├── agent/          # Agent 核心（引擎、LLM、工具、记忆、沙箱、垂直任务等）
-│   ├── gateway/        # AI Gateway（/api/v1/gateway/*、/v1/* OpenAI 兼容）
-│   ├── studio/         # 工作台、工作流、代码质量
+│   ├── gateway/        # AI Gateway（/api/v1/gateway/*；/v1/* OpenAI 兼容 + Anthropic Messages）
 │   └── evaluation/     # 评估
 ├── libs/               # 与业务无关的基础设施（db、config、middleware、observability 等）
 ├── alembic/            # 数据库迁移
@@ -72,7 +71,6 @@ infrastructure 实现持久化与外部系统，由 application 调用；domain 
 | Gateway 与 Agent 解耦协议 | `domains/gateway/application/ports.py`（`GatewayProxyProtocol` 等） |
 | 会话域 | `domains/session/` |
 | 身份域 | `domains/identity/` |
-| Studio | `domains/studio/` |
 | 评估 | `domains/evaluation/` |
 | 全局配置 | `bootstrap/config.py`（及环境变量） |
 

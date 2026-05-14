@@ -1,7 +1,7 @@
 """
 GatewayVirtualKey Model - 网关虚拟 Key
 
-外部客户端通过 Bearer sk-gw-... 调用 /v1/* 时使用的 Key。
+外部客户端通过 Bearer ``sk-gw-...`` 或 ``x-api-key`` 调用 /v1/* 时使用的 Key。
 复用 [`api_key.py`](backend/domains/identity/infrastructure/models/api_key.py) 的 hash/掩码模式。
 """
 
@@ -53,9 +53,7 @@ class GatewayVirtualKey(BaseModel):
     # Key 信息
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    key_prefix: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="sk-gw-"
-    )
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False, server_default="sk-gw-")
     key_id: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
@@ -131,9 +129,7 @@ class GatewayVirtualKey(BaseModel):
         DateTime(timezone=True),
         nullable=True,
     )
-    usage_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", nullable=False
-    )
+    usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     @property
     def masked_key_display(self) -> str:

@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from domains.gateway.domain.errors import (
+    CredentialInUseError,
+    CredentialNameConflictError,
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
@@ -30,6 +32,8 @@ def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, (CredentialInUseError, CredentialNameConflictError)):
+        return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
     return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 

@@ -34,7 +34,6 @@ from domains.gateway.infrastructure.models import (  # noqa: F401
 )
 from domains.identity.infrastructure.models.user import User  # noqa: F401
 from domains.session.infrastructure.models.session import Session  # noqa: F401
-from domains.studio.infrastructure.models.workflow import Workflow, WorkflowVersion  # noqa: F401
 
 # 导入所有模型以确保它们被注册
 from libs.orm.base import Base

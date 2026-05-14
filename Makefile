@@ -9,7 +9,7 @@
 #   make check       - 运行所有检查
 # ==============================================================================
 
-.PHONY: help install install-backend install-frontend dev dev-backend dev-frontend test test-backend test-frontend check check-backend check-frontend clean clean-backend clean-frontend sonar sonar-backend docker-up docker-down docker-logs docker-restart docker-services docker-ps deploy deploy-rebuild deploy-quick deploy-status deploy-logs deploy-stop deploy-setup deploy-sync
+.PHONY: help install install-backend install-frontend dev dev-backend dev-frontend test test-backend test-frontend check check-backend check-frontend clean clean-backend clean-frontend sonar sonar-backend docker-up docker-down docker-logs docker-restart docker-services docker-ps deploy deploy-rebuild deploy-quick deploy-status deploy-logs deploy-stop deploy-setup deploy-sync inspect-duplicate-attribution
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -70,6 +70,9 @@ help: ## 显示帮助信息
 	@echo   make clean            清理所有临时文件
 	@echo   make clean-backend    只清理后端
 	@echo   make clean-frontend   只清理前端
+	@echo.
+	@echo 运维与数据巡检:
+	@echo   make inspect-duplicate-attribution  重复 personal team / 重复 system vkey（上线前建议）
 	@echo.
 
 # ==============================================================================
@@ -224,6 +227,16 @@ docker-ps: ## 查看运行中的容器
 	@echo   运行中的容器
 	@echo ==========================================
 	@docker-compose ps
+
+# ==============================================================================
+# 运维与数据巡检
+# ==============================================================================
+
+inspect-duplicate-attribution: ## 巡检重复 personal team 与重复 system vkey（需可连 DB）
+	@echo ==========================================
+	@echo   inspect_duplicate_attribution
+	@echo ==========================================
+	@cd backend && uv run python scripts/inspect_duplicate_attribution.py
 
 # ==============================================================================
 # 清理

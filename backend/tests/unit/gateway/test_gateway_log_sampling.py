@@ -80,3 +80,18 @@ class TestShouldPersistRequestLogRow:
             )
             is False
         )
+
+    def test_force_persist_overrides_zero_sample(self) -> None:
+        assert (
+            should_persist_request_log_row(
+                status="success",
+                cost_usd=0.0,
+                request_id="rid",
+                litellm_call_id=None,
+                success_sample_rate=0.0,
+                always_persist_non_success=True,
+                always_persist_cost_above_usd=None,
+                force_persist=True,
+            )
+            is True
+        )

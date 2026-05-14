@@ -6,10 +6,11 @@ GatewayModel - 模型注册表
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,6 +71,21 @@ class GatewayModel(BaseModel):
     )
     tags: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True, comment="扩展标签：cost_per_token、context_window、prompt_cache 等"
+    )
+    last_test_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="上次连通性测试结果: success / failed / NULL=未测过",
+    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="上次连通性测试时间",
+    )
+    last_test_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="上次连通性测试说明（失败原因等）；成功时为 NULL",
     )
 
     __table_args__ = (

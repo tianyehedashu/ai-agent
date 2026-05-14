@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bootstrap.config import settings
 from domains.agent.application import AgentUseCase
 from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
+from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
@@ -29,15 +30,23 @@ from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapte
 from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxManager
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry, ToolRegistry
+from domains.gateway.application.gateway_internal_log_context import (
+    reset_internal_store_full_override,
+    resolve_internal_store_full_messages,
+    set_internal_store_full_override,
+)
+from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.session.application import TitleUseCase
 from domains.session.application.ports import SessionApplicationPort
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
 from libs.db.vector import get_vector_store
-from libs.exceptions import NotFoundError
+from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+_CHAT_MODEL_REF_PENDING = object()
 
 
 class ChatUseCase:
@@ -53,9 +62,16 @@ class ChatUseCase:
         session_use_case_factory: Callable[[AsyncSession], SessionApplicationPort],
         checkpointer: LangGraphCheckpointer | None = None,
         model_catalog: ModelCatalogPort | None = None,
+        user_model_use_case: UserModelUseCase | None = None,
     ) -> None:
         self.db = db
         self.llm_gateway = LLMGateway(config=settings, model_catalog=model_catalog)
+        self._model_catalog = model_catalog
+        if user_model_use_case is None:
+            if model_catalog is None:
+                raise ValueError("ChatUseCase requires model_catalog when user_model_use_case is omitted")
+            user_model_use_case = UserModelUseCase(db, catalog=model_catalog)
+        self._user_models = user_model_use_case
         self.tool_registry = ToolRegistry()
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_use_case = session_use_case
@@ -119,6 +135,8 @@ class ChatUseCase:
         agent_id: str | None,
         user_id: str,
         mcp_config: dict | None = None,
+        model_ref: str | None = None,
+        gateway_verbose_request_log: bool | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """处理对话请求
 
@@ -128,6 +146,8 @@ class ChatUseCase:
             agent_id: Agent ID
             user_id: 用户 ID
             mcp_config: MCP 配置（仅新会话生效，如 {"enabled_servers": [...]}）
+            model_ref: 系统模型 id 或用户模型 UUID；None 表示按会话存储 / Agent / 默认解析
+            gateway_verbose_request_log: 单次请求是否扩展网关调用日志（受服务端配置约束）
 
         Yields:
             AgentEvent: 聊天事件
@@ -159,6 +179,17 @@ class ChatUseCase:
         event_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
         self._event_queues[session_id] = event_queue
 
+        session_cfg = session.config if session and isinstance(getattr(session, "config", None), dict) else None
+        log_override = resolve_internal_store_full_messages(
+            request_explicit=gateway_verbose_request_log,
+            session_config=session_cfg,
+        )
+        log_token = None
+        if log_override is not None:
+            log_token = set_internal_store_full_override(log_override)
+
+        picked_chat_model_for_persist: object = _CHAT_MODEL_REF_PENDING
+
         try:
             # 处理标题生成
             await self._handle_title_generation(session, session_id, message, user_id)
@@ -172,9 +203,15 @@ class ChatUseCase:
                 )
 
             # 准备 Agent 引擎
-            engine, session_recreated_event = await self._prepare_agent_engine(
-                agent_id, session_id, user_id
-            )
+            try:
+                engine, session_recreated_event, picked_chat_model_for_persist = (
+                    await self._prepare_agent_engine(
+                        agent_id, session_id, user_id, session, model_ref
+                    )
+                )
+            except ValidationError as e:
+                yield AgentEvent.error(error=e.message, session_id=session_id)
+                return
 
             if session_recreated_event:
                 yield session_recreated_event
@@ -185,6 +222,28 @@ class ChatUseCase:
             ):
                 yield event
         finally:
+            if picked_chat_model_for_persist is not _CHAT_MODEL_REF_PENDING:
+                if not isinstance(picked_chat_model_for_persist, str | type(None)):
+                    logger.warning(
+                        "Unexpected picked_chat_model_for_persist type, skip persist (session %s)",
+                        session_id[:8],
+                    )
+                else:
+                    try:
+                        await self.session_use_case.update_session_chat_model_ref(
+                            session_id,
+                            picked_chat_model_for_persist,
+                            flush=False,
+                        )
+                        await self.db.flush()
+                    except Exception:
+                        logger.warning(
+                            "Failed to persist chat_model_ref for session %s",
+                            session_id[:8],
+                            exc_info=True,
+                        )
+            if log_token is not None:
+                reset_internal_store_full_override(log_token)
             # 清理事件队列
             self._event_queues.pop(session_id, None)
 
@@ -288,14 +347,84 @@ class ChatUseCase:
                 exc_info=True,
             )
 
+    async def _visible_text_system_ids(self) -> frozenset[str]:
+        if self._model_catalog is None:
+            return frozenset()
+        team_id = resolve_internal_gateway_team_id()
+        rows = await self._model_catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type="text",
+        )
+        return frozenset(str(r["id"]) for r in rows if r.get("id") is not None)
+
+    async def _pick_chat_model_ref(
+        self,
+        request_model_ref: str | None,
+        session: object,
+        agent_id: str | None,
+    ) -> str | None:
+        """解析用户可见的 model_ref：请求 > 会话存储 > Agent（须合法）> 默认（None）。"""
+        if request_model_ref and str(request_model_ref).strip():
+            return str(request_model_ref).strip()
+        cfg = session.config if isinstance(getattr(session, "config", None), dict) else {}
+        stored = cfg.get("chat_model_ref")
+        if isinstance(stored, str) and stored.strip():
+            ref = stored.strip()
+            try:
+                sid = uuid.UUID(ref)
+            except ValueError:
+                return ref
+            row = await self._user_models.repo.get_owned(sid)
+            if (
+                row
+                and row.is_active
+                and "text" in list(row.model_types or [])
+                and row.last_test_status != "failed"
+            ):
+                return ref
+        allowed = await self._visible_text_system_ids()
+        base = await self._get_agent_config(agent_id)
+        agent_litellm = base.model
+        if agent_litellm in allowed:
+            return agent_litellm
+        try:
+            uid = uuid.UUID(str(agent_litellm))
+        except (ValueError, AttributeError, TypeError):
+            return None
+        row = await self._user_models.repo.get_owned(uid)
+        if (
+            row
+            and row.is_active
+            and "text" in list(row.model_types or [])
+            and row.last_test_status != "failed"
+        ):
+            return str(uid)
+        return None
+
     async def _prepare_agent_engine(
         self,
         agent_id: str | None,
         session_id: str,
         user_id: str,
+        session: object,
+        request_model_ref: str | None,
     ) -> tuple[LangGraphAgentEngine, AgentEvent | None]:
         """准备 Agent 引擎"""
+        allowed = await self._visible_text_system_ids()
+        picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id)
+        resolved = await self._user_models.resolve_text_chat_model(
+            picked,
+            allowed_text_system_ids=allowed,
+        )
         agent_config = await self._get_agent_config(agent_id)
+        agent_config = agent_config.model_copy(
+            update={
+                "model": resolved.model,
+                "llm_api_key": resolved.api_key,
+                "llm_api_base": resolved.api_base,
+            }
+        )
+
         execution_config = self.config_service.load_for_agent(agent_id=agent_id or "default")
 
         session_recreated_event = None
@@ -325,7 +454,7 @@ class ChatUseCase:
             execution_config=execution_config,
         )
 
-        return engine, session_recreated_event
+        return engine, session_recreated_event, picked
 
     async def _execute_agent_with_event_queue(
         self,

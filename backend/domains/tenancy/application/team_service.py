@@ -13,6 +13,7 @@ from domains.tenancy.infrastructure.repositories.team_repository import (
     TeamMemberRepository,
     TeamRepository,
 )
+from libs.exceptions import TeamNotFoundError
 from libs.iam.tenancy import MembershipPort, TenantId
 
 
@@ -71,6 +72,17 @@ class TeamService:
     async def add_member(
         self, team_id: uuid.UUID, user_id: uuid.UUID, role: str
     ) -> TeamMember:
+        team = await self._teams.get(team_id)
+        if team is None:
+            raise TeamNotFoundError(str(team_id))
+        if role not in ("owner", "admin", "member"):
+            raise ValueError("Invalid role; expected owner, admin, or member")
+        if role == "owner" and user_id != team.owner_user_id:
+            raise ValueError("Only the team owner may hold the owner role")
+        if team.kind == "personal" and user_id != team.owner_user_id:
+            raise ValueError(
+                "Personal teams cannot have members other than the owner"
+            )
         existing = await self._members.get(team_id, user_id)
         if existing is not None:
             return await self._members.update_role(team_id, user_id, role) or existing

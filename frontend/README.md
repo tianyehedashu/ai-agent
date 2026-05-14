@@ -11,8 +11,6 @@ AI Agent 系统前端应用，基于 React + TypeScript 构建。
 - **UI 组件**: shadcn/ui + Radix UI
 - **状态管理**: Zustand
 - **数据请求**: TanStack Query
-- **流程可视化**: React Flow
-- **代码编辑器**: Monaco Editor
 
 ## 项目结构
 
@@ -95,12 +93,6 @@ npm run test:coverage  # 测试覆盖率
 - 配置模型参数
 - 工具选择
 
-### 工作台 (Studio)
-
-- 可视化流程编排
-- Code-First 双向同步
-- 实时预览
-
 ### 设置
 
 - 主题切换
@@ -131,6 +123,6 @@ npm run lint
 
 ## 环境变量
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
+| 变量           | 说明         | 默认值            |
+| -------------- | ------------ | ----------------- |
 | `VITE_API_URL` | API 服务地址 | 空 (使用相对路径) |

@@ -16,9 +16,13 @@ export function Toaster(): React.JSX.Element {
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
-            <div className="grid gap-1">
+            <div className="grid min-w-0 flex-1 gap-1">
               {title && <ToastTitle>{title}</ToastTitle>}
-              {description && <ToastDescription>{description}</ToastDescription>}
+              {description && (
+                <ToastDescription className="max-h-[min(50vh,22rem)] overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {description}
+                </ToastDescription>
+              )}
             </div>
             {action}
             <ToastClose />

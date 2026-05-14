@@ -9,16 +9,21 @@ UserModelUseCase 单元测试
 - resolve_model（系统模型 / 用户模型 UUID / 回退）
 - get_available_models
 - _validate_model_types
-- _build_litellm_model
+- build_litellm_model_id（共享小工具）
+- test_connection 持久化 last_test_status / last_tested_at
+- list_models_for_model_selector（排除连通性 failed）
+- resolve_text_chat_model 拒绝 last_test_failed
 
 注意：不在模块顶层导入 UserModelUseCase，避免触发
 domains.agent.application.__init__ -> ChatUseCase -> MCP 依赖链。
 """
 
+from unittest.mock import AsyncMock, patch
 import uuid
 
 import pytest
 
+from domains.agent.infrastructure.llm.litellm_model_id import build_litellm_model_id
 from domains.identity.infrastructure.models.user import User
 from libs.db.permission_context import (
     PermissionContext,
@@ -50,6 +55,8 @@ class TestUserModelValidation:
         assert {"text", "image", "image_gen", "video"} == _uc_module().VALID_MODEL_TYPES
 
     def test_valid_providers_cover_all(self):
+        from domains.agent.domain.user_model_constants import USER_MODEL_VALID_PROVIDERS
+
         expected = {
             "openai",
             "deepseek",
@@ -59,36 +66,37 @@ class TestUserModelValidation:
             "volcengine",
             "custom",
         }
-        assert expected == _uc_module().VALID_PROVIDERS
+        assert expected == USER_MODEL_VALID_PROVIDERS
 
 
 @pytest.mark.unit
 class TestBuildLitellmModel:
-    """_build_litellm_model 静态方法"""
+    """build_litellm_model_id 共享小工具
 
-    @property
-    def _cls(self):
-        return _uc_module().UserModelUseCase
+    UserModelUseCase 与 GatewayManagementWriteService 都依赖同一份 provider/
+    model_id 拼装逻辑，集中在 ``domains.agent.infrastructure.llm.litellm_model_id``。
+    """
 
     def test_already_has_slash(self):
-        assert self._cls._build_litellm_model("openai", "openai/gpt-4o") == "openai/gpt-4o"
+        assert build_litellm_model_id("openai", "openai/gpt-4o") == "openai/gpt-4o"
 
     def test_deepseek(self):
-        assert (
-            self._cls._build_litellm_model("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"
-        )
+        assert build_litellm_model_id("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"
 
     def test_dashscope(self):
-        assert self._cls._build_litellm_model("dashscope", "qwen-max") == "dashscope/qwen-max"
+        assert build_litellm_model_id("dashscope", "qwen-max") == "dashscope/qwen-max"
 
     def test_volcengine(self):
-        assert self._cls._build_litellm_model("volcengine", "ep-xxx") == "volcengine/ep-xxx"
+        assert build_litellm_model_id("volcengine", "ep-xxx") == "volcengine/ep-xxx"
 
     def test_zhipuai(self):
-        assert self._cls._build_litellm_model("zhipuai", "glm-4") == "zai/glm-4"
+        assert build_litellm_model_id("zhipuai", "glm-4") == "zai/glm-4"
 
     def test_openai_bare(self):
-        assert self._cls._build_litellm_model("openai", "gpt-4o") == "gpt-4o"
+        assert build_litellm_model_id("openai", "gpt-4o") == "gpt-4o"
+
+    def test_empty_model_id_passthrough(self):
+        assert build_litellm_model_id("openai", "") == ""
 
 
 @pytest.mark.unit
@@ -228,6 +236,86 @@ class TestUserModelUseCaseCRUD:
         assert all("image" in m["model_types"] for m in image_items)
 
     @pytest.mark.asyncio
+    async def test_list_models_filter_by_provider(self, db_session):
+        """按接入通道（provider）过滤，total 与 items 一致"""
+        await self.uc.create(
+            user_id=self.user.id,
+            display_name="O1",
+            provider="openai",
+            model_id="gpt-4o",
+        )
+        await self.uc.create(
+            user_id=self.user.id,
+            display_name="D1",
+            provider="deepseek",
+            model_id="deepseek-chat",
+        )
+        ds_items, ds_total = await self.uc.list_models(provider="deepseek")
+        assert ds_total == len(ds_items)
+        assert {m["display_name"] for m in ds_items} == {"D1"}
+        assert all(m["provider"] == "deepseek" for m in ds_items)
+
+        text_ds, text_ds_total = await self.uc.list_models(
+            model_type="text",
+            provider="deepseek",
+        )
+        assert text_ds_total == len(text_ds)
+        assert {m["display_name"] for m in text_ds} == {"D1"}
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_selector_excludes_connectivity_failed(self, db_session):
+        """选择器列表不含 last_test_status=failed（设置页完整列表仍可见）"""
+        ok = await self.uc.create(
+            user_id=self.user.id,
+            display_name="OkModel",
+            provider="openai",
+            model_id="gpt-4o",
+            model_types=["text"],
+        )
+        bad = await self.uc.create(
+            user_id=self.user.id,
+            display_name="BadConn",
+            provider="openai",
+            model_id="gpt-4o-mini",
+            model_types=["text"],
+        )
+        await self.uc.repo.update(
+            uuid.UUID(bad["id"]),
+            last_test_status="failed",
+            last_test_reason="连接失败: quota",
+        )
+        picked = await self.uc.list_models_for_model_selector(model_type="text")
+        ids = {m["id"] for m in picked}
+        assert ok["id"] in ids
+        assert bad["id"] not in ids
+        picked_openai = await self.uc.list_models_for_model_selector(
+            model_type="text",
+            provider="openai",
+        )
+        assert {m["id"] for m in picked_openai} == {ok["id"]}
+        full, _ = await self.uc.list_models(model_type="text")
+        assert bad["id"] in {m["id"] for m in full}
+
+    @pytest.mark.asyncio
+    async def test_resolve_text_chat_model_rejects_last_test_failed(self, db_session):
+        """对话解析拒绝最近一次连通性测试失败的用户模型"""
+        created = await self.uc.create(
+            user_id=self.user.id,
+            display_name="ConnFail",
+            provider="openai",
+            model_id="gpt-4o",
+            api_key="sk-test-key-123456789",
+            model_types=["text"],
+        )
+        mid = uuid.UUID(created["id"])
+        await self.uc.repo.update(mid, last_test_status="failed", last_test_reason="boom")
+        with pytest.raises(ValidationError, match="连通性测试失败"):
+            await self.uc.resolve_text_chat_model(
+                str(mid),
+                allowed_text_system_ids=frozenset(),
+            )
+
+    @pytest.mark.asyncio
     async def test_update_display_name(self, db_session):
         """更新显示名称"""
         created = await self.uc.create(
@@ -283,6 +371,70 @@ class TestUserModelUseCaseCRUD:
         """删除不存在的模型抛 NotFoundError"""
         with pytest.raises(NotFoundError):
             await self.uc.delete(uuid.uuid4())
+
+    @pytest.mark.asyncio
+    async def test_test_connection_success_persists(self, db_session):
+        """test_connection 成功 → last_test_status='success' 写回库"""
+        created = await self.uc.create(
+            user_id=self.user.id,
+            display_name="ProbeOk",
+            provider="deepseek",
+            model_id="deepseek-chat",
+            api_key="sk-probe-1234567",
+        )
+        model_id = uuid.UUID(created["id"])
+
+        fake_resp = type("R", (), {"content": "Hello!"})()
+        with patch.object(
+            _uc_module().LLMGateway,
+            "chat",
+            new=AsyncMock(return_value=fake_resp),
+        ):
+            result = await self.uc.test_connection(model_id)
+
+        assert result["success"] is True
+        assert result["status"] == "success"
+        assert result.get("reason") is None
+        assert "tested_at" in result
+        detail = await self.uc.get_model(model_id)
+        assert detail["last_test_status"] == "success"
+        assert detail["last_tested_at"] is not None
+        assert detail.get("last_test_reason") is None
+
+    @pytest.mark.asyncio
+    async def test_test_connection_failure_persists(self, db_session):
+        """test_connection 失败 → last_test_status='failed' 写回库，HTTP 仍 200"""
+        created = await self.uc.create(
+            user_id=self.user.id,
+            display_name="ProbeFail",
+            provider="openai",
+            model_id="gpt-4o",
+            api_key="sk-bad-key",
+        )
+        model_id = uuid.UUID(created["id"])
+
+        with patch.object(
+            _uc_module().LLMGateway,
+            "chat",
+            new=AsyncMock(side_effect=RuntimeError("401 Unauthorized")),
+        ):
+            result = await self.uc.test_connection(model_id)
+
+        assert result["success"] is False
+        assert result["status"] == "failed"
+        assert "401" in result["message"]
+        assert result.get("reason") and "401" in result["reason"]
+        detail = await self.uc.get_model(model_id)
+        assert detail["last_test_status"] == "failed"
+        assert detail["last_tested_at"] is not None
+        assert detail.get("last_test_reason")
+        assert "401" in detail["last_test_reason"]
+
+    @pytest.mark.asyncio
+    async def test_test_connection_unknown_model_raises(self, db_session):
+        """test_connection 不存在的模型抛 NotFoundError，不污染任何行"""
+        with pytest.raises(NotFoundError):
+            await self.uc.test_connection(uuid.uuid4())
 
 
 @pytest.mark.unit
@@ -400,3 +552,66 @@ class TestGetAvailableModels:
         assert len(text_models) <= len(all_models)
         for m in text_models:
             assert "text" in m["model_types"]
+
+    @pytest.mark.asyncio
+    async def test_filter_by_provider(self):
+        """按接入通道过滤系统模型"""
+        text_models = await self.uc.list_available_system_models(model_type="text")
+        deepseek_only = await self.uc.list_available_system_models(
+            model_type="text",
+            provider="deepseek",
+        )
+        assert len(deepseek_only) <= len(text_models)
+        for m in deepseek_only:
+            assert m["provider"] == "deepseek"
+
+
+@pytest.mark.unit
+class TestResolveTextChatModel:
+    """resolve_text_chat_model 严格校验（对话路径）"""
+
+    @pytest.mark.asyncio
+    async def test_system_not_in_allowed_raises(self, db_session):
+        from unittest.mock import AsyncMock
+
+        uc = _uc_module().UserModelUseCase(db_session, catalog=AsyncMock())
+        with pytest.raises(ValidationError, match="模型不在可用列表中"):
+            await uc.resolve_text_chat_model(
+                "openai/gpt-4o",
+                allowed_text_system_ids=frozenset(["deepseek/deepseek-chat"]),
+            )
+
+    @pytest.mark.asyncio
+    async def test_system_in_allowed(self, db_session):
+        from unittest.mock import AsyncMock
+
+        uc = _uc_module().UserModelUseCase(db_session, catalog=AsyncMock())
+        r = await uc.resolve_text_chat_model(
+            "deepseek/deepseek-chat",
+            allowed_text_system_ids=frozenset(["deepseek/deepseek-chat"]),
+        )
+        assert r.model == "deepseek/deepseek-chat"
+        assert r.is_system is True
+        assert r.api_key is None
+
+    @pytest.mark.asyncio
+    async def test_none_uses_app_default(self, db_session):
+        from unittest.mock import AsyncMock
+
+        from bootstrap.config import settings
+
+        uc = _uc_module().UserModelUseCase(db_session, catalog=AsyncMock())
+        r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
+        assert r.model == settings.default_model
+        assert r.is_system is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_uuid_raises(self, db_session):
+        from unittest.mock import AsyncMock
+
+        uc = _uc_module().UserModelUseCase(db_session, catalog=AsyncMock())
+        with pytest.raises(ValidationError, match="用户模型不存在"):
+            await uc.resolve_text_chat_model(
+                str(uuid.uuid4()),
+                allowed_text_system_ids=frozenset(),
+            )

@@ -6,6 +6,7 @@
 - [实现状态](#实现状态)
 - [架构设计](#架构设计)
 - [核心组件](#核心组件)
+- [AI Gateway：模型与路由](#ai-gateway-models-routes)
 - [数据权限处理流程](#数据权限处理流程)
 - [使用指南](#使用指南)
 - [最佳实践](#最佳实践)
@@ -33,7 +34,6 @@
    - ✅ `Agent` 模型继承 `OwnedMixin`
 
 3. **Presentation 层**
-   - ✅ Studio 路由权限检查已修复
    - ✅ Agent 和 Memory 路由已适配新的权限检查函数
 
 ### ✅ 已完成迁移
@@ -418,20 +418,96 @@ async def admin_only(user: AdminUser):
     """仅管理员可访问"""
     ...
 
-@router.get("/workflows/{workflow_id}")
-async def get_workflow(
-    workflow_id: str,
+@router.get("/agents/{agent_id}")
+async def get_agent(
+    agent_id: str,
     current_user: AuthUser,
 ) -> dict[str, Any]:
-    workflow = await service.get(workflow_id)
-    if not workflow:
-        raise HTTPException(status_code=404, detail=WORKFLOW_NOT_FOUND)
-    
+    agent = await service.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND)
+
     # 显式检查所有权（管理员可访问所有）
-    check_ownership(str(workflow.user_id), current_user, "Workflow")
-    
+    check_ownership(str(agent.user_id), current_user, "Agent")
+
     return {...}
 ```
+
+<a id="ai-gateway-models-routes"></a>
+
+## AI Gateway：模型与路由
+
+本节描述 AI Gateway 管理面中 **GatewayModel**（模型注册表）与 **GatewayRoute**（路由配置）的**数据来源**、管理 UI / API **建议展示字段**，以及**操作权限**；并与 Agent 域 **UserModel** 区分。
+
+### 概念区分
+
+| 概念 | 归属 | 作用 |
+|------|------|------|
+| **GatewayModel** | `domains/gateway/infrastructure/models/gateway_model.py` | 虚拟模型名映射到真实模型、provider 与团队/系统凭据 |
+| **GatewayRoute** | `domains/gateway/infrastructure/models/gateway_route.py` | 虚拟模型名映射到主备 `GatewayModel.name` 列表、三类 fallback、路由策略 |
+| **UserModel** | Agent 域 | 用户个人/匿名自定义模型，见 `domains/agent/presentation/user_model_router.py`，与网关团队模型不同线 |
+
+### 数据来源
+
+**模型（GatewayModel）**
+
+- **数据库**（权威）：表 `gateway_models`，`GatewayModelRepository.list_for_team` 合并 `team_id IS NULL`（系统/全局）与当前团队行；团队行排序优先。
+- **配置同步**：`domains/gateway/application/config_catalog_sync.py` 将 `app.toml` 的 `models.available` 幂等写入 `team_id` 为 NULL 的全局行；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
+- **团队自建**：`POST /api/v1/gateway/models` 在当前团队下创建行。
+
+**路由（GatewayRoute）**
+
+- **仅数据库**：`gateway_routes`，`GatewayRouteRepository.list_for_team` 同样合并系统级与团队级；无 app.toml 自动同步；写操作后 `reload_litellm_router`。
+
+**与聊天选模型的关系**：聊天侧「可用模型」常来自 UserModel + 系统目录（如 `GET .../user-models/available`），与网关控制台 `GET /gateway/models` 列表 API 不同，目录能力可能与同一套 app 配置相关。
+
+```mermaid
+flowchart LR
+  subgraph sources [模型来源]
+    appToml[app.toml models.available]
+    sync[config_catalog_sync]
+    dbGlobal[(gateway_models team_id NULL)]
+    dbTeam[(gateway_models team_id set)]
+    appToml --> sync --> dbGlobal
+  end
+  subgraph routes_src [路由来源]
+    dbRouteGlobal[(gateway_routes team_id NULL)]
+    dbRouteTeam[(gateway_routes team_id set)]
+  end
+  dbGlobal --> proxy[Proxy / LiteLLM]
+  dbTeam --> proxy
+  dbRouteGlobal --> proxy
+  dbRouteTeam --> proxy
+```
+
+### 建议展示字段（管理 UI / API）
+
+**模型列表**：区分 `team_id` 是否为空（系统全局 vs 当前团队）；`name`、`real_model`、`provider`、`capability`、`enabled`；`weight`、RPM/TPM 限制（若有）；`tags.managed_by == config` 时标明「配置托管」；若产品需要可展示连通性字段（如 `last_test_status` / `last_test_reason` / `last_tested_at`）。
+
+**预设目录**：`GET /api/v1/gateway/models/presets` 优先已同步 DB 的配置托管行，否则回退 `get_app_config().models.available`；用于「从目录点选创建团队模型」类 UI。
+
+**路由列表**：`virtual_model`、`primary_models`、三类 `fallbacks_*`、`strategy`、`retry_policy`、`enabled`；同样区分系统路由与团队路由（`team_id`）。
+
+### 操作权限
+
+**团队上下文**：`/api/v1/gateway/*` 经 `resolve_current_team`（`domains/tenancy/presentation/team_dependencies.py`）；**匿名用户 401**；须为可解析团队的已认证用户（`X-Team-Id`、路径 `team_id`、默认 personal team 等由 `TenancyManagementTeamResolveUseCase` 解析）。
+
+**API 依赖**
+
+| 操作 | 依赖 | 含义 |
+|------|------|------|
+| `GET /models`、`GET /models/presets`、`GET /routes` | `CurrentTeam` | 团队成员可读（解析时已校验成员资格） |
+| `POST` / `PATCH` / `DELETE /models`、`POST /models/{id}/test` | `RequiredTeamAdmin` | 平台 `admin` 或团队 `owner` / `admin` |
+| `POST` / `PATCH` / `DELETE /routes` | `RequiredTeamAdmin` | 同上 |
+| `POST /catalog/reload-from-config` | `AdminUser` | 仅平台管理员 |
+| `GET /my-credentials` | `RequiredAuthUser` | 列出当前用户 **user scope** 凭据；**不**依赖 `X-Team-Id` |
+| `POST /my-credentials` | `RequiredAuthUser` | 创建用户私有凭据 |
+| `PATCH /my-credentials/{credential_id}` | `RequiredAuthUser` | 更新本人凭据 |
+| `DELETE /my-credentials/{credential_id}` | `RequiredAuthUser` | 删除本人凭据（若仍被 `gateway_models` 引用则 409） |
+
+`RequiredTeamAdmin`：`require_team_admin` = `_require_team_role("owner", "admin")` 或 `is_platform_admin`。
+
+**前端对齐**：`frontend/src/hooks/use-gateway-permission.ts` 中 `canWrite` 与上述 **团队 Gateway 管理**写操作一致；`member` 仅应使用只读 UI（隐藏或禁用创建/编辑/删除）。**设置 › 提供商凭据**（`/my-credentials`）仅要求已登录本人，**不得**套用 `canWrite`（团队 admin）语义。
 
 ## 数据权限处理流程
 

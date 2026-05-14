@@ -22,7 +22,6 @@ const pageTitles: Partial<Record<string, string>> = {
   '/chat': '对话',
   '/agents': 'Agents 管理',
   '/mcp': 'MCP 服务器',
-  '/studio': '工作台',
   '/video-tasks': '视频任务',
   '/video-tasks/history': '历史任务',
   '/settings': '设置',

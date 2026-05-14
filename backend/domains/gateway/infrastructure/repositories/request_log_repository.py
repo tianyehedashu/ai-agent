@@ -30,6 +30,8 @@ class RequestLogRepository:
         user_email_snapshot: str | None,
         vkey_name_snapshot: str | None,
         route_snapshot: dict[str, Any] | None,
+        credential_id: uuid.UUID | None,
+        credential_name_snapshot: str | None,
         capability: str,
         route_name: str | None,
         real_model: str | None,
@@ -59,6 +61,8 @@ class RequestLogRepository:
             user_email_snapshot=user_email_snapshot,
             vkey_name_snapshot=vkey_name_snapshot,
             route_snapshot=route_snapshot,
+            credential_id=credential_id,
+            credential_name_snapshot=credential_name_snapshot,
             capability=capability,
             route_name=route_name,
             real_model=real_model,
@@ -93,6 +97,7 @@ class RequestLogRepository:
         status: str | None = None,
         capability: str | None = None,
         vkey_id: uuid.UUID | None = None,
+        credential_id: uuid.UUID | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[GatewayRequestLog], int]:
@@ -107,10 +112,10 @@ class RequestLogRepository:
             clauses.append(GatewayRequestLog.capability == capability)
         if vkey_id:
             clauses.append(GatewayRequestLog.vkey_id == vkey_id)
+        if credential_id:
+            clauses.append(GatewayRequestLog.credential_id == credential_id)
 
-        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(
-            and_(*clauses)
-        )
+        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(and_(*clauses))
         total = (await self._session.execute(count_stmt)).scalar_one()
 
         offset = max(0, (page - 1) * page_size)
@@ -133,6 +138,7 @@ class RequestLogRepository:
         status: str | None = None,
         capability: str | None = None,
         vkey_id: uuid.UUID | None = None,
+        credential_id: uuid.UUID | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[GatewayRequestLog], int]:
@@ -147,10 +153,10 @@ class RequestLogRepository:
             clauses.append(GatewayRequestLog.capability == capability)
         if vkey_id:
             clauses.append(GatewayRequestLog.vkey_id == vkey_id)
+        if credential_id:
+            clauses.append(GatewayRequestLog.credential_id == credential_id)
 
-        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(
-            and_(*clauses)
-        )
+        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(and_(*clauses))
         total = (await self._session.execute(count_stmt)).scalar_one()
 
         offset = max(0, (page - 1) * page_size)
@@ -217,12 +223,8 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
             func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-            func.sum(
-                case((GatewayRequestLog.status == "success", 1), else_=0)
-            ).label("success"),
-            func.sum(
-                case((GatewayRequestLog.status != "success", 1), else_=0)
-            ).label("failure"),
+            func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
+            func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency"),
         ).where(and_(*clauses))
         row = (await self._session.execute(stmt)).one()
@@ -253,12 +255,8 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
             func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-            func.sum(
-                case((GatewayRequestLog.status == "success", 1), else_=0)
-            ).label("success"),
-            func.sum(
-                case((GatewayRequestLog.status != "success", 1), else_=0)
-            ).label("failure"),
+            func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
+            func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency"),
         ).where(and_(*clauses))
         row = (await self._session.execute(stmt)).one()

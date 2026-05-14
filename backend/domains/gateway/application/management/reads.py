@@ -68,26 +68,25 @@ class GatewayManagementReadService:
     async def list_team_members(self, team_id: uuid.UUID) -> list[TeamMember]:
         return await self._teams.list_team_members(team_id)
 
-    async def list_virtual_keys_for_team(
-        self, team_id: uuid.UUID
-    ) -> list[GatewayVirtualKey]:
-        return await self._vkeys.list_by_team(
-            team_id, include_system=False, include_inactive=True
-        )
+    async def list_virtual_keys_for_team(self, team_id: uuid.UUID) -> list[GatewayVirtualKey]:
+        return await self._vkeys.list_by_team(team_id, include_system=False, include_inactive=True)
 
     async def list_credentials_for_team(
         self, team_id: uuid.UUID, *, include_system: bool
     ) -> list[Any]:
         return await self._creds.list_for_team(team_id, include_system=include_system)
 
-    async def list_gateway_models(
-        self, team_id: uuid.UUID, *, only_enabled: bool
-    ) -> list[Any]:
-        return await self._models.list_for_team(team_id, only_enabled=only_enabled)
+    async def list_user_credentials(self, user_id: uuid.UUID) -> list[Any]:
+        return await self._creds.list_for_user(user_id)
 
-    async def list_gateway_routes(
-        self, team_id: uuid.UUID, *, only_enabled: bool
+    async def list_gateway_models(
+        self, team_id: uuid.UUID, *, only_enabled: bool, provider: str | None = None
     ) -> list[Any]:
+        return await self._models.list_for_team(
+            team_id, only_enabled=only_enabled, provider=provider
+        )
+
+    async def list_gateway_routes(self, team_id: uuid.UUID, *, only_enabled: bool) -> list[Any]:
         return await self._routes.list_for_team(team_id, only_enabled=only_enabled)
 
     async def list_budgets_for_team_and_user(
@@ -111,6 +110,7 @@ class GatewayManagementReadService:
         status_filter: str | None,
         capability: str | None,
         vkey_id: uuid.UUID | None,
+        credential_id: uuid.UUID | None = None,
     ) -> tuple[list[Any], int]:
         if usage_aggregation == UsageAggregation.USER:
             items, total = await self._logs.list_for_user(
@@ -120,6 +120,7 @@ class GatewayManagementReadService:
                 status=status_filter,
                 capability=capability,
                 vkey_id=vkey_id,
+                credential_id=credential_id,
                 page=page,
                 page_size=page_size,
             )
@@ -131,9 +132,11 @@ class GatewayManagementReadService:
                 status=status_filter,
                 capability=capability,
                 vkey_id=vkey_id,
+                credential_id=credential_id,
                 page=page,
                 page_size=page_size,
             )
+        # 成员在 workspace 视图且未指定 vkey_id 时：仅看自己创建的 vkey 日志，以及平台 sk-* 入站（vkey_id 为空）且 user_id 为自己的调用。
         if (
             usage_aggregation == UsageAggregation.WORKSPACE
             and not ctx.is_platform_admin
@@ -142,11 +145,14 @@ class GatewayManagementReadService:
         ):
             my_keys = await self._vkeys.list_by_team(ctx.team_id)
             my_ids = {
-                k.id
-                for k in my_keys
-                if k.created_by_user_id == ctx.user_id and not k.is_system
+                k.id for k in my_keys if k.created_by_user_id == ctx.user_id and not k.is_system
             }
-            items = [i for i in items if i.vkey_id in my_ids]
+            items = [
+                i
+                for i in items
+                if i.vkey_id in my_ids
+                or (i.vkey_id is None and i.user_id == ctx.user_id)
+            ]
         return items, total
 
     async def get_request_log(
@@ -165,20 +171,19 @@ class GatewayManagementReadService:
         if not ctx.is_platform_admin and ctx.team_role == "member":
             my_keys = await self._vkeys.list_by_team(ctx.team_id)
             my_ids = {
-                k.id
-                for k in my_keys
-                if k.created_by_user_id == ctx.user_id and not k.is_system
+                k.id for k in my_keys if k.created_by_user_id == ctx.user_id and not k.is_system
             }
-            if record.vkey_id not in my_ids:
+            allowed = record.vkey_id in my_ids or (
+                record.vkey_id is None and record.user_id == ctx.user_id
+            )
+            if not allowed:
                 raise TeamPermissionDeniedError(str(ctx.team_id))
         return record
 
     async def get_request_log_for_team(
         self, ctx: ManagementTeamContext, log_id: uuid.UUID
     ) -> Any | None:
-        return await self.get_request_log(
-            ctx, log_id, usage_aggregation=UsageAggregation.WORKSPACE
-        )
+        return await self.get_request_log(ctx, log_id, usage_aggregation=UsageAggregation.WORKSPACE)
 
     async def aggregate_request_log_summary(
         self,

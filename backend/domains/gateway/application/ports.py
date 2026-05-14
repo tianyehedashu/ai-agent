@@ -51,7 +51,10 @@ class GatewayResponse:
     reasoning_content: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str | None = None
-    usage: dict[str, int] | None = None
+    # value 允许 dict —— provider 会在 ``prompt_tokens_details`` /
+    # ``completion_tokens_details`` 下嵌入 ``cached_tokens`` / ``reasoning_tokens``
+    # 子结构（OpenAI / DeepSeek-Reasoner 等）。
+    usage: dict[str, Any] | None = None
     cost_usd: Decimal | None = None
     model: str | None = None
     cache_hit: bool = False
@@ -66,7 +69,7 @@ class GatewayStreamChunk:
     reasoning_content: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str | None = None
-    usage: dict[str, int] | None = None  # 仅末帧填充
+    usage: dict[str, Any] | None = None  # 仅末帧填充（同 GatewayResponse.usage）
 
 
 class GatewayProxyProtocol(Protocol):

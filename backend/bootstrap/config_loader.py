@@ -101,8 +101,16 @@ class ModelInfo:
     name: str
     provider: str
     context_window: int = 128000
-    input_price: float = 0.0  # $/1M tokens 或 ¥/千tokens（根据提供商）
+    input_price: float = 0.0  # $/1M tokens 或 ¥/千tokens（根据提供商，仅供前端展示）
     output_price: float = 0.0
+    # 与 LiteLLM 对齐的「每 token 美元价」，单位严格为 USD/token。
+    # 若该模型在 LiteLLM 内置 model_cost_map 中无价（如 zai/glm-4-flash），
+    # 在 app.toml 显式填这两项后，``config_catalog_sync`` 会把它透传到
+    # ``GatewayModel.tags``，进而由 ``router_singleton._build_litellm_params``
+    # 注入到 deployment 的 ``input_cost_per_token`` / ``output_cost_per_token``，
+    # 让 LiteLLM 的 cost_calculator 不再 fallback 到 0。
+    input_cost_per_token: float = 0.0
+    output_cost_per_token: float = 0.0
     supports_vision: bool = False
     supports_tools: bool = True
     supports_reasoning: bool = False  # 是否支持推理/思维链

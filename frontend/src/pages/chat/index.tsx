@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Wrench } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
+import { userModelApi } from '@/api/userModel'
 import { videoTaskApi } from '@/api/videoTask'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
 import { SessionNotice } from '@/components/chat/session-notice'
 import { TimeTravelDebugger } from '@/components/chat/time-travel-debugger'
+import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { useChat } from '@/hooks/use-chat'
 import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
@@ -31,6 +35,15 @@ export default function ChatPage(): React.JSX.Element {
   const [inputMode, setInputMode] = useState<UnifiedInputMode>('chat')
   const { setCurrentSession, input, setInput } = useChatStore()
   const [toolConfigOpen, setToolConfigOpen] = useState(false)
+  const [selectedModelRef, setSelectedModelRef] = useState<string | null>(null)
+  /** 网关调用详细日志：无会话时仅作用于下一条发送；有会话时切换会 PATCH 持久化到会话 */
+  const [verboseGatewayLog, setVerboseGatewayLog] = useState(false)
+
+  const { data: availableTextModels } = useQuery({
+    queryKey: ['user-models', 'available', 'text'],
+    queryFn: () => userModelApi.listAvailable('text'),
+    staleTime: 30_000,
+  })
 
   const {
     messages,
@@ -116,6 +129,8 @@ export default function ChatPage(): React.JSX.Element {
           // 只有当这个 effect 没有被取消时才更新状态
           if (!cancelled) {
             setCurrentSession(session)
+            setSelectedModelRef(session.chatModelRef ?? null)
+            setVerboseGatewayLog(session.gatewayVerboseRequestLog ?? false)
           }
         })
         .catch((error: unknown) => {
@@ -144,6 +159,8 @@ export default function ChatPage(): React.JSX.Element {
         })
     } else {
       setCurrentSession(null)
+      setSelectedModelRef(null)
+      setVerboseGatewayLog(false)
     }
 
     // 清理函数：当 sessionId 变化或组件卸载时调用
@@ -156,7 +173,30 @@ export default function ChatPage(): React.JSX.Element {
     if (!input.trim() || isLoading) return
     const message = input.trim()
     setInput('')
-    await sendMessage(message)
+    const defaultId = availableTextModels?.default_for_text?.id
+    const modelRef = selectedModelRef ?? defaultId ?? undefined
+    await sendMessage(message, {
+      modelRef,
+      gatewayVerboseRequestLog: verboseGatewayLog ? true : undefined,
+    })
+  }
+
+  const handleVerboseGatewayLogChange = async (checked: boolean): Promise<void> => {
+    const previous = verboseGatewayLog
+    setVerboseGatewayLog(checked)
+    if (!sessionId) return
+    try {
+      const updated = await sessionApi.update(sessionId, { gatewayVerboseRequestLog: checked })
+      setCurrentSession(updated)
+    } catch (error: unknown) {
+      setVerboseGatewayLog(previous)
+      const msg = error instanceof Error ? error.message : '更新失败'
+      toast({
+        title: '无法更新会话设置',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
   }
 
   // 从检查点恢复
@@ -245,17 +285,50 @@ export default function ChatPage(): React.JSX.Element {
             chatOnSend={handleSend}
             chatIsLoading={isLoading}
             toolbarLeftExtra={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
-                title="配置本对话可用的工具与 MCP 服务器"
-                onClick={() => {
-                  setToolConfigOpen(true)
-                }}
-              >
-                <Wrench className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-0.5">
+                <ModelSelector
+                  modelType="text"
+                  value={selectedModelRef}
+                  onChange={setSelectedModelRef}
+                  disabled={isLoading}
+                  showProviderFilter
+                  className="h-8 w-[min(12rem,calc(100vw-10rem))] max-w-[12rem] border-0 bg-transparent shadow-none focus:ring-0"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
+                  title="配置本对话可用的工具与 MCP 服务器"
+                  onClick={() => {
+                    setToolConfigOpen(true)
+                  }}
+                >
+                  <Wrench className="h-4 w-4" />
+                </Button>
+                <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 px-2 py-0.5">
+                  <Switch
+                    id="verbose-gateway-log"
+                    checked={verboseGatewayLog}
+                    onCheckedChange={(v) => {
+                      void handleVerboseGatewayLogChange(v)
+                    }}
+                    disabled={isLoading}
+                    className="scale-90"
+                  />
+                  <Label
+                    htmlFor="verbose-gateway-log"
+                    className="cursor-pointer whitespace-nowrap text-[11px] text-muted-foreground sm:text-xs"
+                    title={
+                      sessionId
+                        ? '开启后本会话内网关调用会记录更长的提示词与模型回复摘要（仍截断落库）。关闭将同步保存到会话。'
+                        : '开启后下一条消息将请求扩展网关日志（需服务端允许）；进入已有会话后可用会话级开关持久化。'
+                    }
+                  >
+                    <span className="hidden sm:inline">网关详细日志</span>
+                    <span className="sm:hidden">日志</span>
+                  </Label>
+                </div>
+              </div>
             }
             onVideoTaskCreated={() => {
               toast({

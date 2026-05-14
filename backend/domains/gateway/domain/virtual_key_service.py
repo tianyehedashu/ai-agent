@@ -16,9 +16,7 @@ import secrets
 VKEY_PREFIX = "sk-gw-"
 VKEY_KEY_ID_LENGTH = 16
 VKEY_SECRET_LENGTH = 32
-VKEY_FULL_LENGTH = (
-    len(VKEY_PREFIX) + VKEY_KEY_ID_LENGTH + 1 + VKEY_SECRET_LENGTH
-)
+VKEY_FULL_LENGTH = len(VKEY_PREFIX) + VKEY_KEY_ID_LENGTH + 1 + VKEY_SECRET_LENGTH
 
 
 def generate_vkey() -> tuple[str, str, str]:

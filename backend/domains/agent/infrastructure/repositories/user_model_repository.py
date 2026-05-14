@@ -63,9 +63,15 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
             "model_types",
             "config",
             "is_active",
+            "last_test_status",
+            "last_tested_at",
+            "last_test_reason",
         }
         for field, value in kwargs.items():
-            if field in allowed and value is not None:
+            if field not in allowed:
+                continue
+            # last_test_reason=None 表示成功测试后清空上次失败说明，须显式写入
+            if field == "last_test_reason" or isinstance(value, bool) or value is not None:
                 setattr(model, field, value)
         await self.db.flush()
         await self.db.refresh(model)
@@ -76,6 +82,8 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
         model_type: str,
         skip: int = 0,
         limit: int = 50,
+        *,
+        provider: str | None = None,
     ) -> list[UserModel]:
         """按模型类型查询（含所有权过滤）"""
         query = (
@@ -86,11 +94,18 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
             .offset(skip)
             .limit(limit)
         )
+        if provider is not None:
+            query = query.where(UserModel.provider == provider)
         query = self._apply_ownership_filter(query)
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def count_by_type(self, model_type: str) -> int:
+    async def count_by_type(
+        self,
+        model_type: str,
+        *,
+        provider: str | None = None,
+    ) -> int:
         """统计指定类型的活跃模型数量（含所有权过滤）"""
         query = (
             select(func.count())
@@ -98,6 +113,8 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
             .where(UserModel.model_types.any(model_type))
             .where(UserModel.is_active.is_(True))
         )
+        if provider is not None:
+            query = query.where(UserModel.provider == provider)
         query = self._apply_ownership_filter(query)
         result = await self.db.execute(query)
         return result.scalar() or 0
@@ -106,12 +123,17 @@ class UserModelRepository(OwnedRepositoryBase[UserModel]):
         self,
         skip: int = 0,
         limit: int = 50,
+        *,
+        provider: str | None = None,
     ) -> list[UserModel]:
         """查询当前用户的所有启用模型"""
-        return await self.find_owned(
-            skip=skip,
-            limit=limit,
-            is_active=True,
-            order_by="created_at",
-            order_desc=True,
-        )
+        kwargs: dict[str, object] = {
+            "skip": skip,
+            "limit": limit,
+            "is_active": True,
+            "order_by": "created_at",
+            "order_desc": True,
+        }
+        if provider is not None:
+            kwargs["provider"] = provider
+        return await self.find_owned(**kwargs)

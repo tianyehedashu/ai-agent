@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+import hashlib
 import uuid
 
 from domains.gateway.domain.errors import (
@@ -32,7 +33,23 @@ PERIOD_MONTHLY = "monthly"
 PERIOD_TOTAL = "total"
 
 
-def _bucket_key(scope: str, scope_id: str | None, period: str) -> str:
+def _model_segment_hash(model_name: str) -> str:
+    return hashlib.sha256(model_name.encode("utf-8")).hexdigest()[:16]
+
+
+def _redis_model_segment(budget_model_name: str | None) -> str | None:
+    if budget_model_name is None:
+        return None
+    return _model_segment_hash(budget_model_name)
+
+
+def _bucket_key(
+    scope: str,
+    scope_id: str | None,
+    period: str,
+    *,
+    model_segment: str | None = None,
+) -> str:
     """Redis key for budget current values"""
     sid = scope_id or "system"
     if period == PERIOD_DAILY:
@@ -41,7 +58,10 @@ def _bucket_key(scope: str, scope_id: str | None, period: str) -> str:
         suffix = datetime.now(UTC).strftime("%Y%m")
     else:
         suffix = "total"
-    return f"gateway:budget:{scope}:{sid}:{period}:{suffix}"
+    base = f"gateway:budget:{scope}:{sid}:{period}:{suffix}"
+    if model_segment:
+        return f"{base}:m:{model_segment}"
+    return base
 
 
 def _rate_key(scope: str, scope_id: str | None, dimension: str) -> str:
@@ -119,9 +139,7 @@ class BudgetService:
             members = await client.zrange(key, 0, -1, withscores=True)
             for member, _score in members:
                 try:
-                    payload = (
-                        member.decode() if isinstance(member, bytes) else str(member)
-                    )
+                    payload = member.decode() if isinstance(member, bytes) else str(member)
                     parts = payload.split(":", 1)
                     if len(parts) == 2:
                         current_tokens += int(parts[0])
@@ -129,9 +147,7 @@ class BudgetService:
                     continue
             if current_tokens + estimate_tokens > tpm_limit:
                 raise RateLimitExceededError(scope=f"{scope}:tpm", retry_after=60)
-            await client.zadd(
-                key, {f"{estimate_tokens}:{uuid.uuid4()}": now}
-            )
+            await client.zadd(key, {f"{estimate_tokens}:{uuid.uuid4()}": now})
             await client.expire(key, 90)
 
     # ---------------------------------------------------------------------
@@ -147,13 +163,15 @@ class BudgetService:
         limit_usd: Decimal | None,
         limit_tokens: int | None,
         limit_requests: int | None,
+        budget_model_name: str | None = None,
     ) -> BudgetCheckResult:
         """读取当前 budget 状态；超限返回 allowed=False
 
         当前 cost/tokens/requests 来自 Redis 桶，由 commit 异步累加。
         """
         client = await get_redis_client()
-        key = _bucket_key(scope, scope_id, period)
+        seg = _redis_model_segment(budget_model_name)
+        key = _bucket_key(scope, scope_id, period, model_segment=seg)
         values = await client.hmget(key, ["cost", "tokens", "requests"])
         used_cost = Decimal(values[0].decode() if values[0] else "0")
         used_tokens = int(values[1].decode() if values[1] else "0")
@@ -197,6 +215,7 @@ class BudgetService:
         scope_id: str | None,
         period: str,
         limit_requests: int | None,
+        budget_model_name: str | None = None,
     ) -> None:
         """预扣 1 个请求名额（用于防止并发请求穿透）
 
@@ -205,7 +224,8 @@ class BudgetService:
         if limit_requests is None or limit_requests <= 0:
             return
         client = await get_redis_client()
-        key = _bucket_key(scope, scope_id, period)
+        seg = _redis_model_segment(budget_model_name)
+        key = _bucket_key(scope, scope_id, period, model_segment=seg)
         new_value = await client.hincrby(key, "requests", 1)
         # 设置 TTL：daily 1 天，monthly 1 个月，total 不过期
         if period == PERIOD_DAILY:
@@ -230,10 +250,12 @@ class BudgetService:
         period: str,
         delta_cost: Decimal,
         delta_tokens: int,
+        budget_model_name: str | None = None,
     ) -> None:
         """结算：在 Redis 中累加真实 cost/token；DB 由 rollup 任务异步同步"""
         client = await get_redis_client()
-        key = _bucket_key(scope, scope_id, period)
+        seg = _redis_model_segment(budget_model_name)
+        key = _bucket_key(scope, scope_id, period, model_segment=seg)
         pipe = client.pipeline()
         pipe.hincrbyfloat(key, "cost", float(delta_cost))
         pipe.hincrby(key, "tokens", delta_tokens)
@@ -249,10 +271,12 @@ class BudgetService:
         scope: str,
         scope_id: str | None,
         period: str,
+        budget_model_name: str | None = None,
     ) -> None:
         """请求失败时回滚预扣的请求数"""
         client = await get_redis_client()
-        key = _bucket_key(scope, scope_id, period)
+        seg = _redis_model_segment(budget_model_name)
+        key = _bucket_key(scope, scope_id, period, model_segment=seg)
         await client.hincrby(key, "requests", -1)
 
 

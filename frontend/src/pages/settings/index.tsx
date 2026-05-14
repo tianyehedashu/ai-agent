@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
+import { useSearchParams } from 'react-router-dom'
 
 import { userApi, type UpdateUserParams } from '@/api/user'
 import { useTheme } from '@/components/theme-provider'
@@ -22,7 +24,11 @@ import { ApiKeyTab } from './components/api-key-tab'
 import { CredentialsTab } from './components/credentials-tab'
 import { MCPTab } from './components/mcp-tab'
 
+const SETTINGS_TABS = ['general', 'api', 'credentials', 'mcp', 'account'] as const
+type SettingsTab = (typeof SETTINGS_TABS)[number]
+
 export default function SettingsPage(): React.JSX.Element {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { theme, setTheme } = useTheme()
   const { currentUser, setCurrentUser } = useUserStore()
   const { toast } = useToast()
@@ -32,7 +38,34 @@ export default function SettingsPage(): React.JSX.Element {
   const [vendorCreatorId, setVendorCreatorId] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
 
-  // 初始化表单值
+  const tabParam = searchParams.get('tab')
+  const activeTab: SettingsTab = SETTINGS_TABS.includes(tabParam as SettingsTab)
+    ? (tabParam as SettingsTab)
+    : 'general'
+
+  const handleTabChange = (value: string): void => {
+    const next = new URLSearchParams(searchParams)
+    if (value === 'general') {
+      next.delete('tab')
+    } else {
+      next.set('tab', value)
+    }
+    setSearchParams(next, { replace: true })
+  }
+
+  // 深链 ?tab= 与无效值时纠回允许的标签
+  useEffect(() => {
+    if (tabParam !== null && tabParam !== '' && !SETTINGS_TABS.includes(tabParam as SettingsTab)) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('tab')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [tabParam, setSearchParams])
   useEffect(() => {
     if (currentUser) {
       setUserName(currentUser.name)
@@ -104,7 +137,7 @@ export default function SettingsPage(): React.JSX.Element {
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="mb-6 text-2xl font-bold">设置</h1>
 
-      <Tabs defaultValue="general">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>

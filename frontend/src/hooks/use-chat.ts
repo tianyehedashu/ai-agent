@@ -30,7 +30,10 @@ interface UseChatReturn {
   processRuns: Record<string, ProcessEvent[]>
   currentRunId: string | null
   sessionRecreation: SessionRecreationData | null
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (
+    content: string,
+    options?: { modelRef?: string | null; gatewayVerboseRequestLog?: boolean }
+  ) => Promise<void>
   cancelRequest: () => void // 取消当前请求
   resumeExecution: (
     action: 'approve' | 'reject' | 'modify',
@@ -348,7 +351,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   }, [])
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (
+      content: string,
+      options?: { modelRef?: string | null; gatewayVerboseRequestLog?: boolean }
+    ) => {
       if (!content.trim() || isLoading) return
 
       // 取消之前的请求（如果有）
@@ -394,6 +400,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             sessionId: sessionIdRef.current,
             agentId,
             mcpConfig,
+            modelRef: options?.modelRef === undefined ? undefined : options.modelRef,
+            gatewayVerboseRequestLog: options?.gatewayVerboseRequestLog ?? undefined,
           },
           handleEvent,
           (error) => {

@@ -21,7 +21,7 @@
 ```
 backend/
 ├── bootstrap/     # FastAPI 入口、生命周期、路由注册
-├── domains/       # 业务域（identity, session, agent, gateway, studio, evaluation, …）
+├── domains/       # 业务域（identity, session, tenancy, agent, gateway, evaluation, …）
 ├── libs/          # 与业务无关的基础设施
 ├── alembic/       # 数据库迁移
 ├── utils/

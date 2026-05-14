@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
-import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
@@ -23,7 +22,7 @@ import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.management import GatewayManagementReadService
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy_use_case import ProxyUseCase
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
@@ -36,25 +35,15 @@ from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
     bearer_vkey_or_apikey_auth,
 )
+from domains.gateway.presentation.gateway_proxy_context import (
+    proxy_context_from_gateway_principal,
+)
 from libs.db.database import get_db
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["OpenAI Compat"])
-
-
-def _build_ctx(principal: VkeyOrApikeyPrincipal, capability: GatewayCapability) -> ProxyContext:
-    vkey = principal.vkey
-    return ProxyContext(
-        team_id=principal.team_id,
-        user_id=principal.user_id,
-        vkey=vkey,
-        capability=capability,
-        request_id=str(uuid.uuid4()),
-        store_full_messages=vkey.store_full_messages if vkey else False,
-        guardrail_enabled=vkey.guardrail_enabled if vkey else True,
-    )
 
 
 def _wrap_business_errors(exc: Exception) -> HTTPException:
@@ -73,9 +62,7 @@ def _wrap_business_errors(exc: Exception) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={"error": {"type": "rate_limit_exceeded", "message": str(exc)}},
-            headers=(
-                {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
-            ),
+            headers=({"Retry-After": str(exc.retry_after)} if exc.retry_after else None),
         )
     if isinstance(exc, BudgetExceededError):
         return HTTPException(
@@ -110,7 +97,7 @@ async def chat_completions(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.CHAT)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.CHAT)
     try:
         result = await use_case.chat_completion(ctx, body)
     except Exception as exc:
@@ -118,15 +105,14 @@ async def chat_completions(
         raise _wrap_business_errors(exc) from exc
 
     if body.get("stream"):
+
         async def _sse() -> AsyncIterator[bytes]:
             async for chunk in result:  # type: ignore[union-attr]
                 yield b"data: " + orjson.dumps(chunk) + b"\n\n"
             yield b"data: [DONE]\n\n"
 
         return StreamingResponse(_sse(), media_type="text/event-stream")
-    return Response(
-        content=orjson.dumps(result), media_type="application/json"
-    )
+    return Response(content=orjson.dumps(result), media_type="application/json")
 
 
 # =============================================================================
@@ -141,7 +127,7 @@ async def embeddings(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.EMBEDDING)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.EMBEDDING)
     try:
         result = await use_case.embedding(ctx, body)
     except Exception as exc:
@@ -161,7 +147,7 @@ async def image_generations(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.IMAGE)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.IMAGE)
     try:
         result = await use_case.image_generation(ctx, body)
     except Exception as exc:
@@ -200,7 +186,7 @@ async def audio_transcriptions(
         body["temperature"] = temperature
 
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.AUDIO_TRANSCRIPTION)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_TRANSCRIPTION)
     try:
         result = await use_case.audio_transcription(ctx, body)
     except Exception as exc:
@@ -220,7 +206,7 @@ async def audio_speech(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.AUDIO_SPEECH)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_SPEECH)
     try:
         result = await use_case.audio_speech(ctx, body)
     except Exception as exc:
@@ -247,7 +233,7 @@ async def rerank(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = _build_ctx(principal, GatewayCapability.RERANK)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.RERANK)
     try:
         result = await use_case.rerank(ctx, body)
     except Exception as exc:

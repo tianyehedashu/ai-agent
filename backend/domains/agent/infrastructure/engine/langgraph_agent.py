@@ -374,6 +374,8 @@ class LangGraphAgentEngine:
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             tools=tools,
+            api_key=self.config.llm_api_key,
+            api_base=self.config.llm_api_base,
         )
         usage = response.usage or {}
         usage_totals = _merge_usage(view.usage_totals, usage)

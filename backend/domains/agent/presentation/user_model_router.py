@@ -11,11 +11,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from domains.agent.application.user_model_use_case import UserModelUseCase
+from domains.agent.domain.user_model_constants import USER_MODEL_VALID_PROVIDERS
 from domains.identity.presentation.deps import AuthUser, OptionalAuthUser, get_owned_user_ids
 from libs.api.deps import get_user_model_service
 from libs.exceptions import NotFoundError, ValidationError
 
 router = APIRouter()
+
+
+def _validate_optional_provider(provider: str | None) -> None:
+    if provider is not None and provider not in USER_MODEL_VALID_PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的提供商: {provider}",
+        )
 
 
 # =============================================================================
@@ -78,14 +87,17 @@ async def list_models(
     current_user: AuthUser,
     service: UserModelUseCase = Depends(get_user_model_service),
     model_type: str | None = Query(None, alias="type"),
+    provider: str | None = Query(None, min_length=1, max_length=50),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ) -> dict[str, Any]:
     """列出当前用户的模型"""
+    _validate_optional_provider(provider)
     items, total = await service.list_models(
         model_type=model_type,
         skip=skip,
         limit=limit,
+        provider=provider,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
 
@@ -95,13 +107,19 @@ async def list_available_models(
     current_user: OptionalAuthUser,
     service: UserModelUseCase = Depends(get_user_model_service),
     model_type: str | None = Query(None, alias="type"),
+    provider: str | None = Query(None, min_length=1, max_length=50),
 ) -> dict[str, Any]:
     """可用模型列表（系统模型 + 用户模型合并）
 
     无认证时仅返回系统模型，不抛 401，便于产品信息等场景展示模型选择器。
+    已认证用户的 ``user_models`` 不含 ``last_test_status=failed`` 的条目（避免聊天等选到已知不可用模型）。
     返回 default_for_text / default_for_vision 供前端展示「默认（模型名）」。
     """
-    system_models = await service.list_available_system_models(model_type=model_type)
+    _validate_optional_provider(provider)
+    system_models = await service.list_available_system_models(
+        model_type=model_type,
+        provider=provider,
+    )
     default_for_text = await service.get_default_for_type_async("text")
     default_for_vision = await service.get_default_for_type_async("image")
     default_for_image_gen = await service.get_default_for_type_async("image_gen")
@@ -113,7 +131,11 @@ async def list_available_models(
             "default_for_vision": default_for_vision,
             "default_for_image_gen": default_for_image_gen,
         }
-    user_items, _ = await service.list_models(model_type=model_type, limit=100)
+    user_items = await service.list_models_for_model_selector(
+        model_type=model_type,
+        limit=100,
+        provider=provider,
+    )
     return {
         "system_models": system_models,
         "user_models": user_items,

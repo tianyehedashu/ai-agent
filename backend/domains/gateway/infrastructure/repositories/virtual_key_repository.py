@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 
@@ -60,34 +61,57 @@ class VirtualKeyRepository:
         key_hash: str,
         key_id_str: str,
     ) -> GatewayVirtualKey:
-        """获取该团队的 system key（用于内部桥接）"""
-        stmt = select(GatewayVirtualKey).where(
+        """获取/创建该团队的 system key（用于内部桥接）。
+
+        通过 ``INSERT ... ON CONFLICT DO NOTHING`` 与 partial unique index
+        ``uq_gateway_virtual_keys_team_id_active_system``（见
+        ``20260513_uvk`` migration）配合，把"每个 team 有且仅有一条
+        ``is_system && is_active`` 的 vkey"这一约束放到数据库层。
+
+        并发 race 行为完全由 PostgreSQL 保证：
+        - 第一个事务 INSERT 成功；
+        - 第二个事务进入 INSERT 时，唯一索引让其变为 ``DO NOTHING``，
+          RETURNING 为空，紧随其后的 SELECT 直接拿到主条目。
+
+        既不在应用层做 read-modify-write，也不依赖"取第一条 + 其余置 inactive"
+        之类的清理逻辑——副本根本不应该写入数据库。
+        """
+        insert_stmt = (
+            pg_insert(GatewayVirtualKey.__table__)
+            .values(
+                team_id=team_id,
+                created_by_user_id=None,
+                name="__system_internal_bridge__",
+                description="自动创建：内部模块调用桥接",
+                key_id=key_id_str,
+                key_hash=key_hash,
+                encrypted_key=encrypted_key,
+                allowed_models=[],
+                allowed_capabilities=[],
+                store_full_messages=False,
+                guardrail_enabled=True,
+                is_system=True,
+                is_active=True,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[GatewayVirtualKey.__table__.c.team_id],
+                index_where=text("is_system = TRUE AND is_active = TRUE"),
+            )
+            .returning(GatewayVirtualKey.__table__.c.id)
+        )
+        result = await self._session.execute(insert_stmt)
+        inserted_id = result.scalar_one_or_none()
+        if inserted_id is not None:
+            await self._session.flush()
+            return await self._session.get(GatewayVirtualKey, inserted_id)  # type: ignore[return-value]
+
+        select_stmt = select(GatewayVirtualKey).where(
             GatewayVirtualKey.team_id == team_id,
             GatewayVirtualKey.is_system.is_(True),
             GatewayVirtualKey.is_active.is_(True),
         )
-        result = await self._session.execute(stmt)
-        existing = result.scalar_one_or_none()
-        if existing is not None:
-            return existing
-        new_key = GatewayVirtualKey(
-            team_id=team_id,
-            created_by_user_id=None,
-            name="__system_internal_bridge__",
-            description="自动创建：内部模块调用桥接",
-            key_id=key_id_str,
-            key_hash=key_hash,
-            encrypted_key=encrypted_key,
-            allowed_models=[],
-            allowed_capabilities=[],
-            store_full_messages=False,
-            guardrail_enabled=True,
-            is_system=True,
-            is_active=True,
-        )
-        self._session.add(new_key)
-        await self._session.flush()
-        return new_key
+        existing = (await self._session.execute(select_stmt)).scalar_one()
+        return existing
 
     async def create(
         self,

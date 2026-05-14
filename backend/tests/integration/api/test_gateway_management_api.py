@@ -189,3 +189,30 @@ class TestGatewayManagementApi:
         assert body["total_requests"] == 2
         assert body["total_input_tokens"] == 13
         assert body["total_output_tokens"] == 7
+
+    @pytest.mark.asyncio
+    async def test_list_model_presets_filter_by_provider(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        r_all = await dev_client.get("/api/v1/gateway/models/presets", headers=headers)
+        assert r_all.status_code == 200, r_all.text
+        all_presets = r_all.json()
+        if not all_presets:
+            pytest.skip("no catalog presets in environment")
+        p0 = str(all_presets[0]["provider"])
+        r_f = await dev_client.get(
+            "/api/v1/gateway/models/presets",
+            params={"provider": p0},
+            headers=headers,
+        )
+        assert r_f.status_code == 200, r_f.text
+        filtered = r_f.json()
+        assert all(str(x["provider"]) == p0 for x in filtered)
+        assert len(filtered) <= len(all_presets)

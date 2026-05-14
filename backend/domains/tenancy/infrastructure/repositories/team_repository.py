@@ -22,13 +22,23 @@ class TeamRepository:
         return await self._session.get(Team, team_id)
 
     async def get_personal(self, user_id: uuid.UUID) -> Team | None:
-        stmt = select(Team).where(
-            Team.owner_user_id == user_id,
-            Team.kind == "personal",
-            Team.is_active.is_(True),
+        """返回该用户的活跃 personal team（至多一条，见 partial unique index）。
+
+        使用 ``ORDER BY ... LIMIT 1`` 而非 ``scalar_one_or_none()``，避免在约束
+        尚未生效或历史脏数据下因多行抛 ``MultipleResultsFound``。
+        """
+        stmt = (
+            select(Team)
+            .where(
+                Team.owner_user_id == user_id,
+                Team.kind == "personal",
+                Team.is_active.is_(True),
+            )
+            .order_by(Team.created_at.asc(), Team.id.asc())
+            .limit(1)
         )
         result = await self._session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[Team]:
         """列出用户加入的所有团队（含 personal + shared）"""

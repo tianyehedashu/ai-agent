@@ -133,9 +133,29 @@ class GatewayModelResponse(BaseModel):
     tpm_limit: int | None = None
     enabled: bool = True
     tags: dict[str, Any] | None = None
+    last_test_status: str | None = None
+    last_tested_at: datetime | None = None
+    last_test_reason: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GatewayModelTestResponse(BaseModel):
+    """模型连通性测试响应。
+
+    无论成功/失败均返回 200 + ``success`` 字段，便于前端单层 if 处理；同时
+    ``status`` / ``tested_at`` 与 ORM 落库字段保持同名，前端拿到响应即可同步
+    或直接 invalidate 列表查询。
+    """
+
+    success: bool
+    message: str
+    model: str
+    status: str
+    tested_at: datetime
+    reason: str | None = None
+    response_preview: str | None = None
 
 
 class GatewayModelPresetResponse(BaseModel):
@@ -203,6 +223,11 @@ class BudgetUpsert(BaseModel):
     scope: str = Field(pattern="^(system|team|key|user)$")
     scope_id: uuid.UUID | None = None
     period: str = Field(pattern="^(daily|monthly|total)$")
+    model_name: str | None = Field(
+        default=None,
+        max_length=200,
+        description="非空时仅对该请求 model 字符串计量；省略为全模型汇总",
+    )
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
@@ -213,6 +238,7 @@ class BudgetResponse(BaseModel):
     scope: str
     scope_id: uuid.UUID | None = None
     period: str
+    model_name: str | None = None
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
@@ -235,6 +261,8 @@ class RequestLogResponse(BaseModel):
     team_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
     vkey_id: uuid.UUID | None = None
+    credential_id: uuid.UUID | None = None
+    credential_name_snapshot: str | None = None
     capability: str
     route_name: str | None = None
     real_model: str | None = None

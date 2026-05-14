@@ -1,7 +1,7 @@
 """
 Internal Bridge - GatewayProxyProtocol 的实现
 
-供 agent/session/studio 等内部域使用：把 LLM 调用通过 Gateway 走，
+供 agent/session 等内部域使用：把 LLM 调用通过 Gateway 走，
 享受统一统计、限流、预算、Guardrail、Fallback。
 
 策略：
@@ -27,6 +27,7 @@ from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCas
 from domains.gateway.domain.types import (
     GatewayCapability,
     VirtualKeyPrincipal,
+    allowed_capabilities_from_storage,
 )
 from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
@@ -35,11 +36,26 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.db.database import get_session_context
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _merge_gateway_ctx_metadata(body: dict[str, Any], ctx: GatewayCallContext) -> None:
+    """将 ``GatewayCallContext.metadata`` 并入请求体 ``metadata``（不覆盖已有键）。"""
+    extra = ctx.metadata
+    if not extra:
+        return
+    base: dict[str, Any] = dict(body["metadata"]) if isinstance(body.get("metadata"), dict) else {}
+    for key, val in extra.items():
+        if key not in base:
+            base[key] = val
+    body["metadata"] = base
 
 
 def _encryption_key() -> str:
@@ -66,13 +82,24 @@ async def _ensure_system_vkey(
         key_hash=key_hash,
         key_id_str=key_id_str,
     )
+    try:
+        caps = allowed_capabilities_from_storage(record.allowed_capabilities)
+    except ValueError as exc:
+        logger.exception(
+            "system virtual key %s has invalid allowed_capabilities",
+            record.id,
+        )
+        raise RuntimeError(
+            "Invalid system virtual key capability configuration",
+        ) from exc
+
     return VirtualKeyPrincipal(
         vkey_id=record.id,
         vkey_name=record.name,
         team_id=record.team_id,
         user_id=record.created_by_user_id,
         allowed_models=tuple(record.allowed_models or ()),
-        allowed_capabilities=tuple(record.allowed_capabilities or ()),
+        allowed_capabilities=caps,
         rpm_limit=record.rpm_limit,
         tpm_limit=record.tpm_limit,
         store_full_messages=record.store_full_messages,
@@ -145,6 +172,8 @@ class GatewayBridge:
         if api_base is not None:
             body["api_base"] = api_base
 
+        _merge_gateway_ctx_metadata(body, ctx)
+
         async with _session_scope() as session:
             team_id = ctx.team_id
             if team_id is None:
@@ -155,6 +184,8 @@ class GatewayBridge:
                 team_id=team_id,
                 user_id=ctx.user_id,
                 vkey=vkey,
+                inbound_via="vkey",
+                platform_api_key_id=None,
                 capability=GatewayCapability.CHAT,
                 request_id=ctx.request_id or str(uuid.uuid4()),
                 store_full_messages=(
@@ -167,11 +198,14 @@ class GatewayBridge:
             result = await ProxyUseCase(session).chat_completion(proxy_ctx, body)
 
         if stream:
+
             async def _wrap() -> AsyncGenerator[GatewayStreamChunk, None]:
                 async for chunk in result:  # type: ignore[union-attr]
                     choices = chunk.get("choices") or []
                     delta = (
-                        choices[0].get("delta", {}) if choices and isinstance(choices[0], dict) else {}
+                        choices[0].get("delta", {})
+                        if choices and isinstance(choices[0], dict)
+                        else {}
                     )
                     yield GatewayStreamChunk(
                         content=delta.get("content"),
@@ -207,6 +241,9 @@ class GatewayBridge:
             body["api_key"] = api_key
         if api_base is not None:
             body["api_base"] = api_base
+
+        _merge_gateway_ctx_metadata(body, ctx)
+
         async with _session_scope() as session:
             team_id = ctx.team_id
             if team_id is None:
@@ -217,6 +254,8 @@ class GatewayBridge:
                 team_id=team_id,
                 user_id=ctx.user_id,
                 vkey=vkey,
+                inbound_via="vkey",
+                platform_api_key_id=None,
                 capability=GatewayCapability.EMBEDDING,
                 request_id=ctx.request_id or str(uuid.uuid4()),
                 store_full_messages=False,
@@ -232,9 +271,7 @@ class GatewayBridge:
         try:
             from litellm import token_counter
 
-            return int(
-                token_counter(model=model or "gpt-4", text=text)
-            )
+            return int(token_counter(model=model or "gpt-4", text=text))
         except Exception:
             import tiktoken
 

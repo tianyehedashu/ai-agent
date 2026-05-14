@@ -12,6 +12,10 @@ export interface ChatRequest {
   agentId?: string
   /** MCP 配置（仅新会话生效，首条消息时携带） */
   mcpConfig?: { enabledServers: string[] }
+  /** 系统模型 id 或用户模型 UUID；省略则使用会话已存 / Agent 默认 */
+  modelRef?: string | null
+  /** 本条请求是否请求扩展网关调用日志（需服务端允许客户端开关） */
+  gatewayVerboseRequestLog?: boolean
 }
 
 // 转换为后端期望的格式（snake_case）
@@ -23,6 +27,8 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
     mcp_config: request.mcpConfig
       ? { enabled_servers: request.mcpConfig.enabledServers }
       : undefined,
+    model_ref: request.modelRef === undefined ? undefined : request.modelRef,
+    gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
   }
 }
 

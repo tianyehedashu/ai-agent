@@ -5,6 +5,8 @@
 export interface ProviderConfig {
   id: string
   provider: string
+  /** 凭据别名；多账号时由后端返回 */
+  name?: string
   api_base: string | null
   is_active: boolean
 }

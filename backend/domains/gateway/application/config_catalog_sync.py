@@ -47,7 +47,9 @@ def _provider_api_key_and_base(provider: str) -> tuple[str | None, str | None]:
         key = settings.zhipuai_api_key.get_secret_value() if settings.zhipuai_api_key else None
         return key, settings.zhipuai_api_base
     if provider == "volcengine":
-        key = settings.volcengine_api_key.get_secret_value() if settings.volcengine_api_key else None
+        key = (
+            settings.volcengine_api_key.get_secret_value() if settings.volcengine_api_key else None
+        )
         return key, settings.volcengine_api_base
     if provider == "custom":
         return None, None
@@ -101,7 +103,7 @@ async def _ensure_system_credential(
 
 
 def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
-    return {
+    tags: dict[str, Any] = {
         MANAGED_BY_KEY: MANAGED_CONFIG,
         "display_name": model.name,
         "context_window": model.context_window,
@@ -110,11 +112,21 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
         "supports_reasoning": model.supports_reasoning,
         "supports_json_mode": model.supports_json_mode,
         "supports_image_gen": getattr(model, "supports_image_gen", False),
+        # 旧字段：单位混乱（¥/千tokens 或 $/1M tokens），保留只供前端展示用。
         "input_price": model.input_price,
         "output_price": model.output_price,
         "description": model.description,
         "recommended_for": list(model.recommended_for),
     }
+    # 与 LiteLLM 对齐的 USD/token 价格。仅在显式配置为正数时透传，
+    # 避免把默认 0 写入 tags 后误抑制 LiteLLM 内置 model_cost_map 的价目。
+    input_cpt = getattr(model, "input_cost_per_token", 0.0) or 0.0
+    output_cpt = getattr(model, "output_cost_per_token", 0.0) or 0.0
+    if input_cpt > 0:
+        tags["input_cost_per_token"] = float(input_cpt)
+    if output_cpt > 0:
+        tags["output_cost_per_token"] = float(output_cpt)
+    return tags
 
 
 def _infer_model_types_from_tags(tags: dict[str, Any]) -> list[str]:

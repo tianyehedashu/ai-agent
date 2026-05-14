@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   MessageSquare,
   Bot,
-  Workflow,
   Settings,
   Plus,
   ChevronLeft,
@@ -59,7 +58,6 @@ const navigation: NavItem[] = [
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '视频', href: '/video-tasks', icon: Video },
   { name: '产品信息', href: '/product-info', icon: Package },
-  { name: '工作台', href: '/studio', icon: Workflow },
   { name: '设置', href: '/settings', icon: Settings },
 ]
 

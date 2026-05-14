@@ -4,8 +4,16 @@ GatewayVirtualKeyRepository - CRUD/system 池/撤销 单元测试。
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
+# 触发跨域 ORM mapper 注册，避免 User.relationships 引用 Agent 时 _check_configure 失败
+from domains.agent.infrastructure.models import (  # noqa: F401  # isort:skip
+    agent as _agent_model,
+    memory as _memory_model,
+    message as _message_model,
+)
 from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
@@ -86,6 +94,99 @@ class TestVirtualKeyRepository:
         )
         assert first.id == second.id
         assert first.is_system is True
+
+    @pytest.mark.asyncio
+    async def test_partial_unique_index_rejects_second_active_system_row(
+        self, db_session, test_user
+    ):
+        """部分唯一索引在 DB 层杜绝同一 team 出现第二条 active system vkey。
+
+        过去并发 chat 启动时（标题生成 + 主流）会同时进入
+        ``get_or_create_system_key``，写入两条 ``is_system && is_active`` 行；
+        随后 ``scalar_one_or_none()`` 抛 ``MultipleResultsFound`` →
+        ``GatewayBridge.chat_completion`` 异常 → 回退直连 LiteLLM →
+        ``gateway_request_logs`` 失去 team/user/vkey 归因 → dashboard 永远是 0。
+
+        根因修复在 schema 层：``uq_gateway_virtual_keys_team_id_active_system``
+        部分唯一索引（``20260513_uvk`` migration）让重复行根本无法 commit。
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        repo = VirtualKeyRepository(db_session)
+
+        _, key_id_a, hash_a = generate_vkey()
+        primary = await repo.get_or_create_system_key(
+            team.id, encrypted_key="enc-a", key_hash=hash_a, key_id_str=key_id_a
+        )
+
+        async with db_session.begin_nested():
+            _, key_id_b, hash_b = generate_vkey()
+            with pytest.raises(IntegrityError):
+                await repo.create(
+                    team_id=team.id,
+                    created_by_user_id=None,
+                    name="__system_internal_bridge__",
+                    description="尝试直接造重复行",
+                    key_id_str=key_id_b,
+                    key_hash=hash_b,
+                    encrypted_key="enc-b",
+                    allowed_models=[],
+                    allowed_capabilities=[],
+                    rpm_limit=None,
+                    tpm_limit=None,
+                    store_full_messages=False,
+                    guardrail_enabled=True,
+                    is_system=True,
+                )
+
+        # 主条目未受影响
+        refreshed = await repo.get(primary.id)
+        assert refreshed is not None
+        assert refreshed.is_active is True
+        assert refreshed.is_system is True
+
+    @pytest.mark.asyncio
+    async def test_concurrent_get_or_create_system_key_returns_single_row(
+        self, db_session, test_user
+    ):
+        """并发两路 ``get_or_create_system_key`` 必须 upsert 到同一条 row。
+
+        通过 PostgreSQL ``INSERT ... ON CONFLICT DO NOTHING`` 与 partial
+        unique index 配合做真正幂等：先到的事务 INSERT 成功，后到的事务命中
+        冲突变成 no-op，紧随其后的 SELECT 拿到同一主键。
+        """
+        import asyncio
+
+        from sqlalchemy import select
+
+        from domains.gateway.infrastructure.models.virtual_key import (
+            GatewayVirtualKey,
+        )
+
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        repo = VirtualKeyRepository(db_session)
+
+        async def _one() -> uuid.UUID:
+            _, key_id, key_hash = generate_vkey()
+            row = await repo.get_or_create_system_key(
+                team.id,
+                encrypted_key="enc",
+                key_hash=key_hash,
+                key_id_str=key_id,
+            )
+            return row.id
+
+        ids = await asyncio.gather(*(_one() for _ in range(4)))
+        assert len(set(ids)) == 1
+
+        stmt = select(GatewayVirtualKey).where(
+            GatewayVirtualKey.team_id == team.id,
+            GatewayVirtualKey.is_system.is_(True),
+            GatewayVirtualKey.is_active.is_(True),
+        )
+        active_rows = (await db_session.execute(stmt)).scalars().all()
+        assert len(active_rows) == 1
 
     @pytest.mark.asyncio
     async def test_list_excludes_system_by_default(self, db_session, test_user):

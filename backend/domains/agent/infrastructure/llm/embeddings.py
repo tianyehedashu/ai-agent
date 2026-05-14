@@ -243,33 +243,22 @@ class APIEmbedding(EmbeddingProvider):
         kw = self._litellm_embedding_kwargs(texts)
         parsed = split_embedding_for_bridge(kw)
         if parsed is None:
-            return None
-        try:
-            attr = resolve_gateway_bridge_attribution()
-            rows = await proxy.embedding(
-                parsed.inputs,
-                ctx=GatewayCallContext(
-                    user_id=attr.actor_user_id,
-                    team_id=attr.billing_team_id,
-                    capability="embedding",
-                ),
-                model=parsed.model,
-                api_key=parsed.api_key,
-                api_base=parsed.api_base,
-                **parsed.extras,
-            )
-        except Exception as exc:
-            if app_settings.gateway_internal_proxy_fail_closed:
-                raise
-            logger.warning(
-                "Embedding API gateway bridge skipped, fallback to LiteLLM: %s",
-                exc,
-            )
-            return None
-        if not rows or len(rows) != len(texts):
-            return None
-        if any(r is None for r in rows):
-            return None
+            raise ValueError("invalid LiteLLM embedding kwargs for Gateway bridge")
+        attr = resolve_gateway_bridge_attribution()
+        rows = await proxy.embedding(
+            parsed.inputs,
+            ctx=GatewayCallContext(
+                user_id=attr.actor_user_id,
+                team_id=attr.billing_team_id,
+                capability="embedding",
+            ),
+            model=parsed.model,
+            api_key=parsed.api_key,
+            api_base=parsed.api_base,
+            **parsed.extras,
+        )
+        if not rows or len(rows) != len(texts) or any(r is None for r in rows):
+            raise ValueError("Gateway embedding returned unexpected row count")
         return [list(r) for r in rows if r is not None]
 
     async def embed(self, text: str) -> list[float]:
@@ -277,6 +266,8 @@ class APIEmbedding(EmbeddingProvider):
         bridged = await self._try_embed_via_gateway([text])
         if bridged is not None and bridged and bridged[0] is not None:
             return list(bridged[0])
+        if app_settings.gateway_internal_proxy_enabled and resolve_internal_gateway_user_id():
+            raise RuntimeError("Gateway embedding bridge did not return a result")
 
         if aembedding is None:
             raise ImportError("LiteLLM not installed. Run: pip install litellm")
@@ -292,6 +283,8 @@ class APIEmbedding(EmbeddingProvider):
         bridged = await self._try_embed_via_gateway(texts)
         if bridged is not None and len(bridged) == len(texts):
             return bridged
+        if app_settings.gateway_internal_proxy_enabled and resolve_internal_gateway_user_id():
+            raise RuntimeError("Gateway embedding bridge did not return a result")
 
         if aembedding is None:
             raise ImportError("LiteLLM not installed. Run: pip install litellm")

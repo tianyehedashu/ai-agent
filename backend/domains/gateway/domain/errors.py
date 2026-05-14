@@ -56,6 +56,23 @@ class CredentialNotFoundError(GatewayError):
         super().__init__(msg)
 
 
+class CredentialInUseError(GatewayError):
+    """凭据仍被网关模型引用，无法删除"""
+
+    def __init__(self, credential_id: str) -> None:
+        super().__init__(f"凭据仍被模型引用，无法删除: {credential_id}")
+        self.credential_id = credential_id
+
+
+class CredentialNameConflictError(GatewayError):
+    """同一用户下同 provider 凭据名称冲突"""
+
+    def __init__(self, provider: str, name: str) -> None:
+        super().__init__(f"凭据名称已存在: {provider}/{name}")
+        self.provider = provider
+        self.name = name
+
+
 class ModelNotAllowedError(GatewayError):
     """模型不在白名单"""
 
@@ -76,9 +93,7 @@ class BudgetExceededError(GatewayError):
     """预算超限"""
 
     def __init__(self, scope: str, period: str, limit: float, used: float) -> None:
-        super().__init__(
-            f"{scope}/{period} 预算已用尽: 限额 {limit}, 已用 {used}"
-        )
+        super().__init__(f"{scope}/{period} 预算已用尽: 限额 {limit}, 已用 {used}")
         self.scope = scope
         self.period = period
         self.limit = limit
@@ -109,6 +124,8 @@ class GuardrailBlockedError(GatewayError):
 __all__ = [
     "BudgetExceededError",
     "CapabilityNotAllowedError",
+    "CredentialInUseError",
+    "CredentialNameConflictError",
     "CredentialNotFoundError",
     "GatewayError",
     "GuardrailBlockedError",

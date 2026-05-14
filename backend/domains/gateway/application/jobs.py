@@ -91,9 +91,7 @@ async def gateway_partition_loop() -> None:
             async with get_session_context() as session:
                 now = datetime.now(UTC)
                 for delta in (0, 1, 2):
-                    target = (now.replace(day=1) + timedelta(days=delta * 32)).replace(
-                        day=1
-                    )
+                    target = (now.replace(day=1) + timedelta(days=delta * 32)).replace(day=1)
                     await _ensure_partition(session, target.year, target.month)
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_partition_job error: %s", exc)
@@ -110,9 +108,7 @@ def _month_partition_upper_bound(year: int, month: int) -> datetime:
     return datetime(year, month + 1, 1, tzinfo=UTC)
 
 
-async def _drop_expired_request_log_partitions(
-    session: AsyncSession, retention_days: int
-) -> int:
+async def _drop_expired_request_log_partitions(session: AsyncSession, retention_days: int) -> int:
     """删除「分区上界」不晚于 cutoff 的整月子分区（数据全部早于保留窗口）。"""
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     stmt = text(
@@ -139,9 +135,7 @@ async def _drop_expired_request_log_partitions(
         upper = _month_partition_upper_bound(year, month)
         if upper > cutoff:
             continue
-        await session.execute(
-            text(f'DROP TABLE IF EXISTS "{schema_name}"."{partition_name}"')
-        )
+        await session.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{partition_name}"'))
         dropped += 1
         logger.info(
             "gateway_request_log_retention: dropped partition %s.%s (upper=%s <= cutoff=%s)",
@@ -189,9 +183,7 @@ async def _evaluate_rule(
     metric = rule.metric
     if metric == "error_rate":
         cnt_total = (
-            await session.execute(
-                select(func.count()).select_from(base_q.subquery())
-            )
+            await session.execute(select(func.count()).select_from(base_q.subquery()))
         ).scalar_one()
         if cnt_total == 0:
             return None
@@ -206,27 +198,21 @@ async def _evaluate_rule(
         return rate > float(rule.threshold), rate
     if metric == "request_rate":
         cnt = (
-            await session.execute(
-                select(func.count()).select_from(base_q.subquery())
-            )
+            await session.execute(select(func.count()).select_from(base_q.subquery()))
         ).scalar_one()
         rate_per_min = float(cnt) / max(rule.window_minutes, 1)
         return rate_per_min > float(rule.threshold), rate_per_min
     if metric == "latency_p95":
         # 使用 PERCENTILE_CONT 近似 p95（PG 10+ 支持）
         sub = base_q.subquery()
-        stmt = select(
-            func.percentile_cont(0.95).within_group(sub.c.latency_ms.asc()).label("p95")
-        )
+        stmt = select(func.percentile_cont(0.95).within_group(sub.c.latency_ms.asc()).label("p95"))
         row = (await session.execute(stmt)).one()
         p95 = float(row.p95 or 0)
         return p95 > float(rule.threshold), p95
     if metric == "budget_usage":
         # budget_usage 需要参考 budget 表；简化为 cost_usd 总和
         sub = base_q.subquery()
-        total = (
-            await session.execute(select(func.sum(sub.c.cost_usd)))
-        ).scalar_one() or 0
+        total = (await session.execute(select(func.sum(sub.c.cost_usd)))).scalar_one() or 0
         total_f = float(total)
         return total_f > float(rule.threshold), total_f
     return None
@@ -247,12 +233,14 @@ async def gateway_alert_loop() -> None:
         try:
             async with get_session_context() as session:
                 rules = (
-                    await session.execute(
-                        select(GatewayAlertRule).where(
-                            GatewayAlertRule.enabled.is_(True)
+                    (
+                        await session.execute(
+                            select(GatewayAlertRule).where(GatewayAlertRule.enabled.is_(True))
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 now = datetime.now(UTC)
                 for rule in rules:
                     result = await _evaluate_rule(session, rule, now)
@@ -262,9 +250,10 @@ async def gateway_alert_loop() -> None:
                     if not triggered:
                         continue
                     # 静默期：5 分钟内不重复触发
-                    if rule.last_triggered_at and (
-                        now - rule.last_triggered_at
-                    ).total_seconds() < 300:
+                    if (
+                        rule.last_triggered_at
+                        and (now - rule.last_triggered_at).total_seconds() < 300
+                    ):
                         continue
                     event = GatewayAlertEvent(
                         rule_id=rule.id,
@@ -301,9 +290,7 @@ def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
     register_app_background_task(app, asyncio.create_task(gateway_rollup_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
-    register_app_background_task(
-        app, asyncio.create_task(gateway_request_log_retention_loop())
-    )
+    register_app_background_task(app, asyncio.create_task(gateway_request_log_retention_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_alert_loop()))
 
 

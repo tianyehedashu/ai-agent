@@ -86,9 +86,7 @@ def _build_litellm_params(
     try:
         params["api_key"] = decrypt_value(credential.api_key_encrypted, encryption_key)
     except Exception:  # pragma: no cover
-        logger.warning(
-            "Failed to decrypt credential %s; falling back to raw value", credential.id
-        )
+        logger.warning("Failed to decrypt credential %s; falling back to raw value", credential.id)
         params["api_key"] = credential.api_key_encrypted
     if credential.api_base:
         params["api_base"] = credential.api_base
@@ -119,9 +117,7 @@ def _models_to_deployments(
     for m in models:
         cred = credentials.get(m.credential_id)
         if cred is None:
-            logger.warning(
-                "GatewayModel %s missing credential %s, skip", m.name, m.credential_id
-            )
+            logger.warning("GatewayModel %s missing credential %s, skip", m.name, m.credential_id)
             continue
         deployments.append(
             {
@@ -139,6 +135,9 @@ def _models_to_deployments(
                     "team_id": str(m.team_id) if m.team_id else None,
                     "capability": m.capability,
                     "weight": m.weight,
+                    "gateway_credential_id": str(cred.id),
+                    "gateway_credential_name": cred.name,
+                    "gateway_credential_scope": cred.scope,
                 },
             }
         )
@@ -201,10 +200,7 @@ async def _build_router_kwargs(
     deployments = _models_to_deployments(models, credentials)
     fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes)
 
-    redis_url = (
-        settings.gateway_router_redis_url
-        or settings.redis_url
-    )
+    redis_url = settings.gateway_router_redis_url or settings.redis_url
 
     kwargs: dict[str, Any] = {
         "model_list": deployments,
@@ -285,13 +281,9 @@ async def reload_router(db: AsyncSession) -> Router:
     if "fallbacks" in kwargs:
         _router_instance.fallbacks = kwargs["fallbacks"]
     if "content_policy_fallbacks" in kwargs:
-        _router_instance.content_policy_fallbacks = kwargs[
-            "content_policy_fallbacks"
-        ]
+        _router_instance.content_policy_fallbacks = kwargs["content_policy_fallbacks"]
     if "context_window_fallbacks" in kwargs:
-        _router_instance.context_window_fallbacks = kwargs[
-            "context_window_fallbacks"
-        ]
+        _router_instance.context_window_fallbacks = kwargs["context_window_fallbacks"]
     _router_instance.routing_strategy = kwargs["routing_strategy"]
     logger.info("LiteLLM Router hot-reloaded: %d deployments", len(kwargs["model_list"]))
     return _router_instance

@@ -134,12 +134,15 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         await self.db.refresh(session)
         return session
 
-    async def update_config(self, session_id: uuid.UUID, config_updates: dict) -> Session | None:
+    async def update_config(
+        self, session_id: uuid.UUID, config_updates: dict, *, flush: bool = True
+    ) -> Session | None:
         """合并更新会话 config（浅合并，用于 mcp_config 等）
 
         Args:
             session_id: 会话 ID
             config_updates: 要合并的 config 片段，如 {"mcp_config": {"enabled_servers": [...]}}
+            flush: 为 False 时仅改内存中的 ORM 状态，由调用方统一 flush（避免嵌套 flush）
 
         Returns:
             更新后的会话实体，不存在则返回 None
@@ -152,8 +155,9 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         current.update(config_updates)
         session.config = current
 
-        await self.db.flush()
-        await self.db.refresh(session)
+        if flush:
+            await self.db.flush()
+            await self.db.refresh(session)
         return session
 
     async def delete(self, session_id: uuid.UUID) -> bool:

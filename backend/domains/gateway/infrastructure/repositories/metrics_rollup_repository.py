@@ -31,24 +31,25 @@ class GatewayMetricsRollupRepository:
                 GatewayRequestLog.team_id,
                 GatewayRequestLog.user_id,
                 GatewayRequestLog.vkey_id,
+                GatewayRequestLog.credential_id,
                 GatewayRequestLog.provider,
                 GatewayRequestLog.real_model,
                 GatewayRequestLog.capability,
                 func.count(GatewayRequestLog.id).label("requests"),
-                func.sum(
-                    case((GatewayRequestLog.status == "success", 1), else_=0)
-                ).label("success_count"),
-                func.sum(
-                    case((GatewayRequestLog.status != "success", 1), else_=0)
-                ).label("error_count"),
+                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label(
+                    "success_count"
+                ),
+                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label(
+                    "error_count"
+                ),
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.sum(GatewayRequestLog.latency_ms).label("total_latency_ms"),
-                func.sum(
-                    case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)
-                ).label("cache_hit_count"),
+                func.sum(case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)).label(
+                    "cache_hit_count"
+                ),
             )
             .where(
                 GatewayRequestLog.created_at >= since,
@@ -59,6 +60,7 @@ class GatewayMetricsRollupRepository:
                 GatewayRequestLog.team_id,
                 GatewayRequestLog.user_id,
                 GatewayRequestLog.vkey_id,
+                GatewayRequestLog.credential_id,
                 GatewayRequestLog.provider,
                 GatewayRequestLog.real_model,
                 GatewayRequestLog.capability,
@@ -73,6 +75,7 @@ class GatewayMetricsRollupRepository:
                 "team_id": row.team_id,
                 "user_id": row.user_id,
                 "vkey_id": row.vkey_id,
+                "credential_id": row.credential_id,
                 "provider": row.provider,
                 "real_model": row.real_model,
                 "capability": row.capability,

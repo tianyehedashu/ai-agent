@@ -288,8 +288,11 @@ class Settings(BaseSettings):
     # ========================================================================
     # 总开关：内部模块（chat/agent/...）调用是否走 Gateway 桥接（全量统计）
     gateway_internal_proxy_enabled: bool = True
-    # 无注册用户上下文时，是否将桥接失败视为致命（True=禁止静默回退直连）
-    gateway_internal_proxy_fail_closed: bool = False
+    # 桥接失败是否致命（True=禁止静默回退直连）。
+    # 默认 True：bridge 是 ``gateway_request_logs`` team/user/vkey 归因的唯一
+    # 注入点，一旦静默回退就会让 dashboard / 计费聚合永远为 0，需要让上游
+    # 立即报错暴露问题，而不是用 fallback 掩盖。
+    gateway_internal_proxy_fail_closed: bool = True
     # 启动时是否将 app.toml 中 models.available 幂等同步到 gateway_models（team_id NULL）
     gateway_catalog_sync_on_startup: bool = True
     # 同步时是否用配置覆盖 tags（GitOps：配置声明优先于 UI 对托管行的修改）
@@ -326,6 +329,16 @@ class Settings(BaseSettings):
     gateway_request_log_always_persist_non_success: bool = True
     # 成功请求 cost(USD) 不低于该阈值时始终写明细；None=不按金额
     gateway_request_log_always_persist_cost_above_usd: float | None = None
+    # 详细请求日志：提示词摘要最大字符（硬上限）
+    gateway_request_log_prompt_max_chars: int = Field(default=4096, ge=256, le=65536)
+    # 非详细模式：响应 preview 最大字符（与历史 ~200 对齐）
+    gateway_request_log_response_preview_max_chars: int = Field(default=200, ge=0, le=8192)
+    # 详细模式（store_full_messages / 会话或请求开关）：assistant 正文 preview 上限
+    gateway_request_log_response_verbose_max_chars: int = Field(default=16384, ge=0, le=65536)
+    # tool_calls 摘要 JSON 最大字符
+    gateway_request_log_tool_calls_summary_max_chars: int = Field(default=2000, ge=0, le=8192)
+    # Chat 请求体中的 gateway_verbose_request_log 是否生效（生产建议 False）
+    gateway_allow_client_request_verbose_log: bool = False
 
     @property
     def is_development(self) -> bool:

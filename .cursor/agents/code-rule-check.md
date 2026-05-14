@@ -1,6 +1,6 @@
 ---
 name: code-rule-check
-model: fast
+model: composer-2
 description: 对修改的代码进行全面检查,确保符合项目规范和质量标准。
 ---
 
@@ -70,7 +70,6 @@ backend/
 │   │   ├── application/
 │   │   ├── infrastructure/llm/   # 可依赖 domains.gateway.application.ports（不依赖 gateway 实现细节）
 │   │   └── presentation/
-│   ├── studio/
 │   └── evaluation/
 ├── libs/                         # 纯技术：db、config、api、exceptions、iam、middleware、observability、orm…
 ├── bootstrap/

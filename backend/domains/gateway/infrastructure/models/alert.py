@@ -76,14 +76,10 @@ class GatewayAlertEvent(BaseModel):
         nullable=False,
         index=True,
     )
-    team_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     metric_value: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     threshold: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    severity: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="warning"
-    )
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, server_default="warning")
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     notified: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False

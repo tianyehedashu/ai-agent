@@ -23,6 +23,8 @@ from domains.tenancy.presentation.team_dependencies import (
     RequiredTeamOwner,
 )
 from libs.db.database import get_db
+from libs.exceptions import TeamNotFoundError
+from libs.iam.team_http import map_team_access_exception_to_http
 
 router = APIRouter(tags=["Tenancy / Teams"])
 
@@ -113,8 +115,36 @@ async def add_team_member(
     team: RequiredTeamAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TeamMemberResponse:
-    member = await TeamService(db).add_member(team_id, body.user_id, body.role)
+    try:
+        member = await TeamService(db).add_member(team_id, body.user_id, body.role)
+    except TeamNotFoundError as exc:
+        mapped = map_team_access_exception_to_http(exc)
+        if mapped is None:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unmapped team access error",
+            ) from exc
+        raise mapped from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return TeamMemberResponse.model_validate(member)
+
+
+@router.delete(
+    "/teams/{team_id}/members/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_self_from_team(
+    team_id: uuid.UUID,
+    team: RequiredTeamMember,
+    current_user: RequiredAuthUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """当前用户退出所在团队（personal 的 owner 不可退出，与 remove_member 规则一致）。"""
+    try:
+        await TeamService(db).remove_member(team_id, uuid.UUID(current_user.id))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.delete("/teams/{team_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -124,4 +154,7 @@ async def remove_team_member(
     team: RequiredTeamAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await TeamService(db).remove_member(team_id, user_id)
+    try:
+        await TeamService(db).remove_member(team_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

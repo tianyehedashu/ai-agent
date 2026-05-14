@@ -35,8 +35,10 @@ class TeamResponse(BaseModel):
 
 
 class TeamMemberAdd(BaseModel):
+    """邀请成员仅允许 ``admin`` / ``member``；``owner`` 由 ``Team.owner_user_id`` 唯一表示。"""
+
     user_id: uuid.UUID
-    role: str = Field(default="member", pattern="^(owner|admin|member)$")
+    role: str = Field(default="member", pattern="^(admin|member)$")
 
 
 class TeamMemberResponse(BaseModel):

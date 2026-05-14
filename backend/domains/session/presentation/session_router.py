@@ -42,6 +42,10 @@ class SessionUpdate(BaseModel):
 
     title: str | None = Field(default=None, max_length=200)
     status: str | None = Field(default=None, pattern="^(active|archived)$")
+    gateway_verbose_request_log: bool | None = Field(
+        default=None,
+        description="为 True 时本会话内网关调用日志记录扩展的提示词/响应摘要（仍截断）",
+    )
 
 
 class SessionMCPConfigResponse(BaseModel):
@@ -70,6 +74,8 @@ class SessionResponse(BaseModel):
     message_count: int
     token_count: int
     video_task_count: int = 0  # 视频任务数量
+    gateway_verbose_request_log: bool = False
+    chat_model_ref: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -139,6 +145,10 @@ class MessageResponse(BaseModel):
 
 def _session_to_response(session: Session) -> SessionResponse:
     """将 Session 模型转换为响应"""
+    cfg = session.config if isinstance(session.config, dict) else {}
+    verbose = bool(cfg.get("gateway_verbose_request_log"))
+    raw_ref = cfg.get("chat_model_ref")
+    chat_model_ref = raw_ref if isinstance(raw_ref, str) and raw_ref.strip() else None
     return SessionResponse(
         id=str(session.id),
         user_id=str(session.user_id) if session.user_id else None,
@@ -149,6 +159,8 @@ def _session_to_response(session: Session) -> SessionResponse:
         message_count=session.message_count,
         token_count=session.token_count,
         video_task_count=session.video_task_count,
+        gateway_verbose_request_log=verbose,
+        chat_model_ref=chat_model_ref,
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
@@ -231,11 +243,13 @@ async def update_session(
     # Pass ... for fields that weren't provided, and the actual value (including None) for fields that were
     title = provided_fields.get("title", ...)
     status_value = provided_fields.get("status", ...)
+    gateway_verbose = provided_fields.get("gateway_verbose_request_log", ...)
 
     updated_session = await session_service.update_session(
         session_id=session_id,
         title=title,
         status=status_value,
+        gateway_verbose_request_log=gateway_verbose,
     )
     return _session_to_response(updated_session)
 

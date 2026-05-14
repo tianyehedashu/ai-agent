@@ -33,6 +33,10 @@ export type ApiKeyScope =
   | 'mcp:workflow-server'
   | 'mcp:custom-server'
   | 'mcp:all'
+  // AI Gateway（与后端 domains.identity.domain.api_key_types.ApiKeyScope 对齐）
+  | 'gateway:proxy'
+  | 'gateway:admin'
+  | 'gateway:read'
 
 // =============================================================================
 // Scope Groups (预设作用域分组)
@@ -64,6 +68,10 @@ export const API_KEY_SCOPE_GROUPS: Record<string, ApiKeyScope[]> = {
     'mcp:custom-server',
   ],
   mcp_full: ['mcp:all'],
+  /** 仅调用 Gateway OpenAI 兼容入口 /v1/*（与虚拟 Key sk-gw- 二选一入站路径） */
+  gateway_proxy: ['gateway:proxy'],
+  /** Gateway 代理 + 管理写 + 只读仪表盘 */
+  gateway_full: ['gateway:proxy', 'gateway:admin', 'gateway:read'],
 }
 
 // =============================================================================
@@ -213,7 +221,28 @@ export const SCOPE_DISPLAY_INFO: Record<
     description: '访问所有 MCP 服务器',
     category: 'MCP',
   },
+  'gateway:proxy': {
+    label: 'Gateway 代理 (/v1/*)',
+    description:
+      '使用本平台的 sk-* 调用 OpenAI 兼容与 Anthropic 入口；需 scope gateway:proxy。细粒度模型白名单与 key 级限流请优先使用「Gateway 虚拟 Key（sk-gw-）」',
+    category: 'Gateway',
+  },
+  'gateway:admin': {
+    label: 'Gateway 管理（写）',
+    description: '管理团队虚拟 Key、路由、凭据与预算等管理面写操作',
+    category: 'Gateway',
+  },
+  'gateway:read': {
+    label: 'Gateway 只读',
+    description: '查看 Gateway 仪表盘、日志与用量等只读能力',
+    category: 'Gateway',
+  },
 }
+
+/** 一键「全选」作用域（排除 gateway:admin，避免误授 Gateway 管理写权限） */
+export const SCOPES_FOR_SELECT_ALL: ApiKeyScope[] = (
+  Object.keys(SCOPE_DISPLAY_INFO) as ApiKeyScope[]
+).filter((s) => s !== 'gateway:admin')
 
 // =============================================================================
 // Expiration Options

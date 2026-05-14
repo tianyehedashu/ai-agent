@@ -7,9 +7,11 @@ import type React from 'react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Key, Plus, Trash2, Ban, History } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { apiKeyApi } from '@/api/api-key'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -131,6 +133,25 @@ export function ApiKeyTab(): React.ReactElement {
           创建 API Key
         </Button>
       </div>
+
+      <Alert>
+        <AlertDescription className="text-sm leading-relaxed">
+          调用本平台的 AI Gateway（OpenAI 兼容 <code className="rounded bg-muted px-1">/v1/*</code>
+          ）有两种入站令牌：推荐在{' '}
+          <Link
+            to="/gateway/keys"
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            Gateway · 虚拟 Key
+          </Link>{' '}
+          使用 <code className="rounded bg-muted px-1">sk-gw-*</code>（团队内分发、白名单与 key
+          级限流更完整）。若需「一把 <code className="rounded bg-muted px-1">sk-*</code>」同时带
+          Agent/MCP 等能力，可在创建 API Key 时勾选 <strong>Gateway 代理</strong>（
+          <code className="rounded bg-muted px-1">gateway:proxy</code>
+          ），调用时按需加请求头 <code className="rounded bg-muted px-1">X-Team-Id</code>
+          。上游供应商的 OpenAI/Anthropic 等密钥属于「我的凭据」，与此处平台 API Key 不同。
+        </AlertDescription>
+      </Alert>
 
       {/* 创建对话框 */}
       <ApiKeyCreateDialog

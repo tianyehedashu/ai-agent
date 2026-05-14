@@ -154,7 +154,7 @@ class TestExecutionConfigAPI:
     """
     Feature: 执行环境配置 API
 
-    作为一个 Agent 工作台用户
+    作为一个 Agent 用户
     我希望能够通过 API 管理执行环境配置
     以便在 UI 中配置 Agent 的执行环境
     """

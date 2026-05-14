@@ -308,8 +308,14 @@ name = "GLM-4 Flash"
 provider = "zhipuai"
 litellm_model = "zai/glm-4-flash"
 context_window = 131072
-input_price = 0.0001    # ¥/千tokens，基本免费
+input_price = 0.0001    # ¥/千tokens，基本免费（仅供前端展示）
 output_price = 0.0001
+# LiteLLM 内置 model_cost_map 不含 zai/* 价目，需在此显式补 USD/token，
+# 否则 ``gateway_request_logs.cost_usd`` 永远为 0。换算：
+#   ¥0.0001 / 千 tokens = ¥1e-7 / token ≈ $1.43e-8 / token（按 7 RMB/USD）
+# 想"算作完全免费"则保持 0，cost_usd 会是 0。
+input_cost_per_token = 1.43e-8
+output_cost_per_token = 1.43e-8
 supports_vision = false
 supports_tools = true
 recommended_for = ["fast", "free"]

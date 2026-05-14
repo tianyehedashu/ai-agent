@@ -5,7 +5,7 @@
  * 复用于产品信息步骤、Agent 对话、视频任务等场景。
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, Loader2, User } from 'lucide-react'
@@ -20,7 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import type { ModelType } from '@/types/user-model'
+import { MODEL_PROVIDERS } from '@/types/user-model'
+
+const CHANNEL_ALL = '__all__'
 
 interface ModelSelectorProps {
   /** 过滤模型类型 */
@@ -35,6 +39,8 @@ interface ModelSelectorProps {
   disabled?: boolean
   /** 额外 className */
   className?: string
+  /** 是否展示「按接入通道」筛选（与设置页列表语义一致） */
+  showProviderFilter?: boolean
 }
 
 export function ModelSelector({
@@ -44,10 +50,15 @@ export function ModelSelector({
   placeholder = '默认模型',
   disabled = false,
   className,
+  showProviderFilter = false,
 }: ModelSelectorProps): React.JSX.Element {
+  const [channel, setChannel] = useState<string>(CHANNEL_ALL)
+
+  const providerForApi = showProviderFilter && channel !== CHANNEL_ALL ? channel : undefined
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['user-models', 'available', modelType],
-    queryFn: () => userModelApi.listAvailable(modelType),
+    queryKey: ['user-models', 'available', modelType, showProviderFilter ? channel : ''],
+    queryFn: () => userModelApi.listAvailable(modelType, providerForApi),
     staleTime: 30_000,
     retry: 1,
   })
@@ -87,7 +98,7 @@ export function ModelSelector({
     )
   }
 
-  return (
+  const mainSelect = (
     <Select
       value={value ?? '__default__'}
       onValueChange={handleChange}
@@ -143,5 +154,31 @@ export function ModelSelector({
         )}
       </SelectContent>
     </Select>
+  )
+
+  if (!showProviderFilter) {
+    return mainSelect
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+      <Select value={channel} onValueChange={setChannel} disabled={disabled || isLoading}>
+        <SelectTrigger
+          className="h-7 w-full min-w-[6.5rem] max-w-[9rem] border-0 bg-muted/30 text-[11px] shadow-none sm:h-8 sm:text-xs"
+          title={PROVIDER_CHANNEL_FILTER_HINT_LONG}
+        >
+          <SelectValue placeholder="接入通道" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={CHANNEL_ALL}>全部通道</SelectItem>
+          {MODEL_PROVIDERS.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="min-w-0 flex-1">{mainSelect}</div>
+    </div>
   )
 }

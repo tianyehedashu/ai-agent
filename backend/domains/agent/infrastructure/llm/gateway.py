@@ -5,10 +5,12 @@ LLM Gateway - LLM 网关实现
 
 注意：
 - 当 settings.gateway_internal_proxy_enabled=True 且能解析到归因 user_id 时，
-  本类会优先把调用转发到 AI Gateway 桥接层（GatewayProxyProtocol / GatewayBridge），
+  本类把调用转发到 AI Gateway 桥接层（GatewayProxyProtocol / GatewayBridge），
   以便统一统计、预算与 Guardrail（含 BYOK 时传入的 api_key/api_base）。
-- 直接 LiteLLM 调用作为回退路径（显式关闭 internal proxy、无归因用户、或
-  gateway_internal_proxy_fail_closed=False 时桥接失败）。
+- 直接 LiteLLM 调用只用于以下场景：显式关闭 internal proxy（开关），或当前
+  请求无法解析出归因 user_id（且未配置 ``gateway_internal_proxy_delegate_user_id``）。
+  桥接调用一旦进入，内部异常**不会被静默回退**——会直接向上抛，保证
+  ``gateway_request_logs`` 不会因 fallback 直连 LiteLLM 而丢失归因。
 """
 
 from collections.abc import AsyncGenerator
@@ -31,6 +33,9 @@ from domains.agent.infrastructure.llm.message_formatter import (
 from domains.agent.infrastructure.llm.prompt_cache import get_prompt_cache_manager
 from domains.agent.infrastructure.llm.providers import get_provider
 from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
+from domains.gateway.application.gateway_internal_log_context import (
+    get_internal_store_full_override,
+)
 from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
 from domains.gateway.application.litellm_bridge_payload import (
@@ -59,7 +64,11 @@ class LLMResponse(BaseModel):
     reasoning_content: str | None = None  # 推理模型的思考过程（DeepSeek Reasoner 等）
     tool_calls: list[ToolCall] | None = None
     finish_reason: str | None = None
-    usage: dict[str, int] | None = None
+    # usage value 不是纯 int —— OpenAI / DeepSeek-Reasoner 等 provider 会在
+    # ``prompt_tokens_details`` / ``completion_tokens_details`` 下嵌入 dict
+    # （``cached_tokens`` / ``reasoning_tokens``）。这里只做透传，下游
+    # 聚合（见 ``_merge_usage``）只读取标量 token 字段。
+    usage: dict[str, Any] | None = None
     model: str | None = None
 
 
@@ -70,7 +79,7 @@ class StreamChunk(BaseModel):
     reasoning_content: str | None = None  # 推理模型的思考过程
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str | None = None
-    usage: dict[str, int] | None = None
+    usage: dict[str, Any] | None = None
 
 
 class LLMGateway:
@@ -466,11 +475,22 @@ class LLMGateway:
 
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
-            bridged = await self._maybe_call_via_gateway_litellm(
+            return await self._call_via_gateway_litellm(
                 litellm_kwargs=litellm_kwargs,
             )
-            if bridged is not None:
-                return bridged
+        elif not _global_settings.gateway_internal_proxy_enabled:
+            logger.debug(
+                "LLMGateway chat: gateway_internal_proxy_enabled=False, 直连 LiteLLM"
+            )
+        else:
+            # bridge_uid 为 None：当前请求没有解析到注册用户，也没有配置委派 user_id。
+            # 这是导致 gateway_request_logs 行 team_id/user_id 为 NULL 的最常见原因。
+            logger.warning(
+                "LLMGateway chat: 无法解析 bridge user_id（PermissionContext 缺失或匿名 + "
+                "未配置 gateway_internal_proxy_delegate_user_id），直连 LiteLLM；"
+                "本次调用日志的 team_id/user_id 将为空。model=%s",
+                model,
+            )
 
         if litellm_kwargs["stream"]:
             return self._stream_chat(**litellm_kwargs)
@@ -593,13 +613,22 @@ class LLMGateway:
             func_dict["arguments"] = str(func.arguments) if func.arguments else ""
         return func_dict
 
-    def _extract_usage(self, usage: Any) -> dict[str, int]:
+    def _extract_usage(self, usage: Any) -> dict[str, Any]:
         """提取 usage 对象"""
-        return {
+        usage_dict: dict[str, Any] = {
             "prompt_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
             "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
             "total_tokens": int(getattr(usage, "total_tokens", 0) or 0),
         }
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            usage_dict["prompt_tokens_details"] = self._extract_primitive_value(prompt_details)
+        completion_details = getattr(usage, "completion_tokens_details", None)
+        if completion_details is not None:
+            usage_dict["completion_tokens_details"] = self._extract_primitive_value(
+                completion_details
+            )
+        return usage_dict
 
     def _parse_response_data(self, response_dict: dict[str, Any]) -> LLMResponse:
         """从响应字典中解析 LLMResponse"""
@@ -705,54 +734,31 @@ class LLMGateway:
             model=result.model or model_fallback,
         )
 
-    async def _maybe_call_via_gateway_litellm(
+    async def _call_via_gateway_litellm(
         self,
         *,
         litellm_kwargs: dict[str, Any],
-    ) -> LLMResponse | AsyncGenerator[StreamChunk, None] | None:
-        """通过 AI Gateway 桥接执行调用，参数与 ``acompletion`` 一致。失败返回 None（除非 fail_closed）。"""
+    ) -> LLMResponse | AsyncGenerator[StreamChunk, None]:
+        """通过 AI Gateway 桥接执行调用，参数与 ``acompletion`` 一致。
+
+        在 internal proxy 开启且已解析到归因用户时，payload 拆分失败也属于
+        编程错误，不能回落直连 LiteLLM；否则会让日志归因
+        ``gateway_team_id/user_id/vkey_id`` 因 fallback 直连 LiteLLM 而丢失。
+        """
         payload = split_chat_completion_for_bridge(litellm_kwargs)
         if payload is None:
-            return None
-        try:
-            bridge = self._gateway_proxy
-            attr = resolve_gateway_bridge_attribution()
-            ctx = GatewayCallContext(
-                user_id=attr.actor_user_id,
-                team_id=attr.billing_team_id,
-                capability="chat",
-            )
+            raise ValueError("invalid LiteLLM chat kwargs for Gateway bridge")
+        bridge = self._gateway_proxy
+        attr = resolve_gateway_bridge_attribution()
+        ctx = GatewayCallContext(
+            user_id=attr.actor_user_id,
+            team_id=attr.billing_team_id,
+            capability="chat",
+            store_full_messages=get_internal_store_full_override(),
+        )
 
-            if payload.stream:
-                stream_iter = await bridge.chat_completion(
-                    payload.messages,
-                    ctx=ctx,
-                    model=payload.model,
-                    temperature=payload.temperature,
-                    max_tokens=payload.max_tokens,
-                    tools=payload.tools,
-                    tool_choice=payload.tool_choice,
-                    stream=True,
-                    response_format=payload.response_format,
-                    api_key=payload.api_key,
-                    api_base=payload.api_base,
-                    **payload.extras,
-                )
-
-                async def _wrap() -> AsyncGenerator[StreamChunk, None]:
-                    async for chunk in stream_iter:  # type: ignore[union-attr]
-                        chunk_obj: GatewayStreamChunk = chunk
-                        yield StreamChunk(
-                            content=chunk_obj.content,
-                            reasoning_content=chunk_obj.reasoning_content,
-                            tool_calls=chunk_obj.tool_calls,
-                            finish_reason=chunk_obj.finish_reason,
-                            usage=chunk_obj.usage,
-                        )
-
-                return _wrap()
-
-            result = await bridge.chat_completion(
+        if payload.stream:
+            stream_iter = await bridge.chat_completion(
                 payload.messages,
                 ctx=ctx,
                 model=payload.model,
@@ -760,18 +766,41 @@ class LLMGateway:
                 max_tokens=payload.max_tokens,
                 tools=payload.tools,
                 tool_choice=payload.tool_choice,
-                stream=False,
+                stream=True,
                 response_format=payload.response_format,
                 api_key=payload.api_key,
                 api_base=payload.api_base,
                 **payload.extras,
             )
-            return self._llm_response_from_gateway_chat(result, payload.model)
-        except Exception as exc:  # pragma: no cover
-            if _global_settings.gateway_internal_proxy_fail_closed:
-                raise
-            logger.warning("Gateway bridge call failed, fallback to direct LiteLLM: %s", exc)
-            return None
+
+            async def _wrap() -> AsyncGenerator[StreamChunk, None]:
+                async for chunk in stream_iter:  # type: ignore[union-attr]
+                    chunk_obj: GatewayStreamChunk = chunk
+                    yield StreamChunk(
+                        content=chunk_obj.content,
+                        reasoning_content=chunk_obj.reasoning_content,
+                        tool_calls=chunk_obj.tool_calls,
+                        finish_reason=chunk_obj.finish_reason,
+                        usage=chunk_obj.usage,
+                    )
+
+            return _wrap()
+
+        result = await bridge.chat_completion(
+            payload.messages,
+            ctx=ctx,
+            model=payload.model,
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+            tools=payload.tools,
+            tool_choice=payload.tool_choice,
+            stream=False,
+            response_format=payload.response_format,
+            api_key=payload.api_key,
+            api_base=payload.api_base,
+            **payload.extras,
+        )
+        return self._llm_response_from_gateway_chat(result, payload.model)
 
     def _compose_embedding_litellm_kwargs(self, texts: list[str], model: str) -> dict[str, Any]:
         """构建与直连 ``aembedding`` 一致的参数。"""
@@ -782,39 +811,35 @@ class LLMGateway:
             **api_config,
         }
 
-    async def _maybe_embed_via_gateway_litellm(
+    async def _embed_via_gateway_litellm(
         self,
         *,
         litellm_kwargs: dict[str, Any],
-    ) -> list[list[float]] | None:
-        """经 Gateway 批量 embedding，参数与 ``aembedding`` 一致。"""
+    ) -> list[list[float]]:
+        """经 Gateway 批量 embedding，参数与 ``aembedding`` 一致。
+
+        payload 拆分失败与桥接异常都直接抛出，杜绝静默 fallback 直连
+        LiteLLM 让 ``gateway_request_logs`` 失去归因。
+        """
         parsed = split_embedding_for_bridge(litellm_kwargs)
         if parsed is None:
-            return None
-        try:
-            attr = resolve_gateway_bridge_attribution()
-            rows = await self._gateway_proxy.embedding(
-                parsed.inputs,
-                ctx=GatewayCallContext(
-                    user_id=attr.actor_user_id,
-                    team_id=attr.billing_team_id,
-                    capability="embedding",
-                ),
-                model=parsed.model,
-                api_key=parsed.api_key,
-                api_base=parsed.api_base,
-                **parsed.extras,
-            )
-            if not rows:
-                return None
-            if any(r is None for r in rows):
-                return None
-            return [list(r) for r in rows if r is not None]
-        except Exception as exc:  # pragma: no cover
-            if _global_settings.gateway_internal_proxy_fail_closed:
-                raise
-            logger.warning("Gateway bridge embedding failed, fallback to direct LiteLLM: %s", exc)
-            return None
+            raise ValueError("invalid LiteLLM embedding kwargs for Gateway bridge")
+        attr = resolve_gateway_bridge_attribution()
+        rows = await self._gateway_proxy.embedding(
+            parsed.inputs,
+            ctx=GatewayCallContext(
+                user_id=attr.actor_user_id,
+                team_id=attr.billing_team_id,
+                capability="embedding",
+            ),
+            model=parsed.model,
+            api_key=parsed.api_key,
+            api_base=parsed.api_base,
+            **parsed.extras,
+        )
+        if not rows or any(r is None for r in rows):
+            raise ValueError("Gateway embedding returned empty rows")
+        return [list(r) for r in rows if r is not None]
 
     async def _chat(self, **kwargs: Any) -> LLMResponse:
         """非流式调用
@@ -1125,11 +1150,19 @@ class LLMGateway:
         litellm_kwargs = self._compose_embedding_litellm_kwargs([text], model)
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
-            bridged = await self._maybe_embed_via_gateway_litellm(
+            bridged = await self._embed_via_gateway_litellm(
                 litellm_kwargs=litellm_kwargs,
             )
-            if bridged is not None and len(bridged) > 0 and bridged[0] is not None:
-                return list(bridged[0])
+            if len(bridged) != 1:
+                raise ValueError("Gateway embedding returned unexpected row count")
+            return list(bridged[0])
+        elif _global_settings.gateway_internal_proxy_enabled and not bridge_uid:
+            logger.warning(
+                "LLMGateway embed: 无法解析 bridge user_id（PermissionContext 缺失或匿名 + "
+                "未配置 gateway_internal_proxy_delegate_user_id），直连 LiteLLM；"
+                "本次调用日志的 team_id/user_id 将为空。model=%s",
+                model,
+            )
 
         try:
             response = await aembedding(**litellm_kwargs)
@@ -1155,11 +1188,20 @@ class LLMGateway:
         litellm_kwargs = self._compose_embedding_litellm_kwargs(texts, model)
         bridge_uid = resolve_internal_gateway_user_id()
         if _global_settings.gateway_internal_proxy_enabled and bridge_uid:
-            bridged = await self._maybe_embed_via_gateway_litellm(
+            bridged = await self._embed_via_gateway_litellm(
                 litellm_kwargs=litellm_kwargs,
             )
-            if bridged is not None and len(bridged) == len(texts):
-                return bridged
+            if len(bridged) != len(texts):
+                raise ValueError("Gateway embedding returned unexpected row count")
+            return bridged
+        elif _global_settings.gateway_internal_proxy_enabled and not bridge_uid:
+            logger.warning(
+                "LLMGateway embed_batch: 无法解析 bridge user_id（PermissionContext 缺失或匿名 + "
+                "未配置 gateway_internal_proxy_delegate_user_id），直连 LiteLLM；"
+                "本次调用日志的 team_id/user_id 将为空。model=%s, batch=%d",
+                model,
+                len(texts),
+            )
 
         try:
             response = await aembedding(**litellm_kwargs)

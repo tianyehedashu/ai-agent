@@ -15,6 +15,9 @@ export interface UserModelConfig {
   description?: string
 }
 
+/** 模型连通性测试三态：未测过 → null。 */
+export type ModelTestStatus = 'success' | 'failed' | null
+
 export interface UserModel {
   id: string
   user_id: string | null
@@ -29,6 +32,12 @@ export interface UserModel {
   config: UserModelConfig | null
   is_active: boolean
   is_system: boolean
+  /** 上次连通性测试结果，未测过为 null */
+  last_test_status: ModelTestStatus
+  /** 上次连通性测试时间（ISO 8601），未测过为 null */
+  last_tested_at: string | null
+  /** 上次失败/不支持时的说明；成功或未测过为 null */
+  last_test_reason: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -85,6 +94,12 @@ export interface TestConnectionResult {
   success: boolean
   message: string
   model: string
+  /** 与 ORM 落库字段同名，便于乐观更新 */
+  status?: ModelTestStatus
+  /** ISO 8601；与 last_tested_at 同语义 */
+  tested_at?: string
+  /** 与 ORM last_test_reason 一致；成功为 undefined/null */
+  reason?: string | null
   response_preview?: string
 }
 

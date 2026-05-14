@@ -79,20 +79,6 @@
   @apply bg-muted-foreground/50;
 }
 
-/* Monaco Editor Customization */
-.monaco-editor {
-  font-family: 'JetBrains Mono', monospace !important;
-}
-
-/* React Flow Customization */
-.react-flow__node {
-  @apply shadow-lg;
-}
-
-.react-flow__edge-path {
-  @apply stroke-primary;
-}
-
 /* Markdown Styles */
 .markdown-body {
   @apply leading-7 text-foreground;

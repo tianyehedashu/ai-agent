@@ -85,13 +85,10 @@
 
 | 位置 | 内容 |
 |------|------|
-| `frontend/src/pages/studio/index.tsx` | 实现测试运行 |
 | `backend/domains/agent/infrastructure/sandbox/factory.py` | 实现远程沙箱执行器 |
 | `backend/domains/agent/infrastructure/memory/tiered_memory.py` | 从 checkpointer 获取会话历史 |
 | `backend/domains/agent/infrastructure/a2a/client.py` | 实际 Agent 调用逻辑 |
 | `backend/domains/evaluation/presentation/router.py` | 完整评估流程 |
-| `backend/domains/studio/presentation/router.py` | 实际测试执行逻辑 |
-| `backend/domains/studio/infrastructure/studio/codegen.py` | 模板中的「实现节点/路由逻辑」（若为生成占位可保留） |
 | `backend/tests/integration/mcp/test_mcp_server_api.py` | 实现后取消注释的断言 |
 
 ---
@@ -101,7 +98,7 @@
 ### 1. 整体符合 DDD 与规范
 
 - 业务在 `domains/`，技术基础在 `libs/`，bootstrap 仅做装配，符合 CLAUDE.md 与 CODE_STANDARDS。
-- agent / identity / studio / evaluation 域边界清晰；presentation → application → domain ← infrastructure 分层明确。
+- agent / identity / evaluation 域边界清晰；presentation → application → domain ← infrastructure 分层明确。
 
 ### 2. 目录与归属
 
@@ -111,7 +108,7 @@
 
 ### 3. 小建议
 
-- 若后续「工作室/工作流」与「评估」扩展，可再审视 studio 与 evaluation 是否共享执行环境、指标存储等基础设施，避免重复建设；当前体量保持现状即可。
+- 若后续「评估」扩展，可再审视与 Agent 运行时是否共享指标存储等基础设施，避免重复建设；当前体量保持现状即可。
 
 ---
 

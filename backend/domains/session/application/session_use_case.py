@@ -152,10 +152,17 @@ class SessionUseCase:
         session_id: str,
         title: str | None | type(...) = ...,  # type: ignore
         status: str | None | type(...) = ...,  # type: ignore
+        gateway_verbose_request_log: bool | None | type(...) = ...,  # type: ignore
     ) -> Session:
         """更新会话"""
+        sid = uuid.UUID(session_id)
+        if gateway_verbose_request_log is not ...:
+            await self.session_repo.update_config(
+                sid,
+                {"gateway_verbose_request_log": bool(gateway_verbose_request_log)},
+            )
         session = await self.session_repo.update(
-            session_id=uuid.UUID(session_id),
+            session_id=sid,
             title=title,
             status=status,
         )
@@ -183,6 +190,17 @@ class SessionUseCase:
             {"mcp_config": {"enabled_servers": enabled_servers}},
         )
         return {"enabled_servers": enabled_servers}
+
+    async def update_session_chat_model_ref(
+        self, session_id: str, model_ref: str | None, *, flush: bool = True
+    ) -> None:
+        """更新会话存储的对话模型引用（系统模型 id 或用户模型 UUID）。"""
+        await self.get_session_or_raise(session_id)
+        await self.session_repo.update_config(
+            uuid.UUID(session_id),
+            {"chat_model_ref": model_ref},
+            flush=flush,
+        )
 
     async def delete_session(self, session_id: str) -> None:
         """删除会话

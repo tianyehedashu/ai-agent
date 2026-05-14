@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Plus, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -66,6 +67,16 @@ export default function GatewayKeysPage(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">
             sk-gw- 前缀，仅用于 OpenAI 兼容入口 /v1/* 调用
           </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            若需使用平台 <span className="font-mono">sk-*</span> 并复用其他 API 能力，请到{' '}
+            <Link
+              to="/settings?tab=api"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              设置 → API 密钥
+            </Link>{' '}
+            创建带 <span className="font-mono">gateway:proxy</span> 作用域的 Key。
+          </p>
         </div>
         {canWrite && (
           <Button
@@ -88,7 +99,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                 <th className="px-4 py-2 text-left font-medium">名称</th>
                 <th className="px-4 py-2 text-left font-medium">Key</th>
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
-                <th className="px-4 py-2 text-left font-medium">RPM/TPM</th>
+                <th className="px-4 py-2 text-left font-medium">每分钟请求 / 每分钟令牌</th>
                 <th className="px-4 py-2 text-left font-medium">守卫</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
                 <th className="px-4 py-2 text-left font-medium" />
@@ -224,7 +235,7 @@ function CreateKeyDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="rpm">RPM 限制（留空不限）</Label>
+                <Label htmlFor="rpm">每分钟请求数上限（留空不限）</Label>
                 <Input
                   id="rpm"
                   type="number"
@@ -238,7 +249,7 @@ function CreateKeyDialog({
                 />
               </div>
               <div>
-                <Label htmlFor="tpm">TPM 限制（留空不限）</Label>
+                <Label htmlFor="tpm">每分钟令牌数上限（留空不限）</Label>
                 <Input
                   id="tpm"
                   type="number"

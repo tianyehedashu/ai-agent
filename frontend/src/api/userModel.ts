@@ -24,20 +24,23 @@ export const userModelApi = {
   /** 用户模型列表 */
   async list(params?: {
     type?: ModelType
+    provider?: string
     skip?: number
     limit?: number
   }): Promise<{ items: UserModel[]; total: number }> {
     const search: Record<string, string | number> = {}
     if (params?.type) search.type = params.type
+    if (params?.provider) search.provider = params.provider
     if (params?.skip !== undefined) search.skip = params.skip
     if (params?.limit !== undefined) search.limit = params.limit
     return apiClient.get(PREFIX, search)
   },
 
   /** 可用模型列表（系统 + 用户合并） */
-  async listAvailable(type?: ModelType): Promise<AvailableModelsResponse> {
+  async listAvailable(type?: ModelType, provider?: string): Promise<AvailableModelsResponse> {
     const search: Record<string, string> = {}
     if (type) search.type = type
+    if (provider) search.provider = provider
     return apiClient.get<AvailableModelsResponse>(`${PREFIX}/available`, search)
   },
 

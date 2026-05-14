@@ -7,9 +7,7 @@ API Error Messages - API 错误消息常量
 # 资源未找
 AGENT_NOT_FOUND = "Agent not found"
 SESSION_NOT_FOUND = "Session not found"
-WORKFLOW_NOT_FOUND = "Workflow not found"
 USER_NOT_FOUND = "User not found"
-VERSION_NOT_FOUND = "Version not found"
 
 # 权限错误
 ACCESS_DENIED = "Access denied"

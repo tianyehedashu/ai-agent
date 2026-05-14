@@ -40,6 +40,7 @@ class GatewayMetricsHourly(BaseModel):
     team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     vkey_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     real_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     capability: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -55,15 +56,13 @@ class GatewayMetricsHourly(BaseModel):
         Numeric(14, 6), nullable=False, server_default="0", default=Decimal("0")
     )
     total_latency_ms: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0",
+        Integer,
+        nullable=False,
+        server_default="0",
         comment="累计 latency_ms，用于计算平均",
     )
-    p95_latency_ms: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
-    cache_hit_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    p95_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cache_hit_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     __table_args__ = (
         UniqueConstraint(
@@ -71,6 +70,7 @@ class GatewayMetricsHourly(BaseModel):
             "team_id",
             "user_id",
             "vkey_id",
+            "credential_id",
             "provider",
             "real_model",
             "capability",
@@ -80,10 +80,7 @@ class GatewayMetricsHourly(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<GatewayMetricsHourly {self.bucket_at} team={self.team_id} "
-            f"req={self.requests}>"
-        )
+        return f"<GatewayMetricsHourly {self.bucket_at} team={self.team_id} req={self.requests}>"
 
 
 __all__ = ["GatewayMetricsHourly"]

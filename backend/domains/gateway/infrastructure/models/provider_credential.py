@@ -99,10 +99,7 @@ class ProviderCredential(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ProviderCredential {self.scope}:{self.scope_id} "
-            f"{self.provider}:{self.name}>"
-        )
+        return f"<ProviderCredential {self.scope}:{self.scope_id} {self.provider}:{self.name}>"
 
 
 __all__ = ["ProviderCredential"]

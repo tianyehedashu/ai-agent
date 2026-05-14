@@ -1,6 +1,6 @@
 # AI Gateway 领域架构与工程实践
 
-> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、OpenAI 兼容入口、管理 API、内部 LLM 桥接及相关前端。  
+> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、**OpenAI 兼容与 Anthropic Messages（`/v1/*`）** 对外入口、管理 API、内部 LLM 桥接及相关前端。  
 > **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)。
 
 ---
@@ -10,7 +10,7 @@
 | 维度 | 说明 |
 |------|------|
 | **业务目标** | 统一多模型调用入口（LiteLLM Router）、团队/虚拟 Key、凭据池、预算与限流、可观测（日志/告警/rollup）。 |
-| **边界** | **Inbound**：`/v1/*`（Bearer `sk-gw-*` 或带 scope 的 `sk-*`）、`/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
+| **边界** | **Inbound**：根路径 **`/v1/*`** —— **OpenAI 兼容**（如 `POST /v1/chat/completions`）与 **Anthropic Messages**（`POST /v1/messages`）；鉴权为 **`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先），令牌为 **`sk-gw-*` 虚拟 Key** 或带 **`gateway:proxy`** scope 的 **`sk-*`**（后者需配合 **`X-Team-Id`** 解析团队）。**管理面**：`/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
 | **与 Agent 域关系** | Agent 通过 `LLMGateway` + `GatewayProxyProtocol`（`domains/gateway/application/ports.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
 
 ---
@@ -35,7 +35,10 @@ domains/tenancy/                  # 团队与成员：权威 ORM 与 TeamService
 domains/gateway/
 ├── presentation/                 # HTTP：路由、Schema、依赖；禁止直连仓储
 │   ├── http_error_map.py       # 领域异常 → HTTPException
-│   └── deps.py                 # 鉴权：GatewayAccessUseCase
+│   ├── deps.py                 # 鉴权：GatewayAccessUseCase；Bearer / x-api-key
+│   ├── openai_compat_router.py # /v1/chat/completions 等 OpenAI 形
+│   ├── anthropic_compat_router.py  # POST /v1/messages Anthropic 形
+│   └── gateway_proxy_context.py    # 对外代理共用 ProxyContext 构造
 ├── application/
 │   ├── gateway_access_use_case.py   # Bearer vkey、代理团队解析、vkey touch；成员角色经 MembershipPort
 │   ├── ports.py                     # GatewayProxyProtocol、GatewayCallContext（跨域依赖倒置）
@@ -44,11 +47,12 @@ domains/gateway/
 │   ├── bridge_attribution.py        # GatewayBridgeAttribution（内部桥接计费工作区）
 │   ├── litellm_bridge_payload.py    # LiteLLM kwargs → 桥接参数拆分
 │   ├── internal_bridge.py           # GatewayBridge 实现
+│   ├── anthropic_openai_bridge.py   # Anthropic ↔ OpenAI 形 JSON（对外 /v1/messages）
 │   ├── management/                # 管理面读写分包（与 CQRS 读/写侧对应）
 │   │   ├── reads.py               # GatewayManagementReadService
 │   │   ├── writes.py              # GatewayManagementWriteService
 │   │   └── usage_reads.py         # GatewayUsageReadService（兼容用量 API）
-│   ├── proxy_use_case.py          # OpenAI 兼容代理
+│   ├── proxy_use_case.py          # 对外 LLM 代理编排（OpenAI 与 Anthropic 经 chat 共用）
 │   └── jobs.py                    # 后台循环；rollup SQL 在 infrastructure 仓储
 ├── domain/                       # 类型、虚拟 Key 算法、领域错误、ManagementTeamContext
 └── infrastructure/             # ORM、仓储、Router 单例、回调、护栏
@@ -94,12 +98,12 @@ domains/agent/infrastructure/llm/gateway.py   # LLMGateway
 flowchart TB
   subgraph clients [Clients]
     UI[Web /gateway]
-    Ext[OpenAI SDK -> /v1]
+    Ext[OpenAI / Anthropic SDK -> /v1]
     Agent[Agent LLMGateway]
   end
   subgraph gateway_http [FastAPI Gateway]
     Mgmt["/api/v1/gateway/*"]
-    V1["/v1/* OpenAI compat"]
+    V1["/v1/* OpenAI + Anthropic"]
   end
   subgraph core [Core]
     Router[LiteLLM Router Singleton]
@@ -141,7 +145,7 @@ flowchart TB
 
 | 入口 | 鉴权 | 团队 |
 |------|------|------|
-| `/v1/*` | `sk-gw-*` 或 `sk-*` + `gateway:proxy` | `X-Team-Id` 可选；缺省 personal team |
+| `/v1/*` | `sk-gw-*` 或 `sk-*` + `gateway:proxy`；**`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先） | `X-Team-Id` 可选；缺省 personal team |
 | `/api/v1/gateway/*` | JWT（`RequiredAuthUser`），匿名 **401** | `X-Team-Id` 优先，否则 personal team（`TenancyManagementTeamResolveUseCase` + `MembershipPort`） |
 
 RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseCase`**。
@@ -170,6 +174,23 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 - **`GET /dashboard/summary`**：聚合自 **`gateway_request_logs`**（PostgreSQL），受成功请求采样配置 `gateway_request_log_success_sample_rate` 影响（见 `domains/gateway/infrastructure/gateway_log_sampling.py` 与 `custom_logger` 注释）。
 - **Redis 计数**（`gateway:metrics:*`）：CustomLogger 中可与 DB 写入路径不同步；**管理面大盘以 DB 为准**。
+- **凭据归因**：`gateway_request_logs` 含可空列 **`credential_id`**、**`credential_name_snapshot`**；`GET /api/v1/gateway/logs` 支持查询参数 **`credential_id`** 过滤；LiteLLM Router deployment 的 **`model_info`** 写入 `gateway_credential_id` / `gateway_credential_name` / `gateway_credential_scope`，与 `ProxyUseCase._build_metadata` 注入的 `gateway_*` 字段互为补充；**`gateway_metrics_hourly`** rollup 唯一维度含 **`credential_id`**（与历史 NULL 行兼容）。
+
+### 4.3 入站「Gateway 调用凭据」与出站「上游凭据」（术语与域划分）
+
+| 概念 | 含义 | 存储 / 生命周期 |
+|------|------|-----------------|
+| **入站 · 虚拟 Key（vkey）** | 客户端调用 **`/v1/*`** 的 Bearer / `x-api-key`，前缀 **`sk-gw-*`**；团队绑定、模型白名单、RPM/TPM、key 级预算与网关日志策略以 **Gateway** 表为准。 | `gateway_virtual_keys` |
+| **入站 · 平台 API Key** | 同一 **`/v1/*`** 入口支持 Identity 签发的 **`sk-*`**，且 scope 含 **`gateway:proxy`**；团队由 **`X-Team-Id`**（可选，缺省 personal team）解析。与 vkey **不合并为一张表**：吊销、scope、多能力复用由 **Identity** 负责；默认网关策略与 vkey 路径不对等处应在产品文档中显式说明。 | Identity API Key |
+| **出站 · Provider 凭据** | LiteLLM 向上游（OpenAI、Anthropic 等）发起请求时使用的 Key/Base，即 **`provider_credentials`**（system / team / user scope）。 | Gateway 凭据池 |
+
+**产品表述建议**：将前两者统称为「**调用本平台的 Gateway 令牌**」两种形态；与设置页「大模型 / 上游 API Key」严格区分，避免用户把 `sk-gw-*` 与 OpenAI `sk-*` 混用。
+
+### 4.4 平台 API Key 与 vkey 管控「完全对齐」（方向 C）评估结论
+
+**默认不实施**：在 Identity 与 Gateway 各维护一套与 `GatewayVirtualKey` 同字段的白名单、限流与日志开关，会造成**双真源**、迁移与 UI 同步成本高，且与「平台 Key 多 scope 复用」的定位冲突。
+
+**若未来强需求**（合规或商业化要求「一把 `sk-*` 也必须 per-key 配额」）：优先在应用层引入共享的 **`InboundPolicy`** 值对象（或单一 JSON 策略 blob）由 **一处** 配置驱动两种入站实现，而不是复制两套管理界面；并评估请求日志是否需新增 `platform_api_key_id` 列（当前可先经 LiteLLM metadata 中的 `gateway_platform_api_key_id` 归因）。
 
 ---
 
@@ -207,6 +228,8 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 - `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
+- `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `credentials`、`mcp` 等）深链到对应设置子页，便于 Gateway 控制台与「API 密钥」说明互链。
+- `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；创建 Key 时可勾选 Gateway 相关作用域。
 
 ### 6.4 已知风险
 

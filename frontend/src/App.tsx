@@ -24,7 +24,6 @@ import ProductInfoPage from '@/pages/product-info'
 import ProductInfoHistoryPage from '@/pages/product-info/history'
 import ProductInfoHistoryDetailPage from '@/pages/product-info/history-detail'
 import SettingsPage from '@/pages/settings'
-import StudioPage from '@/pages/studio'
 import VideoTasksPage from '@/pages/video-tasks'
 import VideoTasksHistoryPage from '@/pages/video-tasks/history'
 
@@ -48,7 +47,6 @@ function App(): React.JSX.Element {
                   <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/mcp" element={<MCPPage />} />
                   <Route path="/mcp/system" element={<SystemMCPPage />} />
-                  <Route path="/studio" element={<StudioPage />} />
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />
                   <Route path="/video-tasks/:sessionId" element={<VideoTasksPage />} />

@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { ModelTestStatus } from '@/types/user-model'
 
 // ============================
 // Types（与后端 schemas/common.py 对齐）
@@ -81,7 +82,23 @@ export interface GatewayModel {
   tpm_limit: number | null
   enabled: boolean
   tags?: Record<string, unknown> | null
+  /** 上次连通性测试结果，未测过为 null */
+  last_test_status: ModelTestStatus
+  /** 上次连通性测试时间（ISO 8601），未测过为 null */
+  last_tested_at: string | null
+  /** 上次失败/不支持时的说明；成功或未测过为 null */
+  last_test_reason: string | null
   created_at: string
+}
+
+export interface GatewayModelTestResult {
+  success: boolean
+  message: string
+  model: string
+  status: 'success' | 'failed'
+  tested_at: string
+  reason?: string | null
+  response_preview?: string
 }
 
 export interface GatewayModelPreset {
@@ -140,6 +157,7 @@ export interface GatewayBudget {
   scope: 'system' | 'team' | 'key' | 'user'
   scope_id: string | null
   period: 'daily' | 'monthly' | 'total'
+  model_name: string | null
   limit_usd: number | null
   limit_tokens: number | null
   limit_requests: number | null
@@ -154,6 +172,7 @@ export interface BudgetUpsertBody {
   scope: 'system' | 'team' | 'key' | 'user'
   scope_id?: string | null
   period: 'daily' | 'monthly' | 'total'
+  model_name?: string | null
   limit_usd?: number | null
   limit_tokens?: number | null
   limit_requests?: number | null
@@ -184,6 +203,8 @@ export interface GatewayLogItem {
   team_id: string | null
   user_id: string | null
   vkey_id: string | null
+  credential_id: string | null
+  credential_name_snapshot: string | null
   capability: string
   route_name: string | null
   real_model: string | null
@@ -266,11 +287,36 @@ export const gatewayApi = {
   }) => apiClient.post<ProviderCredential>(`${base}/credentials`, body),
   deleteCredential: (id: string) => apiClient.delete<unknown>(`${base}/credentials/${id}`),
 
-  listModels: () => apiClient.get<GatewayModel[]>(`${base}/models`),
-  listModelPresets: () => apiClient.get<GatewayModelPreset[]>(`${base}/models/presets`),
+  listMyCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/my-credentials`),
+  createMyCredential: (body: {
+    provider: string
+    name: string
+    api_key: string
+    api_base?: string | null
+    extra?: Record<string, unknown>
+  }) => apiClient.post<ProviderCredential>(`${base}/my-credentials`, body),
+  updateMyCredential: (
+    id: string,
+    body: {
+      name?: string | null
+      api_key?: string | null
+      api_base?: string | null
+      extra?: Record<string, unknown> | null
+      is_active?: boolean | null
+    }
+  ) => apiClient.patch<ProviderCredential>(`${base}/my-credentials/${id}`, body),
+  deleteMyCredential: (id: string) => apiClient.delete<unknown>(`${base}/my-credentials/${id}`),
+
+  listModels: (params?: { provider?: string }) =>
+    apiClient.get<GatewayModel[]>(`${base}/models`, params),
+  listModelPresets: (params?: { provider?: string }) =>
+    apiClient.get<GatewayModelPreset[]>(`${base}/models/presets`, params),
   createModel: (body: GatewayModelCreateBody) =>
     apiClient.post<GatewayModel>(`${base}/models`, body),
   deleteModel: (id: string) => apiClient.delete<unknown>(`${base}/models/${id}`),
+  /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */
+  testModel: (id: string) =>
+    apiClient.post<GatewayModelTestResult>(`${base}/models/${id}/test`, {}),
 
   listRoutes: () => apiClient.get<GatewayRoute[]>(`${base}/routes`),
   createRoute: (body: GatewayRouteCreateBody) =>
@@ -291,6 +337,7 @@ export const gatewayApi = {
     start?: string
     end?: string
     vkey_id?: string
+    credential_id?: string
   }) =>
     apiClient.get<{
       items: GatewayLogItem[]

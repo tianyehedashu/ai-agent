@@ -16,6 +16,9 @@ interface BackendSession {
   status: string
   message_count: number
   token_count: number
+  video_task_count?: number
+  chat_model_ref?: string | null
+  gateway_verbose_request_log?: boolean
   created_at: string
   updated_at: string
 }
@@ -28,6 +31,9 @@ function toFrontendSession(backend: BackendSession): Session {
     agentId: backend.agent_id ?? undefined,
     messageCount: backend.message_count,
     tokenCount: backend.token_count,
+    videoTaskCount: backend.video_task_count,
+    chatModelRef: backend.chat_model_ref ?? undefined,
+    gatewayVerboseRequestLog: backend.gateway_verbose_request_log ?? false,
     createdAt: backend.created_at,
     updatedAt: backend.updated_at,
   }
@@ -161,6 +167,9 @@ export const sessionApi = {
     const backendData: Record<string, unknown> = {}
     if (data.title !== undefined) backendData.title = data.title
     if (data.agentId !== undefined) backendData.agent_id = data.agentId
+    if (data.gatewayVerboseRequestLog !== undefined) {
+      backendData.gateway_verbose_request_log = data.gatewayVerboseRequestLog
+    }
 
     const backend = await apiClient.patch<BackendSession>(`/api/v1/sessions/${id}`, backendData)
     return toFrontendSession(backend)

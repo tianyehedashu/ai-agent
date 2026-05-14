@@ -135,12 +135,14 @@ async def get_chat_service(
     """获取对话服务"""
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
+    user_models = UserModelUseCase(db, catalog=catalog)
     return ChatUseCase(
         db,
         session_use_case=session_service,
         session_use_case_factory=SessionUseCase,
         checkpointer=checkpointer,
         model_catalog=catalog,
+        user_model_use_case=user_models,
     )
 
 

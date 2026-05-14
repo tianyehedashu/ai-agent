@@ -123,3 +123,18 @@ async def test_sql_catalog_list_dedupes_team_over_global(db_session, test_user) 
     matches = [i for i in items if i["id"] == virtual]
     assert len(matches) == 1
     assert matches[0]["display_name"] == "Team Override Display"
+
+
+@pytest.mark.asyncio
+async def test_list_for_team_filters_by_provider(db_session, test_user) -> None:
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+    models = GatewayModelRepository(db_session)
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    all_rows = await models.list_for_team(team.id, only_enabled=True)
+    if not all_rows:
+        pytest.skip("catalog sync produced no global models")
+    p = all_rows[0].provider
+    filtered = await models.list_for_team(team.id, only_enabled=True, provider=p)
+    assert all(r.provider == p for r in filtered)
+    assert len(filtered) == len([r for r in all_rows if r.provider == p])

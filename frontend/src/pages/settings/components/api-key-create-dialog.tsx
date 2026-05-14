@@ -42,7 +42,12 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { ApiKeyScope } from '@/types/api-key'
-import { API_KEY_SCOPE_GROUPS, EXPIRATION_OPTIONS, SCOPE_DISPLAY_INFO } from '@/types/api-key'
+import {
+  API_KEY_SCOPE_GROUPS,
+  EXPIRATION_OPTIONS,
+  SCOPES_FOR_SELECT_ALL,
+  SCOPE_DISPLAY_INFO,
+} from '@/types/api-key'
 
 // 表单验证 schema
 const formSchema = z.object({
@@ -190,7 +195,11 @@ export function ApiKeyCreateDialog({
                       <div className="mb-2 flex items-center justify-between">
                         <div>
                           <FormLabel>作用域</FormLabel>
-                          <FormDescription>选择此 API Key 的权限范围</FormDescription>
+                          <FormDescription>
+                            选择此 API Key 的权限范围。顶部「全选」不含{' '}
+                            <span className="font-mono">gateway:admin</span>
+                            （Gateway 管理写权限），需要时请单独勾选。
+                          </FormDescription>
                         </div>
                         <div className="flex gap-1">
                           <Button
@@ -199,7 +208,7 @@ export function ApiKeyCreateDialog({
                             size="sm"
                             className="h-7 text-xs"
                             onClick={() => {
-                              field.onChange(Object.keys(SCOPE_DISPLAY_INFO) as ApiKeyScope[])
+                              field.onChange([...SCOPES_FOR_SELECT_ALL])
                             }}
                           >
                             全选
@@ -220,86 +229,96 @@ export function ApiKeyCreateDialog({
 
                       {/* 按类别分组显示作用域 */}
                       <div className="max-h-56 space-y-3 overflow-y-auto pr-2">
-                        {(['Agent', 'Session', 'Memory', 'Workflow', 'System', 'MCP'] as const).map(
-                          (category) => {
-                            const categoryScopes = (
-                              Object.keys(SCOPE_DISPLAY_INFO) as ApiKeyScope[]
-                            ).filter((scope) => SCOPE_DISPLAY_INFO[scope].category === category)
-                            if (categoryScopes.length === 0) return null
+                        {(
+                          [
+                            'Agent',
+                            'Session',
+                            'Memory',
+                            'Workflow',
+                            'System',
+                            'MCP',
+                            'Gateway',
+                          ] as const
+                        ).map((category) => {
+                          const categoryScopes = (
+                            Object.keys(SCOPE_DISPLAY_INFO) as ApiKeyScope[]
+                          ).filter((scope) => SCOPE_DISPLAY_INFO[scope].category === category)
+                          if (categoryScopes.length === 0) return null
 
-                            const allSelectedInCategory = categoryScopes.every((scope) =>
-                              field.value.includes(scope)
-                            )
+                          const allSelectedInCategory = categoryScopes.every((scope) =>
+                            field.value.includes(scope)
+                          )
 
-                            return (
-                              <div key={category} className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <Checkbox
-                                    id={`category-${category}`}
-                                    checked={allSelectedInCategory}
-                                    onCheckedChange={(checked) => {
-                                      const updated = checked
-                                        ? [
-                                            ...field.value,
-                                            ...categoryScopes.filter(
-                                              (s) => !field.value.includes(s)
-                                            ),
-                                          ]
-                                        : field.value.filter(
-                                            (v) => !categoryScopes.includes(v as ApiKeyScope)
-                                          )
-                                      field.onChange(updated)
-                                    }}
-                                  />
-                                  <label
-                                    htmlFor={`category-${category}`}
-                                    className="cursor-pointer text-sm font-medium"
-                                  >
-                                    {category === 'MCP' ? 'MCP 服务器' : category}
-                                  </label>
-                                  <Badge variant="outline" className="text-xs">
-                                    {
-                                      field.value.filter((v) =>
-                                        categoryScopes.includes(v as ApiKeyScope)
-                                      ).length
-                                    }
-                                    /{categoryScopes.length}
-                                  </Badge>
-                                </div>
-                                <div className="ml-6 space-y-1">
-                                  {categoryScopes.map((scope) => (
-                                    <div
-                                      key={scope}
-                                      className="flex items-start gap-2 rounded px-2 py-1 hover:bg-muted/50"
-                                    >
-                                      <Checkbox
-                                        id={scope}
-                                        checked={field.value.includes(scope)}
-                                        onCheckedChange={(checked) => {
-                                          const updated = checked
-                                            ? [...field.value, scope]
-                                            : field.value.filter((v) => v !== scope)
-                                          field.onChange(updated)
-                                        }}
-                                      />
-                                      <div className="flex-1">
-                                        <label
-                                          htmlFor={scope}
-                                          className="cursor-pointer text-sm leading-none"
-                                        >
-                                          {SCOPE_DISPLAY_INFO[scope].label}
-                                        </label>
-                                        <p className="text-xs text-muted-foreground">
-                                          {SCOPE_DISPLAY_INFO[scope].description}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                          return (
+                            <div key={category} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`category-${category}`}
+                                  checked={allSelectedInCategory}
+                                  onCheckedChange={(checked) => {
+                                    const updated = checked
+                                      ? [
+                                          ...field.value,
+                                          ...categoryScopes.filter((s) => !field.value.includes(s)),
+                                        ]
+                                      : field.value.filter(
+                                          (v) => !categoryScopes.includes(v as ApiKeyScope)
+                                        )
+                                    field.onChange(updated)
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`category-${category}`}
+                                  className="cursor-pointer text-sm font-medium"
+                                >
+                                  {category === 'MCP'
+                                    ? 'MCP 服务器'
+                                    : category === 'Gateway'
+                                      ? 'Gateway（网关）'
+                                      : category}
+                                </label>
+                                <Badge variant="outline" className="text-xs">
+                                  {
+                                    field.value.filter((v) =>
+                                      categoryScopes.includes(v as ApiKeyScope)
+                                    ).length
+                                  }
+                                  /{categoryScopes.length}
+                                </Badge>
                               </div>
-                            )
-                          }
-                        )}
+                              <div className="ml-6 space-y-1">
+                                {categoryScopes.map((scope) => (
+                                  <div
+                                    key={scope}
+                                    className="flex items-start gap-2 rounded px-2 py-1 hover:bg-muted/50"
+                                  >
+                                    <Checkbox
+                                      id={scope}
+                                      checked={field.value.includes(scope)}
+                                      onCheckedChange={(checked) => {
+                                        const updated = checked
+                                          ? [...field.value, scope]
+                                          : field.value.filter((v) => v !== scope)
+                                        field.onChange(updated)
+                                      }}
+                                    />
+                                    <div className="flex-1">
+                                      <label
+                                        htmlFor={scope}
+                                        className="cursor-pointer text-sm leading-none"
+                                      >
+                                        {SCOPE_DISPLAY_INFO[scope].label}
+                                      </label>
+                                      <p className="text-xs text-muted-foreground">
+                                        {SCOPE_DISPLAY_INFO[scope].description}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                       <FormMessage />
                     </FormItem>

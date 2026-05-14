@@ -84,6 +84,13 @@ describe('userModelApi', () => {
     expect(url).toMatch(/limit=20/)
   })
 
+  it('list 附带 provider query', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse({ items: [], total: 0 }))
+    await userModelApi.list({ provider: 'deepseek', limit: 50 })
+    const url = getLastFetchUrl()
+    expect(url).toMatch(/provider=deepseek/)
+  })
+
   it('list 不传参数时不附带 query', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ items: [], total: 0 }))
     await userModelApi.list()
@@ -109,6 +116,14 @@ describe('userModelApi', () => {
     await userModelApi.listAvailable()
     const url = getLastFetchUrl()
     expect(url).not.toMatch(/type=/)
+  })
+
+  it('listAvailable 附带 provider query', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse({ system_models: [], user_models: [] }))
+    await userModelApi.listAvailable('text', 'volcengine')
+    const url = getLastFetchUrl()
+    expect(url).toMatch(/type=text/)
+    expect(url).toMatch(/provider=volcengine/)
   })
 
   // -----------------------------------------------------------------------
