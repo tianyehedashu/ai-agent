@@ -4,6 +4,7 @@
 
 import { useMemo } from 'react'
 import type { ComponentType } from 'react'
+import type React from 'react'
 
 import {
   AlertTriangle,
@@ -21,11 +22,13 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { cn } from '@/lib/utils'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
 
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
+  const currentTeam = useGatewayTeamStore((s) => s.current())
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
@@ -48,9 +51,17 @@ export default function GatewayLayout(): React.JSX.Element {
     <div className="flex h-full min-h-0">
       <aside className="flex w-56 flex-col border-r border-border/40 bg-background/60 px-3 py-4">
         <div className="mb-3 flex items-center gap-2 px-2 text-sm font-semibold tracking-tight">
-          <Server className="h-4 w-4 text-primary" />
+          <Server className="h-4 w-4 shrink-0 text-primary" />
           AI Gateway
         </div>
+        {currentTeam ? (
+          <div
+            className="mb-2 truncate px-2 text-xs text-muted-foreground"
+            title={currentTeam.name}
+          >
+            {currentTeam.name}
+          </div>
+        ) : null}
         <nav className="flex flex-col gap-1">
           {items.map((it) => (
             <NavLink

@@ -1,21 +1,19 @@
 /**
- * 大模型提供商配置标签页
- *
- * 多账号：调用 Gateway ``/my-credentials``（user scope）；与旧版 ``/settings/providers`` 测试接口兼容。
+ * 个人凭据（/my-credentials）列表与 CRUD，供设置页与网关凭据页复用。
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
-import { toast } from 'sonner'
+import { Eye, EyeOff, ExternalLink, Key, Loader2, Pencil, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -33,18 +31,25 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
-import { PROVIDER_LABELS } from '@/types/provider-config'
 
-import { displayListApiKeyMasked } from './provider-credential-mask-display'
+import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
+import { displayListApiKeyMasked } from './mask-display'
 
-const SUPPORTED_PROVIDERS = Object.keys(PROVIDER_LABELS)
+export type PersonalCredentialsPanelLayout = 'settings' | 'gateway'
 
-export function ProviderConfigTab(): React.ReactElement {
+export interface PersonalCredentialsPanelProps {
+  layout: PersonalCredentialsPanelLayout
+}
+
+export function PersonalCredentialsPanel({
+  layout,
+}: Readonly<PersonalCredentialsPanelProps>): React.ReactElement {
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
   const hasAuthSession = Boolean(token)
-  /** 列表中的掩码：关闭时不展示具体指纹（防 shoulder surfing）；仍为服务端脱敏，非明文。 */
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -80,11 +85,39 @@ export function ProviderConfigTab(): React.ReactElement {
     return m
   }, [credentials])
 
-  const invalidate = (): void => {
+  const invalidate = useCallback((): void => {
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
     void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-  }
+  }, [queryClient])
+
+  const resetForm = useCallback((): void => {
+    setFormProvider('openai')
+    setFormName('')
+    setFormApiKey('')
+    setFormApiBase('')
+    setFormIsActive(true)
+    setShowKey(false)
+  }, [])
+
+  const openAdd = useCallback(
+    (provider?: string): void => {
+      resetForm()
+      if (provider) setFormProvider(provider)
+      setAddOpen(true)
+    },
+    [resetForm]
+  )
+
+  const openEdit = useCallback((c: ProviderCredential): void => {
+    setEditCred(c)
+    setFormProvider(c.provider)
+    setFormName(c.name)
+    setFormApiKey('')
+    setFormApiBase(c.api_base ?? '')
+    setFormIsActive(c.is_active)
+    setShowKey(false)
+  }, [])
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -98,10 +131,10 @@ export function ProviderConfigTab(): React.ReactElement {
       invalidate()
       setAddOpen(false)
       resetForm()
-      toast.success('凭据已添加')
+      toast({ title: '凭据已添加' })
     },
     onError: (e: Error) => {
-      toast.error(`添加失败: ${e.message}`)
+      toast({ variant: 'destructive', title: '添加失败', description: e.message })
     },
   })
 
@@ -119,52 +152,27 @@ export function ProviderConfigTab(): React.ReactElement {
       invalidate()
       setEditCred(null)
       resetForm()
-      toast.success('已保存')
+      toast({ title: '已保存' })
     },
     onError: (e: Error) => {
-      toast.error(`保存失败: ${e.message}`)
+      toast({ variant: 'destructive', title: '保存失败', description: e.message })
     },
   })
 
   const testMutation = useMutation({
     mutationFn: (provider: string) => providerConfigApi.test(provider),
     onSuccess: (data) => {
-      if (data.success) toast.success('Key 有效')
-      else toast.error('Key 验证失败')
+      if (data.success) toast({ title: 'Key 有效' })
+      else toast({ variant: 'destructive', title: 'Key 验证失败' })
     },
     onError: (e: Error) => {
-      toast.error(`验证失败: ${e.message}`)
+      toast({ variant: 'destructive', title: '验证失败', description: e.message })
     },
   })
 
-  const resetForm = (): void => {
-    setFormProvider('openai')
-    setFormName('')
-    setFormApiKey('')
-    setFormApiBase('')
-    setFormIsActive(true)
-    setShowKey(false)
-  }
-
-  const openAdd = (provider?: string): void => {
-    resetForm()
-    if (provider) setFormProvider(provider)
-    setAddOpen(true)
-  }
-
-  const openEdit = (c: ProviderCredential): void => {
-    setEditCred(c)
-    setFormProvider(c.provider)
-    setFormName(c.name)
-    setFormApiKey('')
-    setFormApiBase(c.api_base ?? '')
-    setFormIsActive(c.is_active)
-    setShowKey(false)
-  }
-
   const submitAdd = (): void => {
     if (!formApiKey.trim()) {
-      toast.error('请输入 API Key')
+      toast({ variant: 'destructive', title: '请输入 API Key' })
       return
     }
     createMutation.mutate()
@@ -177,11 +185,148 @@ export function ProviderConfigTab(): React.ReactElement {
     const keyEmpty = !formApiKey.trim()
     const activeUnchanged = formIsActive === editCred.is_active
     if (keyEmpty && nameUnchanged && baseUnchanged && activeUnchanged) {
-      toast.error('请至少修改名称、Base、启用状态或填写新 API Key')
+      toast({
+        variant: 'destructive',
+        title: '请至少修改名称、Base、启用状态或填写新 API Key',
+      })
       return
     }
     updateMutation.mutate()
   }
+
+  const outerClass = 'space-y-4'
+
+  const headerToolbar = useMemo(
+    () => (
+      <div className="flex items-center gap-1">
+        {layout === 'settings' ? (
+          <Button variant="ghost" size="icon" asChild title="在网关打开">
+            <Link to="/gateway/credentials?tab=personal">
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          disabled={!hasAuthSession}
+          onClick={() => {
+            openAdd()
+          }}
+        >
+          <Plus className="mr-1 h-4 w-4" />
+          添加
+        </Button>
+      </div>
+    ),
+    [layout, hasAuthSession, openAdd]
+  )
+
+  const credentialsBody = useMemo(
+    () => (
+      <>
+        {hasAuthSession ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b pb-3">
+            <Label htmlFor="show-full-masked-list" className="cursor-pointer text-xs font-normal">
+              显示掩码
+            </Label>
+            <Switch
+              id="show-full-masked-list"
+              checked={showFullMaskedInList}
+              onCheckedChange={setShowFullMaskedInList}
+              aria-label="在列表中显示完整 API Key 掩码"
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">请先登录</p>
+        )}
+        {USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((provider) => {
+          const rows = byProvider.get(provider) ?? []
+          return (
+            <div key={provider} className="flex flex-col gap-3 rounded-lg border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="font-medium">{credentialProviderLabel(provider)}</span>
+                  <Badge variant={rows.length > 0 ? 'secondary' : 'outline'}>
+                    {rows.length > 0 ? rows.length : '—'}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!hasAuthSession}
+                    onClick={() => {
+                      openAdd(provider)
+                    }}
+                  >
+                    添加账号
+                  </Button>
+                  {rows.length > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasAuthSession || testMutation.isPending}
+                      onClick={() => {
+                        testMutation.mutate(provider)
+                      }}
+                    >
+                      {testMutation.isPending ? '验证中…' : '验证'}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              {rows.length > 0 ? (
+                <ul className="divide-y rounded-md border">
+                  {rows.map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium">{c.name}</span>
+                        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                          {displayListApiKeyMasked(
+                            showFullMaskedInList,
+                            hasAuthSession,
+                            c.api_key_masked
+                          )}
+                        </div>
+                        {c.api_base ? (
+                          <span className="mt-0.5 block truncate text-muted-foreground">
+                            {c.api_base}
+                          </span>
+                        ) : null}
+                        {!c.is_active ? (
+                          <Badge variant="outline" className="ml-2">
+                            已停用
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={!hasAuthSession}
+                          onClick={() => {
+                            openEdit(c)
+                          }}
+                          aria-label="编辑"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )
+        })}
+      </>
+    ),
+    [hasAuthSession, showFullMaskedInList, byProvider, testMutation, openAdd, openEdit]
+  )
 
   if (isLoading) {
     return (
@@ -192,139 +337,24 @@ export function ProviderConfigTab(): React.ReactElement {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>大模型提供商凭据（多账号）</CardTitle>
-            <CardDescription>
-              同一提供商可保存多条命名凭据，供 Gateway 模型绑定与导入团队使用。验证 Key
-              仍走设置侧测试接口（按提供商解析优先账号）。
-            </CardDescription>
+    <div className={outerClass}>
+      {layout === 'settings' ? (
+        <>
+          <div className="flex flex-row items-center justify-between gap-2 border-b pb-3">
+            <h3 className="text-base font-semibold tracking-tight">提供商凭据</h3>
+            {headerToolbar}
           </div>
-          <Button
-            size="sm"
-            disabled={!hasAuthSession}
-            onClick={() => {
-              openAdd()
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            添加凭据
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {hasAuthSession ? (
-            <div className="flex flex-col gap-3 rounded-md border border-dashed bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1 text-xs text-muted-foreground">
-                <p>凭据数据来自当前登录账号的「我的凭据」接口（JWT），他人账号无法查看你的列表。</p>
-                <p>
-                  掩码由服务端生成，仍<strong className="text-foreground">不是</strong>
-                  完整 API Key；公共或共享屏幕建议保持关闭「显示完整掩码」。
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
-                <Label
-                  htmlFor="show-full-masked-list"
-                  className="cursor-pointer text-xs font-normal"
-                >
-                  显示完整掩码
-                </Label>
-                <Switch
-                  id="show-full-masked-list"
-                  checked={showFullMaskedInList}
-                  onCheckedChange={setShowFullMaskedInList}
-                  aria-label="在列表中显示完整 API Key 掩码"
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">请先登录后再管理提供商凭据。</p>
-          )}
-          {SUPPORTED_PROVIDERS.map((provider) => {
-            const rows = byProvider.get(provider) ?? []
-            return (
-              <div key={provider} className="flex flex-col gap-3 rounded-lg border p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Key className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{PROVIDER_LABELS[provider] ?? provider}</span>
-                    <Badge variant={rows.length > 0 ? 'secondary' : 'outline'}>
-                      {rows.length > 0 ? `${String(rows.length)} 条凭据` : '未配置'}
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!hasAuthSession}
-                      onClick={() => {
-                        openAdd(provider)
-                      }}
-                    >
-                      添加账号
-                    </Button>
-                    {rows.length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!hasAuthSession || testMutation.isPending}
-                        onClick={() => {
-                          testMutation.mutate(provider)
-                        }}
-                      >
-                        {testMutation.isPending ? '验证中…' : '验证该提供商'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                {rows.length > 0 && (
-                  <ul className="divide-y rounded-md border">
-                    {rows.map((c) => (
-                      <li
-                        key={c.id}
-                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <span className="font-medium">{c.name}</span>
-                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            {displayListApiKeyMasked(
-                              showFullMaskedInList,
-                              hasAuthSession,
-                              c.api_key_masked
-                            )}
-                          </div>
-                          {c.api_base ? (
-                            <span className="mt-0.5 block text-muted-foreground">{c.api_base}</span>
-                          ) : null}
-                          {!c.is_active ? (
-                            <Badge variant="outline" className="ml-2">
-                              已停用
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            disabled={!hasAuthSession}
-                            onClick={() => {
-                              openEdit(c)
-                            }}
-                            aria-label="编辑"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )
-          })}
-        </CardContent>
-      </Card>
+          <div className="space-y-4 pt-2">{credentialsBody}</div>
+        </>
+      ) : (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">提供商凭据</CardTitle>
+            {headerToolbar}
+          </CardHeader>
+          <CardContent className="space-y-4">{credentialsBody}</CardContent>
+        </Card>
+      )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
@@ -339,9 +369,9 @@ export function ProviderConfigTab(): React.ReactElement {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SUPPORTED_PROVIDERS.map((p) => (
+                  {USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((p) => (
                     <SelectItem key={p} value={p}>
-                      {PROVIDER_LABELS[p] ?? p}
+                      {credentialProviderLabel(p)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -354,7 +384,7 @@ export function ProviderConfigTab(): React.ReactElement {
                 onChange={(e) => {
                   setFormName(e.target.value)
                 }}
-                placeholder="例如 work、personal、default"
+                placeholder="work / personal / default"
               />
             </div>
             <div className="space-y-2">

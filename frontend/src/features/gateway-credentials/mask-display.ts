@@ -1,5 +1,5 @@
 /**
- * 设置页「我的凭据」列表中 API Key 掩码行的展示逻辑（纯函数，便于单测）。
+ * 凭据列表中 API Key 掩码行的展示逻辑（纯函数）。
  */
 
 export function displayListApiKeyMasked(

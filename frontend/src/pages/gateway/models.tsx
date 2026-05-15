@@ -364,7 +364,7 @@ function ModelsTable(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">
             请先前往{' '}
             <Link
-              to="/gateway/credentials"
+              to="/gateway/credentials?tab=team"
               className="text-primary underline-offset-4 hover:underline"
             >
               凭据管理
@@ -992,7 +992,7 @@ function CreateModelDialog({
                 <p className="text-sm text-muted-foreground">
                   当前没有已启用的团队凭据，请先到{' '}
                   <Link
-                    to="/gateway/credentials"
+                    to="/gateway/credentials?tab=team"
                     className="text-primary underline-offset-4 hover:underline"
                     onClick={() => {
                       onOpenChange(false)
@@ -1175,7 +1175,7 @@ function EditModelDialog({
                 <p className="mt-1 text-sm text-muted-foreground">
                   没有可用凭据，请先到{' '}
                   <Link
-                    to="/gateway/credentials"
+                    to="/gateway/credentials?tab=team"
                     className="text-primary underline-offset-4 hover:underline"
                     onClick={() => {
                       onOpenChange(false)

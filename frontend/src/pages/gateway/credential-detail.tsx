@@ -113,7 +113,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
       toast({ title: '凭据已删除' })
-      navigate('/gateway/credentials')
+      navigate('/gateway/credentials?tab=team')
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '删除失败', description: e.message })
@@ -125,7 +125,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       <div className="text-sm text-muted-foreground">
         无效的凭据 ID。
         <Link
-          to="/gateway/credentials"
+          to="/gateway/credentials?tab=team"
           className="ml-2 text-primary underline-offset-4 hover:underline"
         >
           返回列表
@@ -144,7 +144,10 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         <p className="text-destructive">
           {error instanceof Error ? error.message : '无法加载凭据'}
         </p>
-        <Link to="/gateway/credentials" className="text-primary underline-offset-4 hover:underline">
+        <Link
+          to="/gateway/credentials?tab=team"
+          className="text-primary underline-offset-4 hover:underline"
+        >
           返回凭据列表
         </Link>
       </div>
@@ -167,7 +170,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/gateway/credentials" className="hover:text-foreground">
+        <Link to="/gateway/credentials?tab=team" className="hover:text-foreground">
           凭据管理
         </Link>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
