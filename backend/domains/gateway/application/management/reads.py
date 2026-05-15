@@ -157,6 +157,12 @@ class GatewayManagementReadService:
                 page_size=page_size,
             )
         else:
+            apply_member_workspace_scope = (
+                usage_aggregation == UsageAggregation.WORKSPACE
+                and not ctx.is_platform_admin
+                and ctx.team_role == "member"
+                and vkey_id is None
+            )
             items, total = await self._logs.list_for_team(
                 ctx.team_id,
                 start=start,
@@ -167,24 +173,8 @@ class GatewayManagementReadService:
                 credential_id=credential_id,
                 page=page,
                 page_size=page_size,
+                workspace_member_user_id=ctx.user_id if apply_member_workspace_scope else None,
             )
-        # 成员在 workspace 视图且未指定 vkey_id 时：仅看自己创建的 vkey 日志，以及平台 sk-* 入站（vkey_id 为空）且 user_id 为自己的调用。
-        if (
-            usage_aggregation == UsageAggregation.WORKSPACE
-            and not ctx.is_platform_admin
-            and ctx.team_role == "member"
-            and vkey_id is None
-        ):
-            my_keys = await self._vkeys.list_by_team(ctx.team_id)
-            my_ids = {
-                k.id for k in my_keys if k.created_by_user_id == ctx.user_id and not k.is_system
-            }
-            items = [
-                i
-                for i in items
-                if i.vkey_id in my_ids
-                or (i.vkey_id is None and i.user_id == ctx.user_id)
-            ]
         return items, total
 
     async def get_request_log(
@@ -201,13 +191,14 @@ class GatewayManagementReadService:
         if record is None:
             return None
         if not ctx.is_platform_admin and ctx.team_role == "member":
-            my_keys = await self._vkeys.list_by_team(ctx.team_id)
-            my_ids = {
-                k.id for k in my_keys if k.created_by_user_id == ctx.user_id and not k.is_system
-            }
-            allowed = record.vkey_id in my_ids or (
-                record.vkey_id is None and record.user_id == ctx.user_id
-            )
+            if record.vkey_id is None:
+                allowed = record.user_id == ctx.user_id
+            else:
+                allowed = await self._vkeys.is_non_system_vkey_owned_by_user_on_team(
+                    record.vkey_id,
+                    team_id=ctx.team_id,
+                    user_id=ctx.user_id,
+                )
             if not allowed:
                 raise TeamPermissionDeniedError(str(ctx.team_id))
         return record

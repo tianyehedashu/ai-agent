@@ -23,7 +23,6 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
     member_id = uuid.uuid4()
     other_user = uuid.uuid4()
     my_vkey_id = uuid.uuid4()
-    other_vkey_id = uuid.uuid4()
 
     ctx = ManagementTeamContext(
         team_id=team_id,
@@ -34,18 +33,14 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
     )
 
     log_own_vkey = SimpleNamespace(vkey_id=my_vkey_id, user_id=other_user)
-    log_other_vkey = SimpleNamespace(vkey_id=other_vkey_id, user_id=member_id)
     log_platform_own = SimpleNamespace(vkey_id=None, user_id=member_id)
-    log_platform_other = SimpleNamespace(vkey_id=None, user_id=other_user)
 
-    svc._logs.list_for_team = AsyncMock(
-        return_value=(
-            [log_own_vkey, log_other_vkey, log_platform_own, log_platform_other],
-            4,
-        )
-    )
-    my_key = SimpleNamespace(id=my_vkey_id, created_by_user_id=member_id, is_system=False)
-    svc._vkeys.list_by_team = AsyncMock(return_value=[my_key])
+    async def _list_for_team(*_args: Any, **kwargs: Any) -> tuple[list[Any], int]:
+        assert kwargs.get("workspace_member_user_id") == member_id
+        return [log_own_vkey, log_platform_own], 2
+
+    svc._logs.list_for_team = AsyncMock(side_effect=_list_for_team)
+    svc._vkeys.list_by_team = AsyncMock(side_effect=AssertionError("member list must not list vkeys"))
 
     items, total = await svc.list_request_logs(
         ctx,
@@ -59,7 +54,7 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
         vkey_id=None,
         credential_id=None,
     )
-    assert total == 4
+    assert total == 2
     assert len(items) == 2
     assert log_own_vkey in items
     assert log_platform_own in items
@@ -79,7 +74,12 @@ async def test_list_request_logs_admin_no_extra_filter() -> None:
         is_platform_admin=True,
     )
     rows: list[Any] = [SimpleNamespace(vkey_id=None, user_id=uuid.uuid4())]
-    svc._logs.list_for_team = AsyncMock(return_value=(rows, 1))
+
+    async def _list_for_team(*_args: Any, **kwargs: Any) -> tuple[list[Any], int]:
+        assert kwargs.get("workspace_member_user_id") is None
+        return rows, 1
+
+    svc._logs.list_for_team = AsyncMock(side_effect=_list_for_team)
     svc._vkeys.list_by_team = AsyncMock(side_effect=AssertionError("admin path must not list vkeys"))
 
     items, total = await svc.list_request_logs(
@@ -113,8 +113,7 @@ async def test_get_request_log_member_allows_own_vkey_or_own_platform_sk() -> No
         user_id=member_id,
         is_platform_admin=False,
     )
-    my_key = SimpleNamespace(id=my_vkey_id, created_by_user_id=member_id, is_system=False)
-    svc._vkeys.list_by_team = AsyncMock(return_value=[my_key])
+    svc._vkeys.is_non_system_vkey_owned_by_user_on_team = AsyncMock(return_value=True)
 
     rec_vkey = SimpleNamespace(vkey_id=my_vkey_id, user_id=uuid.uuid4())
     svc._logs.get_for_team = AsyncMock(return_value=rec_vkey)
@@ -143,8 +142,7 @@ async def test_get_request_log_member_denies_other_vkey_and_other_platform_sk() 
         user_id=member_id,
         is_platform_admin=False,
     )
-    my_key = SimpleNamespace(id=uuid.uuid4(), created_by_user_id=member_id, is_system=False)
-    svc._vkeys.list_by_team = AsyncMock(return_value=[my_key])
+    svc._vkeys.is_non_system_vkey_owned_by_user_on_team = AsyncMock(return_value=False)
 
     rec_other_vkey = SimpleNamespace(vkey_id=other_vkey_id, user_id=member_id)
     svc._logs.get_for_team = AsyncMock(return_value=rec_other_vkey)

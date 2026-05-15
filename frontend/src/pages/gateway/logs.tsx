@@ -2,7 +2,7 @@
  * AI Gateway · 调用日志（虚拟滚动）
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
@@ -69,10 +69,15 @@ export default function GatewayLogsPage(): React.JSX.Element {
   })
 
   const virtualItems = virtualizer.getVirtualItems()
-  const lastItem = virtualItems.at(-1)
-  if (lastItem !== undefined && lastItem.index >= items.length - 1 && hasNextPage && !isFetching) {
-    void fetchNextPage()
-  }
+  const lastVisibleIndex =
+    virtualItems.length > 0 ? (virtualItems[virtualItems.length - 1]?.index ?? -1) : -1
+
+  useEffect(() => {
+    if (items.length === 0 || !hasNextPage || isFetching) return
+    if (lastVisibleIndex >= items.length - 1) {
+      void fetchNextPage()
+    }
+  }, [lastVisibleIndex, items.length, hasNextPage, isFetching, fetchNextPage])
 
   const { data: detail } = useQuery({
     queryKey: ['gateway', 'log', selectedId, usageAggregation],

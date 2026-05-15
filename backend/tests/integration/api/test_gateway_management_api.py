@@ -12,6 +12,8 @@ from httpx import AsyncClient
 import pytest
 
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
+from domains.identity.application import UserUseCase
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 
@@ -204,6 +206,137 @@ class TestGatewayManagementApi:
         assert body["total_requests"] == 2
         assert body["total_input_tokens"] == 13
         assert body["total_output_tokens"] == 7
+
+    @pytest.mark.asyncio
+    async def test_workspace_logs_member_sql_filter_own_vkeys_and_own_platform_inbound(
+        self,
+        dev_client: AsyncClient,
+        db_session,
+        test_user: User,
+    ) -> None:
+        """工作区成员：列表 total/分页与 SQL EXISTS 一致；详情权限与单条查询一致。"""
+        owner = test_user
+        member = User(
+            email=f"member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Member User",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Shared Logs Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+
+        vkeys = VirtualKeyRepository(db_session)
+        owner_key = await vkeys.create(
+            team_id=shared.id,
+            created_by_user_id=owner.id,
+            name="owner-vk",
+            description=None,
+            key_id_str=uuid.uuid4().hex[:16],
+            key_hash=f"hash-owner-{uuid.uuid4()}",
+            encrypted_key="k" * 64,
+            allowed_models=[],
+            allowed_capabilities=[],
+            rpm_limit=None,
+            tpm_limit=None,
+            store_full_messages=False,
+            guardrail_enabled=True,
+            is_system=False,
+        )
+        member_key = await vkeys.create(
+            team_id=shared.id,
+            created_by_user_id=member.id,
+            name="member-vk",
+            description=None,
+            key_id_str=uuid.uuid4().hex[:16],
+            key_hash=f"hash-member-{uuid.uuid4()}",
+            encrypted_key="k" * 64,
+            allowed_models=[],
+            allowed_capabilities=[],
+            rpm_limit=None,
+            tpm_limit=None,
+            store_full_messages=False,
+            guardrail_enabled=True,
+            is_system=False,
+        )
+        await db_session.commit()
+
+        now = datetime.now(UTC)
+
+        def _row(
+            log_id: uuid.UUID,
+            *,
+            vkey_id: uuid.UUID | None,
+            user_id: uuid.UUID,
+            request_id: str,
+        ) -> GatewayRequestLog:
+            return GatewayRequestLog(
+                id=log_id,
+                created_at=now,
+                team_id=shared.id,
+                user_id=user_id,
+                vkey_id=vkey_id,
+                capability="chat",
+                route_name=None,
+                real_model="gpt-4",
+                provider="openai",
+                status="success",
+                input_tokens=1,
+                output_tokens=1,
+                cached_tokens=0,
+                cost_usd=Decimal("0.001"),
+                latency_ms=10,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id=request_id,
+            )
+
+        log_member_vkey = uuid.uuid4()
+        log_owner_vkey = uuid.uuid4()
+        log_member_platform = uuid.uuid4()
+        log_owner_platform = uuid.uuid4()
+        db_session.add_all(
+            [
+                _row(log_member_vkey, vkey_id=member_key.id, user_id=owner.id, request_id="m-vk"),
+                _row(log_owner_vkey, vkey_id=owner_key.id, user_id=member.id, request_id="o-vk"),
+                _row(log_member_platform, vkey_id=None, user_id=member.id, request_id="m-plat"),
+                _row(log_owner_platform, vkey_id=None, user_id=owner.id, request_id="o-plat"),
+            ]
+        )
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+        team_headers = {**member_headers, "X-Team-Id": str(shared.id)}
+
+        logs = await dev_client.get(
+            "/api/v1/gateway/logs",
+            params={"usage_aggregation": "workspace", "page_size": 50, "page": 1},
+            headers=team_headers,
+        )
+        assert logs.status_code == 200, logs.text
+        body = logs.json()
+        assert body["total"] == 2
+        ids = {item["id"] for item in body["items"]}
+        assert ids == {str(log_member_vkey), str(log_member_platform)}
+
+        ok = await dev_client.get(
+            f"/api/v1/gateway/logs/{log_member_vkey}",
+            params={"usage_aggregation": "workspace"},
+            headers=team_headers,
+        )
+        assert ok.status_code == 200, ok.text
+
+        denied = await dev_client.get(
+            f"/api/v1/gateway/logs/{log_owner_vkey}",
+            params={"usage_aggregation": "workspace"},
+            headers=team_headers,
+        )
+        assert denied.status_code == 403, denied.text
 
     @pytest.mark.asyncio
     async def test_list_model_presets_filter_by_provider(

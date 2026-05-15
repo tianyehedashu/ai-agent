@@ -5,10 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import defer
 
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 
 
 def _request_log_list_defer_options() -> tuple:
@@ -117,6 +118,7 @@ class RequestLogRepository:
         credential_id: UUID | None = None,
         page: int = 1,
         page_size: int = 50,
+        workspace_member_user_id: UUID | None = None,
     ) -> tuple[list[GatewayRequestLog], int]:
         clauses = [GatewayRequestLog.team_id == team_id]
         if start:
@@ -131,6 +133,23 @@ class RequestLogRepository:
             clauses.append(GatewayRequestLog.vkey_id == vkey_id)
         if credential_id:
             clauses.append(GatewayRequestLog.credential_id == credential_id)
+        # 工作区成员：仅本人创建的非系统 vkey 归因行 + 本人 user_id 的平台入站（vkey 为空）
+        if workspace_member_user_id is not None:
+            member_own_vkey = exists(
+                select(1)
+                .select_from(GatewayVirtualKey)
+                .where(
+                    GatewayVirtualKey.id == GatewayRequestLog.vkey_id,
+                    GatewayVirtualKey.team_id == team_id,
+                    GatewayVirtualKey.created_by_user_id == workspace_member_user_id,
+                    GatewayVirtualKey.is_system.is_(False),
+                )
+            )
+            own_platform_inbound = and_(
+                GatewayRequestLog.vkey_id.is_(None),
+                GatewayRequestLog.user_id == workspace_member_user_id,
+            )
+            clauses.append(or_(member_own_vkey, own_platform_inbound))
 
         count_stmt = select(func.count()).select_from(GatewayRequestLog).where(and_(*clauses))
         total = (await self._session.execute(count_stmt)).scalar_one()

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 
 import { User, Bot, Terminal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -57,14 +57,19 @@ export default function ChatMessages({
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            processRuns={processRuns}
-            sessionId={sessionId}
-          />
-        ))}
+        {messages.map((message) => {
+          const runId = message.metadata?.runId
+          const runEvents =
+            typeof runId === 'string' && runId.length > 0 ? processRuns[runId] : undefined
+          return (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              runEvents={runEvents}
+              sessionId={sessionId}
+            />
+          )
+        })}
 
         {/* Streaming content with live process panel */}
         {(currentRunId !== null || isLoading) && (
@@ -151,18 +156,16 @@ export default function ChatMessages({
   )
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
-  processRuns,
+  runEvents,
   sessionId,
 }: Readonly<{
   message: Message
-  processRuns: Record<string, ProcessEvent[]>
+  runEvents: ProcessEvent[] | undefined
   sessionId?: string
 }>): React.JSX.Element {
   const isUser = message.role === 'user'
-  const runId = message.metadata?.runId as string | undefined
-  const runEvents = runId ? processRuns[runId] : undefined
   const usage = getMessageUsage(message)
 
   if (isUser) {
@@ -278,7 +281,7 @@ function MessageBubble({
       </div>
     </div>
   )
-}
+})
 
 interface UsageSummary {
   model?: string

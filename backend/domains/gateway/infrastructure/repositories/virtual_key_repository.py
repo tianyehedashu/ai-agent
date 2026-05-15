@@ -33,6 +33,26 @@ class VirtualKeyRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def is_non_system_vkey_owned_by_user_on_team(
+        self,
+        vkey_id: uuid.UUID,
+        *,
+        team_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        """该 vkey 是否属于指定团队下由该用户创建的非系统 Key（用于成员读单条日志）。"""
+        stmt = (
+            select(GatewayVirtualKey.id)
+            .where(
+                GatewayVirtualKey.id == vkey_id,
+                GatewayVirtualKey.team_id == team_id,
+                GatewayVirtualKey.created_by_user_id == user_id,
+                GatewayVirtualKey.is_system.is_(False),
+            )
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none() is not None
+
     async def list_by_team(
         self,
         team_id: uuid.UUID,
