@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, Loader2, User } from 'lucide-react'
 
-import { userModelApi } from '@/api/userModel'
+import { gatewayApi } from '@/api/gateway'
 import {
   Select,
   SelectContent,
@@ -31,7 +31,7 @@ export type ModelListMode = 'chat' | 'image_gen' | 'video'
 interface ModelSelectorProps {
   /** 过滤模型类型 */
   modelType?: ModelType
-  /** 与后端 ``/user-models/available?mode=`` 对齐（与 modelType 可同时使用，用于创作模式语义） */
+  /** 与后端 ``/gateway/models/available?mode=`` 对齐（与 modelType 可同时使用，用于创作模式语义） */
   listMode?: ModelListMode
   /** 当前选中的 model_id (系统模型 ID 或用户模型 UUID) */
   value?: string | null
@@ -63,14 +63,13 @@ export function ModelSelector({
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [
-      'user-models',
-      'available',
+      'gateway-models-available',
       modelType,
       listMode ?? '',
       showProviderFilter ? channel : '',
     ],
     queryFn: () =>
-      userModelApi.listAvailable(
+      gatewayApi.listAvailableModels(
         modelType,
         providerForApi,
         listMode ? { mode: listMode } : undefined

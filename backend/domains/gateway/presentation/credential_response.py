@@ -6,6 +6,7 @@ from binascii import Error as BinasciiError
 
 from cryptography.fernet import InvalidToken
 
+from domains.gateway.domain.errors import CredentialApiKeyDecryptError
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.presentation.schemas.common import CredentialResponse
 from libs.crypto import decrypt_value
@@ -22,6 +23,23 @@ def mask_plain_secret_for_display(plain: str) -> str:
     prefix = s[:4]
     suffix = s[-4:]
     return f"{prefix}…{suffix}"
+
+
+def decrypt_credential_api_key_for_reveal(
+    cred: ProviderCredential,
+    *,
+    encryption_key: str,
+) -> str:
+    """解密凭据中的 API Key（仅用于显式 reveal 接口，不写入列表/详情 DTO）。"""
+    try:
+        return decrypt_value(cred.api_key_encrypted, encryption_key).strip()
+    except (InvalidToken, BinasciiError, UnicodeDecodeError, ValueError) as exc:
+        logger.warning(
+            "credential api_key reveal decrypt failed credential_id=%s exc_type=%s",
+            cred.id,
+            type(exc).__name__,
+        )
+        raise CredentialApiKeyDecryptError from exc
 
 
 def build_credential_response(
@@ -53,4 +71,8 @@ def build_credential_response(
     )
 
 
-__all__ = ["build_credential_response", "mask_plain_secret_for_display"]
+__all__ = [
+    "build_credential_response",
+    "decrypt_credential_api_key_for_reveal",
+    "mask_plain_secret_for_display",
+]

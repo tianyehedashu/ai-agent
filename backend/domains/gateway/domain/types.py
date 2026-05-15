@@ -249,14 +249,31 @@ class TimeSeriesPoint:
     errors: int
 
 
-# 用户 BYOK：``/my-credentials`` 与设置页 ``provider_config`` 双写所支持的提供商标识（与路由/LiteLLM 对齐）。
-# 刻意 **不含** ``custom``：用户凭据需绑定具体云厂商端点；``custom`` 仅用于 Agent 域 ``UserModel``（自定义 base + model）。
+# 用户 BYOK：``/my-credentials`` 所支持的提供商标识（与路由/LiteLLM 对齐，不含 custom）。
 USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
     {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
 )
 
+# personal team gateway_models 允许的 model_types（与选择器 type 对齐）。
+PERSONAL_MODEL_TYPES: frozenset[str] = frozenset({"text", "image", "image_gen", "video"})
+
+# personal team 模型注册允许的 provider（含 custom：自定义 base + model_id）。
+PERSONAL_MODEL_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "deepseek",
+        "dashscope",
+        "anthropic",
+        "zhipuai",
+        "volcengine",
+        "custom",
+    }
+)
+
 
 __all__ = [
+    "PERSONAL_MODEL_PROVIDERS",
+    "PERSONAL_MODEL_TYPES",
     "USER_GATEWAY_CREDENTIAL_PROVIDERS",
     "AlertChannel",
     "AlertMetric",

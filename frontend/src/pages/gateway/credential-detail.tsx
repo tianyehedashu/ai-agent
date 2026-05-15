@@ -53,6 +53,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [showFullCurrentKey, setShowFullCurrentKey] = useState(false)
+  const [revealedCurrentKey, setRevealedCurrentKey] = useState<string | null>(null)
 
   const {
     data: cred,
@@ -74,6 +76,26 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     setApiKey('')
     setIsActive(cred.is_active)
   }, [cred])
+
+  useEffect(() => {
+    setShowFullCurrentKey(false)
+    setRevealedCurrentKey(null)
+  }, [cred?.id, cred?.api_key_masked])
+
+  const revealKeyMutation = useMutation({
+    mutationFn: () => gatewayApi.revealCredential(id),
+    onSuccess: (data) => {
+      setRevealedCurrentKey(data.api_key)
+    },
+    onError: (e: Error) => {
+      toast({
+        variant: 'destructive',
+        title: '无法显示完整密钥',
+        description: e.message,
+      })
+      setShowFullCurrentKey(false)
+    },
+  })
 
   const synced = useMemo(() => {
     if (!cred) return true
@@ -207,12 +229,51 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         <Card>
           <CardHeader>
             <CardTitle>凭据与密钥</CardTitle>
-            <CardDescription>API Key 仅显示掩码；轮换请填写新密钥后保存。</CardDescription>
+            <CardDescription>
+              默认显示掩码。打开「显示完整密钥」可查看当前值；轮换请在下方填写新密钥后保存。
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>API Key（掩码）</Label>
-              <Input readOnly className="mt-1.5 font-mono text-xs" value={cred.api_key_masked} />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <Label htmlFor="cred-current-key">当前 API Key</Label>
+                {editable ? (
+                  <div className="flex items-center gap-2 sm:pb-0.5">
+                    <Label
+                      htmlFor="cred-show-full-key"
+                      className="cursor-pointer text-xs font-normal text-muted-foreground"
+                    >
+                      显示完整密钥
+                    </Label>
+                    <Switch
+                      id="cred-show-full-key"
+                      checked={showFullCurrentKey}
+                      disabled={revealKeyMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        setShowFullCurrentKey(checked)
+                        if (!checked) {
+                          setRevealedCurrentKey(null)
+                          revealKeyMutation.reset()
+                          return
+                        }
+                        revealKeyMutation.mutate()
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              <Input
+                id="cred-current-key"
+                readOnly
+                className="mt-1.5 font-mono text-xs"
+                value={
+                  showFullCurrentKey
+                    ? revealKeyMutation.isPending && revealedCurrentKey === null
+                      ? '加载中…'
+                      : (revealedCurrentKey ?? '')
+                    : cred.api_key_masked
+                }
+              />
             </div>
             {editable ? (
               <>
@@ -296,10 +357,10 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             <CardDescription>
               在{' '}
               <Link
-                to="/gateway/models"
+                to="/gateway/models?tab=team"
                 className="text-primary underline-offset-4 hover:underline"
               >
-                模型与路由
+                注册模型
               </Link>{' '}
               中可继续调整绑定。
             </CardDescription>
@@ -332,7 +393,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
                     <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
                       <td className="px-4 py-2">
                         <Link
-                          to={`/gateway/models?credentialId=${encodeURIComponent(id)}&modelId=${encodeURIComponent(m.id)}`}
+                          to={`/gateway/models/${encodeURIComponent(m.id)}?tab=team&credentialId=${encodeURIComponent(id)}`}
                           className="font-mono text-xs text-primary underline-offset-4 hover:underline"
                         >
                           {m.name}

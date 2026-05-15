@@ -18,7 +18,6 @@ from bootstrap.config import settings
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
 from domains.agent.infrastructure.models.memory import Memory  # noqa: F401
 from domains.agent.infrastructure.models.message import Message  # noqa: F401
-from domains.agent.infrastructure.models.user_model import UserModel  # noqa: F401
 from domains.gateway.infrastructure.models import (  # noqa: F401
     GatewayAlertEvent,
     GatewayAlertRule,

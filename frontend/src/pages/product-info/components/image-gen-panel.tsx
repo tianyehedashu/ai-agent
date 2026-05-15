@@ -7,8 +7,8 @@ import { useState, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ImagePlus, Loader2, Copy, Check, Settings2 } from 'lucide-react'
 
+import { gatewayApi } from '@/api/gateway'
 import { productInfoApi } from '@/api/productInfo'
-import { userModelApi } from '@/api/userModel'
 import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
@@ -61,8 +61,8 @@ export function ImageGenPanel({
   const { toast } = useToast()
 
   const { data: availableData } = useQuery({
-    queryKey: ['user-models', 'available', 'image_gen'],
-    queryFn: () => userModelApi.listAvailable('image_gen'),
+    queryKey: ['gateway-models-available', 'image_gen'],
+    queryFn: () => gatewayApi.listAvailableModels('image_gen'),
     staleTime: 30_000,
   })
 

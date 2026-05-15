@@ -302,7 +302,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
 
 
 def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
-    """将 ORM 行转为 user-models 选择器条目。"""
+    """将 ORM 行转为模型选择器 system_models 条目。"""
     tags = row.tags or {}
     display_name = str(tags.get("display_name") or row.name)
     raw_vendor = tags.get("video_vendor_model_id") or tags.get("giikin_video_model")

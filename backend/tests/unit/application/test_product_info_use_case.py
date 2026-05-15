@@ -7,12 +7,12 @@ import uuid
 import pytest
 
 from domains.agent.application.product_info_use_case import ProductInfoUseCase
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.agent.domain.product_info.constants import (
     CAPABILITY_IDS,
     CAPABILITY_ORDER,
     DEFAULT_PROMPTS,
 )
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
 from libs.db.permission_context import (
     PermissionContext,
@@ -254,7 +254,7 @@ class TestProductInfoUseCase:
 
             with (
                 patch.object(
-                    use_case._user_model_uc, "resolve_model", new_callable=AsyncMock
+                    use_case._model_resolution, "resolve_model", new_callable=AsyncMock
                 ) as mock_resolve,
                 patch(
                     "domains.agent.application.product_info_use_case.get_app_config",

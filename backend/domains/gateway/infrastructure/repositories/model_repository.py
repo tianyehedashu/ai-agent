@@ -52,6 +52,40 @@ class GatewayModelRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_team_owned(
+        self,
+        team_id: uuid.UUID,
+        *,
+        only_enabled: bool = False,
+        capability: str | None = None,
+        provider: str | None = None,
+    ) -> list[GatewayModel]:
+        clauses = [GatewayModel.team_id == team_id]
+        if only_enabled:
+            clauses.append(GatewayModel.enabled.is_(True))
+        if capability:
+            clauses.append(GatewayModel.capability == capability)
+        if provider is not None:
+            clauses.append(GatewayModel.provider == provider)
+        stmt = select(GatewayModel).where(*clauses).order_by(GatewayModel.name)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_on_team(self, model_id: uuid.UUID, team_id: uuid.UUID) -> GatewayModel | None:
+        row = await self.get(model_id)
+        if row is None or row.team_id != team_id:
+            return None
+        return row
+
+    async def name_exists_on_team(self, team_id: uuid.UUID, name: str) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(GatewayModel)
+            .where(GatewayModel.team_id == team_id, GatewayModel.name == name)
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one() or 0) > 0
+
     async def list_all_active(self) -> list[GatewayModel]:
         stmt = select(GatewayModel).where(GatewayModel.enabled.is_(True))
         result = await self._session.execute(stmt)

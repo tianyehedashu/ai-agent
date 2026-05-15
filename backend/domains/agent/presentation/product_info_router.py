@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.product_image_gen_task_use_case import (
     ProductImageGenTaskUseCase,
 )
@@ -24,13 +25,12 @@ from domains.agent.application.product_info_use_case import (
     ProductInfoUseCase,
     run_pipeline_async,
 )
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.identity.presentation.deps import AuthUser, get_owned_user_ids
 from libs.api.deps import (
+    get_chat_model_resolution_service,
     get_product_image_gen_task_service,
     get_product_info_prompt_service,
     get_product_info_service,
-    get_user_model_service,
 )
 from libs.api.params import parse_optional_uuid
 from libs.background_tasks import register_app_background_task
@@ -420,20 +420,20 @@ async def upload_image(
 async def create_image_gen_task(
     current_user: AuthUser,
     image_gen_service: ProductImageGenTaskUseCase = Depends(get_product_image_gen_task_service),
-    user_model_service: UserModelUseCase = Depends(get_user_model_service),
+    model_resolution_service: ChatModelResolutionUseCase = Depends(get_chat_model_resolution_service),
     body: CreateImageGenTaskBody | None = None,
 ) -> dict[str, Any]:
     """创建 8 图生成任务。
 
     model_id 可以是系统模型 (如 "volcengine/seedream") 或用户模型 UUID，
-    通过 UserModelUseCase 解析为 provider + credentials。
+    通过 ChatModelResolutionUseCase 解析为 provider + credentials。
     """
     if body is None:
         body = CreateImageGenTaskBody()
     user_id, anonymous_user_id = get_owned_user_ids(current_user)
     job_uuid = parse_optional_uuid(body.job_id, "job_id")
 
-    resolved = await user_model_service.resolve_image_gen_model(body.model_id)
+    resolved = await model_resolution_service.resolve_image_gen_model(body.model_id)
 
     provider = body.provider or resolved.provider
     global_defaults: dict[str, Any] = {"provider": provider}

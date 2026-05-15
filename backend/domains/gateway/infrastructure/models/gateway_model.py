@@ -99,7 +99,6 @@ class GatewayModel(BaseModel):
         nullable=True,
         comment="上次连通性测试说明（失败原因等）；成功时为 NULL",
     )
-
     __table_args__ = (
         UniqueConstraint("team_id", "name", name="uq_gateway_models_team_name"),
         Index("ix_gateway_models_lookup", "team_id", "capability", "enabled"),

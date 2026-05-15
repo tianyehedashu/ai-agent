@@ -38,6 +38,10 @@ class TestMyCredentialsAPI:
         assert body["api_key_masked"] == "••••" or "…" in body["api_key_masked"]
         assert "sk-test-placeholder" not in body["api_key_masked"]
 
+        r_reveal = await client.get(f"/api/v1/gateway/my-credentials/{cid}/reveal", headers=auth_headers)
+        assert r_reveal.status_code == 200, r_reveal.text
+        assert r_reveal.json()["api_key"] == "sk-test-placeholder"
+
         r2 = await client.get("/api/v1/gateway/my-credentials", headers=auth_headers)
         assert r2.status_code == 200
         assert len(r2.json()) == initial + 1

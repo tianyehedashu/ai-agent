@@ -1,15 +1,15 @@
 /**
- * ModelTab - 用户模型管理标签页
- *
- * 在设置页面中提供模型 CRUD、连接测试功能。
+ * 个人模型（/my-models）面板，用于 AI Gateway 模型页「个人」Tab。
  */
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Zap, Pencil, Loader2 } from 'lucide-react'
+import { Loader2, Pencil, Plus, Trash2, Zap } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
-import { userModelApi } from '@/api/userModel'
+import { gatewayApi, type PersonalGatewayModel } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,48 +34,66 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
-import type {
-  UserModel,
-  CreateUserModelBody,
-  UpdateUserModelBody,
-  ModelType,
-} from '@/types/user-model'
+import { useAuthStore } from '@/stores/auth'
+import type { ModelType } from '@/types/user-model'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
-const EMPTY_FORM: CreateUserModelBody = {
+const LIST_CHANNEL_ALL = '__all__'
+const NO_CREDENTIAL = '__none__'
+
+interface PersonalModelForm {
+  display_name: string
+  provider: string
+  model_id: string
+  credential_id: string
+  model_types: ModelType[]
+}
+
+const EMPTY_FORM: PersonalModelForm = {
   display_name: '',
   provider: 'openai',
   model_id: '',
-  api_key: '',
-  api_base: '',
+  credential_id: '',
   model_types: ['text'],
 }
 
-/** 列表筛选：全部接入通道 */
-const LIST_CHANNEL_ALL = '__all__'
-
-export function ModelTab(): React.JSX.Element {
+export function PersonalModelsPanel(): React.ReactElement {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
-  const qc = useQueryClient()
+  const token = useAuthStore((s) => s.token)
+  const hasAuthSession = Boolean(token)
+
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<CreateUserModelBody>({ ...EMPTY_FORM })
+  const [editing, setEditing] = useState<PersonalGatewayModel | null>(null)
+  const [form, setForm] = useState<PersonalModelForm>({ ...EMPTY_FORM })
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['user-models', listChannel],
-    queryFn: () =>
-      userModelApi.list({
-        limit: 100,
-        provider: listChannel === LIST_CHANNEL_ALL ? undefined : listChannel,
-      }),
+  const { data: credentials = [] } = useQuery({
+    queryKey: ['gateway', 'my-credentials'],
+    queryFn: () => gatewayApi.listMyCredentials(),
+    enabled: hasAuthSession,
   })
 
+  const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['gateway', 'my-models', listChannel],
+    queryFn: () =>
+      gatewayApi.listMyModels({
+        provider: listChannel === LIST_CHANNEL_ALL ? undefined : listChannel,
+      }),
+    enabled: hasAuthSession,
+  })
+
+  const invalidate = useCallback((): void => {
+    void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
+    void queryClient.invalidateQueries({ queryKey: ['gateway-models-available'] })
+  }, [queryClient])
+
   const createMut = useMutation({
-    mutationFn: (body: CreateUserModelBody) => userModelApi.create(body),
+    mutationFn: gatewayApi.createMyModel,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['user-models'] })
-      void qc.invalidateQueries({ queryKey: ['user-models', 'available'] })
+      invalidate()
       toast({ title: '模型已创建' })
       closeDialog()
     },
@@ -86,11 +104,15 @@ export function ModelTab(): React.JSX.Element {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: UpdateUserModelBody }) =>
-      userModelApi.update(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string
+      body: Parameters<typeof gatewayApi.updateMyModel>[1]
+    }) => gatewayApi.updateMyModel(id, body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['user-models'] })
-      void qc.invalidateQueries({ queryKey: ['user-models', 'available'] })
+      invalidate()
       toast({ title: '模型已更新' })
       closeDialog()
     },
@@ -101,18 +123,17 @@ export function ModelTab(): React.JSX.Element {
   })
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => userModelApi.delete(id),
+    mutationFn: gatewayApi.deleteMyModel,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['user-models'] })
-      void qc.invalidateQueries({ queryKey: ['user-models', 'available'] })
+      invalidate()
       toast({ title: '模型已删除' })
     },
   })
 
   const testMut = useMutation({
-    mutationFn: (id: string) => userModelApi.testConnection(id),
+    mutationFn: gatewayApi.testMyModel,
     onSuccess: (result) => {
-      void qc.invalidateQueries({ queryKey: ['user-models'] })
+      invalidate()
       if (result.success) {
         toast({ title: '连接成功', description: result.message })
       } else {
@@ -125,22 +146,24 @@ export function ModelTab(): React.JSX.Element {
     },
   })
 
-  const items: UserModel[] = data?.items ?? []
+  const credentialOptions = useMemo(() => {
+    const matching = activeCredentials.filter((c) => c.provider === form.provider)
+    return matching.length > 0 ? matching : activeCredentials
+  }, [activeCredentials, form.provider])
 
   function openCreate(): void {
-    setEditingId(null)
+    setEditing(null)
     setForm({ ...EMPTY_FORM })
     setDialogOpen(true)
   }
 
-  function openEdit(m: UserModel): void {
-    setEditingId(m.id)
+  function openEdit(m: PersonalGatewayModel): void {
+    setEditing(m)
     setForm({
       display_name: m.display_name,
       provider: m.provider,
       model_id: m.model_id,
-      api_key: '',
-      api_base: m.api_base ?? '',
+      credential_id: m.credential_id,
       model_types: m.model_types,
     })
     setDialogOpen(true)
@@ -148,27 +171,38 @@ export function ModelTab(): React.JSX.Element {
 
   function closeDialog(): void {
     setDialogOpen(false)
-    setEditingId(null)
+    setEditing(null)
   }
 
   function handleSubmit(): void {
-    if (!form.display_name || !form.model_id) {
-      toast({ title: '请填写必填项', variant: 'destructive' })
+    if (!form.display_name || !form.model_id || !form.credential_id) {
+      toast({ title: '请填写必填项并选择凭据', variant: 'destructive' })
       return
     }
-    const body = { ...form }
-    if (!body.api_key) delete body.api_key
-    if (!body.api_base) delete body.api_base
-
-    if (editingId) {
-      updateMut.mutate({ id: editingId, body })
+    if (editing) {
+      updateMut.mutate({
+        id: editing.id,
+        body: {
+          display_name: form.display_name,
+          model_id: form.model_id,
+          credential_id: form.credential_id,
+          is_active: editing.is_active,
+        },
+      })
     } else {
-      createMut.mutate(body)
+      createMut.mutate({
+        display_name: form.display_name,
+        provider: form.provider,
+        model_id: form.model_id,
+        credential_id: form.credential_id,
+        model_types: form.model_types,
+      })
     }
   }
 
   function toggleType(t: ModelType): void {
-    const current = form.model_types ?? ['text']
+    if (editing) return
+    const current = form.model_types
     const next = current.includes(t) ? current.filter((x) => x !== t) : [...current, t]
     if (next.length === 0) return
     setForm({ ...form, model_types: next })
@@ -176,30 +210,61 @@ export function ModelTab(): React.JSX.Element {
 
   const isSaving = createMut.isPending || updateMut.isPending
 
+  if (!hasAuthSession) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          请先登录以管理个人模型
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>模型管理</CardTitle>
-          <CardDescription>配置您的自定义模型，支持自带 API Key</CardDescription>
+          <CardTitle>个人模型</CardTitle>
+          <CardDescription>
+            注册自带凭据的模型；请先配置{' '}
+            <Link
+              to="/gateway/credentials?tab=personal"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              个人凭据
+            </Link>
+          </CardDescription>
         </div>
-        <Button size="sm" onClick={openCreate}>
+        <Button size="sm" onClick={openCreate} disabled={activeCredentials.length === 0}>
           <Plus className="mr-1 h-4 w-4" />
           添加模型
         </Button>
       </CardHeader>
 
       <CardContent>
+        {activeCredentials.length === 0 ? (
+          <p className="mb-4 text-sm text-muted-foreground">
+            尚无个人凭据，请先到{' '}
+            <Link
+              to="/gateway/credentials?tab=personal"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              凭据管理
+            </Link>{' '}
+            添加 API Key。
+          </p>
+        ) : null}
+
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="grid max-w-xs gap-1.5">
-            <Label htmlFor="model-list-channel">按接入通道筛选</Label>
+            <Label htmlFor="personal-model-channel">按接入通道筛选</Label>
             <Select
               value={listChannel}
               onValueChange={(v) => {
                 setListChannel(v)
               }}
             >
-              <SelectTrigger id="model-list-channel" className="w-full sm:w-[220px]">
+              <SelectTrigger id="personal-model-channel" className="w-full sm:w-[220px]">
                 <SelectValue placeholder="全部" />
               </SelectTrigger>
               <SelectContent>
@@ -221,7 +286,7 @@ export function ModelTab(): React.JSX.Element {
           </div>
         ) : items.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            暂无自定义模型，点击「添加模型」开始配置
+            暂无个人模型，点击「添加模型」开始配置
           </p>
         ) : (
           <div className="space-y-3">
@@ -244,11 +309,7 @@ export function ModelTab(): React.JSX.Element {
                       </Badge>
                     ))}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {m.model_id}
-                    {m.api_key_masked ? ` · Key: ${m.api_key_masked}` : ''}
-                    {m.api_base ? ` · ${m.api_base}` : ''}
-                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{m.model_id}</p>
                   {m.last_test_status === 'failed' && m.last_test_reason ? (
                     <p
                       className="mt-1 line-clamp-4 text-xs text-destructive/90 [overflow-wrap:anywhere]"
@@ -308,13 +369,14 @@ export function ModelTab(): React.JSX.Element {
         )}
       </CardContent>
 
-      {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>{editingId ? '编辑模型' : '添加模型'}</DialogTitle>
+            <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
             <DialogDescription>
-              {editingId ? '修改模型配置' : '配置您的自定义模型，API Key 将加密存储'}
+              {editing
+                ? '修改模型配置（多能力拆分为多行时仅编辑当前行）'
+                : '选择已配置的个人凭据并注册模型'}
             </DialogDescription>
           </DialogHeader>
 
@@ -334,8 +396,9 @@ export function ModelTab(): React.JSX.Element {
               <Label>提供商 *</Label>
               <Select
                 value={form.provider}
+                disabled={Boolean(editing)}
                 onValueChange={(v) => {
-                  setForm({ ...form, provider: v })
+                  setForm({ ...form, provider: v, credential_id: '' })
                 }}
               >
                 <SelectTrigger>
@@ -354,7 +417,7 @@ export function ModelTab(): React.JSX.Element {
             <div className="grid gap-1.5">
               <Label>模型 ID *</Label>
               <Input
-                placeholder="如 gpt-4o, deepseek-chat, qwen-max"
+                placeholder="如 gpt-4o, deepseek-chat"
                 value={form.model_id}
                 onChange={(e) => {
                   setForm({ ...form, model_id: e.target.value })
@@ -363,44 +426,45 @@ export function ModelTab(): React.JSX.Element {
             </div>
 
             <div className="grid gap-1.5">
-              <Label>API Key</Label>
-              <Input
-                type="password"
-                placeholder={editingId ? '留空则保持不变' : 'sk-...'}
-                value={form.api_key ?? ''}
-                onChange={(e) => {
-                  setForm({ ...form, api_key: e.target.value })
+              <Label>凭据 *</Label>
+              <Select
+                value={form.credential_id || NO_CREDENTIAL}
+                onValueChange={(v) => {
+                  setForm({ ...form, credential_id: v === NO_CREDENTIAL ? '' : v })
                 }}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CREDENTIAL}>未选择</SelectItem>
+                  {credentialOptions.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} · {c.provider}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label>API Base URL</Label>
-              <Input
-                placeholder="留空使用默认端点"
-                value={form.api_base ?? ''}
-                onChange={(e) => {
-                  setForm({ ...form, api_base: e.target.value })
-                }}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>模型类型</Label>
-              <div className="flex gap-4">
-                {(['text', 'image', 'image_gen', 'video'] as ModelType[]).map((t) => (
-                  <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
-                    <Checkbox
-                      checked={(form.model_types ?? []).includes(t)}
-                      onCheckedChange={() => {
-                        toggleType(t)
-                      }}
-                    />
-                    {MODEL_TYPE_LABELS[t]}
-                  </label>
-                ))}
+            {!editing ? (
+              <div className="grid gap-1.5">
+                <Label>模型类型</Label>
+                <div className="flex gap-4">
+                  {(['text', 'image', 'image_gen', 'video'] as ModelType[]).map((t) => (
+                    <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
+                      <Checkbox
+                        checked={form.model_types.includes(t)}
+                        onCheckedChange={() => {
+                          toggleType(t)
+                        }}
+                      />
+                      {MODEL_TYPE_LABELS[t]}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <DialogFooter>
@@ -409,7 +473,7 @@ export function ModelTab(): React.JSX.Element {
             </Button>
             <Button onClick={handleSubmit} disabled={isSaving}>
               {isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-              {editingId ? '保存' : '创建'}
+              {editing ? '保存' : '创建'}
             </Button>
           </DialogFooter>
         </DialogContent>

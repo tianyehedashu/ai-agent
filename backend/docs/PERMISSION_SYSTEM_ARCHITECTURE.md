@@ -437,7 +437,7 @@ async def get_agent(
 
 ## AI Gateway：模型与路由
 
-本节描述 AI Gateway 管理面中 **GatewayModel**（模型注册表）与 **GatewayRoute**（路由配置）的**数据来源**、管理 UI / API **建议展示字段**，以及**操作权限**；并与 Agent 域 **UserModel** 区分。
+本节描述 AI Gateway 管理面中 **GatewayModel**（模型注册表）与 **GatewayRoute**（路由配置）的**数据来源**、管理 UI / API **建议展示字段**，以及**操作权限**。
 
 ### 概念区分
 
@@ -445,11 +445,17 @@ async def get_agent(
 |------|------|------|
 | **GatewayModel** | `domains/gateway/infrastructure/models/gateway_model.py` | 虚拟模型名映射到真实模型、provider 与团队/系统凭据 |
 | **GatewayRoute** | `domains/gateway/infrastructure/models/gateway_route.py` | 虚拟模型名映射到主备 `GatewayModel.name` 列表、三类 fallback、路由策略 |
-| **UserModel** | Agent 域 | 用户个人/匿名自定义模型，见 `domains/agent/presentation/user_model_router.py`，与网关团队模型不同线 |
+| **Personal GatewayModel** | personal team 的 `gateway_models` | 用户自有模型；管理面 `GET/POST /gateway/my-models`；聊天选择器经 `GET /gateway/models/available` |
 
 ### 数据来源
 
-**模型（GatewayModel）**
+**个人模型（personal team GatewayModel）**
+
+- **数据库**：`gateway_models` 中 `team_id` = 用户 personal team；须绑定 `credential_id`（user scope 凭据，见 `/my-credentials`）。
+- **管理 API**：`GET/POST/PATCH/DELETE /api/v1/gateway/my-models`（`RequiredAuthUser`，不依赖 `X-Team-Id`）。
+- **历史迁移**：原 `user_models` 表数据经 Alembic 一次性迁入 personal team 后已 DROP。
+
+**模型（GatewayModel，团队/系统）**
 
 - **数据库**（权威）：表 `gateway_models`，`GatewayModelRepository.list_for_team` 合并 `team_id IS NULL`（系统/全局）与当前团队行；团队行排序优先。
 - **配置同步**：`domains/gateway/application/config_catalog_sync.py` 将 `app.toml` 的 `models.available` 幂等写入 `team_id` 为 NULL 的全局行；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
@@ -459,7 +465,7 @@ async def get_agent(
 
 - **仅数据库**：`gateway_routes`，`GatewayRouteRepository.list_for_team` 同样合并系统级与团队级；无 app.toml 自动同步；写操作后 `reload_litellm_router`。
 
-**与聊天选模型的关系**：聊天侧「可用模型」常来自 UserModel + 系统目录（如 `GET .../user-models/available`），与网关控制台 `GET /gateway/models` 列表 API 不同，目录能力可能与同一套 app 配置相关。
+**与聊天选模型的关系**：聊天侧「可用模型」来自系统目录（`ModelCatalogPort.list_visible_models`）+ personal team `gateway_models`（`list_personal_models_for_selector`）；统一经 `GET /api/v1/gateway/models/available`。团队控制台列表为 `GET /gateway/models`（`CurrentTeam`）。
 
 ```mermaid
 flowchart LR
@@ -504,10 +510,15 @@ flowchart LR
 | `POST /my-credentials` | `RequiredAuthUser` | 创建用户私有凭据 |
 | `PATCH /my-credentials/{credential_id}` | `RequiredAuthUser` | 更新本人凭据 |
 | `DELETE /my-credentials/{credential_id}` | `RequiredAuthUser` | 删除本人凭据（若仍被 `gateway_models` 引用则 409） |
+| `GET /my-models` | `RequiredAuthUser` | 列出 personal team 注册模型 |
+| `POST /my-models` | `RequiredAuthUser` | 创建个人模型（须 user 凭据） |
+| `PATCH /my-models/{model_id}` | `RequiredAuthUser` | 更新个人模型 |
+| `DELETE /my-models/{model_id}` | `RequiredAuthUser` | 删除个人模型 |
+| `POST /my-models/{model_id}/test` | `RequiredAuthUser` | 个人模型连通性测试 |
 
 `RequiredTeamAdmin`：`require_team_admin` = `_require_team_role("owner", "admin")` 或 `is_platform_admin`。
 
-**前端对齐**：`frontend/src/hooks/use-gateway-permission.ts` 中 `canWrite` 与上述 **团队 Gateway 管理**写操作一致；`member` 仅应使用只读 UI（隐藏或禁用创建/编辑/删除）。**设置 › 提供商凭据**（`/my-credentials`）仅要求已登录本人，**不得**套用 `canWrite`（团队 admin）语义。
+**前端对齐**：`frontend/src/hooks/use-gateway-permission.ts` 中 `canWrite` 与上述 **团队 Gateway 管理**写操作一致；`member` 仅应使用只读 UI（隐藏或禁用创建/编辑/删除）。**个人 user scope 凭据**（`GET/POST /api/v1/gateway/my-credentials`，UI 在 **`/gateway/credentials`** 或复用 `PersonalCredentialsPanel`）仅要求已登录本人，**不得**套用 `canWrite`（团队 admin）语义。
 
 ## 数据权限处理流程
 

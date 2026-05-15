@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.application import AgentUseCase
+from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
@@ -64,16 +64,18 @@ class ChatUseCase:
         session_use_case_factory: Callable[[AsyncSession], SessionApplicationPort],
         checkpointer: LangGraphCheckpointer | None = None,
         model_catalog: ModelCatalogPort | None = None,
-        user_model_use_case: UserModelUseCase | None = None,
+        model_resolution_use_case: ChatModelResolutionUseCase | None = None,
     ) -> None:
         self.db = db
         self.llm_gateway = LLMGateway(config=settings, model_catalog=model_catalog)
         self._model_catalog = model_catalog
-        if user_model_use_case is None:
+        if model_resolution_use_case is None:
             if model_catalog is None:
-                raise ValueError("ChatUseCase requires model_catalog when user_model_use_case is omitted")
-            user_model_use_case = UserModelUseCase(db, catalog=model_catalog)
-        self._user_models = user_model_use_case
+                raise ValueError(
+                    "ChatUseCase requires model_catalog when model_resolution_use_case is omitted"
+                )
+            model_resolution_use_case = ChatModelResolutionUseCase(db, catalog=model_catalog)
+        self._model_resolution = model_resolution_use_case
         self.tool_registry = ToolRegistry()
         self.checkpointer = checkpointer or LangGraphCheckpointer(storage_type="postgres")
         self.session_use_case = session_use_case
@@ -410,13 +412,7 @@ class ChatUseCase:
                 sid = uuid.UUID(ref)
             except ValueError:
                 return ref
-            row = await self._user_models.repo.get_owned(sid)
-            if (
-                row
-                and row.is_active
-                and "text" in list(row.model_types or [])
-                and row.last_test_status != "failed"
-            ):
+            if await self._model_resolution.is_valid_text_personal_model_ref(sid):
                 return ref
         allowed = await self._visible_text_system_ids()
         base = await self._get_agent_config(agent_id)
@@ -427,13 +423,7 @@ class ChatUseCase:
             uid = uuid.UUID(str(agent_litellm))
         except (ValueError, AttributeError, TypeError):
             return None
-        row = await self._user_models.repo.get_owned(uid)
-        if (
-            row
-            and row.is_active
-            and "text" in list(row.model_types or [])
-            and row.last_test_status != "failed"
-        ):
+        if await self._model_resolution.is_valid_text_personal_model_ref(uid):
             return str(uid)
         return None
 
@@ -515,10 +505,10 @@ class ChatUseCase:
         image_gen_strength: float | None,
         is_new_session: bool,
     ) -> AsyncGenerator[AgentEvent, None]:
-        allowed = await self._user_models.visible_image_gen_system_model_ids()
+        allowed = await self._model_resolution.visible_image_gen_system_model_ids()
         picked_ref = await self._pick_image_gen_model_ref(model_ref, session)
         try:
-            resolved = await self._user_models.resolve_image_gen_model_for_chat(
+            resolved = await self._model_resolution.resolve_image_gen_model_for_chat(
                 picked_ref,
                 allowed_image_gen_system_ids=allowed,
             )
@@ -650,7 +640,7 @@ class ChatUseCase:
         """准备 Agent 引擎"""
         allowed = await self._visible_text_system_ids()
         picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id)
-        resolved = await self._user_models.resolve_text_chat_model(
+        resolved = await self._model_resolution.resolve_text_chat_model(
             picked,
             allowed_text_system_ids=allowed,
         )

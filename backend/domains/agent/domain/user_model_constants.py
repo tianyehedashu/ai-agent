@@ -1,23 +1,7 @@
-"""用户模型（BYOK）接入通道标识。
+"""个人模型 provider 枚举（re-export，权威在 gateway.domain.types）。"""
 
-与 LiteLLM 路由 ``provider`` 段及设置页选项一致；供 Presentation / Application 共用，
-避免在 ``user_model_use_case`` 模块上产生 presentation 依赖。
+from domains.gateway.domain.types import PERSONAL_MODEL_PROVIDERS
 
-与 Gateway ``USER_GATEWAY_CREDENTIAL_PROVIDERS``（``domains.gateway.domain.types``）的
-关系：后者约束 **用户级 Gateway 凭据** 可写 API 的枚举，**不含** ``custom``；
-用户模型允许 ``custom``，表示自定义 Base URL + 模型 ID 组合。
-"""
-
-USER_MODEL_VALID_PROVIDERS: frozenset[str] = frozenset(
-    {
-        "openai",
-        "deepseek",
-        "dashscope",
-        "anthropic",
-        "zhipuai",
-        "volcengine",
-        "custom",
-    }
-)
+USER_MODEL_VALID_PROVIDERS = PERSONAL_MODEL_PROVIDERS
 
 __all__ = ["USER_MODEL_VALID_PROVIDERS"]

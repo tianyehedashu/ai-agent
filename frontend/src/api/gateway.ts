@@ -6,7 +6,7 @@
  */
 
 import { apiClient } from '@/api/client'
-import type { ModelTestStatus } from '@/types/user-model'
+import type { AvailableModelsResponse, ModelTestStatus, ModelType } from '@/types/user-model'
 
 // ============================
 // 模型连通性测试（与 backend model_test_constants 对齐）
@@ -146,10 +146,51 @@ export interface GatewayModelTestResult {
   success: boolean
   message: string
   model: string
-  status: 'success' | 'failed'
+  status: string
   tested_at: string
-  reason?: string | null
+  reason: string | null
   response_preview?: string
+}
+
+/** GET /my-models 列表项（与模型选择器 personal 段形状对齐） */
+export interface PersonalGatewayModel {
+  id: string
+  user_id: string | null
+  anonymous_user_id: string | null
+  display_name: string
+  provider: string
+  model_id: string
+  api_key_masked: string | null
+  has_api_key: boolean
+  api_base: string | null
+  credential_id: string
+  model_types: ModelType[]
+  config: Record<string, unknown> | null
+  is_active: boolean
+  is_system: boolean
+  capability: string
+  name: string
+  last_test_status: ModelTestStatus
+  last_tested_at: string | null
+  last_test_reason: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface PersonalGatewayModelCreateBody {
+  display_name: string
+  provider: string
+  model_id: string
+  credential_id: string
+  model_types: ModelType[]
+  tags?: Record<string, unknown> | null
+}
+
+export interface PersonalGatewayModelUpdateBody {
+  display_name?: string
+  model_id?: string
+  credential_id?: string
+  is_active?: boolean
 }
 
 export interface GatewayModelPreset {
@@ -378,6 +419,8 @@ export const gatewayApi = {
 
   listCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/credentials`),
   getCredential: (id: string) => apiClient.get<ProviderCredential>(`${base}/credentials/${id}`),
+  revealCredential: (id: string) =>
+    apiClient.get<{ api_key: string }>(`${base}/credentials/${id}/reveal`),
   createCredential: (body: {
     provider: string
     name: string
@@ -392,6 +435,8 @@ export const gatewayApi = {
   deleteCredential: (id: string) => apiClient.delete<unknown>(`${base}/credentials/${id}`),
 
   listMyCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/my-credentials`),
+  revealMyCredential: (id: string) =>
+    apiClient.get<{ api_key: string }>(`${base}/my-credentials/${id}/reveal`),
   createMyCredential: (body: {
     provider: string
     name: string
@@ -402,6 +447,28 @@ export const gatewayApi = {
   updateMyCredential: (id: string, body: GatewayCredentialUpdateBody) =>
     apiClient.patch<ProviderCredential>(`${base}/my-credentials/${id}`, body),
   deleteMyCredential: (id: string) => apiClient.delete<unknown>(`${base}/my-credentials/${id}`),
+
+  listMyModels: (params?: { provider?: string }) =>
+    apiClient.get<PersonalGatewayModel[]>(`${base}/my-models`, params),
+  createMyModel: (body: PersonalGatewayModelCreateBody) =>
+    apiClient.post<PersonalGatewayModel[]>(`${base}/my-models`, body),
+  updateMyModel: (id: string, body: PersonalGatewayModelUpdateBody) =>
+    apiClient.patch<PersonalGatewayModel>(`${base}/my-models/${id}`, body),
+  deleteMyModel: (id: string) => apiClient.delete<unknown>(`${base}/my-models/${id}`),
+  testMyModel: (id: string) =>
+    apiClient.post<GatewayModelTestResult>(`${base}/my-models/${id}/test`, {}),
+
+  listAvailableModels: (
+    type?: ModelType,
+    provider?: string,
+    options?: { mode?: 'chat' | 'image_gen' | 'video' }
+  ) => {
+    const search: Record<string, string> = {}
+    if (type) search.type = type
+    if (provider) search.provider = provider
+    if (options?.mode) search.mode = options.mode
+    return apiClient.get<AvailableModelsResponse>(`${base}/models/available`, search)
+  },
 
   listModels: (params?: { provider?: string; credential_id?: string }) =>
     apiClient.get<GatewayModel[]>(`${base}/models`, params),

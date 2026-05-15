@@ -15,6 +15,7 @@
 src/
 ├── api/           # API 调用层
 ├── components/    # 组件 (ui/ layout/ shared/)
+├── features/      # 按功能分包（如 gateway-credentials、gateway-models）；供页面组合，避免在 settings 重复实现 Gateway UI
 ├── hooks/         # 自定义 Hooks
 ├── lib/           # 工具函数 (utils.ts)
 ├── pages/         # 页面组件
@@ -22,13 +23,14 @@ src/
 └── types/         # TypeScript 类型
 ```
 
-| 目录             | 职责                   |
-| ---------------- | ---------------------- |
-| `api/`           | HTTP 请求封装          |
-| `components/ui/` | 基础 UI (Button, Card) |
-| `hooks/`         | 可复用逻辑             |
-| `stores/`        | 全局状态               |
-| `types/`         | 类型定义               |
+| 目录             | 职责                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| `api/`           | HTTP 请求封装                                                                                     |
+| `features/`      | 可复用业务块（Gateway 个人凭据/模型等）；**不再**在 `pages/settings/components` 内嵌凭据/模型 Tab |
+| `components/ui/` | 基础 UI (Button, Card)                                                                            |
+| `hooks/`         | 可复用逻辑                                                                                        |
+| `stores/`        | 全局状态                                                                                          |
+| `types/`         | 类型定义                                                                                          |
 
 ## TypeScript 规范
 
@@ -49,6 +51,8 @@ function process(data: unknown): User {
   return data
 }
 ```
+
+路径别名：`@/*` 映射 `src/`；`@/features/*` 显式映射 `src/features/*`（见根目录 `tsconfig.json`）。业务组件优先 `@/features/...`，避免在 `pages/settings/components` 重复实现已迁入 Gateway 的凭据/模型 UI。
 
 ## React 组件
 

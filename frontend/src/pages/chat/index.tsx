@@ -4,8 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Wrench } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 
+import { gatewayApi } from '@/api/gateway'
 import { sessionApi } from '@/api/session'
-import { userModelApi } from '@/api/userModel'
 import { videoTaskApi } from '@/api/videoTask'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
 import { SessionNotice } from '@/components/chat/session-notice'
@@ -43,8 +43,8 @@ export default function ChatPage(): React.JSX.Element {
   const [verboseGatewayLog, setVerboseGatewayLog] = useState(false)
 
   const { data: availableTextModels } = useQuery({
-    queryKey: ['user-models', 'available', 'text'],
-    queryFn: () => userModelApi.listAvailable('text'),
+    queryKey: ['gateway-models-available', 'text'],
+    queryFn: () => gatewayApi.listAvailableModels('text'),
     staleTime: 30_000,
   })
 
@@ -210,7 +210,7 @@ export default function ChatPage(): React.JSX.Element {
 
     if (creativeMode === 'image_gen') {
       const defaultImg = (
-        await userModelApi.listAvailable('image_gen', undefined, { mode: 'image_gen' })
+        await gatewayApi.listAvailableModels('image_gen', undefined, { mode: 'image_gen' })
       ).default_for_image_gen?.id
       const modelRef = selectedImageGenModelRef ?? defaultImg ?? undefined
       await sendMessage(message, {

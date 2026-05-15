@@ -1,7 +1,7 @@
 """
 ProviderCredential Model - 统一 LLM 提供商凭据模型
 
-替代原有的 UserProviderConfig 与 UserModel.api_key_encrypted，
+替代原有的 UserProviderConfig 与历史 user_models.api_key_encrypted，
 为 system / team / user 三级作用域提供统一的凭据池。
 
 GatewayModel.credential_id 引用此表，使路由配置不需要内嵌 api_key。
@@ -84,11 +84,6 @@ class ProviderCredential(BaseModel):
         UUID(as_uuid=True),
         nullable=True,
         comment="迁移自 user_provider_configs 的源记录 ID",
-    )
-    legacy_user_model_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        nullable=True,
-        comment="迁移自 user_models 的源记录 ID",
     )
 
     __table_args__ = (

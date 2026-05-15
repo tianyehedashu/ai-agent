@@ -40,7 +40,6 @@ from domains.agent.presentation.product_info_router import router as product_inf
 from domains.agent.presentation.provider_config_router import router as provider_config_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
-from domains.agent.presentation.user_model_router import router as user_model_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
 from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
@@ -607,13 +606,6 @@ app.include_router(
     product_info_router,
     prefix=f"{api_router_prefix}/product-info",
     tags=["Product Info"],
-)
-
-# 用户模型管理
-app.include_router(
-    user_model_router,
-    prefix=f"{api_router_prefix}/user-models",
-    tags=["User Models"],
 )
 
 # AI Gateway 团队 API（/api/v1/gateway/teams*，由 tenancy 域实现）

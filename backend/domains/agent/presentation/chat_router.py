@@ -18,8 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import ChatUseCase
+from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase
@@ -44,14 +44,14 @@ def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCas
     session_service = SessionUseCase(db, sandbox_service=sandbox_service)
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
-    user_models = UserModelUseCase(db, catalog=catalog)
+    model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
     return ChatUseCase(
         db,
         session_use_case=session_service,
         session_use_case_factory=SessionUseCase,
         checkpointer=checkpointer,
         model_catalog=catalog,
-        user_model_use_case=user_models,
+        model_resolution_use_case=model_resolution,
     )
 
 

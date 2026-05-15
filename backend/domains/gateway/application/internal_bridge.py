@@ -12,7 +12,6 @@ Internal Bridge - GatewayProxyProtocol 的实现
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
@@ -60,12 +59,6 @@ def _merge_gateway_ctx_metadata(body: dict[str, Any], ctx: GatewayCallContext) -
 
 def _encryption_key() -> str:
     return derive_encryption_key(settings.secret_key.get_secret_value())
-
-
-@asynccontextmanager
-async def _session_scope() -> AsyncGenerator[AsyncSession, None]:
-    async with get_session_context() as session:
-        yield session
 
 
 async def _ensure_system_vkey(
@@ -174,7 +167,7 @@ class GatewayBridge:
 
         _merge_gateway_ctx_metadata(body, ctx)
 
-        async with _session_scope() as session:
+        async with get_session_context() as session:
             team_id = ctx.team_id
             if team_id is None:
                 team = await TeamService(session).ensure_personal_team(ctx.user_id)
@@ -244,7 +237,7 @@ class GatewayBridge:
 
         _merge_gateway_ctx_metadata(body, ctx)
 
-        async with _session_scope() as session:
+        async with get_session_context() as session:
             team_id = ctx.team_id
             if team_id is None:
                 team = await TeamService(session).ensure_personal_team(ctx.user_id)

@@ -172,7 +172,7 @@ class ProductImageGenTaskUseCase:
         """创建 8 图任务并异步启动图片生成。
 
         api_key_override / api_base_override 由 Router 通过
-        UserModelUseCase.resolve_image_gen_model 解析后传入。
+        ChatModelResolutionUseCase.resolve_image_gen_model 解析后传入。
         """
         task = await self.repo.create(
             user_id=user_id,

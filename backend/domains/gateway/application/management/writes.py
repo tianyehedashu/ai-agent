@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings as _settings
-from domains.agent.infrastructure.llm.litellm_model_id import build_litellm_model_id
 from domains.gateway.application.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
 )
@@ -20,6 +19,7 @@ from domains.gateway.domain.errors import (
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
+from domains.gateway.domain.types import PERSONAL_MODEL_PROVIDERS, PERSONAL_MODEL_TYPES
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -34,6 +34,8 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
 )
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import decrypt_value, derive_encryption_key
+from libs.exceptions import ValidationError
+from libs.llm.litellm_model_id import build_litellm_model_id
 from libs.model_connectivity import truncate_last_test_reason
 from utils.logging import get_logger
 
@@ -59,30 +61,218 @@ def _gateway_image_probe_size(provider: str) -> str:
     return "1024x1024"
 
 
+async def _record_gateway_model_test_failure(
+    models: GatewayModelRepository,
+    model_id: uuid.UUID,
+    tested_at: datetime,
+    msg: str,
+    litellm_model: str,
+) -> dict[str, Any]:
+    reason = truncate_last_test_reason(msg)
+    await models.update(
+        model_id,
+        last_test_status="failed",
+        last_tested_at=tested_at,
+        last_test_reason=reason,
+    )
+    return {
+        "success": False,
+        "message": msg,
+        "model": litellm_model,
+        "status": "failed",
+        "tested_at": tested_at,
+        "reason": reason,
+    }
+
+
+async def _record_gateway_model_test_success(
+    models: GatewayModelRepository,
+    model_id: uuid.UUID,
+    tested_at: datetime,
+    litellm_model: str,
+    *,
+    response_preview: str | None = None,
+) -> dict[str, Any]:
+    await models.update(
+        model_id,
+        last_test_status="success",
+        last_tested_at=tested_at,
+        last_test_reason=None,
+    )
+    payload: dict[str, Any] = {
+        "success": True,
+        "message": "连接成功",
+        "model": litellm_model,
+        "status": "success",
+        "tested_at": tested_at,
+        "reason": None,
+    }
+    if response_preview is not None:
+        payload["response_preview"] = response_preview
+    return payload
+
+
+def _image_generation_probe_preview(img_response: Any) -> str:
+    preview = ""
+    with suppress(Exception):
+        data = getattr(img_response, "data", None)
+        if data is None and isinstance(img_response, dict):
+            raw = img_response.get("data")
+            data = raw if isinstance(raw, list) else None
+        if data and len(data) > 0:
+            first = data[0]
+            url: str | None
+            b64: str | None
+            if isinstance(first, dict):
+                url = first.get("url") if isinstance(first.get("url"), str) else None
+                b64 = (
+                    first.get("b64_json")
+                    if isinstance(first.get("b64_json"), str)
+                    else None
+                )
+            else:
+                url = getattr(first, "url", None)
+                b64 = getattr(first, "b64_json", None)
+                url = url if isinstance(url, str) else None
+                b64 = b64 if isinstance(b64, str) else None
+            if url:
+                preview = url[:100]
+            elif b64:
+                preview = f"{b64[:40]}…" if len(b64) > 40 else b64
+    return preview
+
+
 class GatewayManagementWriteService:
     """管理 API 状态变更，经仓储与领域服务落库"""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-        self._team_svc = TeamService(session)
         self._vkeys = VirtualKeyRepository(session)
         self._creds = ProviderCredentialRepository(session)
         self._models = GatewayModelRepository(session)
         self._routes = GatewayRouteRepository(session)
         self._budgets = BudgetRepository(session)
         self._alerts = GatewayAlertRepository(session)
+        self._teams = TeamService(session)
 
-    async def update_team(
+    async def _ensure_personal_team_id(self, user_id: uuid.UUID) -> uuid.UUID:
+        personal_team = await self._teams.ensure_personal_team(user_id)
+        return personal_team.id
+
+    async def _assert_user_owns_credential(
+        self, user_id: uuid.UUID, credential_id: uuid.UUID
+    ) -> None:
+        cred = await self._creds.get(credential_id)
+        if cred is None or cred.scope != "user" or cred.scope_id != user_id:
+            raise CredentialNotFoundError(str(credential_id))
+
+    async def create_personal_models(
         self,
-        team_id: uuid.UUID,
+        user_id: uuid.UUID,
         *,
-        name: str | None = None,
-        settings: dict[str, Any] | None = None,
-    ) -> Any | None:
-        return await self._team_svc.update_team(team_id, name=name, settings=settings)
+        display_name: str,
+        provider: str,
+        model_id: str,
+        credential_id: uuid.UUID,
+        model_types: list[str],
+        tags: dict[str, Any] | None = None,
+    ) -> list[Any]:
+        from domains.gateway.application.personal_models import (
+            capability_for_model_type,
+            personal_model_alias,
+            tags_for_model_type,
+        )
 
-    async def delete_shared_team(self, team_id: uuid.UUID) -> None:
-        await self._team_svc.delete_shared_team(team_id)
+        if provider not in PERSONAL_MODEL_PROVIDERS:
+            raise ValidationError(f"不支持的提供商: {provider}")
+        if not model_types:
+            raise ValidationError("model_types 不能为空")
+        invalid = set(model_types) - PERSONAL_MODEL_TYPES
+        if invalid:
+            raise ValidationError(f"无效的模型类型: {sorted(invalid)}")
+
+        await self._assert_user_owns_credential(user_id, credential_id)
+        team_id = await self._ensure_personal_team_id(user_id)
+        real_model = build_litellm_model_id(provider, model_id)
+        created: list[Any] = []
+        for idx, mtype in enumerate(model_types):
+            cap = capability_for_model_type(mtype)
+            alias = personal_model_alias(display_name, mtype, suffix=idx if idx else 0)
+            suffix = 0
+            while await self._models.name_exists_on_team(team_id, alias):
+                suffix += 1
+                alias = personal_model_alias(display_name, mtype, suffix=suffix)
+
+            mtags = tags_for_model_type(mtype)
+            mtags["display_name"] = display_name
+            if tags:
+                mtags.update({k: v for k, v in tags.items() if v is not None})
+
+            row = await self._models.create(
+                team_id=team_id,
+                name=alias,
+                capability=cap,
+                real_model=real_model,
+                credential_id=credential_id,
+                provider=provider,
+                weight=1,
+                rpm_limit=None,
+                tpm_limit=None,
+                tags=mtags,
+            )
+            created.append(row)
+
+        await self.reload_litellm_router()
+        return created
+
+    async def update_personal_model(
+        self,
+        user_id: uuid.UUID,
+        model_id: uuid.UUID,
+        fields: dict[str, Any],
+    ) -> Any:
+        team_id = await self._ensure_personal_team_id(user_id)
+        existing = await self._models.get_on_team(model_id, team_id)
+        if existing is None:
+            raise ManagementEntityNotFoundError("model", str(model_id))
+
+        update_fields: dict[str, Any] = {}
+        if "credential_id" in fields and fields["credential_id"] is not None:
+            await self._assert_user_owns_credential(user_id, fields["credential_id"])
+            update_fields["credential_id"] = fields["credential_id"]
+        if fields.get("model_id") is not None:
+            update_fields["real_model"] = build_litellm_model_id(
+                existing.provider, str(fields["model_id"])
+            )
+        if fields.get("is_active") is not None:
+            update_fields["enabled"] = fields["is_active"]
+        if fields.get("display_name") is not None:
+            merged_tags = dict(existing.tags or {})
+            merged_tags["display_name"] = fields["display_name"]
+            update_fields["tags"] = merged_tags
+
+        if not update_fields:
+            return existing
+
+        updated = await self._models.update(model_id, **update_fields)
+        if updated is None:
+            raise ManagementEntityNotFoundError("model", str(model_id))
+        await self.reload_litellm_router()
+        return updated
+
+    async def delete_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> None:
+        team_id = await self._ensure_personal_team_id(user_id)
+        existing = await self._models.get_on_team(model_id, team_id)
+        if existing is None:
+            raise ManagementEntityNotFoundError("model", str(model_id))
+        await self._models.delete(model_id)
+        await self.reload_litellm_router()
+
+    async def test_personal_model(
+        self, user_id: uuid.UUID, model_id: uuid.UUID
+    ) -> dict[str, Any]:
+        team_id = await self._ensure_personal_team_id(user_id)
+        return await self.test_gateway_model(model_id, team_id=team_id)
 
     async def create_virtual_key(
         self,
@@ -486,40 +676,16 @@ class GatewayManagementWriteService:
 
         if capability not in GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES:
             msg = f"capability={capability} 暂不支持连通性测试"
-            reason = truncate_last_test_reason(msg)
-            await self._models.update(
-                model_id,
-                last_test_status="failed",
-                last_tested_at=tested_at,
-                last_test_reason=reason,
+            return await _record_gateway_model_test_failure(
+                self._models, model_id, tested_at, msg, litellm_model
             )
-            return {
-                "success": False,
-                "message": msg,
-                "model": litellm_model,
-                "status": "failed",
-                "tested_at": tested_at,
-                "reason": reason,
-            }
 
         credential = await self._creds.get(existing.credential_id)
         if credential is None:
             msg = "关联凭据已不存在"
-            reason = truncate_last_test_reason(msg)
-            await self._models.update(
-                model_id,
-                last_test_status="failed",
-                last_tested_at=tested_at,
-                last_test_reason=reason,
+            return await _record_gateway_model_test_failure(
+                self._models, model_id, tested_at, msg, litellm_model
             )
-            return {
-                "success": False,
-                "message": msg,
-                "model": litellm_model,
-                "status": "failed",
-                "tested_at": tested_at,
-                "reason": reason,
-            }
 
         encryption_key = derive_encryption_key(_settings.secret_key.get_secret_value())
         try:
@@ -527,21 +693,9 @@ class GatewayManagementWriteService:
         except Exception as exc:  # pragma: no cover - 极端配置异常
             logger.warning("Failed to decrypt credential %s: %s", credential.id, exc)
             msg = f"凭据解密失败: {exc}"
-            reason = truncate_last_test_reason(msg)
-            await self._models.update(
-                model_id,
-                last_test_status="failed",
-                last_tested_at=tested_at,
-                last_test_reason=reason,
+            return await _record_gateway_model_test_failure(
+                self._models, model_id, tested_at, msg, litellm_model
             )
-            return {
-                "success": False,
-                "message": msg,
-                "model": litellm_model,
-                "status": "failed",
-                "tested_at": tested_at,
-                "reason": reason,
-            }
 
         api_base = credential.api_base
         # 延迟导入 litellm，避免在模块加载阶段拉起重型依赖。
@@ -564,21 +718,13 @@ class GatewayManagementWriteService:
                 preview = ""
                 with suppress(Exception):
                     preview = (response.choices[0].message.content or "")[:100]
-                await self._models.update(
+                return await _record_gateway_model_test_success(
+                    self._models,
                     model_id,
-                    last_test_status="success",
-                    last_tested_at=tested_at,
-                    last_test_reason=None,
+                    tested_at,
+                    litellm_model,
+                    response_preview=preview,
                 )
-                return {
-                    "success": True,
-                    "message": "连接成功",
-                    "model": litellm_model,
-                    "status": "success",
-                    "tested_at": tested_at,
-                    "reason": None,
-                    "response_preview": preview,
-                }
 
             if capability == "image":
                 img_size = _gateway_image_probe_size(existing.provider)
@@ -591,47 +737,14 @@ class GatewayManagementWriteService:
                     api_base=api_base,
                     timeout=60,
                 )
-                preview = ""
-                with suppress(Exception):
-                    data = getattr(img_response, "data", None)
-                    if data is None and isinstance(img_response, dict):
-                        raw = img_response.get("data")
-                        data = raw if isinstance(raw, list) else None
-                    if data and len(data) > 0:
-                        first = data[0]
-                        url: str | None
-                        b64: str | None
-                        if isinstance(first, dict):
-                            url = first.get("url") if isinstance(first.get("url"), str) else None
-                            b64 = (
-                                first.get("b64_json")
-                                if isinstance(first.get("b64_json"), str)
-                                else None
-                            )
-                        else:
-                            url = getattr(first, "url", None)
-                            b64 = getattr(first, "b64_json", None)
-                            url = url if isinstance(url, str) else None
-                            b64 = b64 if isinstance(b64, str) else None
-                        if url:
-                            preview = url[:100]
-                        elif b64:
-                            preview = f"{b64[:40]}…" if len(b64) > 40 else b64
-                await self._models.update(
+                preview = _image_generation_probe_preview(img_response)
+                return await _record_gateway_model_test_success(
+                    self._models,
                     model_id,
-                    last_test_status="success",
-                    last_tested_at=tested_at,
-                    last_test_reason=None,
+                    tested_at,
+                    litellm_model,
+                    response_preview=preview,
                 )
-                return {
-                    "success": True,
-                    "message": "连接成功",
-                    "model": litellm_model,
-                    "status": "success",
-                    "tested_at": tested_at,
-                    "reason": None,
-                    "response_preview": preview,
-                }
 
             if capability == "embedding":
                 await aembedding(
@@ -640,20 +753,9 @@ class GatewayManagementWriteService:
                     api_key=api_key,
                     api_base=api_base,
                 )
-                await self._models.update(
-                    model_id,
-                    last_test_status="success",
-                    last_tested_at=tested_at,
-                    last_test_reason=None,
+                return await _record_gateway_model_test_success(
+                    self._models, model_id, tested_at, litellm_model
                 )
-                return {
-                    "success": True,
-                    "message": "连接成功",
-                    "model": litellm_model,
-                    "status": "success",
-                    "tested_at": tested_at,
-                    "reason": None,
-                }
 
             raise AssertionError(
                 f"test_gateway_model: capability {capability!r} missing probe branch "
@@ -662,21 +764,9 @@ class GatewayManagementWriteService:
         except Exception as exc:
             logger.warning("Gateway model %s connection test failed: %s", model_id, exc)
             msg = f"连接失败: {exc}"
-            reason = truncate_last_test_reason(msg)
-            await self._models.update(
-                model_id,
-                last_test_status="failed",
-                last_tested_at=tested_at,
-                last_test_reason=reason,
+            return await _record_gateway_model_test_failure(
+                self._models, model_id, tested_at, msg, litellm_model
             )
-            return {
-                "success": False,
-                "message": msg,
-                "model": litellm_model,
-                "status": "failed",
-                "tested_at": tested_at,
-                "reason": reason,
-            }
 
     async def create_gateway_route(
         self,

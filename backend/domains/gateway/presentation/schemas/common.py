@@ -232,6 +232,97 @@ class PlatformCredentialStatItem(BaseModel):
     failure_count: int = 0
 
 
+class PersonalModelCreate(BaseModel):
+    """POST /my-credentials 同级的个人模型注册（按 model_type 拆分为多行 gateway_models）。"""
+
+    display_name: str = Field(..., min_length=1, max_length=100)
+    provider: str = Field(..., min_length=1, max_length=50)
+    model_id: str = Field(..., min_length=1, max_length=200)
+    credential_id: uuid.UUID
+    model_types: list[str] = Field(default_factory=lambda: ["text"])
+    tags: dict[str, Any] | None = None
+
+
+class PersonalModelUpdate(BaseModel):
+    display_name: str | None = Field(None, min_length=1, max_length=100)
+    model_id: str | None = Field(None, min_length=1, max_length=200)
+    credential_id: uuid.UUID | None = None
+    is_active: bool | None = None
+    enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _normalize_enabled(self) -> Self:
+        if self.enabled is not None and self.is_active is None:
+            return self.model_copy(update={"is_active": self.enabled})
+        return self
+
+
+class PersonalModelResponse(BaseModel):
+    """与 ``gateway_model_to_personal_list_item`` 字段对齐的个人模型列表项。"""
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    anonymous_user_id: str | None = None
+    display_name: str
+    provider: str
+    model_id: str
+    api_key_masked: str | None = None
+    has_api_key: bool = True
+    api_base: str | None = None
+    credential_id: uuid.UUID
+    model_types: list[str] = Field(default_factory=list)
+    config: dict[str, Any] | None = None
+    is_active: bool
+    is_system: bool = False
+    capability: str
+    name: str
+    last_test_status: str | None = None
+    last_tested_at: datetime | None = None
+    last_test_reason: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_gateway_model(cls, row: Any) -> Self:
+        from domains.gateway.application.personal_models import gateway_model_to_personal_list_item
+
+        raw = gateway_model_to_personal_list_item(row)
+
+        def _dt(key: str) -> datetime | None:
+            val = raw.get(key)
+            if val is None:
+                return None
+            return datetime.fromisoformat(str(val))
+
+        def _uuid(key: str) -> uuid.UUID | None:
+            val = raw.get(key)
+            return uuid.UUID(str(val)) if val else None
+
+        return cls(
+            id=uuid.UUID(str(raw["id"])),
+            user_id=_uuid("user_id"),
+            anonymous_user_id=raw.get("anonymous_user_id"),
+            display_name=str(raw["display_name"]),
+            provider=str(raw["provider"]),
+            model_id=str(raw["model_id"]),
+            api_key_masked=raw.get("api_key_masked"),
+            has_api_key=bool(raw.get("has_api_key", True)),
+            api_base=raw.get("api_base"),
+            credential_id=uuid.UUID(str(raw["credential_id"])),
+            model_types=list(raw.get("model_types") or []),
+            config=raw.get("config"),
+            is_active=bool(raw["is_active"]),
+            is_system=bool(raw.get("is_system", False)),
+            capability=str(raw["capability"]),
+            name=str(raw["name"]),
+            last_test_status=raw.get("last_test_status"),
+            last_tested_at=_dt("last_tested_at"),
+            last_test_reason=raw.get("last_test_reason"),
+            created_at=_dt("created_at"),
+            updated_at=_dt("updated_at"),
+        )
+
+
 class GatewayModelTestResponse(BaseModel):
     """模型连通性测试响应。
 
@@ -506,6 +597,9 @@ __all__ = [
     "GatewayModelUpdate",
     "GatewayModelUsageSummaryResponse",
     "ManagedCredentialCreate",
+    "PersonalModelCreate",
+    "PersonalModelResponse",
+    "PersonalModelUpdate",
     "PlatformCredentialStatItem",
     "RequestLogDetailResponse",
     "RequestLogListResponse",

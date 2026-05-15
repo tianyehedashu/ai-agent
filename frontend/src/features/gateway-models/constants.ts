@@ -1,0 +1,45 @@
+/** 与 backend GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES 一致 */
+import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway'
+
+export type ModelScopeTab = 'personal' | 'team'
+
+export const MANUAL_PRESET = '__manual__'
+export const NO_CREDENTIAL = '__none__'
+export const FILTER_ALL = '__all__'
+export const FILTER_ALL_STATUS = '__all_status__'
+
+export const CAPABILITIES = [
+  'chat',
+  'embedding',
+  'image',
+  'video_generation',
+  'moderation',
+  'audio_transcription',
+  'audio_speech',
+  'rerank',
+] as const
+
+export const MODEL_TYPE_LABELS: Record<string, string> = {
+  text: '文本',
+  image: '视觉',
+  image_gen: '生图',
+  video: '视频',
+}
+
+export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
+  GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES
+)
+
+export const ROUTING_STRATEGIES = [
+  'simple-shuffle',
+  'least-busy',
+  'usage-based-routing',
+  'latency-based-routing',
+  'cost-based-routing',
+] as const
+
+export type HealthFilter = 'all' | 'success' | 'failed' | 'unknown'
+
+export function parseScopeTab(raw: string | null): ModelScopeTab {
+  return raw === 'personal' || raw === 'team' ? raw : 'team'
+}

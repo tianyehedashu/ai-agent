@@ -22,8 +22,6 @@ from domains.agent.application.product_info_capability_runners import (
     optimize_prompt_for_capability,
     render_meta_prompt,
 )
-from domains.agent.application.product_info_use_case import ProductInfoUseCase
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.agent.domain.product_info.constants import (
     CAPABILITY_DEPENDENCIES,
     CAPABILITY_IDS,
@@ -33,6 +31,7 @@ from domains.agent.domain.product_info.constants import (
 from domains.agent.infrastructure.models.product_info_job_step import (
     ProductInfoJobStepStatus,
 )
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
 from libs.db.permission_context import (
     PermissionContext,

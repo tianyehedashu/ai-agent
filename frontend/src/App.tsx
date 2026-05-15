@@ -15,9 +15,11 @@ import GatewayCredentialDetailPage from '@/pages/gateway/credential-detail'
 import GatewayCredentialsPage from '@/pages/gateway/credentials'
 import GatewayKeysPage from '@/pages/gateway/keys'
 import GatewayLogsPage from '@/pages/gateway/logs'
+import GatewayModelDetailPage from '@/pages/gateway/model-detail'
 import GatewayModelsPage from '@/pages/gateway/models'
 import GatewayOverviewPage from '@/pages/gateway/overview'
 import GatewayPlatformStatsPage from '@/pages/gateway/platform-stats'
+import GatewayRoutesPage from '@/pages/gateway/routes'
 import GatewayTeamsPage from '@/pages/gateway/teams'
 import MCPPage from '@/pages/mcp'
 import SystemMCPPage from '@/pages/mcp/system'
@@ -69,6 +71,8 @@ function App(): React.JSX.Element {
                       element={<GatewayCredentialDetailPage />}
                     />
                     <Route path="models" element={<GatewayModelsPage />} />
+                    <Route path="models/:modelId" element={<GatewayModelDetailPage />} />
+                    <Route path="routes" element={<GatewayRoutesPage />} />
                     <Route path="platform-stats" element={<GatewayPlatformStatsPage />} />
                     <Route path="budgets" element={<GatewayBudgetsPage />} />
                     <Route path="logs" element={<GatewayLogsPage />} />

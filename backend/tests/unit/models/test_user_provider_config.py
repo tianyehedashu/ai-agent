@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-# 预先导入所有模型以初始化 SQLAlchemy 注册表
-from domains.agent.infrastructure.models import Agent, Memory, Session  # pylint: disable=unused-import
+# 预先导入包以初始化 SQLAlchemy 注册表（侧效）
+import domains.agent.infrastructure.models  # noqa: F401
 from domains.agent.infrastructure.models.user_provider_config import UserProviderConfig
 
 

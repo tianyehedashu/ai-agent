@@ -87,6 +87,7 @@ from libs.types import Result
 - **DRY** - 复用现有类型和工具函数
 - **分层** - Presentation / Application / Domain / Infrastructure；Gateway **管理面**在 Application 内以 `management/` 分包读写（`GatewayManagementReadService` / `GatewayManagementWriteService`，与 CQRS 读/写侧对应）；**鉴权与团队解析**用单一 `GatewayAccessUseCase`（与上述服务互补，见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md`）
 - **业务/技术分离** - 业务类型在 `domains/`，纯技术基础设施在 `libs/`
+- **前端** - 个人模型与 BYOK 凭据的 UI 在 **`/gateway/*`** 与 `frontend/src/features/gateway-*`；设置页（`pages/settings`）仅保留账户、API Key、MCP 等，**不**再内嵌凭据/模型 Tab（见 `frontend/docs/CODE_STANDARDS.md`）
 
 ## 详细规范
 

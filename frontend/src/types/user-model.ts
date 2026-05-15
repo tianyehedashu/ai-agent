@@ -1,5 +1,5 @@
 /**
- * User Model Types - 用户模型类型
+ * Model selector types - 模型选择器类型（系统 + personal gateway_models）
  */
 
 export type ModelType = 'text' | 'image' | 'image_gen' | 'video'
@@ -82,27 +82,6 @@ export interface AvailableModelsResponse {
   default_for_vision?: DefaultModelInfo
   /** 图像生成默认模型（未选时展示） */
   default_for_image_gen?: DefaultModelInfo
-}
-
-export interface CreateUserModelBody {
-  display_name: string
-  provider: string
-  model_id: string
-  api_key?: string | null
-  api_base?: string | null
-  model_types?: ModelType[]
-  config?: UserModelConfig | null
-}
-
-export interface UpdateUserModelBody {
-  display_name?: string
-  provider?: string
-  model_id?: string
-  api_key?: string | null
-  api_base?: string | null
-  model_types?: ModelType[]
-  config?: UserModelConfig | null
-  is_active?: boolean
 }
 
 export interface TestConnectionResult {

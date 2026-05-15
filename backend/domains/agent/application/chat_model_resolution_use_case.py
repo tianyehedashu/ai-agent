@@ -1,0 +1,332 @@
+"""聊天侧模型目录解析（系统目录 + personal gateway_models）。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+import uuid
+
+from bootstrap.config import settings
+from bootstrap.config_loader import app_config
+from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.application.model_selector_reads import (
+    get_default_for_model_type,
+    list_personal_models_for_selector,
+)
+from domains.gateway.application.model_selector_reads import (
+    list_available_models as list_available_models_for_selector,
+)
+from domains.gateway.application.model_selector_reads import (
+    list_available_system_models as list_system_models_for_selector,
+)
+from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
+from libs.db.permission_context import get_permission_context
+from libs.exceptions import ValidationError
+from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
+
+logger = get_logger(__name__)
+
+VALID_MODEL_TYPES = PERSONAL_MODEL_TYPES
+
+
+@dataclass(frozen=True)
+class ResolvedModel:
+    """解析后的模型信息，供 LLMGateway 使用"""
+
+    model: str
+    api_key: str | None = None
+    api_base: str | None = None
+    is_system: bool = True
+
+
+@dataclass(frozen=True)
+class ResolvedImageGenModel:
+    """解析后的图像生成模型信息"""
+
+    provider: str = "volcengine"
+    model: str | None = None
+    api_key: str | None = None
+    api_base: str | None = None
+    is_system: bool = True
+
+
+class ChatModelResolutionUseCase:
+    """运行时模型选择与解析（真源：Gateway 目录 + personal team gateway_models）。"""
+
+    def __init__(self, db: AsyncSession, catalog: ModelCatalogPort) -> None:
+        self.db = db
+        self._catalog = catalog
+
+    @staticmethod
+    def _resolve_user_id(user_id: uuid.UUID | None = None) -> uuid.UUID | None:
+        if user_id is not None:
+            return user_id
+        ctx = get_permission_context()
+        if ctx is None:
+            return None
+        return ctx.user_id
+
+    async def list_models_for_model_selector(
+        self,
+        model_type: str | None = None,
+        *,
+        user_id: uuid.UUID | None = None,
+        limit: int = 100,
+        provider: str | None = None,
+    ) -> list[dict[str, Any]]:
+        uid = self._resolve_user_id(user_id)
+        if uid is None:
+            return []
+        return await list_personal_models_for_selector(
+            self._catalog,
+            uid,
+            model_type=model_type,
+            provider=provider,
+            limit=limit,
+        )
+
+    async def list_available(
+        self,
+        *,
+        model_type: str | None = None,
+        user_id: uuid.UUID | None = None,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        uid = self._resolve_user_id(user_id)
+        return await list_available_models_for_selector(
+            self._catalog,
+            model_type=model_type,
+            user_id=uid,
+            provider=provider,
+        )
+
+    async def is_valid_text_personal_model_ref(
+        self,
+        model_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> bool:
+        uid = self._resolve_user_id(user_id)
+        if uid is None:
+            return False
+        resolution = await self._catalog.resolve_registered_model(
+            uid, model_id, required_model_type="text"
+        )
+        if resolution is None:
+            return False
+        return (
+            resolution.is_active
+            and "text" in resolution.model_types
+            and resolution.last_test_status != "failed"
+        )
+
+    async def _resolve_personal_text(self, model_id: uuid.UUID) -> ResolvedModel | None:
+        uid = self._resolve_user_id()
+        if uid is None:
+            return None
+        resolution = await self._catalog.resolve_registered_model(
+            uid, model_id, required_model_type="text"
+        )
+        if resolution is None:
+            return None
+        if not resolution.is_active:
+            raise ValidationError("该 Gateway 个人模型已停用")
+        if resolution.last_test_status == "failed":
+            raise ValidationError(
+                "该 Gateway 个人模型最近一次连通性测试失败，请先在 Gateway 凭据/模型中修复并测试通过，或选择其他模型。"
+            )
+        if "text" not in resolution.model_types:
+            raise ValidationError("该 Gateway 个人模型不支持对话（text）")
+        return ResolvedModel(
+            model=resolution.litellm_model,
+            api_key=resolution.api_key,
+            api_base=resolution.api_base,
+            is_system=False,
+        )
+
+    async def _resolve_personal_image_gen(
+        self, model_id: uuid.UUID
+    ) -> ResolvedImageGenModel | None:
+        uid = self._resolve_user_id()
+        if uid is None:
+            return None
+        resolution = await self._catalog.resolve_registered_model(
+            uid, model_id, required_model_type="image_gen"
+        )
+        if resolution is None:
+            return None
+        if not resolution.is_active:
+            raise ValidationError("该 Gateway 个人模型已停用")
+        if resolution.last_test_status == "failed":
+            raise ValidationError(
+                "该 Gateway 个人模型最近一次连通性测试失败，请先在 Gateway 凭据/模型中修复并测试通过，或选择其他模型。"
+            )
+        if "image_gen" not in resolution.model_types:
+            raise ValidationError("该 Gateway 个人模型不支持图像生成（image_gen）")
+        bare_model = resolution.litellm_model
+        if "/" in bare_model:
+            bare_model = bare_model.split("/", 1)[1]
+        return ResolvedImageGenModel(
+            provider=resolution.provider,
+            model=bare_model or None,
+            api_key=resolution.api_key,
+            api_base=resolution.api_base,
+            is_system=False,
+        )
+
+    async def resolve_model(self, model_ref: str | None) -> ResolvedModel:
+        if not model_ref:
+            return ResolvedModel(model=settings.default_model, is_system=True)
+
+        if self._is_system_model(model_ref):
+            return ResolvedModel(model=model_ref, is_system=True)
+
+        try:
+            personal_id = uuid.UUID(model_ref)
+        except ValueError:
+            return ResolvedModel(model=model_ref, is_system=True)
+
+        resolved = await self._resolve_personal_text(personal_id)
+        if resolved is not None:
+            return resolved
+        raise ValidationError("Gateway 个人模型不存在或无权使用")
+
+    async def resolve_text_chat_model(
+        self,
+        model_ref: str | None,
+        *,
+        allowed_text_system_ids: frozenset[str],
+    ) -> ResolvedModel:
+        if not model_ref or not str(model_ref).strip():
+            return ResolvedModel(model=settings.default_model, is_system=True)
+
+        ref = str(model_ref).strip()
+        try:
+            personal_id = uuid.UUID(ref)
+        except ValueError:
+            if ref not in allowed_text_system_ids:
+                raise ValidationError(f"模型不在可用列表中: {ref}") from None
+            return ResolvedModel(model=ref, is_system=True)
+
+        resolved = await self._resolve_personal_text(personal_id)
+        if resolved is not None:
+            return resolved
+        raise ValidationError("Gateway 个人模型不存在或无权使用")
+
+    async def list_available_system_models(
+        self,
+        model_type: str | None = None,
+        *,
+        provider: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return await list_system_models_for_selector(
+            self._catalog,
+            model_type=model_type,
+            provider=provider,
+        )
+
+    async def get_default_for_type_async(self, model_type: str) -> dict[str, str] | None:
+        return await get_default_for_model_type(self._catalog, model_type)
+
+    async def resolve_image_gen_model(self, model_ref: str | None) -> ResolvedImageGenModel:
+        if not model_ref:
+            return ResolvedImageGenModel(provider="volcengine")
+
+        team_id = resolve_internal_gateway_team_id()
+        catalog_items = await self._catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type="image_gen",
+        )
+        for item in catalog_items:
+            if str(item.get("id")) == model_ref:
+                info = app_config.models.get_model(model_ref)
+                litellm = (info.litellm_model or info.id) if info else model_ref
+                return ResolvedImageGenModel(
+                    provider=str(item.get("provider") or "volcengine"),
+                    model=litellm,
+                    is_system=True,
+                )
+
+        system_image_models = {
+            m.id: m.provider
+            for m in app_config.models.available
+            if getattr(m, "supports_image_gen", False)
+        }
+        if model_ref in system_image_models:
+            info = app_config.models.get_model(model_ref)
+            litellm = (info.litellm_model or info.id) if info else model_ref
+            return ResolvedImageGenModel(
+                provider=system_image_models[model_ref],
+                model=litellm,
+                is_system=True,
+            )
+
+        try:
+            personal_id = uuid.UUID(model_ref)
+        except ValueError:
+            logger.warning("Unknown image_gen model_ref %s, using default", model_ref)
+            return ResolvedImageGenModel(provider="volcengine")
+
+        resolved = await self._resolve_personal_image_gen(personal_id)
+        if resolved is not None:
+            return resolved
+        raise ValidationError("Gateway 个人模型不存在或无权使用")
+
+    async def visible_image_gen_system_model_ids(self) -> frozenset[str]:
+        team_id = resolve_internal_gateway_team_id()
+        items = await self._catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type="image_gen",
+        )
+        return frozenset(str(m["id"]) for m in items if m.get("id") is not None)
+
+    async def resolve_image_gen_model_for_chat(
+        self,
+        model_ref: str | None,
+        *,
+        allowed_image_gen_system_ids: frozenset[str],
+    ) -> ResolvedImageGenModel:
+        if not model_ref or not str(model_ref).strip():
+            if not allowed_image_gen_system_ids:
+                return ResolvedImageGenModel(provider="volcengine")
+            first = sorted(allowed_image_gen_system_ids)[0]
+            return await self.resolve_image_gen_model(first)
+
+        ref = str(model_ref).strip()
+        try:
+            personal_id = uuid.UUID(ref)
+        except ValueError:
+            if ref not in allowed_image_gen_system_ids:
+                raise ValidationError(f"图像生成模型不在可用列表中: {ref}") from None
+            return await self.resolve_image_gen_model(ref)
+
+        resolved = await self._resolve_personal_image_gen(personal_id)
+        if resolved is not None:
+            return resolved
+        raise ValidationError("Gateway 个人模型不存在或无权使用")
+
+    @staticmethod
+    def _is_system_model(model_ref: str) -> bool:
+        if "/" in model_ref:
+            return True
+        known_prefixes = ("gpt-", "claude-", "o1", "o3")
+        return any(model_ref.startswith(p) for p in known_prefixes)
+
+    @staticmethod
+    def validate_model_types(types: list[str]) -> None:
+        invalid = set(types) - VALID_MODEL_TYPES
+        if invalid:
+            raise ValidationError(f"无效的模型类型: {invalid}")
+
+
+__all__ = [
+    "VALID_MODEL_TYPES",
+    "ChatModelResolutionUseCase",
+    "ResolvedImageGenModel",
+    "ResolvedModel",
+]

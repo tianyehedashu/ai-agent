@@ -13,13 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import get_app_config
+from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 from domains.agent.application.product_info_capability_runners import (
     RUNNERS,
     optimize_prompt_for_capability,
     render_meta_prompt,
 )
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.domain.product_info.constants import (
     CAPABILITIES,
     CAPABILITIES_REQUIRING_VISION,
@@ -69,7 +69,7 @@ class ProductInfoUseCase:
         self.job_repo = ProductInfoJobRepository(db)
         self.step_repo = ProductInfoJobStepRepository(db)
         self._llm_gateway = LLMGateway(config=settings, model_catalog=catalog)
-        self._user_model_uc = UserModelUseCase(db, catalog)
+        self._model_resolution = ChatModelResolutionUseCase(db, catalog)
 
     # ─── Job CRUD ────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ class ProductInfoUseCase:
                 effective_model_id,
             )
 
-        resolved = await self._user_model_uc.resolve_model(effective_model_id)
+        resolved = await self._model_resolution.resolve_model(effective_model_id)
         model_override: dict[str, Any] = {"model": resolved.model}
         if resolved.api_key:
             model_override["api_key"] = resolved.api_key

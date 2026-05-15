@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { userApi, type UpdateUserParams } from '@/api/user'
 import { useTheme } from '@/components/theme-provider'
@@ -22,27 +22,36 @@ import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
-import { ModelTab } from './components/model-tab'
 
-const SETTINGS_TABS = ['general', 'api', 'models', 'mcp', 'account'] as const
+const SETTINGS_TABS = ['general', 'api', 'mcp', 'account'] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 export default function SettingsPage(): React.JSX.Element {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { theme, setTheme } = useTheme()
   const { currentUser, setCurrentUser } = useUserStore()
   const { toast } = useToast()
 
-  // 账户设置状态
   const [userName, setUserName] = useState('')
   const [vendorCreatorId, setVendorCreatorId] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
 
   const tabParam = searchParams.get('tab')
-  /** 旧深链 ?tab=credentials 已迁至 AI Gateway；此处映射到「我的模型」 */
-  const normalizedTab = tabParam === 'credentials' ? 'models' : tabParam
-  const activeTab: SettingsTab = SETTINGS_TABS.includes(normalizedTab as SettingsTab)
-    ? (normalizedTab as SettingsTab)
+  const viewParam = searchParams.get('view')
+
+  useEffect(() => {
+    if (tabParam === 'credentials') {
+      navigate('/gateway/credentials?tab=personal', { replace: true })
+      return
+    }
+    if (tabParam === 'models' || viewParam === 'gateway') {
+      navigate('/gateway/models?tab=personal', { replace: true })
+    }
+  }, [tabParam, viewParam, navigate])
+
+  const activeTab: SettingsTab = SETTINGS_TABS.includes(tabParam as SettingsTab)
+    ? (tabParam as SettingsTab)
     : 'general'
 
   const handleTabChange = (value: string): void => {
@@ -52,33 +61,24 @@ export default function SettingsPage(): React.JSX.Element {
     } else {
       next.set('tab', value)
     }
+    next.delete('view')
     setSearchParams(next, { replace: true })
   }
 
-  // 旧凭据 tab 深链改为 models，并清理非法 ?tab=
   useEffect(() => {
-    if (tabParam === 'credentials') {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          next.set('tab', 'models')
-          return next
-        },
-        { replace: true }
-      )
-      return
-    }
     if (tabParam !== null && tabParam !== '' && !SETTINGS_TABS.includes(tabParam as SettingsTab)) {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
           next.delete('tab')
+          next.delete('view')
           return next
         },
         { replace: true }
       )
     }
   }, [tabParam, setSearchParams])
+
   useEffect(() => {
     if (currentUser) {
       setUserName(currentUser.name)
@@ -90,7 +90,6 @@ export default function SettingsPage(): React.JSX.Element {
     }
   }, [currentUser])
 
-  // 保存账户设置
   const handleSaveAccount = async (): Promise<void> => {
     if (!currentUser || currentUser.is_anonymous) {
       toast({
@@ -105,7 +104,6 @@ export default function SettingsPage(): React.JSX.Element {
     try {
       const params: UpdateUserParams = {}
 
-      // 只有当值变化时才提交
       if (userName !== currentUser.name) {
         params.name = userName
       }
@@ -124,7 +122,6 @@ export default function SettingsPage(): React.JSX.Element {
       }
 
       const updatedUser = await userApi.updateUser(params)
-      // 更新本地状态
       setCurrentUser({
         ...currentUser,
         name: updatedUser.name,
@@ -154,7 +151,6 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
-          <TabsTrigger value="models">我的模型</TabsTrigger>
           <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
         </TabsList>
@@ -209,10 +205,6 @@ export default function SettingsPage(): React.JSX.Element {
 
         <TabsContent value="api">
           <ApiKeyTab />
-        </TabsContent>
-
-        <TabsContent value="models">
-          <ModelTab />
         </TabsContent>
 
         <TabsContent value="mcp">

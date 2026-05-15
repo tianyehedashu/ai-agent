@@ -1,0 +1,231 @@
+"""
+ChatModelResolutionUseCase 单元测试
+
+覆盖模型类型校验、系统/个人模型解析、可用列表与严格对话路径校验。
+"""
+
+from dataclasses import dataclass
+from unittest.mock import AsyncMock
+import uuid
+
+import pytest
+
+from domains.agent.application.chat_model_resolution_use_case import (
+    VALID_MODEL_TYPES,
+    ChatModelResolutionUseCase,
+)
+from domains.identity.infrastructure.models.user import User
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
+from libs.exceptions import ValidationError
+from libs.llm.litellm_model_id import build_litellm_model_id
+
+
+@pytest.mark.unit
+class TestChatModelValidation:
+    def test_validate_model_types_passes(self):
+        ChatModelResolutionUseCase.validate_model_types(["text", "image"])
+
+    def test_validate_model_types_rejects_invalid(self):
+        with pytest.raises(ValidationError, match="无效的模型类型"):
+            ChatModelResolutionUseCase.validate_model_types(["text", "audio"])
+
+    def test_valid_model_types_exhaustive(self):
+        assert {"text", "image", "image_gen", "video"} == VALID_MODEL_TYPES
+
+    def test_valid_providers_cover_all(self):
+        from domains.gateway.domain.types import PERSONAL_MODEL_PROVIDERS
+
+        expected = {
+            "openai",
+            "deepseek",
+            "dashscope",
+            "anthropic",
+            "zhipuai",
+            "volcengine",
+            "custom",
+        }
+        assert expected == PERSONAL_MODEL_PROVIDERS
+
+
+@pytest.mark.unit
+class TestBuildLitellmModel:
+    def test_openai_bare_id(self):
+        assert build_litellm_model_id("openai", "gpt-4o") == "gpt-4o"
+
+    def test_prefixes_bare_id(self):
+        assert build_litellm_model_id("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"
+
+
+@dataclass(frozen=True)
+class _FakeResolution:
+    litellm_model: str
+    api_key: str | None
+    api_base: str | None
+    provider: str
+    model_types: list[str]
+    is_active: bool
+    last_test_status: str | None
+
+
+@pytest.mark.unit
+class TestResolveModel:
+    @pytest.fixture(autouse=True)
+    async def _setup(self, db_session):
+        user = User(
+            email=f"resolve_{uuid.uuid4().hex[:8]}@test.com",
+            hashed_password="hashed",
+            name="Resolver",
+        )
+        db_session.add(user)
+        await db_session.flush()
+        await db_session.refresh(user)
+        self.user = user
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        self.catalog = AsyncMock()
+        self.uc = ChatModelResolutionUseCase(db_session, catalog=self.catalog)
+        yield
+        clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_none_returns_default(self):
+        resolved = await self.uc.resolve_model(None)
+        assert resolved.is_system is True
+        assert resolved.api_key is None
+
+    @pytest.mark.asyncio
+    async def test_system_model_id(self):
+        resolved = await self.uc.resolve_model("deepseek/deepseek-chat")
+        assert resolved.model == "deepseek/deepseek-chat"
+        assert resolved.is_system is True
+
+    @pytest.mark.asyncio
+    async def test_personal_model_uuid(self):
+        model_id = uuid.uuid4()
+        self.catalog.resolve_registered_model = AsyncMock(
+            return_value=_FakeResolution(
+                litellm_model="deepseek/deepseek-chat",
+                api_key="sk-resolve-me-12345",
+                api_base=None,
+                provider="deepseek",
+                model_types=["text"],
+                is_active=True,
+                last_test_status=None,
+            )
+        )
+        resolved = await self.uc.resolve_model(str(model_id))
+        assert resolved.is_system is False
+        assert resolved.model == "deepseek/deepseek-chat"
+        assert resolved.api_key == "sk-resolve-me-12345"
+
+    @pytest.mark.asyncio
+    async def test_unknown_uuid_raises(self):
+        self.catalog.resolve_registered_model = AsyncMock(return_value=None)
+        with pytest.raises(ValidationError, match="Gateway 个人模型不存在"):
+            await self.uc.resolve_model(str(uuid.uuid4()))
+
+    @pytest.mark.asyncio
+    async def test_non_uuid_string_treated_as_system(self):
+        resolved = await self.uc.resolve_model("not-a-uuid-but-not-system-either")
+        assert resolved.is_system is True
+
+
+@pytest.mark.unit
+class TestGetAvailableModels:
+    @pytest.fixture(autouse=True)
+    async def _setup(self, db_session):
+        user = User(
+            email=f"avail_{uuid.uuid4().hex[:8]}@test.com",
+            hashed_password="hashed",
+            name="Avail",
+        )
+        db_session.add(user)
+        await db_session.flush()
+        await db_session.refresh(user)
+        ctx = PermissionContext(user_id=user.id, role="user")
+        set_permission_context(ctx)
+        from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+        await sync_app_config_gateway_catalog(db_session)
+        await db_session.flush()
+        self.uc = ChatModelResolutionUseCase(
+            db_session, catalog=get_model_catalog_adapter(db_session)
+        )
+        yield
+        clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_returns_list(self):
+        models = await self.uc.list_available_system_models()
+        assert isinstance(models, list)
+        for m in models:
+            assert m["is_system"] is True
+            assert "id" in m
+            assert "model_types" in m
+
+    @pytest.mark.asyncio
+    async def test_filter_by_type(self):
+        all_models = await self.uc.list_available_system_models()
+        text_models = await self.uc.list_available_system_models(model_type="text")
+        assert len(text_models) <= len(all_models)
+        for m in text_models:
+            assert "text" in m["model_types"]
+
+    @pytest.mark.asyncio
+    async def test_filter_by_provider(self):
+        text_models = await self.uc.list_available_system_models(model_type="text")
+        deepseek_only = await self.uc.list_available_system_models(
+            model_type="text",
+            provider="deepseek",
+        )
+        assert len(deepseek_only) <= len(text_models)
+        for m in deepseek_only:
+            assert m["provider"] == "deepseek"
+
+
+@pytest.mark.unit
+class TestResolveTextChatModel:
+    @pytest.mark.asyncio
+    async def test_system_not_in_allowed_raises(self, db_session):
+        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        with pytest.raises(ValidationError, match="模型不在可用列表中"):
+            await uc.resolve_text_chat_model(
+                "openai/gpt-4o",
+                allowed_text_system_ids=frozenset(["deepseek/deepseek-chat"]),
+            )
+
+    @pytest.mark.asyncio
+    async def test_system_in_allowed(self, db_session):
+        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        r = await uc.resolve_text_chat_model(
+            "deepseek/deepseek-chat",
+            allowed_text_system_ids=frozenset(["deepseek/deepseek-chat"]),
+        )
+        assert r.model == "deepseek/deepseek-chat"
+        assert r.is_system is True
+        assert r.api_key is None
+
+    @pytest.mark.asyncio
+    async def test_none_uses_app_default(self, db_session):
+        from bootstrap.config import settings
+
+        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
+        assert r.model == settings.default_model
+        assert r.is_system is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_uuid_raises(self, db_session):
+        catalog = AsyncMock()
+        catalog.resolve_registered_model = AsyncMock(return_value=None)
+        uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
+        with pytest.raises(ValidationError, match="Gateway 个人模型不存在"):
+            await uc.resolve_text_chat_model(
+                str(uuid.uuid4()),
+                allowed_text_system_ids=frozenset(),
+            )

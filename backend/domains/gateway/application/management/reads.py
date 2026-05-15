@@ -100,8 +100,32 @@ class GatewayManagementReadService:
             return row
         raise CredentialNotFoundError(str(credential_id))
 
+    async def get_user_credential_for_owner(
+        self, credential_id: UUID, user_id: UUID
+    ) -> ProviderCredential:
+        """与 ``list_user_credentials`` 可见集合一致：仅当前用户的 user-scope 凭据。"""
+        row = await self._creds.get(credential_id)
+        if row is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if row.scope != "user" or row.scope_id != user_id:
+            raise CredentialNotFoundError(str(credential_id))
+        return row
+
     async def list_user_credentials(self, user_id: UUID) -> list[ProviderCredential]:
         return await self._creds.list_for_user(user_id)
+
+    async def list_personal_gateway_models(
+        self,
+        user_id: UUID,
+        *,
+        provider: str | None = None,
+    ) -> list[GatewayModel]:
+        personal_team = await self._teams.ensure_personal_team(user_id)
+        return await self._models.list_team_owned(
+            personal_team.id,
+            only_enabled=False,
+            provider=provider,
+        )
 
     async def list_gateway_models(
         self,

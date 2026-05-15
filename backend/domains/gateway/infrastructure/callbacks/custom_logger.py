@@ -396,6 +396,72 @@ def _deployment_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUI
     return None, None
 
 
+def _gateway_provider_for_persist(kwargs: dict[str, Any], metadata: dict[str, Any]) -> Any | None:
+    provider = metadata.get("gateway_provider")
+    if provider is not None:
+        return provider
+    for container_key in ("litellm_params", "standard_logging_object"):
+        container = kwargs.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        mi = container.get("model_info")
+        if isinstance(mi, dict) and mi.get("gateway_provider"):
+            return mi.get("gateway_provider")
+    return None
+
+
+def _credential_snapshots_for_persist(
+    metadata: dict[str, Any], kwargs: dict[str, Any]
+) -> tuple[uuid.UUID | None, str | None]:
+    cred_id = _to_uuid(metadata.get("gateway_credential_id"))
+    raw_snap = metadata.get("gateway_credential_name_snapshot")
+    cred_name_snap: str | None = None
+    if isinstance(raw_snap, str) and raw_snap.strip():
+        cred_name_snap = raw_snap.strip()[:100]
+    if cred_id is None:
+        mid, mname = _credential_from_model_info_kwargs(kwargs)
+        cred_id = mid
+        if cred_name_snap is None and mname is not None:
+            cred_name_snap = mname
+    return cred_id, cred_name_snap
+
+
+def _normalized_fallback_entries(metadata: dict[str, Any]) -> list[str]:
+    raw = metadata.get("gateway_fallback_chain") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    return [str(x) for x in raw if x]
+
+
+def _build_prompt_redacted(
+    *,
+    verbose_log: bool,
+    kwargs_messages: Any,
+    prompt_max: int,
+    pii_redactions: Any,
+) -> dict[str, Any] | None:
+    messages_preview = (
+        _serialize_messages_preview(kwargs_messages, prompt_max) if verbose_log else None
+    )
+    if not (pii_redactions or messages_preview):
+        return None
+    out: dict[str, Any] = {}
+    if pii_redactions:
+        out["redactions"] = pii_redactions
+    if messages_preview:
+        out["messages_preview"] = messages_preview
+    return out
+
+
+def _metadata_extra_non_gateway(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    extra = {
+        k: v
+        for k, v in metadata.items()
+        if not k.startswith("gateway_") and k not in {"pii_prompt_hash", "pii_redactions"}
+    }
+    return extra or None
+
+
 async def _persist_event(
     *,
     kwargs: dict[str, Any],
@@ -427,27 +493,9 @@ async def _persist_event(
     capability = str(metadata.get("gateway_capability", "chat"))
     route_name = metadata.get("gateway_route_name") or kwargs.get("model")
     real_model = getattr(response_obj, "model", None) or kwargs.get("model")
-    provider = metadata.get("gateway_provider")
-    if provider is None:
-        for container_key in ("litellm_params", "standard_logging_object"):
-            container = kwargs.get(container_key)
-            if not isinstance(container, dict):
-                continue
-            mi = container.get("model_info")
-            if isinstance(mi, dict) and mi.get("gateway_provider"):
-                provider = mi.get("gateway_provider")
-                break
+    provider = _gateway_provider_for_persist(kwargs, metadata)
 
-    cred_id = _to_uuid(metadata.get("gateway_credential_id"))
-    raw_snap = metadata.get("gateway_credential_name_snapshot")
-    cred_name_snap: str | None = None
-    if isinstance(raw_snap, str) and raw_snap.strip():
-        cred_name_snap = raw_snap.strip()[:100]
-    if cred_id is None:
-        mid, mname = _credential_from_model_info_kwargs(kwargs)
-        cred_id = mid
-        if cred_name_snap is None and mname is not None:
-            cred_name_snap = mname
+    cred_id, cred_name_snap = _credential_snapshots_for_persist(metadata, kwargs)
 
     deploy_id, deploy_name = _deployment_from_model_info_kwargs(kwargs)
 
@@ -463,10 +511,7 @@ async def _persist_event(
             ttfb_ms = int(ttfb_ms)
 
     cache_hit = bool(metadata.get("gateway_cache_hit") or kwargs.get("cache_hit"))
-    fallback_chain = metadata.get("gateway_fallback_chain") or []
-    if isinstance(fallback_chain, str):
-        fallback_chain = [fallback_chain]
-    fallback_chain = [str(x) for x in fallback_chain if x]
+    fallback_chain = _normalized_fallback_entries(metadata)
 
     request_id = metadata.get("gateway_request_id") or kwargs.get("litellm_call_id")
     prompt_hash = metadata.get("pii_prompt_hash")
@@ -487,16 +532,12 @@ async def _persist_event(
     )
     tool_cap = int(settings.gateway_request_log_tool_calls_summary_max_chars)
 
-    messages_preview = (
-        _serialize_messages_preview(kwargs.get("messages"), prompt_max) if verbose_log else None
+    prompt_redacted = _build_prompt_redacted(
+        verbose_log=verbose_log,
+        kwargs_messages=kwargs.get("messages"),
+        prompt_max=prompt_max,
+        pii_redactions=pii_redactions,
     )
-    prompt_redacted: dict[str, Any] | None = None
-    if pii_redactions or messages_preview:
-        prompt_redacted = {}
-        if pii_redactions:
-            prompt_redacted["redactions"] = pii_redactions
-        if messages_preview:
-            prompt_redacted["messages_preview"] = messages_preview
 
     response_summary = _summarize_response(
         response_obj,
@@ -509,12 +550,7 @@ async def _persist_event(
     vkey_name_snapshot = metadata.get("gateway_vkey_name_snapshot")
     route_snapshot = metadata.get("gateway_route_snapshot")
 
-    extra_metadata = {
-        k: v
-        for k, v in metadata.items()
-        if not k.startswith("gateway_") and k not in {"pii_prompt_hash", "pii_redactions"}
-    }
-    metadata_extra = extra_metadata or None
+    metadata_extra = _metadata_extra_non_gateway(metadata)
 
     litellm_call = kwargs.get("litellm_call_id")
     litellm_call_str = str(litellm_call) if litellm_call is not None else None

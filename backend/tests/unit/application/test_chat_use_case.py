@@ -24,20 +24,22 @@ class TestChatUseCase:
     def service(self, db_session):
         from unittest.mock import AsyncMock
 
-        from domains.agent.application.user_model_use_case import UserModelUseCase
+        from domains.agent.application.chat_model_resolution_use_case import (
+            ChatModelResolutionUseCase,
+        )
 
         session_use_case = SessionUseCase(db_session)
         catalog = AsyncMock()
         catalog.list_visible_models = AsyncMock(
             return_value=[{"id": "deepseek/deepseek-chat", "display_name": "DeepSeek"}]
         )
-        user_models = UserModelUseCase(db_session, catalog=catalog)
+        model_resolution = ChatModelResolutionUseCase(db_session, catalog=catalog)
         return ChatUseCase(
             db_session,
             session_use_case=session_use_case,
             session_use_case_factory=lambda d: SessionUseCase(d),
             model_catalog=catalog,
-            user_model_use_case=user_models,
+            model_resolution_use_case=model_resolution,
         )
 
     async def _create_test_user(self, db_session) -> User:

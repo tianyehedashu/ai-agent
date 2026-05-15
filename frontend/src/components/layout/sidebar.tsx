@@ -66,7 +66,7 @@ export default function Sidebar(): React.JSX.Element {
   const navigate = useNavigate()
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { isCollapsed, toggle } = useSidebarStore()
-  const [isHistoryOpen, setIsHistoryOpen] = useState(true)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const { currentUser } = useUserStore()
   const isAnonymous = currentUser?.is_anonymous ?? true
   const visibleNavigation = useMemo(

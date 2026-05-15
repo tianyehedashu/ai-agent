@@ -400,6 +400,13 @@ class TestGatewayManagementApi:
         assert got["id"] == cid
         assert got["name"] == name
 
+        r_reveal = await dev_client.get(
+            f"/api/v1/gateway/credentials/{cid}/reveal",
+            headers=headers,
+        )
+        assert r_reveal.status_code == 200, r_reveal.text
+        assert r_reveal.json()["api_key"] == "sk-int-test-key-for-gateway-123456"
+
         r_models = await dev_client.get(
             "/api/v1/gateway/models",
             headers=headers,
@@ -408,3 +415,48 @@ class TestGatewayManagementApi:
         assert r_models.status_code == 200, r_models.text
         models = r_models.json()
         assert all(m["credential_id"] == cid for m in models)
+
+    @pytest.mark.asyncio
+    async def test_my_models_crud(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """个人模型 /my-models 不依赖 X-Team-Id"""
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"my-model-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-my-models-int-test-key-123456",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/my-models",
+            headers=auth_headers,
+            json={
+                "display_name": "My GPT",
+                "provider": "openai",
+                "model_id": "gpt-4o-mini",
+                "credential_id": cred_id,
+                "model_types": ["text"],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        created = r_create.json()
+        assert len(created) >= 1
+        model_id = created[0]["id"]
+
+        r_list = await dev_client.get("/api/v1/gateway/my-models", headers=auth_headers)
+        assert r_list.status_code == 200, r_list.text
+        assert any(m["id"] == model_id for m in r_list.json())
+
+        r_del = await dev_client.delete(
+            f"/api/v1/gateway/my-models/{model_id}",
+            headers=auth_headers,
+        )
+        assert r_del.status_code == 204, r_del.text

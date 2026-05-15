@@ -100,6 +100,15 @@ class CredentialNotFoundError(GatewayError):
         super().__init__(msg)
 
 
+class CredentialApiKeyDecryptError(GatewayError):
+    """已存密文无法解密（配置或历史数据问题），需通过轮换新密钥恢复"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "无法解密已存储的 API Key，请通过「新 API Key」轮换并保存",
+        )
+
+
 class CredentialInUseError(GatewayError):
     """凭据仍被网关模型引用，无法删除"""
 
@@ -177,6 +186,7 @@ __all__ = [
     "ApiKeyGatewayGrantRequiredError",
     "BudgetExceededError",
     "CapabilityNotAllowedError",
+    "CredentialApiKeyDecryptError",
     "CredentialInUseError",
     "CredentialNameConflictError",
     "CredentialNotFoundError",

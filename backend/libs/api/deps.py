@@ -16,6 +16,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import AgentUseCase, ChatUseCase
+from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
 from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
@@ -29,7 +30,6 @@ from domains.agent.application.product_info_prompt_service import (
 )
 from domains.agent.application.product_info_use_case import ProductInfoUseCase
 from domains.agent.application.stats_service import StatsService
-from domains.agent.application.user_model_use_case import UserModelUseCase
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DbSession",
     "get_agent_service",
+    "get_chat_model_resolution_service",
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
@@ -59,7 +60,6 @@ __all__ = [
     "get_session_service",
     "get_stats_service",
     "get_title_service",
-    "get_user_model_service",
     "get_user_service",
     "get_video_task_service",
 ]
@@ -135,14 +135,14 @@ async def get_chat_service(
     """获取对话服务"""
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
-    user_models = UserModelUseCase(db, catalog=catalog)
+    model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
     return ChatUseCase(
         db,
         session_use_case=session_service,
         session_use_case_factory=SessionUseCase,
         checkpointer=checkpointer,
         model_catalog=catalog,
-        user_model_use_case=user_models,
+        model_resolution_use_case=model_resolution,
     )
 
 
@@ -206,6 +206,6 @@ async def get_product_info_prompt_service(db: DbSession) -> ProductInfoPromptTem
     return ProductInfoPromptTemplateUseCase(db)
 
 
-async def get_user_model_service(db: DbSession) -> UserModelUseCase:
-    """获取用户模型管理服务"""
-    return UserModelUseCase(db, catalog=get_model_catalog_adapter(db))
+async def get_chat_model_resolution_service(db: DbSession) -> ChatModelResolutionUseCase:
+    """获取聊天模型目录解析服务"""
+    return ChatModelResolutionUseCase(db, catalog=get_model_catalog_adapter(db))

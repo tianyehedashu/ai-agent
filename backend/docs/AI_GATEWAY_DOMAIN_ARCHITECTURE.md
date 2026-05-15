@@ -254,9 +254,9 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ### 6.3 前后端契约
 
-- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。
+- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider`）；个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
-- `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `models`、`mcp` 等）深链到对应设置子页；个人/团队 LLM 凭据在 **AI Gateway → 凭据**（`/gateway/credentials`）。旧 `?tab=credentials` 会重定向为 `?tab=models`（用户模型）。
+- `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `mcp`、`account` 等）深链到对应设置子页；**模型与凭据**均在 **AI Gateway**（`/gateway/models?tab=personal|team`、`/gateway/credentials?tab=personal|team`）。旧 `?tab=credentials`、`?tab=models`、`?view=gateway` 会重定向到 Gateway 个人 Tab。**已移除**设置内嵌的 `credentials-tab` / `model-tab` / `provider-config-tab` 等组件；个人凭据 UI 复用 `features/gateway-credentials/personal-credentials-panel.tsx`（仅由 Gateway 凭据页等挂载）。
 - `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；创建 Key 时可勾选 Gateway 相关作用域。
 
 ### 6.4 已知风险
@@ -275,8 +275,10 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 |------|------|
 | 页面 | `frontend/src/pages/gateway/` |
 | API | `frontend/src/api/gateway.ts` |
+| 可复用块 | `frontend/src/features/gateway-credentials/`、`frontend/src/features/gateway-models/` |
 | 团队 | `frontend/src/stores/gateway-team.ts`、`components/layout/team-switcher.tsx` |
 | 权限 | `frontend/src/hooks/use-gateway-permission.ts` |
+| 设置（非 Gateway） | `frontend/src/pages/settings/`（账户、API Key、MCP 等；**不含**内嵌凭据/模型 Tab） |
 
 ---
 
