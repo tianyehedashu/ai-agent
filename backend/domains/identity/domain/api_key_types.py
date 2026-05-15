@@ -14,12 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+import uuid  # noqa: TC003 - Pydantic resolves deferred uuid.UUID annotations at runtime.
 
 from pydantic import BaseModel, Field, field_validator
-
-if TYPE_CHECKING:
-    from uuid import UUID
 
 # =============================================================================
 # ApiKeyScope - 作用域枚举
@@ -120,6 +117,20 @@ API_KEY_SCOPE_GROUPS: dict[str, set[ApiKeyScope]] = {
 }
 
 
+GATEWAY_PROXY_CAPABILITY_VALUES: frozenset[str] = frozenset(
+    {
+        "chat",
+        "embedding",
+        "image",
+        "audio_transcription",
+        "audio_speech",
+        "rerank",
+        "video_generation",
+        "moderation",
+    }
+)
+
+
 # =============================================================================
 # ApiKeyStatus - 状态枚举
 # =============================================================================
@@ -170,14 +181,36 @@ class ApiKeyFormat:
 
 
 @dataclass(slots=True)
+class ApiKeyGatewayGrantEntity:
+    """平台 API Key 的 Gateway 团队授权策略。
+
+    ``X-Team-Id`` 只允许选择这里已授权的团队；模型、能力与限流按 grant 生效。
+    """
+
+    id: uuid.UUID
+    api_key_id: uuid.UUID
+    user_id: uuid.UUID
+    team_id: uuid.UUID
+    allowed_models: tuple[str, ...]
+    allowed_capabilities: tuple[str, ...]
+    rpm_limit: int | None
+    tpm_limit: int | None
+    store_full_messages: bool
+    guardrail_enabled: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(slots=True)
 class ApiKeyEntity:
     """API Key 领域实体
 
     封装 API Key 的业务逻辑和状态。
     """
 
-    id: UUID
-    user_id: UUID
+    id: uuid.UUID
+    user_id: uuid.UUID
     key_hash: str
     key_id: str
     key_prefix: str
@@ -190,6 +223,7 @@ class ApiKeyEntity:
     usage_count: int
     created_at: datetime
     updated_at: datetime
+    gateway_grants: tuple[ApiKeyGatewayGrantEntity, ...] = ()
 
     # =======================================================================
     # 业务规则方法
@@ -238,6 +272,46 @@ class ApiKeyEntity:
 # =============================================================================
 
 
+class ApiKeyGatewayGrantRequest(BaseModel):
+    """创建/更新平台 API Key 时配置 Gateway 团队授权。"""
+
+    team_id: uuid.UUID
+    allowed_models: list[str] = Field(default_factory=list)
+    allowed_capabilities: list[str] = Field(default_factory=list)
+    rpm_limit: int | None = Field(default=None, ge=1)
+    tpm_limit: int | None = Field(default=None, ge=1)
+    store_full_messages: bool = False
+    guardrail_enabled: bool = True
+
+    @field_validator("allowed_models")
+    @classmethod
+    def normalize_allowed_models(cls, v: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in v:
+            model = str(item).strip()
+            if model and model not in seen:
+                seen.add(model)
+                out.append(model)
+        return out
+
+    @field_validator("allowed_capabilities")
+    @classmethod
+    def normalize_allowed_capabilities(cls, v: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in v:
+            capability = str(item).strip()
+            if not capability:
+                continue
+            if capability not in GATEWAY_PROXY_CAPABILITY_VALUES:
+                raise ValueError(f"invalid gateway capability: {capability}")
+            if capability not in seen:
+                seen.add(capability)
+                out.append(capability)
+        return out
+
+
 class ApiKeyCreateRequest(BaseModel):
     """创建 API Key 请求"""
 
@@ -252,6 +326,13 @@ class ApiKeyCreateRequest(BaseModel):
         ge=1,
         le=365,
         description="有效期（天），必须设置",
+    )
+    gateway_grants: list[ApiKeyGatewayGrantRequest] = Field(
+        default_factory=list,
+        description=(
+            "gateway:proxy 的团队授权。为空时仅自动授予当前用户 personal team；"
+            "调用时 X-Team-Id 只能选择已授权团队。"
+        ),
     )
 
     @field_validator("scopes")
@@ -270,6 +351,37 @@ class ApiKeyUpdateRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     scopes: list[ApiKeyScope] | None = None
     extend_expiry_days: int | None = Field(None, ge=1, le=365)
+    gateway_grants: list[ApiKeyGatewayGrantRequest] | None = None
+
+
+class ApiKeyGatewayGrantResponse(BaseModel):
+    """平台 API Key 的 Gateway 团队授权响应。"""
+
+    id: str
+    team_id: str
+    allowed_models: list[str]
+    allowed_capabilities: list[str]
+    rpm_limit: int | None
+    tpm_limit: int | None
+    store_full_messages: bool
+    guardrail_enabled: bool
+    is_active: bool
+    created_at: datetime
+
+    @classmethod
+    def from_entity(cls, entity: ApiKeyGatewayGrantEntity) -> ApiKeyGatewayGrantResponse:
+        return cls(
+            id=str(entity.id),
+            team_id=str(entity.team_id),
+            allowed_models=list(entity.allowed_models),
+            allowed_capabilities=list(entity.allowed_capabilities),
+            rpm_limit=entity.rpm_limit,
+            tpm_limit=entity.tpm_limit,
+            store_full_messages=entity.store_full_messages,
+            guardrail_enabled=entity.guardrail_enabled,
+            is_active=entity.is_active,
+            created_at=entity.created_at,
+        )
 
 
 class ApiKeyResponse(BaseModel):
@@ -286,6 +398,7 @@ class ApiKeyResponse(BaseModel):
     usage_count: int
     created_at: datetime
     masked_key: str  # 掩码后的 Key，用于展示
+    gateway_grants: list[ApiKeyGatewayGrantResponse] = Field(default_factory=list)
 
     @classmethod
     def from_entity(cls, entity: ApiKeyEntity) -> ApiKeyResponse:
@@ -303,6 +416,9 @@ class ApiKeyResponse(BaseModel):
             usage_count=entity.usage_count,
             created_at=entity.created_at,
             masked_key=masked_key,
+            gateway_grants=[
+                ApiKeyGatewayGrantResponse.from_entity(g) for g in entity.gateway_grants
+            ],
         )
 
 

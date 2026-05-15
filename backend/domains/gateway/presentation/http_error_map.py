@@ -5,11 +5,17 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from domains.gateway.domain.errors import (
+    ApiKeyGatewayGrantDeniedError,
+    ApiKeyGatewayGrantRequiredError,
     CredentialInUseError,
     CredentialNameConflictError,
     CredentialNotFoundError,
+    GatewayTeamHeaderInvalidError,
+    GatewayTeamHeaderRequiredError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
+    PlatformApiKeyInvalidError,
+    PlatformApiKeyMissingGatewayProxyScopeError,
     SystemCredentialAdminRequiredError,
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
@@ -27,8 +33,20 @@ def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if isinstance(exc, PlatformApiKeyInvalidError):
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if isinstance(exc, PlatformApiKeyMissingGatewayProxyScopeError):
+        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, NoPersonalTeamForProxyError):
         return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if isinstance(exc, (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError)):
+        return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if isinstance(exc, (ApiKeyGatewayGrantDeniedError, ApiKeyGatewayGrantRequiredError)):
+        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, VirtualKeyNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):

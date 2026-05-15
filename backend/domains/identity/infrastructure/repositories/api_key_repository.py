@@ -9,9 +9,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
-from domains.identity.infrastructure.models.api_key import ApiKey, ApiKeyUsageLog
+from domains.identity.infrastructure.models.api_key import (
+    ApiKey,
+    ApiKeyGatewayGrant,
+    ApiKeyUsageLog,
+)
 from libs.db.base_repository import OwnedRepositoryBase
 from libs.db.permission_context import get_permission_context
 
@@ -20,7 +24,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.identity.domain.api_key_types import ApiKeyScope
+    from domains.identity.domain.api_key_types import ApiKeyGatewayGrantRequest, ApiKeyScope
 
 
 class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
@@ -235,8 +239,71 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
         if not api_key:
             return False
 
+        await self.delete_gateway_grants(api_key_id)
         await self.db.delete(api_key)
         return True
+
+    # =======================================================================
+    # Gateway grants
+    # =======================================================================
+
+    async def list_gateway_grants(self, api_key_id: uuid.UUID) -> list[ApiKeyGatewayGrant]:
+        """列出 API Key 的 Gateway 团队授权（认证路径使用，不走所有权过滤）。"""
+        stmt = (
+            select(ApiKeyGatewayGrant)
+            .where(ApiKeyGatewayGrant.api_key_id == api_key_id)
+            .order_by(ApiKeyGatewayGrant.created_at.asc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_gateway_grant(
+        self, api_key_id: uuid.UUID, team_id: uuid.UUID
+    ) -> ApiKeyGatewayGrant | None:
+        """获取某把 API Key 对某团队的 Gateway 授权（认证路径使用）。"""
+        stmt = select(ApiKeyGatewayGrant).where(
+            ApiKeyGatewayGrant.api_key_id == api_key_id,
+            ApiKeyGatewayGrant.team_id == team_id,
+            ApiKeyGatewayGrant.is_active.is_(True),
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def delete_gateway_grants(self, api_key_id: uuid.UUID) -> None:
+        await self.db.execute(
+            delete(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.api_key_id == api_key_id)
+        )
+        await self.db.flush()
+
+    async def replace_gateway_grants(
+        self,
+        *,
+        api_key_id: uuid.UUID,
+        user_id: uuid.UUID,
+        grants: list[ApiKeyGatewayGrantRequest],
+    ) -> list[ApiKeyGatewayGrant]:
+        """以全量替换方式保存 Gateway grants。"""
+        await self.delete_gateway_grants(api_key_id)
+        created: list[ApiKeyGatewayGrant] = []
+        for grant in grants:
+            row = ApiKeyGatewayGrant(
+                api_key_id=api_key_id,
+                user_id=user_id,
+                team_id=grant.team_id,
+                allowed_models=grant.allowed_models,
+                allowed_capabilities=grant.allowed_capabilities,
+                rpm_limit=grant.rpm_limit,
+                tpm_limit=grant.tpm_limit,
+                store_full_messages=grant.store_full_messages,
+                guardrail_enabled=grant.guardrail_enabled,
+                is_active=True,
+            )
+            self.db.add(row)
+            created.append(row)
+        await self.db.flush()
+        for row in created:
+            await self.db.refresh(row)
+        return created
 
     # =======================================================================
     # Usage Logs

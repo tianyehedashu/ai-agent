@@ -104,6 +104,7 @@ class ProxyContext:
             用于模型级预算；未设置时仅校验/结算「全模型」汇总行（``model_name IS NULL``）。
         inbound_via: 入站鉴权路径 ``vkey``（``sk-gw-*``）或 ``apikey``（平台 ``sk-*`` + ``gateway:proxy``）。
         platform_api_key_id: 当 ``inbound_via=apikey`` 时为 Identity API Key 主键；否则为 ``None``。
+        platform_api_key_grant_id: 当 ``inbound_via=apikey`` 时为命中的 Gateway grant 主键。
 
     与 ``BudgetUpsert.scope``（system/team/key/user）及 HTTP ``usage_aggregation`` 正交。
     """
@@ -118,6 +119,11 @@ class ProxyContext:
     budget_model: str | None = None
     inbound_via: GatewayInboundVia = "vkey"
     platform_api_key_id: uuid.UUID | None = None
+    platform_api_key_grant_id: uuid.UUID | None = None
+    allowed_models: tuple[str, ...] = ()
+    allowed_capabilities: tuple[GatewayCapability, ...] = ()
+    rpm_limit: int | None = None
+    tpm_limit: int | None = None
 
 
 class ProxyUseCase:
@@ -135,18 +141,36 @@ class ProxyUseCase:
     # ---------------------------------------------------------------------
 
     def _check_model(self, model: str, ctx: ProxyContext) -> None:
-        vkey = ctx.vkey
-        if vkey and vkey.allowed_models and model not in vkey.allowed_models:
+        allowed_models = ctx.allowed_models or (ctx.vkey.allowed_models if ctx.vkey else ())
+        if allowed_models and model not in allowed_models:
             raise ModelNotAllowedError(model)
 
     def _check_capability(self, ctx: ProxyContext) -> None:
-        vkey = ctx.vkey
-        if vkey and vkey.allowed_capabilities and ctx.capability not in vkey.allowed_capabilities:
+        allowed_capabilities = ctx.allowed_capabilities or (
+            ctx.vkey.allowed_capabilities if ctx.vkey else ()
+        )
+        if allowed_capabilities and ctx.capability not in allowed_capabilities:
             raise CapabilityNotAllowedError(ctx.capability.value)
 
     async def _check_limits(self, ctx: ProxyContext, estimate_tokens: int = 0) -> None:
         """vkey + team 维度限流"""
-        if ctx.vkey is not None:
+        if ctx.rpm_limit is not None or ctx.tpm_limit is not None:
+            rate_scope = "vkey" if ctx.vkey is not None else "platform_api_key_grant"
+            rate_scope_id = (
+                str(ctx.vkey.vkey_id)
+                if ctx.vkey is not None
+                else str(ctx.platform_api_key_grant_id or ctx.platform_api_key_id)
+                if (ctx.platform_api_key_grant_id or ctx.platform_api_key_id)
+                else None
+            )
+            await self._budget.check_rate_limit(
+                scope=rate_scope,
+                scope_id=rate_scope_id,
+                rpm_limit=ctx.rpm_limit,
+                tpm_limit=ctx.tpm_limit,
+                estimate_tokens=estimate_tokens,
+            )
+        elif ctx.vkey is not None:
             await self._budget.check_rate_limit(
                 scope="vkey",
                 scope_id=str(ctx.vkey.vkey_id),
@@ -280,6 +304,9 @@ class ProxyUseCase:
             "gateway_inbound_via": ctx.inbound_via,
             "gateway_platform_api_key_id": (
                 str(ctx.platform_api_key_id) if ctx.platform_api_key_id else None
+            ),
+            "gateway_platform_api_key_grant_id": (
+                str(ctx.platform_api_key_grant_id) if ctx.platform_api_key_grant_id else None
             ),
             "gateway_capability": ctx.capability.value,
             "gateway_request_id": ctx.request_id,

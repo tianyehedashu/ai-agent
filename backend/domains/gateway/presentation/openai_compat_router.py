@@ -15,23 +15,16 @@ OpenAI 兼容入口（挂载在根路径 /）
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from collections.abc import AsyncIterator, Mapping
+from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.proxy_use_case import ProxyUseCase
-from domains.gateway.domain.errors import (
-    BudgetExceededError,
-    CapabilityNotAllowedError,
-    GuardrailBlockedError,
-    ModelNotAllowedError,
-    RateLimitExceededError,
-)
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
@@ -40,6 +33,9 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.gateway_proxy_context import (
     proxy_context_from_gateway_principal,
 )
+from domains.gateway.presentation.openai_compat_error_map import (
+    openai_http_exception_from_proxy_business_error,
+)
 from libs.db.database import get_db
 from utils.logging import get_logger
 
@@ -47,44 +43,12 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["OpenAI Compat"])
 
+OpenAiRequestBody = dict[str, object]
 
-def _wrap_business_errors(exc: Exception) -> HTTPException:
-    """把领域异常转成 OpenAI 兼容的 HTTP 错误"""
-    if isinstance(exc, ModelNotAllowedError):
-        return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"type": "model_not_allowed", "message": str(exc)}},
-        )
-    if isinstance(exc, CapabilityNotAllowedError):
-        return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"type": "capability_not_allowed", "message": str(exc)}},
-        )
-    if isinstance(exc, RateLimitExceededError):
-        return HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"error": {"type": "rate_limit_exceeded", "message": str(exc)}},
-            headers=({"Retry-After": str(exc.retry_after)} if exc.retry_after else None),
-        )
-    if isinstance(exc, BudgetExceededError):
-        return HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"error": {"type": "budget_exceeded", "message": str(exc)}},
-        )
-    if isinstance(exc, GuardrailBlockedError):
-        return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"type": "guardrail_blocked", "message": str(exc)}},
-        )
-    if isinstance(exc, ValueError):
-        return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"type": "invalid_request", "message": str(exc)}},
-        )
-    return HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail={"error": {"type": "server_error", "message": str(exc)}},
-    )
+
+def _as_proxy_body(body: OpenAiRequestBody) -> dict[str, Any]:
+    """``ProxyUseCase`` 仍使用 ``dict[str, Any]`` 承载 LiteLLM/OpenAI 动态字段。"""
+    return cast("dict[str, Any]", body)
 
 
 # =============================================================================
@@ -94,22 +58,24 @@ def _wrap_business_errors(exc: Exception) -> HTTPException:
 
 @router.post("/chat/completions")
 async def chat_completions(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.CHAT)
+    proxy_body = _as_proxy_body(body)
     try:
-        result = await use_case.chat_completion(ctx, body)
+        result = await use_case.chat_completion(ctx, proxy_body)
     except Exception as exc:
         logger.warning("chat_completions failed: %s", exc)
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
 
-    if body.get("stream"):
+    if proxy_body.get("stream"):
+        stream = cast("AsyncIterator[dict[str, Any]]", result)
 
         async def _sse() -> AsyncIterator[bytes]:
-            async for chunk in result:  # type: ignore[union-attr]
+            async for chunk in stream:
                 yield b"data: " + orjson.dumps(chunk) + b"\n\n"
             yield b"data: [DONE]\n\n"
 
@@ -124,16 +90,16 @@ async def chat_completions(
 
 @router.post("/embeddings")
 async def embeddings(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.EMBEDDING)
     try:
-        result = await use_case.embedding(ctx, body)
+        result = await use_case.embedding(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -144,16 +110,16 @@ async def embeddings(
 
 @router.post("/images/generations")
 async def image_generations(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.IMAGE)
     try:
-        result = await use_case.image_generation(ctx, body)
+        result = await use_case.image_generation(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -174,7 +140,7 @@ async def audio_transcriptions(
     temperature: float | None = Form(default=None),
 ) -> Response:
     contents = await file.read()
-    body: dict[str, Any] = {
+    body: OpenAiRequestBody = {
         "file": (file.filename or "audio", contents, file.content_type),
         "model": model,
     }
@@ -190,9 +156,9 @@ async def audio_transcriptions(
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_TRANSCRIPTION)
     try:
-        result = await use_case.audio_transcription(ctx, body)
+        result = await use_case.audio_transcription(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -203,16 +169,16 @@ async def audio_transcriptions(
 
 @router.post("/audio/speech")
 async def audio_speech(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_SPEECH)
     try:
-        result = await use_case.audio_speech(ctx, body)
+        result = await use_case.audio_speech(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     if isinstance(result, bytes):
         return Response(content=result, media_type="audio/mpeg")
     if hasattr(result, "content"):
@@ -230,16 +196,16 @@ async def audio_speech(
 
 @router.post("/rerank")
 async def rerank(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.RERANK)
     try:
-        result = await use_case.rerank(ctx, body)
+        result = await use_case.rerank(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -250,16 +216,16 @@ async def rerank(
 
 @router.post("/moderations")
 async def moderations(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.MODERATION)
     try:
-        result = await use_case.moderation(ctx, body)
+        result = await use_case.moderation(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -270,16 +236,16 @@ async def moderations(
 
 @router.post("/videos")
 async def videos(
-    body: dict[str, Any],
+    body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.VIDEO_GENERATION)
     try:
-        result = await use_case.video_generation(ctx, body)
+        result = await use_case.video_generation(ctx, _as_proxy_body(body))
     except Exception as exc:
-        raise _wrap_business_errors(exc) from exc
+        raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
 
 
@@ -292,25 +258,26 @@ async def videos(
 async def list_models(
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, Any]:
+) -> dict[str, object]:
     reads = GatewayManagementReadService(db)
     models = await reads.list_gateway_models(principal.team_id, only_enabled=True)
     if principal.vkey and principal.vkey.allowed_models:
         allowed = set(principal.vkey.allowed_models)
         models = [m for m in models if m.name in allowed]
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": m.name,
-                "object": "model",
-                "created": int(m.created_at.timestamp()),
-                "owned_by": m.provider,
-                "capability": m.capability,
-            }
-            for m in models
-        ],
-    }
+    if principal.api_key_grant and principal.api_key_grant.allowed_models:
+        allowed = set(principal.api_key_grant.allowed_models)
+        models = [m for m in models if m.name in allowed]
+    data: list[Mapping[str, object]] = [
+        {
+            "id": m.name,
+            "object": "model",
+            "created": int(m.created_at.timestamp()),
+            "owned_by": m.provider,
+            "capability": m.capability,
+        }
+        for m in models
+    ]
+    return {"object": "list", "data": data}
 
 
 __all__ = ["router"]

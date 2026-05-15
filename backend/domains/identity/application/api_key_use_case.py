@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from domains.identity.domain.api_key_types import (
     ApiKeyCreateRequest,
     ApiKeyEntity,
+    ApiKeyGatewayGrantEntity,
+    ApiKeyGatewayGrantRequest,
     ApiKeyScope,
     ApiKeyUpdateRequest,
     ApiKeyUsageLogResponse,
@@ -22,14 +24,17 @@ from domains.identity.domain.services.api_key_service import (
 from domains.identity.infrastructure.repositories.api_key_repository import (
     ApiKeyRepository,
 )
+from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
+from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
 from libs.exceptions import NotFoundError, ValidationError
+from libs.iam.tenancy import TenantId
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.identity.infrastructure.models.api_key import ApiKey
+    from domains.identity.infrastructure.models.api_key import ApiKey, ApiKeyGatewayGrant
 
 
 class ApiKeyUseCase:
@@ -50,6 +55,8 @@ class ApiKeyUseCase:
         self.generator = generator or ApiKeyGenerator(encryption_key)
         self.domain_service = ApiKeyDomainService(self.generator)
         self._encryption_key = encryption_key
+        self._teams = TeamRepository(db)
+        self._membership = TenancyMembershipAdapter()
 
     # =======================================================================
     # CRUD 操作
@@ -97,7 +104,22 @@ class ApiKeyUseCase:
             encrypted_key=encrypted_key,
         )
 
-        entity = self._to_entity(model)
+        grants = await self._validated_gateway_grants(
+            user_id=user_id,
+            scopes=scopes,
+            requested=request.gateway_grants,
+        )
+        grant_models = (
+            await self.repo.replace_gateway_grants(
+                api_key_id=model.id,
+                user_id=user_id,
+                grants=grants,
+            )
+            if grants
+            else []
+        )
+
+        entity = self._to_entity(model, grant_models)
         return entity, plain_key
 
     async def get_api_key(
@@ -122,7 +144,8 @@ class ApiKeyUseCase:
             raise NotFoundError("ApiKey", str(api_key_id))
 
         # 验证所有权（Repository 已通过 PermissionContext 自动处理）
-        return self._to_entity(model)
+        grants = await self.repo.list_gateway_grants(api_key_id)
+        return self._to_entity(model, grants)
 
     async def list_api_keys(
         self,
@@ -151,7 +174,11 @@ class ApiKeyUseCase:
             skip=skip,
             limit=limit,
         )
-        return [self._to_entity(m) for m in models]
+        out: list[ApiKeyEntity] = []
+        for model in models:
+            grants = await self.repo.list_gateway_grants(model.id)
+            out.append(self._to_entity(model, grants))
+        return out
 
     async def update_api_key(
         self,
@@ -204,7 +231,29 @@ class ApiKeyUseCase:
         if model is None:
             raise NotFoundError("ApiKey", str(api_key_id))
 
-        return self._to_entity(model)
+        grant_models = await self.repo.list_gateway_grants(api_key_id)
+        if request.gateway_grants is not None or scopes is not None:
+            effective_scopes = scopes if scopes is not None else current.scopes
+            if request.gateway_grants is not None:
+                requested_grants = request.gateway_grants
+            elif ApiKeyScope.GATEWAY_PROXY in effective_scopes:
+                requested_grants = [
+                    self._grant_request_from_entity(grant) for grant in current.gateway_grants
+                ]
+            else:
+                requested_grants = []
+            grants = await self._validated_gateway_grants(
+                user_id=user_id,
+                scopes=effective_scopes,
+                requested=requested_grants,
+            )
+            grant_models = await self.repo.replace_gateway_grants(
+                api_key_id=api_key_id,
+                user_id=user_id,
+                grants=grants,
+            )
+
+        return self._to_entity(model, grant_models)
 
     async def revoke_api_key(
         self,
@@ -313,7 +362,8 @@ class ApiKeyUseCase:
         # 逐个验证哈希
         for model in candidates:
             if self.generator.verify_key(plain_key, model.key_hash):
-                entity = self._to_entity(model)
+                grants = await self.repo.list_gateway_grants(model.id)
+                entity = self._to_entity(model, grants)
                 # 返回实体（调用方需要检查 is_valid 判断是否过期/撤销）
                 return entity
 
@@ -399,7 +449,87 @@ class ApiKeyUseCase:
     # 辅助方法
     # =======================================================================
 
-    def _to_entity(self, model: ApiKey) -> ApiKeyEntity:
+    async def _validated_gateway_grants(
+        self,
+        *,
+        user_id: uuid.UUID,
+        scopes: set[ApiKeyScope],
+        requested: list[ApiKeyGatewayGrantRequest],
+    ) -> list[ApiKeyGatewayGrantRequest]:
+        """验证并规范化 Gateway grants。
+
+        ``gateway:proxy`` 没有显式 grant 时只默认授予 personal team，避免一把平台
+        Key 能在用户加入的所有团队间任意切换。
+        """
+        if ApiKeyScope.GATEWAY_PROXY not in scopes:
+            if requested:
+                raise ValidationError("gateway_grants require scope gateway:proxy")
+            return []
+
+        grants = list(requested)
+        if not grants:
+            personal = await self._teams.get_personal(user_id)
+            if personal is None or not personal.is_active:
+                raise ValidationError(
+                    "gateway:proxy API key requires a personal team or explicit gateway_grants"
+                )
+            grants = [ApiKeyGatewayGrantRequest(team_id=personal.id)]
+
+        seen: set[uuid.UUID] = set()
+        for grant in grants:
+            if grant.team_id in seen:
+                raise ValidationError(f"duplicate gateway grant team_id: {grant.team_id}")
+            seen.add(grant.team_id)
+            team = await self._teams.get(grant.team_id)
+            if team is None or not team.is_active:
+                raise ValidationError(f"gateway grant team not found: {grant.team_id}")
+            role = await self._membership.member_role(
+                self.db,
+                tenant_id=TenantId(grant.team_id),
+                user_id=user_id,
+            )
+            if role not in {"owner", "admin"}:
+                raise ValidationError(
+                    f"gateway grant requires team owner/admin role: {grant.team_id}"
+                )
+        return grants
+
+    @staticmethod
+    def _grant_request_from_entity(
+        grant: ApiKeyGatewayGrantEntity,
+    ) -> ApiKeyGatewayGrantRequest:
+        return ApiKeyGatewayGrantRequest(
+            team_id=grant.team_id,
+            allowed_models=list(grant.allowed_models),
+            allowed_capabilities=list(grant.allowed_capabilities),
+            rpm_limit=grant.rpm_limit,
+            tpm_limit=grant.tpm_limit,
+            store_full_messages=grant.store_full_messages,
+            guardrail_enabled=grant.guardrail_enabled,
+        )
+
+    def _grant_to_entity(self, model: ApiKeyGatewayGrant) -> ApiKeyGatewayGrantEntity:
+        return ApiKeyGatewayGrantEntity(
+            id=model.id,
+            api_key_id=model.api_key_id,
+            user_id=model.user_id,
+            team_id=model.team_id,
+            allowed_models=tuple(model.allowed_models or ()),
+            allowed_capabilities=tuple(model.allowed_capabilities or ()),
+            rpm_limit=model.rpm_limit,
+            tpm_limit=model.tpm_limit,
+            store_full_messages=model.store_full_messages,
+            guardrail_enabled=model.guardrail_enabled,
+            is_active=model.is_active,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    def _to_entity(
+        self,
+        model: ApiKey,
+        gateway_grants: list[ApiKeyGatewayGrant] | None = None,
+    ) -> ApiKeyEntity:
         """ORM 模型转领域实体
 
         Args:
@@ -423,4 +553,8 @@ class ApiKeyUseCase:
             usage_count=model.usage_count,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            gateway_grants=tuple(
+                self._grant_to_entity(grant)
+                for grant in (gateway_grants if isinstance(gateway_grants, list) else [])
+            ),
         )

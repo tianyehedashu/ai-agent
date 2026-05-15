@@ -196,7 +196,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         </div>
 
         <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
-          <PersonalCredentialsPanel layout="gateway" />
+          <PersonalCredentialsPanel />
         </TabsContent>
 
         <TabsContent value="team" className="mt-4 focus-visible:outline-none">

@@ -23,6 +23,50 @@ class NoPersonalTeamForProxyError(GatewayError):
         super().__init__("No team available for this user (personal team missing)")
 
 
+class GatewayTeamHeaderInvalidError(GatewayError):
+    """Gateway 代理入口的 X-Team-Id 不是合法 UUID。"""
+
+    def __init__(self, value: str) -> None:
+        super().__init__(f"Invalid X-Team-Id: {value}")
+        self.value = value
+
+
+class GatewayTeamHeaderRequiredError(GatewayError):
+    """一把平台 API Key 有多条非 personal 授权时必须显式选择团队。"""
+
+    def __init__(self) -> None:
+        super().__init__("X-Team-Id is required for this API key")
+
+
+class ApiKeyGatewayGrantRequiredError(GatewayError):
+    """平台 API Key 缺少 Gateway 团队授权。"""
+
+    def __init__(self) -> None:
+        super().__init__("API key is not granted to any Gateway team")
+
+
+class ApiKeyGatewayGrantDeniedError(GatewayError):
+    """平台 API Key 未被授权访问指定 Gateway 团队。"""
+
+    def __init__(self, team_id: str) -> None:
+        super().__init__(f"API key is not granted to Gateway team: {team_id}")
+        self.team_id = team_id
+
+
+class PlatformApiKeyInvalidError(GatewayError):
+    """平台 ``sk-*`` 校验失败（格式/哈希/已撤销/已过期）。"""
+
+    def __init__(self) -> None:
+        super().__init__("Invalid API key")
+
+
+class PlatformApiKeyMissingGatewayProxyScopeError(GatewayError):
+    """平台 API Key 缺少 ``gateway:proxy`` 作用域。"""
+
+    def __init__(self) -> None:
+        super().__init__("API key missing scope: gateway:proxy")
+
+
 class ManagementEntityNotFoundError(GatewayError):
     """管理面资源不存在（模型/路由/告警规则等）"""
 
@@ -129,18 +173,24 @@ class GuardrailBlockedError(GatewayError):
 
 
 __all__ = [
+    "ApiKeyGatewayGrantDeniedError",
+    "ApiKeyGatewayGrantRequiredError",
     "BudgetExceededError",
     "CapabilityNotAllowedError",
     "CredentialInUseError",
     "CredentialNameConflictError",
     "CredentialNotFoundError",
     "GatewayError",
+    "GatewayTeamHeaderInvalidError",
+    "GatewayTeamHeaderRequiredError",
     "GuardrailBlockedError",
     "HttpMappableDomainError",
     "ManagementEntityNotFoundError",
     "ModelNotAllowedError",
     "NoPersonalTeamForProxyError",
     "PersonalTeamNotInitializedError",
+    "PlatformApiKeyInvalidError",
+    "PlatformApiKeyMissingGatewayProxyScopeError",
     "RateLimitExceededError",
     "RouteNotFoundError",
     "SystemCredentialAdminRequiredError",

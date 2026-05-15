@@ -12,8 +12,9 @@ API Key Models - API Key 模型
 """
 
 from datetime import UTC, datetime
+import uuid
 
-from sqlalchemy import ARRAY, Boolean, DateTime, Integer, String, Text
+from sqlalchemy import ARRAY, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -147,7 +148,7 @@ class ApiKeyUsageLog(BaseModel):
 
     __tablename__ = "api_key_usage_logs"
 
-    api_key_id: Mapped[str] = mapped_column(
+    api_key_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         nullable=False,
         index=True,
@@ -192,3 +193,73 @@ class ApiKeyUsageLog(BaseModel):
 
     def __repr__(self) -> str:
         return f"<ApiKeyUsageLog {self.method} {self.endpoint}>"
+
+
+class ApiKeyGatewayGrant(BaseModel, TimestampMixin):
+    """平台 API Key 的 Gateway 团队授权。
+
+    ``api_keys.scopes`` 只说明这把 Key 具备 Gateway 代理能力；本表才是它能访问
+    哪些团队、模型和调用能力的授权真源。
+    """
+
+    __tablename__ = "api_key_gateway_grants"
+
+    api_key_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        comment="关联的 API Key ID",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        comment="API Key 所属用户 ID，用于授权校验和审计",
+    )
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        comment="允许代理调用归属的 Gateway Team ID",
+    )
+    allowed_models: Mapped[list[str]] = mapped_column(
+        ARRAY(String(200)),
+        default=list,
+        nullable=False,
+        comment="允许模型白名单；空数组表示不限制",
+    )
+    allowed_capabilities: Mapped[list[str]] = mapped_column(
+        ARRAY(String(40)),
+        default=list,
+        nullable=False,
+        comment="允许 Gateway 能力；空数组表示不限制",
+    )
+    rpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    store_full_messages: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="是否允许该平台 Key 的 Gateway 调用保存完整消息",
+    )
+    guardrail_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="是否启用 Gateway Guardrail",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        index=True,
+        comment="授权是否有效",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("api_key_id", "team_id", name="uq_api_key_gateway_grants_key_team"),
+        Index("ix_api_key_gateway_grants_user_team", "user_id", "team_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ApiKeyGatewayGrant api_key={self.api_key_id} team={self.team_id}>"

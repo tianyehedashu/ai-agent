@@ -148,8 +148,10 @@ export function ApiKeyTab(): React.ReactElement {
           级限流更完整）。若需「一把 <code className="rounded bg-muted px-1">sk-*</code>」同时带
           Agent/MCP 等能力，可在创建 API Key 时勾选 <strong>Gateway 代理</strong>（
           <code className="rounded bg-muted px-1">gateway:proxy</code>
-          ），调用时按需加请求头 <code className="rounded bg-muted px-1">X-Team-Id</code>
-          。上游供应商的 OpenAI/Anthropic 等密钥属于「我的凭据」，与此处平台 API Key 不同。
+          ）。平台 Key 默认只授权 personal team；调用时的{' '}
+          <code className="rounded bg-muted px-1">X-Team-Id</code>
+          只能选择后端 grant 已授权团队。上游供应商的 OpenAI/Anthropic
+          等密钥属于「我的凭据」，与此处平台 API Key 不同。
         </AlertDescription>
       </Alert>
 
@@ -355,6 +357,12 @@ function ApiKeyCard({
             </Badge>
           ))}
         </div>
+
+        {apiKey.gateway_grants.length > 0 && (
+          <div className="rounded border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Gateway 授权团队: {apiKey.gateway_grants.length}
+          </div>
+        )}
 
         {/* 统计信息 */}
         <div className="flex items-center gap-4 text-sm text-muted-foreground">

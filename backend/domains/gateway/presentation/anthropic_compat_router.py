@@ -22,17 +22,13 @@ from domains.gateway.application.anthropic_openai_bridge import (
     openai_chat_stream_chunks_to_anthropic_sse,
 )
 from domains.gateway.application.proxy_use_case import ProxyUseCase
-from domains.gateway.domain.errors import (
-    BudgetExceededError,
-    CapabilityNotAllowedError,
-    GuardrailBlockedError,
-    ModelNotAllowedError,
-    RateLimitExceededError,
-)
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
     bearer_vkey_or_apikey_auth,
+)
+from domains.gateway.presentation.gateway_proxy_business_error_classify import (
+    classify_proxy_use_case_business_error,
 )
 from domains.gateway.presentation.gateway_proxy_context import (
     proxy_context_from_gateway_principal,
@@ -58,41 +54,23 @@ def _anthropic_error(
 
 
 def _wrap_anthropic_business_errors(exc: Exception) -> HTTPException:
-    if isinstance(exc, ModelNotAllowedError):
-        return _anthropic_error(
-            http_status=status.HTTP_400_BAD_REQUEST,
-            error_type="invalid_request_error",
-            message=str(exc),
+    classified = classify_proxy_use_case_business_error(exc)
+    if classified is not None:
+        headers = (
+            {"Retry-After": str(classified.retry_after)}
+            if classified.retry_after is not None
+            else None
         )
-    if isinstance(exc, CapabilityNotAllowedError):
-        return _anthropic_error(
-            http_status=status.HTTP_400_BAD_REQUEST,
-            error_type="invalid_request_error",
-            message=str(exc),
-        )
-    if isinstance(exc, RateLimitExceededError):
-        return _anthropic_error(
-            http_status=status.HTTP_429_TOO_MANY_REQUESTS,
-            error_type="rate_limit_error",
-            message=str(exc),
-        )
-    if isinstance(exc, BudgetExceededError):
-        return _anthropic_error(
-            http_status=status.HTTP_402_PAYMENT_REQUIRED,
-            error_type="api_error",
-            message=str(exc),
-        )
-    if isinstance(exc, GuardrailBlockedError):
-        return _anthropic_error(
-            http_status=status.HTTP_400_BAD_REQUEST,
-            error_type="invalid_request_error",
-            message=str(exc),
-        )
-    if isinstance(exc, ValueError):
-        return _anthropic_error(
-            http_status=status.HTTP_400_BAD_REQUEST,
-            error_type="invalid_request_error",
-            message=str(exc),
+        return HTTPException(
+            status_code=classified.http_status,
+            detail={
+                "type": "error",
+                "error": {
+                    "type": classified.anthropic_error_type,
+                    "message": classified.message,
+                },
+            },
+            headers=headers,
         )
     return _anthropic_error(
         http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,

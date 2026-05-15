@@ -108,6 +108,8 @@ export type {
   ApiKey,
   ApiKeyCreateRequest,
   ApiKeyCreatedResponse,
+  ApiKeyGatewayGrant,
+  ApiKeyGatewayGrantRequest,
   ApiKeyStatus,
   ApiKeyUpdateRequest,
   ApiKeyUsageLog,

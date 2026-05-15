@@ -21,10 +21,10 @@ import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
-import { CredentialsTab } from './components/credentials-tab'
 import { MCPTab } from './components/mcp-tab'
+import { ModelTab } from './components/model-tab'
 
-const SETTINGS_TABS = ['general', 'api', 'credentials', 'mcp', 'account'] as const
+const SETTINGS_TABS = ['general', 'api', 'models', 'mcp', 'account'] as const
 type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 export default function SettingsPage(): React.JSX.Element {
@@ -39,8 +39,10 @@ export default function SettingsPage(): React.JSX.Element {
   const [isSaving, setIsSaving] = useState(false)
 
   const tabParam = searchParams.get('tab')
-  const activeTab: SettingsTab = SETTINGS_TABS.includes(tabParam as SettingsTab)
-    ? (tabParam as SettingsTab)
+  /** 旧深链 ?tab=credentials 已迁至 AI Gateway；此处映射到「我的模型」 */
+  const normalizedTab = tabParam === 'credentials' ? 'models' : tabParam
+  const activeTab: SettingsTab = SETTINGS_TABS.includes(normalizedTab as SettingsTab)
+    ? (normalizedTab as SettingsTab)
     : 'general'
 
   const handleTabChange = (value: string): void => {
@@ -53,8 +55,19 @@ export default function SettingsPage(): React.JSX.Element {
     setSearchParams(next, { replace: true })
   }
 
-  // 深链 ?tab= 与无效值时纠回允许的标签
+  // 旧凭据 tab 深链改为 models，并清理非法 ?tab=
   useEffect(() => {
+    if (tabParam === 'credentials') {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('tab', 'models')
+          return next
+        },
+        { replace: true }
+      )
+      return
+    }
     if (tabParam !== null && tabParam !== '' && !SETTINGS_TABS.includes(tabParam as SettingsTab)) {
       setSearchParams(
         (prev) => {
@@ -141,7 +154,7 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
-          <TabsTrigger value="credentials">我的凭据</TabsTrigger>
+          <TabsTrigger value="models">我的模型</TabsTrigger>
           <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
         </TabsList>
@@ -198,8 +211,8 @@ export default function SettingsPage(): React.JSX.Element {
           <ApiKeyTab />
         </TabsContent>
 
-        <TabsContent value="credentials">
-          <CredentialsTab />
+        <TabsContent value="models">
+          <ModelTab />
         </TabsContent>
 
         <TabsContent value="mcp">

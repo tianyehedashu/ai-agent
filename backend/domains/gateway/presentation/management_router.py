@@ -372,7 +372,9 @@ async def list_my_credentials(
     return [build_credential_response(c, encryption_key=_encryption_key()) for c in creds]
 
 
-@router.post("/my-credentials", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/my-credentials", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_my_credential(
     body: UserCredentialCreate,
     current_user: RequiredAuthUser,

@@ -117,7 +117,7 @@ make test-cov  # 带覆盖率
 
 ### AI Gateway 对外协议（根路径 `/v1`）
 
-同一服务、同一 `base_url`（例如 `http://localhost:8000`）下提供两套 HTTP 面，虚拟 Key（`sk-gw-...`）与带 `gateway:proxy` 的 API Key 均可使用；鉴权支持 **`Authorization: Bearer <token>`** 或 **`x-api-key: <token>`**（同时存在时优先 Bearer）。`X-Team-Id` 在使用业务 `sk-` 时用于指定团队。
+同一服务、同一 `base_url`（例如 `http://localhost:8000`）下提供两套 HTTP 面，虚拟 Key（`sk-gw-...`）与带 `gateway:proxy` 且命中 Gateway grant 的 API Key 均可使用；鉴权支持 **`Authorization: Bearer <token>`** 或 **`x-api-key: <token>`**（同时存在时优先 Bearer）。`X-Team-Id` 在使用业务 `sk-` 时只用于选择该 Key 已授权的团队。
 
 | 协议 | 示例端点 | 说明 |
 |------|-----------|------|

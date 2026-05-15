@@ -27,14 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.gateway_access_use_case import GatewayAccessUseCase
 from domains.gateway.domain.errors import VirtualKeyInvalidError
 from domains.gateway.domain.types import (
+    ApiKeyGatewayGrantPrincipal,
     GatewayInboundVia,
     VirtualKeyPrincipal,
     allowed_capabilities_from_storage,
 )
 from domains.gateway.domain.virtual_key_service import is_vkey_format
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
-from domains.identity.application.api_key_use_case import ApiKeyUseCase
-from domains.identity.domain.api_key_types import ApiKeyScope
 from domains.tenancy.presentation.team_dependencies import (
     CurrentTeam,
     RequiredGatewayAdmin,
@@ -194,6 +193,7 @@ class VkeyOrApikeyPrincipal:
     team_id: uuid.UUID
     vkey: VirtualKeyPrincipal | None = None
     platform_api_key_id: uuid.UUID | None = None
+    api_key_grant: ApiKeyGatewayGrantPrincipal | None = None
 
 
 async def bearer_vkey_or_apikey_auth(
@@ -220,41 +220,51 @@ async def bearer_vkey_or_apikey_auth(
             platform_api_key_id=None,
         )
 
-    use_case = ApiKeyUseCase(db)
-    entity = await use_case.verify_api_key(plain)
-    if entity is None or not entity.is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not entity.can_access(ApiKeyScope.GATEWAY_PROXY):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="API key missing scope: gateway:proxy",
-        )
-
     access = GatewayAccessUseCase(db)
     try:
-        team, team_role = await access.resolve_team_for_gateway_proxy(entity.user_id, x_team_id)
+        auth = await access.authenticate_platform_sk_for_gateway_proxy(plain, x_team_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
 
+    try:
+        grant_caps = allowed_capabilities_from_storage(auth.allowed_capabilities)
+    except ValueError:
+        logger.exception(
+            "api key gateway grant %s has invalid allowed_capabilities in DB",
+            auth.grant_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid API key Gateway grant capability configuration",
+        ) from None
+
     set_permission_context(
         PermissionContext(
-            user_id=entity.user_id,
+            user_id=auth.user_id,
             anonymous_user_id=None,
             role="user",
-            team_id=team.id,
-            team_role=team_role,
+            team_id=auth.team_id,
+            team_role=auth.team_role,
         )
     )
 
     return VkeyOrApikeyPrincipal(
         via="apikey",
-        user_id=entity.user_id,
-        team_id=team.id,
-        platform_api_key_id=entity.id,
+        user_id=auth.user_id,
+        team_id=auth.team_id,
+        platform_api_key_id=auth.api_key_id,
+        api_key_grant=ApiKeyGatewayGrantPrincipal(
+            grant_id=auth.grant_id,
+            api_key_id=auth.api_key_id,
+            team_id=auth.team_id,
+            user_id=auth.user_id,
+            allowed_models=auth.allowed_models,
+            allowed_capabilities=grant_caps,
+            rpm_limit=auth.rpm_limit,
+            tpm_limit=auth.tpm_limit,
+            store_full_messages=auth.store_full_messages,
+            guardrail_enabled=auth.guardrail_enabled,
+        ),
     )
 
 

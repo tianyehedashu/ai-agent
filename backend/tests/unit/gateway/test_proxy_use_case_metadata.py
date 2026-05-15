@@ -9,6 +9,7 @@ import uuid
 import pytest
 
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.errors import CapabilityNotAllowedError, ModelNotAllowedError
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
 
@@ -244,3 +245,30 @@ async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
     uc = ProxyUseCase(db_session)
     meta = await uc._build_metadata(ctx, user_kwargs={"model": "bare-model"})
     assert "gateway_route_snapshot" not in meta
+
+
+@pytest.mark.asyncio
+async def test_platform_api_key_grant_policy_checks_model_and_capability(db_session: Any) -> None:
+    tid = uuid.uuid4()
+    uid = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=tid,
+        user_id=uid,
+        vkey=None,
+        capability=GatewayCapability.EMBEDDING,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=True,
+        inbound_via="apikey",
+        platform_api_key_id=uuid.uuid4(),
+        platform_api_key_grant_id=uuid.uuid4(),
+        allowed_models=("allowed-chat",),
+        allowed_capabilities=(GatewayCapability.CHAT,),
+    )
+    uc = ProxyUseCase(db_session)
+
+    with pytest.raises(ModelNotAllowedError):
+        uc._check_model("other-model", ctx)
+
+    with pytest.raises(CapabilityNotAllowedError):
+        uc._check_capability(ctx)

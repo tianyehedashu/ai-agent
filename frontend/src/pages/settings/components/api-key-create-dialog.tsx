@@ -198,7 +198,8 @@ export function ApiKeyCreateDialog({
                           <FormDescription>
                             选择此 API Key 的权限范围。顶部「全选」不含{' '}
                             <span className="font-mono">gateway:admin</span>
-                            （Gateway 管理写权限），需要时请单独勾选。
+                            （Gateway 管理写权限），需要时请单独勾选。 勾选 gateway:proxy
+                            时默认只授权 personal team；共享团队建议使用 Gateway 虚拟 Key。
                           </FormDescription>
                         </div>
                         <div className="flex gap-1">

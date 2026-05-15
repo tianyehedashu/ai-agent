@@ -75,7 +75,8 @@ export default function GatewayKeysPage(): React.JSX.Element {
             >
               设置 → API 密钥
             </Link>{' '}
-            创建带 <span className="font-mono">gateway:proxy</span> 作用域的 Key。
+            创建带 <span className="font-mono">gateway:proxy</span> 作用域的
+            Key；共享团队调用仍建议使用此处的 <span className="font-mono">sk-gw-*</span>。
           </p>
         </div>
         {canWrite && (

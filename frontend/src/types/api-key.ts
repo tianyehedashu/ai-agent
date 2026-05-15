@@ -90,6 +90,7 @@ export interface ApiKey {
   usage_count: number
   created_at: string
   masked_key: string
+  gateway_grants: ApiKeyGatewayGrant[]
 }
 
 export interface ApiKeyCreateRequest {
@@ -97,6 +98,7 @@ export interface ApiKeyCreateRequest {
   description?: string
   scopes: ApiKeyScope[]
   expires_in_days: number
+  gateway_grants?: ApiKeyGatewayGrantRequest[]
 }
 
 export interface ApiKeyUpdateRequest {
@@ -105,12 +107,36 @@ export interface ApiKeyUpdateRequest {
   scopes?: ApiKeyScope[]
   extend_expiry_days?: number
   is_active?: boolean
+  gateway_grants?: ApiKeyGatewayGrantRequest[]
 }
 
 export interface ApiKeyCreatedResponse {
   api_key: ApiKey
   plain_key: string
   warning: string
+}
+
+export interface ApiKeyGatewayGrant {
+  id: string
+  team_id: string
+  allowed_models: string[]
+  allowed_capabilities: string[]
+  rpm_limit: number | null
+  tpm_limit: number | null
+  store_full_messages: boolean
+  guardrail_enabled: boolean
+  is_active: boolean
+  created_at: string
+}
+
+export interface ApiKeyGatewayGrantRequest {
+  team_id: string
+  allowed_models?: string[]
+  allowed_capabilities?: string[]
+  rpm_limit?: number | null
+  tpm_limit?: number | null
+  store_full_messages?: boolean
+  guardrail_enabled?: boolean
 }
 
 // =============================================================================
@@ -224,7 +250,7 @@ export const SCOPE_DISPLAY_INFO: Record<
   'gateway:proxy': {
     label: 'Gateway 代理 (/v1/*)',
     description:
-      '使用本平台的 sk-* 调用 OpenAI 兼容与 Anthropic 入口；需 scope gateway:proxy。细粒度模型白名单与 key 级限流请优先使用「Gateway 虚拟 Key（sk-gw-）」',
+      '使用本平台的 sk-* 调用 OpenAI 兼容与 Anthropic 入口；默认只授权 personal team，X-Team-Id 只能选择已授权团队',
     category: 'Gateway',
   },
   'gateway:admin': {

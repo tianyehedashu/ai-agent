@@ -32,6 +32,11 @@ from domains.gateway.infrastructure.models import (  # noqa: F401
     Team,
     TeamMember,
 )
+from domains.identity.infrastructure.models.api_key import (  # noqa: F401
+    ApiKey,
+    ApiKeyGatewayGrant,
+    ApiKeyUsageLog,
+)
 from domains.identity.infrastructure.models.user import User  # noqa: F401
 from domains.session.infrastructure.models.session import Session  # noqa: F401
 

@@ -1,13 +1,12 @@
 /**
- * 个人凭据（/my-credentials）列表与 CRUD，供设置页与网关凭据页复用。
+ * 个人凭据（/my-credentials）列表与 CRUD，用于 AI Gateway 凭据页「个人」Tab。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, ExternalLink, Key, Loader2, Pencil, Plus } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
@@ -37,15 +36,7 @@ import { useAuthStore } from '@/stores/auth'
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
 import { displayListApiKeyMasked } from './mask-display'
 
-export type PersonalCredentialsPanelLayout = 'settings' | 'gateway'
-
-export interface PersonalCredentialsPanelProps {
-  layout: PersonalCredentialsPanelLayout
-}
-
-export function PersonalCredentialsPanel({
-  layout,
-}: Readonly<PersonalCredentialsPanelProps>): React.ReactElement {
+export function PersonalCredentialsPanel(): React.ReactElement {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
@@ -199,13 +190,6 @@ export function PersonalCredentialsPanel({
   const headerToolbar = useMemo(
     () => (
       <div className="flex items-center gap-1">
-        {layout === 'settings' ? (
-          <Button variant="ghost" size="icon" asChild title="在网关打开">
-            <Link to="/gateway/credentials?tab=personal">
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
-        ) : null}
         <Button
           size="sm"
           disabled={!hasAuthSession}
@@ -218,7 +202,7 @@ export function PersonalCredentialsPanel({
         </Button>
       </div>
     ),
-    [layout, hasAuthSession, openAdd]
+    [hasAuthSession, openAdd]
   )
 
   const credentialsBody = useMemo(
@@ -338,23 +322,13 @@ export function PersonalCredentialsPanel({
 
   return (
     <div className={outerClass}>
-      {layout === 'settings' ? (
-        <>
-          <div className="flex flex-row items-center justify-between gap-2 border-b pb-3">
-            <h3 className="text-base font-semibold tracking-tight">提供商凭据</h3>
-            {headerToolbar}
-          </div>
-          <div className="space-y-4 pt-2">{credentialsBody}</div>
-        </>
-      ) : (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base">提供商凭据</CardTitle>
-            {headerToolbar}
-          </CardHeader>
-          <CardContent className="space-y-4">{credentialsBody}</CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-base">提供商凭据</CardTitle>
+          {headerToolbar}
+        </CardHeader>
+        <CardContent className="space-y-4">{credentialsBody}</CardContent>
+      </Card>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>

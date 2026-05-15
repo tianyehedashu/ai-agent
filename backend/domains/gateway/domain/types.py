@@ -176,6 +176,22 @@ class VirtualKeyPrincipal:
     is_system: bool
 
 
+@dataclass(frozen=True)
+class ApiKeyGatewayGrantPrincipal:
+    """平台 API Key 的 Gateway grant 主体信息。"""
+
+    grant_id: uuid.UUID
+    api_key_id: uuid.UUID
+    team_id: uuid.UUID
+    user_id: uuid.UUID
+    allowed_models: tuple[str, ...]
+    allowed_capabilities: tuple[GatewayCapability, ...]
+    rpm_limit: int | None
+    tpm_limit: int | None
+    store_full_messages: bool
+    guardrail_enabled: bool
+
+
 @dataclass
 class RouteConfig:
     """路由配置（对齐 LiteLLM Router 的 model_list 配置）"""
@@ -244,6 +260,7 @@ __all__ = [
     "USER_GATEWAY_CREDENTIAL_PROVIDERS",
     "AlertChannel",
     "AlertMetric",
+    "ApiKeyGatewayGrantPrincipal",
     "BudgetPeriod",
     "BudgetScope",
     "CredentialScope",
