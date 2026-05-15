@@ -6,7 +6,9 @@ import {
   classifyFailureReason,
   formatUsageLine,
   matchesHealthFilter,
+  pickInspectorModelId,
   routesReferencingModel,
+  runWithConcurrency,
   summarizeHealth,
 } from './utils'
 
@@ -33,6 +35,31 @@ function model(
     ...partial,
   }
 }
+
+describe('pickInspectorModelId', () => {
+  const candidates = [
+    model({ id: 'a', enabled: false, last_test_status: 'success' }),
+    model({ id: 'b', enabled: true, last_test_status: 'failed' }),
+    model({ id: 'c', enabled: true, last_test_status: 'success' }),
+    model({ id: 'd', enabled: true, last_test_status: null }),
+  ]
+
+  it('prefers deep link id when visible', () => {
+    expect(pickInspectorModelId(candidates, null, 'b')).toBe('b')
+  })
+
+  it('keeps current selection when still visible', () => {
+    expect(pickInspectorModelId(candidates, 'd')).toBe('d')
+  })
+
+  it('picks enabled model with successful health when no selection', () => {
+    expect(pickInspectorModelId(candidates, null)).toBe('c')
+  })
+
+  it('returns null when list is empty', () => {
+    expect(pickInspectorModelId([], null)).toBeNull()
+  })
+})
 
 describe('classifyFailureReason', () => {
   it('maps quota errors', () => {
@@ -97,5 +124,24 @@ describe('summarizeHealth', () => {
       model({ id: '3', last_test_status: null }),
     ])
     expect(summary).toEqual({ total: 3, success: 1, failed: 1, unknown: 1 })
+  })
+})
+
+describe('runWithConcurrency', () => {
+  it('runs all items with bounded concurrency', async () => {
+    const order: number[] = []
+    let inFlight = 0
+    let maxInFlight = 0
+    const items = [0, 1, 2, 3, 4]
+    await runWithConcurrency(items, 2, async (n) => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      order.push(n)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight -= 1
+    })
+    expect(order.sort((a, b) => a - b)).toEqual(items)
+    expect(maxInFlight).toBeLessThanOrEqual(2)
+    expect(maxInFlight).toBeGreaterThanOrEqual(1)
   })
 })

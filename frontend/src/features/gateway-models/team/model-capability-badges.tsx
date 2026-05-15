@@ -2,7 +2,7 @@ import { Info } from 'lucide-react'
 
 import type { GatewayModel } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 import { MODEL_TYPE_LABELS } from '../constants'
 
@@ -26,20 +26,22 @@ export function ModelCapabilityBadges({
           {model.capability}
         </Badge>
         {!compact ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex rounded-sm text-muted-foreground hover:text-foreground"
-                aria-label="能力说明"
-              >
-                <Info className="h-3 w-3" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
-              主调用面决定 OpenAI 兼容 HTTP 入口；下方芯片为产品特性标签。
-            </TooltipContent>
-          </Tooltip>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex rounded-sm text-muted-foreground hover:text-foreground"
+                  aria-label="能力说明"
+                >
+                  <Info className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
+                主调用面决定 OpenAI 兼容 HTTP 入口；下方芯片为产品特性标签。
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
       </div>
       {(types.length > 0 || extraTags.length > 0) && (

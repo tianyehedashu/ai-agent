@@ -109,14 +109,6 @@ class CredentialApiKeyDecryptError(GatewayError):
         )
 
 
-class CredentialInUseError(GatewayError):
-    """凭据仍被网关模型引用，无法删除"""
-
-    def __init__(self, credential_id: str) -> None:
-        super().__init__(f"凭据仍被模型引用，无法删除: {credential_id}")
-        self.credential_id = credential_id
-
-
 class SystemCredentialAdminRequiredError(GatewayError):
     """管理系统级凭据（scope=system）需要平台管理员身份"""
 
@@ -187,7 +179,6 @@ __all__ = [
     "BudgetExceededError",
     "CapabilityNotAllowedError",
     "CredentialApiKeyDecryptError",
-    "CredentialInUseError",
     "CredentialNameConflictError",
     "CredentialNotFoundError",
     "GatewayError",

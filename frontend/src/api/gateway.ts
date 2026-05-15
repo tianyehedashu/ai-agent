@@ -72,6 +72,8 @@ export interface ProviderCredential {
   name: string
   api_base: string | null
   is_active: boolean
+  /** app.toml/环境变量同步托管的 system 凭据 */
+  is_config_managed?: boolean
   extra: Record<string, unknown> | null
   created_at: string
   /** 后端解密后掩码展示，不含完整密钥 */

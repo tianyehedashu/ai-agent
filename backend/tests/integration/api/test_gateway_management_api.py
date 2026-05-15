@@ -417,6 +417,59 @@ class TestGatewayManagementApi:
         assert all(m["credential_id"] == cid for m in models)
 
     @pytest.mark.asyncio
+    async def test_delete_managed_credential_cascades_models(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        cred_name = f"del-cascade-{uuid.uuid4().hex[:8]}"
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-int-del-cascade-key-12345678",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        model_name = f"vm-del-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            "/api/v1/gateway/models",
+            headers=headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+
+        r_del = await dev_client.delete(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        assert r_del.status_code == 204, r_del.text
+
+        r_cred_after = await dev_client.get(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        assert r_cred_after.status_code == 404
+
+        r_models_after = await dev_client.get(
+            "/api/v1/gateway/models",
+            headers=headers,
+            params={"credential_id": cid},
+        )
+        assert r_models_after.status_code == 200, r_models_after.text
+        assert not any(m["id"] == mid for m in r_models_after.json())
+
+    @pytest.mark.asyncio
     async def test_my_models_crud(
         self,
         dev_client: AsyncClient,
@@ -454,6 +507,71 @@ class TestGatewayManagementApi:
         r_list = await dev_client.get("/api/v1/gateway/my-models", headers=auth_headers)
         assert r_list.status_code == 200, r_list.text
         assert any(m["id"] == model_id for m in r_list.json())
+
+        r_del = await dev_client.delete(
+            f"/api/v1/gateway/my-models/{model_id}",
+            headers=auth_headers,
+        )
+        assert r_del.status_code == 204, r_del.text
+
+    @pytest.mark.asyncio
+    async def test_personal_my_model_listed_on_v1_models(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """个人模型注册别名应出现在 personal team 虚拟 Key 的 GET /v1/models 列表中。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"v1-models-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-v1-models-int-test-key-123456789",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/my-models",
+            headers=auth_headers,
+            json={
+                "display_name": "V1 List Test",
+                "provider": "openai",
+                "model_id": "gpt-4o-mini",
+                "credential_id": cred_id,
+                "model_types": ["text"],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        created = r_create.json()
+        assert len(created) >= 1
+        registration_name = created[0]["name"]
+        assert registration_name
+        model_id = created[0]["id"]
+
+        mgmt_headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        ck = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=mgmt_headers,
+            json={"name": f"itest-personal-model-v1-{uuid.uuid4().hex[:6]}"},
+        )
+        assert ck.status_code == 201, ck.text
+        plain_key = ck.json()["plain_key"]
+
+        r_models = await dev_client.get(
+            "/v1/models",
+            headers={"Authorization": f"Bearer {plain_key}"},
+        )
+        assert r_models.status_code == 200, r_models.text
+        ids = [m["id"] for m in r_models.json().get("data", [])]
+        assert registration_name in ids
 
         r_del = await dev_client.delete(
             f"/api/v1/gateway/my-models/{model_id}",

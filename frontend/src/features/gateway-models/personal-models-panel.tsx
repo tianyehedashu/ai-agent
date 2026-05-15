@@ -226,13 +226,18 @@ export function PersonalModelsPanel(): React.ReactElement {
         <div>
           <CardTitle>个人模型</CardTitle>
           <CardDescription>
-            注册自带凭据的模型；请先配置{' '}
+            绑定个人凭据后注册模型，进入 LiteLLM Router；可用于对话与{' '}
+            <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
+              虚拟 Key
+            </Link>{' '}
+            / OpenAI 兼容 API（<code className="text-xs">model</code> 使用下方注册别名）。请先配置{' '}
             <Link
               to="/gateway/credentials?tab=personal"
               className="text-primary underline-offset-4 hover:underline"
             >
               个人凭据
             </Link>
+            。
           </CardDescription>
         </div>
         <Button size="sm" onClick={openCreate} disabled={activeCredentials.length === 0}>
@@ -285,9 +290,51 @@ export function PersonalModelsPanel(): React.ReactElement {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : items.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            暂无个人模型，点击「添加模型」开始配置
-          </p>
+          <div className="rounded-lg border border-dashed bg-muted/10 p-8">
+            <h3 className="text-lg font-semibold">配置个人模型供给链</h3>
+            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+              <li>
+                在{' '}
+                <Link
+                  to="/gateway/credentials?tab=personal"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  凭据管理
+                </Link>{' '}
+                添加并启用个人凭据
+              </li>
+              <li>注册第一条模型（展示名 → 上游模型 ID + 凭据，自动生成注册别名）</li>
+              <li>
+                在{' '}
+                <Link
+                  to="/gateway/routes"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  虚拟路由
+                </Link>{' '}
+                将别名编排为对外虚拟名（可选）
+              </li>
+              <li>
+                在{' '}
+                <Link
+                  to="/gateway/keys"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  虚拟 Key
+                </Link>{' '}
+                创建令牌并以注册别名或虚拟名调用 <code className="text-xs">/v1</code>
+              </li>
+            </ol>
+            <Button
+              className="mt-4"
+              size="sm"
+              onClick={openCreate}
+              disabled={activeCredentials.length === 0}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              添加第一个模型
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
             {items.map((m) => (
@@ -309,6 +356,13 @@ export function PersonalModelsPanel(): React.ReactElement {
                       </Badge>
                     ))}
                   </div>
+                  <p
+                    className="mt-0.5 font-mono text-xs text-muted-foreground"
+                    title="OpenAI 兼容 API 的 model 字段"
+                  >
+                    <span className="font-sans text-muted-foreground/80">注册别名 </span>
+                    {m.name}
+                  </p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">{m.model_id}</p>
                   {m.last_test_status === 'failed' && m.last_test_reason ? (
                     <p

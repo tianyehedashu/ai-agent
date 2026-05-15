@@ -6,8 +6,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import case, func, or_, select
 
+from domains.gateway.domain.types import CONFIG_MANAGED_BY
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+
+MANAGED_BY_TAG_KEY = "managed_by"
 
 if TYPE_CHECKING:
     import uuid
@@ -155,6 +158,29 @@ class GatewayModelRepository:
         await self._session.flush()
         return model
 
+    async def list_by_credential_id(self, credential_id: uuid.UUID) -> list[GatewayModel]:
+        stmt = (
+            select(GatewayModel)
+            .where(GatewayModel.credential_id == credential_id)
+            .order_by(GatewayModel.team_id.nulls_first(), GatewayModel.name)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def has_config_managed_global_for_credential(self, credential_id: uuid.UUID) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(GatewayModel)
+            .where(
+                GatewayModel.team_id.is_(None),
+                GatewayModel.credential_id == credential_id,
+                GatewayModel.tags.isnot(None),
+                GatewayModel.tags[MANAGED_BY_TAG_KEY].astext == CONFIG_MANAGED_BY,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one() or 0) > 0
+
     async def count_by_credential_id(self, credential_id: uuid.UUID) -> int:
         stmt = (
             select(func.count())
@@ -276,6 +302,33 @@ class GatewayRouteRepository:
         await self._session.delete(route)
         await self._session.flush()
         return True
+
+    async def remove_model_names_from_all_routes(self, model_names: frozenset[str]) -> int:
+        """从所有路由的 primary/fallback 列表中移除已删除的虚拟模型名。"""
+        if not model_names:
+            return 0
+        stmt = select(GatewayRoute)
+        routes = list((await self._session.execute(stmt)).scalars().all())
+        updated = 0
+        array_fields = (
+            "primary_models",
+            "fallbacks_general",
+            "fallbacks_content_policy",
+            "fallbacks_context_window",
+        )
+        for route in routes:
+            changed = False
+            for field in array_fields:
+                current = list(getattr(route, field) or ())
+                filtered = [name for name in current if name not in model_names]
+                if len(filtered) != len(current):
+                    setattr(route, field, filtered)
+                    changed = True
+            if changed:
+                updated += 1
+        if updated:
+            await self._session.flush()
+        return updated
 
 
 __all__ = ["GatewayModelRepository", "GatewayRouteRepository"]

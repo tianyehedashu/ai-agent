@@ -104,6 +104,50 @@ export function routesReferencingModel(routes: GatewayRoute[], modelName: string
   )
 }
 
+/** 以固定并发度执行异步任务（用于批量测试等） */
+export async function runWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T) => Promise<unknown>
+): Promise<void> {
+  if (items.length === 0) return
+  const limit = Math.max(1, Math.min(concurrency, items.length))
+  let next = 0
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = next++
+      if (i >= items.length) return
+      await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, () => worker()))
+}
+
+/** 详情面板默认选中：深链优先，保留当前选中，再优先已启用且连通正常的模型 */
+export function pickInspectorModelId(
+  candidates: readonly GatewayModel[],
+  currentId: string | null,
+  preferredId?: string | null
+): string | null {
+  if (candidates.length === 0) return null
+
+  const contains = (id: string): boolean => candidates.some((m) => m.id === id)
+
+  if (preferredId && contains(preferredId)) return preferredId
+  if (currentId && contains(currentId)) return currentId
+
+  const pool = candidates.filter((m) => m.enabled)
+  const ordered = pool.length > 0 ? pool : [...candidates]
+
+  const success = ordered.find((m) => m.last_test_status === 'success')
+  if (success) return success.id
+
+  const untested = ordered.find((m) => m.last_test_status === null)
+  if (untested) return untested.id
+
+  return ordered[0]?.id ?? null
+}
+
 export function summarizeHealth(models: GatewayModel[]): {
   total: number
   success: number

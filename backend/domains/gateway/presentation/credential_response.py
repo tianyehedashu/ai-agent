@@ -7,6 +7,7 @@ from binascii import Error as BinasciiError
 from cryptography.fernet import InvalidToken
 
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
+from domains.gateway.domain.types import is_config_managed_system_credential
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.presentation.schemas.common import CredentialResponse
 from libs.crypto import decrypt_value
@@ -66,6 +67,11 @@ def build_credential_response(
         api_base=cred.api_base,
         extra=cred.extra,
         is_active=cred.is_active,
+        is_config_managed=is_config_managed_system_credential(
+            scope=cred.scope,
+            name=cred.name,
+            extra=cred.extra,
+        ),
         created_at=cred.created_at,
         api_key_masked=api_key_masked,
     )

@@ -1,12 +1,12 @@
 /**
- * AI Gateway · 凭据详情（编辑、轮换密钥、删除、关联模型）
+ * AI Gateway · 凭据详情（编辑、轮换密钥、启用/禁用、关联模型）
  */
 
 import { useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Trash2 } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -14,21 +14,12 @@ import {
   type GatewayModel,
   type ProviderCredential,
 } from '@/api/gateway'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 
@@ -43,11 +34,9 @@ function canEditGatewayCredential(
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
-  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const [name, setName] = useState('')
   const [apiBase, setApiBase] = useState('')
@@ -68,6 +57,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   })
 
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
+  const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
 
   useEffect(() => {
     if (!cred) return
@@ -129,19 +119,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: gatewayApi.deleteCredential,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      toast({ title: '凭据已删除' })
-      navigate('/gateway/credentials?tab=team')
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '删除失败', description: e.message })
-    },
-  })
-
   if (!id) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -179,9 +156,11 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   function handleSave(): void {
     if (!editable || !name.trim()) return
     const body: GatewayCredentialUpdateBody = {
-      name: name.trim(),
       is_active: isActive,
       api_base: apiBase.trim() || null,
+    }
+    if (!configManaged) {
+      body.name = name.trim()
     }
     if (apiKey.trim()) {
       body.api_key = apiKey.trim()
@@ -207,22 +186,34 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             <span className="mx-2">·</span>
             <span>{cred.scope}</span>
             {cred.scope === 'system' ? <span className="ml-2 text-xs">（系统全局）</span> : null}
+            {configManaged ? (
+              <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">
+                （配置同步托管，名称不可改）
+              </span>
+            ) : null}
           </p>
         </div>
         {editable ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setDeleteOpen(true)
+          <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+            <Label htmlFor="cred-header-active" className="cursor-pointer text-sm font-normal">
+              {isActive ? '已启用' : '已禁用'}
+            </Label>
+            <Switch
+              id="cred-header-active"
+              checked={isActive}
+              disabled={updateMutation.isPending}
+              onCheckedChange={(checked) => {
+                setIsActive(checked)
+                updateMutation.mutate({ cid: id, body: { is_active: checked } })
               }}
-            >
-              <Trash2 className="mr-1.5 h-4 w-4" />
-              删除
-            </Button>
+              aria-label={isActive ? '停用凭据' : '启用凭据'}
+            />
           </div>
-        ) : null}
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {cred.is_active ? '已启用' : '已禁用'}
+          </span>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -277,29 +268,23 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             </div>
             {editable ? (
               <>
-                <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
-                  <Label
-                    htmlFor="cred-detail-active"
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    启用
-                  </Label>
-                  <Switch
-                    id="cred-detail-active"
-                    checked={isActive}
-                    onCheckedChange={setIsActive}
-                  />
-                </div>
                 <div>
                   <Label htmlFor="cred-detail-name">名称</Label>
                   <Input
                     id="cred-detail-name"
                     className="mt-1.5"
                     value={name}
+                    readOnly={configManaged}
+                    disabled={configManaged}
                     onChange={(e) => {
                       setName(e.target.value)
                     }}
                   />
+                  {configManaged ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      该凭据由 app.toml / 环境变量同步维护，重命名会导致重复凭据。
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <Label htmlFor="cred-detail-new-key">新 API Key（留空则不变）</Label>
@@ -357,7 +342,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             <CardDescription>
               在{' '}
               <Link
-                to="/gateway/models?tab=team"
+                to="/gateway/models?tab=team&view=register"
                 className="text-primary underline-offset-4 hover:underline"
               >
                 注册模型
@@ -410,33 +395,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           </CardContent>
         </Card>
       </div>
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除凭据</AlertDialogTitle>
-            <AlertDialogDescription>
-              确定删除「{cred.name}」？若仍被网关模型引用，删除将失败并提示冲突。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                deleteMutation.mutate(id, {
-                  onSettled: () => {
-                    setDeleteOpen(false)
-                  },
-                })
-              }}
-            >
-              {deleteMutation.isPending ? '删除中…' : '删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

@@ -40,6 +40,16 @@ export const ROUTING_STRATEGIES = [
 
 export type HealthFilter = 'all' | 'success' | 'failed' | 'unknown'
 
+export const USAGE_PERIOD_DAYS = [1, 7, 30] as const
+export type UsagePeriodDays = (typeof USAGE_PERIOD_DAYS)[number]
+
 export function parseScopeTab(raw: string | null): ModelScopeTab {
   return raw === 'personal' || raw === 'team' ? raw : 'team'
+}
+
+/** 团队模型页子视图：清单 / 注册 */
+export type TeamModelsView = 'list' | 'register'
+
+export function parseTeamModelsView(raw: string | null): TeamModelsView {
+  return raw === 'register' ? 'register' : 'list'
 }

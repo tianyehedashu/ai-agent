@@ -249,6 +249,25 @@ class TimeSeriesPoint:
     errors: int
 
 
+# app.toml / 环境变量同步写入的系统凭据固定名与 extra 标记（与 GatewayModel.tags.managed_by 同源语义）。
+CONFIG_MANAGED_CREDENTIAL_NAME = "app-config-default"
+CONFIG_MANAGED_BY = "config"
+
+
+def is_config_managed_system_credential(
+    *,
+    scope: str,
+    name: str,
+    extra: dict[str, Any] | None,
+) -> bool:
+    """是否为配置同步托管的 system 凭据（不可重命名，同步按 provider 幂等更新）。"""
+    if scope != CredentialScope.SYSTEM.value:
+        return False
+    if (extra or {}).get("managed_by") == CONFIG_MANAGED_BY:
+        return True
+    return name == CONFIG_MANAGED_CREDENTIAL_NAME
+
+
 # 用户 BYOK：``/my-credentials`` 所支持的提供商标识（与路由/LiteLLM 对齐，不含 custom）。
 USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
     {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
@@ -272,6 +291,8 @@ PERSONAL_MODEL_PROVIDERS: frozenset[str] = frozenset(
 
 
 __all__ = [
+    "CONFIG_MANAGED_BY",
+    "CONFIG_MANAGED_CREDENTIAL_NAME",
     "PERSONAL_MODEL_PROVIDERS",
     "PERSONAL_MODEL_TYPES",
     "USER_GATEWAY_CREDENTIAL_PROVIDERS",
@@ -296,4 +317,5 @@ __all__ = [
     "UsageRecord",
     "VirtualKeyPrincipal",
     "allowed_capabilities_from_storage",
+    "is_config_managed_system_credential",
 ]

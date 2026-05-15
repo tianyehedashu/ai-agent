@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 
 import { Copy, ExternalLink, Loader2, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -47,9 +47,10 @@ interface ModelInspectorProps {
   onTest: (id: string) => void
   onSave: (id: string, body: GatewayModelUpdateBody) => void
   onToggleEnabled: (id: string, enabled: boolean) => void
+  emptyReason?: 'none' | 'filter'
 }
 
-export function ModelInspector({
+const ModelInspectorPanel = memo(function ModelInspectorPanel({
   model,
   credentials,
   routes,
@@ -61,52 +62,31 @@ export function ModelInspector({
   onTest,
   onSave,
   onToggleEnabled,
-}: ModelInspectorProps): React.JSX.Element {
+}: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
   const [usageScope, setUsageScope] = useState<'workspace' | 'user'>('workspace')
-  const [realModel, setRealModel] = useState('')
-  const [credentialId, setCredentialId] = useState('')
-  const [weight, setWeight] = useState('1')
-  const [rpmLimit, setRpmLimit] = useState('')
-  const [tpmLimit, setTpmLimit] = useState('')
+  const [realModel, setRealModel] = useState(model.real_model)
+  const [credentialId, setCredentialId] = useState(model.credential_id)
+  const [weight, setWeight] = useState(String(model.weight))
+  const [rpmLimit, setRpmLimit] = useState(model.rpm_limit !== null ? String(model.rpm_limit) : '')
+  const [tpmLimit, setTpmLimit] = useState(model.tpm_limit !== null ? String(model.tpm_limit) : '')
   const [copied, setCopied] = useState(false)
 
   const referencingRoutes = useMemo(
-    () => (model ? routesReferencingModel(routes, model.name) : []),
-    [model, routes]
+    () => routesReferencingModel(routes, model.name),
+    [routes, model.name]
   )
 
   const credential = useMemo(
-    () => credentials.find((c) => c.id === model?.credential_id),
-    [credentials, model?.credential_id]
+    () => credentials.find((c) => c.id === model.credential_id),
+    [credentials, model.credential_id]
   )
 
   const credentialOptions = useMemo(() => {
-    if (!model) return []
     const pool = credentials.filter((c) => c.is_active || c.id === model.credential_id)
     const matching = pool.filter((c) => c.provider === model.provider)
     return matching.length > 0 ? matching : pool
-  }, [credentials, model])
-
-  useEffect(() => {
-    if (!model) return
-    setRealModel(model.real_model)
-    setCredentialId(model.credential_id)
-    setWeight(String(model.weight))
-    setRpmLimit(model.rpm_limit !== null ? String(model.rpm_limit) : '')
-    setTpmLimit(model.tpm_limit !== null ? String(model.tpm_limit) : '')
-  }, [model])
-
-  if (!model) {
-    return (
-      <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/10 p-8 text-center">
-        <p className="text-sm font-medium text-foreground">选择左侧模型查看详情</p>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          可在此编辑上游配置、查看健康状态、用量与被哪些虚拟路由引用。
-        </p>
-      </div>
-    )
-  }
+  }, [credentials, model.credential_id, model.provider])
 
   const isTestable = TESTABLE_CAPABILITIES.has(model.capability)
   const slice = usageScope === 'workspace' ? usageRow?.workspace : usageRow?.user
@@ -122,7 +102,6 @@ export function ModelInspector({
     tpmLimit !== (model.tpm_limit !== null ? String(model.tpm_limit) : '')
 
   async function copyReason(): Promise<void> {
-    if (!model) return
     const text = model.last_test_reason?.trim()
     if (!text) return
     await navigator.clipboard.writeText(text)
@@ -133,7 +112,7 @@ export function ModelInspector({
   }
 
   function handleSave(): void {
-    if (!model || !realModel.trim() || !credentialId) return
+    if (!realModel.trim() || !credentialId) return
     onSave(model.id, {
       real_model: realModel.trim(),
       credential_id: credentialId,
@@ -388,4 +367,51 @@ export function ModelInspector({
       </div>
     </div>
   )
-}
+})
+
+export const ModelInspector = memo(function ModelInspector({
+  model,
+  credentials,
+  routes,
+  usageDays,
+  usageRow,
+  usageLoading,
+  isTesting,
+  isSaving,
+  onTest,
+  onSave,
+  onToggleEnabled,
+  emptyReason = 'none',
+}: ModelInspectorProps): React.JSX.Element {
+  if (!model) {
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/10 px-6 py-10 text-center">
+        <p className="text-sm font-medium text-foreground">
+          {emptyReason === 'filter' ? '当前筛选无匹配模型' : '选择左侧模型查看详情'}
+        </p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          {emptyReason === 'filter'
+            ? '请调整搜索或健康筛选，或从左侧列表选择模型。'
+            : '可在此编辑上游配置、查看健康状态、用量与被哪些虚拟路由引用。'}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <ModelInspectorPanel
+      key={model.id}
+      model={model}
+      credentials={credentials}
+      routes={routes}
+      usageDays={usageDays}
+      usageRow={usageRow}
+      usageLoading={usageLoading}
+      isTesting={isTesting}
+      isSaving={isSaving}
+      onTest={onTest}
+      onSave={onSave}
+      onToggleEnabled={onToggleEnabled}
+    />
+  )
+})

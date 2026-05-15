@@ -101,6 +101,10 @@ class CredentialResponse(BaseModel):
     api_base: str | None = None
     extra: dict[str, Any] | None = None
     is_active: bool = True
+    is_config_managed: bool = Field(
+        default=False,
+        description="app.toml/环境变量同步托管的 system 凭据（不可重命名；删除后同步可能恢复）",
+    )
     created_at: datetime
     api_key_masked: str = Field(
         description="解密后仅用于展示的掩码，不包含完整密钥",

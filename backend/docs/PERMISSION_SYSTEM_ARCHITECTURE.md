@@ -454,6 +454,20 @@ async def get_agent(
 - **数据库**：`gateway_models` 中 `team_id` = 用户 personal team；须绑定 `credential_id`（user scope 凭据，见 `/my-credentials`）。
 - **管理 API**：`GET/POST/PATCH/DELETE /api/v1/gateway/my-models`（`RequiredAuthUser`，不依赖 `X-Team-Id`）。
 - **历史迁移**：原 `user_models` 表数据经 Alembic 一次性迁入 personal team 后已 DROP。
+- **Router**：创建/更新/删除个人模型后调用 `reload_litellm_router()`，与团队模型相同进入 LiteLLM Router 全局 `model_list`。
+
+**个人模型双入站路径**
+
+个人模型与团队模型共用 `GatewayModel` 表与 `ProxyUseCase`，但客户端传入的 `model` 字符串形态不同：
+
+| 路径 | 入口 | `model` 形态 | LiteLLM | 出站凭据 |
+|------|------|--------------|---------|----------|
+| **A 对外网关** | `/v1/*` + `sk-gw-*` 或 `sk-*`（`gateway:proxy`，默认 personal grant） | 注册别名 `GatewayModel.name` 或 `GatewayRoute.virtual_model` | 优先 Router deployment | `provider_credentials`（user/team scope）解密 |
+| **B 产品对话** | Chat / 产品信息 → `ChatModelResolutionUseCase` → `GatewayBridge` | 选择器 UUID → 解析为 `real_model` + body 内 `api_key`/`api_base` | 常直连 LiteLLM（`get_by_name` 未命中别名时） | user 凭据 BYOK |
+
+路径 A 供给链：`/my-credentials` → `POST /my-models` → [可选] `POST /gateway/routes` → 虚拟 Key → `POST /v1/chat/completions`。`GET /v1/models` 列表项 `id` 为注册别名。
+
+路径 B：`GET /gateway/models/available` 的 `personal_models` 段以 `gateway_models.id`（UUID）为选择器 value；经内部桥接仍写 `gateway_request_logs` 与预算，**不经 HTTP `/v1`**。
 
 **模型（GatewayModel，团队/系统）**
 

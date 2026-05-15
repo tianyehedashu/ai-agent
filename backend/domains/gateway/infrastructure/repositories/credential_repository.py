@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, or_, select
 
+from domains.gateway.domain.types import (
+    CONFIG_MANAGED_BY,
+    CONFIG_MANAGED_CREDENTIAL_NAME,
+)
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 
 if TYPE_CHECKING:
     import uuid
@@ -122,6 +127,45 @@ class ProviderCredentialRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def find_system_config_managed(self, provider: str) -> ProviderCredential | None:
+        """配置同步托管的系统凭据：按固定名或 extra.managed_by=config 查找（避免重命名后重复创建）。"""
+        by_name = await self.find_system_by_provider_and_name(
+            provider, CONFIG_MANAGED_CREDENTIAL_NAME
+        )
+        if by_name is not None:
+            return by_name
+        stmt = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.scope == "system",
+                ProviderCredential.scope_id.is_(None),
+                ProviderCredential.provider == provider,
+                ProviderCredential.extra.isnot(None),
+                ProviderCredential.extra["managed_by"].astext == CONFIG_MANAGED_BY,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        tagged = result.scalar_one_or_none()
+        if tagged is not None:
+            return tagged
+        stmt_all = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.scope == "system",
+                ProviderCredential.scope_id.is_(None),
+                ProviderCredential.provider == provider,
+            )
+            .order_by(ProviderCredential.name)
+        )
+        all_for_provider = list((await self._session.execute(stmt_all)).scalars().all())
+        if len(all_for_provider) == 1:
+            only = all_for_provider[0]
+            model_repo = GatewayModelRepository(self._session)
+            if await model_repo.has_config_managed_global_for_credential(only.id):
+                return only
+        return None
 
     async def create(
         self,

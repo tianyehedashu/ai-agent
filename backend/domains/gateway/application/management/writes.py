@@ -10,8 +10,8 @@ from bootstrap.config import settings as _settings
 from domains.gateway.application.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
 )
+from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.errors import (
-    CredentialInUseError,
     CredentialNameConflictError,
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
@@ -19,7 +19,11 @@ from domains.gateway.domain.errors import (
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
-from domains.gateway.domain.types import PERSONAL_MODEL_PROVIDERS, PERSONAL_MODEL_TYPES
+from domains.gateway.domain.types import (
+    PERSONAL_MODEL_PROVIDERS,
+    PERSONAL_MODEL_TYPES,
+    is_config_managed_system_credential,
+)
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -166,6 +170,17 @@ class GatewayManagementWriteService:
         if cred is None or cred.scope != "user" or cred.scope_id != user_id:
             raise CredentialNotFoundError(str(credential_id))
 
+    async def _cascade_delete_models_for_credential(self, credential_id: uuid.UUID) -> int:
+        """删除引用该凭据的全部 gateway_models，并修剪 vkey / 路由中的模型名。"""
+        models = await self._models.list_by_credential_id(credential_id)
+        if not models:
+            return 0
+        model_names = frozenset(m.name for m in models)
+        for model in models:
+            await self._models.delete(model.id)
+        await prune_gateway_model_name_references(self._session, model_names)
+        return len(models)
+
     async def create_personal_models(
         self,
         user_id: uuid.UUID,
@@ -265,7 +280,9 @@ class GatewayManagementWriteService:
         existing = await self._models.get_on_team(model_id, team_id)
         if existing is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
+        model_name = existing.name
         await self._models.delete(model_id)
+        await prune_gateway_model_name_references(self._session, frozenset({model_name}))
         await self.reload_litellm_router()
 
     async def test_personal_model(
@@ -398,6 +415,18 @@ class GatewayManagementWriteService:
                 raise CredentialNotFoundError(str(credential_id))
         else:
             raise CredentialNotFoundError(str(credential_id))
+        if (
+            name is not None
+            and name != existing.name
+            and is_config_managed_system_credential(
+                scope=existing.scope,
+                name=existing.name,
+                extra=existing.extra,
+            )
+        ):
+            raise ValidationError(
+                "配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥",
+            )
         updated = await self._creds.update(
             credential_id,
             api_key_encrypted=api_key_encrypted,
@@ -429,9 +458,7 @@ class GatewayManagementWriteService:
                 raise CredentialNotFoundError(str(credential_id))
         else:
             raise CredentialNotFoundError(str(credential_id))
-        in_use = await self._models.count_by_credential_id(credential_id)
-        if in_use > 0:
-            raise CredentialInUseError(str(credential_id))
+        await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)
         await self.reload_litellm_router()
 
@@ -531,9 +558,7 @@ class GatewayManagementWriteService:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != "user" or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
-        in_use = await self._models.count_by_credential_id(credential_id)
-        if in_use > 0:
-            raise CredentialInUseError(str(credential_id))
+        await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)
         if reload_router:
             await self.reload_litellm_router()
@@ -647,7 +672,9 @@ class GatewayManagementWriteService:
         existing = await repo.get(model_id)
         if existing is None or (existing.team_id is not None and existing.team_id != team_id):
             raise CredentialNotFoundError(str(model_id))
+        model_name = existing.name
         await repo.delete(model_id)
+        await prune_gateway_model_name_references(self._session, frozenset({model_name}))
         await self.reload_litellm_router()
 
     async def test_gateway_model(

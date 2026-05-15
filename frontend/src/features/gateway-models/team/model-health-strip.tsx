@@ -1,3 +1,5 @@
+import { memo, useMemo } from 'react'
+
 import { Loader2 } from 'lucide-react'
 
 import type { GatewayModel } from '@/api/gateway'
@@ -17,6 +19,17 @@ interface ModelHealthStripProps {
   testingAll?: boolean
 }
 
+const FILTER_OPTIONS: ReadonlyArray<{
+  value: HealthFilter
+  label: string
+  variant?: 'success' | 'failed'
+}> = [
+  { value: 'all', label: '全部' },
+  { value: 'success', label: '可用', variant: 'success' },
+  { value: 'failed', label: '不可用', variant: 'failed' },
+  { value: 'unknown', label: '未测试' },
+]
+
 function FilterChip({
   active,
   label,
@@ -28,26 +41,27 @@ function FilterChip({
   label: string
   count: number
   onClick: () => void
-  variant?: 'success' | 'failed' | 'muted'
+  variant?: 'success' | 'failed'
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
-        active && 'border-primary bg-primary/10 text-primary',
-        !active && 'border-border text-muted-foreground hover:bg-muted/50',
-        variant === 'success' && !active && count > 0 && 'border-emerald-200/60',
-        variant === 'failed' && !active && count > 0 && 'border-rose-200/60'
+        'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+        active && 'bg-background text-foreground shadow-sm',
+        !active && 'text-muted-foreground hover:text-foreground',
+        variant === 'success' && !active && count > 0 && 'text-emerald-600 dark:text-emerald-400',
+        variant === 'failed' && !active && count > 0 && 'text-rose-600 dark:text-rose-400'
       )}
     >
-      {label} <span className="tabular-nums">{count}</span>
+      {label}
+      <span className="ml-1 tabular-nums opacity-70">{count}</span>
     </button>
   )
 }
 
-export function ModelHealthStrip({
+export const ModelHealthStrip = memo(function ModelHealthStrip({
   models,
   healthFilter,
   onHealthFilterChange,
@@ -55,62 +69,46 @@ export function ModelHealthStrip({
   onTestAll,
   testingAll,
 }: ModelHealthStripProps): React.JSX.Element {
-  const { total, success, failed, unknown } = summarizeHealth(models)
+  const counts = useMemo(() => summarizeHealth(models), [models])
 
-  if (total === 0) return <></>
+  if (counts.total === 0) return <></>
+
+  const countByFilter: Record<HealthFilter, number> = {
+    all: counts.total,
+    success: counts.success,
+    failed: counts.failed,
+    unknown: counts.unknown,
+  }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">健康</span>
-        <FilterChip
-          active={healthFilter === 'all'}
-          label="全部"
-          count={total}
-          onClick={() => {
-            onHealthFilterChange('all')
-          }}
-        />
-        <FilterChip
-          active={healthFilter === 'success'}
-          label="可用"
-          count={success}
-          variant="success"
-          onClick={() => {
-            onHealthFilterChange('success')
-          }}
-        />
-        <FilterChip
-          active={healthFilter === 'failed'}
-          label="不可用"
-          count={failed}
-          variant="failed"
-          onClick={() => {
-            onHealthFilterChange('failed')
-          }}
-        />
-        <FilterChip
-          active={healthFilter === 'unknown'}
-          label="未测试"
-          count={unknown}
-          onClick={() => {
-            onHealthFilterChange('unknown')
-          }}
-        />
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+      <div className="flex flex-wrap items-center gap-0.5 rounded-md bg-muted/50 p-0.5">
+        {FILTER_OPTIONS.map((opt) => (
+          <FilterChip
+            key={opt.value}
+            active={healthFilter === opt.value}
+            label={opt.label}
+            count={countByFilter[opt.value]}
+            variant={opt.variant}
+            onClick={() => {
+              onHealthFilterChange(opt.value)
+            }}
+          />
+        ))}
       </div>
       {canWrite && onTestAll ? (
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          className="h-7 text-xs"
+          variant="ghost"
+          className="ml-auto h-7 shrink-0 px-2 text-xs text-muted-foreground"
           disabled={testingAll}
           onClick={onTestAll}
         >
           {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-          测试全部可测模型
+          测试全部
         </Button>
       ) : null}
     </div>
   )
-}
+})

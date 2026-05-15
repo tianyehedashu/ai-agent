@@ -20,7 +20,6 @@ from domains.gateway.application.management import (
     GatewayManagementReadService,
     GatewayManagementWriteService,
 )
-from domains.gateway.domain.errors import CredentialInUseError
 from domains.gateway.domain.types import USER_GATEWAY_CREDENTIAL_PROVIDERS
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.deps import DbSession
@@ -205,13 +204,10 @@ async def delete_provider_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"未找到提供商 {provider} 的配置",
         )
-    try:
-        if has_pc:
-            await writes.delete_all_user_credentials_for_provider(
-                actor_user_id=user_id, provider=provider_lower
-            )
-    except CredentialInUseError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if has_pc:
+        await writes.delete_all_user_credentials_for_provider(
+            actor_user_id=user_id, provider=provider_lower
+        )
     if legacy is not None:
         await repo.delete(user_id, provider_lower)
 

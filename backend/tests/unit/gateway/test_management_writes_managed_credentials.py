@@ -10,7 +10,6 @@ from bootstrap.config import settings
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.domain.errors import (
-    CredentialInUseError,
     CredentialNotFoundError,
     SystemCredentialAdminRequiredError,
 )
@@ -21,6 +20,7 @@ from domains.gateway.infrastructure.repositories.model_repository import Gateway
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
+from libs.exceptions import ValidationError
 
 
 @pytest.mark.asyncio
@@ -66,20 +66,25 @@ async def test_update_system_credential_requires_platform_admin(db_session, test
 
 
 @pytest.mark.asyncio
-async def test_delete_managed_credential_raises_in_use(db_session, test_user) -> None:
+async def test_delete_managed_credential_cascades_linked_models(
+    db_session, test_user
+) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
+    cred_repo = ProviderCredentialRepository(db_session)
+    model_repo = GatewayModelRepository(db_session)
+    cred = await cred_repo.create(
         scope="team",
         scope_id=team.id,
         provider="deepseek",
-        name="del-in-use",
+        name="del-cascade",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
     )
-    await GatewayModelRepository(db_session).create(
+    model_name = f"vm-{uuid.uuid4().hex[:6]}"
+    model = await model_repo.create(
         team_id=team.id,
-        name=f"vm-{uuid.uuid4().hex[:6]}",
+        name=model_name,
         capability="chat",
         real_model="deepseek/deepseek-chat",
         credential_id=cred.id,
@@ -87,12 +92,44 @@ async def test_delete_managed_credential_raises_in_use(db_session, test_user) ->
     )
     await db_session.flush()
     writes = GatewayManagementWriteService(db_session)
-    with pytest.raises(CredentialInUseError):
-        await writes.delete_managed_credential(
-            cred.id,
-            team_id=team.id,
-            is_platform_admin=False,
-        )
+    await writes.delete_managed_credential(
+        cred.id,
+        team_id=team.id,
+        is_platform_admin=False,
+    )
+    await db_session.flush()
+    assert await cred_repo.get(cred.id) is None
+    assert await model_repo.get(model.id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_user_credential_cascades_personal_models(db_session, test_user) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    model_repo = GatewayModelRepository(db_session)
+    cred = await cred_repo.create(
+        scope="user",
+        scope_id=test_user.id,
+        provider="deepseek",
+        name="user-del-cascade",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    model = await model_repo.create(
+        team_id=team.id,
+        name=f"pm-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="deepseek/deepseek-chat",
+        credential_id=cred.id,
+        provider="deepseek",
+    )
+    await db_session.flush()
+    writes = GatewayManagementWriteService(db_session)
+    await writes.delete_user_credential(cred.id, actor_user_id=test_user.id)
+    await db_session.flush()
+    assert await cred_repo.get(cred.id) is None
+    assert await model_repo.get(model.id) is None
 
 
 @pytest.mark.asyncio
@@ -127,3 +164,33 @@ def test_system_credential_admin_error_maps_to_403() -> None:
     exc = http_exception_from_gateway_domain(SystemCredentialAdminRequiredError())
     assert exc.status_code == 403
     assert "平台管理员" in str(exc.detail)
+
+
+@pytest.mark.asyncio
+async def test_update_config_managed_system_credential_rejects_rename(
+    db_session, test_user
+) -> None:
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await ProviderCredentialRepository(db_session).create(
+        scope="system",
+        scope_id=None,
+        provider="openai",
+        name="app-config-default",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+        extra={"managed_by": "config"},
+    )
+    await db_session.flush()
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    writes = GatewayManagementWriteService(db_session)
+    with pytest.raises(ValidationError, match="不可重命名"):
+        await writes.update_managed_credential(
+            cred.id,
+            team_id=team.id,
+            is_platform_admin=True,
+            api_key_encrypted=None,
+            api_base=None,
+            extra=None,
+            is_active=None,
+            name="new-name",
+        )

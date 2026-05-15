@@ -12,21 +12,23 @@ from bootstrap.config import settings
 from bootstrap.config_loader import ModelInfo, app_config
 from domains.agent.application.ports.model_catalog_port import ModelCapabilitySnapshot
 from domains.gateway.application.catalog_capability import infer_catalog_capability
+from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.domain.types import (
+    CONFIG_MANAGED_BY,
+    CONFIG_MANAGED_CREDENTIAL_NAME,
+)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
-from domains.gateway.infrastructure.repositories.virtual_key_repository import (
-    VirtualKeyRepository,
-)
 from libs.crypto import derive_encryption_key, encrypt_value
 
 logger = logging.getLogger(__name__)
 
 MANAGED_BY_KEY = "managed_by"
-MANAGED_CONFIG = "config"
-SYSTEM_CREDENTIAL_NAME = "app-config-default"
+MANAGED_CONFIG = CONFIG_MANAGED_BY
+SYSTEM_CREDENTIAL_NAME = CONFIG_MANAGED_CREDENTIAL_NAME
 
 
 def _provider_api_key_and_base(provider: str) -> tuple[str | None, str | None]:
@@ -64,6 +66,15 @@ def _volcengine_extra() -> dict[str, Any] | None:
     return None
 
 
+def _config_managed_credential_extra(provider: str) -> dict[str, Any]:
+    extra: dict[str, Any] = {MANAGED_BY_KEY: MANAGED_CONFIG}
+    if provider == "volcengine":
+        ve = _volcengine_extra()
+        if ve:
+            extra.update(ve)
+    return extra
+
+
 async def _ensure_system_credential(
     session: AsyncSession,
     *,
@@ -76,9 +87,9 @@ async def _ensure_system_credential(
     if not plain_key:
         return None
 
-    existing = await repo.find_system_by_provider_and_name(provider, SYSTEM_CREDENTIAL_NAME)
+    existing = await repo.find_system_config_managed(provider)
     encrypted = encrypt_value(plain_key, encryption_key)
-    extra = _volcengine_extra() if provider == "volcengine" else None
+    extra = _config_managed_credential_extra(provider)
     if existing is not None:
         await repo.update(
             existing.id,
@@ -279,25 +290,27 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
             newly_disabled_names.append(row.name)
 
     vkeys_pruned = 0
+    routes_pruned = 0
     if settings.gateway_catalog_prune_vkey_allowed_models and newly_disabled_names:
-        vkey_repo = VirtualKeyRepository(session)
-        vkeys_pruned = await vkey_repo.remove_model_names_from_all_allowed_lists(
-            frozenset(newly_disabled_names)
+        vkeys_pruned, routes_pruned = await prune_gateway_model_name_references(
+            session, frozenset(newly_disabled_names)
         )
 
     await session.flush()
     logger.info(
-        "Gateway catalog sync finished: upserted=%s disabled=%s skipped_no_credential=%s vkeys_pruned=%s",
+        "Gateway catalog sync finished: upserted=%s disabled=%s skipped_no_credential=%s vkeys_pruned=%s routes_pruned=%s",
         upserted,
         disabled,
         skipped,
         vkeys_pruned,
+        routes_pruned,
     )
     return {
         "upserted": upserted,
         "disabled": disabled,
         "skipped_no_credential": skipped,
         "vkeys_pruned": vkeys_pruned,
+        "routes_pruned": routes_pruned,
     }
 
 

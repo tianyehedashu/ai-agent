@@ -24,11 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import {
   CreateTeamManagedCredentialDialog,
   type TeamManagedCredentialCreateValues,
@@ -138,8 +140,9 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     mutationFn: gatewayApi.deleteCredential,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
       setCredentialPendingDelete(null)
-      toast({ title: '凭据已删除' })
+      toast({ title: '凭据已删除', description: '关联的注册模型已一并移除' })
     },
     onError: (e: Error) => {
       setCredentialPendingDelete(null)
@@ -243,19 +246,27 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                     )}
                     {items?.map((c: ProviderCredential) => {
                       const editable = canEditGatewayCredential(c, canWrite, isPlatformAdmin)
+                      const configManaged = isConfigManagedSystemCredential(c)
                       return (
                         <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2">
-                            {editable ? (
-                              <Link
-                                to={`/gateway/credentials/${c.id}`}
-                                className="font-medium text-primary underline-offset-4 hover:underline"
-                              >
-                                {c.name}
-                              </Link>
-                            ) : (
-                              <span className="font-medium">{c.name}</span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {editable ? (
+                                <Link
+                                  to={`/gateway/credentials/${c.id}`}
+                                  className="font-medium text-primary underline-offset-4 hover:underline"
+                                >
+                                  {c.name}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">{c.name}</span>
+                              )}
+                              {configManaged ? (
+                                <Badge variant="secondary" className="text-[10px] font-normal">
+                                  配置同步
+                                </Badge>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
                             {c.api_key_masked}
@@ -336,7 +347,9 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
             <AlertDialogTitle>删除凭据</AlertDialogTitle>
             <AlertDialogDescription>
               {credentialPendingDelete
-                ? `确定删除「${credentialPendingDelete.name}」？若仍被网关模型引用，删除将失败并提示冲突。`
+                ? isConfigManagedSystemCredential(credentialPendingDelete)
+                  ? `确定删除「${credentialPendingDelete.name}」？将同时删除所有引用该凭据的注册模型；此为配置同步凭据，下次从配置重载或重启后可能自动恢复。`
+                  : `确定删除「${credentialPendingDelete.name}」？将同时删除所有引用该凭据的注册模型，并更新虚拟 Key / 路由中的模型白名单。`
                 : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>

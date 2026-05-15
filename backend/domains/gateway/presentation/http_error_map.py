@@ -8,7 +8,6 @@ from domains.gateway.domain.errors import (
     ApiKeyGatewayGrantDeniedError,
     ApiKeyGatewayGrantRequiredError,
     CredentialApiKeyDecryptError,
-    CredentialInUseError,
     CredentialNameConflictError,
     CredentialNotFoundError,
     GatewayTeamHeaderInvalidError,
@@ -46,7 +45,7 @@ def _http_exception_for_gateway_domain(exc: Exception) -> HTTPException | None:
         return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, (CredentialInUseError, CredentialNameConflictError)):
+    if isinstance(exc, CredentialNameConflictError):
         return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, SystemCredentialAdminRequiredError):
         return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
