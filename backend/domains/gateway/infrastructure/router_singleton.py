@@ -135,6 +135,7 @@ def _models_to_deployments(
                     "team_id": str(m.team_id) if m.team_id else None,
                     "capability": m.capability,
                     "weight": m.weight,
+                    "gateway_model_name": m.name,
                     "gateway_credential_id": str(cred.id),
                     "gateway_credential_name": cred.name,
                     "gateway_credential_scope": cred.scope,

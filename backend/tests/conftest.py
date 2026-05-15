@@ -82,8 +82,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from bootstrap.config import settings
+from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
+from domains.agent.infrastructure.models.memory import Memory  # noqa: F401
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
 from domains.identity.infrastructure.models.user import User
+from domains.session.infrastructure.models.session import Session as SessionORM  # noqa: F401
 from libs.db.database import Base
 from libs.db.permission_context import (
     PermissionContext,

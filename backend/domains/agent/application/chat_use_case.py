@@ -6,6 +6,7 @@ Chat Use Case - 对话用例
 
 import asyncio
 from collections.abc import AsyncGenerator, Callable
+from typing import Any, Literal
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from domains.agent.domain.types import (
 )
 from domains.agent.infrastructure.engine.langgraph_agent import LangGraphAgentEngine
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
+from domains.agent.infrastructure.llm import create_image_generator
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
@@ -137,6 +139,9 @@ class ChatUseCase:
         mcp_config: dict | None = None,
         model_ref: str | None = None,
         gateway_verbose_request_log: bool | None = None,
+        creative_mode: str = "chat",
+        reference_image_urls: list[str] | None = None,
+        image_gen_strength: float | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """处理对话请求
 
@@ -148,28 +153,39 @@ class ChatUseCase:
             mcp_config: MCP 配置（仅新会话生效，如 {"enabled_servers": [...]}）
             model_ref: 系统模型 id 或用户模型 UUID；None 表示按会话存储 / Agent / 默认解析
             gateway_verbose_request_log: 单次请求是否扩展网关调用日志（受服务端配置约束）
+            creative_mode: chat（默认 Agent 对话）| image_gen（直连 ImageGenerator）
+            reference_image_urls: 参考图 URL（http/https）；对话+视觉模型时注入多模态用户消息
+            image_gen_strength: 图生图强度 0~1（仅 image_gen + 有参考图时生效）
 
         Yields:
             AgentEvent: 聊天事件
         """
         await self._ensure_memory_store_initialized()
 
+        mode = (creative_mode or "chat").strip().lower()
+        if mode not in ("chat", "image_gen"):
+            yield AgentEvent.error(error=f"不支持的创作模式: {creative_mode}", session_id=session_id)
+            return
+
+        ref_urls = self._normalize_reference_image_urls(reference_image_urls or [])
+
         # 创建或获取对话
         session, session_id, is_new_session = await self._get_or_create_session(
             session_id, user_id, agent_id
         )
 
+        user_metadata = self._build_user_message_metadata(mode, ref_urls)
+
         if is_new_session:
-            # 新建会话：先落库并提交首条用户消息，再下发 session_created，
-            # 确保前端 navigate 后 GET messages 能拿到首条
+            # 新建会话：先落库并提交首条用户消息；session_created 延至解析并写入 chat_model_ref 之后，
+            # 避免前端 navigate 后 GET 会话尚无 chat_model_ref 而把模型选择器重置为默认。
             await self.session_use_case.add_message(
                 session_id=session_id,
                 role=MessageRole.USER,
                 content=message,
+                metadata=user_metadata,
             )
             await self.db.commit()
-            yield AgentEvent.session_created(session_id)
-            # 新会话：初始化 MCP 配置，供 _prepare_agent_engine 加载工具
             if mcp_config and mcp_config.get("enabled_servers"):
                 await self.session_use_case.update_session_mcp_config(
                     session_id, mcp_config["enabled_servers"]
@@ -200,7 +216,35 @@ class ChatUseCase:
                     session_id=session_id,
                     role=MessageRole.USER,
                     content=message,
+                    metadata=user_metadata,
                 )
+
+            if mode == "image_gen":
+                async for evt in self._run_image_gen_mode(
+                    session_id=session_id,
+                    message=message,
+                    session=session,
+                    model_ref=model_ref,
+                    reference_image_urls=ref_urls,
+                    image_gen_strength=image_gen_strength,
+                    is_new_session=is_new_session,
+                ):
+                    yield evt
+                return
+
+            human_multimodal: list[dict[str, Any]] | None = None
+            if mode == "chat" and ref_urls:
+                try:
+                    human_multimodal = await self._build_vision_user_content(
+                        message=message,
+                        reference_image_urls=ref_urls,
+                        request_model_ref=model_ref,
+                        session=session,
+                        agent_id=agent_id,
+                    )
+                except ValidationError as e:
+                    yield AgentEvent.error(error=e.message, session_id=session_id)
+                    return
 
             # 准备 Agent 引擎
             try:
@@ -213,35 +257,27 @@ class ChatUseCase:
                 yield AgentEvent.error(error=e.message, session_id=session_id)
                 return
 
+            # 在流式输出前写入，避免前端 GET 会话时尚无 chat_model_ref 而把选择器重置为默认。
+            await self._persist_picked_chat_model_ref(session_id, picked_chat_model_for_persist)
+
+            if is_new_session:
+                yield AgentEvent.session_created(session_id)
+
             if session_recreated_event:
                 yield session_recreated_event
 
             # 执行 Agent，同时监听事件队列
             async for event in self._execute_agent_with_event_queue(
-                engine, session_id, message, user_id, session, event_queue
+                engine,
+                session_id,
+                message,
+                user_id,
+                session,
+                event_queue,
+                human_message_parts=human_multimodal,
             ):
                 yield event
         finally:
-            if picked_chat_model_for_persist is not _CHAT_MODEL_REF_PENDING:
-                if not isinstance(picked_chat_model_for_persist, str | type(None)):
-                    logger.warning(
-                        "Unexpected picked_chat_model_for_persist type, skip persist (session %s)",
-                        session_id[:8],
-                    )
-                else:
-                    try:
-                        await self.session_use_case.update_session_chat_model_ref(
-                            session_id,
-                            picked_chat_model_for_persist,
-                            flush=False,
-                        )
-                        await self.db.flush()
-                    except Exception:
-                        logger.warning(
-                            "Failed to persist chat_model_ref for session %s",
-                            session_id[:8],
-                            exc_info=True,
-                        )
             if log_token is not None:
                 reset_internal_store_full_override(log_token)
             # 清理事件队列
@@ -401,6 +437,208 @@ class ChatUseCase:
             return str(uid)
         return None
 
+    async def _persist_picked_chat_model_ref(self, session_id: str, picked: object) -> None:
+        """将本次解析到的对话模型引用写入会话（在流式输出前调用，避免前端 GET 竞态）。"""
+        if picked is _CHAT_MODEL_REF_PENDING:
+            return
+        if not isinstance(picked, str | type(None)):
+            logger.warning(
+                "Unexpected picked_chat_model_for_persist type, skip persist (session %s)",
+                session_id[:8],
+            )
+            return
+        try:
+            await self.session_use_case.update_session_chat_model_ref(
+                session_id,
+                picked,
+                flush=False,
+            )
+            await self.db.flush()
+        except Exception:
+            logger.warning(
+                "Failed to persist chat_model_ref for session %s",
+                session_id[:8],
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _normalize_reference_image_urls(raw: list[str]) -> list[str]:
+        out: list[str] = []
+        for item in raw:
+            u = str(item).strip()
+            if u.startswith("http://") or u.startswith("https://"):
+                out.append(u)
+        return out
+
+    @staticmethod
+    def _build_user_message_metadata(creative_mode: str, reference_image_urls: list[str]) -> dict[str, Any]:
+        meta: dict[str, Any] = {"creative_mode": creative_mode}
+        if reference_image_urls:
+            meta["reference_image_urls"] = reference_image_urls
+        return meta
+
+    async def _pick_image_gen_model_ref(
+        self, request_model_ref: str | None, session: object
+    ) -> str | None:
+        if request_model_ref and str(request_model_ref).strip():
+            return str(request_model_ref).strip()
+        cfg = session.config if isinstance(getattr(session, "config", None), dict) else {}
+        stored = cfg.get("image_gen_model_ref")
+        if isinstance(stored, str) and stored.strip():
+            return stored.strip()
+        return None
+
+    async def _max_reference_images_for_model(self, model_key: str) -> int:
+        if self._model_catalog is None:
+            return 8
+        snap = await self._model_catalog.resolve_capabilities(model_key)
+        if snap is None:
+            return 8
+        return snap.max_reference_images if snap.max_reference_images > 0 else 8
+
+    async def _supports_img2img(self, model_key: str) -> bool:
+        if self._model_catalog is None:
+            return True
+        snap = await self._model_catalog.resolve_capabilities(model_key)
+        if snap is None:
+            return True
+        return snap.supports_img2img
+
+    async def _run_image_gen_mode(
+        self,
+        *,
+        session_id: str,
+        message: str,
+        session: object,
+        model_ref: str | None,
+        reference_image_urls: list[str],
+        image_gen_strength: float | None,
+        is_new_session: bool,
+    ) -> AsyncGenerator[AgentEvent, None]:
+        allowed = await self._user_models.visible_image_gen_system_model_ids()
+        picked_ref = await self._pick_image_gen_model_ref(model_ref, session)
+        try:
+            resolved = await self._user_models.resolve_image_gen_model_for_chat(
+                picked_ref,
+                allowed_image_gen_system_ids=allowed,
+            )
+        except ValidationError as e:
+            yield AgentEvent.error(error=e.message, session_id=session_id)
+            return
+
+        persist_ref: str | None = picked_ref
+        if persist_ref is None and allowed:
+            persist_ref = sorted(allowed)[0]
+
+        model_key_for_caps = persist_ref or ""
+        if not model_key_for_caps and resolved.is_system:
+            model_key_for_caps = (
+                f"{resolved.provider}/{resolved.model}" if resolved.model else resolved.provider
+            )
+
+        max_refs = await self._max_reference_images_for_model(model_key_for_caps)
+        if len(reference_image_urls) > max_refs:
+            yield AgentEvent.error(
+                error=f"参考图过多：最多 {max_refs} 张",
+                session_id=session_id,
+            )
+            return
+
+        if reference_image_urls and not await self._supports_img2img(model_key_for_caps):
+            yield AgentEvent.error(
+                error="当前图像生成模型不支持参考图（图生图）",
+                session_id=session_id,
+            )
+            return
+
+        if resolved.provider not in ("volcengine", "openai"):
+            yield AgentEvent.error(
+                error=f"对话生图暂不支持提供商: {resolved.provider}",
+                session_id=session_id,
+            )
+            return
+
+        await self.session_use_case.merge_session_config_fragment(
+            session_id,
+            {
+                "creative_mode": "image_gen",
+                **({"image_gen_model_ref": persist_ref} if persist_ref else {}),
+            },
+            flush=False,
+        )
+        await self.db.flush()
+
+        if is_new_session:
+            yield AgentEvent.session_created(session_id)
+
+        ref_url = reference_image_urls[0] if reference_image_urls else None
+        prov: Literal["volcengine", "openai"] = "volcengine" if resolved.provider == "volcengine" else "openai"
+
+        yield AgentEvent.thinking(status="image_gen", iteration=1, content="正在生成图像…")
+        gen = create_image_generator(settings)
+        result = await gen.generate(
+            prompt=message,
+            provider=prov,
+            model=resolved.model,
+            reference_image_url=ref_url,
+            strength=image_gen_strength,
+            api_key_override=resolved.api_key,
+            api_base_override=resolved.api_base,
+        )
+        if not result.success:
+            yield AgentEvent.error(error=result.error or "图像生成失败", session_id=session_id)
+            return
+
+        lines: list[str] = []
+        for url in result.images:
+            lines.append(f"![generated]({url})")
+        markdown = "\n\n".join(lines) if lines else "（未返回图像 URL）"
+
+        await self.session_use_case.add_message(
+            session_id=session_id,
+            role=MessageRole.ASSISTANT,
+            content=markdown,
+            metadata={
+                "kind": "image_gen",
+                "image_urls": result.images,
+                "usage": result.usage or {},
+            },
+        )
+        await self.db.commit()
+
+        yield AgentEvent.text(markdown)
+        yield AgentEvent.done(
+            content=markdown,
+            iterations=1,
+            tool_iterations=0,
+            total_tokens=0,
+            usage=None,
+            model=resolved.model,
+        )
+
+    async def _build_vision_user_content(
+        self,
+        *,
+        message: str,
+        reference_image_urls: list[str],
+        request_model_ref: str | None,
+        session: object,
+        agent_id: str | None,
+    ) -> list[dict[str, Any]]:
+        picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id)
+        if picked is None:
+            raise ValidationError("未选择对话模型，无法发送带参考图的对话（请先选择支持视觉的模型）")
+        caps = await self._model_catalog.resolve_capabilities(picked) if self._model_catalog else None
+        if caps is None or not caps.supports_vision:
+            raise ValidationError("当前对话模型不支持视觉输入，请更换支持「图片理解」的模型或移除参考图")
+        max_refs = caps.max_reference_images if caps.max_reference_images > 0 else 8
+        if len(reference_image_urls) > max_refs:
+            raise ValidationError(f"参考图过多：当前模型最多接受 {max_refs} 张")
+        parts: list[dict[str, Any]] = [{"type": "text", "text": message}]
+        for url in reference_image_urls[:max_refs]:
+            parts.append({"type": "image_url", "image_url": {"url": url}})
+        return parts
+
     async def _prepare_agent_engine(
         self,
         agent_id: str | None,
@@ -464,6 +702,7 @@ class ChatUseCase:
         user_id: str,
         session: object | None,
         event_queue: asyncio.Queue[AgentEvent | None],
+        human_message_parts: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """执行 Agent 并保存结果，同时监听事件队列"""
         final_content = ""
@@ -479,6 +718,7 @@ class ChatUseCase:
                     session_id=session_id,
                     user_message=message,
                     user_id=user_id,
+                    user_message_parts=human_message_parts,
                 ):
                     # 将引擎事件放入队列
                     await event_queue.put(event)

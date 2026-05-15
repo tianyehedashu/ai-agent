@@ -32,9 +32,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import get_app_config
+from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.config_catalog_sync import (
     MANAGED_BY_KEY,
     MANAGED_CONFIG,
+    _build_tags_from_model_info,
+    model_types_for_gateway_registration,
+    selector_capabilities_from_tags,
     sync_app_config_gateway_catalog,
 )
 from domains.gateway.application.management import (
@@ -47,6 +51,7 @@ from domains.gateway.domain.virtual_key_service import (
     generate_vkey,
 )
 from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.presentation.credential_response import build_credential_response
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
@@ -59,7 +64,6 @@ from domains.gateway.presentation.schemas.common import (
     AlertRuleUpdate,
     BudgetResponse,
     BudgetUpsert,
-    CredentialCreate,
     CredentialResponse,
     CredentialUpdate,
     DashboardSummaryResponse,
@@ -68,11 +72,16 @@ from domains.gateway.presentation.schemas.common import (
     GatewayModelResponse,
     GatewayModelTestResponse,
     GatewayModelUpdate,
+    GatewayModelUsageSummaryResponse,
+    ManagedCredentialCreate,
+    PlatformCredentialStatItem,
+    RequestLogDetailResponse,
     RequestLogListResponse,
     RequestLogResponse,
     RouteCreate,
     RouteResponse,
     RouteUpdate,
+    UserCredentialCreate,
     VirtualKeyCreate,
     VirtualKeyCreateResponse,
     VirtualKeyResponse,
@@ -216,25 +225,55 @@ async def list_credentials(
     creds = await reads.list_credentials_for_team(
         team.team_id, include_system=team.is_platform_admin
     )
-    return [CredentialResponse.model_validate(c) for c in creds]
+    return [build_credential_response(c, encryption_key=_encryption_key()) for c in creds]
+
+
+@router.get("/credentials/{credential_id}", response_model=CredentialResponse)
+async def get_credential(
+    credential_id: uuid.UUID,
+    team: RequiredTeamAdmin,
+    reads: MgmtReads,
+) -> CredentialResponse:
+    try:
+        row = await reads.get_managed_credential_for_team(
+            credential_id,
+            team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return build_credential_response(row, encryption_key=_encryption_key())
 
 
 @router.post("/credentials", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED)
 async def create_credential(
-    body: CredentialCreate,
+    body: ManagedCredentialCreate,
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> CredentialResponse:
     encrypted = encrypt_value(body.api_key, _encryption_key())
-    cred = await writes.create_team_credential(
-        team_id=team.team_id,
-        provider=body.provider,
-        name=body.name,
-        api_key_encrypted=encrypted,
-        api_base=body.api_base,
-        extra=body.extra,
-    )
-    return CredentialResponse.model_validate(cred)
+    try:
+        if body.scope == "system":
+            cred = await writes.create_system_credential(
+                is_platform_admin=team.is_platform_admin,
+                provider=body.provider,
+                name=body.name,
+                api_key_encrypted=encrypted,
+                api_base=body.api_base,
+                extra=body.extra,
+            )
+        else:
+            cred = await writes.create_team_credential(
+                team_id=team.team_id,
+                provider=body.provider,
+                name=body.name,
+                api_key_encrypted=encrypted,
+                api_base=body.api_base,
+                extra=body.extra,
+            )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return build_credential_response(cred, encryption_key=_encryption_key())
 
 
 @router.patch("/credentials/{credential_id}", response_model=CredentialResponse)
@@ -246,9 +285,10 @@ async def update_credential(
 ) -> CredentialResponse:
     try:
         encrypted = encrypt_value(body.api_key, _encryption_key()) if body.api_key else None
-        updated = await writes.update_team_credential(
+        updated = await writes.update_managed_credential(
             credential_id,
             team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
             api_key_encrypted=encrypted,
             api_base=body.api_base,
             extra=body.extra,
@@ -257,7 +297,7 @@ async def update_credential(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return CredentialResponse.model_validate(updated)
+    return build_credential_response(updated, encryption_key=_encryption_key())
 
 
 @router.delete("/credentials/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -267,7 +307,11 @@ async def delete_credential(
     writes: MgmtWrites,
 ) -> None:
     try:
-        await writes.delete_team_credential(credential_id, team_id=team.team_id)
+        await writes.delete_managed_credential(
+            credential_id,
+            team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
 
@@ -295,7 +339,7 @@ async def import_user_credential(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return CredentialResponse.model_validate(new_cred)
+    return build_credential_response(new_cred, encryption_key=_encryption_key())
 
 
 @router.post("/credentials/import")
@@ -325,12 +369,12 @@ async def list_my_credentials(
 ) -> list[CredentialResponse]:
     user_id = get_user_uuid(current_user)
     creds = await reads.list_user_credentials(user_id)
-    return [CredentialResponse.model_validate(c) for c in creds]
+    return [build_credential_response(c, encryption_key=_encryption_key()) for c in creds]
 
 
 @router.post("/my-credentials", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED)
 async def create_my_credential(
-    body: CredentialCreate,
+    body: UserCredentialCreate,
     current_user: RequiredAuthUser,
     writes: MgmtWrites,
 ) -> CredentialResponse:
@@ -348,7 +392,7 @@ async def create_my_credential(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return CredentialResponse.model_validate(cred)
+    return build_credential_response(cred, encryption_key=_encryption_key())
 
 
 @router.patch("/my-credentials/{credential_id}", response_model=CredentialResponse)
@@ -372,7 +416,7 @@ async def update_my_credential(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return CredentialResponse.model_validate(updated)
+    return build_credential_response(updated, encryption_key=_encryption_key())
 
 
 @router.delete("/my-credentials/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -391,14 +435,6 @@ async def delete_my_credential(
 # =============================================================================
 # Models
 # =============================================================================
-
-
-def _infer_preset_capability(model: Any) -> str:
-    if getattr(model, "supports_image_gen", False):
-        return "image"
-    if "embedding" in model.id:
-        return "embedding"
-    return "chat"
 
 
 @router.get("/models/presets", response_model=list[GatewayModelPresetResponse])
@@ -432,29 +468,37 @@ async def list_model_presets(
                 supports_reasoning=bool((m.tags or {}).get("supports_reasoning", False)),
                 recommended_for=list((m.tags or {}).get("recommended_for") or []),
                 description=str((m.tags or {}).get("description") or ""),
+                model_types=model_types_for_gateway_registration(m.tags or {}, m.capability),
+                selector_capabilities=selector_capabilities_from_tags(m.tags or {}),
             )
             for m in cfg_rows
         ]
     else:
-        presets = [
-            GatewayModelPresetResponse(
-                id=model.id,
-                name=model.name,
-                provider=model.provider,
-                real_model=model.litellm_model or model.id,
-                capability=_infer_preset_capability(model),
-                context_window=model.context_window,
-                input_price=model.input_price,
-                output_price=model.output_price,
-                supports_vision=model.supports_vision,
-                supports_tools=model.supports_tools,
-                supports_reasoning=model.supports_reasoning,
-                recommended_for=list(model.recommended_for),
-                description=model.description,
+        presets = []
+        for model in get_app_config().models.available:
+            if not (model.litellm_model or model.id):
+                continue
+            tags = _build_tags_from_model_info(model)
+            cap = infer_catalog_capability(model)
+            presets.append(
+                GatewayModelPresetResponse(
+                    id=model.id,
+                    name=model.name,
+                    provider=model.provider,
+                    real_model=model.litellm_model or model.id,
+                    capability=cap,
+                    context_window=model.context_window,
+                    input_price=model.input_price,
+                    output_price=model.output_price,
+                    supports_vision=model.supports_vision,
+                    supports_tools=model.supports_tools,
+                    supports_reasoning=model.supports_reasoning,
+                    recommended_for=list(model.recommended_for),
+                    description=model.description,
+                    model_types=model_types_for_gateway_registration(tags, cap),
+                    selector_capabilities=selector_capabilities_from_tags(tags),
+                )
             )
-            for model in get_app_config().models.available
-            if model.litellm_model or model.id
-        ]
     if provider is not None:
         presets = [p for p in presets if p.provider == provider]
     return presets
@@ -477,9 +521,42 @@ async def list_models(
     team: CurrentTeam,
     reads: MgmtReads,
     provider: str | None = Query(None, min_length=1, max_length=50),
+    credential_id: uuid.UUID | None = Query(None),
 ) -> list[GatewayModelResponse]:
-    models = await reads.list_gateway_models(team.team_id, only_enabled=False, provider=provider)
+    models = await reads.list_gateway_models(
+        team.team_id,
+        only_enabled=False,
+        provider=provider,
+        credential_id=credential_id,
+    )
     return [GatewayModelResponse.model_validate(m) for m in models]
+
+
+@router.get("/models/usage-summary", response_model=GatewayModelUsageSummaryResponse)
+async def models_usage_summary(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    days: int = Query(7, ge=1, le=90),
+    provider: str | None = Query(None, min_length=1, max_length=50),
+) -> GatewayModelUsageSummaryResponse:
+    """按当前团队注册模型名与请求日志 ``route_name`` 对齐；见 ``UsageAggregation`` 文档。"""
+    raw = await reads.aggregate_gateway_model_route_usage(team, days=days, provider=provider)
+    return GatewayModelUsageSummaryResponse.model_validate(raw)
+
+
+@router.get("/admin/credential-stats", response_model=list[PlatformCredentialStatItem])
+async def admin_credential_stats(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    days: int = Query(7, ge=1, le=90),
+) -> list[PlatformCredentialStatItem]:
+    if not team.is_platform_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform admin can view credential stats",
+        )
+    rows = await reads.list_platform_credential_stats(days=days)
+    return [PlatformCredentialStatItem.model_validate(r) for r in rows]
 
 
 @router.post("/models", response_model=GatewayModelResponse, status_code=status.HTTP_201_CREATED)
@@ -539,7 +616,7 @@ async def test_model(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> GatewayModelTestResponse:
-    """对 Gateway 团队模型发起一次最小 LLM 调用做连通性测试。
+    """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图）。
 
     成功/失败均返回 200 + ``success`` 字段，结果同步落库（``last_test_status``
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。
@@ -581,7 +658,6 @@ async def create_route(
         strategy=body.strategy,
         retry_policy=body.retry_policy,
     )
-    await writes.reload_litellm_router()
     return RouteResponse.model_validate(route)
 
 
@@ -600,7 +676,6 @@ async def update_route(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    await writes.reload_litellm_router()
     return RouteResponse.model_validate(updated)
 
 
@@ -614,7 +689,6 @@ async def delete_route(
         await writes.delete_gateway_route(route_id, team_id=team.team_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    await writes.reload_litellm_router()
 
 
 # =============================================================================
@@ -712,7 +786,7 @@ async def list_logs(
     )
 
 
-@router.get("/logs/{log_id}", response_model=RequestLogResponse)
+@router.get("/logs/{log_id}", response_model=RequestLogDetailResponse)
 async def get_log_detail(
     log_id: uuid.UUID,
     team: CurrentTeam,
@@ -723,14 +797,14 @@ async def get_log_detail(
             "用量切片：workspace=按当前工作区 team_id；user=仅当日志 user_id 为当前用户时可见。"
         ),
     ),
-) -> RequestLogResponse:
+) -> RequestLogDetailResponse:
     try:
         record = await reads.get_request_log(team, log_id, usage_aggregation=usage_aggregation)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Log not found")
-    return RequestLogResponse.model_validate(record)
+    return RequestLogDetailResponse.model_validate(record)
 
 
 # =============================================================================

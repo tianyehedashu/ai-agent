@@ -42,6 +42,19 @@ export interface UserModel {
   updated_at: string | null
 }
 
+export interface ModelCapabilitiesPayload {
+  supports_vision: boolean
+  supports_tools: boolean
+  supports_reasoning: boolean
+  supports_json_mode: boolean
+  supports_image_gen: boolean
+  supports_txt2img: boolean
+  supports_img2img: boolean
+  supports_video_gen: boolean
+  supports_image_to_video: boolean
+  max_reference_images: number
+}
+
 export interface SystemModel {
   id: string
   display_name: string
@@ -50,6 +63,8 @@ export interface SystemModel {
   model_types: ModelType[]
   is_system: true
   config: UserModelConfig | null
+  /** 后端网关 tags 扁平化能力（可选） */
+  capabilities?: ModelCapabilitiesPayload
 }
 
 /** 默认模型信息（用于展示「默认（模型名）」） */

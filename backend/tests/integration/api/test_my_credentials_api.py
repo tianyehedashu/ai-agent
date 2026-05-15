@@ -34,6 +34,9 @@ class TestMyCredentialsAPI:
         cid = body["id"]
         assert body["provider"] == "deepseek"
         assert body["name"] == "integration-test-acct"
+        assert "api_key_masked" in body
+        assert body["api_key_masked"] == "••••" or "…" in body["api_key_masked"]
+        assert "sk-test-placeholder" not in body["api_key_masked"]
 
         r2 = await client.get("/api/v1/gateway/my-credentials", headers=auth_headers)
         assert r2.status_code == 200

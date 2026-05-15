@@ -4,26 +4,15 @@
  * 多账号：调用 Gateway ``/my-credentials``（user scope）；与旧版 ``/settings/providers`` 测试接口兼容。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,12 +32,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { useAuthStore } from '@/stores/auth'
 import { PROVIDER_LABELS } from '@/types/provider-config'
+
+import { displayListApiKeyMasked } from './provider-credential-mask-display'
 
 const SUPPORTED_PROVIDERS = Object.keys(PROVIDER_LABELS)
 
 export function ProviderConfigTab(): React.ReactElement {
   const queryClient = useQueryClient()
+  const token = useAuthStore((s) => s.token)
+  const hasAuthSession = Boolean(token)
+  /** 列表中的掩码：关闭时不展示具体指纹（防 shoulder surfing）；仍为服务端脱敏，非明文。 */
+  const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
@@ -56,11 +53,19 @@ export function ProviderConfigTab(): React.ReactElement {
   const [formName, setFormName] = useState('')
   const [formApiKey, setFormApiKey] = useState('')
   const [formApiBase, setFormApiBase] = useState('')
+  const [formIsActive, setFormIsActive] = useState(true)
 
   const { data: credentials = [], isLoading } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
     queryFn: () => gatewayApi.listMyCredentials(),
+    enabled: hasAuthSession,
   })
+
+  useEffect(() => {
+    if (!hasAuthSession) {
+      setShowFullMaskedInList(false)
+    }
+  }, [hasAuthSession])
 
   const byProvider = useMemo(() => {
     const m = new Map<string, ProviderCredential[]>()
@@ -107,6 +112,7 @@ export function ProviderConfigTab(): React.ReactElement {
         name: formName.trim() || editCred.name,
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
         api_base: formApiBase.trim() || null,
+        is_active: formIsActive,
       })
     },
     onSuccess: () => {
@@ -117,17 +123,6 @@ export function ProviderConfigTab(): React.ReactElement {
     },
     onError: (e: Error) => {
       toast.error(`保存失败: ${e.message}`)
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.deleteMyCredential(id),
-    onSuccess: () => {
-      invalidate()
-      toast.success('已删除')
-    },
-    onError: (e: Error) => {
-      toast.error(`删除失败: ${e.message}`)
     },
   })
 
@@ -147,6 +142,7 @@ export function ProviderConfigTab(): React.ReactElement {
     setFormName('')
     setFormApiKey('')
     setFormApiBase('')
+    setFormIsActive(true)
     setShowKey(false)
   }
 
@@ -162,6 +158,7 @@ export function ProviderConfigTab(): React.ReactElement {
     setFormName(c.name)
     setFormApiKey('')
     setFormApiBase(c.api_base ?? '')
+    setFormIsActive(c.is_active)
     setShowKey(false)
   }
 
@@ -178,8 +175,9 @@ export function ProviderConfigTab(): React.ReactElement {
     const nameUnchanged = formName.trim() === editCred.name
     const baseUnchanged = formApiBase.trim() === (editCred.api_base ?? '').trim()
     const keyEmpty = !formApiKey.trim()
-    if (keyEmpty && nameUnchanged && baseUnchanged) {
-      toast.error('请至少修改名称、Base 或填写新 API Key')
+    const activeUnchanged = formIsActive === editCred.is_active
+    if (keyEmpty && nameUnchanged && baseUnchanged && activeUnchanged) {
+      toast.error('请至少修改名称、Base、启用状态或填写新 API Key')
       return
     }
     updateMutation.mutate()
@@ -206,6 +204,7 @@ export function ProviderConfigTab(): React.ReactElement {
           </div>
           <Button
             size="sm"
+            disabled={!hasAuthSession}
             onClick={() => {
               openAdd()
             }}
@@ -215,6 +214,33 @@ export function ProviderConfigTab(): React.ReactElement {
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
+          {hasAuthSession ? (
+            <div className="flex flex-col gap-3 rounded-md border border-dashed bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1 text-xs text-muted-foreground">
+                <p>凭据数据来自当前登录账号的「我的凭据」接口（JWT），他人账号无法查看你的列表。</p>
+                <p>
+                  掩码由服务端生成，仍<strong className="text-foreground">不是</strong>
+                  完整 API Key；公共或共享屏幕建议保持关闭「显示完整掩码」。
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
+                <Label
+                  htmlFor="show-full-masked-list"
+                  className="cursor-pointer text-xs font-normal"
+                >
+                  显示完整掩码
+                </Label>
+                <Switch
+                  id="show-full-masked-list"
+                  checked={showFullMaskedInList}
+                  onCheckedChange={setShowFullMaskedInList}
+                  aria-label="在列表中显示完整 API Key 掩码"
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">请先登录后再管理提供商凭据。</p>
+          )}
           {SUPPORTED_PROVIDERS.map((provider) => {
             const rows = byProvider.get(provider) ?? []
             return (
@@ -231,6 +257,7 @@ export function ProviderConfigTab(): React.ReactElement {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={!hasAuthSession}
                       onClick={() => {
                         openAdd(provider)
                       }}
@@ -241,10 +268,10 @@ export function ProviderConfigTab(): React.ReactElement {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={!hasAuthSession || testMutation.isPending}
                         onClick={() => {
                           testMutation.mutate(provider)
                         }}
-                        disabled={testMutation.isPending}
                       >
                         {testMutation.isPending ? '验证中…' : '验证该提供商'}
                       </Button>
@@ -258,10 +285,17 @@ export function ProviderConfigTab(): React.ReactElement {
                         key={c.id}
                         className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
                       >
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <span className="font-medium">{c.name}</span>
+                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {displayListApiKeyMasked(
+                              showFullMaskedInList,
+                              hasAuthSession,
+                              c.api_key_masked
+                            )}
+                          </div>
                           {c.api_base ? (
-                            <span className="ml-2 text-muted-foreground">{c.api_base}</span>
+                            <span className="mt-0.5 block text-muted-foreground">{c.api_base}</span>
                           ) : null}
                           {!c.is_active ? (
                             <Badge variant="outline" className="ml-2">
@@ -273,6 +307,7 @@ export function ProviderConfigTab(): React.ReactElement {
                           <Button
                             variant="ghost"
                             size="icon"
+                            disabled={!hasAuthSession}
                             onClick={() => {
                               openEdit(c)
                             }}
@@ -280,33 +315,6 @@ export function ProviderConfigTab(): React.ReactElement {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" aria-label="删除">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>删除凭据</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  确定删除「{PROVIDER_LABELS[c.provider] ?? c.provider} / {c.name}
-                                  」？若仍被网关模型引用将返回 409。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>取消</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => {
-                                    deleteMutation.mutate(c.id)
-                                  }}
-                                >
-                                  删除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
                         </div>
                       </li>
                     ))}
@@ -415,6 +423,16 @@ export function ProviderConfigTab(): React.ReactElement {
             <DialogTitle>编辑凭据</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label htmlFor="my-cred-active" className="cursor-pointer font-normal">
+                启用该账号
+              </Label>
+              <Switch
+                id="my-cred-active"
+                checked={formIsActive}
+                onCheckedChange={setFormIsActive}
+              />
+            </div>
             <div className="space-y-2">
               <Label>账号名称</Label>
               <Input

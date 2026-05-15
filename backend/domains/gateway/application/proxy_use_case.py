@@ -28,6 +28,7 @@ from domains.gateway.application.budget_service import (
     PERIOD_TOTAL,
     BudgetService,
 )
+from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
@@ -309,6 +310,9 @@ class ProxyUseCase:
                 meta.update(
                     await self._credential_metadata_for_virtual_model(ctx.team_id, virtual_model)
                 )
+                snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
+                if snap is not None:
+                    meta["gateway_route_snapshot"] = snap
         return meta
 
     async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
@@ -531,6 +535,60 @@ class ProxyUseCase:
 
         try:
             response = await arerank(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
+        return _adapt_response(response, ctx, self._budget)
+
+    async def moderation(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """处理 ``POST /v1/moderations``（经 LiteLLM ``amoderation``）。"""
+        ctx.capability = GatewayCapability.MODERATION
+        raw_model = body.get("model")
+        model = str(raw_model).strip() if raw_model is not None else ""
+        ctx.budget_model = model or None
+        if model:
+            self._check_model(model, ctx)
+        self._check_capability(ctx)
+        await self._check_limits(ctx)
+        reservations = await self._check_budget(ctx)
+        metadata = await self._build_metadata(ctx, user_kwargs=body)
+        kwargs = dict(body)
+        kwargs["metadata"] = metadata
+        from litellm import amoderation
+
+        try:
+            response = await amoderation(**kwargs)
+        except Exception:
+            await self._release_budget_reservations(reservations)
+            raise
+        return _adapt_response(response, ctx, self._budget)
+
+    async def video_generation(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """处理 ``POST /v1/videos``（经 LiteLLM ``avideo_generation``）。"""
+        ctx.capability = GatewayCapability.VIDEO_GENERATION
+        model = str(body.get("model", "")).strip()
+        if not model:
+            raise ValueError("model is required")
+        ctx.budget_model = model
+        self._check_model(model, ctx)
+        self._check_capability(ctx)
+        await self._check_limits(ctx)
+        reservations = await self._check_budget(ctx)
+        metadata = await self._build_metadata(ctx, user_kwargs=body)
+        kwargs = dict(body)
+        kwargs["metadata"] = metadata
+        from litellm import avideo_generation
+
+        try:
+            response = await avideo_generation(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
             raise

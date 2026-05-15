@@ -9,6 +9,13 @@ import { apiClient } from '@/api/client'
 import type { ModelTestStatus } from '@/types/user-model'
 
 // ============================
+// 模型连通性测试（与 backend model_test_constants 对齐）
+// ============================
+
+/** 与 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES``（Python）一致。 */
+export const GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES = ['chat', 'embedding', 'image'] as const
+
+// ============================
 // Types（与后端 schemas/common.py 对齐）
 // ============================
 
@@ -67,6 +74,8 @@ export interface ProviderCredential {
   is_active: boolean
   extra: Record<string, unknown> | null
   created_at: string
+  /** 后端解密后掩码展示，不含完整密钥 */
+  api_key_masked: string
 }
 
 export interface GatewayModel {
@@ -82,6 +91,10 @@ export interface GatewayModel {
   tpm_limit: number | null
   enabled: boolean
   tags?: Record<string, unknown> | null
+  /** 选择器用特性类型（后端由 tags + capability 推导） */
+  model_types?: string[]
+  /** 与 ModelCapabilitySnapshot 对齐的扁平特性 */
+  selector_capabilities?: Record<string, unknown>
   /** 上次连通性测试结果，未测过为 null */
   last_test_status: ModelTestStatus
   /** 上次连通性测试时间（ISO 8601），未测过为 null */
@@ -89,6 +102,44 @@ export interface GatewayModel {
   /** 上次失败/不支持时的说明；成功或未测过为 null */
   last_test_reason: string | null
   created_at: string
+}
+
+/** 与 GET /models/usage-summary 对齐；用量按日志 route_name = 注册名统计。 */
+export interface GatewayModelRouteUsageSlice {
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  /** 后端 Decimal 序列化常为 JSON 字符串 */
+  cost_usd: number | string
+}
+
+export interface GatewayModelRouteUsageItem {
+  route_name: string
+  workspace: GatewayModelRouteUsageSlice
+  user: GatewayModelRouteUsageSlice
+}
+
+export interface GatewayModelUsageSummary {
+  start: string
+  end: string
+  items: GatewayModelRouteUsageItem[]
+}
+
+/** GET /admin/credential-stats（仅平台管理员） */
+export interface PlatformCredentialStat {
+  credential_id: string
+  provider: string
+  name: string
+  scope: string
+  scope_id: string | null
+  is_active: boolean
+  gateway_model_count: number
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number | string
+  success_count: number
+  failure_count: number
 }
 
 export interface GatewayModelTestResult {
@@ -115,6 +166,8 @@ export interface GatewayModelPreset {
   supports_reasoning: boolean
   recommended_for: string[]
   description: string
+  model_types?: string[]
+  selector_capabilities?: Record<string, unknown>
 }
 
 export interface GatewayModelCreateBody {
@@ -126,6 +179,17 @@ export interface GatewayModelCreateBody {
   weight?: number
   rpm_limit?: number | null
   tpm_limit?: number | null
+  tags?: Record<string, unknown> | null
+}
+
+/** PATCH /models/{id}，与 GatewayModelUpdate 对齐 */
+export interface GatewayModelUpdateBody {
+  real_model?: string | null
+  credential_id?: string | null
+  weight?: number | null
+  rpm_limit?: number | null
+  tpm_limit?: number | null
+  enabled?: boolean | null
   tags?: Record<string, unknown> | null
 }
 
@@ -150,6 +214,26 @@ export interface GatewayRouteCreateBody {
   fallbacks_context_window?: string[]
   strategy?: string
   retry_policy?: Record<string, unknown> | null
+}
+
+/** PATCH /routes/{id}，与 RouteUpdate 对齐 */
+export interface GatewayRouteUpdateBody {
+  primary_models?: string[] | null
+  fallbacks_general?: string[] | null
+  fallbacks_content_policy?: string[] | null
+  fallbacks_context_window?: string[] | null
+  strategy?: string | null
+  retry_policy?: Record<string, unknown> | null
+  enabled?: boolean | null
+}
+
+/** PATCH /credentials/{id} 与 /my-credentials/{id} 共用字段 */
+export interface GatewayCredentialUpdateBody {
+  name?: string | null
+  api_key?: string | null
+  api_base?: string | null
+  extra?: Record<string, unknown> | null
+  is_active?: boolean | null
 }
 
 export interface GatewayBudget {
@@ -205,22 +289,37 @@ export interface GatewayLogItem {
   vkey_id: string | null
   credential_id: string | null
   credential_name_snapshot: string | null
+  /** Router 选中的注册模型 id；与 route_name（客户端 model）可不同 */
+  deployment_gateway_model_id?: string | null
+  deployment_model_name?: string | null
   capability: string
   route_name: string | null
   real_model: string | null
   provider: string | null
   status: string
   error_code: string | null
+  error_message?: string | null
   input_tokens: number
   output_tokens: number
   cached_tokens: number
   cost_usd: number | string
   latency_ms: number
+  ttfb_ms?: number | null
   cache_hit: boolean
   fallback_chain: string[]
   request_id: string | null
+  prompt_hash?: string | null
   user_email_snapshot: string | null
   vkey_name_snapshot: string | null
+}
+
+/** GET /logs/{id}，含脱敏 prompt / 响应摘要等 */
+export interface GatewayLogDetail extends GatewayLogItem {
+  team_snapshot?: Record<string, unknown> | null
+  route_snapshot?: Record<string, unknown> | null
+  prompt_redacted?: Record<string, unknown> | null
+  response_summary?: Record<string, unknown> | null
+  metadata_extra?: Record<string, unknown> | null
 }
 
 export interface AlertRule {
@@ -278,13 +377,18 @@ export const gatewayApi = {
   revokeKey: (id: string) => apiClient.delete<unknown>(`${base}/keys/${id}`),
 
   listCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/credentials`),
+  getCredential: (id: string) => apiClient.get<ProviderCredential>(`${base}/credentials/${id}`),
   createCredential: (body: {
     provider: string
     name: string
     api_key: string
     api_base?: string
     extra?: Record<string, unknown>
+    /** 默认 team；system 仅平台管理员可创建 */
+    scope?: 'team' | 'system'
   }) => apiClient.post<ProviderCredential>(`${base}/credentials`, body),
+  updateCredential: (id: string, body: GatewayCredentialUpdateBody) =>
+    apiClient.patch<ProviderCredential>(`${base}/credentials/${id}`, body),
   deleteCredential: (id: string) => apiClient.delete<unknown>(`${base}/credentials/${id}`),
 
   listMyCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/my-credentials`),
@@ -295,24 +399,22 @@ export const gatewayApi = {
     api_base?: string | null
     extra?: Record<string, unknown>
   }) => apiClient.post<ProviderCredential>(`${base}/my-credentials`, body),
-  updateMyCredential: (
-    id: string,
-    body: {
-      name?: string | null
-      api_key?: string | null
-      api_base?: string | null
-      extra?: Record<string, unknown> | null
-      is_active?: boolean | null
-    }
-  ) => apiClient.patch<ProviderCredential>(`${base}/my-credentials/${id}`, body),
+  updateMyCredential: (id: string, body: GatewayCredentialUpdateBody) =>
+    apiClient.patch<ProviderCredential>(`${base}/my-credentials/${id}`, body),
   deleteMyCredential: (id: string) => apiClient.delete<unknown>(`${base}/my-credentials/${id}`),
 
-  listModels: (params?: { provider?: string }) =>
+  listModels: (params?: { provider?: string; credential_id?: string }) =>
     apiClient.get<GatewayModel[]>(`${base}/models`, params),
+  modelsUsageSummary: (params?: { days?: number; provider?: string }) =>
+    apiClient.get<GatewayModelUsageSummary>(`${base}/models/usage-summary`, params),
+  adminCredentialStats: (params?: { days?: number }) =>
+    apiClient.get<PlatformCredentialStat[]>(`${base}/admin/credential-stats`, params),
   listModelPresets: (params?: { provider?: string }) =>
     apiClient.get<GatewayModelPreset[]>(`${base}/models/presets`, params),
   createModel: (body: GatewayModelCreateBody) =>
     apiClient.post<GatewayModel>(`${base}/models`, body),
+  updateModel: (id: string, body: GatewayModelUpdateBody) =>
+    apiClient.patch<GatewayModel>(`${base}/models/${id}`, body),
   deleteModel: (id: string) => apiClient.delete<unknown>(`${base}/models/${id}`),
   /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */
   testModel: (id: string) =>
@@ -321,6 +423,8 @@ export const gatewayApi = {
   listRoutes: () => apiClient.get<GatewayRoute[]>(`${base}/routes`),
   createRoute: (body: GatewayRouteCreateBody) =>
     apiClient.post<GatewayRoute>(`${base}/routes`, body),
+  updateRoute: (id: string, body: GatewayRouteUpdateBody) =>
+    apiClient.patch<GatewayRoute>(`${base}/routes/${id}`, body),
   deleteRoute: (id: string) => apiClient.delete<unknown>(`${base}/routes/${id}`),
 
   listBudgets: () => apiClient.get<GatewayBudget[]>(`${base}/budgets`),
@@ -346,7 +450,7 @@ export const gatewayApi = {
       page_size: number
     }>(`${base}/logs`, params),
   getLog: (id: string, params?: { usage_aggregation?: GatewayUsageAggregation }) =>
-    apiClient.get<GatewayLogItem>(`${base}/logs/${id}`, params),
+    apiClient.get<GatewayLogDetail>(`${base}/logs/${id}`, params),
 
   dashboard: (params?: { days?: number; usage_aggregation?: GatewayUsageAggregation }) =>
     apiClient.get<DashboardSummary>(`${base}/dashboard/summary`, params),

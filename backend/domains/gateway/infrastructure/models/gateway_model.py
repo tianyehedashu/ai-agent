@@ -23,7 +23,10 @@ class GatewayModel(BaseModel):
     业务规则：
     - 同一 team 下 name 唯一
     - team_id NULL 表示系统级模型（所有团队都可用）
-    - capability 决定该模型能被哪些 endpoint 调用（chat/embedding/...）
+    - capability：该注册行的 **OpenAI 兼容主调用面**（与 ``GatewayCapability`` 对齐），
+      决定默认 HTTP 入口族（chat / images / videos / …）；**不是**「模型全部产品能力」。
+      视觉 / 工具 / 生图标记等多特性在 ``tags``，并由管理 API 派生 ``model_types`` /
+      ``selector_capabilities`` 供前端展示。
     """
 
     __tablename__ = "gateway_models"
@@ -43,7 +46,10 @@ class GatewayModel(BaseModel):
         String(40),
         nullable=False,
         index=True,
-        comment="chat / embedding / image / audio_transcription / audio_speech / rerank",
+        comment=(
+            "主调用面: chat / embedding / image / video_generation / moderation / "
+            "audio_transcription / audio_speech / rerank（与 OpenAI 兼容路由入口对齐）"
+        ),
     )
     real_model: Mapped[str] = mapped_column(
         String(200),
@@ -70,7 +76,13 @@ class GatewayModel(BaseModel):
         Boolean, default=True, server_default="true", nullable=False
     )
     tags: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True, comment="扩展标签：cost_per_token、context_window、prompt_cache 等"
+        JSONB,
+        nullable=True,
+        comment=(
+            "扩展标签：cost_per_token、context_window、prompt_cache；"
+            "视频目录：supports_video_gen、video_vendor_model_id（或 giikin_video_model）、"
+            "video_durations（整数秒列表）"
+        ),
     )
     last_test_status: Mapped[str | None] = mapped_column(
         String(20),

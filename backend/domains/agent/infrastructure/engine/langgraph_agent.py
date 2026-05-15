@@ -660,6 +660,7 @@ class LangGraphAgentEngine:
         session_id: str,
         user_id: str,
         user_message: str,
+        user_message_parts: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """
         执行 Agent
@@ -674,7 +675,8 @@ class LangGraphAgentEngine:
         Args:
             session_id: 会话 ID（作为 LangGraph 的 thread_id，也用于记忆隔离）
             user_id: 用户 ID
-            user_message: 用户消息
+            user_message: 用户消息（纯文本；与 ``user_message_parts`` 二选一优先多模态）
+            user_message_parts: OpenAI 风格多模态 content 数组（如含 image_url）
 
         Yields:
             AgentEvent: 执行事件流
@@ -682,9 +684,13 @@ class LangGraphAgentEngine:
         # 获取 LangGraph 配置
         config = self.checkpointer.get_config(session_id)
 
+        human_content: str | list[dict[str, Any]] = (
+            user_message_parts if user_message_parts is not None else user_message
+        )
+
         # 构建初始状态
         initial_state = {
-            "messages": [HumanMessage(content=user_message)],
+            "messages": [HumanMessage(content=human_content)],
             "user_id": user_id,
             "session_id": session_id,
             "iteration": 0,

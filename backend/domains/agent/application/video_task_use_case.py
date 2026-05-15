@@ -10,6 +10,10 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.agent.application.video_gen_catalog import (
+    allowed_durations_for_video_model,
+    list_merged_video_models,
+)
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.domain.types import MessageRole
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask, VideoGenTaskStatus
@@ -147,7 +151,7 @@ class VideoTaskUseCase:
             prompt_source: 提示词来源
             reference_images: 参考图片 URL 列表
             marketplace: 目标站点
-            model: 视频生成模型 (openai::sora1.0, openai::sora2.0)
+            model: 视频生成模型（厂商 ``config.model``，见合并目录 ``list_merged_video_models``）
             duration: 视频时长（秒）
             auto_submit: 是否自动提交到厂商
             auto_create_session: 如果未提供 session_id，是否自动创建会话
@@ -178,20 +182,18 @@ class VideoTaskUseCase:
                 code="INVALID_MARKETPLACE",
             )
 
-        # 验证 model
-        valid_models = {"openai::sora1.0", "openai::sora2.0"}
-        if model not in valid_models:
+        merged_catalog = await list_merged_video_models(self.db)
+        valid_ids = frozenset(str(x["value"]) for x in merged_catalog)
+        if model not in valid_ids:
             raise ValidationError(
-                f"Invalid model: {model}. Valid values: {valid_models}",
+                f"Invalid model: {model}. Valid values: {sorted(valid_ids)}",
                 code="INVALID_MODEL",
             )
 
-        # 验证 duration
-        valid_durations = {5, 10, 15, 20} if model == "openai::sora1.0" else {5, 10, 15}
-
+        valid_durations = allowed_durations_for_video_model(merged_catalog, model)
         if duration not in valid_durations:
             raise ValidationError(
-                f"Invalid duration for {model}: {duration}. Valid values: {valid_durations}",
+                f"Invalid duration for {model}: {duration}. Valid values: {sorted(valid_durations)}",
                 code="INVALID_DURATION",
             )
 

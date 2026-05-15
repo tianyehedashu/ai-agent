@@ -71,6 +71,8 @@ class GatewayCapability(str, Enum):
     AUDIO_TRANSCRIPTION = "audio_transcription"
     AUDIO_SPEECH = "audio_speech"
     RERANK = "rerank"
+    VIDEO_GENERATION = "video_generation"
+    MODERATION = "moderation"
 
 
 def allowed_capabilities_from_storage(

@@ -5,6 +5,8 @@ OpenAI 兼容入口（挂载在根路径 /）
 - POST /v1/chat/completions（含 SSE）
 - POST /v1/embeddings
 - POST /v1/images/generations
+- POST /v1/videos
+- POST /v1/moderations
 - POST /v1/audio/transcriptions
 - POST /v1/audio/speech
 - POST /v1/rerank
@@ -236,6 +238,46 @@ async def rerank(
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.RERANK)
     try:
         result = await use_case.rerank(ctx, body)
+    except Exception as exc:
+        raise _wrap_business_errors(exc) from exc
+    return Response(content=orjson.dumps(result), media_type="application/json")
+
+
+# =============================================================================
+# /v1/moderations
+# =============================================================================
+
+
+@router.post("/moderations")
+async def moderations(
+    body: dict[str, Any],
+    principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    use_case = ProxyUseCase(db)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.MODERATION)
+    try:
+        result = await use_case.moderation(ctx, body)
+    except Exception as exc:
+        raise _wrap_business_errors(exc) from exc
+    return Response(content=orjson.dumps(result), media_type="application/json")
+
+
+# =============================================================================
+# /v1/videos
+# =============================================================================
+
+
+@router.post("/videos")
+async def videos(
+    body: dict[str, Any],
+    principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    use_case = ProxyUseCase(db)
+    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.VIDEO_GENERATION)
+    try:
+        result = await use_case.video_generation(ctx, body)
     except Exception as exc:
         raise _wrap_business_errors(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")

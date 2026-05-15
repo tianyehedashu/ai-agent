@@ -17,12 +17,13 @@ import { Switch } from '@/components/ui/switch'
 import { useChat } from '@/hooks/use-chat'
 import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
+import type { SessionCreativeMode } from '@/types'
 
 import ChatMessages from './components/chat-messages'
 import { MCPSessionConfig } from './components/mcp-session-config'
 import ChatSessionVideoTasks from './components/session-video-tasks'
 import UnifiedInputArea, {
-  type UnifiedInputMode,
+  type CreativeInputMode,
   type VideoCreateParams,
 } from './components/unified-input-area'
 
@@ -32,10 +33,12 @@ export default function ChatPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [showDebugger, setShowDebugger] = useState(false)
-  const [inputMode, setInputMode] = useState<UnifiedInputMode>('chat')
+  const [creativeMode, setCreativeMode] = useState<CreativeInputMode>('chat')
   const { setCurrentSession, input, setInput } = useChatStore()
   const [toolConfigOpen, setToolConfigOpen] = useState(false)
   const [selectedModelRef, setSelectedModelRef] = useState<string | null>(null)
+  const [selectedImageGenModelRef, setSelectedImageGenModelRef] = useState<string | null>(null)
+  const [referenceImageUrls, setReferenceImageUrls] = useState('')
   /** 网关调用详细日志：无会话时仅作用于下一条发送；有会话时切换会 PATCH 持久化到会话 */
   const [verboseGatewayLog, setVerboseGatewayLog] = useState(false)
 
@@ -103,7 +106,7 @@ export default function ChatPage(): React.JSX.Element {
 
   // 无会话时（新建对话）切回对话模式，避免底部只显示 Tab 不显示输入
   useEffect(() => {
-    if (!sessionId) setInputMode('chat')
+    if (!sessionId) setCreativeMode('chat')
   }, [sessionId])
 
   // Load session - 当 sessionId 变化时，仅「离开当前会话」或「切换到另一会话」时清除消息；
@@ -131,6 +134,13 @@ export default function ChatPage(): React.JSX.Element {
             setCurrentSession(session)
             setSelectedModelRef(session.chatModelRef ?? null)
             setVerboseGatewayLog(session.gatewayVerboseRequestLog ?? false)
+            const cm = session.creativeMode
+            if (cm === 'image_gen' || cm === 'video') {
+              setCreativeMode(cm)
+            } else {
+              setCreativeMode('chat')
+            }
+            setSelectedImageGenModelRef(session.imageGenModelRef ?? null)
           }
         })
         .catch((error: unknown) => {
@@ -160,6 +170,8 @@ export default function ChatPage(): React.JSX.Element {
     } else {
       setCurrentSession(null)
       setSelectedModelRef(null)
+      setSelectedImageGenModelRef(null)
+      setReferenceImageUrls('')
       setVerboseGatewayLog(false)
     }
 
@@ -169,15 +181,62 @@ export default function ChatPage(): React.JSX.Element {
     }
   }, [sessionId, setCurrentSession, clearMessages, loadMessages, handleSessionAccessError])
 
+  const handleCreativeModeChange = async (mode: CreativeInputMode): Promise<void> => {
+    setCreativeMode(mode)
+    if (!sessionId) return
+    try {
+      const updated = await sessionApi.update(sessionId, {
+        creativeMode: mode as SessionCreativeMode,
+      })
+      setCurrentSession(updated)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : '更新失败'
+      toast({
+        title: '无法保存创作模式',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
+
   const handleSend = async (): Promise<void> => {
     if (!input.trim() || isLoading) return
     const message = input.trim()
     setInput('')
+    const refLines = referenceImageUrls
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((u) => u.startsWith('http://') || u.startsWith('https://'))
+
+    if (creativeMode === 'image_gen') {
+      const defaultImg = (
+        await userModelApi.listAvailable('image_gen', undefined, { mode: 'image_gen' })
+      ).default_for_image_gen?.id
+      const modelRef = selectedImageGenModelRef ?? defaultImg ?? undefined
+      await sendMessage(message, {
+        modelRef,
+        gatewayVerboseRequestLog: verboseGatewayLog ? true : undefined,
+        creativeMode: 'image_gen',
+        referenceImageUrls: refLines.length > 0 ? refLines : undefined,
+      })
+      if (sessionId && modelRef) {
+        try {
+          const updated = await sessionApi.update(sessionId, { imageGenModelRef: modelRef })
+          setCurrentSession(updated)
+        } catch {
+          /* 非阻塞 */
+        }
+      }
+      return
+    }
+
     const defaultId = availableTextModels?.default_for_text?.id
     const modelRef = selectedModelRef ?? defaultId ?? undefined
     await sendMessage(message, {
       modelRef,
       gatewayVerboseRequestLog: verboseGatewayLog ? true : undefined,
+      creativeMode: 'chat',
+      referenceImageUrls: refLines.length > 0 ? refLines : undefined,
     })
   }
 
@@ -277,58 +336,77 @@ export default function ChatPage(): React.JSX.Element {
       <div className="relative z-10 border-t border-border/40 bg-background/95 pb-4 pt-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-3xl px-4">
           <UnifiedInputArea
-            mode={inputMode}
-            onModeChange={setInputMode}
+            creativeMode={creativeMode}
+            onCreativeModeChange={(m) => {
+              void handleCreativeModeChange(m)
+            }}
             sessionId={sessionId}
             chatValue={input}
             chatOnChange={setInput}
             chatOnSend={handleSend}
             chatIsLoading={isLoading}
+            referenceImageUrls={referenceImageUrls}
+            onReferenceImageUrlsChange={setReferenceImageUrls}
             toolbarLeftExtra={
-              <div className="flex items-center gap-0.5">
-                <ModelSelector
-                  modelType="text"
-                  value={selectedModelRef}
-                  onChange={setSelectedModelRef}
-                  disabled={isLoading}
-                  showProviderFilter
-                  className="h-8 w-[min(12rem,calc(100vw-10rem))] max-w-[12rem] border-0 bg-transparent shadow-none focus:ring-0"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
-                  title="配置本对话可用的工具与 MCP 服务器"
-                  onClick={() => {
-                    setToolConfigOpen(true)
-                  }}
-                >
-                  <Wrench className="h-4 w-4" />
-                </Button>
-                <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 px-2 py-0.5">
-                  <Switch
-                    id="verbose-gateway-log"
-                    checked={verboseGatewayLog}
-                    onCheckedChange={(v) => {
-                      void handleVerboseGatewayLogChange(v)
+              creativeMode !== 'video' ? (
+                <div className="flex items-center gap-0.5">
+                  {creativeMode === 'image_gen' ? (
+                    <ModelSelector
+                      modelType="image_gen"
+                      listMode="image_gen"
+                      value={selectedImageGenModelRef}
+                      onChange={setSelectedImageGenModelRef}
+                      disabled={isLoading}
+                      showProviderFilter
+                      className="h-8 w-[min(12rem,calc(100vw-10rem))] max-w-[12rem] border-0 bg-transparent shadow-none focus:ring-0"
+                    />
+                  ) : (
+                    <ModelSelector
+                      modelType="text"
+                      listMode="chat"
+                      value={selectedModelRef}
+                      onChange={setSelectedModelRef}
+                      disabled={isLoading}
+                      showProviderFilter
+                      className="h-8 w-[min(12rem,calc(100vw-10rem))] max-w-[12rem] border-0 bg-transparent shadow-none focus:ring-0"
+                    />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
+                    title="配置本对话可用的工具与 MCP 服务器"
+                    onClick={() => {
+                      setToolConfigOpen(true)
                     }}
-                    disabled={isLoading}
-                    className="scale-90"
-                  />
-                  <Label
-                    htmlFor="verbose-gateway-log"
-                    className="cursor-pointer whitespace-nowrap text-[11px] text-muted-foreground sm:text-xs"
-                    title={
-                      sessionId
-                        ? '开启后本会话内网关调用会记录更长的提示词与模型回复摘要（仍截断落库）。关闭将同步保存到会话。'
-                        : '开启后下一条消息将请求扩展网关日志（需服务端允许）；进入已有会话后可用会话级开关持久化。'
-                    }
                   >
-                    <span className="hidden sm:inline">网关详细日志</span>
-                    <span className="sm:hidden">日志</span>
-                  </Label>
+                    <Wrench className="h-4 w-4" />
+                  </Button>
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 px-2 py-0.5">
+                    <Switch
+                      id="verbose-gateway-log"
+                      checked={verboseGatewayLog}
+                      onCheckedChange={(v) => {
+                        void handleVerboseGatewayLogChange(v)
+                      }}
+                      disabled={isLoading}
+                      className="scale-90"
+                    />
+                    <Label
+                      htmlFor="verbose-gateway-log"
+                      className="cursor-pointer whitespace-nowrap text-[11px] text-muted-foreground sm:text-xs"
+                      title={
+                        sessionId
+                          ? '开启后本会话内网关调用会记录更长的提示词与模型回复摘要（仍截断落库）。关闭将同步保存到会话。'
+                          : '开启后下一条消息将请求扩展网关日志（需服务端允许）；进入已有会话后可用会话级开关持久化。'
+                      }
+                    >
+                      <span className="hidden sm:inline">网关详细日志</span>
+                      <span className="sm:hidden">日志</span>
+                    </Label>
+                  </div>
                 </div>
-              </div>
+              ) : undefined
             }
             onVideoTaskCreated={() => {
               toast({
@@ -338,11 +416,11 @@ export default function ChatPage(): React.JSX.Element {
               if (sessionId) {
                 navigate(`/video-tasks/${sessionId}`)
               }
-              setInputMode('chat')
+              void handleCreativeModeChange('chat')
             }}
             onVideoSessionForbidden={() => {
               navigate('/video-tasks')
-              setInputMode('chat')
+              void handleCreativeModeChange('chat')
             }}
             onVideoCreateWithoutSession={async (params: VideoCreateParams) => {
               const session = await sessionApi.create()
@@ -362,7 +440,7 @@ export default function ChatPage(): React.JSX.Element {
                 description: '正在跳转到视频任务页',
               })
               navigate(`/video-tasks/${session.id}`)
-              setInputMode('chat')
+              void handleCreativeModeChange('chat')
             }}
           />
         </div>

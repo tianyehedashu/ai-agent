@@ -386,7 +386,11 @@ class UserModelUseCase:
         repo = GatewayModelRepository(self.db)
         row = await repo.get_by_name(None, model_ref)
         if row is not None and bool((row.tags or {}).get("supports_image_gen")):
-            return ResolvedImageGenModel(provider=row.provider, is_system=True)
+            return ResolvedImageGenModel(
+                provider=row.provider,
+                model=(row.real_model or None) if row.real_model else None,
+                is_system=True,
+            )
 
         system_image_models = {
             m.id: m.provider
@@ -394,8 +398,11 @@ class UserModelUseCase:
             if getattr(m, "supports_image_gen", False)
         }
         if model_ref in system_image_models:
+            info = app_config.models.get_model(model_ref)
+            litellm = (info.litellm_model or info.id) if info else model_ref
             return ResolvedImageGenModel(
                 provider=system_image_models[model_ref],
+                model=litellm,
                 is_system=True,
             )
 
@@ -417,6 +424,65 @@ class UserModelUseCase:
             except Exception:
                 logger.exception("Failed to decrypt API key for image gen model %s", model_ref)
                 return ResolvedImageGenModel(provider="volcengine")
+
+        return ResolvedImageGenModel(
+            provider=model.provider,
+            model=model.model_id or None,
+            api_key=api_key,
+            api_base=model.api_base,
+            is_system=False,
+        )
+
+    async def visible_image_gen_system_model_ids(self) -> frozenset[str]:
+        """当前团队可见的、含 image_gen 类型的系统模型 id 集合。"""
+        team_id = resolve_internal_gateway_team_id()
+        items = await self._catalog.list_visible_models(
+            billing_team_id=team_id,
+            model_type="image_gen",
+        )
+        return frozenset(str(m["id"]) for m in items if m.get("id") is not None)
+
+    async def resolve_image_gen_model_for_chat(
+        self,
+        model_ref: str | None,
+        *,
+        allowed_image_gen_system_ids: frozenset[str],
+    ) -> ResolvedImageGenModel:
+        """解析对话「生图模式」模型：非法系统 id / 用户模型类型不符时抛出 ``ValidationError``。"""
+        if not model_ref or not str(model_ref).strip():
+            if not allowed_image_gen_system_ids:
+                return ResolvedImageGenModel(provider="volcengine")
+            first = sorted(allowed_image_gen_system_ids)[0]
+            return await self.resolve_image_gen_model(first)
+
+        ref = str(model_ref).strip()
+        try:
+            user_model_id = uuid.UUID(ref)
+        except ValueError:
+            if ref not in allowed_image_gen_system_ids:
+                raise ValidationError(f"图像生成模型不在可用列表中: {ref}") from None
+            return await self.resolve_image_gen_model(ref)
+
+        model = await self.repo.get_owned(user_model_id)
+        if not model:
+            raise ValidationError("用户模型不存在或无权使用")
+        if not model.is_active:
+            raise ValidationError("该用户模型已停用")
+        if model.last_test_status == "failed":
+            raise ValidationError(
+                "该模型最近一次连通性测试失败，请先在设置中修复并测试通过，或选择其他模型。"
+            )
+        types = list(model.model_types or [])
+        if "image_gen" not in types:
+            raise ValidationError("该模型不支持图像生成（image_gen）")
+
+        api_key: str | None = None
+        if model.api_key_encrypted:
+            try:
+                api_key = decrypt_value(model.api_key_encrypted, self._encryption_key)
+            except Exception as e:
+                logger.exception("Failed to decrypt API key for image gen model %s", ref)
+                raise ValidationError("无法解密该模型的 API Key") from e
 
         return ResolvedImageGenModel(
             provider=model.provider,

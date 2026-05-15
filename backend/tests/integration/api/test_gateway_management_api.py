@@ -48,6 +48,7 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         log_id = uuid.uuid4()
+        cred_id = uuid.uuid4()
         now = datetime.now(UTC)
         row = GatewayRequestLog(
             id=log_id,
@@ -55,6 +56,8 @@ class TestGatewayManagementApi:
             team_id=team.id,
             user_id=test_user.id,
             vkey_id=None,
+            credential_id=cred_id,
+            credential_name_snapshot="team-openai",
             capability="chat",
             route_name=None,
             real_model="gpt-4",
@@ -65,9 +68,14 @@ class TestGatewayManagementApi:
             cached_tokens=0,
             cost_usd=Decimal("0.001"),
             latency_ms=100,
+            ttfb_ms=42,
             cache_hit=False,
             fallback_chain=[],
             request_id="req-test",
+            prompt_hash="phash",
+            prompt_redacted={"messages_preview": [{"role": "user", "content": "hi"}]},
+            response_summary={"text": "hello"},
+            metadata_extra={"foo": "bar"},
         )
         db_session.add(row)
         await db_session.commit()
@@ -78,6 +86,13 @@ class TestGatewayManagementApi:
         body = r.json()
         assert body["id"] == str(log_id)
         assert body["team_id"] == str(team.id)
+        assert body["credential_id"] == str(cred_id)
+        assert body["credential_name_snapshot"] == "team-openai"
+        assert body["ttfb_ms"] == 42
+        assert body["prompt_hash"] == "phash"
+        assert body["prompt_redacted"]["messages_preview"][0]["role"] == "user"
+        assert body["response_summary"]["text"] == "hello"
+        assert body["metadata_extra"] == {"foo": "bar"}
 
     @pytest.mark.asyncio
     async def test_user_aggregation_uses_current_user_not_selected_team(
@@ -216,3 +231,47 @@ class TestGatewayManagementApi:
         filtered = r_f.json()
         assert all(str(x["provider"]) == p0 for x in filtered)
         assert len(filtered) <= len(all_presets)
+
+    @pytest.mark.asyncio
+    async def test_get_managed_credential_and_list_models_by_credential_id(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        name = f"int-test-cred-{uuid.uuid4().hex[:8]}"
+        r_create = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": name,
+                "api_key": "sk-int-test-key-for-gateway-123456",
+                "api_base": None,
+                "scope": "team",
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        cred_body = r_create.json()
+        cid = cred_body["id"]
+        assert "api_key_masked" in cred_body
+        assert "sk-int-test-key-for-gateway-123456" not in cred_body["api_key_masked"]
+
+        r_get = await dev_client.get(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        assert r_get.status_code == 200, r_get.text
+        got = r_get.json()
+        assert got["id"] == cid
+        assert got["name"] == name
+
+        r_models = await dev_client.get(
+            "/api/v1/gateway/models",
+            headers=headers,
+            params={"credential_id": cid},
+        )
+        assert r_models.status_code == 200, r_models.text
+        models = r_models.json()
+        assert all(m["credential_id"] == cid for m in models)

@@ -116,6 +116,11 @@ class ModelInfo:
     supports_reasoning: bool = False  # 是否支持推理/思维链
     supports_json_mode: bool = True  # 是否支持 response_format=json_object
     supports_image_gen: bool = False  # 是否为图像生成模型
+    supports_txt2img: bool = True  # 文生图（与 supports_image_gen 同时为 True 时写入 tags）
+    supports_img2img: bool = True  # 图生图 / 参考图
+    supports_video_gen: bool = False  # 视频生成（产品级能力，写入 tags）
+    supports_image_to_video: bool = False  # 图生视频
+    max_reference_images: int = 0  # 0 表示由运行时默认（如 8）
     litellm_model: str = ""  # LiteLLM 调用格式 (如 deepseek/deepseek-chat)
     recommended_for: list[str] = field(default_factory=list)  # 推荐使用场景
     description: str = ""  # 模型描述
@@ -134,6 +139,14 @@ class ModelInfo:
             result.add("json_mode")
         if self.supports_image_gen:
             result.add("image_gen")
+        if self.supports_txt2img and self.supports_image_gen:
+            result.add("txt2img")
+        if self.supports_img2img and self.supports_image_gen:
+            result.add("img2img")
+        if self.supports_video_gen:
+            result.add("video_gen")
+        if self.supports_image_to_video:
+            result.add("image_to_video")
         return frozenset(result)
 
 

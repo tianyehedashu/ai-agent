@@ -5,7 +5,7 @@
  * 复用于产品信息步骤、Agent 对话、视频任务等场景。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, Loader2, User } from 'lucide-react'
@@ -26,9 +26,13 @@ import { MODEL_PROVIDERS } from '@/types/user-model'
 
 const CHANNEL_ALL = '__all__'
 
+export type ModelListMode = 'chat' | 'image_gen' | 'video'
+
 interface ModelSelectorProps {
   /** 过滤模型类型 */
   modelType?: ModelType
+  /** 与后端 ``/user-models/available?mode=`` 对齐（与 modelType 可同时使用，用于创作模式语义） */
+  listMode?: ModelListMode
   /** 当前选中的 model_id (系统模型 ID 或用户模型 UUID) */
   value?: string | null
   /** 选择变更回调 */
@@ -45,6 +49,7 @@ interface ModelSelectorProps {
 
 export function ModelSelector({
   modelType,
+  listMode,
   value,
   onChange,
   placeholder = '默认模型',
@@ -57,17 +62,41 @@ export function ModelSelector({
   const providerForApi = showProviderFilter && channel !== CHANNEL_ALL ? channel : undefined
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['user-models', 'available', modelType, showProviderFilter ? channel : ''],
-    queryFn: () => userModelApi.listAvailable(modelType, providerForApi),
+    queryKey: [
+      'user-models',
+      'available',
+      modelType,
+      listMode ?? '',
+      showProviderFilter ? channel : '',
+    ],
+    queryFn: () =>
+      userModelApi.listAvailable(
+        modelType,
+        providerForApi,
+        listMode ? { mode: listMode } : undefined
+      ),
     staleTime: 30_000,
     retry: 1,
   })
 
   const systemModels = useMemo(() => data?.system_models ?? [], [data])
   const userModels = useMemo(() => data?.user_models ?? [], [data])
+  const selectableIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const m of systemModels) ids.add(m.id)
+    for (const m of userModels) ids.add(m.id)
+    return ids
+  }, [systemModels, userModels])
   const hasModels = systemModels.length > 0 || userModels.length > 0
+
+  useEffect(() => {
+    if (value === null || value === undefined || isLoading || isError) return
+    if (!selectableIds.has(value)) {
+      onChange(null)
+    }
+  }, [value, selectableIds, isLoading, isError, onChange])
   const defaultDisplayName =
-    modelType === 'image_gen'
+    modelType === 'image_gen' || listMode === 'image_gen'
       ? data?.default_for_image_gen?.display_name
       : modelType === 'image'
         ? data?.default_for_vision?.display_name
@@ -90,9 +119,7 @@ export function ModelSelector({
           <SelectValue placeholder="加载失败，点击重试" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__default__">
-            <span className="text-muted-foreground">加载失败，点击重试</span>
-          </SelectItem>
+          <SelectItem value="__default__">加载失败，点击重试</SelectItem>
         </SelectContent>
       </Select>
     )
@@ -115,9 +142,7 @@ export function ModelSelector({
         )}
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="__default__">
-          <span className="text-muted-foreground">{defaultLabel}</span>
-        </SelectItem>
+        <SelectItem value="__default__">{defaultLabel}</SelectItem>
 
         {systemModels.length > 0 && (
           <SelectGroup>

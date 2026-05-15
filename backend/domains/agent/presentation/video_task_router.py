@@ -8,7 +8,9 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.agent.application.video_gen_catalog import list_merged_video_models
 from domains.agent.application.video_prompt_optimize_use_case import (
     DEFAULT_VIDEO_PROMPT_SYSTEM_TEMPLATE,
     VideoPromptOptimizeUseCase,
@@ -17,6 +19,7 @@ from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.identity.presentation.deps import AuthUser
 from libs.api.deps import get_video_task_service
 from libs.api.params import parse_optional_uuid
+from libs.db.database import get_db
 
 router = APIRouter()
 
@@ -60,7 +63,8 @@ class VideoTaskCreate(BaseModel):
     reference_images: list[str] = Field(default_factory=list, description="参考图片URL列表")
     marketplace: str = Field(default="jp", description="目标站点")
     model: str = Field(
-        default="openai::sora1.0", description="视频生成模型: openai::sora1.0, openai::sora2.0"
+        default="openai::sora1.0",
+        description="视频生成模型（厂商 config.model）；见 GET /video-tasks/models 合并目录",
     )
     duration: int = Field(
         default=5, description="视频时长（秒）: sora1支持5/10/15/20, sora2支持5/10/15"
@@ -124,6 +128,17 @@ class VideoTaskResponse(BaseModel):
         return v
 
 
+class VideoModelOptionResponse(BaseModel):
+    """视频生成可选模型（前端选择器）。"""
+
+    value: str
+    label: str
+    durations: list[int]
+    max_reference_images: int
+    supports_image_to_video: bool
+    source: str = "builtin"
+
+
 class VideoTaskListResponse(BaseModel):
     """视频任务列表响应"""
 
@@ -136,6 +151,16 @@ class VideoTaskListResponse(BaseModel):
 # =============================================================================
 # API Endpoints
 # =============================================================================
+
+
+@router.get("/models", response_model=list[VideoModelOptionResponse])
+async def list_video_models(
+    _current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> list[VideoModelOptionResponse]:
+    """列出当前可用的视频生成模型（内置 + 网关 ``model_type=video`` 且配置 vendor id）。"""
+    raw = await list_merged_video_models(db)
+    return [VideoModelOptionResponse.model_validate(x) for x in raw]
 
 
 @router.get("/prompt-template", response_model=VideoPromptTemplateResponse)

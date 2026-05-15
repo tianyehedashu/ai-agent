@@ -26,6 +26,13 @@ class ProviderCredentialRepository:
     async def get(self, credential_id: uuid.UUID) -> ProviderCredential | None:
         return await self._session.get(ProviderCredential, credential_id)
 
+    async def list_by_ids(self, credential_ids: list[uuid.UUID]) -> list[ProviderCredential]:
+        if not credential_ids:
+            return []
+        stmt = select(ProviderCredential).where(ProviderCredential.id.in_(credential_ids))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_for_user(self, user_id: uuid.UUID) -> list[ProviderCredential]:
         stmt = (
             select(ProviderCredential)

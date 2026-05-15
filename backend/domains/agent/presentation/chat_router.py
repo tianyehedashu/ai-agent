@@ -86,6 +86,21 @@ class ChatRequest(BaseModel):
         default=None,
         description="True 且服务端允许时本请求启用网关详细日志（仍截断）；None=仅会话/vkey",
     )
+    creative_mode: str = Field(
+        default="chat",
+        pattern="^(chat|image_gen)$",
+        description="chat=Agent 对话；image_gen=直连图像生成",
+    )
+    reference_image_urls: list[str] = Field(
+        default_factory=list,
+        description="参考图 URL（http/https）；对话+视觉模型时作为多模态输入；生图模式用于图生图",
+    )
+    image_gen_strength: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="图生图强度（仅 image_gen 且提供参考图时有效）",
+    )
 
     @field_validator("session_id")
     @classmethod
@@ -174,6 +189,9 @@ async def chat(
                     mcp_config=mcp_config_dict,
                     model_ref=request.model_ref,
                     gateway_verbose_request_log=request.gateway_verbose_request_log,
+                    creative_mode=request.creative_mode,
+                    reference_image_urls=request.reference_image_urls,
+                    image_gen_strength=request.image_gen_strength,
                 ):
                     try:
                         event_dict = event.model_dump(mode="json", warnings="error")

@@ -111,13 +111,23 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
         "supports_tools": model.supports_tools,
         "supports_reasoning": model.supports_reasoning,
         "supports_json_mode": model.supports_json_mode,
-        "supports_image_gen": getattr(model, "supports_image_gen", False),
+        "supports_image_gen": model.supports_image_gen,
         # 旧字段：单位混乱（¥/千tokens 或 $/1M tokens），保留只供前端展示用。
         "input_price": model.input_price,
         "output_price": model.output_price,
         "description": model.description,
         "recommended_for": list(model.recommended_for),
     }
+    if model.supports_image_gen:
+        tags["supports_txt2img"] = model.supports_txt2img
+        tags["supports_img2img"] = model.supports_img2img
+    if model.supports_video_gen:
+        tags["supports_video_gen"] = True
+    if model.supports_image_to_video:
+        tags["supports_image_to_video"] = True
+    if int(model.max_reference_images or 0) > 0:
+        tags["max_reference_images"] = int(model.max_reference_images)
+
     # 与 LiteLLM 对齐的 USD/token 价格。仅在显式配置为正数时透传，
     # 避免把默认 0 写入 tags 后误抑制 LiteLLM 内置 model_cost_map 的价目。
     input_cpt = getattr(model, "input_cost_per_token", 0.0) or 0.0
@@ -129,13 +139,63 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
     return tags
 
 
-def _infer_model_types_from_tags(tags: dict[str, Any]) -> list[str]:
-    if tags.get("supports_image_gen"):
-        return ["image_gen"]
-    types: list[str] = ["text"]
-    if tags.get("supports_vision"):
-        types.append("image")
-    return types
+def _infer_model_types_from_tags(tags: dict[str, Any], capability: str) -> list[str]:
+    """结合网关 capability 与 tags 推断 user-model 选择器 ``model_types``。"""
+    cap = (capability or "").strip().lower()
+    if cap in (
+        "embedding",
+        "audio_transcription",
+        "audio_speech",
+        "rerank",
+        "moderation",
+    ):
+        return []
+    out: list[str] = []
+    if tags.get("supports_video_gen"):
+        out.append("video")
+    if cap == "image":
+        out.append("image_gen")
+    elif cap == "video_generation":
+        if "video" not in out:
+            out.append("video")
+    elif cap == "chat":
+        out.append("text")
+        if tags.get("supports_vision"):
+            out.append("image")
+        if tags.get("supports_image_gen"):
+            out.append("image_gen")
+    if not out:
+        out.append("text")
+        if tags.get("supports_vision"):
+            out.append("image")
+    return out
+
+
+def model_types_for_gateway_registration(tags: dict[str, Any], capability: str) -> list[str]:
+    """管理 API / 文档用：与 ``gateway_model_to_selector_item`` 的 ``model_types`` 推导一致。"""
+    return _infer_model_types_from_tags(tags, capability)
+
+
+def selector_capabilities_from_tags(tags: dict[str, Any]) -> dict[str, Any]:
+    """扁平特性字典，与选择器 ``capabilities`` 字段对齐。"""
+    return _selector_capabilities_payload(tags)
+
+
+def _selector_capabilities_payload(tags: dict[str, Any]) -> dict[str, Any]:
+    """供前端展示与校验的扁平能力（与 ``ModelCapabilitySnapshot`` 对齐）。"""
+    snap = tags_to_capability_snapshot(tags)
+    return {
+        "supports_vision": snap.supports_vision,
+        "supports_tools": snap.supports_tools,
+        "supports_reasoning": snap.supports_reasoning,
+        "supports_json_mode": snap.supports_json_mode,
+        "supports_image_gen": snap.supports_image_gen,
+        "supports_txt2img": snap.supports_txt2img,
+        "supports_img2img": snap.supports_img2img,
+        "supports_video_gen": snap.supports_video_gen,
+        "supports_image_to_video": snap.supports_image_to_video,
+        "max_reference_images": snap.max_reference_images,
+    }
 
 
 async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, int]:
@@ -245,12 +305,20 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
     """将 ORM 行转为 user-models 选择器条目。"""
     tags = row.tags or {}
     display_name = str(tags.get("display_name") or row.name)
+    raw_vendor = tags.get("video_vendor_model_id") or tags.get("giikin_video_model")
+    video_vendor_model_id = (
+        str(raw_vendor).strip() if isinstance(raw_vendor, str) and str(raw_vendor).strip() else None
+    )
+    video_durations = tags.get("video_durations")
     return {
         "id": row.name,
         "display_name": display_name,
         "provider": row.provider,
         "model_id": row.name,
-        "model_types": _infer_model_types_from_tags(tags),
+        "model_types": _infer_model_types_from_tags(tags, row.capability),
+        "capabilities": _selector_capabilities_payload(tags),
+        "video_vendor_model_id": video_vendor_model_id,
+        "video_durations": video_durations if isinstance(video_durations, list) else None,
         "is_system": True,
         "config": {
             "context_window": tags.get("context_window", 0),
@@ -265,12 +333,20 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
 
 
 def tags_to_capability_snapshot(tags: dict[str, Any]) -> ModelCapabilitySnapshot:
+    supports_image_gen = bool(tags.get("supports_image_gen", False))
+    default_txt2 = supports_image_gen
+    default_img2 = supports_image_gen
     return ModelCapabilitySnapshot(
         supports_tools=bool(tags.get("supports_tools", True)),
         supports_reasoning=bool(tags.get("supports_reasoning", False)),
         supports_json_mode=bool(tags.get("supports_json_mode", True)),
         supports_vision=bool(tags.get("supports_vision", False)),
-        supports_image_gen=bool(tags.get("supports_image_gen", False)),
+        supports_image_gen=supports_image_gen,
+        supports_txt2img=bool(tags.get("supports_txt2img", default_txt2)),
+        supports_img2img=bool(tags.get("supports_img2img", default_img2)),
+        supports_video_gen=bool(tags.get("supports_video_gen", False)),
+        supports_image_to_video=bool(tags.get("supports_image_to_video", False)),
+        max_reference_images=int(tags.get("max_reference_images", 0) or 0),
     )
 
 
@@ -278,6 +354,8 @@ __all__ = [
     "MANAGED_BY_KEY",
     "MANAGED_CONFIG",
     "gateway_model_to_selector_item",
+    "model_types_for_gateway_registration",
+    "selector_capabilities_from_tags",
     "sync_app_config_gateway_catalog",
     "tags_to_capability_snapshot",
 ]

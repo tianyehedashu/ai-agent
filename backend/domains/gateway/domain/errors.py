@@ -64,6 +64,13 @@ class CredentialInUseError(GatewayError):
         self.credential_id = credential_id
 
 
+class SystemCredentialAdminRequiredError(GatewayError):
+    """管理系统级凭据（scope=system）需要平台管理员身份"""
+
+    def __init__(self) -> None:
+        super().__init__("管理系统凭据需要平台管理员身份")
+
+
 class CredentialNameConflictError(GatewayError):
     """同一用户下同 provider 凭据名称冲突"""
 
@@ -136,6 +143,7 @@ __all__ = [
     "PersonalTeamNotInitializedError",
     "RateLimitExceededError",
     "RouteNotFoundError",
+    "SystemCredentialAdminRequiredError",
     "TeamNotFoundError",
     "TeamPermissionDeniedError",
     "VirtualKeyInvalidError",

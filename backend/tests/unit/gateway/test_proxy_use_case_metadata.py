@@ -141,3 +141,106 @@ async def test_build_metadata_apikey_inbound_sets_platform_key_id(
     assert meta["gateway_inbound_via"] == "apikey"
     assert meta["gateway_platform_api_key_id"] == str(akid)
     assert meta["gateway_vkey_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Any,
+) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_use_case.TeamRepository.get",
+        AsyncMock(return_value=MagicMock(name="t", kind="personal")),
+    )
+    snap = {
+        "virtual_model": "vm1",
+        "primary_models": ["p1"],
+        "strategy": "fallback",
+    }
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_use_case.get_route_snapshot_metadata",
+        AsyncMock(return_value=snap),
+    )
+    monkeypatch.setattr(
+        ProxyUseCase,
+        "_credential_metadata_for_virtual_model",
+        AsyncMock(return_value={}),
+    )
+
+    tid = uuid.uuid4()
+    uid = uuid.uuid4()
+    vid = uuid.uuid4()
+    vkey = VirtualKeyPrincipal(
+        vkey_id=vid,
+        vkey_name="k",
+        team_id=tid,
+        user_id=uid,
+        allowed_models=(),
+        allowed_capabilities=(GatewayCapability.CHAT,),
+        rpm_limit=None,
+        tpm_limit=None,
+        store_full_messages=False,
+        guardrail_enabled=True,
+        is_system=True,
+    )
+    ctx = ProxyContext(
+        team_id=tid,
+        user_id=uid,
+        vkey=vkey,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=True,
+    )
+    uc = ProxyUseCase(db_session)
+    meta = await uc._build_metadata(ctx, user_kwargs={"model": "vm1"})
+    assert meta["gateway_route_snapshot"] == snap
+
+
+@pytest.mark.asyncio
+async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Any,
+) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_use_case.TeamRepository.get",
+        AsyncMock(return_value=MagicMock(name="t", kind="personal")),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_use_case.get_route_snapshot_metadata",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        ProxyUseCase,
+        "_credential_metadata_for_virtual_model",
+        AsyncMock(return_value={}),
+    )
+
+    tid = uuid.uuid4()
+    uid = uuid.uuid4()
+    vid = uuid.uuid4()
+    vkey = VirtualKeyPrincipal(
+        vkey_id=vid,
+        vkey_name="k",
+        team_id=tid,
+        user_id=uid,
+        allowed_models=(),
+        allowed_capabilities=(GatewayCapability.CHAT,),
+        rpm_limit=None,
+        tpm_limit=None,
+        store_full_messages=False,
+        guardrail_enabled=True,
+        is_system=True,
+    )
+    ctx = ProxyContext(
+        team_id=tid,
+        user_id=uid,
+        vkey=vkey,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=True,
+    )
+    uc = ProxyUseCase(db_session)
+    meta = await uc._build_metadata(ctx, user_kwargs={"model": "bare-model"})
+    assert "gateway_route_snapshot" not in meta

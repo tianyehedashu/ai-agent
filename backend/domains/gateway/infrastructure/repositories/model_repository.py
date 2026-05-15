@@ -29,6 +29,7 @@ class GatewayModelRepository:
         only_enabled: bool = True,
         capability: str | None = None,
         provider: str | None = None,
+        credential_id: uuid.UUID | None = None,
     ) -> list[GatewayModel]:
         clauses = []
         if team_id is None:
@@ -45,6 +46,8 @@ class GatewayModelRepository:
             clauses.append(GatewayModel.capability == capability)
         if provider is not None:
             clauses.append(GatewayModel.provider == provider)
+        if credential_id is not None:
+            clauses.append(GatewayModel.credential_id == credential_id)
         stmt = select(GatewayModel).where(*clauses).order_by(*order_by)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -126,6 +129,15 @@ class GatewayModelRepository:
         )
         result = await self._session.execute(stmt)
         return int(result.scalar_one() or 0)
+
+    async def count_models_grouped_by_credential(self) -> list[tuple[uuid.UUID, int]]:
+        stmt = (
+            select(GatewayModel.credential_id, func.count(GatewayModel.id))
+            .group_by(GatewayModel.credential_id)
+            .order_by(GatewayModel.credential_id)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(cid, int(cnt or 0)) for cid, cnt in rows]
 
     async def delete(self, model_id: uuid.UUID) -> bool:
         model = await self.get(model_id)

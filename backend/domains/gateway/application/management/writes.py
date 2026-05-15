@@ -8,11 +8,15 @@ from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings as _settings
 from domains.agent.infrastructure.llm.litellm_model_id import build_litellm_model_id
+from domains.gateway.application.management.model_test_constants import (
+    GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
+)
 from domains.gateway.domain.errors import (
     CredentialInUseError,
     CredentialNameConflictError,
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
+    SystemCredentialAdminRequiredError,
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
@@ -45,7 +49,14 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-_TEST_SUPPORTED_CAPABILITIES: frozenset[str] = frozenset({"chat", "embedding"})
+def _gateway_image_probe_size(provider: str) -> str:
+    """生图探活用最小合法尺寸（各云厂商约束不同，与 Agent 侧 Seedream 默认对齐）。"""
+    if provider == "volcengine":
+        # 火山 Ark / Seedream 常用尺寸集，见 Agent image_generator 默认
+        return "1920x1920"
+    if provider == "openai":
+        return "1024x1024"
+    return "1024x1024"
 
 
 class GatewayManagementWriteService:
@@ -138,7 +149,7 @@ class GatewayManagementWriteService:
         api_base: str | None,
         extra: dict[str, Any] | None,
     ) -> Any:
-        return await self._creds.create(
+        row = await self._creds.create(
             scope="team",
             scope_id=team_id,
             provider=provider,
@@ -147,12 +158,39 @@ class GatewayManagementWriteService:
             api_base=api_base,
             extra=extra,
         )
+        await self.reload_litellm_router()
+        return row
 
-    async def update_team_credential(
+    async def create_system_credential(
+        self,
+        *,
+        is_platform_admin: bool,
+        provider: str,
+        name: str,
+        api_key_encrypted: str,
+        api_base: str | None,
+        extra: dict[str, Any] | None,
+    ) -> Any:
+        if not is_platform_admin:
+            raise SystemCredentialAdminRequiredError()
+        row = await self._creds.create(
+            scope="system",
+            scope_id=None,
+            provider=provider,
+            name=name,
+            api_key_encrypted=api_key_encrypted,
+            api_base=api_base,
+            extra=extra,
+        )
+        await self.reload_litellm_router()
+        return row
+
+    async def update_managed_credential(
         self,
         credential_id: uuid.UUID,
         *,
         team_id: uuid.UUID,
+        is_platform_admin: bool,
         api_key_encrypted: str | None,
         api_base: str | None,
         extra: dict[str, Any] | None,
@@ -160,7 +198,15 @@ class GatewayManagementWriteService:
         name: str | None,
     ) -> Any:
         existing = await self._creds.get(credential_id)
-        if existing is None or existing.scope_id != team_id:
+        if existing is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if existing.scope == "system":
+            if not is_platform_admin:
+                raise SystemCredentialAdminRequiredError()
+        elif existing.scope == "team":
+            if existing.scope_id != team_id:
+                raise CredentialNotFoundError(str(credential_id))
+        else:
             raise CredentialNotFoundError(str(credential_id))
         updated = await self._creds.update(
             credential_id,
@@ -172,13 +218,32 @@ class GatewayManagementWriteService:
         )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
+        await self.reload_litellm_router()
         return updated
 
-    async def delete_team_credential(self, credential_id: uuid.UUID, *, team_id: uuid.UUID) -> None:
+    async def delete_managed_credential(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        team_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
         existing = await self._creds.get(credential_id)
-        if existing is None or existing.scope_id != team_id:
+        if existing is None:
             raise CredentialNotFoundError(str(credential_id))
+        if existing.scope == "system":
+            if not is_platform_admin:
+                raise SystemCredentialAdminRequiredError()
+        elif existing.scope == "team":
+            if existing.scope_id != team_id:
+                raise CredentialNotFoundError(str(credential_id))
+        else:
+            raise CredentialNotFoundError(str(credential_id))
+        in_use = await self._models.count_by_credential_id(credential_id)
+        if in_use > 0:
+            raise CredentialInUseError(str(credential_id))
         await self._creds.delete(credential_id)
+        await self.reload_litellm_router()
 
     async def import_user_credential_to_team(
         self,
@@ -196,6 +261,7 @@ class GatewayManagementWriteService:
         new_cred = await self._creds.copy_to_team(user_credential_id, team_id)
         if new_cred is None:
             raise CredentialNotFoundError(str(user_credential_id))
+        await self.reload_litellm_router()
         return new_cred
 
     async def import_all_user_credentials_to_team(
@@ -207,6 +273,8 @@ class GatewayManagementWriteService:
             copied = await self._creds.copy_to_team(cred.id, team_id)
             if copied is not None:
                 created += 1
+        if created > 0:
+            await self.reload_litellm_router()
         return created
 
     async def create_user_credential(
@@ -222,7 +290,7 @@ class GatewayManagementWriteService:
         dup = await self._creds.find_user_by_provider_and_name(actor_user_id, provider, name)
         if dup is not None:
             raise CredentialNameConflictError(provider, name)
-        return await self._creds.create(
+        row = await self._creds.create(
             scope="user",
             scope_id=actor_user_id,
             provider=provider,
@@ -231,6 +299,8 @@ class GatewayManagementWriteService:
             api_base=api_base,
             extra=extra,
         )
+        await self.reload_litellm_router()
+        return row
 
     async def update_user_credential(
         self,
@@ -262,9 +332,12 @@ class GatewayManagementWriteService:
         )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
+        await self.reload_litellm_router()
         return updated
 
-    async def delete_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID) -> None:
+    async def delete_user_credential(
+        self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, reload_router: bool = True
+    ) -> None:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != "user" or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
@@ -272,6 +345,8 @@ class GatewayManagementWriteService:
         if in_use > 0:
             raise CredentialInUseError(str(credential_id))
         await self._creds.delete(credential_id)
+        if reload_router:
+            await self.reload_litellm_router()
 
     async def sync_user_provider_legacy_row(
         self,
@@ -307,8 +382,9 @@ class GatewayManagementWriteService:
             )
             if updated is None:
                 raise CredentialNotFoundError(str(target.id))
+            await self.reload_litellm_router()
             return updated
-        return await self._creds.create(
+        created = await self._creds.create(
             scope="user",
             scope_id=actor_user_id,
             provider=provider,
@@ -318,13 +394,17 @@ class GatewayManagementWriteService:
             extra=None,
             is_active=is_active,
         )
+        await self.reload_litellm_router()
+        return created
 
     async def delete_all_user_credentials_for_provider(
         self, *, actor_user_id: uuid.UUID, provider: str
     ) -> None:
         rows = await self._creds.list_user_by_provider(actor_user_id, provider)
         for row in rows:
-            await self.delete_user_credential(row.id, actor_user_id=actor_user_id)
+            await self.delete_user_credential(row.id, actor_user_id=actor_user_id, reload_router=False)
+        if rows:
+            await self.reload_litellm_router()
 
     async def create_gateway_model(
         self,
@@ -340,7 +420,7 @@ class GatewayManagementWriteService:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
     ) -> Any:
-        return await self._models.create(
+        row = await self._models.create(
             team_id=team_id,
             name=name,
             capability=capability,
@@ -352,6 +432,8 @@ class GatewayManagementWriteService:
             tpm_limit=tpm_limit,
             tags=tags,
         )
+        await self.reload_litellm_router()
+        return row
 
     async def update_gateway_model(
         self,
@@ -367,6 +449,7 @@ class GatewayManagementWriteService:
         updated = await repo.update(model_id, **fields)
         if updated is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
+        await self.reload_litellm_router()
         return updated
 
     async def delete_gateway_model(self, model_id: uuid.UUID, *, team_id: uuid.UUID) -> None:
@@ -375,6 +458,7 @@ class GatewayManagementWriteService:
         if existing is None or (existing.team_id is not None and existing.team_id != team_id):
             raise CredentialNotFoundError(str(model_id))
         await repo.delete(model_id)
+        await self.reload_litellm_router()
 
     async def test_gateway_model(
         self,
@@ -382,13 +466,13 @@ class GatewayManagementWriteService:
         *,
         team_id: uuid.UUID,
     ) -> dict[str, Any]:
-        """对 Gateway 团队模型发起一次最小 LLM 调用做连通性测试。
+        """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图）。
 
-        - 仅支持 ``capability ∈ {chat, embedding}``；其它返回 ``success=false``
-          + ``status=failed`` 并写回字段，避免前端误以为"未测过"。
-        - 直连 ``litellm.acompletion`` / ``litellm.aembedding`` 并显式传入
-          解密后的 ``api_key`` 与 ``api_base``，绕过 Gateway 内部桥接，确保探
-          测的就是这条记录本身的凭据。
+        - 仅支持 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 中的 capability；
+          其它返回 ``success=false`` + ``status=failed`` 并写回字段，避免前端误以为"未测过"。
+        - 直连 ``litellm.acompletion`` / ``litellm.aimage_generation`` /
+          ``litellm.aembedding`` 并显式传入解密后的 ``api_key`` 与 ``api_base``，
+          绕过 Gateway 内部桥接，确保探测的就是这条记录本身的凭据。
         无论成功/失败，均把 ``last_test_status`` + ``last_tested_at`` +
         ``last_test_reason`` 写回 ``gateway_models``，列表页可直接展示连通状态。
         """
@@ -400,7 +484,7 @@ class GatewayManagementWriteService:
         litellm_model = build_litellm_model_id(existing.provider, existing.real_model)
         tested_at = datetime.now(UTC)
 
-        if capability not in _TEST_SUPPORTED_CAPABILITIES:
+        if capability not in GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES:
             msg = f"capability={capability} 暂不支持连通性测试"
             reason = truncate_last_test_reason(msg)
             await self._models.update(
@@ -464,6 +548,7 @@ class GatewayManagementWriteService:
         from litellm import (  # pylint: disable=import-error,import-outside-toplevel
             acompletion,
             aembedding,
+            aimage_generation,
         )
 
         try:
@@ -495,26 +580,85 @@ class GatewayManagementWriteService:
                     "response_preview": preview,
                 }
 
-            await aembedding(
-                model=litellm_model,
-                input=["ping"],
-                api_key=api_key,
-                api_base=api_base,
+            if capability == "image":
+                img_size = _gateway_image_probe_size(existing.provider)
+                img_response = await aimage_generation(
+                    model=litellm_model,
+                    prompt="ping",
+                    n=1,
+                    size=img_size,
+                    api_key=api_key,
+                    api_base=api_base,
+                    timeout=60,
+                )
+                preview = ""
+                with suppress(Exception):
+                    data = getattr(img_response, "data", None)
+                    if data is None and isinstance(img_response, dict):
+                        raw = img_response.get("data")
+                        data = raw if isinstance(raw, list) else None
+                    if data and len(data) > 0:
+                        first = data[0]
+                        url: str | None
+                        b64: str | None
+                        if isinstance(first, dict):
+                            url = first.get("url") if isinstance(first.get("url"), str) else None
+                            b64 = (
+                                first.get("b64_json")
+                                if isinstance(first.get("b64_json"), str)
+                                else None
+                            )
+                        else:
+                            url = getattr(first, "url", None)
+                            b64 = getattr(first, "b64_json", None)
+                            url = url if isinstance(url, str) else None
+                            b64 = b64 if isinstance(b64, str) else None
+                        if url:
+                            preview = url[:100]
+                        elif b64:
+                            preview = f"{b64[:40]}…" if len(b64) > 40 else b64
+                await self._models.update(
+                    model_id,
+                    last_test_status="success",
+                    last_tested_at=tested_at,
+                    last_test_reason=None,
+                )
+                return {
+                    "success": True,
+                    "message": "连接成功",
+                    "model": litellm_model,
+                    "status": "success",
+                    "tested_at": tested_at,
+                    "reason": None,
+                    "response_preview": preview,
+                }
+
+            if capability == "embedding":
+                await aembedding(
+                    model=litellm_model,
+                    input=["ping"],
+                    api_key=api_key,
+                    api_base=api_base,
+                )
+                await self._models.update(
+                    model_id,
+                    last_test_status="success",
+                    last_tested_at=tested_at,
+                    last_test_reason=None,
+                )
+                return {
+                    "success": True,
+                    "message": "连接成功",
+                    "model": litellm_model,
+                    "status": "success",
+                    "tested_at": tested_at,
+                    "reason": None,
+                }
+
+            raise AssertionError(
+                f"test_gateway_model: capability {capability!r} missing probe branch "
+                f"(out of sync with GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES)"
             )
-            await self._models.update(
-                model_id,
-                last_test_status="success",
-                last_tested_at=tested_at,
-                last_test_reason=None,
-            )
-            return {
-                "success": True,
-                "message": "连接成功",
-                "model": litellm_model,
-                "status": "success",
-                "tested_at": tested_at,
-                "reason": None,
-            }
         except Exception as exc:
             logger.warning("Gateway model %s connection test failed: %s", model_id, exc)
             msg = f"连接失败: {exc}"
@@ -546,7 +690,7 @@ class GatewayManagementWriteService:
         strategy: str,
         retry_policy: dict[str, Any],
     ) -> Any:
-        return await self._routes.create(
+        row = await self._routes.create(
             team_id=team_id,
             virtual_model=virtual_model,
             primary_models=primary_models,
@@ -556,6 +700,8 @@ class GatewayManagementWriteService:
             strategy=strategy,
             retry_policy=retry_policy,
         )
+        await self.reload_litellm_router()
+        return row
 
     async def update_gateway_route(
         self,
@@ -571,6 +717,7 @@ class GatewayManagementWriteService:
         updated = await repo.update(route_id, **fields)
         if updated is None:
             raise ManagementEntityNotFoundError("route", str(route_id))
+        await self.reload_litellm_router()
         return updated
 
     async def delete_gateway_route(self, route_id: uuid.UUID, *, team_id: uuid.UUID) -> None:
@@ -579,6 +726,7 @@ class GatewayManagementWriteService:
         if existing is None or (existing.team_id is not None and existing.team_id != team_id):
             raise ManagementEntityNotFoundError("route", str(route_id))
         await repo.delete(route_id)
+        await self.reload_litellm_router()
 
     async def reload_litellm_router(self) -> None:
         from domains.gateway.infrastructure.router_singleton import reload_router

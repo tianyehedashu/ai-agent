@@ -126,6 +126,29 @@ async def test_sql_catalog_list_dedupes_team_over_global(db_session, test_user) 
 
 
 @pytest.mark.asyncio
+async def test_sql_catalog_excludes_last_test_failed(db_session, test_user) -> None:
+    """连通性测试为 failed 的系统模型不进入「可见目录」，与对话选择器语义一致。"""
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+    models = GatewayModelRepository(db_session)
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    adapter = SqlModelCatalogAdapter(db_session)
+    before = await adapter.list_visible_models(billing_team_id=team.id, model_type=None)
+    if not before:
+        pytest.skip("catalog sync produced no global models (no provider API keys)")
+    item_id = before[0]["id"]
+    row = await models.get_by_name(team.id, item_id)
+    assert row is not None
+    row.last_test_status = "failed"
+    row.last_test_reason = "unit: forced failed"
+    await db_session.flush()
+
+    after = await adapter.list_visible_models(billing_team_id=team.id, model_type=None)
+    ids = {i["id"] for i in after}
+    assert item_id not in ids
+
+
+@pytest.mark.asyncio
 async def test_list_for_team_filters_by_provider(db_session, test_user) -> None:
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()

@@ -377,6 +377,25 @@ def _credential_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUI
     return None, None
 
 
+def _deployment_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
+    """从 LiteLLM Router deployment 的 ``model_info`` 取 ``GatewayModel`` 主键与注册别名。"""
+    for container_key in ("litellm_params", "standard_logging_object"):
+        container = kwargs.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        mi = container.get("model_info")
+        if not isinstance(mi, dict):
+            continue
+        gid = _to_uuid(mi.get("id"))
+        raw_alias = mi.get("gateway_model_name")
+        alias: str | None = None
+        if isinstance(raw_alias, str) and raw_alias.strip():
+            alias = raw_alias.strip()[:200]
+        if gid is not None:
+            return gid, alias
+    return None, None
+
+
 async def _persist_event(
     *,
     kwargs: dict[str, Any],
@@ -429,6 +448,8 @@ async def _persist_event(
         cred_id = mid
         if cred_name_snap is None and mname is not None:
             cred_name_snap = mname
+
+    deploy_id, deploy_name = _deployment_from_model_info_kwargs(kwargs)
 
     input_tokens, output_tokens, cached_tokens = _extract_usage(response_obj)
     cost_usd = _calc_cost(kwargs, response_obj) if status == "success" else Decimal("0")
@@ -527,6 +548,8 @@ async def _persist_event(
                     route_snapshot=route_snapshot,
                     credential_id=cred_id,
                     credential_name_snapshot=cred_name_snap,
+                    deployment_gateway_model_id=deploy_id,
+                    deployment_model_name=deploy_name,
                     capability=capability,
                     route_name=str(route_name) if route_name else None,
                     real_model=str(real_model) if real_model else None,

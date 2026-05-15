@@ -1,4 +1,4 @@
-"""GatewayManagementWriteService.test_gateway_model 三条 capability 分支与持久化"""
+"""GatewayManagementWriteService.test_gateway_model capability 分支与持久化"""
 
 from __future__ import annotations
 
@@ -131,13 +131,80 @@ async def test_embedding_capability_uses_aembedding(db_session, test_user) -> No
 
 
 @pytest.mark.asyncio
-async def test_unsupported_capability_returns_failed(db_session, test_user) -> None:
-    """capability=image 暂不做真实探测，写回 failed 让 UI 不留'未测过'。"""
+async def test_image_capability_uses_aimage_generation(db_session, test_user) -> None:
     team_id, model_id = await _seed_team_credential_and_model(
         db_session,
         test_user,
         capability="image",
-        real_model="dall-e-3",
+        real_model="ep-fake-seedream",
+        provider="volcengine",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    fake_img = type(
+        "ImgResp",
+        (),
+        {
+            "data": [
+                type("D", (), {"url": "https://example.com/x.png", "b64_json": None})(),
+            ]
+        },
+    )()
+
+    with patch("litellm.aimage_generation", new=AsyncMock(return_value=fake_img)) as mock_img:
+        result = await writes.test_gateway_model(model_id, team_id=team_id)
+
+    assert result["success"] is True
+    assert result["status"] == "success"
+    assert result.get("response_preview")
+    mock_img.assert_awaited_once()
+    call_kw = mock_img.await_args.kwargs
+    assert call_kw["size"] == "1920x1920"
+    assert call_kw["n"] == 1
+    assert call_kw["prompt"] == "ping"
+    assert call_kw["timeout"] == 60
+
+    refreshed = await GatewayModelRepository(db_session).get(model_id)
+    assert refreshed is not None
+    assert refreshed.last_test_status == "success"
+    assert refreshed.last_test_reason is None
+
+
+@pytest.mark.asyncio
+async def test_image_capability_failure_persists(db_session, test_user) -> None:
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="image",
+        real_model="ep-fake-seedream",
+        provider="volcengine",
+    )
+    writes = GatewayManagementWriteService(db_session)
+
+    with patch(
+        "litellm.aimage_generation",
+        new=AsyncMock(side_effect=RuntimeError("502 Bad Gateway")),
+    ):
+        result = await writes.test_gateway_model(model_id, team_id=team_id)
+
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert "502" in result["message"]
+
+    refreshed = await GatewayModelRepository(db_session).get(model_id)
+    assert refreshed is not None
+    assert refreshed.last_test_status == "failed"
+    assert refreshed.last_test_reason
+    assert "502" in refreshed.last_test_reason
+
+
+@pytest.mark.asyncio
+async def test_unsupported_capability_returns_failed(db_session, test_user) -> None:
+    """非 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 仍写回 failed，避免 UI 留'未测过'。"""
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="video_generation",
+        real_model="dummy",
         provider="openai",
     )
     writes = GatewayManagementWriteService(db_session)

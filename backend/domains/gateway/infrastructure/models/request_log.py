@@ -67,6 +67,17 @@ class GatewayRequestLog(Base):
     credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     credential_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    deployment_gateway_model_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        comment="Router 选中的 GatewayModel.id；经虚拟路由进线时与 route_name 可不同",
+    )
+    deployment_model_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+        comment="命中 deployment 的注册别名快照（GatewayModel.name）",
+    )
+
     # 调用信息
     capability: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     route_name: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
@@ -122,6 +133,12 @@ class GatewayRequestLog(Base):
         Index("ix_gateway_request_logs_vkey_time", "vkey_id", "created_at"),
         Index("ix_gateway_request_logs_credential_time", "credential_id", "created_at"),
         Index("ix_gateway_request_logs_status_time", "status", "created_at"),
+        Index(
+            "ix_gateway_request_logs_deploy_team_time",
+            "team_id",
+            "deployment_gateway_model_id",
+            "created_at",
+        ),
         # 分区配置（在 alembic 中显式声明 PARTITION BY RANGE (created_at)）
         {"postgresql_partition_by": "RANGE (created_at)"},
     )

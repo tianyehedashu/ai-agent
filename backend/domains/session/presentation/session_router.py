@@ -46,6 +46,21 @@ class SessionUpdate(BaseModel):
         default=None,
         description="为 True 时本会话内网关调用日志记录扩展的提示词/响应摘要（仍截断）",
     )
+    creative_mode: str | None = Field(
+        default=None,
+        pattern="^(chat|image_gen|video)$",
+        description="对话窗口创作模式：chat / image_gen / video",
+    )
+    image_gen_model_ref: str | None = Field(
+        default=None,
+        max_length=300,
+        description="生图模式下的模型引用（系统 id 或用户模型 UUID）",
+    )
+    video_model_ref: str | None = Field(
+        default=None,
+        max_length=200,
+        description="视频模式下的厂商模型 id（如 openai::sora2.0）",
+    )
 
 
 class SessionMCPConfigResponse(BaseModel):
@@ -76,6 +91,9 @@ class SessionResponse(BaseModel):
     video_task_count: int = 0  # 视频任务数量
     gateway_verbose_request_log: bool = False
     chat_model_ref: str | None = None
+    creative_mode: str = "chat"
+    image_gen_model_ref: str | None = None
+    video_model_ref: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -149,6 +167,16 @@ def _session_to_response(session: Session) -> SessionResponse:
     verbose = bool(cfg.get("gateway_verbose_request_log"))
     raw_ref = cfg.get("chat_model_ref")
     chat_model_ref = raw_ref if isinstance(raw_ref, str) and raw_ref.strip() else None
+    raw_mode = cfg.get("creative_mode")
+    creative_mode = (
+        raw_mode.strip()
+        if isinstance(raw_mode, str) and raw_mode.strip() in ("chat", "image_gen", "video")
+        else "chat"
+    )
+    raw_igr = cfg.get("image_gen_model_ref")
+    image_gen_model_ref = raw_igr if isinstance(raw_igr, str) and raw_igr.strip() else None
+    raw_vm = cfg.get("video_model_ref")
+    video_model_ref = raw_vm if isinstance(raw_vm, str) and raw_vm.strip() else None
     return SessionResponse(
         id=str(session.id),
         user_id=str(session.user_id) if session.user_id else None,
@@ -161,6 +189,9 @@ def _session_to_response(session: Session) -> SessionResponse:
         video_task_count=session.video_task_count,
         gateway_verbose_request_log=verbose,
         chat_model_ref=chat_model_ref,
+        creative_mode=creative_mode,
+        image_gen_model_ref=image_gen_model_ref,
+        video_model_ref=video_model_ref,
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
@@ -244,12 +275,18 @@ async def update_session(
     title = provided_fields.get("title", ...)
     status_value = provided_fields.get("status", ...)
     gateway_verbose = provided_fields.get("gateway_verbose_request_log", ...)
+    creative_mode = provided_fields.get("creative_mode", ...)
+    image_gen_model_ref = provided_fields.get("image_gen_model_ref", ...)
+    video_model_ref = provided_fields.get("video_model_ref", ...)
 
     updated_session = await session_service.update_session(
         session_id=session_id,
         title=title,
         status=status_value,
         gateway_verbose_request_log=gateway_verbose,
+        creative_mode=creative_mode,
+        image_gen_model_ref=image_gen_model_ref,
+        video_model_ref=video_model_ref,
     )
     return _session_to_response(updated_session)
 

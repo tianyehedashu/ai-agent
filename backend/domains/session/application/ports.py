@@ -59,6 +59,9 @@ class SessionApplicationPort(Protocol):
         title: str | None = ...,
         status: str | None = ...,
         gateway_verbose_request_log: bool | None = ...,
+        creative_mode: str | None = ...,
+        image_gen_model_ref: str | None = ...,
+        video_model_ref: str | None = ...,
     ) -> Any:
         """更新会话（如标题、状态、网关详细请求日志开关）。"""
         ...
@@ -88,6 +91,12 @@ class SessionApplicationPort(Protocol):
         self, session_id: str, model_ref: str | None, *, flush: bool = True
     ) -> None:
         """合并写入会话 config.chat_model_ref（None 表示清除）。"""
+        ...
+
+    async def merge_session_config_fragment(
+        self, session_id: str, fragment: dict[str, Any], *, flush: bool = True
+    ) -> None:
+        """浅合并写入会话 config 片段（如 creative_mode、image_gen_model_ref）。"""
         ...
 
     async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:

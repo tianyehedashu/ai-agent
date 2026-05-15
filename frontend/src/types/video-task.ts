@@ -12,11 +12,20 @@ export type VideoTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | '
 // Video Task Types
 // ============================================
 
-/** 视频生成模型 */
-export type VideoModel = 'openai::sora1.0' | 'openai::sora2.0'
+/** 视频生成模型（以后端 /video-tasks/models 为准，含内置 Sora 等） */
+export type VideoModel = string
 
 /** 视频时长（秒） */
 export type VideoDuration = 5 | 10 | 15 | 20
+
+export interface VideoCatalogModelOption {
+  value: string
+  label: string
+  durations: number[]
+  maxReferenceImages: number
+  supportsImageToVideo: boolean
+  source: string
+}
 
 export interface VideoGenTask {
   id: string

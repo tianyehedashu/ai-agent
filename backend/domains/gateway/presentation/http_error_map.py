@@ -10,6 +10,7 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
+    SystemCredentialAdminRequiredError,
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
 )
@@ -34,6 +35,8 @@ def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, (CredentialInUseError, CredentialNameConflictError)):
         return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, SystemCredentialAdminRequiredError):
+        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
     return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 

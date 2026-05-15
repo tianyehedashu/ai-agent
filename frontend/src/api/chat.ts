@@ -16,6 +16,10 @@ export interface ChatRequest {
   modelRef?: string | null
   /** 本条请求是否请求扩展网关调用日志（需服务端允许客户端开关） */
   gatewayVerboseRequestLog?: boolean
+  /** chat=Agent；image_gen=直连生图 */
+  creativeMode?: 'chat' | 'image_gen'
+  referenceImageUrls?: string[]
+  imageGenStrength?: number | null
 }
 
 // 转换为后端期望的格式（snake_case）
@@ -29,6 +33,11 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
       : undefined,
     model_ref: request.modelRef === undefined ? undefined : request.modelRef,
     gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
+    creative_mode: request.creativeMode ?? undefined,
+    reference_image_urls: request.referenceImageUrls?.length
+      ? request.referenceImageUrls
+      : undefined,
+    image_gen_strength: request.imageGenStrength ?? undefined,
   }
 }
 

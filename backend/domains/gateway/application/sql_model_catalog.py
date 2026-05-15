@@ -42,6 +42,10 @@ class SqlModelCatalogAdapter:
                 by_name[row.name] = row
         items: list[dict[str, Any]] = []
         for row in sorted(by_name.values(), key=lambda r: r.name):
+            # 与 user_models 选择器一致：已知连通性测试失败的模型不进入「可用」目录，
+            # 避免管理页标「不可用」但对话/产品信息仍可点选。
+            if row.last_test_status == "failed":
+                continue
             item = gateway_model_to_selector_item(row)
             if model_type and model_type not in item["model_types"]:
                 continue

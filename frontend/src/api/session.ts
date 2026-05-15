@@ -18,6 +18,9 @@ interface BackendSession {
   token_count: number
   video_task_count?: number
   chat_model_ref?: string | null
+  creative_mode?: string | null
+  image_gen_model_ref?: string | null
+  video_model_ref?: string | null
   gateway_verbose_request_log?: boolean
   created_at: string
   updated_at: string
@@ -33,6 +36,12 @@ function toFrontendSession(backend: BackendSession): Session {
     tokenCount: backend.token_count,
     videoTaskCount: backend.video_task_count,
     chatModelRef: backend.chat_model_ref ?? undefined,
+    creativeMode:
+      backend.creative_mode === 'image_gen' || backend.creative_mode === 'video'
+        ? backend.creative_mode
+        : 'chat',
+    imageGenModelRef: backend.image_gen_model_ref ?? undefined,
+    videoModelRef: backend.video_model_ref ?? undefined,
     gatewayVerboseRequestLog: backend.gateway_verbose_request_log ?? false,
     createdAt: backend.created_at,
     updatedAt: backend.updated_at,
@@ -167,9 +176,9 @@ export const sessionApi = {
     const backendData: Record<string, unknown> = {}
     if (data.title !== undefined) backendData.title = data.title
     if (data.agentId !== undefined) backendData.agent_id = data.agentId
-    if (data.gatewayVerboseRequestLog !== undefined) {
-      backendData.gateway_verbose_request_log = data.gatewayVerboseRequestLog
-    }
+    if (data.creativeMode !== undefined) backendData.creative_mode = data.creativeMode
+    if (data.imageGenModelRef !== undefined) backendData.image_gen_model_ref = data.imageGenModelRef
+    if (data.videoModelRef !== undefined) backendData.video_model_ref = data.videoModelRef
 
     const backend = await apiClient.patch<BackendSession>(`/api/v1/sessions/${id}`, backendData)
     return toFrontendSession(backend)

@@ -8,11 +8,11 @@ import type {
   VideoTaskUpdateInput,
   VideoTaskListResponse,
   VideoTaskStatus,
-  VideoModel,
   VideoDuration,
   VideoPromptOptimizeInput,
   VideoPromptOptimizeResult,
   VideoPromptTemplate,
+  VideoCatalogModelOption,
 } from '@/types/video-task'
 
 import { apiClient } from './client'
@@ -69,7 +69,7 @@ function toFrontendVideoTask(backend: BackendVideoTask): VideoGenTask {
     promptSource: backend.prompt_source ?? undefined,
     referenceImages: backend.reference_images,
     marketplace: backend.marketplace,
-    model: backend.model as VideoModel,
+    model: backend.model,
     duration: backend.duration as VideoDuration,
     result: backend.result ?? undefined,
     errorMessage: backend.error_message ?? undefined,
@@ -111,6 +111,28 @@ function toBackendUpdateRequest(data: VideoTaskUpdateInput): Record<string, unkn
 // ============================================
 
 export const videoTaskApi = {
+  /** 获取后端提供的视频模型目录（内置 + 未来网关扩展） */
+  async listModels(): Promise<VideoCatalogModelOption[]> {
+    const raw = await apiClient.get<
+      Array<{
+        value: string
+        label: string
+        durations: number[]
+        max_reference_images: number
+        supports_image_to_video: boolean
+        source?: string
+      }>
+    >('/api/v1/video-tasks/models')
+    return raw.map((x) => ({
+      value: x.value,
+      label: x.label,
+      durations: x.durations,
+      maxReferenceImages: x.max_reference_images,
+      supportsImageToVideo: x.supports_image_to_video,
+      source: x.source ?? 'builtin',
+    }))
+  },
+
   /**
    * 获取视频任务列表
    */

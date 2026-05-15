@@ -58,6 +58,16 @@ class UpdateUserModelBody(BaseModel):
 # =============================================================================
 
 
+def _effective_model_type_query(*, model_type: str | None, mode: str | None) -> str | None:
+    """``mode`` 为 ``chat|image_gen|video`` 时映射到 ``type``，显式 ``type`` 优先。"""
+    if model_type and model_type.strip():
+        return model_type.strip()
+    if not mode or not mode.strip():
+        return None
+    key = mode.strip().lower()
+    return {"chat": "text", "image_gen": "image_gen", "video": "video"}.get(key)
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_model(
     body: CreateUserModelBody,
@@ -107,17 +117,24 @@ async def list_available_models(
     current_user: OptionalAuthUser,
     service: UserModelUseCase = Depends(get_user_model_service),
     model_type: str | None = Query(None, alias="type"),
+    mode: str | None = Query(
+        None,
+        description="创作模式：chat→text 模型；image_gen；video（与 type 二选一，type 优先）",
+    ),
     provider: str | None = Query(None, min_length=1, max_length=50),
 ) -> dict[str, Any]:
     """可用模型列表（系统模型 + 用户模型合并）
 
     无认证时仅返回系统模型，不抛 401，便于产品信息等场景展示模型选择器。
-    已认证用户的 ``user_models`` 不含 ``last_test_status=failed`` 的条目（避免聊天等选到已知不可用模型）。
+    系统模型与用户模型均不含 ``last_test_status=failed``（系统侧由 Gateway 目录
+    ``list_visible_models`` 过滤，用户侧由 ``list_models_for_model_selector`` 过滤），
+    避免管理页标「不可用」仍出现在对话选择器中。
     返回 default_for_text / default_for_vision 供前端展示「默认（模型名）」。
     """
     _validate_optional_provider(provider)
+    effective_type = _effective_model_type_query(model_type=model_type, mode=mode)
     system_models = await service.list_available_system_models(
-        model_type=model_type,
+        model_type=effective_type,
         provider=provider,
     )
     default_for_text = await service.get_default_for_type_async("text")
@@ -132,7 +149,7 @@ async def list_available_models(
             "default_for_image_gen": default_for_image_gen,
         }
     user_items = await service.list_models_for_model_selector(
-        model_type=model_type,
+        model_type=effective_type,
         limit=100,
         provider=provider,
     )

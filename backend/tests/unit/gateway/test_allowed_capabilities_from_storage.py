@@ -19,6 +19,14 @@ def test_empty_and_whitespace() -> None:
 def test_valid_list() -> None:
     caps = allowed_capabilities_from_storage(["chat", "embedding"])
     assert caps == (GatewayCapability.CHAT, GatewayCapability.EMBEDDING)
+    caps2 = allowed_capabilities_from_storage(
+        ["video_generation", "moderation", "image"],
+    )
+    assert caps2 == (
+        GatewayCapability.VIDEO_GENERATION,
+        GatewayCapability.MODERATION,
+        GatewayCapability.IMAGE,
+    )
 
 
 def test_invalid_raises() -> None:

@@ -2,12 +2,16 @@
  * AI Gateway 二级布局：左侧二级导航 + 右侧 Outlet
  */
 
+import { useMemo } from 'react'
+import type { ComponentType } from 'react'
+
 import {
   AlertTriangle,
   BarChart3,
   Database,
   FileText,
   Key,
+  LineChart,
   Network,
   Receipt,
   Server,
@@ -15,20 +19,31 @@ import {
 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { cn } from '@/lib/utils'
 
-const items = [
-  { to: 'overview', label: '概览', icon: BarChart3 },
-  { to: 'keys', label: '虚拟 Key', icon: Key },
-  { to: 'credentials', label: '凭据', icon: Database },
-  { to: 'models', label: '模型与路由', icon: Network },
-  { to: 'budgets', label: '预算配额', icon: Receipt },
-  { to: 'logs', label: '调用日志', icon: FileText },
-  { to: 'alerts', label: '告警规则', icon: AlertTriangle },
-  { to: 'teams', label: '团队成员', icon: Users },
-] as const
+type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
 
 export default function GatewayLayout(): React.JSX.Element {
+  const { isPlatformAdmin } = useGatewayPermission()
+
+  const items = useMemo((): NavItem[] => {
+    const base: NavItem[] = [
+      { to: 'overview', label: '概览', icon: BarChart3 },
+      { to: 'keys', label: '虚拟 Key', icon: Key },
+      { to: 'credentials', label: '凭据', icon: Database },
+      { to: 'models', label: '模型与路由', icon: Network },
+      { to: 'budgets', label: '预算配额', icon: Receipt },
+      { to: 'logs', label: '调用日志', icon: FileText },
+      { to: 'alerts', label: '告警规则', icon: AlertTriangle },
+      { to: 'teams', label: '团队成员', icon: Users },
+    ]
+    if (isPlatformAdmin) {
+      base.push({ to: 'platform-stats', label: '平台统计', icon: LineChart })
+    }
+    return base
+  }, [isPlatformAdmin])
+
   return (
     <div className="flex h-full min-h-0">
       <aside className="flex w-56 flex-col border-r border-border/40 bg-background/60 px-3 py-4">

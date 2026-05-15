@@ -14,6 +14,8 @@ interface ChatInputProps {
   isLoading: boolean
   /** 工具栏左侧额外按钮（如「对话工具」） */
   toolbarLeftExtra?: React.ReactNode
+  /** 输入框占位符 */
+  placeholder?: string
 }
 
 export default function ChatInput({
@@ -22,6 +24,7 @@ export default function ChatInput({
   onSend,
   isLoading,
   toolbarLeftExtra,
+  placeholder = '给 AI Agent 发送消息…',
 }: Readonly<ChatInputProps>): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -63,7 +66,7 @@ export default function ChatInput({
             onChange(e.target.value)
           }}
           onKeyDown={handleKeyDown}
-          placeholder="给 AI Agent 发送消息..."
+          placeholder={placeholder}
           className="max-h-[200px] min-h-[52px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-[15px] leading-relaxed placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
           disabled={isLoading}

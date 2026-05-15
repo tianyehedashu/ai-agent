@@ -18,6 +18,11 @@ class ModelCapabilitySnapshot:
     supports_json_mode: bool = True
     supports_vision: bool = False
     supports_image_gen: bool = False
+    supports_txt2img: bool = True
+    supports_img2img: bool = False
+    supports_video_gen: bool = False
+    supports_image_to_video: bool = False
+    max_reference_images: int = 0
 
     @property
     def features(self) -> frozenset[str]:
@@ -32,6 +37,14 @@ class ModelCapabilitySnapshot:
             result.add("json_mode")
         if self.supports_image_gen:
             result.add("image_gen")
+        if self.supports_txt2img:
+            result.add("txt2img")
+        if self.supports_img2img:
+            result.add("img2img")
+        if self.supports_video_gen:
+            result.add("video_gen")
+        if self.supports_image_to_video:
+            result.add("image_to_video")
         return frozenset(result)
 
 

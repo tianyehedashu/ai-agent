@@ -6,7 +6,7 @@ Session Use Case - 会话用例
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.agent.domain.types import MessageRole
@@ -153,14 +153,23 @@ class SessionUseCase:
         title: str | None | type(...) = ...,  # type: ignore
         status: str | None | type(...) = ...,  # type: ignore
         gateway_verbose_request_log: bool | None | type(...) = ...,  # type: ignore
+        creative_mode: str | None | type(...) = ...,  # type: ignore
+        image_gen_model_ref: str | None | type(...) = ...,  # type: ignore
+        video_model_ref: str | None | type(...) = ...,  # type: ignore
     ) -> Session:
         """更新会话"""
         sid = uuid.UUID(session_id)
+        cfg_slice: dict[str, Any] = {}
         if gateway_verbose_request_log is not ...:
-            await self.session_repo.update_config(
-                sid,
-                {"gateway_verbose_request_log": bool(gateway_verbose_request_log)},
-            )
+            cfg_slice["gateway_verbose_request_log"] = bool(gateway_verbose_request_log)
+        if creative_mode is not ...:
+            cfg_slice["creative_mode"] = creative_mode
+        if image_gen_model_ref is not ...:
+            cfg_slice["image_gen_model_ref"] = image_gen_model_ref
+        if video_model_ref is not ...:
+            cfg_slice["video_model_ref"] = video_model_ref
+        if cfg_slice:
+            await self.session_repo.update_config(sid, cfg_slice)
         session = await self.session_repo.update(
             session_id=sid,
             title=title,
@@ -201,6 +210,13 @@ class SessionUseCase:
             {"chat_model_ref": model_ref},
             flush=flush,
         )
+
+    async def merge_session_config_fragment(
+        self, session_id: str, fragment: dict[str, Any], *, flush: bool = True
+    ) -> None:
+        """浅合并写入会话 config 片段。"""
+        await self.get_session_or_raise(session_id)
+        await self.session_repo.update_config(uuid.UUID(session_id), fragment, flush=flush)
 
     async def delete_session(self, session_id: str) -> None:
         """删除会话

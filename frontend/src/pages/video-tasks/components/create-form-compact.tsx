@@ -21,16 +21,32 @@ import {
 import { VIDEO_TASK_EXAMPLE_PROMPTS } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
+import type {
+  VideoGenTask,
+  VideoModel,
+  VideoDuration,
+  VideoCatalogModelOption,
+} from '@/types/video-task'
 
-const MODELS: { value: VideoModel; label: string }[] = [
+const FALLBACK_MODELS: { value: VideoModel; label: string }[] = [
   { value: 'openai::sora1.0', label: 'Sora 1.0' },
   { value: 'openai::sora2.0', label: 'Sora 2.0' },
 ]
 
-function getDurations(model: VideoModel): VideoDuration[] {
+function getDurationsLegacy(model: VideoModel): VideoDuration[] {
   if (model === 'openai::sora2.0') return [5, 10, 15]
   return [5, 10, 15, 20]
+}
+
+function getDurationsForModel(
+  model: VideoModel,
+  catalog: VideoCatalogModelOption[] | undefined
+): VideoDuration[] {
+  const row = catalog?.find((c) => c.value === model)
+  if (row !== undefined && row.durations.length > 0) {
+    return row.durations as VideoDuration[]
+  }
+  return getDurationsLegacy(model)
 }
 
 export interface VideoCreateParams {
@@ -43,6 +59,8 @@ export interface VideoCreateParams {
 export interface VideoTaskCreateFormCompactProps {
   /** 有则直接创建到该会话；无则通过 onVideoCreateWithoutSession 由父组件先建会话再创建 */
   sessionId?: string
+  /** 由父级传入时优先使用（与 /video-tasks/models 一致）；缺省用内置 Sora 列表 */
+  catalogModels?: VideoCatalogModelOption[]
   onTaskCreated?: (task: VideoGenTask) => void
   onSessionForbidden?: () => void
   /** 无 sessionId 时提交时调用，父组件负责先建会话再创建任务 */
@@ -52,6 +70,7 @@ export interface VideoTaskCreateFormCompactProps {
 
 export default function VideoTaskCreateFormCompact({
   sessionId,
+  catalogModels,
   onTaskCreated,
   onSessionForbidden,
   onVideoCreateWithoutSession,
@@ -67,8 +86,18 @@ export default function VideoTaskCreateFormCompact({
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
-  const selectedModel = MODELS.find((m) => m.value === model)
-  const availableDurations = useMemo(() => getDurations(model), [model])
+  const modelsForUi = useMemo(() => {
+    if (catalogModels && catalogModels.length > 0) {
+      return catalogModels.map((c) => ({ value: c.value, label: c.label }))
+    }
+    return FALLBACK_MODELS
+  }, [catalogModels])
+
+  const selectedModel = modelsForUi.find((m) => m.value === model)
+  const availableDurations = useMemo(
+    () => getDurationsForModel(model, catalogModels),
+    [model, catalogModels]
+  )
 
   const imageUrls = useMemo(() => {
     return referenceImages
@@ -80,9 +109,9 @@ export default function VideoTaskCreateFormCompact({
   const [imageStates, setImageStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({})
 
   useEffect(() => {
-    const durations = getDurations(model)
+    const durations = getDurationsForModel(model, catalogModels)
     if (!durations.includes(duration)) setDuration(durations[0])
-  }, [model, duration])
+  }, [model, duration, catalogModels])
 
   useEffect(() => {
     const el = textareaRef.current
@@ -355,7 +384,7 @@ export default function VideoTaskCreateFormCompact({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[120px]">
-              {MODELS.map((m) => (
+              {modelsForUi.map((m) => (
                 <DropdownMenuItem
                   key={m.value}
                   onClick={() => {

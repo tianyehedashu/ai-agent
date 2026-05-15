@@ -32,7 +32,13 @@ interface UseChatReturn {
   sessionRecreation: SessionRecreationData | null
   sendMessage: (
     content: string,
-    options?: { modelRef?: string | null; gatewayVerboseRequestLog?: boolean }
+    options?: {
+      modelRef?: string | null
+      gatewayVerboseRequestLog?: boolean
+      creativeMode?: 'chat' | 'image_gen'
+      referenceImageUrls?: string[]
+      imageGenStrength?: number | null
+    }
   ) => Promise<void>
   cancelRequest: () => void // 取消当前请求
   resumeExecution: (
@@ -353,7 +359,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const sendMessage = useCallback(
     async (
       content: string,
-      options?: { modelRef?: string | null; gatewayVerboseRequestLog?: boolean }
+      options?: {
+        modelRef?: string | null
+        gatewayVerboseRequestLog?: boolean
+        creativeMode?: 'chat' | 'image_gen'
+        referenceImageUrls?: string[]
+        imageGenStrength?: number | null
+      }
     ) => {
       if (!content.trim() || isLoading) return
 
@@ -402,6 +414,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             mcpConfig,
             modelRef: options?.modelRef === undefined ? undefined : options.modelRef,
             gatewayVerboseRequestLog: options?.gatewayVerboseRequestLog ?? undefined,
+            creativeMode: options?.creativeMode,
+            referenceImageUrls: options?.referenceImageUrls,
+            imageGenStrength: options?.imageGenStrength,
           },
           handleEvent,
           (error) => {

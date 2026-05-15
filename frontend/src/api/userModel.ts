@@ -37,10 +37,15 @@ export const userModelApi = {
   },
 
   /** 可用模型列表（系统 + 用户合并） */
-  async listAvailable(type?: ModelType, provider?: string): Promise<AvailableModelsResponse> {
+  async listAvailable(
+    type?: ModelType,
+    provider?: string,
+    options?: { mode?: 'chat' | 'image_gen' | 'video' }
+  ): Promise<AvailableModelsResponse> {
     const search: Record<string, string> = {}
     if (type) search.type = type
     if (provider) search.provider = provider
+    if (options?.mode) search.mode = options.mode
     return apiClient.get<AvailableModelsResponse>(`${PREFIX}/available`, search)
   },
 
