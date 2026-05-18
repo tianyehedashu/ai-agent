@@ -19,6 +19,8 @@ class UpstreamModelItem:
 
     id: str
     owned_by: str | None = None
+    already_registered: bool = False
+    registered_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -134,5 +134,10 @@ class TeamService:
             raise ValueError("Cannot delete personal team")
         await self._teams.delete(team_id)
 
+    async def get_display_names_by_ids(
+        self, team_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        return await self._teams.get_display_names_by_ids(team_ids)
+
 
 __all__ = ["TeamService"]

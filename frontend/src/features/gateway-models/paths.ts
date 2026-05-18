@@ -28,7 +28,7 @@ export function personalModelEditHref(modelId: string): string {
 }
 
 function teamModelsBaseParams(credentialId?: string): URLSearchParams {
-  const params = new URLSearchParams({ tab: 'team' })
+  const params = new URLSearchParams({ tab: 'shared' })
   if (credentialId) {
     params.set('credentialId', credentialId)
   }
@@ -58,9 +58,9 @@ export function teamModelsIndexHref(): string {
   return teamModelsFilteredHref()
 }
 
-/** 凭据管理（团队 Tab） */
+/** 凭据管理（团队 Tab；URL 字面量与后端 `Team.kind='shared'` 对齐） */
 export function credentialsTeamListHref(): string {
-  return '/gateway/credentials?tab=team'
+  return '/gateway/credentials?tab=shared'
 }
 
 /** 凭据详情 */

@@ -203,6 +203,10 @@ export type CredentialProbeUpstream = 'openai_compatible' | 'none'
 export interface CredentialUpstreamItem {
   id: string
   owned_by?: string | null
+  /** 该上游 id 在本凭据下是否已有注册行 */
+  already_registered?: boolean
+  /** 已注册的 Gateway 别名（route name） */
+  registered_names?: string[]
 }
 
 export interface CredentialProbeResult {
@@ -400,8 +404,10 @@ export interface DashboardSummary {
 
 /**
  * 管理面日志/大盘用量切片（与 Tenancy Team.kind、预算 BudgetUpsert.scope 无关）。
- * - workspace：按当前 X-Team-Id 工作区（含 personal/shared）过滤/聚合。
- * - user：按当前登录用户跨工作区聚合。
+ * - workspace（产品文案：团队）：按当前 X-Team-Id 选中的团队（含 personal/shared）过滤/聚合。
+ * - user（产品文案：我）：按当前登录账号跨团队聚合。
+ *
+ * 字面量保留 `workspace` 是为了与 BudgetScope.team 字面量正交，避免 URL/JSON 中误读。
  */
 export type GatewayUsageAggregation = 'workspace' | 'user'
 
@@ -620,12 +626,16 @@ export interface MarginGroupItem {
   margin_ratio: number
 }
 
+export type MarginGroupBy = 'credential' | 'model' | 'team'
+
 export interface MarginSummary {
   period_start: string
   period_end: string
   total_revenue_usd: number | string
   total_cost_usd: number | string
   total_margin_usd: number | string
+  group_by: MarginGroupBy
+  group_column_label: string
   items: MarginGroupItem[]
 }
 
@@ -759,7 +769,7 @@ export const gatewayApi = {
   deleteBudget: (id: string) => apiClient.delete<unknown>(`${base}/budgets/${id}`),
 
   listLogs: (params?: {
-    /** 默认 workspace */
+    /** 默认 workspace（产品文案：团队） */
     usage_aggregation?: GatewayUsageAggregation
     page?: number
     page_size?: number

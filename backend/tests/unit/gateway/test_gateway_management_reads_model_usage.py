@@ -29,70 +29,72 @@ async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -
     m1 = SimpleNamespace(id=uuid.uuid4(), name="alpha-model")
     m2 = SimpleNamespace(id=uuid.uuid4(), name="beta-model")
     svc._models.list_for_team = AsyncMock(return_value=[m1, m2])
-    svc._logs.aggregate_by_route_names_for_team = AsyncMock(
-        return_value={
-            "alpha-model": {
-                "requests": 1,
-                "input_tokens": 4,
-                "output_tokens": 1,
-                "cost_usd": Decimal("0.004"),
-            },
-            "beta-model": {
-                "requests": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cost_usd": Decimal("0"),
-            },
-        }
-    )
-    svc._logs.aggregate_by_route_names_for_user = AsyncMock(
-        return_value={
-            "alpha-model": {
-                "requests": 0,
-                "input_tokens": 1,
-                "output_tokens": 0,
-                "cost_usd": Decimal("0.001"),
-            },
-            "beta-model": {
-                "requests": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cost_usd": Decimal("0"),
-            },
-        }
-    )
-    svc._logs.aggregate_by_deployment_gateway_model_ids_for_team = AsyncMock(
-        return_value={
-            m1.id: {
-                "requests": 1,
-                "input_tokens": 6,
-                "output_tokens": 2,
-                "cost_usd": Decimal("0.006"),
-            },
-            m2.id: {
-                "requests": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cost_usd": Decimal("0"),
-            },
-        }
-    )
-    svc._logs.aggregate_by_deployment_gateway_model_ids_for_user = AsyncMock(
-        return_value={
-            m1.id: {
-                "requests": 1,
-                "input_tokens": 4,
-                "output_tokens": 1,
-                "cost_usd": Decimal("0.004"),
-            },
-            m2.id: {
-                "requests": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cost_usd": Decimal("0"),
-            },
-        }
-    )
+
+    route_ws = {
+        "alpha-model": {
+            "requests": 1,
+            "input_tokens": 4,
+            "output_tokens": 1,
+            "cost_usd": Decimal("0.004"),
+        },
+        "beta-model": {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": Decimal("0"),
+        },
+    }
+    route_user = {
+        "alpha-model": {
+            "requests": 0,
+            "input_tokens": 1,
+            "output_tokens": 0,
+            "cost_usd": Decimal("0.001"),
+        },
+        "beta-model": {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": Decimal("0"),
+        },
+    }
+    dep_ws = {
+        m1.id: {
+            "requests": 1,
+            "input_tokens": 6,
+            "output_tokens": 2,
+            "cost_usd": Decimal("0.006"),
+        },
+        m2.id: {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": Decimal("0"),
+        },
+    }
+    dep_user = {
+        m1.id: {
+            "requests": 1,
+            "input_tokens": 4,
+            "output_tokens": 1,
+            "cost_usd": Decimal("0.004"),
+        },
+        m2.id: {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": Decimal("0"),
+        },
+    }
+
+    async def _route_axis(axis, _names, _s, _e):
+        return route_ws if axis.is_workspace() else route_user
+
+    async def _dep_axis(axis, _ids, _s, _e):
+        return dep_ws if axis.is_workspace() else dep_user
+
+    svc._logs.aggregate_by_route_names_by_axis = AsyncMock(side_effect=_route_axis)
+    svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock(side_effect=_dep_axis)
 
     raw = await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
     assert raw["items"][0]["route_name"] == "alpha-model"
@@ -113,15 +115,14 @@ async def test_aggregate_gateway_model_route_usage_no_models_returns_empty_items
         is_platform_admin=False,
     )
     svc._models.list_for_team = AsyncMock(return_value=[])
-    svc._logs.aggregate_by_route_names_for_team = AsyncMock()
-    svc._logs.aggregate_by_route_names_for_user = AsyncMock()
-    svc._logs.aggregate_by_deployment_gateway_model_ids_for_team = AsyncMock()
-    svc._logs.aggregate_by_deployment_gateway_model_ids_for_user = AsyncMock()
+    svc._logs.aggregate_by_route_names_by_axis = AsyncMock()
+    svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock()
 
     raw = await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
 
     assert raw["items"] == []
-    svc._logs.aggregate_by_route_names_for_team.assert_not_called()
+    svc._logs.aggregate_by_route_names_by_axis.assert_not_called()
+    svc._logs.aggregate_by_deployment_ids_by_axis.assert_not_called()
 
 
 @pytest.mark.asyncio

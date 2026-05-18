@@ -2,12 +2,12 @@
  * AI Gateway · 凭据（个人 / 团队）
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, startTransition, useCallback, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import {
   CreateCredentialDialog,
@@ -42,11 +42,13 @@ import {
   type CredentialFormScope,
 } from '@/features/gateway-credentials/provider-schemas'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
 import {
   credentialDetailAddModelsHref,
   credentialDetailHref,
 } from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useToast } from '@/hooks/use-toast'
 
 const AddModelsDialog = lazy(() =>
@@ -55,18 +57,12 @@ const AddModelsDialog = lazy(() =>
   }))
 )
 
-type CredentialTab = 'personal' | 'team'
-
 interface JustCreatedCredential {
   id: string
   provider: string
   name: string
   scope: CredentialUpstreamScope
   is_active: boolean
-}
-
-function parseTab(raw: string | null): CredentialTab {
-  return raw === 'personal' || raw === 'team' ? raw : 'team'
 }
 
 function canEditGatewayCredential(
@@ -108,7 +104,6 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
   const [pendingProvider, setPendingProvider] = useState<string | undefined>(undefined)
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
@@ -116,44 +111,19 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   )
   const [justCreated, setJustCreated] = useState<JustCreatedCredential | null>(null)
 
-  const activeTab = parseTab(searchParams.get('tab'))
+  const closeCreateUi = useCallback((): void => {
+    setOpen(false)
+    setPendingProvider(undefined)
+  }, [])
 
-  const setActiveTab = useCallback(
-    (next: CredentialTab): void => {
-      setOpen(false)
-      setPendingProvider(undefined)
-      setSearchParams(
-        (prev) => {
-          const n = new URLSearchParams(prev)
-          n.set('tab', next)
-          return n
-        },
-        { replace: true }
-      )
-    },
-    [setSearchParams]
-  )
-
-  useEffect(() => {
-    const raw = searchParams.get('tab')
-    if (raw !== null && raw !== 'personal' && raw !== 'team') {
-      setOpen(false)
-      setPendingProvider(undefined)
-      setSearchParams(
-        (prev) => {
-          const n = new URLSearchParams(prev)
-          n.set('tab', 'team')
-          return n
-        },
-        { replace: true }
-      )
-    }
-  }, [searchParams, setSearchParams])
+  const { scopeTab: activeTab, setScopeTab: setActiveTab } = useGatewayScopeTab({
+    onBeforeTabChange: closeCreateUi,
+  })
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['gateway', 'credentials'],
     queryFn: () => gatewayApi.listCredentials(),
-    enabled: activeTab === 'team',
+    enabled: activeTab === 'shared',
   })
 
   const closeCreateDialog = useCallback((): void => {
@@ -266,6 +236,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     if (isPlatformAdmin) scopes.push('system')
     return scopes
   }, [canWrite, isPlatformAdmin])
+  // 注意：此处 'team' 是 `CredentialScope.team`（凭据写入归属），
+  // 与 ScopeTab 的 'shared' / 'personal' 是不同概念，禁止合并字面量。
   const defaultScope: CredentialFormScope = activeTab === 'personal' ? 'user' : 'team'
   const createSubmitting = createManagedMutation.isPending || createUserMutation.isPending
 
@@ -284,16 +256,19 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
-          setActiveTab(parseTab(v))
+          if (v === 'personal' || v === 'shared') {
+            startTransition(() => {
+              setActiveTab(v)
+            })
+          }
         }}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TabsList>
-            <TabsTrigger value="personal">个人</TabsTrigger>
-            <TabsTrigger value="team">团队</TabsTrigger>
+            <GatewayScopeTabTriggers />
           </TabsList>
           <div className="flex flex-wrap gap-2">
-            {activeTab === 'team' && canWrite ? (
+            {activeTab === 'shared' && canWrite ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -321,7 +296,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
           <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
         </TabsContent>
 
-        <TabsContent value="team" className="mt-4 focus-visible:outline-none">
+        <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
           <Card>
             <CardContent className="p-0">
               <ScrollArea className="w-full overscroll-y-contain">

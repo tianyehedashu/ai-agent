@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 class UpstreamModelItemResponse(BaseModel):
     id: str
     owned_by: str | None = None
+    already_registered: bool = False
+    registered_names: list[str] = Field(default_factory=list)
 
 
 class CredentialProbeResponse(BaseModel):

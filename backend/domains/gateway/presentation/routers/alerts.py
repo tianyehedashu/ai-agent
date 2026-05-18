@@ -1,0 +1,99 @@
+"""Alerts 子 router。"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+import uuid
+
+from fastapi import APIRouter, Query, status
+
+from domains.gateway.presentation.deps import (
+    CurrentTeam,
+    RequiredTeamAdmin,
+)
+from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.gateway.presentation.schemas.common import (
+    AlertEventResponse,
+    AlertRuleCreate,
+    AlertRuleResponse,
+    AlertRuleUpdate,
+)
+from libs.exceptions import HttpMappableDomainError
+
+from ._common import (
+    MgmtReads,
+    MgmtWrites,
+)
+
+router = APIRouter()
+
+
+@router.get("/alerts/rules", response_model=list[AlertRuleResponse])
+async def list_alert_rules(
+    team: CurrentTeam,
+    reads: MgmtReads,
+) -> list[AlertRuleResponse]:
+    rows = await reads.list_alert_rules(team.team_id)
+    return [AlertRuleResponse.model_validate(r) for r in rows]
+
+
+@router.post("/alerts/rules", response_model=AlertRuleResponse, status_code=status.HTTP_201_CREATED)
+async def create_alert_rule(
+    body: AlertRuleCreate,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> AlertRuleResponse:
+    rule = await writes.create_alert_rule(
+        team_id=team.team_id,
+        name=body.name,
+        description=body.description,
+        metric=body.metric,
+        threshold=Decimal(str(body.threshold)),
+        window_minutes=body.window_minutes,
+        channels=body.channels,
+        enabled=body.enabled,
+    )
+    return AlertRuleResponse.model_validate(rule)
+
+
+@router.patch("/alerts/rules/{rule_id}", response_model=AlertRuleResponse)
+async def update_alert_rule(
+    rule_id: uuid.UUID,
+    body: AlertRuleUpdate,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> AlertRuleResponse:
+    try:
+        rule = await writes.update_alert_rule(
+            rule_id,
+            team_id=team.team_id,
+            fields=body.model_dump(exclude_unset=True, exclude_none=True),
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return AlertRuleResponse.model_validate(rule)
+
+
+@router.delete("/alerts/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_alert_rule(
+    rule_id: uuid.UUID,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> None:
+    try:
+        await writes.delete_alert_rule(rule_id, team_id=team.team_id)
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+
+
+@router.get("/alerts/events", response_model=list[AlertEventResponse])
+async def list_alert_events(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    limit: int = Query(100, ge=1, le=500),
+) -> list[AlertEventResponse]:
+    rows = await reads.list_alert_events_as_dicts(team.team_id, limit=limit)
+    return [AlertEventResponse(**row) for row in rows]
+
+
+__all__ = ["router"]

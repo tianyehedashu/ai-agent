@@ -2,7 +2,7 @@
  * 凭据上游模型探测：探测 / 刷新、不支持标记、多选后批量入库（与后端契约对齐）。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, RefreshCw, Search } from 'lucide-react'
@@ -22,15 +22,24 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
   credentialProbeCacheKey,
+  invalidateCredentialProbeCache,
   isProbeCacheFresh,
 } from '@/features/gateway-credentials/credential-probe-cache'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import {
+  countProbeItems,
+  isImportableUpstreamItem,
+} from '@/features/gateway-credentials/upstream-import-utils'
+import { UpstreamModelList } from '@/features/gateway-credentials/upstream-model-list'
+import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import type { ModelType } from '@/types/user-model'
 import { MODEL_TYPE_LABELS } from '@/types/user-model'
 
 export type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+
+const IMPORT_MODEL_TYPES: ModelType[] = ['text', 'image', 'image_gen', 'video']
 
 export interface CredentialUpstreamModelsPanelProps {
   scope: CredentialUpstreamScope
@@ -56,9 +65,17 @@ function supportBadge(support: CredentialProbeResult['support']): {
       return { label: '不支持自动列举', variant: 'secondary' }
     case 'error':
       return { label: '探测失败', variant: 'destructive' }
+    case 'partial':
+      return { label: '部分列举', variant: 'outline' }
     default:
       return { label: support, variant: 'outline' }
   }
+}
+
+function formatProbeTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
 function readCachedProbe(
@@ -90,53 +107,6 @@ function ProbeStatusAlert({ probe }: { probe: CredentialProbeResult }): React.JS
   )
 }
 
-function UpstreamModelList({
-  items,
-  selected,
-  onToggle,
-  onPickModelId,
-}: {
-  items: CredentialProbeResult['items']
-  selected: Set<string>
-  onToggle: (id: string) => void
-  onPickModelId?: (id: string) => void
-}): React.JSX.Element {
-  return (
-    <div className="max-h-56 space-y-1 overflow-y-auto overscroll-y-contain rounded-md border p-2 text-sm [content-visibility:auto]">
-      {items.map((it) => (
-        <label
-          key={it.id}
-          className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-muted/60"
-        >
-          <Checkbox
-            checked={selected.has(it.id)}
-            onCheckedChange={() => {
-              onToggle(it.id)
-            }}
-          />
-          <span className="font-mono text-xs">{it.id}</span>
-          {it.owned_by ? (
-            <span className="text-xs text-muted-foreground">· {it.owned_by}</span>
-          ) : null}
-          {onPickModelId ? (
-            <Button
-              type="button"
-              variant="link"
-              className="ml-auto h-7 px-1 text-xs"
-              onClick={(e) => {
-                e.preventDefault()
-                onPickModelId(it.id)
-              }}
-            >
-              填入
-            </Button>
-          ) : null}
-        </label>
-      ))}
-    </div>
-  )
-}
-
 export function CredentialUpstreamModelsPanel({
   scope,
   credentialId,
@@ -152,16 +122,19 @@ export function CredentialUpstreamModelsPanel({
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const cacheKey = cacheKeyProp ?? credentialProbeCacheKey(scope, credentialId)
+  const manualProbeRef = useRef(false)
 
   const [probe, setProbe] = useState<CredentialProbeResult | null>(() =>
     readCachedProbe(queryClient, cacheKey)
   )
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
+  const deferredFilter = useDeferredValue(filter)
   const [displayNamePrefix, setDisplayNamePrefix] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [capability, setCapability] = useState('chat')
   const [modelTypes, setModelTypes] = useState<ModelType[]>(['text'])
+  const [hideRegistered, setHideRegistered] = useState(false)
 
   const writeProbeCache = useCallback(
     (data: CredentialProbeResult) => {
@@ -187,13 +160,29 @@ export function CredentialUpstreamModelsPanel({
       writeProbeCache(data)
       setSelected(new Set())
       applyProbeResult(data)
+      if (manualProbeRef.current) {
+        const stats =
+          data.support === 'full' || data.support === 'partial' ? countProbeItems(data.items) : null
+        toast({
+          title: '探测完成',
+          description:
+            stats !== null
+              ? `共 ${String(stats.total)} 个，可导入 ${String(stats.importable)} 个${
+                  stats.registered > 0 ? `，已注册 ${String(stats.registered)} 个` : ''
+                }`
+              : (data.message ?? '上游不支持自动列举模型'),
+        })
+      }
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '探测失败', description: e.message })
     },
+    onSettled: () => {
+      manualProbeRef.current = false
+    },
   })
 
-  // 单次 effect：凭据/缓存键变化时同步缓存；autoProbe 时仅在无缓存或缓存仍新鲜时跳过网络请求
+  // 单次 effect：凭据/缓存键变化时同步缓存；旧缓存先展示，缓存过期时后台刷新。
   useEffect(() => {
     const cached = readCachedProbe(queryClient, cacheKey)
     if (cached) applyProbeResult(cached)
@@ -201,15 +190,17 @@ export function CredentialUpstreamModelsPanel({
     if (!autoProbe || disabled || credentialId.length === 0) return
     if (probeMutation.isPending) return
     if (isProbeCacheFresh(queryClient, cacheKey)) return
-    if (cached) return
     probeMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在打开/凭据变化时自动探测
   }, [autoProbe, disabled, credentialId, cacheKey, queryClient, applyProbeResult])
 
   const batchMutation = useMutation({
     mutationFn: async () => {
-      const ids = [...selected]
-      if (ids.length === 0) throw new Error('请至少选择一条上游模型')
+      const ids = [...selected].filter((id) => {
+        const row = probe?.items.find((it) => it.id === id)
+        return row !== undefined && isImportableUpstreamItem(row)
+      })
+      if (ids.length === 0) throw new Error('请至少选择一条可导入的上游模型')
       if (scope === 'user') {
         const body: PersonalModelBatchImportBody = {
           provider,
@@ -239,11 +230,18 @@ export function CredentialUpstreamModelsPanel({
       void queryClient.invalidateQueries({
         queryKey: ['gateway', 'models', 'by-credential', credentialId],
       })
+      const dupFailed = res.failed.filter((f) => f.reason.includes('已注册'))
       toast({
         title: '导入完成',
-        description: `成功 ${String(res.created.length)} 条，失败 ${String(res.failed.length)} 条`,
+        description: `成功 ${String(res.created.length)} 条，失败 ${String(res.failed.length)} 条${
+          dupFailed.length > 0 ? `（含 ${String(dupFailed.length)} 条已注册）` : ''
+        }`,
       })
       setSelected(new Set())
+      invalidateCredentialProbeCache(queryClient, scope, credentialId)
+      if (!disabled && credentialId.length > 0) {
+        probeMutation.mutate()
+      }
       if (res.created.length > 0) onImported?.(res.created.length)
     },
     onError: (e: Error) => {
@@ -251,39 +249,79 @@ export function CredentialUpstreamModelsPanel({
     },
   })
 
+  const probeStats = useMemo(
+    () => (probe?.items ? countProbeItems(probe.items) : null),
+    [probe?.items]
+  )
+
+  const filterIsStale = filter !== deferredFilter
   const filteredItems = useMemo(() => {
     if (!probe?.items) return []
-    const q = filter.trim().toLowerCase()
-    if (!q) return probe.items
-    return probe.items.filter((it) => it.id.toLowerCase().includes(q))
-  }, [probe, filter])
+    let rows = probe.items
+    if (hideRegistered) {
+      rows = rows.filter((it) => isImportableUpstreamItem(it))
+    }
+    const q = deferredFilter.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((it) => it.id.toLowerCase().includes(q))
+  }, [probe, deferredFilter, hideRegistered])
 
-  const toggle = useCallback((id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  const importableVisibleItems = useMemo(
+    () => filteredItems.filter((it) => isImportableUpstreamItem(it)),
+    [filteredItems]
+  )
+
+  const selectedImportableCount = useMemo(() => {
+    if (!probe?.items) return 0
+    return [...selected].filter((id) => {
+      const row = probe.items.find((it) => it.id === id)
+      return row !== undefined && isImportableUpstreamItem(row)
+    }).length
+  }, [probe?.items, selected])
+
+  const visibleSelectedCount = importableVisibleItems.reduce(
+    (count, item) => count + (selected.has(item.id) ? 1 : 0),
+    0
+  )
+  const allVisibleSelected =
+    importableVisibleItems.length > 0 && visibleSelectedCount === importableVisibleItems.length
+
+  const toggle = useCallback(
+    (id: string) => {
+      const row = probe?.items.find((it) => it.id === id)
+      if (row !== undefined && !isImportableUpstreamItem(row)) return
+      setSelected((prev) => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    },
+    [probe?.items]
+  )
 
   const toggleAllVisible = useCallback(() => {
-    const ids = filteredItems.map((i) => i.id)
+    const ids = importableVisibleItems.map((i) => i.id)
     if (ids.length === 0) return
-    const allSelected = ids.every((id) => selected.has(id))
     setSelected((prev) => {
       const next = new Set(prev)
-      if (allSelected) ids.forEach((id) => next.delete(id))
+      if (allVisibleSelected) ids.forEach((id) => next.delete(id))
       else ids.forEach((id) => next.add(id))
       return next
     })
-  }, [filteredItems, selected])
+  }, [allVisibleSelected, importableVisibleItems])
+
+  const clearSelected = useCallback(() => {
+    setSelected(new Set())
+  }, [])
 
   const runProbe = useCallback(() => {
+    manualProbeRef.current = true
     probeMutation.mutate()
   }, [probeMutation])
 
   const badge = probe ? supportBadge(probe.support) : null
+  const canListProbeItems = probe?.support === 'full' || probe?.support === 'partial'
 
   function toggleModelType(t: ModelType): void {
     setModelTypes((cur) => {
@@ -295,6 +333,11 @@ export function CredentialUpstreamModelsPanel({
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
       {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
+      {probe ? (
+        <span className="text-xs text-muted-foreground">
+          最近探测 {formatProbeTime(probe.probe_at)}
+        </span>
+      ) : null}
       <Button
         type="button"
         variant="outline"
@@ -303,9 +346,9 @@ export function CredentialUpstreamModelsPanel({
         onClick={runProbe}
       >
         {probeMutation.isPending ? (
-          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         ) : (
-          <Search className="mr-1 h-3.5 w-3.5" />
+          <Search className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
         )}
         探测
       </Button>
@@ -316,8 +359,9 @@ export function CredentialUpstreamModelsPanel({
         disabled={disabled || probeMutation.isPending || !probe}
         onClick={runProbe}
         title="重新探测上游"
+        aria-label="重新探测上游"
       >
-        <RefreshCw className="h-3.5 w-3.5" />
+        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
       </Button>
     </div>
   )
@@ -325,40 +369,82 @@ export function CredentialUpstreamModelsPanel({
   const statusBlock =
     probe && (probe.support === 'unsupported' || probe.support === 'error') ? (
       <ProbeStatusAlert probe={probe} />
-    ) : probe?.message && probe.support === 'full' ? (
+    ) : probe?.message && canListProbeItems ? (
       <p className="text-sm text-muted-foreground">{probe.message}</p>
     ) : null
 
   const listBlock =
-    probe?.support === 'full' && probe.items.length > 0 ? (
+    canListProbeItems && probe.items.length > 0 ? (
       <>
+        {probeStats !== null && probeStats.registered > 0 ? (
+          <div
+            role="status"
+            className="rounded-md border border-muted bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+          >
+            本凭据已有 {probeStats.registered}{' '}
+            个模型注册过；列表中带「已注册」标记的行无法再次导入。
+          </div>
+        ) : null}
+        <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            id="hide-registered"
+            checked={hideRegistered}
+            onCheckedChange={(c) => {
+              setHideRegistered(c === true)
+            }}
+          />
+          <span>隐藏已注册</span>
+        </label>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="grid flex-1 gap-1.5">
-            <Label htmlFor="upstream-filter">筛选 id</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="upstream-filter">筛选模型 ID</Label>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                显示 {filteredItems.length}/{probe.items.length} · 可导入{' '}
+                {probeStats?.importable ?? 0} · 已选 {selectedImportableCount} 个
+              </span>
+            </div>
             <Input
               id="upstream-filter"
+              name="upstream-model-filter"
+              autoComplete="off"
+              spellCheck={false}
               value={filter}
               onChange={(e) => {
                 setFilter(e.target.value)
               }}
-              placeholder="gpt-4…"
+              placeholder="输入模型 ID，如 gpt-4…"
             />
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="shrink-0"
-            onClick={toggleAllVisible}
-          >
-            全选/取消可见项
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={importableVisibleItems.length === 0}
+              onClick={toggleAllVisible}
+            >
+              {allVisibleSelected
+                ? '取消可见项'
+                : `选择可导入项（${String(importableVisibleItems.length)}）`}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={selected.size === 0}
+              onClick={clearSelected}
+            >
+              清空选择
+            </Button>
+          </div>
         </div>
         <UpstreamModelList
           items={filteredItems}
           selected={selected}
           onToggle={toggle}
           onPickModelId={onPickModelId}
+          isStale={filterIsStale}
         />
         <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
           {scope === 'user' ? (
@@ -374,17 +460,12 @@ export function CredentialUpstreamModelsPanel({
               />
             </div>
           ) : (
-            <div className="grid gap-1.5">
-              <Label htmlFor="team-cap">主调用面 capability</Label>
-              <Input
-                id="team-cap"
-                value={capability}
-                onChange={(e) => {
-                  setCapability(e.target.value)
-                }}
-                placeholder="chat"
-              />
-            </div>
+            <CapabilityField
+              id="team-cap"
+              value={capability}
+              onValueChange={setCapability}
+              showHint
+            />
           )}
           <div className="flex items-center gap-2">
             <Switch
@@ -401,9 +482,9 @@ export function CredentialUpstreamModelsPanel({
         </div>
         {scope === 'user' ? (
           <div className="grid gap-1.5">
-            <Label>模型类型（写入多行 personal gateway_models）</Label>
+            <Label>导入为哪些模型类型</Label>
             <div className="flex flex-wrap gap-3">
-              {(['text', 'image', 'image_gen', 'video'] as ModelType[]).map((t) => (
+              {IMPORT_MODEL_TYPES.map((t) => (
                 <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
                   <Checkbox
                     checked={modelTypes.includes(t)}
@@ -415,22 +496,27 @@ export function CredentialUpstreamModelsPanel({
                 </label>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              每选一种类型，会为同一个上游模型创建一条个人模型记录。
+            </p>
           </div>
         ) : null}
         <div className="flex justify-end">
           <Button
             type="button"
-            disabled={disabled || batchMutation.isPending || selected.size === 0}
+            disabled={disabled || batchMutation.isPending || selectedImportableCount === 0}
             onClick={() => {
               batchMutation.mutate()
             }}
           >
-            {batchMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            导入选中项（{selected.size}）
+            {batchMutation.isPending ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            导入选中项（{selectedImportableCount}）
           </Button>
         </div>
       </>
-    ) : probe?.support === 'full' && probe.items.length === 0 ? (
+    ) : canListProbeItems && probe.items.length === 0 ? (
       <p className="text-sm text-muted-foreground" role="status">
         上游未返回任何模型。
       </p>
@@ -438,13 +524,12 @@ export function CredentialUpstreamModelsPanel({
       <p className="text-sm text-muted-foreground">点击「探测」列举上游可用模型。</p>
     ) : null
 
-  const pendingBlock =
-    probeMutation.isPending && !probe ? (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        正在探测上游…
-      </div>
-    ) : null
+  const pendingBlock = probeMutation.isPending ? (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      {probe ? '正在重新探测上游…' : '正在探测上游…'}
+    </div>
+  ) : null
 
   const content = (
     <div className="space-y-4">

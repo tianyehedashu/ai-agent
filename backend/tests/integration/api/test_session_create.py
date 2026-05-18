@@ -144,7 +144,7 @@ class TestSessionCreate:
         )
 
         # Assert
-        assert create_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert create_response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     @pytest.mark.asyncio
     async def test_create_session_with_invalid_agent_id(
@@ -224,7 +224,7 @@ class TestSessionCreate:
         # 空字符串可能被视None，或者被拒绝
         assert create_response.status_code in [
             status.HTTP_201_CREATED,
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
         ]
 
     @pytest.mark.asyncio

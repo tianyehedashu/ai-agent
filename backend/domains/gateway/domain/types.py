@@ -38,7 +38,16 @@ class TeamRole(str, Enum):
 
 
 class CredentialScope(str, Enum):
-    """凭据作用域"""
+    """凭据归属作用域（写入维度）。
+
+    描述 ``provider_credentials.scope`` 列：一条上游凭据记录归属于哪一层。
+    与 ``BudgetScope`` 同形（都包含 ``system|team|user``）但**语义独立**，禁止互相替代：
+    BudgetScope 多 ``key``（虚拟 Key 级预算），CredentialScope 不具备。
+
+    与 ``domains.gateway.domain.usage_read_model.UsageAggregation`` **正交**：
+    CredentialScope 是"凭据条目属于谁"（写入字段），UsageAggregation 是
+    "查询用量时按哪一列切片"（HTTP 查询参数）。
+    """
 
     SYSTEM = "system"  # 全局系统凭据
     TEAM = "team"  # 团队凭据
@@ -46,7 +55,19 @@ class CredentialScope(str, Enum):
 
 
 class BudgetScope(str, Enum):
-    """预算作用域"""
+    """预算归属作用域（写入维度）。
+
+    描述 ``gateway_budgets.scope`` 列：一条预算记录绑定在哪一层。
+    与 ``CredentialScope`` 同形（``system|team|user``）但 BudgetScope 多 ``key``（单个虚拟 Key）；
+    两者各自独立演进，禁止合并字面量。
+
+    与 ``domains.gateway.domain.usage_read_model.UsageAggregation`` **正交**：
+    BudgetScope 是"预算条目属于谁"（写入字段），UsageAggregation 是
+    "查询用量时按哪一列切片"（HTTP 查询参数）。``BudgetScope.team`` 与
+    ``UsageAggregation`` 之所以保持不同字面量（前者用 ``team``、后者用 ``workspace``），
+    是为了在 URL/JSON 上下文可独立解析，避免 ``team=team-A&usage_aggregation=team`` 这类
+    组合造成的语义模糊。
+    """
 
     SYSTEM = "system"
     TEAM = "team"

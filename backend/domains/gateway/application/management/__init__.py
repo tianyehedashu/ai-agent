@@ -5,7 +5,6 @@ from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
     GatewayPlanUsageReadService,
     GatewayUsageReadService,
-    MarginGroupBy,
     MarginGroupItem,
     MarginSummaryReadModel,
     ProviderPlanCostReadModel,
@@ -13,6 +12,7 @@ from domains.gateway.application.management.usage_reads import (
     UserQuotaReadModel,
 )
 from domains.gateway.application.management.writes import GatewayManagementWriteService
+from domains.gateway.domain.margin_read_model import MarginGroupBy
 
 __all__ = [
     "EntitlementUsageReadModel",

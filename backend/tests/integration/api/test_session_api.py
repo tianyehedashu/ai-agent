@@ -199,7 +199,7 @@ class TestSessionAPI:
         )
 
         # Assert
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     @pytest.mark.asyncio
     async def test_get_session_by_id(self, client: AsyncClient, auth_headers: dict):

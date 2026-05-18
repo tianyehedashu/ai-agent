@@ -1,7 +1,19 @@
 /** 与 backend GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES 一致 */
 import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway'
 
-export type ModelScopeTab = 'personal' | 'team'
+/**
+ * 网关页面通用 Scope Tab：与后端 `Team.kind` 字面量对齐。
+ *
+ * - `personal`：个人团队（每用户一个，单成员）
+ * - `shared`：共享团队（多人协作）
+ *
+ * 与 `BudgetScope.team`、`CredentialScope.team`（写入归属层级）正交，
+ * URL 字面量虽不同（`shared` vs `team`），语义相互独立。
+ */
+export type GatewayScopeTab = 'personal' | 'shared'
+
+/** @deprecated 使用 `GatewayScopeTab`；保留单版本兼容旧 import。 */
+export type ModelScopeTab = GatewayScopeTab
 
 export const MANUAL_PRESET = '__manual__'
 export const NO_CREDENTIAL = '__none__'
@@ -18,6 +30,27 @@ export const CAPABILITIES = [
   'audio_speech',
   'rerank',
 ] as const
+
+export type GatewayCapability = (typeof CAPABILITIES)[number]
+
+/** 团队模型 capability 字段的中文展示（API 仍用英文枚举值） */
+export const CAPABILITY_LABELS: Record<GatewayCapability, string> = {
+  chat: '聊天 / 文本生成',
+  embedding: '向量 Embedding',
+  image: '图片理解',
+  video_generation: '视频生成',
+  moderation: '内容审核',
+  audio_transcription: '语音转文字',
+  audio_speech: '文字转语音',
+  rerank: '重排序',
+}
+
+export function capabilityLabel(capability: string): string {
+  if (capability in CAPABILITY_LABELS) {
+    return CAPABILITY_LABELS[capability as GatewayCapability]
+  }
+  return capability
+}
 
 export const MODEL_TYPE_LABELS: Record<string, string> = {
   text: '文本',
@@ -43,8 +76,11 @@ export type HealthFilter = 'all' | 'success' | 'failed' | 'unknown'
 export const USAGE_PERIOD_DAYS = [1, 7, 30] as const
 export type UsagePeriodDays = (typeof USAGE_PERIOD_DAYS)[number]
 
-export function parseScopeTab(raw: string | null): ModelScopeTab {
-  return raw === 'personal' || raw === 'team' ? raw : 'team'
+export function parseScopeTab(raw: string | null): GatewayScopeTab {
+  if (raw === 'personal') return 'personal'
+  if (raw === 'shared') return 'shared'
+  if (raw === 'team') return 'shared'
+  return 'shared'
 }
 
 /** 模型页子视图：清单 / 注册 / 编辑（个人详情深链） */

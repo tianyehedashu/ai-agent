@@ -9,6 +9,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamMemberAdd,
@@ -123,7 +124,7 @@ class GatewayModelCreate(BaseModel):
         ...,
         min_length=1,
         max_length=200,
-        description="虚拟模型别名；同一工作区内 (name) 唯一",
+        description="虚拟模型别名；同一团队内 (name) 唯一",
     )
     capability: str = Field(
         ...,
@@ -147,7 +148,7 @@ class GatewayModelUpdate(BaseModel):
         default=None,
         min_length=1,
         max_length=200,
-        description="虚拟模型别名；同一工作区内 (team_id, name) 唯一",
+        description="虚拟模型别名；同一团队内 (team_id, name) 唯一",
     )
     real_model: str | None = None
     credential_id: uuid.UUID | None = None
@@ -759,6 +760,8 @@ class MarginSummaryResponse(BaseModel):
     total_revenue_usd: Decimal
     total_cost_usd: Decimal
     total_margin_usd: Decimal
+    group_by: MarginGroupBy = "credential"
+    group_column_label: str = "凭据"
     items: list[MarginGroupItemResponse] = Field(default_factory=list)
 
 

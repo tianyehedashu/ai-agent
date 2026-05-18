@@ -1,4 +1,8 @@
-"""RequestLogRepository 用量聚合（route / deployment / credential）单测。"""
+"""RequestLogRepository 用量聚合（route / deployment / credential）单测。
+
+Stage 2 起：仓储 5 对镜像方法收敛为 5 个 axis-based 方法；本套测试基于 ``UsageAxis``
+工厂方法构造维度。
+"""
 
 from __future__ import annotations
 
@@ -10,35 +14,38 @@ import uuid
 
 import pytest
 
+from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )
 
 
 @pytest.mark.asyncio
-async def test_aggregate_by_route_names_for_team_empty_skips_execute() -> None:
+async def test_aggregate_by_route_names_workspace_empty_skips_execute() -> None:
     session = AsyncMock(spec=["execute"])
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
-    out = await repo.aggregate_by_route_names_for_team(uuid.uuid4(), [], now, now)
-    assert out == {}
-    session.execute.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_aggregate_by_deployment_gateway_model_ids_for_team_empty_skips_execute() -> None:
-    session = AsyncMock(spec=["execute"])
-    repo = RequestLogRepository(session)
-    now = datetime.now(UTC)
-    out = await repo.aggregate_by_deployment_gateway_model_ids_for_team(
-        uuid.uuid4(), [], now, now
+    out = await repo.aggregate_by_route_names_by_axis(
+        UsageAxis.workspace(uuid.uuid4()), [], now, now
     )
     assert out == {}
     session.execute.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_aggregate_by_route_names_for_team_fills_defaults_and_rows() -> None:
+async def test_aggregate_by_deployment_ids_workspace_empty_skips_execute() -> None:
+    session = AsyncMock(spec=["execute"])
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    out = await repo.aggregate_by_deployment_ids_by_axis(
+        UsageAxis.workspace(uuid.uuid4()), [], now, now
+    )
+    assert out == {}
+    session.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_aggregate_by_route_names_workspace_fills_defaults_and_rows() -> None:
     team_id = uuid.uuid4()
     session = AsyncMock()
     row = SimpleNamespace(
@@ -54,8 +61,8 @@ async def test_aggregate_by_route_names_for_team_fills_defaults_and_rows() -> No
     repo = RequestLogRepository(session)
     start = datetime.now(UTC) - timedelta(days=1)
     end = datetime.now(UTC)
-    out = await repo.aggregate_by_route_names_for_team(
-        team_id, ["m-a", "m-b"], start, end
+    out = await repo.aggregate_by_route_names_by_axis(
+        UsageAxis.workspace(team_id), ["m-a", "m-b"], start, end
     )
     assert out["m-a"]["requests"] == 3
     assert out["m-a"]["cost_usd"] == Decimal("0.05")
@@ -64,7 +71,7 @@ async def test_aggregate_by_route_names_for_team_fills_defaults_and_rows() -> No
 
 
 @pytest.mark.asyncio
-async def test_aggregate_by_deployment_gateway_model_ids_for_user_maps_by_id() -> None:
+async def test_aggregate_by_deployment_ids_user_axis_maps_by_id() -> None:
     user_id = uuid.uuid4()
     mid = uuid.uuid4()
     session = AsyncMock()
@@ -80,8 +87,8 @@ async def test_aggregate_by_deployment_gateway_model_ids_for_user_maps_by_id() -
     session.execute = AsyncMock(return_value=result)
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
-    out = await repo.aggregate_by_deployment_gateway_model_ids_for_user(
-        user_id, [mid], now, now
+    out = await repo.aggregate_by_deployment_ids_by_axis(
+        UsageAxis.user(user_id), [mid], now, now
     )
     assert out[mid]["requests"] == 1
     assert out[mid]["input_tokens"] == 2

@@ -2,6 +2,7 @@
  * AI Gateway · 概览
  *
  * 用量 KPI（与 GET /dashboard/summary 对齐；usage_aggregation=user|workspace）。
+ * 切片产品文案：workspace=团队（按当前选中团队），user=我（跨团队按当前账号）。
  */
 
 import { useMemo, useState } from 'react'
@@ -11,7 +12,8 @@ import { useQuery } from '@tanstack/react-query'
 import { gatewayApi, type GatewayUsageAggregation, type MarginSummary } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { GATEWAY_USAGE_AGGREGATION_OPTIONS } from '@/features/gateway-usage/usage-aggregation'
+import { marginGroupRowTitle } from '@/features/gateway-usage/credential-display'
+import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 
 const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] = [
   { value: '1d', days: 1, label: '24 小时' },
@@ -53,22 +55,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">概览</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-            {GATEWAY_USAGE_AGGREGATION_OPTIONS.map((option) => (
-              <Button
-                key={option.value}
-                size="sm"
-                variant={usageAggregation === option.value ? 'default' : 'ghost'}
-                className="h-7 px-3 text-xs"
-                title={option.description}
-                onClick={() => {
-                  setUsageAggregation(option.value)
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+          <UsageAggregationToggle value={usageAggregation} onChange={setUsageAggregation} />
           <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
             {RANGE_DAYS.map((r) => (
               <Button
@@ -169,6 +156,7 @@ function MarginSummaryCard({
   const gross = coalesceNumber(margin?.total_margin_usd)
   const rate = revenue > 0 ? gross / revenue : 0
   const topItems = margin?.items.slice(0, 5) ?? []
+  const groupColumnLabel = margin?.group_column_label ?? '凭据'
 
   return (
     <Card>
@@ -194,7 +182,7 @@ function MarginSummaryCard({
             <table className="w-full text-sm">
               <thead className="border-b text-xs text-muted-foreground">
                 <tr>
-                  <th className="py-2 text-left font-medium">维度</th>
+                  <th className="py-2 text-left font-medium">{groupColumnLabel}</th>
                   <th className="py-2 text-right font-medium">收入</th>
                   <th className="py-2 text-right font-medium">成本</th>
                   <th className="py-2 text-right font-medium">毛利</th>
@@ -202,8 +190,13 @@ function MarginSummaryCard({
               </thead>
               <tbody>
                 {topItems.map((item) => (
-                  <tr key={item.group_key} className="border-b last:border-0">
-                    <td className="py-2 font-mono text-xs">{item.label}</td>
+                  <tr key={item.group_key || '__unlinked__'} className="border-b last:border-0">
+                    <td
+                      className="py-2 text-sm"
+                      title={marginGroupRowTitle(item.label, item.group_key)}
+                    >
+                      {item.label}
+                    </td>
                     <td className="py-2 text-right tabular-nums">
                       ${coalesceNumber(item.revenue_usd).toFixed(4)}
                     </td>

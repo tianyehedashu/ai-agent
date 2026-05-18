@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { parseScopeTab } from './constants'
 import {
   credentialDetailAddModelsHref,
   credentialDetailHref,
@@ -16,22 +17,22 @@ import {
 
 describe('gateway model paths', () => {
   it('teamModelsFilteredHref without credential', () => {
-    expect(teamModelsFilteredHref()).toBe('/gateway/models?tab=team')
+    expect(teamModelsFilteredHref()).toBe('/gateway/models?tab=shared')
   })
 
   it('teamModelsFilteredHref with credential', () => {
-    expect(teamModelsFilteredHref('cred-1')).toBe('/gateway/models?tab=team&credentialId=cred-1')
+    expect(teamModelsFilteredHref('cred-1')).toBe('/gateway/models?tab=shared&credentialId=cred-1')
   })
 
   it('teamModelsRegisterHref locks credential', () => {
     expect(teamModelsRegisterHref('cred-1')).toBe(
-      '/gateway/models?tab=team&credentialId=cred-1&view=register'
+      '/gateway/models?tab=shared&credentialId=cred-1&view=register'
     )
   })
 
   it('teamModelDetailHref includes credential context', () => {
     expect(teamModelDetailHref('model-1', { credentialId: 'cred-1' })).toBe(
-      '/gateway/models/model-1?tab=team&credentialId=cred-1'
+      '/gateway/models/model-1?tab=shared&credentialId=cred-1'
     )
   })
 
@@ -45,7 +46,7 @@ describe('gateway model paths', () => {
 
   it('teamModelsIndexHref matches filtered without credential', () => {
     expect(teamModelsIndexHref()).toBe(teamModelsFilteredHref())
-    expect(credentialsTeamListHref()).toBe('/gateway/credentials?tab=team')
+    expect(credentialsTeamListHref()).toBe('/gateway/credentials?tab=shared')
   })
 
   it('personalModelsIndexHref', () => {
@@ -62,5 +63,24 @@ describe('gateway model paths', () => {
 
   it('personalModelEditHref', () => {
     expect(personalModelEditHref('pm-1')).toBe('/gateway/models/pm-1?tab=personal&view=edit')
+  })
+})
+
+describe('parseScopeTab', () => {
+  it('returns shared for null/unknown raw', () => {
+    expect(parseScopeTab(null)).toBe('shared')
+    expect(parseScopeTab('garbage')).toBe('shared')
+  })
+
+  it('returns personal for personal raw', () => {
+    expect(parseScopeTab('personal')).toBe('personal')
+  })
+
+  it('returns shared for shared raw', () => {
+    expect(parseScopeTab('shared')).toBe('shared')
+  })
+
+  it('compatibility: legacy ?tab=team maps to shared', () => {
+    expect(parseScopeTab('team')).toBe('shared')
   })
 })

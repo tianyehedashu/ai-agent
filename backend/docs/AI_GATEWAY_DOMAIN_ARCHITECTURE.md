@@ -44,7 +44,7 @@ domains/gateway/
 │   ├── ports.py                     # GatewayProxyProtocol、GatewayCallContext（跨域依赖倒置）
 │   ├── gateway_proxy_factory.py     # get_gateway_proxy() → GatewayBridge 单例
 │   ├── internal_bridge_actor.py     # resolve_internal_gateway_user_id / team_id
-│   ├── bridge_attribution.py        # GatewayBridgeAttribution（内部桥接计费工作区）
+│   ├── bridge_attribution.py        # GatewayBridgeAttribution（内部桥接计费团队 BillingTeam）
 │   ├── litellm_bridge_payload.py    # LiteLLM kwargs → 桥接参数拆分
 │   ├── internal_bridge.py           # GatewayBridge 实现
 │   ├── anthropic_openai_bridge.py   # Anthropic ↔ OpenAI 形 JSON（对外 /v1/messages）
@@ -163,19 +163,23 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 | 域 / 层 | 职责 | 与本节相关类型 |
 |---------|------|----------------|
-| **Tenancy** | `Team`（`kind=personal|shared`）、成员、`ManagementTeamContext`；**personal team 仍是 `Team` 表的一行**，用户通过成员关系属于该工作区。 | `Team.id` 可作为当前工作区 ID。 |
+| **Tenancy** | `Team`（`kind=personal|shared`）、成员、`ManagementTeamContext`；**personal team 仍是 `Team` 表的一行**，用户通过成员关系属于该团队。 | `Team.id` 可作为当前团队 ID。 |
 | **Gateway 管理读** | 请求日志列表/详情/大盘摘要的**切片维度**；**不**改变 Tenancy 实体。 | `UsageAggregation`（`domains/gateway/domain/usage_read_model.py`）。 |
 | **Identity** | JWT 主体 `user_id`。 | 与 `usage_aggregation=user` 聚合键一致。 |
-| **Gateway 应用（内部桥接）** | `GatewayCallContext`、`GatewayBridgeAttribution`：内部桥接的 **Actor** 与 **计费工作区**（日志 `team_id`）。 | 与 HTTP `usage_aggregation` **正交**（桥接不携带该查询参数）。 |
+| **Gateway 应用（内部桥接）** | `GatewayCallContext`、`GatewayBridgeAttribution`：内部桥接的 **Actor** 与 **计费团队**（BillingTeam，日志 `team_id`）。 | 与 HTTP `usage_aggregation` **正交**（桥接不携带该查询参数）。 |
 
 **`usage_aggregation`（查询参数，默认 `workspace`）**
 
-| 取值 | 含义 |
-|------|------|
-| `workspace` | 按 **`X-Team-Id` → CurrentTeam.team_id`** 过滤/聚合；该 ID 可为 **personal** 或 **shared** 工作区。 |
-| `user` | 按当前登录 **`user_id`** 跨工作区聚合/过滤（与日志行 `user_id` 对齐）；**不**表示「无团队用户」。 |
+| 取值 | 产品文案 | 含义 |
+|------|---------|------|
+| `workspace` | **团队** | 按 **`X-Team-Id` → CurrentTeam.team_id`** 过滤/聚合；该 ID 可为 **personal** 或 **shared** 团队。 |
+| `user` | **我** | 按当前登录 **`user_id`** 跨团队聚合/过滤（与日志行 `user_id` 对齐）；**不**表示「无团队用户」。 |
 
-**与预算 `BudgetUpsert.scope`（`system|team|key|user`）正交**：后者表示预算作用域类型，禁止与 `UsageAggregation` 混用同一组字面量。
+**前端 ScopeTab 与 Team.kind 对齐**：前端 URL `?tab=` 使用 `personal | shared` 字面量与后端 `Team.kind` 完全对齐；旧 `?tab=team` 由 `parseScopeTab` 自动兼容映射至 `shared`。注意 `pages/gateway/budgets.tsx` 中 `<SelectItem value="team">` 是 `BudgetScope.team`（预算归属层级），与 ScopeTab 无关。
+
+**与预算 `BudgetUpsert.scope`（`system|team|key|user`）正交**：后者表示预算作用域类型，禁止与 `UsageAggregation` 混用同一组字面量。`UsageAggregation` 字面量保留 `workspace` 而非改为 `team`，正是为了在 URL/JSON 上下文与 `BudgetScope.team` 独立解析（详见 `domains/gateway/domain/types.py` 的 `BudgetScope` docstring）。
+
+**Stage 2 起**：仓储层（`RequestLogRepository`）按 `UsageAxis` 值对象统一访问 `gateway_request_logs`，由应用层将 `UsageAggregation` 映射为 `UsageAxis`。
 
 **破坏性变更（已无兼容）**：`GET /logs`、`GET /logs/{log_id}`、`GET /dashboard/summary` **已移除**查询参数 `scope=team|personal`，客户端必须改用 **`usage_aggregation=workspace|user`**。
 

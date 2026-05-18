@@ -6,13 +6,13 @@ export const GATEWAY_USAGE_AGGREGATION_OPTIONS: readonly {
   description: string
 }[] = [
   {
-    value: 'user',
-    label: '按账号',
-    description: '按当前登录账号跨空间统计',
+    value: 'workspace',
+    label: '团队',
+    description: '按顶部团队切换器选中的当前团队（含个人/共享）统计',
   },
   {
-    value: 'workspace',
-    label: '当前空间',
-    description: '按顶部团队切换器选中的个人/团队空间统计',
+    value: 'user',
+    label: '我',
+    description: '按当前登录账号跨团队统计',
   },
 ]

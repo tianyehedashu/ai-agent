@@ -107,7 +107,7 @@ class TestSessionList:
         response = await dev_client.get("/api/v1/sessions/?limit=101", headers=auth_headers)
 
         # Assert
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     @pytest.mark.asyncio
     async def test_list_sessions_skip_validation(self, dev_client: AsyncClient, auth_headers: dict):
@@ -116,7 +116,7 @@ class TestSessionList:
         response = await dev_client.get("/api/v1/sessions/?skip=-1", headers=auth_headers)
 
         # Assert
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     @pytest.mark.asyncio
     async def test_list_sessions_response_format(self, dev_client: AsyncClient, auth_headers: dict):

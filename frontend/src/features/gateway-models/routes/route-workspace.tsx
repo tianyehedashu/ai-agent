@@ -91,7 +91,7 @@ export function RouteWorkspace(): React.JSX.Element {
           虚拟路由定义客户端请求的 <span className="font-mono">model</span> 名与主模型池、Fallback
           及 Router 策略。需先在{' '}
           <Link
-            to="/gateway/models?tab=team"
+            to="/gateway/models?tab=shared"
             className="text-primary underline-offset-4 hover:underline"
           >
             模型管理

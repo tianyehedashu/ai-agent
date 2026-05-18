@@ -11,7 +11,6 @@ from domains.gateway.application.management.usage_metrics import merge_gateway_u
 from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
     GatewayPlanUsageReadService,
-    MarginGroupBy,
     MarginSummaryReadModel,
     ProviderPlanCostReadModel,
 )
@@ -21,6 +20,8 @@ from domains.gateway.domain.errors import (
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
+from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.infrastructure.models.entitlement_plan import (
     EntitlementPlan,
@@ -179,6 +180,29 @@ class GatewayManagementReadService:
             budgets.extend(await self._budgets.list_for_scope("user", user_id))
         return budgets
 
+    @staticmethod
+    def _resolve_usage_axis(
+        ctx: ManagementTeamContext,
+        aggregation: UsageAggregation,
+        *,
+        vkey_id: UUID | None = None,
+    ) -> UsageAxis:
+        """把"产品视角"的 ``UsageAggregation`` 映射为仓储层 ``UsageAxis``。
+
+        - ``USER`` → ``UsageAxis.user(ctx.user_id)``。
+        - ``WORKSPACE`` → ``UsageAxis.workspace(ctx.team_id)``；对"团队普通成员 + 未指定 vkey_id"
+          的场景附加 ``member_user_id`` 子约束（仅可见自己创建的非系统 vkey 行 + 自己的平台入站行）。
+        """
+        if aggregation == UsageAggregation.USER:
+            return UsageAxis.user(ctx.user_id)
+        member_only = (
+            not ctx.is_platform_admin and ctx.team_role == "member" and vkey_id is None
+        )
+        return UsageAxis.workspace(
+            ctx.team_id,
+            member_user_id=ctx.user_id if member_only else None,
+        )
+
     async def list_request_logs(
         self,
         ctx: ManagementTeamContext,
@@ -193,38 +217,18 @@ class GatewayManagementReadService:
         vkey_id: UUID | None,
         credential_id: UUID | None = None,
     ) -> tuple[list[Any], int]:
-        if usage_aggregation == UsageAggregation.USER:
-            items, total = await self._logs.list_for_user(
-                ctx.user_id,
-                start=start,
-                end=end,
-                status=status_filter,
-                capability=capability,
-                vkey_id=vkey_id,
-                credential_id=credential_id,
-                page=page,
-                page_size=page_size,
-            )
-        else:
-            apply_member_workspace_scope = (
-                usage_aggregation == UsageAggregation.WORKSPACE
-                and not ctx.is_platform_admin
-                and ctx.team_role == "member"
-                and vkey_id is None
-            )
-            items, total = await self._logs.list_for_team(
-                ctx.team_id,
-                start=start,
-                end=end,
-                status=status_filter,
-                capability=capability,
-                vkey_id=vkey_id,
-                credential_id=credential_id,
-                page=page,
-                page_size=page_size,
-                workspace_member_user_id=ctx.user_id if apply_member_workspace_scope else None,
-            )
-        return items, total
+        axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=vkey_id)
+        return await self._logs.list_by_axis(
+            axis,
+            start=start,
+            end=end,
+            status=status_filter,
+            capability=capability,
+            vkey_id=vkey_id,
+            credential_id=credential_id,
+            page=page,
+            page_size=page_size,
+        )
 
     async def get_request_log(
         self,
@@ -233,12 +237,15 @@ class GatewayManagementReadService:
         *,
         usage_aggregation: UsageAggregation,
     ) -> Any | None:
+        # 详情访问 axis **不**附带 member_user_id：单条查询只用基础 team_id/user_id 约束，
+        # 团队成员可见性由下方应用层显式判断，未命中走 PermissionDenied 语义而非 NotFound。
         if usage_aggregation == UsageAggregation.USER:
-            return await self._logs.get_for_user(log_id, ctx.user_id)
-
-        record = await self._logs.get_for_team(log_id, ctx.team_id)
-        if record is None:
-            return None
+            axis = UsageAxis.user(ctx.user_id)
+        else:
+            axis = UsageAxis.workspace(ctx.team_id)
+        record = await self._logs.get_by_axis(axis, log_id)
+        if record is None or usage_aggregation == UsageAggregation.USER:
+            return record
         if not ctx.is_platform_admin and ctx.team_role == "member":
             if record.vkey_id is None:
                 allowed = record.user_id == ctx.user_id
@@ -265,9 +272,8 @@ class GatewayManagementReadService:
         *,
         usage_aggregation: UsageAggregation,
     ) -> dict[str, Any]:
-        if usage_aggregation == UsageAggregation.USER:
-            return await self._logs.aggregate_summary_for_user(ctx.user_id, start, end)
-        return await self._logs.aggregate_summary(ctx.team_id, start, end)
+        axis = self._resolve_usage_axis(ctx, usage_aggregation)
+        return await self._logs.aggregate_summary_by_axis(axis, start, end)
 
     async def list_alert_rules(self, team_id: UUID) -> list[GatewayAlertRule]:
         return await self._alerts.list_rules_by_team(team_id)
@@ -312,17 +318,19 @@ class GatewayManagementReadService:
         models_sorted = sorted(models, key=lambda m: (m.name, str(m.id)))[:500]
         route_names = [m.name for m in models_sorted]
         model_ids = [m.id for m in models_sorted]
-        by_ws_route = await self._logs.aggregate_by_route_names_for_team(
-            ctx.team_id, route_names, start, end
+        ws_axis = UsageAxis.workspace(ctx.team_id)
+        u_axis = UsageAxis.user(ctx.user_id)
+        by_ws_route = await self._logs.aggregate_by_route_names_by_axis(
+            ws_axis, route_names, start, end
         )
-        by_user_route = await self._logs.aggregate_by_route_names_for_user(
-            ctx.user_id, route_names, start, end
+        by_user_route = await self._logs.aggregate_by_route_names_by_axis(
+            u_axis, route_names, start, end
         )
-        by_ws_dep = await self._logs.aggregate_by_deployment_gateway_model_ids_for_team(
-            ctx.team_id, model_ids, start, end
+        by_ws_dep = await self._logs.aggregate_by_deployment_ids_by_axis(
+            ws_axis, model_ids, start, end
         )
-        by_user_dep = await self._logs.aggregate_by_deployment_gateway_model_ids_for_user(
-            ctx.user_id, model_ids, start, end
+        by_user_dep = await self._logs.aggregate_by_deployment_ids_by_axis(
+            u_axis, model_ids, start, end
         )
         items: list[dict[str, Any]] = []
         for m in models_sorted:

@@ -6,9 +6,10 @@
     可写入日志 ``gateway_user_id`` 的注册用户 UUID；来自
     ``resolve_internal_gateway_user_id``（PermissionContext 或委派配置）。
 
-**BillingWorkspace（计费工作区）**
+**BillingTeam（计费团队）**
     与 ``gateway_request_logs.team_id``、LiteLLM metadata ``gateway_team_id`` 对齐；
     ``None`` 表示未指定，由 ``GatewayBridge`` 回退为 ``ensure_personal_team(actor)``。
+    可为 ``Team.kind=personal`` 或 ``shared`` 的 Team。
 
 不变量
 ------
@@ -39,10 +40,10 @@ def resolve_gateway_bridge_attribution(
     *,
     explicit_billing_team_id: uuid.UUID | None = None,
 ) -> GatewayBridgeAttribution:
-    """解析桥接归因：计费工作区优先级为显式参数 > PermissionContext.team_id > None。
+    """解析桥接归因：计费团队优先级为显式参数 > PermissionContext.team_id > None。
 
     Args:
-        explicit_billing_team_id: 调用方显式指定的计费工作区（通常来自已构造的
+        explicit_billing_team_id: 调用方显式指定的计费团队（通常来自已构造的
             ``GatewayCallContext.team_id``）；一般内部 LLM 路径传 ``None``。
     """
     actor = resolve_internal_gateway_user_id()

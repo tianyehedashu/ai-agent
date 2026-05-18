@@ -324,7 +324,7 @@ export function TeamModelsWorkspace({
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>
               在{' '}
-              <Link to="/gateway/credentials?tab=team" className="text-primary underline">
+              <Link to="/gateway/credentials?tab=shared" className="text-primary underline">
                 凭据管理
               </Link>{' '}
               添加并启用团队凭据

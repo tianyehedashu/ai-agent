@@ -110,8 +110,8 @@ class ProxyContext:
     """单次 OpenAI 兼容代理调用的上下文。
 
     Attributes:
-        team_id: **计费工作区**（与日志 ``gateway_team_id``、``gateway_request_logs.team_id``
-            一致），为一次调用归属的租户键。
+        team_id: **计费团队**（BillingTeam，与日志 ``gateway_team_id``、
+            ``gateway_request_logs.team_id`` 一致），为一次调用归属的租户键。
         user_id: 触发用户（可为 None，视入口而定）。
         vkey: 虚拟 Key 主体；内部 system vkey 走同字段；平台 ``sk-*`` 入站时可为 None。
         capability: 网关能力枚举。

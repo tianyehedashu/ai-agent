@@ -5,20 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.domain.margin_read_model import (
+    MarginGroupBy,
+    margin_group_column_label,
+    resolve_margin_group_label,
+)
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.repositories.credential_repository import (
+    ProviderCredentialRepository,
+)
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
 )
-from domains.tenancy.infrastructure.models.team import Team
-
-MarginGroupBy = Literal["credential", "model", "team"]
+from domains.tenancy.application.team_service import TeamService
 
 
 @dataclass(frozen=True)
@@ -98,13 +103,19 @@ class GatewayUsageReadService:
         window_days: int = 90,
     ) -> list[UsageLogReadModel]:
         since = datetime.now(UTC) - timedelta(days=window_days)
-        team_ids_subq = select(Team.id).where(Team.owner_user_id == user_id)
+        member_teams = await TeamService(self._session).list_user_teams(user_id)
+        team_ids = [t.id for t in member_teams]
+        scope_filter = (
+            or_(
+                GatewayRequestLog.user_id == user_id,
+                GatewayRequestLog.team_id.in_(team_ids),
+            )
+            if team_ids
+            else GatewayRequestLog.user_id == user_id
+        )
         stmt = (
             select(GatewayRequestLog)
-            .where(
-                (GatewayRequestLog.user_id == user_id)
-                | (GatewayRequestLog.team_id.in_(team_ids_subq))
-            )
+            .where(scope_filter)
             .where(GatewayRequestLog.created_at >= since)
             .order_by(GatewayRequestLog.created_at.desc())
             .offset(offset)
@@ -180,11 +191,16 @@ class MarginSummaryReadModel:
     period_end: datetime
     total_revenue_usd: Decimal
     total_cost_usd: Decimal
+    group_by: MarginGroupBy = "credential"
     items: list[MarginGroupItem] = field(default_factory=list)
 
     @property
     def total_margin_usd(self) -> Decimal:
         return self.total_revenue_usd - self.total_cost_usd
+
+    @property
+    def group_column_label(self) -> str:
+        return margin_group_column_label(self.group_by)
 
 
 def _entitlement_revenue_decimal(
@@ -313,32 +329,55 @@ class GatewayPlanUsageReadService:
             "team": GatewayRequestLog.team_id,
         }[group_by]
 
-        stmt = (
-            select(
-                group_col.label("group_key"),
-                func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
-                func.coalesce(func.sum(GatewayRequestLog.input_tokens), 0).label("input_tokens"),
-                func.coalesce(func.sum(GatewayRequestLog.output_tokens), 0).label("output_tokens"),
-                func.count(GatewayRequestLog.id).label("requests"),
-                func.coalesce(
-                    func.sum(
-                        # 仅含 entitlement_plan_id 非空行的 cost 占比作为客户消费基准
-                        # （unit_price 在缺省时按上游成本等价；该汇总在 group 级别由调用方扩展）
-                        GatewayRequestLog.cost_usd,
+        if group_by == "credential":
+            stmt = (
+                select(
+                    group_col.label("group_key"),
+                    func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
+                    func.max(GatewayRequestLog.credential_name_snapshot).label(
+                        "credential_name_snapshot"
                     ),
-                    0,
-                ).label("entitlement_cost_usd"),
-            )
-            .where(
-                and_(
-                    GatewayRequestLog.team_id == team_id,
-                    GatewayRequestLog.created_at >= start,
-                    GatewayRequestLog.created_at <= end,
                 )
+                .where(
+                    and_(
+                        GatewayRequestLog.team_id == team_id,
+                        GatewayRequestLog.created_at >= start,
+                        GatewayRequestLog.created_at <= end,
+                    )
+                )
+                .group_by(group_col)
             )
-            .group_by(group_col)
-        )
+        else:
+            stmt = (
+                select(
+                    group_col.label("group_key"),
+                    func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
+                )
+                .where(
+                    and_(
+                        GatewayRequestLog.team_id == team_id,
+                        GatewayRequestLog.created_at >= start,
+                        GatewayRequestLog.created_at <= end,
+                    )
+                )
+                .group_by(group_col)
+            )
         rows = (await self._session.execute(stmt)).all()
+
+        credential_names: dict[UUID, str] = {}
+        if group_by == "credential":
+            cred_ids = [row.group_key for row in rows if row.group_key is not None]
+            if cred_ids:
+                creds = await ProviderCredentialRepository(self._session).list_by_ids(cred_ids)
+                credential_names = {c.id: c.name for c in creds}
+
+        team_names: dict[UUID, str] = {}
+        if group_by == "team":
+            grouped_team_ids = [row.group_key for row in rows if row.group_key is not None]
+            if grouped_team_ids:
+                team_names = await TeamService(self._session).get_display_names_by_ids(
+                    grouped_team_ids
+                )
 
         items: list[MarginGroupItem] = []
         total_cost = Decimal("0")
@@ -347,10 +386,19 @@ class GatewayPlanUsageReadService:
             cost = Decimal(row.cost_usd or 0)
             # 默认 revenue = cost；后续可叠加按 entitlement_plan unit_price 计算的精确值
             revenue = cost
-            label = "(unknown)" if row.group_key is None else str(row.group_key)
+            cred_snap = (
+                row.credential_name_snapshot if group_by == "credential" else None
+            )
+            group_key_str, label = resolve_margin_group_label(
+                group_by,
+                row.group_key,
+                credential_names=credential_names,
+                credential_name_snapshot=cred_snap,
+                team_names=team_names,
+            )
             items.append(
                 MarginGroupItem(
-                    group_key=str(row.group_key) if row.group_key is not None else "",
+                    group_key=group_key_str,
                     label=label,
                     revenue_usd=revenue,
                     cost_usd=cost,
@@ -359,11 +407,14 @@ class GatewayPlanUsageReadService:
             total_cost += cost
             total_revenue += revenue
 
+        items.sort(key=lambda i: i.cost_usd, reverse=True)
+
         return MarginSummaryReadModel(
             period_start=start,
             period_end=end,
             total_revenue_usd=total_revenue,
             total_cost_usd=total_cost,
+            group_by=group_by,
             items=items,
         )
 

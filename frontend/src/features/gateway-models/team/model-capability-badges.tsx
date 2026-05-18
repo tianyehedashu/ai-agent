@@ -4,7 +4,7 @@ import type { GatewayModel } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
-import { MODEL_TYPE_LABELS } from '../constants'
+import { MODEL_TYPE_LABELS, capabilityLabel } from '../constants'
 
 export function ModelCapabilityBadges({
   model,
@@ -22,8 +22,8 @@ export function ModelCapabilityBadges({
   return (
     <div className={compact ? 'flex flex-wrap items-center gap-1' : 'flex flex-col gap-1.5'}>
       <div className="flex items-center gap-1">
-        <Badge variant="outline" className="text-xs">
-          {model.capability}
+        <Badge variant="outline" className="text-xs" title={model.capability}>
+          {capabilityLabel(model.capability)}
         </Badge>
         {!compact ? (
           <TooltipProvider delayDuration={200}>
@@ -38,7 +38,7 @@ export function ModelCapabilityBadges({
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
-                主调用面决定 OpenAI 兼容 HTTP 入口；下方芯片为产品特性标签。
+                模型能力决定 OpenAI 兼容 HTTP 入口；下方芯片为产品特性标签。
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

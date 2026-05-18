@@ -32,6 +32,7 @@ import {
   parsePositiveInt,
   routesReferencingModel,
 } from '@/features/gateway-models/utils'
+import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { cn } from '@/lib/utils'
 
@@ -389,22 +390,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             用量 · {daysLabel}
           </h3>
-          <div className="flex w-fit gap-1 rounded-md border bg-background p-0.5">
-            {(['workspace', 'user'] as const).map((scope) => (
-              <Button
-                key={scope}
-                type="button"
-                size="sm"
-                variant={usageScope === scope ? 'default' : 'ghost'}
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setUsageScope(scope)
-                }}
-              >
-                {scope === 'workspace' ? '工作区' : '账号'}
-              </Button>
-            ))}
-          </div>
+          <UsageAggregationToggle value={usageScope} size="compact" onChange={setUsageScope} />
           {usageLoading ? (
             <p className="text-sm text-muted-foreground">加载用量…</p>
           ) : (

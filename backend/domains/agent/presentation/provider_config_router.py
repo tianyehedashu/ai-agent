@@ -89,7 +89,7 @@ def _validate_provider(provider: str) -> str:
     p = provider.lower()
     if p not in SUPPORTED_PROVIDERS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"不支持的提供商: {provider}。支持: {', '.join(sorted(SUPPORTED_PROVIDERS))}",
         )
     return p

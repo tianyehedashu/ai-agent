@@ -23,6 +23,18 @@ class GatewayModelRepository:
     async def get(self, model_id: uuid.UUID) -> GatewayModel | None:
         return await self._session.get(GatewayModel, model_id)
 
+    async def list_name_real_model_pairs_for_credential(
+        self, credential_id: uuid.UUID
+    ) -> list[tuple[str, str]]:
+        """凭据下已注册模型的 (注册别名, real_model)。"""
+        stmt = (
+            select(GatewayModel.name, GatewayModel.real_model)
+            .where(GatewayModel.credential_id == credential_id)
+            .order_by(GatewayModel.name)
+        )
+        result = await self._session.execute(stmt)
+        return [(str(row[0]), str(row[1])) for row in result.all()]
+
     async def list_for_team(
         self,
         team_id: uuid.UUID | None,

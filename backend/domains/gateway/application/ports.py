@@ -22,8 +22,8 @@ class GatewayCallContext:
 
     Attributes:
         user_id: **Actor**（操作者）— 写入日志 ``gateway_user_id`` 的注册用户 UUID。
-        team_id: **计费工作区**（BillingWorkspace）— 与 ``gateway_request_logs.team_id``、
-            LiteLLM metadata ``gateway_team_id`` 一致；可为 **personal 或 shared** 工作区的
+        team_id: **计费团队**（BillingTeam）— 与 ``gateway_request_logs.team_id``、
+            LiteLLM metadata ``gateway_team_id`` 一致；可为 **personal 或 shared** 团队的
             ``Team.id``。若为 ``None``，``GatewayBridge`` 对该用户执行 ``ensure_personal_team``
             后归账到其 personal team。
         capability: 调用能力（chat/embedding/...）
@@ -31,8 +31,8 @@ class GatewayCallContext:
         request_id: 客户端传入的 request_id（可选，用于跨服务关联）
         store_full_messages: 是否在日志中保存完整 prompt/response（覆盖 vkey 默认）
 
-    注意：HTTP 查询 ``usage_aggregation``（管理面读模型）**不**在此类型中表达；其仅影响
-    ``GET /dashboard/summary`` 等聚合接口的切片方式。
+    注意：HTTP 查询 ``usage_aggregation``（管理面读模型，产品文案"团队/我"）**不**在此类型
+    中表达；其仅影响 ``GET /dashboard/summary`` 等聚合接口的切片方式。
     """
 
     user_id: uuid.UUID

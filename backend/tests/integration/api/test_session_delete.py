@@ -208,5 +208,5 @@ class TestSessionDelete:
         # 可能返回 404 或 422，取决于 UUID 验证的实现
         assert delete_response.status_code in [
             status.HTTP_404_NOT_FOUND,
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
         ]

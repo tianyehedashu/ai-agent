@@ -214,7 +214,7 @@ class TestGatewayManagementApi:
         db_session,
         test_user: User,
     ) -> None:
-        """工作区成员：列表 total/分页与 SQL EXISTS 一致；详情权限与单条查询一致。"""
+        """团队成员视角（usage_aggregation=workspace）：列表 total/分页与 SQL EXISTS 一致；详情权限与单条查询一致。"""
         owner = test_user
         member = User(
             email=f"member_{uuid.uuid4()}@example.com",
@@ -914,7 +914,12 @@ class TestGatewayManagementApi:
         margin = r_margin.json()
         assert "total_revenue_usd" in margin
         assert "total_cost_usd" in margin
+        assert margin["group_by"] == "credential"
+        assert margin["group_column_label"] == "凭据"
         assert isinstance(margin["items"], list)
+        for row in margin["items"]:
+            assert "label" in row
+            assert row["label"] != "(unknown)"
 
     @pytest.mark.asyncio
     async def test_plan_apis_reject_cross_team_access(

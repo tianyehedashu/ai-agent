@@ -21,6 +21,19 @@ class TeamRepository:
     async def get(self, team_id: uuid.UUID) -> Team | None:
         return await self._session.get(Team, team_id)
 
+    async def get_display_names_by_ids(
+        self, team_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """批量解析团队展示名（供跨域读模型标签等）。"""
+        if not team_ids:
+            return {}
+        stmt = select(Team.id, Team.name).where(Team.id.in_(team_ids))
+        rows = (await self._session.execute(stmt)).all()
+        out: dict[uuid.UUID, str] = {}
+        for tid, name in rows:
+            out[tid] = name
+        return out
+
     async def get_personal(self, user_id: uuid.UUID) -> Team | None:
         """返回该用户的活跃 personal team（至多一条，见 partial unique index）。
 

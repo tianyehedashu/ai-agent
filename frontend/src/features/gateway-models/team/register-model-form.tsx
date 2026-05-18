@@ -25,7 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { CAPABILITIES, MANUAL_PRESET, NO_CREDENTIAL } from '@/features/gateway-models/constants'
+import { CapabilityField } from '@/features/gateway-models/capability-field'
+import { MANUAL_PRESET, NO_CREDENTIAL } from '@/features/gateway-models/constants'
 import { buildPresetTags, parsePositiveInt } from '@/features/gateway-models/utils'
 import { cn } from '@/lib/utils'
 
@@ -233,7 +234,7 @@ export function RegisterModelForm({
                   {credentials.length === 0 ? (
                     <p className="mt-2 text-sm text-muted-foreground">
                       请先到{' '}
-                      <Link to="/gateway/credentials?tab=team" className="text-primary underline">
+                      <Link to="/gateway/credentials?tab=shared" className="text-primary underline">
                         凭据管理
                       </Link>{' '}
                       添加并启用团队凭据。
@@ -255,38 +256,14 @@ export function RegisterModelForm({
                 />
               </div>
 
-              <div>
-                <div className="mb-1 flex items-center gap-1">
-                  <Label>主调用面</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" aria-label="主调用面说明">
-                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">
-                      与 OpenAI 兼容路由一致（chat、image、video_generation 等）。
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Select
-                  value={values.capability}
-                  onValueChange={(v) => {
-                    setValues({ ...values, capability: v })
-                  }}
-                >
-                  <SelectTrigger className="mt-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAPABILITIES.map((capability) => (
-                      <SelectItem key={capability} value={capability}>
-                        {capability}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <CapabilityField
+                id="register-model-capability"
+                value={values.capability}
+                onValueChange={(v) => {
+                  setValues({ ...values, capability: v })
+                }}
+                showTooltip
+              />
 
               <div className="sm:col-span-2">
                 <div className="mb-1 flex items-center gap-1">

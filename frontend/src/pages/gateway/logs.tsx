@@ -19,26 +19,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { GATEWAY_USAGE_AGGREGATION_OPTIONS } from '@/features/gateway-usage/usage-aggregation'
+import {
+  credentialDisplayText,
+  credentialDisplayTitle,
+} from '@/features/gateway-usage/credential-display'
+import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 
 const PAGE_SIZE = 100
 
 /** 表头与行共用，避免列宽漂移 */
 const LOG_GRID_COLS = 'grid grid-cols-[150px_120px_112px_88px_72px_96px_80px_72px_minmax(0,1fr)]'
-
-function credentialCellText(item: GatewayLogItem): string {
-  const name = item.credential_name_snapshot?.trim()
-  if (name) return name
-  if (item.credential_id) return `${item.credential_id.slice(0, 8)}…`
-  return '—'
-}
-
-function credentialCellTitle(item: GatewayLogItem): string | undefined {
-  if (item.credential_name_snapshot?.trim() && item.credential_id) {
-    return `${item.credential_name_snapshot.trim()} · ${item.credential_id}`
-  }
-  return item.credential_id ?? item.credential_name_snapshot ?? undefined
-}
 
 export default function GatewayLogsPage(): React.JSX.Element {
   const parentRef = useRef<HTMLDivElement>(null)
@@ -100,23 +90,13 @@ export default function GatewayLogsPage(): React.JSX.Element {
             按月分区表 + 虚拟滚动，最近 {items.length.toLocaleString()} 条
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-          {GATEWAY_USAGE_AGGREGATION_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              size="sm"
-              variant={usageAggregation === option.value ? 'default' : 'ghost'}
-              className="h-7 px-3 text-xs"
-              title={option.description}
-              onClick={() => {
-                setUsageAggregation(option.value)
-                setSelectedId(null)
-              }}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <UsageAggregationToggle
+          value={usageAggregation}
+          onChange={(next) => {
+            setUsageAggregation(next)
+            setSelectedId(null)
+          }}
+        />
       </div>
 
       <Card className="overflow-hidden">
@@ -188,8 +168,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
                       {new Date(item.created_at).toLocaleString()}
                     </div>
                     <div className="truncate font-mono">{item.real_model ?? '—'}</div>
-                    <div className="truncate" title={credentialCellTitle(item)}>
-                      {credentialCellText(item)}
+                    <div className="truncate" title={credentialDisplayTitle(item)}>
+                      {credentialDisplayText(item)}
                     </div>
                     <div className="truncate">{item.capability}</div>
                     <div>

@@ -107,7 +107,7 @@ class TestSessionTitle:
         )
 
         # Assert
-        assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     @pytest.mark.asyncio
     async def test_generate_title_with_summary_strategy(
