@@ -14,7 +14,11 @@ import {
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
-import { credentialDetailHref, teamModelDetailHref } from '@/features/gateway-models/paths'
+import {
+  credentialDetailAddModelsHref,
+  credentialDetailHref,
+  teamModelDetailHref,
+} from '@/features/gateway-models/paths'
 import {
   gatewayModelsListQueryKey,
   invalidateGatewayModelCaches,
@@ -271,15 +275,22 @@ export function TeamModelsWorkspace({
           <span className="ml-1 font-medium">{filterCredential.name}</span>
         )}
       </span>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7"
-        type="button"
-        onClick={clearCredentialFilter}
-      >
-        清除筛选
-      </Button>
+      <div className="flex flex-wrap items-center gap-1">
+        {canWrite && filterCredential ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+            <Link to={credentialDetailAddModelsHref(credentialFilter)}>添加模型</Link>
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7"
+          type="button"
+          onClick={clearCredentialFilter}
+        >
+          清除筛选
+        </Button>
+      </div>
     </div>
   ) : null
 

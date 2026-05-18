@@ -79,6 +79,8 @@ export function PersonalModelDetailPane({
               status={model.last_test_status}
               testedAt={model.last_tested_at}
               reason={model.last_test_reason}
+              entitlementStatus={model.entitlement_status}
+              entitlementResetAt={model.entitlement_reset_at}
             />
             {!model.is_active ? (
               <Badge variant="outline" className="text-amber-600">

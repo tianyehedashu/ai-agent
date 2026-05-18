@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-import uuid
 
 from sqlalchemy import and_, or_, select
 
@@ -18,6 +17,8 @@ from domains.gateway.infrastructure.models.provider_plan import (
 )
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -153,11 +154,13 @@ class ProviderPlanRepository:
         limit_usd: Any | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
+        reset_strategy: str = "rolling",
     ) -> ProviderPlanQuota:
         quota = ProviderPlanQuota(
             plan_id=plan_id,
             label=label,
             window_seconds=window_seconds,
+            reset_strategy=reset_strategy,
             limit_usd=limit_usd,
             limit_tokens=limit_tokens,
             limit_requests=limit_requests,

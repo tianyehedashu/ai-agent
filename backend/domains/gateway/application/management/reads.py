@@ -8,18 +8,44 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
-from domains.gateway.domain.errors import CredentialNotFoundError, TeamPermissionDeniedError
+from domains.gateway.application.management.usage_reads import (
+    EntitlementUsageReadModel,
+    GatewayPlanUsageReadService,
+    MarginGroupBy,
+    MarginSummaryReadModel,
+    ProviderPlanCostReadModel,
+)
+from domains.gateway.domain.errors import (
+    CredentialNotFoundError,
+    ManagementEntityNotFoundError,
+    TeamPermissionDeniedError,
+    VirtualKeyNotFoundError,
+)
 from domains.gateway.domain.usage_read_model import UsageAggregation
+from domains.gateway.infrastructure.models.entitlement_plan import (
+    EntitlementPlan,
+    EntitlementPlanQuota,
+)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+from domains.gateway.infrastructure.models.provider_plan import (
+    ProviderPlan,
+    ProviderPlanQuota,
+)
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
+from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
+    EntitlementPlanRepository,
+)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
+)
+from domains.gateway.infrastructure.repositories.provider_plan_repository import (
+    ProviderPlanRepository,
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
@@ -59,6 +85,9 @@ class GatewayManagementReadService:
         self._budgets = BudgetRepository(session)
         self._logs = RequestLogRepository(session)
         self._alerts = GatewayAlertRepository(session)
+        self._provider_plans = ProviderPlanRepository(session)
+        self._entitlement_plans = EntitlementPlanRepository(session)
+        self._plan_usage = GatewayPlanUsageReadService(session)
 
     async def list_teams_with_roles_for_user(
         self, user_id: UUID
@@ -324,6 +353,131 @@ class GatewayManagementReadService:
                 }
             )
         return {"start": start, "end": end, "items": items}
+
+    # ------------------------------------------------------------------
+    # ProviderPlan / EntitlementPlan reads
+    #
+    # 路由层会用这些方法做归属校验后再执行 CRUD/usage；返回 ORM 元组直接用
+    # ``model_validate`` 构造 Response，避免 dict↔Response 双层映射重复。
+    # ------------------------------------------------------------------
+    async def assert_credential_in_team(
+        self,
+        credential_id: UUID,
+        *,
+        team_id: UUID,
+        is_platform_admin: bool,
+    ) -> ProviderCredential:
+        row = await self._creds.get_bindable_for_team_gateway_model(
+            credential_id,
+            team_id=team_id,
+            is_platform_admin=is_platform_admin,
+        )
+        if row is None:
+            raise CredentialNotFoundError(str(credential_id))
+        return row
+
+    async def assert_vkey_in_team(
+        self,
+        vkey_id: UUID,
+        *,
+        team_id: UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        record = await self._vkeys.get(vkey_id)
+        if record is None:
+            raise VirtualKeyNotFoundError(str(vkey_id))
+        if not is_platform_admin and record.team_id != team_id:
+            raise VirtualKeyNotFoundError(str(vkey_id))
+
+    async def assert_apikey_grant_in_team(
+        self,
+        grant_id: UUID,
+        *,
+        team_id: UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        from sqlalchemy import select
+
+        from domains.identity.infrastructure.models.api_key import ApiKeyGatewayGrant
+
+        stmt = select(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.id == grant_id)
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id))
+        if not is_platform_admin and row.team_id != team_id:
+            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id))
+
+    async def assert_entitlement_plan_in_team(
+        self,
+        plan_id: UUID,
+        *,
+        team_id: UUID,
+        is_platform_admin: bool,
+    ) -> EntitlementPlan:
+        plan = await self._entitlement_plans.get(plan_id)
+        if plan is None:
+            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
+        if plan.scope == "vkey":
+            await self.assert_vkey_in_team(
+                plan.scope_id, team_id=team_id, is_platform_admin=is_platform_admin
+            )
+        elif plan.scope == "apikey_grant":
+            await self.assert_apikey_grant_in_team(
+                plan.scope_id, team_id=team_id, is_platform_admin=is_platform_admin
+            )
+        else:
+            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
+        return plan
+
+    async def list_provider_plans_with_quotas_for_credential(
+        self, credential_id: UUID
+    ) -> list[tuple[ProviderPlan, list[ProviderPlanQuota]]]:
+        return await self._provider_plans.list_with_quotas_for_credential(credential_id)
+
+    async def list_entitlement_plans_with_quotas_for_scope(
+        self, scope: str, scope_id: UUID
+    ) -> list[tuple[EntitlementPlan, list[EntitlementPlanQuota]]]:
+        return await self._entitlement_plans.list_with_quotas_for_scope(scope, scope_id)
+
+    async def get_provider_plan_with_quotas(
+        self, plan_id: UUID
+    ) -> tuple[ProviderPlan, list[ProviderPlanQuota]] | None:
+        return await self._provider_plans.get_with_quotas(plan_id)
+
+    async def get_entitlement_plan_with_quotas(
+        self, plan_id: UUID
+    ) -> tuple[EntitlementPlan, list[EntitlementPlanQuota]] | None:
+        return await self._entitlement_plans.get_with_quotas(plan_id)
+
+    async def get_entitlement_usage(
+        self,
+        plan_id: UUID,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> EntitlementUsageReadModel:
+        return await self._plan_usage.get_entitlement_usage(plan_id, since=since, until=until)
+
+    async def get_provider_plan_cost(
+        self,
+        plan_id: UUID,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> ProviderPlanCostReadModel:
+        return await self._plan_usage.get_provider_plan_cost(plan_id, since=since, until=until)
+
+    async def get_team_margin_summary(
+        self,
+        team_id: UUID,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        group_by: MarginGroupBy = "credential",
+    ) -> MarginSummaryReadModel:
+        return await self._plan_usage.get_team_margin_summary(
+            team_id, since=since, until=until, group_by=group_by
+        )
 
     async def list_platform_credential_stats(self, *, days: int) -> list[dict[str, Any]]:
         """全平台凭据维度调用统计 + 各凭据被 GatewayModel 引用条数（仅平台管理员 HTTP 层应调用）。"""

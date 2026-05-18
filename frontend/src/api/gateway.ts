@@ -103,6 +103,9 @@ export interface GatewayModel {
   last_tested_at: string | null
   /** 上次失败/不支持时的说明；成功或未测过为 null */
   last_test_reason: string | null
+  /** 当前调用方客户套餐命中状态；管理列表可缺省 */
+  entitlement_status?: 'active' | 'exhausted' | 'resetting' | 'expired' | 'none'
+  entitlement_reset_at?: string | null
   created_at: string
 }
 
@@ -175,6 +178,9 @@ export interface PersonalGatewayModel {
   last_test_status: ModelTestStatus
   last_tested_at: string | null
   last_test_reason: string | null
+  /** 当前调用方客户套餐命中状态；管理列表可缺省 */
+  entitlement_status?: 'active' | 'exhausted' | 'resetting' | 'expired' | 'none'
+  entitlement_reset_at?: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -466,6 +472,164 @@ export interface AlertRuleCreateBody {
 }
 
 // ============================
+// Provider / Entitlement Plans（与 backend schemas 对齐）
+// ============================
+
+export type PlanResetStrategy =
+  | 'rolling'
+  | 'calendar_daily_utc'
+  | 'calendar_monthly_utc'
+  | 'plan_anniversary'
+
+export interface PlanQuotaInput {
+  label: string
+  window_seconds: number
+  reset_strategy?: PlanResetStrategy
+  limit_usd?: number | string | null
+  limit_tokens?: number | null
+  limit_requests?: number | null
+}
+
+export interface EntitlementPlanQuotaInput extends PlanQuotaInput {
+  unit_price_usd_per_token?: number | string | null
+  unit_price_usd_per_request?: number | string | null
+}
+
+export interface PlanQuota {
+  id: string
+  label: string
+  window_seconds: number
+  reset_strategy: PlanResetStrategy
+  limit_usd: number | string | null
+  limit_tokens: number | null
+  limit_requests: number | null
+}
+
+export interface EntitlementPlanQuota extends PlanQuota {
+  unit_price_usd_per_token?: number | string | null
+  unit_price_usd_per_request?: number | string | null
+}
+
+export interface ProviderPlan {
+  id: string
+  credential_id: string
+  real_model: string | null
+  label: string
+  valid_from: string
+  valid_until: string
+  is_active: boolean
+  auto_renew: boolean
+  notes: string | null
+  extra: Record<string, unknown> | null
+  quotas: PlanQuota[]
+}
+
+export interface ProviderPlanCreateBody {
+  real_model?: string | null
+  label: string
+  valid_from: string
+  valid_until: string
+  is_active?: boolean
+  auto_renew?: boolean
+  notes?: string | null
+  extra?: Record<string, unknown> | null
+  quotas?: PlanQuotaInput[]
+}
+
+export interface ProviderPlanUpdateBody {
+  real_model?: string | null
+  label?: string
+  valid_from?: string
+  valid_until?: string
+  is_active?: boolean
+  auto_renew?: boolean
+  notes?: string | null
+  extra?: Record<string, unknown> | null
+  quotas?: PlanQuotaInput[]
+}
+
+export interface EntitlementPlan {
+  id: string
+  scope: 'vkey' | 'apikey_grant'
+  scope_id: string
+  label: string
+  valid_from: string
+  valid_until: string
+  included_models: string[]
+  included_capabilities: string[]
+  is_active: boolean
+  auto_renew: boolean
+  notes: string | null
+  extra: Record<string, unknown> | null
+  quotas: EntitlementPlanQuota[]
+}
+
+export interface EntitlementPlanCreateBody {
+  label: string
+  valid_from: string
+  valid_until: string
+  included_models?: string[]
+  included_capabilities?: string[]
+  is_active?: boolean
+  auto_renew?: boolean
+  notes?: string | null
+  extra?: Record<string, unknown> | null
+  quotas?: EntitlementPlanQuotaInput[]
+}
+
+export interface EntitlementPlanUpdateBody {
+  label?: string
+  valid_from?: string
+  valid_until?: string
+  included_models?: string[]
+  included_capabilities?: string[]
+  is_active?: boolean
+  auto_renew?: boolean
+  notes?: string | null
+  extra?: Record<string, unknown> | null
+  quotas?: EntitlementPlanQuotaInput[]
+}
+
+export interface EntitlementUsage {
+  plan_id: string
+  period_start: string
+  period_end: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number | string
+  charged_usd: number | string
+}
+
+export interface ProviderPlanCost {
+  plan_id: string
+  period_start: string
+  period_end: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number | string
+}
+
+export interface MarginGroupItem {
+  group_key: string
+  label: string
+  revenue_usd: number | string
+  cost_usd: number | string
+  margin_usd: number | string
+  margin_ratio: number
+}
+
+export interface MarginSummary {
+  period_start: string
+  period_end: string
+  total_revenue_usd: number | string
+  total_cost_usd: number | string
+  total_margin_usd: number | string
+  items: MarginGroupItem[]
+}
+
+// ============================
 // API
 // ============================
 
@@ -624,4 +788,42 @@ export const gatewayApi = {
   deleteAlert: (id: string) => apiClient.delete<unknown>(`${base}/alerts/rules/${id}`),
 
   importFromUserConfig: () => apiClient.post<{ created: number }>(`${base}/credentials/import`),
+
+  // ============================
+  // Provider / Entitlement Plans
+  // ============================
+  listProviderPlans: (credentialId: string) =>
+    apiClient.get<ProviderPlan[]>(`${base}/credentials/${credentialId}/provider-plans`),
+  createProviderPlan: (credentialId: string, body: ProviderPlanCreateBody) =>
+    apiClient.post<ProviderPlan>(`${base}/credentials/${credentialId}/provider-plans`, body),
+  updateProviderPlan: (credentialId: string, planId: string, body: ProviderPlanUpdateBody) =>
+    apiClient.patch<ProviderPlan>(
+      `${base}/credentials/${credentialId}/provider-plans/${planId}`,
+      body
+    ),
+  deleteProviderPlan: (credentialId: string, planId: string) =>
+    apiClient.delete<unknown>(`${base}/credentials/${credentialId}/provider-plans/${planId}`),
+  listProviderPlanUsage: (credentialId: string, params?: { days?: number }) =>
+    apiClient.get<ProviderPlanCost[]>(
+      `${base}/credentials/${credentialId}/provider-plan-usage`,
+      params
+    ),
+
+  listVkeyEntitlements: (vkeyId: string) =>
+    apiClient.get<EntitlementPlan[]>(`${base}/keys/${vkeyId}/entitlements`),
+  createVkeyEntitlement: (vkeyId: string, body: EntitlementPlanCreateBody) =>
+    apiClient.post<EntitlementPlan>(`${base}/keys/${vkeyId}/entitlements`, body),
+  listGrantEntitlements: (grantId: string) =>
+    apiClient.get<EntitlementPlan[]>(`${base}/api-key-grants/${grantId}/entitlements`),
+  createGrantEntitlement: (grantId: string, body: EntitlementPlanCreateBody) =>
+    apiClient.post<EntitlementPlan>(`${base}/api-key-grants/${grantId}/entitlements`, body),
+  updateEntitlementPlan: (planId: string, body: EntitlementPlanUpdateBody) =>
+    apiClient.patch<EntitlementPlan>(`${base}/entitlements/${planId}`, body),
+  deleteEntitlementPlan: (planId: string) =>
+    apiClient.delete<unknown>(`${base}/entitlements/${planId}`),
+  getEntitlementUsage: (planId: string, params?: { days?: number }) =>
+    apiClient.get<EntitlementUsage>(`${base}/entitlements/${planId}/usage`, params),
+
+  dashboardMargin: (params?: { days?: number; group_by?: 'credential' | 'model' | 'team' }) =>
+    apiClient.get<MarginSummary>(`${base}/dashboard/margin`, params),
 }

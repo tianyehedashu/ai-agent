@@ -113,7 +113,18 @@ class ProviderPlanQuota(BaseModel):
     window_seconds: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        comment="滚动窗口长度（秒）；0 表示整套餐有效期作为一个桶",
+        comment="窗口长度（秒）；0 表示整套餐有效期作为一个桶",
+    )
+    reset_strategy: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="rolling",
+        server_default="rolling",
+        comment=(
+            "重置策略：rolling（默认滚动）| calendar_daily_utc（每日 UTC 重置，"
+            "对齐 OpenAI/Anthropic）| calendar_monthly_utc（自然月重置）|"
+            " plan_anniversary（按 valid_from 切片，对齐合同日）"
+        ),
     )
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)

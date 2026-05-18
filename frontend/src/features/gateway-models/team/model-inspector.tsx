@@ -25,6 +25,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TESTABLE_CAPABILITIES, NO_CREDENTIAL } from '@/features/gateway-models/constants'
+import { credentialDetailHref } from '@/features/gateway-models/paths'
 import {
   channelLabel,
   coalesceNumber,
@@ -165,6 +166,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             status={model.last_test_status}
             testedAt={model.last_tested_at}
             reason={model.last_test_reason}
+            entitlementStatus={model.entitlement_status}
+            entitlementResetAt={model.entitlement_reset_at}
           />
           {canWrite ? (
             <>
@@ -324,7 +327,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 )}
                 {credential ? (
                   <Link
-                    to={`/gateway/credentials/${credential.id}`}
+                    to={credentialDetailHref(credential.id)}
                     className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
                   >
                     凭据详情 <ExternalLink className="h-3 w-3" />

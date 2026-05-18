@@ -286,17 +286,200 @@ async def gateway_alert_loop() -> None:
         await asyncio.sleep(interval)
 
 
+# =============================================================================
+# Plan Lifecycle (上下游对称 ProviderPlan / EntitlementPlan)
+# =============================================================================
+
+
+async def _renew_plan_with_quotas(
+    session: AsyncSession,
+    *,
+    table: str,
+    quota_table: str,
+    plan_id: Any,
+    valid_from: datetime,
+    valid_until: datetime,
+) -> None:
+    """续期：复制 plan 行（除 id/valid_*/created_at 外）+ 全部 quota 行至新 plan_id。
+
+    SQL-only 实现，使用显式列名兼容两侧 schema。
+    """
+    if table == "entitlement_plans":
+        plan_sql = text(
+            """
+            INSERT INTO entitlement_plans (
+                id, created_at, updated_at,
+                scope, scope_id, label,
+                included_models, included_capabilities,
+                valid_from, valid_until,
+                is_active, auto_renew,
+                notes, extra
+            )
+            SELECT gen_random_uuid(), NOW(), NOW(),
+                   p.scope, p.scope_id, p.label,
+                   p.included_models, p.included_capabilities,
+                   :valid_from, :valid_until,
+                   TRUE, p.auto_renew,
+                   p.notes, p.extra
+            FROM entitlement_plans p
+            WHERE p.id = :plan_id
+            RETURNING id
+            """
+        )
+    else:
+        plan_sql = text(
+            """
+            INSERT INTO provider_plans (
+                id, created_at, updated_at,
+                credential_id, real_model, label,
+                valid_from, valid_until,
+                is_active, auto_renew,
+                notes, extra
+            )
+            SELECT gen_random_uuid(), NOW(), NOW(),
+                   p.credential_id, p.real_model, p.label,
+                   :valid_from, :valid_until,
+                   TRUE, p.auto_renew,
+                   p.notes, p.extra
+            FROM provider_plans p
+            WHERE p.id = :plan_id
+            RETURNING id
+            """
+        )
+    new_plan_id = (
+        await session.execute(
+            plan_sql,
+            {"valid_from": valid_from, "valid_until": valid_until, "plan_id": plan_id},
+        )
+    ).scalar_one_or_none()
+    if new_plan_id is None:
+        return
+    if quota_table == "entitlement_plan_quotas":
+        quota_sql = text(
+            """
+            INSERT INTO entitlement_plan_quotas (
+                id, created_at, updated_at,
+                plan_id, label, window_seconds, reset_strategy,
+                limit_usd, limit_tokens, limit_requests,
+                unit_price_usd_per_token, unit_price_usd_per_request
+            )
+            SELECT gen_random_uuid(), NOW(), NOW(),
+                   :new_plan_id, q.label, q.window_seconds, q.reset_strategy,
+                   q.limit_usd, q.limit_tokens, q.limit_requests,
+                   q.unit_price_usd_per_token, q.unit_price_usd_per_request
+            FROM entitlement_plan_quotas q
+            WHERE q.plan_id = :plan_id
+            """
+        )
+    else:
+        quota_sql = text(
+            """
+            INSERT INTO provider_plan_quotas (
+                id, created_at, updated_at,
+                plan_id, label, window_seconds, reset_strategy,
+                limit_usd, limit_tokens, limit_requests
+            )
+            SELECT gen_random_uuid(), NOW(), NOW(),
+                   :new_plan_id, q.label, q.window_seconds, q.reset_strategy,
+                   q.limit_usd, q.limit_tokens, q.limit_requests
+            FROM provider_plan_quotas q
+            WHERE q.plan_id = :plan_id
+            """
+        )
+    await session.execute(
+        quota_sql,
+        {"new_plan_id": new_plan_id, "plan_id": plan_id},
+    )
+
+
+async def _process_plan_lifecycle_for_table(
+    session: AsyncSession, *, table: str, quota_table: str
+) -> tuple[int, int]:
+    """单张 plan 表 lifecycle：``valid_until <= now`` 的活跃行下线 +（auto_renew 时）顺延。
+
+    返回 ``(deactivated, renewed)``。
+    """
+    now = datetime.now(UTC)
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT id, valid_from, valid_until, auto_renew
+                FROM {table}
+                WHERE is_active = TRUE AND valid_until <= :now
+                """
+            ),
+            {"now": now},
+        )
+    ).mappings().all()
+    deactivated = 0
+    renewed = 0
+    for row in rows:
+        plan_id = row["id"]
+        await session.execute(
+            text(f"UPDATE {table} SET is_active = FALSE, updated_at = NOW() WHERE id = :id"),
+            {"id": plan_id},
+        )
+        deactivated += 1
+        if not row["auto_renew"]:
+            continue
+        old_from: datetime = row["valid_from"]
+        old_until: datetime = row["valid_until"]
+        duration = old_until - old_from
+        new_from = old_until
+        new_until = old_until + duration
+        await _renew_plan_with_quotas(
+            session,
+            table=table,
+            quota_table=quota_table,
+            plan_id=plan_id,
+            valid_from=new_from,
+            valid_until=new_until,
+        )
+        renewed += 1
+    return deactivated, renewed
+
+
+async def gateway_plan_lifecycle_loop() -> None:
+    """5 分钟一次，统一处理上下游 plan 过期 + auto_renew。"""
+    interval = settings.gateway_rollup_interval_seconds
+    while True:
+        try:
+            async with get_session_context() as session:
+                e_off, e_on = await _process_plan_lifecycle_for_table(
+                    session,
+                    table="entitlement_plans",
+                    quota_table="entitlement_plan_quotas",
+                )
+                p_off, p_on = await _process_plan_lifecycle_for_table(
+                    session,
+                    table="provider_plans",
+                    quota_table="provider_plan_quotas",
+                )
+                await session.commit()
+                if e_off or e_on or p_off or p_on:
+                    logger.info(
+                        "gateway_plan_lifecycle: entitlement off=%d renew=%d, provider off=%d renew=%d",
+                        e_off, e_on, p_off, p_on,
+                    )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("gateway_plan_lifecycle error: %s", exc)
+        await asyncio.sleep(interval)
+
+
 def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
     register_app_background_task(app, asyncio.create_task(gateway_rollup_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_request_log_retention_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_alert_loop()))
+    register_app_background_task(app, asyncio.create_task(gateway_plan_lifecycle_loop()))
 
 
 __all__ = [
     "gateway_alert_loop",
     "gateway_partition_loop",
+    "gateway_plan_lifecycle_loop",
     "gateway_request_log_retention_loop",
     "gateway_rollup_loop",
     "schedule_gateway_jobs",

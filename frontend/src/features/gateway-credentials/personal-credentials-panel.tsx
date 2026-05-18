@@ -5,11 +5,11 @@
  * 的 `CreateCredentialDialog` 统一承担，本组件仅承载列表渲染与编辑弹窗。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Pencil } from 'lucide-react'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
@@ -36,8 +36,13 @@ import {
   extraToFormValues,
   type CredentialExtraValues,
 } from './credential-extra-utils'
+import { invalidateCredentialProbeCache } from './credential-probe-cache'
 import { displayListApiKeyMasked } from './mask-display'
 import { apiKeyLabelForProvider, extraFieldsForProvider } from './provider-schemas'
+
+const AddModelsDialog = lazy(() =>
+  import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
+)
 
 export interface PersonalCredentialsPanelProps {
   /**
@@ -57,6 +62,7 @@ export function PersonalCredentialsPanel({
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
+  const [addModelsCred, setAddModelsCred] = useState<ProviderCredential | null>(null)
   const [formName, setFormName] = useState('')
   const [formApiKey, setFormApiKey] = useState('')
   const [formApiBase, setFormApiBase] = useState('')
@@ -130,6 +136,9 @@ export function PersonalCredentialsPanel({
       })
     },
     onSuccess: () => {
+      if (editCred) {
+        invalidateCredentialProbeCache(queryClient, 'user', editCred.id)
+      }
       invalidate()
       setEditCred(null)
       resetEditForm()
@@ -258,6 +267,19 @@ export function PersonalCredentialsPanel({
                         ) : null}
                       </div>
                       <div className="flex gap-1">
+                        {hasAuthSession ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => {
+                              setAddModelsCred(c)
+                            }}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            模型
+                          </Button>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -287,6 +309,7 @@ export function PersonalCredentialsPanel({
       testMutate,
       openEdit,
       onAddCredential,
+      setAddModelsCred,
     ]
   )
 
@@ -396,6 +419,34 @@ export function PersonalCredentialsPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {addModelsCred ? (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              加载添加模型…
+            </div>
+          }
+        >
+          <AddModelsDialog
+            open
+            onOpenChange={(next) => {
+              if (!next) setAddModelsCred(null)
+            }}
+            scope="user"
+            credentialId={addModelsCred.id}
+            provider={addModelsCred.provider}
+            credentialName={addModelsCred.name}
+            isActive={addModelsCred.is_active}
+            onEditPersonalCredential={() => {
+              const target = addModelsCred
+              setAddModelsCred(null)
+              openEdit(target)
+            }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

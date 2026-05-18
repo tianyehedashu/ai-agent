@@ -28,14 +28,21 @@ from domains.gateway.application.budget_service import (
     PERIOD_TOTAL,
     BudgetService,
 )
+from domains.gateway.application.entitlement_guard import (
+    EntitlementContext,
+    EntitlementGuard,
+)
+from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
+    EntitlementPlanExhaustedError,
     GuardrailBlockedError,
     ModelNotAllowedError,
     RateLimitExceededError,
 )
+from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import (
     GatewayCapability,
     GatewayInboundVia,
@@ -89,6 +96,16 @@ BudgetReservation = tuple[str, str | None, str, str | None]
 
 
 @dataclass
+class EntitlementReservationState:
+    """单次调用命中的下游 entitlement 套餐预扣信息，跨 reserve / settle 阶段共享。"""
+
+    plan_id: uuid.UUID
+    plan_label: str | None
+    specs: list[PlanQuotaSpec]
+    reservations: list[QuotaPlanReservation]
+
+
+@dataclass
 class ProxyContext:
     """单次 OpenAI 兼容代理调用的上下文。
 
@@ -124,6 +141,7 @@ class ProxyContext:
     allowed_capabilities: tuple[GatewayCapability, ...] = ()
     rpm_limit: int | None = None
     tpm_limit: int | None = None
+    entitlement_state: EntitlementReservationState | None = None
 
 
 class ProxyUseCase:
@@ -132,9 +150,13 @@ class ProxyUseCase:
         session: AsyncSession,
         *,
         budget_service: BudgetService | None = None,
+        entitlement_guard: EntitlementGuard | None = None,
     ) -> None:
         self._session = session
         self._budget = budget_service or BudgetService()
+        self._entitlement_guard = entitlement_guard or EntitlementGuard(
+            session, quota_service=get_quota_plan_service()
+        )
 
     # ---------------------------------------------------------------------
     # 校验
@@ -189,6 +211,42 @@ class ProxyUseCase:
                     period=period,
                     budget_model_name=budget_model_name,
                 )
+
+    async def _release_entitlement_reservations(
+        self, ctx: ProxyContext
+    ) -> None:
+        state = ctx.entitlement_state
+        if state is None or not state.reservations:
+            return
+        with suppress(Exception):
+            await self._entitlement_guard.release(state.plan_id, state.reservations)
+        ctx.entitlement_state = None
+
+    async def _check_entitlement(
+        self, ctx: ProxyContext, model: str | None, *, estimate_tokens: int = 0
+    ) -> None:
+        """根据 ctx (vkey_id 或 apikey_grant_id) 解析活跃 entitlement plan 并预扣。
+
+        无匹配 plan = 默认放行；命中但任一桶耗尽抛 ``EntitlementPlanExhaustedError``。
+        """
+        ent_ctx = EntitlementContext(
+            vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,
+            apikey_grant_id=ctx.platform_api_key_grant_id,
+            virtual_model=model,
+            capability=ctx.capability.value if ctx.capability is not None else None,
+        )
+        result = await self._entitlement_guard.check_and_reserve(
+            ent_ctx, estimate_tokens=estimate_tokens
+        )
+        if result.plan_id is None:
+            ctx.entitlement_state = None
+            return
+        ctx.entitlement_state = EntitlementReservationState(
+            plan_id=result.plan_id,
+            plan_label=result.plan_label,
+            specs=result.specs,
+            reservations=result.reservations,
+        )
 
     async def _check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
         """检查 team/user/key 维度预算（含全模型汇总行与可选模型行）。"""
@@ -313,6 +371,9 @@ class ProxyUseCase:
             "gateway_team_snapshot": ({"name": team.name, "kind": team.kind} if team else None),
             "gateway_vkey_name_snapshot": ctx.vkey.vkey_name if ctx.vkey else None,
             "guardrail_enabled": ctx.guardrail_enabled,
+            "gateway_entitlement_plan_id": (
+                str(ctx.entitlement_state.plan_id) if ctx.entitlement_state is not None else None
+            ),
             "gateway_store_full_messages": verbose_log,
             "gateway_log_prompt_max_chars": int(settings.gateway_request_log_prompt_max_chars),
             "gateway_log_response_max_chars": int(
@@ -415,6 +476,11 @@ class ProxyUseCase:
         ) // 4 + int(body.get("max_tokens") or 0)
         await self._check_limits(ctx, estimate_tokens=estimate_tokens)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, model, estimate_tokens=estimate_tokens)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
 
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
@@ -435,13 +501,15 @@ class ProxyUseCase:
                     response = await self._direct_chat_completion(kwargs)
                 except Exception:
                     await self._release_budget_reservations(reservations)
+                    await self._release_entitlement_reservations(ctx)
                     raise
             else:
                 await self._release_budget_reservations(reservations)
+                await self._release_entitlement_reservations(ctx)
                 raise
         if stream:
-            return _adapt_stream(response, ctx, self._budget)
-        return _adapt_response(response, ctx, self._budget)
+            return _adapt_stream(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def embedding(
         self,
@@ -457,6 +525,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
 
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
@@ -469,8 +542,9 @@ class ProxyUseCase:
                 response = await router.aembedding(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def image_generation(
         self,
@@ -482,6 +556,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, ctx.budget_model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -490,8 +569,9 @@ class ProxyUseCase:
             response = await router.aimage_generation(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def audio_transcription(
         self,
@@ -503,6 +583,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, ctx.budget_model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -511,8 +596,9 @@ class ProxyUseCase:
             response = await router.atranscription(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def audio_speech(
         self,
@@ -524,6 +610,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, ctx.budget_model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -534,6 +625,7 @@ class ProxyUseCase:
             result = await aspeech(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
         # TTS 多为二进制返回，无 usage；仍结算请求/占位 token 与 DB 用量，与 limit_requests 预扣对齐
         _schedule_settle_usage(
@@ -542,6 +634,7 @@ class ProxyUseCase:
             tokens=0,
             cost=Decimal("0"),
             requests=1,
+            entitlement_guard=self._entitlement_guard,
         )
         return result
 
@@ -555,6 +648,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, ctx.budget_model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -564,8 +662,9 @@ class ProxyUseCase:
             response = await arerank(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def moderation(
         self,
@@ -582,6 +681,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, ctx.budget_model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -591,8 +695,9 @@ class ProxyUseCase:
             response = await amoderation(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
     async def video_generation(
         self,
@@ -609,6 +714,11 @@ class ProxyUseCase:
         self._check_capability(ctx)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
+        try:
+            await self._check_entitlement(ctx, model)
+        except EntitlementPlanExhaustedError:
+            await self._release_budget_reservations(reservations)
+            raise
         metadata = await self._build_metadata(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
@@ -618,8 +728,9 @@ class ProxyUseCase:
             response = await avideo_generation(**kwargs)
         except Exception:
             await self._release_budget_reservations(reservations)
+            await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget)
+        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
 
 
 # =============================================================================
@@ -642,12 +753,20 @@ def _adapt_response(
     response: Any,
     ctx: ProxyContext,
     budget: BudgetService,
+    entitlement_guard: EntitlementGuard | None = None,
 ) -> dict[str, Any]:
     data = _to_dict(response)
     usage = data.get("usage") or {}
     tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
     cost = _calc_cost(response)
-    _schedule_settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=1)
+    _schedule_settle_usage(
+        ctx,
+        budget,
+        tokens=tokens,
+        cost=cost,
+        requests=1,
+        entitlement_guard=entitlement_guard,
+    )
     return data
 
 
@@ -655,6 +774,7 @@ async def _adapt_stream(
     stream: Any,
     ctx: ProxyContext,
     budget: BudgetService,
+    entitlement_guard: EntitlementGuard | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """转为 SSE 友好的 dict 流，并在末帧结算"""
     total_tokens = 0
@@ -669,7 +789,14 @@ async def _adapt_stream(
     if last_usage:
         total_tokens = int(last_usage.get("total_tokens", 0) or 0)
     cost = Decimal("0")  # 流式 cost 由 callbacks 落账
-    await _settle_usage(ctx, budget, tokens=total_tokens, cost=cost, requests=1)
+    await _settle_usage(
+        ctx,
+        budget,
+        tokens=total_tokens,
+        cost=cost,
+        requests=1,
+        entitlement_guard=entitlement_guard,
+    )
 
 
 async def _settle_usage(
@@ -679,6 +806,7 @@ async def _settle_usage(
     tokens: int,
     cost: Decimal,
     requests: int,
+    entitlement_guard: EntitlementGuard | None = None,
 ) -> None:
     scope_items = (
         ("team", str(ctx.team_id)),
@@ -704,6 +832,17 @@ async def _settle_usage(
                         delta_tokens=tokens,
                         budget_model_name=mk,
                     )
+
+    # 命中 entitlement 套餐时累加真实用量到 entitlement Redis 桶
+    state = ctx.entitlement_state
+    if entitlement_guard is not None and state is not None and state.specs:
+        with suppress(Exception):
+            await entitlement_guard.commit(
+                state.plan_id,
+                state.specs,
+                delta_tokens=tokens,
+                delta_usd=cost,
+            )
 
     with suppress(Exception):
         async with get_session_context() as session:
@@ -732,11 +871,19 @@ def _schedule_settle_usage(
     tokens: int,
     cost: Decimal,
     requests: int,
+    entitlement_guard: EntitlementGuard | None = None,
 ) -> None:
     """异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。"""
 
     async def _settle() -> None:
-        await _settle_usage(ctx, budget, tokens=tokens, cost=cost, requests=requests)
+        await _settle_usage(
+            ctx,
+            budget,
+            tokens=tokens,
+            cost=cost,
+            requests=requests,
+            entitlement_guard=entitlement_guard,
+        )
 
     with suppress(RuntimeError):
         settle_task = asyncio.create_task(_settle())

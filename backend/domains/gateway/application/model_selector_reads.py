@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.entitlement_model_status import annotate_items_entitlement_status
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 
 if TYPE_CHECKING:
     from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
+    from domains.gateway.application.entitlement_guard import EntitlementGuard
 
 
 async def list_available_system_models(
@@ -17,15 +19,23 @@ async def list_available_system_models(
     *,
     model_type: str | None = None,
     provider: str | None = None,
+    entitlement_guard: EntitlementGuard | None = None,
+    entitlement_scope: str | None = None,
+    entitlement_scope_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     team_id = resolve_internal_gateway_team_id()
     items = await catalog.list_visible_models(
         billing_team_id=team_id,
         model_type=model_type,
     )
-    if provider is None:
-        return items
-    return [m for m in items if str(m.get("provider") or "") == provider]
+    if provider is not None:
+        items = [m for m in items if str(m.get("provider") or "") == provider]
+    return await annotate_items_entitlement_status(
+        items,
+        guard=entitlement_guard,
+        scope=entitlement_scope,
+        scope_id=entitlement_scope_id,
+    )
 
 
 async def list_personal_models_for_selector(
@@ -35,13 +45,22 @@ async def list_personal_models_for_selector(
     model_type: str | None = None,
     provider: str | None = None,
     limit: int = 100,
+    entitlement_guard: EntitlementGuard | None = None,
+    entitlement_scope: str | None = None,
+    entitlement_scope_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     items = await catalog.list_personal_models_for_selector(
         user_id,
         model_type,
         provider,
     )
-    return items[:limit]
+    items = items[:limit]
+    return await annotate_items_entitlement_status(
+        items,
+        guard=entitlement_guard,
+        scope=entitlement_scope,
+        scope_id=entitlement_scope_id,
+    )
 
 
 async def get_default_for_model_type(
@@ -84,11 +103,17 @@ async def list_available_models(
     model_type: str | None = None,
     user_id: uuid.UUID | None = None,
     provider: str | None = None,
+    entitlement_guard: EntitlementGuard | None = None,
+    entitlement_scope: str | None = None,
+    entitlement_scope_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     system_models = await list_available_system_models(
         catalog,
         model_type=model_type,
         provider=provider,
+        entitlement_guard=entitlement_guard,
+        entitlement_scope=entitlement_scope,
+        entitlement_scope_id=entitlement_scope_id,
     )
     default_for_text = await get_default_for_model_type(catalog, "text")
     default_for_vision = await get_default_for_model_type(catalog, "image")
@@ -100,6 +125,9 @@ async def list_available_models(
             user_id,
             model_type=model_type,
             provider=provider,
+            entitlement_guard=entitlement_guard,
+            entitlement_scope=entitlement_scope,
+            entitlement_scope_id=entitlement_scope_id,
         )
     return {
         "system_models": system_models,

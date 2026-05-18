@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  credentialDetailAddModelsHref,
   credentialDetailHref,
   credentialsTeamListHref,
   personalModelDetailHref,
@@ -36,6 +37,10 @@ describe('gateway model paths', () => {
 
   it('credentialDetailHref encodes id', () => {
     expect(credentialDetailHref('cred/1')).toBe('/gateway/credentials/cred%2F1')
+  })
+
+  it('credentialDetailAddModelsHref appends addModels query', () => {
+    expect(credentialDetailAddModelsHref('cred-1')).toBe('/gateway/credentials/cred-1?addModels=1')
   })
 
   it('teamModelsIndexHref matches filtered without credential', () => {

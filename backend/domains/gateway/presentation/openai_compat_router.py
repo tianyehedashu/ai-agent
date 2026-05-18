@@ -15,7 +15,7 @@ OpenAI 兼容入口（挂载在根路径 /）
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
@@ -23,7 +23,9 @@ from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.entitlement_model_status import resolve_entitlement_scope
 from domains.gateway.application.management import GatewayManagementReadService
+from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
 from domains.gateway.application.proxy_use_case import ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
@@ -267,16 +269,16 @@ async def list_models(
     if principal.api_key_grant and principal.api_key_grant.allowed_models:
         allowed = set(principal.api_key_grant.allowed_models)
         models = [m for m in models if m.name in allowed]
-    data: list[Mapping[str, object]] = [
-        {
-            "id": m.name,
-            "object": "model",
-            "created": int(m.created_at.timestamp()),
-            "owned_by": m.provider,
-            "capability": m.capability,
-        }
-        for m in models
-    ]
+    entitlement_scope, entitlement_scope_id = resolve_entitlement_scope(
+        vkey_id=principal.vkey.vkey_id if principal.vkey else None,
+        apikey_grant_id=principal.api_key_grant.grant_id if principal.api_key_grant else None,
+    )
+    data = await build_proxy_models_list(
+        db,
+        models,
+        entitlement_scope=entitlement_scope,
+        entitlement_scope_id=entitlement_scope_id,
+    )
     return {"object": "list", "data": data}
 
 

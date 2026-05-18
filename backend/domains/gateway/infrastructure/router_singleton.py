@@ -44,10 +44,16 @@ def _get_encryption_key() -> str:
     return derive_encryption_key(settings.secret_key.get_secret_value())
 
 
+_provider_plan_pre_call_logger: Any | None = None
+
+
 def ensure_gateway_callbacks() -> None:
     """注册 Gateway LiteLLM callbacks，供 Router 与内部直连兜底共用。"""
     import litellm
 
+    from domains.gateway.application.provider_plan_guard import (
+        build_provider_plan_pre_call_logger,
+    )
     from domains.gateway.infrastructure.callbacks.custom_logger import (
         get_logger_singleton,
     )
@@ -55,12 +61,17 @@ def ensure_gateway_callbacks() -> None:
         _build_pii_guardrail_instance,
     )
 
-    global _pii_guardrail_instance  # pylint: disable=global-statement
+    global _pii_guardrail_instance, _provider_plan_pre_call_logger  # pylint: disable=global-statement
     callbacks = list(litellm.callbacks or [])
 
     gateway_logger = get_logger_singleton()
     if gateway_logger not in callbacks:
         callbacks.append(gateway_logger)
+
+    if _provider_plan_pre_call_logger is None:
+        _provider_plan_pre_call_logger = build_provider_plan_pre_call_logger()
+    if _provider_plan_pre_call_logger not in callbacks:
+        callbacks.append(_provider_plan_pre_call_logger)
 
     if settings.gateway_default_guardrail_enabled:
         if _pii_guardrail_instance is None:

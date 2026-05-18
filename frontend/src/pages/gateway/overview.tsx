@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
+import { gatewayApi, type GatewayUsageAggregation, type MarginSummary } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GATEWAY_USAGE_AGGREGATION_OPTIONS } from '@/features/gateway-usage/usage-aggregation'
@@ -37,6 +37,10 @@ export default function GatewayOverviewPage(): React.JSX.Element {
   const { data, isLoading } = useQuery({
     queryKey: ['gateway', 'dashboard', usageAggregation, days],
     queryFn: () => gatewayApi.dashboard({ days, usage_aggregation: usageAggregation }),
+  })
+  const { data: margin, isLoading: marginLoading } = useQuery({
+    queryKey: ['gateway', 'dashboard', 'margin', days, 'credential'],
+    queryFn: () => gatewayApi.dashboardMargin({ days, group_by: 'credential' }),
   })
 
   const totalTokens = useMemo(() => {
@@ -115,6 +119,8 @@ export default function GatewayOverviewPage(): React.JSX.Element {
           {data?.total_input_tokens ?? '—'} · 输出 Token {data?.total_output_tokens ?? '—'}
         </CardContent>
       </Card>
+
+      <MarginSummaryCard margin={margin} loading={marginLoading} />
     </div>
   )
 }
@@ -148,5 +154,81 @@ function Kpi({
         <div className="text-2xl font-semibold tabular-nums">{loading ? '—' : display}</div>
       </CardContent>
     </Card>
+  )
+}
+
+function MarginSummaryCard({
+  margin,
+  loading,
+}: Readonly<{
+  margin: MarginSummary | undefined
+  loading?: boolean
+}>): React.JSX.Element {
+  const revenue = coalesceNumber(margin?.total_revenue_usd)
+  const cost = coalesceNumber(margin?.total_cost_usd)
+  const gross = coalesceNumber(margin?.total_margin_usd)
+  const rate = revenue > 0 ? gross / revenue : 0
+  const topItems = margin?.items.slice(0, 5) ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">套餐毛利</CardTitle>
+        <CardDescription>
+          按客户套餐收入与厂商套餐成本对齐，帮助识别高成本凭据或低毛利模型。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiniKpi title="收入" value={loading ? '—' : `$${revenue.toFixed(4)}`} />
+          <MiniKpi title="成本" value={loading ? '—' : `$${cost.toFixed(4)}`} />
+          <MiniKpi title="毛利" value={loading ? '—' : `$${gross.toFixed(4)}`} />
+          <MiniKpi title="毛利率" value={loading ? '—' : `${(rate * 100).toFixed(2)}%`} />
+        </div>
+        {topItems.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {loading ? '加载中…' : '暂无套餐收入/成本数据。'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b text-xs text-muted-foreground">
+                <tr>
+                  <th className="py-2 text-left font-medium">维度</th>
+                  <th className="py-2 text-right font-medium">收入</th>
+                  <th className="py-2 text-right font-medium">成本</th>
+                  <th className="py-2 text-right font-medium">毛利</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topItems.map((item) => (
+                  <tr key={item.group_key} className="border-b last:border-0">
+                    <td className="py-2 font-mono text-xs">{item.label}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      ${coalesceNumber(item.revenue_usd).toFixed(4)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      ${coalesceNumber(item.cost_usd).toFixed(4)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      ${coalesceNumber(item.margin_usd).toFixed(4)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function MiniKpi({ title, value }: Readonly<{ title: string; value: string }>): React.JSX.Element {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-muted-foreground">{title}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+    </div>
   )
 }

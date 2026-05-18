@@ -9,6 +9,7 @@ import { Copy, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -101,6 +102,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                 <th className="px-4 py-2 text-left font-medium">Key</th>
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
                 <th className="px-4 py-2 text-left font-medium">每分钟请求 / 每分钟令牌</th>
+                <th className="px-4 py-2 text-left font-medium">客户套餐</th>
                 <th className="px-4 py-2 text-left font-medium">守卫</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
                 <th className="px-4 py-2 text-left font-medium" />
@@ -109,14 +111,14 @@ export default function GatewayKeysPage(): React.JSX.Element {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
                     加载中...
                   </td>
                 </tr>
               )}
               {!isLoading && (keys?.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
                     暂无虚拟 Key
                   </td>
                 </tr>
@@ -132,6 +134,9 @@ export default function GatewayKeysPage(): React.JSX.Element {
                     </td>
                     <td className="px-4 py-2 text-xs tabular-nums">
                       {`${String(k.rpm_limit ?? '∞')} / ${String(k.tpm_limit ?? '∞')}`}
+                    </td>
+                    <td className="px-4 py-2 text-xs">
+                      <KeyEntitlementsCell vkeyId={k.id} />
                     </td>
                     <td className="px-4 py-2 text-xs">{k.guardrail_enabled ? '已启用' : '关闭'}</td>
                     <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
@@ -167,6 +172,34 @@ export default function GatewayKeysPage(): React.JSX.Element {
         }}
         plaintext={createdKey}
       />
+    </div>
+  )
+}
+
+function KeyEntitlementsCell({ vkeyId }: Readonly<{ vkeyId: string }>): React.JSX.Element {
+  const { data, isLoading } = useQuery({
+    queryKey: ['gateway', 'keys', vkeyId, 'entitlements'],
+    queryFn: () => gatewayApi.listVkeyEntitlements(vkeyId),
+    enabled: vkeyId.length > 0,
+  })
+  if (isLoading) return <span className="text-muted-foreground">加载中…</span>
+  const active = (data ?? []).filter((plan) => {
+    const now = Date.now()
+    return (
+      plan.is_active &&
+      new Date(plan.valid_from).getTime() <= now &&
+      new Date(plan.valid_until).getTime() > now
+    )
+  })
+  if (active.length === 0) return <span className="text-muted-foreground">未配置</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {active.slice(0, 2).map((plan) => (
+        <Badge key={plan.id} variant="secondary" className="max-w-40 truncate">
+          {plan.label}
+        </Badge>
+      ))}
+      {active.length > 2 ? <Badge variant="outline">+{active.length - 2}</Badge> : null}
     </div>
   )
 }

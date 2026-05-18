@@ -16,17 +16,23 @@ ProxyUseCase 在 ``_check_budget`` 之后调用本 guard：
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from domains.gateway.application.entitlement_model_status import ENTITLEMENT_RESETTING_SOON_SECONDS
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.quota_plan import (
     ENTITLEMENT_NS,
+    PlanQuotaSnapshot,
     PlanQuotaSpec,
     QuotaPlanReservation,
+    ResetStrategy,
 )
+from domains.gateway.domain.types import EntitlementListStatus
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     ENTITLEMENT_SCOPE_APIKEY_GRANT,
     ENTITLEMENT_SCOPE_VKEY,
@@ -34,8 +40,6 @@ from domains.gateway.infrastructure.repositories.entitlement_plan_repository imp
 )
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     from domains.gateway.application.quota_plan_service import QuotaPlanService
     from domains.gateway.infrastructure.models.entitlement_plan import (
         EntitlementPlan,
@@ -64,7 +68,40 @@ class EntitlementCheckResult:
     quota_quotas_unit_prices: dict[uuid.UUID, tuple[Decimal | None, Decimal | None]]
 
 
-def _quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
+_RESET_STRATEGIES: set[ResetStrategy] = {
+    "rolling",
+    "calendar_daily_utc",
+    "calendar_monthly_utc",
+    "plan_anniversary",
+}
+
+
+def _reset_strategy(value: str) -> ResetStrategy:
+    return value if value in _RESET_STRATEGIES else "rolling"
+
+
+def _status_from_quota_snapshots(
+    snapshots: list[PlanQuotaSnapshot],
+    *,
+    when: datetime,
+) -> EntitlementListStatus:
+    if not any(s.exhausted for s in snapshots):
+        return "active"
+    reset_ats = [
+        reset_at
+        for s in snapshots
+        if s.exhausted
+        for reset_at in (s.reset_at(when),)
+        if reset_at is not None
+    ]
+    if reset_ats:
+        soonest = min(reset_ats)
+        if soonest <= when + timedelta(seconds=ENTITLEMENT_RESETTING_SOON_SECONDS):
+            return "resetting"
+    return "exhausted"
+
+
+def _quota_to_spec(row: EntitlementPlanQuota, *, plan: EntitlementPlan) -> PlanQuotaSpec:
     return PlanQuotaSpec(
         quota_id=row.id,
         label=row.label,
@@ -72,6 +109,8 @@ def _quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        reset_strategy=_reset_strategy(row.reset_strategy),
+        plan_valid_from=plan.valid_from,
     )
 
 
@@ -107,7 +146,7 @@ class EntitlementGuard:
                 quota_quotas_unit_prices={},
             )
         quotas = await self._repo.list_quotas(plan.id)
-        specs = [_quota_to_spec(q) for q in quotas]
+        specs = [_quota_to_spec(q, plan=plan) for q in quotas]
         if not specs:
             return EntitlementCheckResult(
                 plan_id=plan.id,
@@ -125,11 +164,8 @@ class EntitlementGuard:
         )
         if not result.allowed:
             exhausted = result.exhausted_snapshot
-            retry_at = (
-                exhausted.reset_at(when).isoformat()
-                if exhausted is not None and exhausted.reset_at(when) is not None
-                else None
-            )
+            reset_at_dt = exhausted.reset_at(when) if exhausted is not None else None
+            retry_at = reset_at_dt.isoformat() if reset_at_dt is not None else None
             label = exhausted.spec.label if exhausted is not None else "(unknown)"
             reason = exhausted.exhausted_reason or "requests" if exhausted else "requests"
             raise EntitlementPlanExhaustedError(
@@ -208,21 +244,21 @@ class EntitlementGuard:
         virtual_models: list[str],
         *,
         now: datetime | None = None,
-    ) -> dict[str, str]:
-        """供 ``models/available`` 注入：返回每个 virtual_model 的 entitlement 状态。
+    ) -> dict[str, EntitlementListStatus]:
+        """供模型列表注入：返回每个 virtual_model 的 entitlement 状态。
 
-        语义：active / exhausted / expired / none。
+        语义：active / exhausted / resetting / expired / none。
         """
         when = now or datetime.now(UTC)
         plans = await self._repo.list_for_scope(scope, scope_id)
         if not plans:
-            return {m: "none" for m in virtual_models}
+            return dict.fromkeys(virtual_models, "none")
         active_plans = [
             p
             for p in plans
             if p.is_active and p.valid_from <= when < p.valid_until
         ]
-        result: dict[str, str] = {}
+        result: dict[str, EntitlementListStatus] = {}
         for vm in virtual_models:
             matched: EntitlementPlan | None = None
             for p in active_plans:
@@ -239,20 +275,25 @@ class EntitlementGuard:
                     result[vm] = "none"
                 continue
             quotas = await self._repo.list_quotas(matched.id)
-            specs = [_quota_to_spec(q) for q in quotas]
+            specs = [_quota_to_spec(q, plan=matched) for q in quotas]
             if not specs:
                 result[vm] = "active"
                 continue
             snapshots = await self._quota.snapshot(ENTITLEMENT_NS, matched.id, specs, now=when)
-            if any(s.exhausted for s in snapshots):
-                result[vm] = "exhausted"
-            else:
-                result[vm] = "active"
+            result[vm] = _status_from_quota_snapshots(snapshots, when=when)
         return result
+
+
+def build_entitlement_guard_for_session(session: AsyncSession) -> EntitlementGuard:
+    """便捷工厂：构造 ``EntitlementGuard`` 供选择器与代理列表共用。"""
+    from domains.gateway.application.quota_plan_service import get_quota_plan_service
+
+    return EntitlementGuard(session, quota_service=get_quota_plan_service())
 
 
 __all__ = [
     "EntitlementCheckResult",
     "EntitlementContext",
     "EntitlementGuard",
+    "build_entitlement_guard_for_session",
 ]

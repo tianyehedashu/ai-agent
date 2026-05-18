@@ -7,16 +7,18 @@
  * - 头部「启用」Switch 走独立的乐观更新 mutation，UI 即时响应。
  */
 
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { ChevronRight, Loader2 } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
   type GatewayCredentialUpdateBody,
   type ProviderCredential,
+  type ProviderPlan,
+  type ProviderPlanCost,
 } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,7 +34,7 @@ import {
   type CredentialExtraValues,
 } from '@/features/gateway-credentials/credential-extra-utils'
 import { CredentialModelsCard } from '@/features/gateway-credentials/credential-linked-models'
-import { CredentialUpstreamModelsPanel } from '@/features/gateway-credentials/credential-upstream-models-panel'
+import { invalidateCredentialProbeCache } from '@/features/gateway-credentials/credential-probe-cache'
 import {
   apiKeyLabelForProvider,
   defaultApiBaseForProvider,
@@ -42,6 +44,12 @@ import {
 } from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+
+const AddModelsDialog = lazy(() =>
+  import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
+    default: m.AddModelsDialog,
+  }))
+)
 
 function canEditGatewayCredential(
   c: ProviderCredential,
@@ -54,6 +62,8 @@ function canEditGatewayCredential(
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [addModelsOpen, setAddModelsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
@@ -72,6 +82,30 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
   const schema = cred ? getProviderSchema(cred.provider) : undefined
+
+  const addModelsFromUrl = searchParams.get('addModels') === '1'
+  const showAddModelsDialog = Boolean(cred) && editable && (addModelsOpen || addModelsFromUrl)
+
+  const handleAddModelsOpenChange = useCallback(
+    (open: boolean) => {
+      setAddModelsOpen(open)
+      if (!open && addModelsFromUrl) {
+        setSearchParams(
+          (prev) => {
+            const n = new URLSearchParams(prev)
+            n.delete('addModels')
+            return n
+          },
+          { replace: true }
+        )
+      }
+    },
+    [addModelsFromUrl, setSearchParams]
+  )
+
+  const openAddModelsDialog = useCallback(() => {
+    setAddModelsOpen(true)
+  }, [])
 
   // 头部「启用/禁用」走独立 mutation + 乐观更新，UI 即时响应，不再依赖本地 isActive state
   const toggleActiveMutation = useMutation({
@@ -94,6 +128,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
     onSettled: () => {
+      invalidateCredentialProbeCache(queryClient, 'team', id)
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', id] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
     },
@@ -202,20 +237,150 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               cred={cred}
               editable={editable}
               configManaged={configManaged}
+              onSaved={() => {
+                invalidateCredentialProbeCache(queryClient, 'team', id)
+              }}
             />
           </CardContent>
         </Card>
 
-        <CredentialUpstreamModelsPanel
-          scope="team"
+        <ProviderPlansSection credentialId={id} />
+
+        <CredentialLinkedModelsSection
           credentialId={id}
-          provider={cred.provider}
-          disabled={!editable}
+          canManageModels={editable}
+          onAddModels={editable ? openAddModelsDialog : undefined}
         />
 
-        <CredentialLinkedModelsSection credentialId={id} canManageModels={editable} />
+        {showAddModelsDialog ? (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                加载添加模型…
+              </div>
+            }
+          >
+            <AddModelsDialog
+              open
+              onOpenChange={handleAddModelsOpenChange}
+              scope="team"
+              credentialId={id}
+              provider={cred.provider}
+              credentialName={cred.name}
+              isActive={cred.is_active}
+            />
+          </Suspense>
+        ) : null}
       </div>
     </div>
+  )
+}
+
+function formatDateTime(value: string): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleString()
+}
+
+function formatMoney(value: number | string | null | undefined): string {
+  const n = Number(value ?? 0)
+  return Number.isFinite(n) ? `$${n.toFixed(4)}` : '$0.0000'
+}
+
+function formatQuotaLimit(plan: ProviderPlan): string {
+  if (plan.quotas.length === 0) return '不限'
+  return plan.quotas
+    .map((q) => {
+      const limits = [
+        q.limit_requests !== null ? `${String(q.limit_requests)} req` : null,
+        q.limit_tokens !== null ? `${String(q.limit_tokens)} token` : null,
+        q.limit_usd !== null ? formatMoney(q.limit_usd) : null,
+      ].filter(Boolean)
+      const strategy =
+        q.reset_strategy === 'calendar_daily_utc'
+          ? '每日 UTC'
+          : q.reset_strategy === 'calendar_monthly_utc'
+            ? '自然月'
+            : q.reset_strategy === 'plan_anniversary'
+              ? '订阅锚点'
+              : '滚动'
+      return `${q.label}：${limits.join(' / ') || '不限'} · ${strategy}`
+    })
+    .join('；')
+}
+
+function usageByPlanId(rows: ProviderPlanCost[] | undefined): Map<string, ProviderPlanCost> {
+  return new Map((rows ?? []).map((row) => [row.plan_id, row]))
+}
+
+function ProviderPlansSection({
+  credentialId,
+}: Readonly<{
+  credentialId: string
+}>): React.JSX.Element {
+  const { data: plans, isLoading: plansLoading } = useQuery({
+    queryKey: ['gateway', 'credential', credentialId, 'provider-plans'],
+    queryFn: () => gatewayApi.listProviderPlans(credentialId),
+    enabled: credentialId.length > 0,
+  })
+  const { data: usage } = useQuery({
+    queryKey: ['gateway', 'credential', credentialId, 'provider-plan-usage', 30],
+    queryFn: () => gatewayApi.listProviderPlanUsage(credentialId, { days: 30 }),
+    enabled: credentialId.length > 0,
+  })
+  const usageMap = useMemo(() => usageByPlanId(usage), [usage])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>厂商套餐</CardTitle>
+        <CardDescription>
+          上游购买的套餐额度。若厂商返回配额耗尽，系统会立即同步本地套餐状态并触发路由 fallback。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {plansLoading ? (
+          <p className="text-sm text-muted-foreground">加载中…</p>
+        ) : (plans?.length ?? 0) === 0 ? (
+          <p className="text-sm text-muted-foreground">暂无厂商套餐；该凭据按普通按量模式路由。</p>
+        ) : (
+          <div className="space-y-2">
+            {plans?.map((plan) => {
+              const row = usageMap.get(plan.id)
+              const activeNow =
+                plan.is_active &&
+                new Date(plan.valid_from).getTime() <= Date.now() &&
+                new Date(plan.valid_until).getTime() > Date.now()
+              return (
+                <div key={plan.id} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{plan.label}</p>
+                        <Badge variant={activeNow ? 'default' : 'secondary'}>
+                          {activeNow ? '生效中' : plan.is_active ? '未在有效期' : '已停用'}
+                        </Badge>
+                        {plan.auto_renew ? <Badge variant="outline">自动续期</Badge> : null}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {plan.real_model ?? '整凭据共享'} · {formatDateTime(plan.valid_from)} →{' '}
+                        {formatDateTime(plan.valid_until)}
+                      </p>
+                    </div>
+                    <div className="text-right text-xs tabular-nums text-muted-foreground">
+                      <p>30 天请求：{String(row?.requests ?? 0)}</p>
+                      <p>成本：{formatMoney(row?.cost_usd)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{formatQuotaLimit(plan)}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -225,9 +390,11 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
 function CredentialLinkedModelsSection({
   credentialId,
   canManageModels,
+  onAddModels,
 }: Readonly<{
   credentialId: string
   canManageModels: boolean
+  onAddModels?: () => void
 }>): React.JSX.Element {
   const { data: linkedModels, isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'models', 'by-credential', credentialId],
@@ -240,6 +407,7 @@ function CredentialLinkedModelsSection({
       models={linkedModels}
       isLoading={modelsLoading}
       canManageModels={canManageModels}
+      onAddModels={onAddModels}
     />
   )
 }
@@ -252,10 +420,12 @@ function CredentialEditForm({
   cred,
   editable,
   configManaged,
+  onSaved,
 }: Readonly<{
   cred: ProviderCredential
   editable: boolean
   configManaged: boolean
+  onSaved?: () => void
 }>): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -287,6 +457,7 @@ function CredentialEditForm({
   const updateMutation = useMutation({
     mutationFn: (body: GatewayCredentialUpdateBody) => gatewayApi.updateCredential(credId, body),
     onSuccess: () => {
+      onSaved?.()
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', credId] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })

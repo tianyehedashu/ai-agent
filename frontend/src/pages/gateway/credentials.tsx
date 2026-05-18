@@ -2,11 +2,11 @@
  * AI Gateway · 凭据（个人 / 团队）
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import {
@@ -41,10 +41,29 @@ import {
   providerLabel,
   type CredentialFormScope,
 } from '@/features/gateway-credentials/provider-schemas'
+import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import {
+  credentialDetailAddModelsHref,
+  credentialDetailHref,
+} from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 
+const AddModelsDialog = lazy(() =>
+  import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
+    default: m.AddModelsDialog,
+  }))
+)
+
 type CredentialTab = 'personal' | 'team'
+
+interface JustCreatedCredential {
+  id: string
+  provider: string
+  name: string
+  scope: CredentialUpstreamScope
+  is_active: boolean
+}
 
 function parseTab(raw: string | null): CredentialTab {
   return raw === 'personal' || raw === 'team' ? raw : 'team'
@@ -95,6 +114,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
     null
   )
+  const [justCreated, setJustCreated] = useState<JustCreatedCredential | null>(null)
 
   const activeTab = parseTab(searchParams.get('tab'))
 
@@ -141,12 +161,29 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     setPendingProvider(undefined)
   }, [])
 
+  const openAddModelsAfterCreate = useCallback(
+    (cred: ProviderCredential, scope: CredentialUpstreamScope): void => {
+      closeCreateDialog()
+      setJustCreated({
+        id: cred.id,
+        provider: cred.provider,
+        name: cred.name,
+        scope,
+        is_active: cred.is_active,
+      })
+      toast({
+        title: '凭据已创建',
+        description: '正在准备添加模型，也可稍后在凭据详情中操作。',
+      })
+    },
+    [closeCreateDialog, toast]
+  )
+
   const createManagedMutation = useMutation({
     mutationFn: gatewayApi.createCredential,
-    onSuccess: () => {
+    onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      closeCreateDialog()
-      toast({ title: '凭据已创建' })
+      openAddModelsAfterCreate(cred, 'team')
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -155,11 +192,10 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
   const createUserMutation = useMutation({
     mutationFn: gatewayApi.createMyCredential,
-    onSuccess: () => {
+    onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
-      closeCreateDialog()
-      toast({ title: '凭据已创建' })
+      openAddModelsAfterCreate(cred, 'user')
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -288,7 +324,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         <TabsContent value="team" className="mt-4 focus-visible:outline-none">
           <Card>
             <CardContent className="p-0">
-              <ScrollArea className="w-full">
+              <ScrollArea className="w-full overscroll-y-contain">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -336,7 +372,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                             <div className="flex flex-wrap items-center gap-2">
                               {editable ? (
                                 <Link
-                                  to={`/gateway/credentials/${c.id}`}
+                                  to={credentialDetailHref(c.id)}
                                   className="font-medium text-primary underline-offset-4 hover:underline"
                                 >
                                   {c.name}
@@ -394,7 +430,15 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                                   className="h-7 px-2 text-xs"
                                   asChild
                                 >
-                                  <Link to={`/gateway/credentials/${c.id}`}>详情</Link>
+                                  <Link to={credentialDetailHref(c.id)}>详情</Link>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  asChild
+                                >
+                                  <Link to={credentialDetailAddModelsHref(c.id)}>添加模型</Link>
                                 </Button>
                                 <Button
                                   size="icon"
@@ -431,6 +475,30 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         submitting={createSubmitting}
         onSubmit={onCreateSubmit}
       />
+
+      {justCreated ? (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              加载添加模型…
+            </div>
+          }
+        >
+          <AddModelsDialog
+            open
+            onOpenChange={(next: boolean) => {
+              if (!next) setJustCreated(null)
+            }}
+            scope={justCreated.scope}
+            credentialId={justCreated.id}
+            provider={justCreated.provider}
+            credentialName={justCreated.name}
+            isActive={justCreated.is_active}
+            onboardingHint="凭据已创建。现在可以快速添加模型，也可以稍后再来。"
+          />
+        </Suspense>
+      ) : null}
 
       <AlertDialog
         open={credentialPendingDelete !== null}

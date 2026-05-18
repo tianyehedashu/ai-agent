@@ -16,10 +16,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 import time
-from typing import TYPE_CHECKING
 import uuid
 
 from domains.gateway.domain.quota_plan import (
@@ -29,12 +28,11 @@ from domains.gateway.domain.quota_plan import (
     QuotaPlanNamespace,
     QuotaPlanReservation,
     compute_minute_index,
+    compute_reset_at,
+    compute_window_start_minute,
 )
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -54,11 +52,23 @@ def _index_key(base: str) -> str:
     return f"{base}:idx"
 
 
-def _bucket_ttl_seconds(window_seconds: int) -> int:
-    """单个分钟桶 TTL：窗口长度 + 120s 容差，0（整套餐期）按 90 天兜底。"""
-    if window_seconds <= 0:
+def _bucket_ttl_seconds(spec: PlanQuotaSpec) -> int:
+    """单个分钟桶 TTL：窗口长度 + 120s 容差。
+
+    - rolling：``window_seconds + 120``。
+    - calendar_daily_utc：1 天 + 容差。
+    - calendar_monthly_utc：31 天 + 容差。
+    - plan_anniversary：``window_seconds + 120``。
+    - ``window_seconds=0``（整套餐期）：90 天兜底。
+    """
+    if spec.window_seconds <= 0:
         return 86400 * 90
-    return window_seconds + 120
+    strategy = spec.reset_strategy
+    if strategy == "calendar_daily_utc":
+        return 86400 + 120
+    if strategy == "calendar_monthly_utc":
+        return 86400 * 31 + 120
+    return spec.window_seconds + 120
 
 
 @dataclass
@@ -166,7 +176,7 @@ class QuotaPlanService:
                 pipe = client.pipeline()
                 pipe.hincrby(bkey, "requests", request_count)
                 pipe.zadd(ikey, {str(minute_unix): minute_unix})
-                ttl = _bucket_ttl_seconds(spec.window_seconds)
+                ttl = _bucket_ttl_seconds(spec)
                 pipe.expire(bkey, ttl)
                 pipe.expire(ikey, ttl)
                 await pipe.execute()
@@ -219,7 +229,7 @@ class QuotaPlanService:
             if delta_requests:
                 pipe.hincrby(bkey, "requests", delta_requests)
             pipe.zadd(ikey, {str(minute_unix): minute_unix})
-            ttl = _bucket_ttl_seconds(spec.window_seconds)
+            ttl = _bucket_ttl_seconds(spec)
             pipe.expire(bkey, ttl)
             pipe.expire(ikey, ttl)
             await pipe.execute()
@@ -251,6 +261,91 @@ class QuotaPlanService:
             await client.hincrby(bkey, "requests", -reservation.reserved_requests)
         except Exception as exc:  # pragma: no cover - 不影响主路径
             logger.warning("QuotaPlanService.release failed for %s: %s", bkey, exc)
+
+    # ------------------------------------------------------------------
+    # force_exhaust - 上游 429 / insufficient_quota 信号反馈
+    # ------------------------------------------------------------------
+    async def force_exhaust(
+        self,
+        ns: QuotaPlanNamespace,
+        plan_id: uuid.UUID,
+        specs: list[PlanQuotaSpec],
+        *,
+        until: datetime | None = None,
+        reason: str = "upstream_quota_exhausted",
+        now: datetime | None = None,
+    ) -> None:
+        """把指定 plan 的所有 quota 桶立刻打满到 ``limit``，模拟"已耗尽"。
+
+        触发场景：上游返回 429/402/RESOURCE_EXHAUSTED，本地预测 vs 上游真实计数偏差。
+        实现：在当前分钟桶补齐 ``limit_*`` 累计差额；同时设置 ``::forced_until`` 标记
+        作为快照层兜底（超过 until 时再恢复正常滚动）。
+
+        - ``until``：解禁时刻（None 表示按 ``compute_reset_at`` 自然策略）。
+        - 不抛错；失败仅记 warn 日志，避免影响主路径。
+        """
+        if not specs:
+            return
+        when = now or datetime.now(UTC)
+        minute_unix = compute_minute_index(when)
+        client = await get_redis_client()
+        for spec in specs:
+            try:
+                snap = await self._compute_snapshot(ns, plan_id, spec, when)
+                base = _quota_key_base(ns, plan_id, spec.quota_id)
+                bkey = _bucket_key(base, minute_unix)
+                ikey = _index_key(base)
+
+                pipe = client.pipeline()
+                if spec.limit_requests is not None and spec.limit_requests > 0:
+                    delta = max(spec.limit_requests - snap.used_requests, 0)
+                    if delta:
+                        pipe.hincrby(bkey, "requests", delta)
+                if spec.limit_tokens is not None and spec.limit_tokens > 0:
+                    delta_t = max(spec.limit_tokens - snap.used_tokens, 0)
+                    if delta_t:
+                        pipe.hincrby(bkey, "tokens", delta_t)
+                if spec.limit_usd is not None and spec.limit_usd > 0:
+                    delta_u = max(float(spec.limit_usd - snap.used_usd), 0.0)
+                    if delta_u > 0:
+                        pipe.hincrbyfloat(bkey, "cost", delta_u)
+                pipe.zadd(ikey, {str(minute_unix): minute_unix})
+                ttl = _bucket_ttl_seconds(spec)
+                pipe.expire(bkey, ttl)
+                pipe.expire(ikey, ttl)
+
+                # 标记强制耗尽：到 until/或自然 reset 之前所有 snapshot 都视为耗尽
+                resolved_until = until or compute_reset_at(
+                    strategy=spec.reset_strategy,
+                    window_seconds=spec.window_seconds,
+                    now=when,
+                    earliest_minute_in_window=snap.earliest_minute_in_window,
+                    plan_valid_from=spec.plan_valid_from,
+                )
+                if resolved_until is not None:
+                    forced_key = f"{base}:forced_until"
+                    pipe.set(
+                        forced_key,
+                        str(int(resolved_until.timestamp())),
+                        ex=max(int((resolved_until - when).total_seconds()) + 60, 60),
+                    )
+                await pipe.execute()
+                logger.info(
+                    "QuotaPlanService.force_exhaust ns=%s plan=%s quota=%s reason=%s until=%s",
+                    ns,
+                    plan_id,
+                    spec.quota_id,
+                    reason,
+                    resolved_until.isoformat() if resolved_until else "natural",
+                )
+            except Exception as exc:  # pragma: no cover - 不影响主路径
+                logger.warning(
+                    "QuotaPlanService.force_exhaust failed for plan=%s quota=%s: %s",
+                    plan_id,
+                    spec.quota_id,
+                    exc,
+                )
+        self._invalidate_cache(ns, plan_id, [s.quota_id for s in specs])
 
     # ------------------------------------------------------------------
     # snapshot
@@ -286,10 +381,27 @@ class QuotaPlanService:
         base = _quota_key_base(ns, plan_id, spec.quota_id)
         ikey = _index_key(base)
 
+        forced_exhausted = False
+        try:
+            forced_raw = await client.get(f"{base}:forced_until")
+            if forced_raw is not None:
+                forced_until_ts = int(
+                    forced_raw.decode() if isinstance(forced_raw, bytes) else forced_raw
+                )
+                if forced_until_ts > int(now.timestamp()):
+                    forced_exhausted = True
+        except Exception as exc:  # pragma: no cover
+            logger.warning("force_exhaust flag read failed for %s: %s", base, exc)
+
         if spec.window_seconds and spec.window_seconds > 0:
-            cutoff_minute = compute_minute_index(now - timedelta(seconds=spec.window_seconds))
+            window_start_minute = compute_window_start_minute(
+                now,
+                spec.window_seconds,
+                strategy=spec.reset_strategy,
+                plan_valid_from=spec.plan_valid_from,
+            )
             try:
-                await client.zremrangebyscore(ikey, 0, cutoff_minute - 1)
+                await client.zremrangebyscore(ikey, 0, window_start_minute - 1)
             except Exception as exc:  # pragma: no cover
                 logger.warning("zremrangebyscore failed for %s: %s", ikey, exc)
             members = await client.zrange(ikey, 0, -1, withscores=False)
@@ -342,6 +454,14 @@ class QuotaPlanService:
             and used_requests >= spec.limit_requests
         ):
             exhausted_reason = "requests"
+        elif forced_exhausted:
+            exhausted_reason = (
+                "requests"
+                if spec.limit_requests
+                else "tokens"
+                if spec.limit_tokens
+                else "usd"
+            )
 
         return PlanQuotaSnapshot(
             spec=spec,

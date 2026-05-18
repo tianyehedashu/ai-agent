@@ -589,6 +589,179 @@ class AlertEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# =============================================================================
+# Plan (Provider / Entitlement) — 上下游对称
+# =============================================================================
+
+
+PlanResetStrategy = Literal[
+    "rolling",
+    "calendar_daily_utc",
+    "calendar_monthly_utc",
+    "plan_anniversary",
+]
+
+
+class PlanQuotaUpsert(BaseModel):
+    """通用 plan quota 输入；上下游共用，非空字段才设置。"""
+
+    label: str = Field(..., min_length=1, max_length=40)
+    window_seconds: int = Field(..., ge=0, description="0 表示整套餐有效期作为一个累计桶")
+    reset_strategy: PlanResetStrategy = Field(
+        default="rolling",
+        description=(
+            "重置策略：rolling=滚动窗口；calendar_daily_utc=每日 UTC 重置；"
+            "calendar_monthly_utc=自然月重置；plan_anniversary=按 valid_from 切片"
+        ),
+    )
+    limit_usd: Decimal | None = None
+    limit_tokens: int | None = None
+    limit_requests: int | None = None
+
+
+class EntitlementPlanQuotaUpsert(PlanQuotaUpsert):
+    unit_price_usd_per_token: Decimal | None = None
+    unit_price_usd_per_request: Decimal | None = None
+
+
+class ProviderPlanCreate(BaseModel):
+    real_model: str | None = None
+    label: str = Field(..., min_length=1, max_length=100)
+    valid_from: datetime
+    valid_until: datetime
+    is_active: bool = True
+    auto_renew: bool = False
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[PlanQuotaUpsert] = Field(default_factory=list)
+
+
+class ProviderPlanUpdate(BaseModel):
+    real_model: str | None = None
+    label: str | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    is_active: bool | None = None
+    auto_renew: bool | None = None
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[PlanQuotaUpsert] | None = None
+
+
+class PlanQuotaResponse(BaseModel):
+    id: uuid.UUID
+    label: str
+    window_seconds: int
+    reset_strategy: PlanResetStrategy = "rolling"
+    limit_usd: Decimal | None = None
+    limit_tokens: int | None = None
+    limit_requests: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EntitlementPlanQuotaResponse(PlanQuotaResponse):
+    unit_price_usd_per_token: Decimal | None = None
+    unit_price_usd_per_request: Decimal | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProviderPlanResponse(BaseModel):
+    id: uuid.UUID
+    credential_id: uuid.UUID
+    real_model: str | None = None
+    label: str
+    valid_from: datetime
+    valid_until: datetime
+    is_active: bool
+    auto_renew: bool
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[PlanQuotaResponse] = Field(default_factory=list)
+
+
+class EntitlementPlanCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=100)
+    valid_from: datetime
+    valid_until: datetime
+    included_models: list[str] = Field(default_factory=list)
+    included_capabilities: list[str] = Field(default_factory=list)
+    is_active: bool = True
+    auto_renew: bool = False
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[EntitlementPlanQuotaUpsert] = Field(default_factory=list)
+
+
+class EntitlementPlanUpdate(BaseModel):
+    label: str | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    included_models: list[str] | None = None
+    included_capabilities: list[str] | None = None
+    is_active: bool | None = None
+    auto_renew: bool | None = None
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[EntitlementPlanQuotaUpsert] | None = None
+
+
+class EntitlementPlanResponse(BaseModel):
+    id: uuid.UUID
+    scope: str
+    scope_id: uuid.UUID
+    label: str
+    valid_from: datetime
+    valid_until: datetime
+    included_models: list[str] = Field(default_factory=list)
+    included_capabilities: list[str] = Field(default_factory=list)
+    is_active: bool
+    auto_renew: bool
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+    quotas: list[EntitlementPlanQuotaResponse] = Field(default_factory=list)
+
+
+class EntitlementUsageResponse(BaseModel):
+    plan_id: uuid.UUID
+    period_start: datetime
+    period_end: datetime
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: Decimal
+    charged_usd: Decimal
+
+
+class ProviderPlanCostResponse(BaseModel):
+    plan_id: uuid.UUID
+    period_start: datetime
+    period_end: datetime
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: Decimal
+
+
+class MarginGroupItemResponse(BaseModel):
+    group_key: str
+    label: str
+    revenue_usd: Decimal
+    cost_usd: Decimal
+    margin_usd: Decimal
+    margin_ratio: float
+
+
+class MarginSummaryResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    total_revenue_usd: Decimal
+    total_cost_usd: Decimal
+    total_margin_usd: Decimal
+    items: list[MarginGroupItemResponse] = Field(default_factory=list)
+
+
 __all__ = [
     "AlertEventResponse",
     "AlertRuleCreate",
@@ -599,6 +772,12 @@ __all__ = [
     "CredentialResponse",
     "CredentialUpdate",
     "DashboardSummaryResponse",
+    "EntitlementPlanCreate",
+    "EntitlementPlanQuotaResponse",
+    "EntitlementPlanQuotaUpsert",
+    "EntitlementPlanResponse",
+    "EntitlementPlanUpdate",
+    "EntitlementUsageResponse",
     "GatewayModelCreate",
     "GatewayModelPresetResponse",
     "GatewayModelResponse",
@@ -608,10 +787,19 @@ __all__ = [
     "GatewayModelUpdate",
     "GatewayModelUsageSummaryResponse",
     "ManagedCredentialCreate",
+    "MarginGroupItemResponse",
+    "MarginSummaryResponse",
     "PersonalModelCreate",
     "PersonalModelResponse",
     "PersonalModelUpdate",
+    "PlanQuotaResponse",
+    "PlanQuotaUpsert",
+    "PlanResetStrategy",
     "PlatformCredentialStatItem",
+    "ProviderPlanCostResponse",
+    "ProviderPlanCreate",
+    "ProviderPlanResponse",
+    "ProviderPlanUpdate",
     "RequestLogDetailResponse",
     "RequestLogListResponse",
     "RequestLogResponse",

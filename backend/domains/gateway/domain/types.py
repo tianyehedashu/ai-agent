@@ -144,6 +144,12 @@ class AlertChannel(str, Enum):
 # 入站鉴权路径：虚拟 Key（sk-gw-*）或 Identity 平台 Key（sk-* + gateway:proxy）
 GatewayInboundVia = Literal["vkey", "apikey"]
 
+# 模型列表 / 选择器展示的 entitlement 状态（与前端 EntitlementStatus 对齐）
+EntitlementListStatus = Literal["active", "exhausted", "expired", "none", "resetting"]
+
+# 连通性探针在列表 API 中的取值；未测过用 JSON null（Python None）
+ModelConnectivityStatus = Literal["success", "failed"]
+
 
 # =============================================================================
 # 值对象与 DTO
@@ -327,10 +333,12 @@ __all__ = [
     "BudgetScope",
     "CredentialScope",
     "DashboardSummary",
+    "EntitlementListStatus",
     "FallbackKind",
     "GatewayCapability",
     "GatewayInboundVia",
     "ManagementTeamContext",
+    "ModelConnectivityStatus",
     "RequestStatus",
     "RouteConfig",
     "RoutingStrategy",

@@ -27,6 +27,8 @@ interface CredentialModelsCardProps {
   models: GatewayModel[] | undefined
   isLoading: boolean
   canManageModels: boolean
+  /** 打开就地「添加模型」弹窗；未提供时退回链接跳转 */
+  onAddModels?: () => void
 }
 
 export const CredentialModelsCard = memo(function CredentialModelsCard({
@@ -34,6 +36,7 @@ export const CredentialModelsCard = memo(function CredentialModelsCard({
   models,
   isLoading,
   canManageModels,
+  onAddModels,
 }: CredentialModelsCardProps): React.JSX.Element {
   const manageAllHref = teamModelsFilteredHref(credentialId)
   const registerHref = teamModelsRegisterHref(credentialId)
@@ -79,16 +82,29 @@ export const CredentialModelsCard = memo(function CredentialModelsCard({
             </Button>
           ) : null}
           {canManageModels ? (
-            <Button size="sm" asChild>
-              <Link
-                to={registerHref}
+            onAddModels ? (
+              <Button
+                type="button"
+                size="sm"
                 onMouseEnter={preloadModelNavigation}
                 onFocus={preloadModelNavigation}
+                onClick={onAddModels}
               >
                 <Plus className="mr-1.5 h-4 w-4" />
-                增加
-              </Link>
-            </Button>
+                添加模型
+              </Button>
+            ) : (
+              <Button size="sm" asChild>
+                <Link
+                  to={registerHref}
+                  onMouseEnter={preloadModelNavigation}
+                  onFocus={preloadModelNavigation}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  增加
+                </Link>
+              </Button>
+            )
           ) : null}
         </div>
       </CardHeader>
@@ -100,12 +116,22 @@ export const CredentialModelsCard = memo(function CredentialModelsCard({
             <p>暂无模型</p>
             {canManageModels ? (
               <p className="mt-2">
-                <Link
-                  to={registerHref}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  注册第一条模型
-                </Link>
+                {onAddModels ? (
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    onClick={onAddModels}
+                  >
+                    添加第一条模型
+                  </button>
+                ) : (
+                  <Link
+                    to={registerHref}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    注册第一条模型
+                  </Link>
+                )}
                 <span className="mx-1">·</span>
                 <Link
                   to={manageAllHref}

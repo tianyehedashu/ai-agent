@@ -4,7 +4,7 @@ Gateway 管理面 /api/v1/gateway/* 集成测试（dev_client + JWT）。
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import uuid
 
@@ -761,3 +761,309 @@ class TestGatewayManagementApi:
             headers=auth_headers,
         )
         assert r_del.status_code == 204, r_del.text
+
+    @pytest.mark.asyncio
+    async def test_provider_and_entitlement_plan_management_apis(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """三组套餐管理 API：ProviderPlan、EntitlementPlan、usage/margin 读入口。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        now = datetime.now(UTC).replace(microsecond=0)
+        valid_from = (now - timedelta(minutes=1)).isoformat()
+        valid_until = (now + timedelta(days=30)).isoformat()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"plan-cred-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-plan-api-test-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        credential_id = r_cred.json()["id"]
+
+        r_provider_create = await dev_client.post(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            headers=headers,
+            json={
+                "real_model": "openai/gpt-4o-mini",
+                "label": "OpenAI daily pack",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "auto_renew": True,
+                "quotas": [
+                    {
+                        "label": "daily",
+                        "window_seconds": 86400,
+                        "reset_strategy": "calendar_daily_utc",
+                        "limit_requests": 100,
+                    }
+                ],
+            },
+        )
+        assert r_provider_create.status_code == 201, r_provider_create.text
+        provider_plan = r_provider_create.json()
+        provider_plan_id = provider_plan["id"]
+        assert provider_plan["quotas"][0]["reset_strategy"] == "calendar_daily_utc"
+
+        r_provider_list = await dev_client.get(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            headers=headers,
+        )
+        assert r_provider_list.status_code == 200, r_provider_list.text
+        assert any(p["id"] == provider_plan_id for p in r_provider_list.json())
+
+        r_provider_patch = await dev_client.patch(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            headers=headers,
+            json={
+                "label": "OpenAI monthly pack",
+                "quotas": [
+                    {
+                        "label": "monthly",
+                        "window_seconds": 31 * 86400,
+                        "reset_strategy": "calendar_monthly_utc",
+                        "limit_requests": 1000,
+                    }
+                ],
+            },
+        )
+        assert r_provider_patch.status_code == 200, r_provider_patch.text
+        assert r_provider_patch.json()["label"] == "OpenAI monthly pack"
+        assert r_provider_patch.json()["quotas"][0]["reset_strategy"] == "calendar_monthly_utc"
+
+        r_provider_usage = await dev_client.get(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plan-usage?days=7",
+            headers=headers,
+        )
+        assert r_provider_usage.status_code == 200, r_provider_usage.text
+        assert isinstance(r_provider_usage.json(), list)
+
+        r_key = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=headers,
+            json={"name": f"plan-vkey-{uuid.uuid4().hex[:8]}"},
+        )
+        assert r_key.status_code == 201, r_key.text
+        vkey_id = r_key.json()["id"]
+
+        r_ent_create = await dev_client.post(
+            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            headers=headers,
+            json={
+                "label": "Customer daily pack",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "included_models": ["gpt-4o-mini"],
+                "included_capabilities": ["chat"],
+                "quotas": [
+                    {
+                        "label": "daily",
+                        "window_seconds": 86400,
+                        "reset_strategy": "calendar_daily_utc",
+                        "limit_requests": 10,
+                        "unit_price_usd_per_request": "0.01",
+                    }
+                ],
+            },
+        )
+        assert r_ent_create.status_code == 201, r_ent_create.text
+        entitlement = r_ent_create.json()
+        entitlement_id = entitlement["id"]
+        assert entitlement["scope"] == "vkey"
+        assert entitlement["scope_id"] == vkey_id
+        assert entitlement["quotas"][0]["reset_strategy"] == "calendar_daily_utc"
+
+        r_ent_list = await dev_client.get(
+            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            headers=headers,
+        )
+        assert r_ent_list.status_code == 200, r_ent_list.text
+        assert any(p["id"] == entitlement_id for p in r_ent_list.json())
+
+        r_ent_patch = await dev_client.patch(
+            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            headers=headers,
+            json={"label": "Customer monthly pack", "included_models": ["gpt-4o-mini", "gpt-4o"]},
+        )
+        assert r_ent_patch.status_code == 200, r_ent_patch.text
+        assert r_ent_patch.json()["label"] == "Customer monthly pack"
+        assert r_ent_patch.json()["included_models"] == ["gpt-4o-mini", "gpt-4o"]
+
+        r_ent_usage = await dev_client.get(
+            f"/api/v1/gateway/entitlements/{entitlement_id}/usage?days=7",
+            headers=headers,
+        )
+        assert r_ent_usage.status_code == 200, r_ent_usage.text
+        assert r_ent_usage.json()["plan_id"] == entitlement_id
+
+        r_margin = await dev_client.get(
+            "/api/v1/gateway/dashboard/margin?days=7&group_by=credential",
+            headers=headers,
+        )
+        assert r_margin.status_code == 200, r_margin.text
+        margin = r_margin.json()
+        assert "total_revenue_usd" in margin
+        assert "total_cost_usd" in margin
+        assert isinstance(margin["items"], list)
+
+    @pytest.mark.asyncio
+    async def test_plan_apis_reject_cross_team_access(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """ProviderPlan / EntitlementPlan / api-key-grant entitlements API 跨团队应返回 404。
+
+        IDOR 防护：用 team A 的 credential / vkey id，从 team B 的 personal team
+        上下文（不同 user，且非平台管理员）访问应得到 404，且不暴露实体存在性。
+        """
+        team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers_a = {**auth_headers, "X-Team-Id": str(team_a.id)}
+        now = datetime.now(UTC).replace(microsecond=0)
+        valid_from = (now - timedelta(minutes=1)).isoformat()
+        valid_until = (now + timedelta(days=30)).isoformat()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers_a,
+            json={
+                "provider": "openai",
+                "name": f"cross-team-cred-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-cross-team-test-12345",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        credential_id = r_cred.json()["id"]
+
+        r_pp = await dev_client.post(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            headers=headers_a,
+            json={
+                "real_model": "openai/gpt-4o-mini",
+                "label": "Owner Plan",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "quotas": [
+                    {"label": "daily", "window_seconds": 86400, "limit_requests": 100}
+                ],
+            },
+        )
+        assert r_pp.status_code == 201, r_pp.text
+        provider_plan_id = r_pp.json()["id"]
+
+        r_key = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=headers_a,
+            json={"name": f"cross-team-vkey-{uuid.uuid4().hex[:8]}"},
+        )
+        assert r_key.status_code == 201, r_key.text
+        vkey_id = r_key.json()["id"]
+
+        r_ent = await dev_client.post(
+            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            headers=headers_a,
+            json={
+                "label": "Owner Entitlement",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "quotas": [
+                    {"label": "daily", "window_seconds": 86400, "limit_requests": 10}
+                ],
+            },
+        )
+        assert r_ent.status_code == 201, r_ent.text
+        entitlement_id = r_ent.json()["id"]
+
+        intruder = User(
+            email=f"intruder_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Intruder",
+        )
+        db_session.add(intruder)
+        await db_session.commit()
+        await db_session.refresh(intruder)
+        token_pair = await UserUseCase(db_session).create_token(intruder)
+        team_b = await TeamService(db_session).ensure_personal_team(intruder.id)
+        await db_session.commit()
+        headers_b = {
+            "Authorization": f"Bearer {token_pair.access_token}",
+            "X-Team-Id": str(team_b.id),
+        }
+
+        r1 = await dev_client.get(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            headers=headers_b,
+        )
+        assert r1.status_code == 404, r1.text
+
+        r2 = await dev_client.patch(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            headers=headers_b,
+            json={"label": "hijacked"},
+        )
+        assert r2.status_code == 404, r2.text
+
+        r3 = await dev_client.delete(
+            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            headers=headers_b,
+        )
+        assert r3.status_code == 404, r3.text
+
+        r4 = await dev_client.get(
+            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            headers=headers_b,
+        )
+        assert r4.status_code == 404, r4.text
+
+        r5 = await dev_client.post(
+            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            headers=headers_b,
+            json={
+                "label": "hijack",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "quotas": [
+                    {"label": "daily", "window_seconds": 86400, "limit_requests": 1}
+                ],
+            },
+        )
+        assert r5.status_code == 404, r5.text
+
+        r6 = await dev_client.patch(
+            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            headers=headers_b,
+            json={"label": "hijacked"},
+        )
+        assert r6.status_code == 404, r6.text
+
+        r7 = await dev_client.delete(
+            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            headers=headers_b,
+        )
+        assert r7.status_code == 404, r7.text
+
+        r8 = await dev_client.get(
+            f"/api/v1/gateway/entitlements/{entitlement_id}/usage?days=7",
+            headers=headers_b,
+        )
+        assert r8.status_code == 404, r8.text
+
+        r9 = await dev_client.get(
+            f"/api/v1/gateway/api-key-grants/{uuid.uuid4()}/entitlements",
+            headers=headers_b,
+        )
+        assert r9.status_code == 404, r9.text

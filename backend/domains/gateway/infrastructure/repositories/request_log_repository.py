@@ -68,6 +68,8 @@ class RequestLogRepository:
         prompt_redacted: dict[str, Any] | None,
         response_summary: dict[str, Any] | None,
         metadata_extra: dict[str, Any] | None,
+        entitlement_plan_id: UUID | None = None,
+        provider_plan_id: UUID | None = None,
     ) -> GatewayRequestLog:
         log = GatewayRequestLog(
             team_id=team_id,
@@ -79,6 +81,8 @@ class RequestLogRepository:
             route_snapshot=route_snapshot,
             credential_id=credential_id,
             credential_name_snapshot=credential_name_snapshot,
+            entitlement_plan_id=entitlement_plan_id,
+            provider_plan_id=provider_plan_id,
             deployment_gateway_model_id=deployment_gateway_model_id,
             deployment_model_name=deployment_model_name,
             capability=capability,

@@ -67,3 +67,8 @@ export function credentialsTeamListHref(): string {
 export function credentialDetailHref(credentialId: string): string {
   return `/gateway/credentials/${encodeURIComponent(credentialId)}`
 }
+
+/** 凭据详情并打开「添加模型」弹窗（由详情页根据 query 派生展示，无需 effect） */
+export function credentialDetailAddModelsHref(credentialId: string): string {
+  return `${credentialDetailHref(credentialId)}?addModels=1`
+}

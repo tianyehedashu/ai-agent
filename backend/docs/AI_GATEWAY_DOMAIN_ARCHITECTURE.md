@@ -223,11 +223,51 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **约束**：``uq_gateway_models_team_name`` 决定同一 ``(team_id, name)`` 仅一行注册记录，因而 **一个别名只有一个主调用面**。若同一逻辑产品既要走 chat 又要走 images/videos 等不同 HTTP 面，应使用 **不同注册别名**（例如 `my-model` 与 `my-model-image`），并在 ``GatewayRoute.primary_models`` 中指向对应注册名。
 
+#### 4.5.1 三条模型列表读路径
+
+| 端点 | 消费方 | 列表范围 | 扩展字段 | 过滤策略 |
+|------|--------|----------|----------|----------|
+| ``GET /v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
+| ``GET /api/v1/gateway/models`` | 管理 UI（JWT + 团队） | 含 disabled；可按 provider / credential 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
+| ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
+
+``gateway.callable`` 派生规则（与前端 ``ModelStatusBadge`` 一致）：连通性 ``failed`` → 不可调用；``entitlement_status`` 为 ``exhausted`` / ``expired`` → 不可调用；``resetting`` / ``active`` / ``none`` / 未测 → 可调用。``entitlement_status`` 含 ``resetting``（配额已耗尽且距窗口重置 ≤ 5 分钟）。上游 ``ProviderPlan`` 耗尽仍在 pre-call 拦截，列表阶段不做批量快照。
+
+组装逻辑：Presentation 解析 ``resolve_entitlement_scope``（``application/entitlement_model_status.py``）后调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
+
 ### 4.6 LiteLLM Router 与「同别名多调用面」
 
 LiteLLM Router 的 ``model_list`` 以 **deployment 的 ``model_name``** 参与调度；同一字符串多 deployment 时行为依赖版本与具体调用函数（``acompletion`` / ``aimage_generation`` / ``avideo_generation`` 等），**不应依赖未文档化的隐式过滤**。
 
 **工程定案（当前阶段）**：需要多 HTTP 面时采用 **别名拆分**（多行 ``GatewayModel``、不同 ``name``），而非在同一 ``name`` 上叠多个主调用面。若未来要强需求「单展示名多面」，需单独做 LiteLLM 行为验证与 Router 构建改造后再定 schema。
+
+### 4.7 上下游对称套餐与周期纠偏
+
+Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanService``，但**业务含义与失败语义不同**：
+
+| 层级 | 存储 | 绑定对象 | 耗尽后的语义 | 是否 fallback | 统计用途 |
+|------|------|----------|--------------|---------------|----------|
+| 上游 ``ProviderPlan`` | ``provider_plans`` / ``provider_plan_quotas`` | ``provider_credentials`` + 可选 ``real_model`` | 该 deployment 暂不可用，抛 ``ProviderPlanExhaustedError`` 给 Router cooldown | 是：切下一条凭据 / fallback 模型 | 厂商成本、凭据成本归因 |
+| 下游 ``EntitlementPlan`` | ``entitlement_plans`` / ``entitlement_plan_quotas`` | ``vkey`` 或 ``api_key_gateway_grant`` | 当前客户套餐不可用，抛 ``EntitlementPlanExhaustedError``（HTTP 429） | 否：这是客户购买边界，不应绕过 | 客户收入、用量权益、毛利 |
+
+**与 budget / route fallback 的边界**：
+
+1. ``Budget`` 仍是组织 / key / 用户的整体消费护栏，语义是「平台侧预算」；``EntitlementPlan`` 是售卖套餐权益，二者可以同时存在，任一耗尽都拒绝。
+2. ``ProviderPlan`` 只影响出站 deployment 可用性，不改变客户 entitlement / budget；耗尽时允许 Router 在同一路由内 fallback。
+3. ``EntitlementPlan`` 耗尽是入站硬拒绝，不应尝试其它上游凭据，否则会突破客户套餐边界。
+
+**周期策略与厂商周期不一致的纠偏**：
+
+``provider_plan_quotas`` / ``entitlement_plan_quotas`` 均有 ``reset_strategy``：
+
+| 策略 | 含义 | 典型场景 |
+|------|------|----------|
+| ``rolling`` | 按 ``window_seconds`` 滚动窗口（默认，兼容历史） | 自建分钟 / 小时窗口 |
+| ``calendar_daily_utc`` | 当前 UTC 日 00:00 起算，次日 00:00 重置 | 厂商日额度 / RPD |
+| ``calendar_monthly_utc`` | 自然月 1 号 UTC 00:00 重置 | 月套餐 |
+| ``plan_anniversary`` | 以 plan.valid_from 为锚点，每 ``window_seconds`` 切片 | 订阅合同日 / 购买日不在自然边界 |
+
+本地窗口只是预测，**上游返回 402 / 429 / ``insufficient_quota`` / ``RESOURCE_EXHAUSTED`` 才是事实来源**。``custom_logger.async_log_failure_event`` 会识别这些信号，并调用 ``ProviderPlanGuard.mark_upstream_exhausted`` → ``QuotaPlanService.force_exhaust`` 把对应 ``ProviderPlan`` 的 quota 立即打满到下次 reset。这样不用引入复杂的厂商 header 同步，也能在真实偏差出现后快速收敛，避免连续浪费上游调用。
 
 ---
 

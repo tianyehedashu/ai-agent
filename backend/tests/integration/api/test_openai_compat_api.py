@@ -48,7 +48,17 @@ class TestOpenAiCompatApi:
             assert r.status_code == 200, r.text
             body = r.json()
             assert body.get("object") == "list"
-            assert isinstance(body.get("data"), list)
+            data = body.get("data")
+            assert isinstance(data, list)
+            if data:
+                first = data[0]
+                assert "model_types" in first
+                assert isinstance(first["model_types"], list)
+                gateway = first.get("gateway")
+                assert isinstance(gateway, dict)
+                assert "callable" in gateway
+                assert "connectivity_status" in gateway
+                assert "entitlement_status" in gateway
         finally:
             clear_permission_context()
 

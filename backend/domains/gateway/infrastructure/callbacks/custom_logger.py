@@ -358,6 +358,61 @@ def _extract_gateway_metadata(kwargs: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+_UPSTREAM_QUOTA_KEYWORDS: tuple[str, ...] = (
+    "insufficient_quota",
+    "quota_exceeded",
+    "quota exceeded",
+    "rate_limit_exceeded",
+    "resource_exhausted",
+    "resource has been exhausted",
+    "you exceeded your current quota",
+    "billing_hard_limit_reached",
+    "exceeded_call_rate_limit",
+)
+
+
+def _is_upstream_quota_exhaustion(
+    *, error_code: str | None, error_message: str | None, status_code: int | None
+) -> bool:
+    """识别上游"配额耗尽"类失败信号。
+
+    覆盖 OpenAI/Anthropic/Google/Volcengine 等典型用语；保守宽松匹配，宁可
+    多一次 force_exhaust（最坏后果是延迟 N 分钟恢复），不要漏掉一次（最坏后果
+    是连续浪费上游调用）。
+    """
+    if status_code is not None and status_code in (402, 429):
+        msg = (error_message or "").lower()
+        for kw in _UPSTREAM_QUOTA_KEYWORDS:
+            if kw in msg:
+                return True
+        # 单看 status 不足够：429 也可能是临时限流；要求 message 含关键字。
+        # 但 402（支付/余额）几乎必然=配额耗尽。
+        if status_code == 402:
+            return True
+    if error_code is None and error_message is None:
+        return False
+    blob = f"{error_code or ''} {error_message or ''}".lower()
+    return any(kw in blob for kw in _UPSTREAM_QUOTA_KEYWORDS)
+
+
+def _extract_status_code(exc: Any) -> int | None:
+    """从 LiteLLM/HTTP 异常提取 status_code（兼容 dict 与对象）。"""
+    if exc is None:
+        return None
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code
+    code = getattr(exc, "http_status", None)
+    if isinstance(code, int):
+        return code
+    if isinstance(exc, dict):
+        for k in ("status_code", "http_status", "status"):
+            v = exc.get(k)
+            if isinstance(v, int):
+                return v
+    return None
+
+
 def _credential_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
     """从 LiteLLM Router deployment 的 model_info 取凭据（与 router_singleton 写入字段一致）。"""
     for container_key in ("litellm_params", "standard_logging_object"):
@@ -499,6 +554,9 @@ async def _persist_event(
 
     deploy_id, deploy_name = _deployment_from_model_info_kwargs(kwargs)
 
+    entitlement_plan_id = _to_uuid(metadata.get("gateway_entitlement_plan_id"))
+    provider_plan_id = _to_uuid(metadata.get("gateway_provider_plan_id"))
+
     input_tokens, output_tokens, cached_tokens = _extract_usage(response_obj)
     cost_usd = _calc_cost(kwargs, response_obj) if status == "success" else Decimal("0")
 
@@ -584,6 +642,8 @@ async def _persist_event(
                     route_snapshot=route_snapshot,
                     credential_id=cred_id,
                     credential_name_snapshot=cred_name_snap,
+                    entitlement_plan_id=entitlement_plan_id,
+                    provider_plan_id=provider_plan_id,
                     deployment_gateway_model_id=deploy_id,
                     deployment_model_name=deploy_name,
                     capability=capability,
@@ -622,6 +682,45 @@ async def _persist_event(
             output_tokens=output_tokens,
             cost_usd=cost_usd,
         )
+
+    # ---------- 上游配额耗尽信号 → 立即拉满本地 ProviderPlan ----------
+    if status == "failed" and provider_plan_id is not None:
+        with suppress(Exception):
+            await _maybe_mark_provider_plan_upstream_exhausted(
+                kwargs=kwargs,
+                provider_plan_id=provider_plan_id,
+                error_code=error_code,
+                error_message=error_message,
+            )
+
+
+async def _maybe_mark_provider_plan_upstream_exhausted(
+    *,
+    kwargs: dict[str, Any],
+    provider_plan_id: uuid.UUID,
+    error_code: str | None,
+    error_message: str | None,
+) -> None:
+    """检测上游"配额耗尽"信号并即时同步本地 ProviderPlan quota。
+
+    本地 quota 永远是"礼貌的预测"，上游 429 才是真理；命中此分支 = 用真理收敛
+    预测，避免后续连续浪费上游调用。
+    """
+    exc = kwargs.get("exception") or kwargs.get("error")
+    status_code = _extract_status_code(exc)
+    if not _is_upstream_quota_exhaustion(
+        error_code=error_code,
+        error_message=error_message,
+        status_code=status_code,
+    ):
+        return
+    from domains.gateway.application.provider_plan_guard import get_provider_plan_guard
+
+    guard = get_provider_plan_guard()
+    await guard.mark_upstream_exhausted(
+        provider_plan_id,
+        reason=f"upstream_signal:{error_code or status_code or 'unknown'}",
+    )
 
 
 async def _bump_redis_counters(
