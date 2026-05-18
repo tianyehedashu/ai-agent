@@ -3,9 +3,23 @@ import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import type { HealthFilter } from './constants'
+import type { QueryClient } from '@tanstack/react-query'
+
+/** 接入通道 id → 展示名（模块级 Map，避免列表内反复线性查找） */
+const MODEL_PROVIDER_NAME_BY_ID: ReadonlyMap<string, string> = new Map(
+  MODEL_PROVIDERS.map((p) => [p.id, p.name])
+)
+
+/** 与 TeamModelsWorkspace listModels 查询键一致 */
+export function gatewayModelsListQueryKey(
+  providerFilter = '',
+  credentialFilter = ''
+): readonly ['gateway', 'models', string, string] {
+  return ['gateway', 'models', providerFilter, credentialFilter]
+}
 
 export function channelLabel(id: string): string {
-  return MODEL_PROVIDERS.find((p) => p.id === id)?.name ?? id
+  return MODEL_PROVIDER_NAME_BY_ID.get(id) ?? id
 }
 
 /** 与概览页一致：对齐后端 Decimal / JSON 数字 */
@@ -164,4 +178,26 @@ export function summarizeHealth(models: GatewayModel[]): {
     else unknown += 1
   }
   return { total: models.length, success, failed, unknown }
+}
+
+/** 刷新模型列表相关 React Query 缓存 */
+export function invalidateGatewayModelCaches(
+  queryClient: QueryClient,
+  options?: { credentialId?: string; usageSummary?: boolean }
+): void {
+  void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+  if (options?.credentialId) {
+    void queryClient.invalidateQueries({
+      queryKey: ['gateway', 'models', 'by-credential', options.credentialId],
+    })
+  }
+  if (options?.usageSummary) {
+    void queryClient.invalidateQueries({ queryKey: ['gateway', 'models', 'usage-summary'] })
+  }
+}
+
+/** 注册别名变更后，刷新虚拟路由与 vkey 白名单（后端会级联更新引用） */
+export function invalidateGatewayModelAliasDependents(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+  void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
 }

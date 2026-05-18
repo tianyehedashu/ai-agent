@@ -1,12 +1,15 @@
 /**
- * 个人凭据（/my-credentials）列表与 CRUD，用于 AI Gateway 凭据页「个人」Tab。
+ * 个人凭据（/my-credentials）列表与编辑，用于 AI Gateway 凭据页「个人」Tab。
+ *
+ * 新增动作由外层 [`pages/gateway/credentials.tsx`](../../pages/gateway/credentials.tsx)
+ * 的 `CreateCredentialDialog` 统一承担，本组件仅承载列表渲染与编辑弹窗。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
+import { Eye, EyeOff, Key, Loader2, Pencil } from 'lucide-react'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
@@ -22,33 +25,42 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
+import { ExtraFieldsRenderer } from './credential-extra-fields'
+import {
+  compactExtra,
+  extraToFormValues,
+  type CredentialExtraValues,
+} from './credential-extra-utils'
 import { displayListApiKeyMasked } from './mask-display'
+import { apiKeyLabelForProvider, extraFieldsForProvider } from './provider-schemas'
 
-export function PersonalCredentialsPanel(): React.ReactElement {
+export interface PersonalCredentialsPanelProps {
+  /**
+   * 上层接管「添加凭据」入口：可选预填 provider。
+   * 若未注入，则 panel 不展示「添加账号」按钮。
+   */
+  onAddCredential?: (provider?: string) => void
+}
+
+export function PersonalCredentialsPanel({
+  onAddCredential,
+}: PersonalCredentialsPanelProps = {}): React.ReactElement {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
   const hasAuthSession = Boolean(token)
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
-  const [addOpen, setAddOpen] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
-  const [formProvider, setFormProvider] = useState('openai')
   const [formName, setFormName] = useState('')
   const [formApiKey, setFormApiKey] = useState('')
   const [formApiBase, setFormApiBase] = useState('')
+  const [formExtra, setFormExtra] = useState<CredentialExtraValues>({})
   const [formIsActive, setFormIsActive] = useState(true)
 
   const { data: credentials = [], isLoading } = useQuery({
@@ -82,67 +94,45 @@ export function PersonalCredentialsPanel(): React.ReactElement {
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
   }, [queryClient])
 
-  const resetForm = useCallback((): void => {
-    setFormProvider('openai')
+  const resetEditForm = useCallback((): void => {
     setFormName('')
     setFormApiKey('')
     setFormApiBase('')
+    setFormExtra({})
     setFormIsActive(true)
     setShowKey(false)
   }, [])
 
-  const openAdd = useCallback(
-    (provider?: string): void => {
-      resetForm()
-      if (provider) setFormProvider(provider)
-      setAddOpen(true)
-    },
-    [resetForm]
-  )
-
   const openEdit = useCallback((c: ProviderCredential): void => {
     setEditCred(c)
-    setFormProvider(c.provider)
     setFormName(c.name)
     setFormApiKey('')
     setFormApiBase(c.api_base ?? '')
+    setFormExtra(extraToFormValues(c.extra))
     setFormIsActive(c.is_active)
     setShowKey(false)
   }, [])
 
-  const createMutation = useMutation({
-    mutationFn: () =>
-      gatewayApi.createMyCredential({
-        provider: formProvider,
-        name: formName.trim() || 'default',
-        api_key: formApiKey.trim(),
-        api_base: formApiBase.trim() || null,
-      }),
-    onSuccess: () => {
-      invalidate()
-      setAddOpen(false)
-      resetForm()
-      toast({ title: '凭据已添加' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '添加失败', description: e.message })
-    },
-  })
+  const editProvider = editCred?.provider ?? ''
+  const editExtraFields = useMemo(() => extraFieldsForProvider(editProvider), [editProvider])
+  const editApiKeyLabel = apiKeyLabelForProvider(editProvider)
 
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!editCred) throw new Error('no credential')
+      const compactedExtra = compactExtra(formExtra)
       return gatewayApi.updateMyCredential(editCred.id, {
         name: formName.trim() || editCred.name,
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
         api_base: formApiBase.trim() || null,
+        extra: Object.keys(compactedExtra).length > 0 ? compactedExtra : undefined,
         is_active: formIsActive,
       })
     },
     onSuccess: () => {
       invalidate()
       setEditCred(null)
-      resetForm()
+      resetEditForm()
       toast({ title: '已保存' })
     },
     onError: (e: Error) => {
@@ -160,14 +150,7 @@ export function PersonalCredentialsPanel(): React.ReactElement {
       toast({ variant: 'destructive', title: '验证失败', description: e.message })
     },
   })
-
-  const submitAdd = (): void => {
-    if (!formApiKey.trim()) {
-      toast({ variant: 'destructive', title: '请输入 API Key' })
-      return
-    }
-    createMutation.mutate()
-  }
+  const { isPending: testIsPending, mutate: testMutate } = testMutation
 
   const submitEdit = (): void => {
     if (!editCred) return
@@ -175,10 +158,13 @@ export function PersonalCredentialsPanel(): React.ReactElement {
     const baseUnchanged = formApiBase.trim() === (editCred.api_base ?? '').trim()
     const keyEmpty = !formApiKey.trim()
     const activeUnchanged = formIsActive === editCred.is_active
-    if (keyEmpty && nameUnchanged && baseUnchanged && activeUnchanged) {
+    const extraChanged =
+      JSON.stringify(compactExtra(formExtra)) !==
+      JSON.stringify(compactExtra(extraToFormValues(editCred.extra)))
+    if (keyEmpty && nameUnchanged && baseUnchanged && activeUnchanged && !extraChanged) {
       toast({
         variant: 'destructive',
-        title: '请至少修改名称、Base、启用状态或填写新 API Key',
+        title: '请至少修改名称、Base、扩展字段、启用状态或填写新 API Key',
       })
       return
     }
@@ -186,24 +172,6 @@ export function PersonalCredentialsPanel(): React.ReactElement {
   }
 
   const outerClass = 'space-y-4'
-
-  const headerToolbar = useMemo(
-    () => (
-      <div className="flex items-center gap-1">
-        <Button
-          size="sm"
-          disabled={!hasAuthSession}
-          onClick={() => {
-            openAdd()
-          }}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          添加
-        </Button>
-      </div>
-    ),
-    [hasAuthSession, openAdd]
-  )
 
   const credentialsBody = useMemo(
     () => (
@@ -236,26 +204,28 @@ export function PersonalCredentialsPanel(): React.ReactElement {
                   </Badge>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!hasAuthSession}
-                    onClick={() => {
-                      openAdd(provider)
-                    }}
-                  >
-                    添加账号
-                  </Button>
+                  {onAddCredential ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasAuthSession}
+                      onClick={() => {
+                        onAddCredential(provider)
+                      }}
+                    >
+                      添加账号
+                    </Button>
+                  ) : null}
                   {rows.length > 0 ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={!hasAuthSession || testMutation.isPending}
+                      disabled={!hasAuthSession || testIsPending}
                       onClick={() => {
-                        testMutation.mutate(provider)
+                        testMutate(provider)
                       }}
                     >
-                      {testMutation.isPending ? '验证中…' : '验证'}
+                      {testIsPending ? '验证中…' : '验证'}
                     </Button>
                   ) : null}
                 </div>
@@ -309,7 +279,15 @@ export function PersonalCredentialsPanel(): React.ReactElement {
         })}
       </>
     ),
-    [hasAuthSession, showFullMaskedInList, byProvider, testMutation, openAdd, openEdit]
+    [
+      hasAuthSession,
+      showFullMaskedInList,
+      byProvider,
+      testIsPending,
+      testMutate,
+      openEdit,
+      onAddCredential,
+    ]
   )
 
   if (isLoading) {
@@ -325,104 +303,20 @@ export function PersonalCredentialsPanel(): React.ReactElement {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base">提供商凭据</CardTitle>
-          {headerToolbar}
         </CardHeader>
         <CardContent className="space-y-4">{credentialsBody}</CardContent>
       </Card>
-
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加凭据</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="space-y-2">
-              <Label>提供商</Label>
-              <Select value={formProvider} onValueChange={setFormProvider}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {credentialProviderLabel(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>账号名称</Label>
-              <Input
-                value={formName}
-                onChange={(e) => {
-                  setFormName(e.target.value)
-                }}
-                placeholder="work / personal / default"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <div className="relative">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={formApiKey}
-                  onChange={(e) => {
-                    setFormApiKey(e.target.value)
-                  }}
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                  onClick={() => {
-                    setShowKey(!showKey)
-                  }}
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>API Base（可选）</Label>
-              <Input
-                type="url"
-                value={formApiBase}
-                onChange={(e) => {
-                  setFormApiBase(e.target.value)
-                }}
-                placeholder="自定义 API 地址"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddOpen(false)
-              }}
-            >
-              取消
-            </Button>
-            <Button onClick={submitAdd} disabled={createMutation.isPending}>
-              {createMutation.isPending ? '保存中…' : '保存'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={editCred !== null}
         onOpenChange={(o) => {
           if (!o) {
             setEditCred(null)
-            resetForm()
+            resetEditForm()
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>编辑凭据</DialogTitle>
           </DialogHeader>
@@ -447,7 +341,7 @@ export function PersonalCredentialsPanel(): React.ReactElement {
               />
             </div>
             <div className="space-y-2">
-              <Label>新 API Key（留空则不变）</Label>
+              <Label>新 {editApiKeyLabel}（留空则不变）</Label>
               <div className="relative">
                 <Input
                   type={showKey ? 'text' : 'password'}
@@ -463,7 +357,7 @@ export function PersonalCredentialsPanel(): React.ReactElement {
                   size="icon"
                   className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
                   onClick={() => {
-                    setShowKey(!showKey)
+                    setShowKey((v) => !v)
                   }}
                 >
                   {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -480,6 +374,12 @@ export function PersonalCredentialsPanel(): React.ReactElement {
                 }}
               />
             </div>
+            <ExtraFieldsRenderer
+              fields={editExtraFields}
+              values={formExtra}
+              onChange={setFormExtra}
+              idPrefix="edit-cred-extra"
+            />
           </div>
           <DialogFooter>
             <Button

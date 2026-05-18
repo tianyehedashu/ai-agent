@@ -67,6 +67,17 @@ class GatewayRequestLog(Base):
     credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     credential_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    entitlement_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        comment="命中的下游 EntitlementPlan.id；统计 '客户消费' 的聚合键",
+    )
+    provider_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        comment="命中的上游 ProviderPlan.id；统计 '上游成本/厂商配额' 的聚合键",
+    )
+
     deployment_gateway_model_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
@@ -132,6 +143,16 @@ class GatewayRequestLog(Base):
         Index("ix_gateway_request_logs_user_time", "user_id", "created_at"),
         Index("ix_gateway_request_logs_vkey_time", "vkey_id", "created_at"),
         Index("ix_gateway_request_logs_credential_time", "credential_id", "created_at"),
+        Index(
+            "ix_gateway_request_logs_entitlement_time",
+            "entitlement_plan_id",
+            "created_at",
+        ),
+        Index(
+            "ix_gateway_request_logs_provider_plan_time",
+            "provider_plan_id",
+            "created_at",
+        ),
         Index("ix_gateway_request_logs_status_time", "status", "created_at"),
         Index(
             "ix_gateway_request_logs_deploy_team_time",

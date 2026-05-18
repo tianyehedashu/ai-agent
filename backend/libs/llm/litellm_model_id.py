@@ -7,6 +7,8 @@ LiteLLM 模型标识拼装工具
 - ``zhipuai`` → ``zai/<model_id>``；
 - ``dashscope`` / ``deepseek`` / ``volcengine`` → ``<provider>/<model_id>``；
 - 其它（``openai``、``anthropic``、``custom``、未知 provider）→ 原样返回。
+
+前缀与 provider 是否匹配的业务校验见 ``domains.gateway.application.litellm_real_model_prefix``。
 """
 
 from __future__ import annotations

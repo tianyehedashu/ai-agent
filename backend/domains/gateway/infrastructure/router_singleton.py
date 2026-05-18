@@ -16,7 +16,12 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
+from domains.gateway.domain.litellm_credential_extra_keys import (
+    credential_extra_keys_for_litellm,
+    litellm_api_key_param_name,
+)
 from libs.crypto import decrypt_value, derive_encryption_key
+from libs.llm.litellm_model_id import build_litellm_model_id
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -80,20 +85,24 @@ def _build_litellm_params(
 ) -> dict[str, Any]:
     """构造单个 deployment 的 litellm_params"""
     params: dict[str, Any] = {
-        "model": real_model,
+        "model": build_litellm_model_id(provider, real_model),
     }
     encryption_key = _get_encryption_key()
     try:
-        params["api_key"] = decrypt_value(credential.api_key_encrypted, encryption_key)
+        decrypted_api_key = decrypt_value(credential.api_key_encrypted, encryption_key)
     except Exception:  # pragma: no cover
         logger.warning("Failed to decrypt credential %s; falling back to raw value", credential.id)
-        params["api_key"] = credential.api_key_encrypted
+        decrypted_api_key = credential.api_key_encrypted
+    api_key_param = litellm_api_key_param_name(provider)
+    params[api_key_param] = decrypted_api_key
     if credential.api_base:
         params["api_base"] = credential.api_base
     extra = credential.extra or {}
-    for key in ("organization", "project_id", "region", "endpoint_id"):
-        if key in extra:
-            params[key] = extra[key]
+    for key in credential_extra_keys_for_litellm(provider):
+        value = extra.get(key)
+        if value is None or value == "":
+            continue
+        params[key] = value
     if rpm_limit:
         params["rpm"] = rpm_limit
     if tpm_limit:

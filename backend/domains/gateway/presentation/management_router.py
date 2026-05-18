@@ -45,9 +45,17 @@ from domains.gateway.application.management import (
     GatewayManagementReadService,
     GatewayManagementWriteService,
 )
+from domains.gateway.application.management.credential_upstream_catalog import (
+    CredentialUpstreamCatalogService,
+)
 from domains.gateway.application.model_selector_reads import list_available_models
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
-from domains.gateway.domain.types import PERSONAL_MODEL_PROVIDERS, USER_GATEWAY_CREDENTIAL_PROVIDERS
+from domains.gateway.domain.credential_probe import CredentialProbeResult
+from domains.gateway.domain.types import (
+    MANAGED_GATEWAY_CREDENTIAL_PROVIDERS,
+    PERSONAL_MODEL_PROVIDERS,
+    USER_GATEWAY_CREDENTIAL_PROVIDERS,
+)
 from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.domain.virtual_key_service import (
     generate_vkey,
@@ -94,6 +102,17 @@ from domains.gateway.presentation.schemas.common import (
     VirtualKeyCreateResponse,
     VirtualKeyResponse,
 )
+from domains.gateway.presentation.schemas.credential_upstream_catalog import (
+    BatchImportFailureItem,
+    CredentialProbeResponse,
+    PersonalModelBatchImportCreatedItem,
+    PersonalModelBatchImportRequest,
+    PersonalModelBatchImportResponse,
+    TeamGatewayModelBatchImportCreatedItem,
+    TeamGatewayModelBatchImportRequest,
+    TeamGatewayModelBatchImportResponse,
+    UpstreamModelItemResponse,
+)
 from domains.identity.presentation.deps import (
     AdminUser,
     OptionalAuthUser,
@@ -108,6 +127,20 @@ from libs.exceptions import HttpMappableDomainError, ValidationError
 router = APIRouter(prefix="/api/v1/gateway", tags=["AI Gateway"])
 
 
+def _credential_probe_to_response(result: CredentialProbeResult) -> CredentialProbeResponse:
+    return CredentialProbeResponse(
+        credential_id=result.credential_id,
+        probe_at=result.probe_at,
+        support=result.support,
+        upstream=result.upstream,
+        items=[
+            UpstreamModelItemResponse(id=i.id, owned_by=i.owned_by) for i in result.items
+        ],
+        message=result.message,
+        http_status=result.http_status,
+    )
+
+
 def _validate_user_credential_provider(provider: str) -> str:
     p = provider.lower()
     if p not in USER_GATEWAY_CREDENTIAL_PROVIDERS:
@@ -116,6 +149,20 @@ def _validate_user_credential_provider(provider: str) -> str:
             detail=(
                 f"不支持的提供商: {provider}。"
                 f"支持: {', '.join(sorted(USER_GATEWAY_CREDENTIAL_PROVIDERS))}"
+            ),
+        )
+    return p
+
+
+def _validate_managed_credential_provider(provider: str) -> str:
+    """校验 team/system 凭据 provider；与前端 `provider-schemas.ts` 表对齐。"""
+    p = provider.lower()
+    if p not in MANAGED_GATEWAY_CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"不支持的提供商: {provider}。"
+                f"支持: {', '.join(sorted(MANAGED_GATEWAY_CREDENTIAL_PROVIDERS))}"
             ),
         )
     return p
@@ -148,6 +195,15 @@ def _gateway_management_writes(
 
 MgmtReads = Annotated[GatewayManagementReadService, Depends(_gateway_management_reads)]
 MgmtWrites = Annotated[GatewayManagementWriteService, Depends(_gateway_management_writes)]
+
+
+def _credential_upstream_catalog(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CredentialUpstreamCatalogService:
+    return CredentialUpstreamCatalogService(db)
+
+
+CatalogSvc = Annotated[CredentialUpstreamCatalogService, Depends(_credential_upstream_catalog)]
 
 
 def _encryption_key() -> str:
@@ -300,12 +356,13 @@ async def create_credential(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> CredentialResponse:
+    provider = _validate_managed_credential_provider(body.provider)
     encrypted = encrypt_value(body.api_key, _encryption_key())
     try:
         if body.scope == "system":
             cred = await writes.create_system_credential(
                 is_platform_admin=team.is_platform_admin,
-                provider=body.provider,
+                provider=provider,
                 name=body.name,
                 api_key_encrypted=encrypted,
                 api_base=body.api_base,
@@ -314,7 +371,7 @@ async def create_credential(
         else:
             cred = await writes.create_team_credential(
                 team_id=team.team_id,
-                provider=body.provider,
+                provider=provider,
                 name=body.name,
                 api_key_encrypted=encrypted,
                 api_base=body.api_base,
@@ -363,6 +420,65 @@ async def delete_credential(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
+
+
+@router.post("/credentials/{credential_id}/probe", response_model=CredentialProbeResponse)
+async def probe_managed_credential_endpoint(
+    credential_id: uuid.UUID,
+    team: RequiredTeamAdmin,
+    catalog: CatalogSvc,
+) -> CredentialProbeResponse:
+    """POST 触发上游 OpenAI 兼容 ``/v1/models`` 列举（同路径重复调用即刷新）。"""
+    try:
+        result = await catalog.probe_managed_credential(
+            team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+            credential_id=credential_id,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return _credential_probe_to_response(result)
+
+
+@router.post(
+    "/credentials/{credential_id}/batch-import-models",
+    response_model=TeamGatewayModelBatchImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def batch_import_team_models_endpoint(
+    credential_id: uuid.UUID,
+    body: TeamGatewayModelBatchImportRequest,
+    team: RequiredTeamAdmin,
+    catalog: CatalogSvc,
+) -> TeamGatewayModelBatchImportResponse:
+    try:
+        tuples = [(it.upstream_model_id, it.name) for it in body.items]
+        created_raw, failed_raw = await catalog.batch_import_team_models(
+            team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+            credential_id=credential_id,
+            provider=body.provider.strip().lower(),
+            capability=body.capability,
+            weight=body.weight,
+            rpm_limit=body.rpm_limit,
+            tpm_limit=body.tpm_limit,
+            tags=body.tags,
+            enabled=body.enabled,
+            items=tuples,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return TeamGatewayModelBatchImportResponse(
+        credential_id=credential_id,
+        created=[
+            TeamGatewayModelBatchImportCreatedItem(
+                upstream_model_id=c["upstream_model_id"],
+                gateway_model_id=c["gateway_model_id"],
+            )
+            for c in created_raw
+        ],
+        failed=[BatchImportFailureItem.model_validate(f) for f in failed_raw],
+    )
 
 
 @router.post(
@@ -502,6 +618,60 @@ async def delete_my_credential(
         raise http_exception_from_gateway_domain(exc) from exc
 
 
+@router.post("/my-credentials/{credential_id}/probe", response_model=CredentialProbeResponse)
+async def probe_my_credential_endpoint(
+    credential_id: uuid.UUID,
+    current_user: RequiredAuthUser,
+    catalog: CatalogSvc,
+) -> CredentialProbeResponse:
+    """POST 触发上游列举；重复调用即刷新。"""
+    user_id = get_user_uuid(current_user)
+    try:
+        result = await catalog.probe_user_credential(user_id=user_id, credential_id=credential_id)
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return _credential_probe_to_response(result)
+
+
+@router.post(
+    "/my-credentials/{credential_id}/batch-import-models",
+    response_model=PersonalModelBatchImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def batch_import_my_models_endpoint(
+    credential_id: uuid.UUID,
+    body: PersonalModelBatchImportRequest,
+    current_user: RequiredAuthUser,
+    catalog: CatalogSvc,
+) -> PersonalModelBatchImportResponse:
+    user_id = get_user_uuid(current_user)
+    provider = _validate_personal_model_provider(body.provider)
+    try:
+        created_raw, failed_raw = await catalog.batch_import_personal_models(
+            user_id=user_id,
+            credential_id=credential_id,
+            provider=provider,
+            upstream_model_ids=body.upstream_model_ids,
+            model_types=body.model_types,
+            display_name_prefix=body.display_name_prefix,
+            enabled=body.enabled,
+            tags=body.tags,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return PersonalModelBatchImportResponse(
+        credential_id=credential_id,
+        created=[
+            PersonalModelBatchImportCreatedItem(
+                upstream_model_id=c["upstream_model_id"],
+                gateway_model_ids=c["gateway_model_ids"],
+            )
+            for c in created_raw
+        ],
+        failed=[BatchImportFailureItem.model_validate(f) for f in failed_raw],
+    )
+
+
 # =============================================================================
 # User-scoped personal models (JWT only; no X-Team-Id)
 # =============================================================================
@@ -561,6 +731,8 @@ async def update_my_model(
             model_id,
             fields=body.model_dump(exclude_unset=True, exclude_none=True),
         )
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return PersonalModelResponse.from_gateway_model(updated)
@@ -767,18 +939,25 @@ async def create_model(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
-    model = await writes.create_gateway_model(
-        team_id=team.team_id,
-        name=body.name,
-        capability=body.capability,
-        real_model=body.real_model,
-        credential_id=body.credential_id,
-        provider=body.provider,
-        weight=body.weight,
-        rpm_limit=body.rpm_limit,
-        tpm_limit=body.tpm_limit,
-        tags=body.tags,
-    )
+    try:
+        model = await writes.create_gateway_model(
+            team_id=team.team_id,
+            name=body.name,
+            capability=body.capability,
+            real_model=body.real_model,
+            credential_id=body.credential_id,
+            provider=body.provider,
+            weight=body.weight,
+            rpm_limit=body.rpm_limit,
+            tpm_limit=body.tpm_limit,
+            tags=body.tags,
+            is_platform_admin=team.is_platform_admin,
+            enabled=body.enabled,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
     return GatewayModelResponse.model_validate(model)
 
 
@@ -793,8 +972,11 @@ async def update_model(
         updated = await writes.update_gateway_model(
             model_id,
             team_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
             fields=body.model_dump(exclude_unset=True, exclude_none=True),
         )
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return GatewayModelResponse.model_validate(updated)

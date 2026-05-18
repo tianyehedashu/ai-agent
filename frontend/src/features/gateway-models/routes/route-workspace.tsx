@@ -94,7 +94,7 @@ export function RouteWorkspace(): React.JSX.Element {
             to="/gateway/models?tab=team"
             className="text-primary underline-offset-4 hover:underline"
           >
-            注册模型
+            模型管理
           </Link>{' '}
           配置供给。
         </p>

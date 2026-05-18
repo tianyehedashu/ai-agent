@@ -1,4 +1,4 @@
-"""从虚拟 Key 白名单与路由配置中移除已下线/已删除的虚拟模型名。"""
+"""从虚拟 Key 白名单与路由配置中移除或重命名已下线/已改名的虚拟模型名。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from domains.gateway.infrastructure.repositories.model_repository import Gateway
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -29,4 +31,34 @@ async def prune_gateway_model_name_references(
     return vkeys_updated, routes_updated
 
 
-__all__ = ["prune_gateway_model_name_references"]
+async def rename_gateway_model_name_references(
+    session: AsyncSession,
+    *,
+    team_id: uuid.UUID | None,
+    old_name: str,
+    new_name: str,
+) -> tuple[int, int]:
+    """按团队作用域将 vkey 白名单与路由中的虚拟模型名 old_name 替换为 new_name。
+
+    ``team_id`` 为 ``None`` 时仅更新系统级路由（``gateway_routes.team_id IS NULL``），
+    不修改各团队 vkey，避免跨团队同名误伤。
+
+    Returns:
+        (vkeys_updated, routes_updated)
+    """
+    if old_name == new_name:
+        return 0, 0
+    vkeys = VirtualKeyRepository(session)
+    routes = GatewayRouteRepository(session)
+    if team_id is None:
+        vkeys_updated = 0
+        routes_updated = await routes.rename_model_name_in_global_routes(old_name, new_name)
+    else:
+        vkeys_updated = await vkeys.rename_model_name_in_team_allowed_lists(
+            team_id, old_name, new_name
+        )
+        routes_updated = await routes.rename_model_name_in_team_routes(team_id, old_name, new_name)
+    return vkeys_updated, routes_updated
+
+
+__all__ = ["prune_gateway_model_name_references", "rename_gateway_model_name_references"]

@@ -1,64 +1,77 @@
 import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useState } from 'react'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Plus } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
+import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import {
   type HealthFilter,
-  type TeamModelsView,
+  type ModelsPageView,
   type UsagePeriodDays,
   TESTABLE_CAPABILITIES,
-  parseTeamModelsView,
+  parseModelsPageView,
 } from '@/features/gateway-models/constants'
+import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
+import { credentialDetailHref, teamModelDetailHref } from '@/features/gateway-models/paths'
 import {
+  gatewayModelsListQueryKey,
+  invalidateGatewayModelCaches,
   matchesHealthFilter,
-  pickInspectorModelId,
   runWithConcurrency,
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
-import { ModelInspector } from './model-inspector'
-import { ModelInventory } from './model-inventory'
+import { preloadRegisterModelForm } from './register-model-preload'
+import { preloadTeamModelDetailPane } from './team-model-detail-preload'
+
+const ModelInventory = lazy(() =>
+  import('./model-inventory').then((m) => ({ default: m.ModelInventory }))
+)
 
 const RegisterModelForm = lazy(() =>
   import('./register-model-form').then((m) => ({ default: m.RegisterModelForm }))
 )
 
-function preloadRegisterModelForm(): void {
-  void import('./register-model-form')
-}
+const inventorySuspenseFallback = (
+  <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+    <Loader2 className="h-4 w-4 animate-spin" />
+    加载清单…
+  </div>
+)
+
+const registerFormSuspenseFallback = (
+  <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+    <Loader2 className="h-4 w-4 animate-spin" />
+    加载注册表单…
+  </div>
+)
 
 const BATCH_TEST_CONCURRENCY = 3
 
 interface TeamModelsWorkspaceProps {
-  /** 深链选中模型 id（/gateway/models/:modelId 或 query） */
-  initialModelId?: string
-  /** 主列表页 Tab 栏已提供「注册模型」子 Tab */
   hideRegisterAction?: boolean
-  /** 由父级 Tabs 传入时优先于 URL `view` */
-  teamView?: TeamModelsView
+  /** 由父级传入时优先于 URL `view` */
+  pageView?: Extract<ModelsPageView, 'list' | 'register'>
 }
 
 export function TeamModelsWorkspace({
-  initialModelId,
   hideRegisterAction = false,
-  teamView: teamViewProp,
+  pageView: pageViewProp,
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
-  const highlightModelId = searchParams.get('modelId') ?? initialModelId ?? ''
-  const teamView = teamViewProp ?? parseTeamModelsView(searchParams.get('view'))
-  const isRegisterView = teamView === 'register' && canWrite
+  const highlightModelId = searchParams.get('modelId') ?? ''
+  const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
+  const isRegisterView = pageView === 'register' && canWrite
 
-  const [pinnedId, setPinnedId] = useState<string | null>(initialModelId ?? null)
   const [providerFilter, setProviderFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -90,7 +103,7 @@ export function TeamModelsWorkspace({
   }, [setSearchParams])
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['gateway', 'models', providerFilter, credentialFilter],
+    queryKey: gatewayModelsListQueryKey(providerFilter, credentialFilter),
     queryFn: () =>
       gatewayApi.listModels({
         ...(providerFilter ? { provider: providerFilter } : {}),
@@ -108,33 +121,13 @@ export function TeamModelsWorkspace({
     enabled: !isRegisterView,
   })
 
-  const needsSecondaryData = isRegisterView || pinnedId !== null || (items?.length ?? 0) > 0
-
-  const { data: routes } = useQuery({
-    queryKey: ['gateway', 'routes'],
-    queryFn: () => gatewayApi.listRoutes(),
-    enabled: !isRegisterView && pinnedId !== null,
-  })
-
-  const { data: presets } = useQuery({
-    queryKey: ['gateway', 'models', 'presets', providerFilter],
-    queryFn: () =>
-      providerFilter
-        ? gatewayApi.listModelPresets({ provider: providerFilter })
-        : gatewayApi.listModelPresets(),
-    enabled: isRegisterView,
-  })
+  const needsCredentials = isRegisterView || credentialFilter !== ''
 
   const { data: credentials } = useQuery({
     queryKey: ['gateway', 'credentials'],
     queryFn: () => gatewayApi.listCredentials(),
-    enabled: needsSecondaryData,
+    enabled: needsCredentials,
   })
-
-  const activeCredentials = useMemo(
-    () => (credentials ?? []).filter((c) => c.is_active),
-    [credentials]
-  )
 
   const credentialsById = useMemo(() => {
     const m = new Map<string, NonNullable<typeof credentials>[number]>()
@@ -143,6 +136,28 @@ export function TeamModelsWorkspace({
     }
     return m
   }, [credentials])
+
+  const filterCredential = credentialFilter ? credentialsById.get(credentialFilter) : undefined
+  const registerCredentialLocked = isRegisterView && credentialFilter !== ''
+  const presetProvider =
+    registerCredentialLocked && filterCredential ? filterCredential.provider : providerFilter
+
+  const { data: presets } = useQuery({
+    queryKey: ['gateway', 'models', 'presets', presetProvider],
+    queryFn: () =>
+      presetProvider
+        ? gatewayApi.listModelPresets({ provider: presetProvider })
+        : gatewayApi.listModelPresets(),
+    enabled: isRegisterView,
+  })
+
+  const activeCredentials = useMemo(
+    () =>
+      (credentials ?? []).filter(
+        (c) => c.is_active || (credentialFilter !== '' && c.id === credentialFilter)
+      ),
+    [credentials, credentialFilter]
+  )
 
   const usageByRouteName = useMemo(() => {
     const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
@@ -175,59 +190,24 @@ export function TeamModelsWorkspace({
     })
   }, [items, healthFilter, deferredSearch])
 
-  const preferredModelId = highlightModelId !== '' ? highlightModelId : (initialModelId ?? null)
+  const { createMutation } = useGatewayModelMutations({
+    credentialId: credentialFilter || undefined,
+    onCreateSuccess: (created) => {
+      navigate(
+        teamModelDetailHref(created.id, {
+          credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+        })
+      )
+    },
+  })
 
-  const selectedId = useMemo(() => {
-    if (isRegisterView || isLoading) return pinnedId
-    return pickInspectorModelId(filteredModels, pinnedId, preferredModelId)
-  }, [isRegisterView, isLoading, filteredModels, pinnedId, preferredModelId])
-
-  const selectedModel = useMemo(
-    () => (items ?? []).find((m) => m.id === selectedId) ?? null,
-    [items, selectedId]
+  const getModelHref = useCallback(
+    (modelId: string) =>
+      teamModelDetailHref(modelId, {
+        credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+      }),
+    [credentialFilter]
   )
-
-  const createMutation = useMutation({
-    mutationFn: gatewayApi.createModel,
-    onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models', 'usage-summary'] })
-      goToList()
-      setPinnedId(created.id)
-      toast({ title: '模型已注册' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '注册失败', description: e.message })
-    },
-  })
-
-  const updateModelMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: GatewayModelUpdateBody }) =>
-      gatewayApi.updateModel(id, body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models', 'usage-summary'] })
-      toast({ title: '模型已更新' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '更新失败', description: e.message })
-    },
-  })
-
-  const testMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.testModel(id),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      if (result.success) {
-        toast({ title: '连接成功', description: result.message })
-      } else {
-        toast({ variant: 'destructive', title: '连接失败', description: result.message })
-      }
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '测试出错', description: e.message })
-    },
-  })
 
   const clearCredentialFilter = useCallback((): void => {
     setSearchParams(
@@ -247,7 +227,10 @@ export function TeamModelsWorkspace({
     setTestingAll(true)
     try {
       await runWithConcurrency(testable, BATCH_TEST_CONCURRENCY, (m) => gatewayApi.testModel(m.id))
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+      invalidateGatewayModelCaches(queryClient, {
+        credentialId: credentialFilter || undefined,
+        usageSummary: true,
+      })
       toast({ title: '批量测试完成' })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -255,32 +238,7 @@ export function TeamModelsWorkspace({
     } finally {
       setTestingAll(false)
     }
-  }, [items, queryClient, toast])
-
-  const handleSelect = useCallback((id: string): void => {
-    setPinnedId(id)
-  }, [])
-
-  const handleTest = useCallback(
-    (id: string): void => {
-      testMutation.mutate(id)
-    },
-    [testMutation]
-  )
-
-  const handleSave = useCallback(
-    (id: string, body: GatewayModelUpdateBody): void => {
-      updateModelMutation.mutate({ id, body })
-    },
-    [updateModelMutation]
-  )
-
-  const handleToggleEnabled = useCallback(
-    (id: string, enabled: boolean): void => {
-      updateModelMutation.mutate({ id, body: { enabled } })
-    },
-    [updateModelMutation]
-  )
+  }, [items, queryClient, toast, credentialFilter])
 
   const handleTestAllClick = useCallback((): void => {
     void handleTestAll()
@@ -295,7 +253,6 @@ export function TeamModelsWorkspace({
 
   const showEmptyOnboarding =
     !isRegisterView && !isLoading && (items?.length ?? 0) === 0 && !credentialFilter
-  const filterCredential = credentialFilter ? credentialsById.get(credentialFilter) : undefined
 
   const credentialBanner = credentialFilter ? (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
@@ -305,7 +262,7 @@ export function TeamModelsWorkspace({
           <span className="ml-1 font-mono text-xs">{credentialFilter.slice(0, 8)}…</span>
         ) : canWrite ? (
           <Link
-            to={`/gateway/credentials/${credentialFilter}`}
+            to={credentialDetailHref(credentialFilter)}
             className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
           >
             {filterCredential.name}
@@ -330,17 +287,13 @@ export function TeamModelsWorkspace({
     return (
       <div className="space-y-4">
         {credentialBanner}
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              加载注册表单…
-            </div>
-          }
-        >
+        <Suspense fallback={registerFormSuspenseFallback}>
           <RegisterModelForm
             presets={presets ?? []}
             credentials={activeCredentials}
+            lockCredentialId={registerCredentialLocked ? credentialFilter : undefined}
+            lockCredentialLabel={filterCredential?.name}
+            initialProvider={filterCredential?.provider}
             onSubmit={handleCreateSubmit}
             onCancel={goToList}
             isSubmitting={createMutation.isPending}
@@ -388,12 +341,12 @@ export function TeamModelsWorkspace({
           ) : null}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr] lg:items-start">
+        <Suspense fallback={inventorySuspenseFallback}>
           <ModelInventory
             models={filteredModels}
             allModels={items ?? []}
-            selectedId={selectedId}
-            onSelect={handleSelect}
+            selectedId={null}
+            getModelHref={getModelHref}
             isLoading={isLoading}
             search={search}
             onSearchChange={setSearch}
@@ -412,26 +365,9 @@ export function TeamModelsWorkspace({
             testingAll={testingAll}
             onRegister={!hideRegisterAction && canWrite ? goToRegister : undefined}
             onPreloadRegister={preloadRegisterModelForm}
+            onPreloadRowNavigate={preloadTeamModelDetailPane}
           />
-          <div className="w-full lg:sticky lg:top-6">
-            <ModelInspector
-              model={selectedModel}
-              credentials={credentials ?? []}
-              routes={routes ?? []}
-              usageDays={usageDays}
-              usageRow={selectedModel ? usageByRouteName.get(selectedModel.name) : undefined}
-              usageLoading={usageLoading}
-              isTesting={testMutation.isPending && testMutation.variables === selectedModel?.id}
-              isSaving={updateModelMutation.isPending}
-              onTest={handleTest}
-              onSave={handleSave}
-              onToggleEnabled={handleToggleEnabled}
-              emptyReason={
-                filteredModels.length === 0 && (items?.length ?? 0) > 0 ? 'filter' : 'none'
-              }
-            />
-          </div>
-        </div>
+        </Suspense>
       )}
     </div>
   )

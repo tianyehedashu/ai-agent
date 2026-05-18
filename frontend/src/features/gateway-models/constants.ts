@@ -47,9 +47,20 @@ export function parseScopeTab(raw: string | null): ModelScopeTab {
   return raw === 'personal' || raw === 'team' ? raw : 'team'
 }
 
-/** 团队模型页子视图：清单 / 注册 */
+/** 模型页子视图：清单 / 注册 / 编辑（个人详情深链） */
+export type ModelsPageView = 'list' | 'register' | 'edit'
+
+export function parseModelsPageView(raw: string | null): ModelsPageView {
+  if (raw === 'register') return 'register'
+  if (raw === 'edit') return 'edit'
+  return 'list'
+}
+
+/** @deprecated 使用 ModelsPageView */
 export type TeamModelsView = 'list' | 'register'
 
-export function parseTeamModelsView(raw: string | null): TeamModelsView {
-  return raw === 'register' ? 'register' : 'list'
+/** @deprecated 使用 parseModelsPageView */
+export function parseTeamModelsView(raw: string | null): 'list' | 'register' {
+  const v = parseModelsPageView(raw)
+  return v === 'edit' ? 'list' : v
 }

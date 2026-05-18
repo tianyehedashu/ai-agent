@@ -5,12 +5,17 @@ from __future__ import annotations
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from bootstrap.config import settings as _settings
+from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
 from domains.gateway.application.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
 )
-from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.application.model_reference_prune import (
+    prune_gateway_model_name_references,
+    rename_gateway_model_name_references,
+)
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -20,6 +25,8 @@ from domains.gateway.domain.errors import (
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.types import (
+    CONFIG_MANAGED_BY,
+    GATEWAY_MODEL_MANAGED_BY_TAG,
     PERSONAL_MODEL_PROVIDERS,
     PERSONAL_MODEL_TYPES,
     is_config_managed_system_credential,
@@ -45,7 +52,6 @@ from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from decimal import Decimal
-    import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -191,6 +197,8 @@ class GatewayManagementWriteService:
         credential_id: uuid.UUID,
         model_types: list[str],
         tags: dict[str, Any] | None = None,
+        enabled: bool = True,
+        reload_router: bool = True,
     ) -> list[Any]:
         from domains.gateway.application.personal_models import (
             capability_for_model_type,
@@ -207,6 +215,13 @@ class GatewayManagementWriteService:
             raise ValidationError(f"无效的模型类型: {sorted(invalid)}")
 
         await self._assert_user_owns_credential(user_id, credential_id)
+        cred_row = await self._creds.get(credential_id)
+        if cred_row is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if cred_row.provider.strip().lower() != provider.strip().lower():
+            raise ValidationError(
+                f"凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致"
+            )
         team_id = await self._ensure_personal_team_id(user_id)
         real_model = build_litellm_model_id(provider, model_id)
         created: list[Any] = []
@@ -234,10 +249,12 @@ class GatewayManagementWriteService:
                 rpm_limit=None,
                 tpm_limit=None,
                 tags=mtags,
+                enabled=enabled,
             )
             created.append(row)
 
-        await self.reload_litellm_router()
+        if reload_router:
+            await self.reload_litellm_router()
         return created
 
     async def update_personal_model(
@@ -254,6 +271,13 @@ class GatewayManagementWriteService:
         update_fields: dict[str, Any] = {}
         if "credential_id" in fields and fields["credential_id"] is not None:
             await self._assert_user_owns_credential(user_id, fields["credential_id"])
+            nrow = await self._creds.get(fields["credential_id"])
+            if nrow is None:
+                raise CredentialNotFoundError(str(fields["credential_id"]))
+            if nrow.provider.strip().lower() != existing.provider.strip().lower():
+                raise ValidationError(
+                    f"凭据提供商为 {nrow.provider}，与当前模型的 provider（{existing.provider}）不一致"
+                )
             update_fields["credential_id"] = fields["credential_id"]
         if fields.get("model_id") is not None:
             update_fields["real_model"] = build_litellm_model_id(
@@ -634,20 +658,44 @@ class GatewayManagementWriteService:
         rpm_limit: int | None,
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
+        is_platform_admin: bool,
+        enabled: bool = True,
+        reload_router: bool = True,
     ) -> Any:
+        raw_rm = str(real_model).strip()
+        if not raw_rm:
+            raise ValidationError("上游模型 ID 不能为空")
+        cred = await self._creds.get_bindable_for_team_gateway_model(
+            credential_id,
+            team_id=team_id,
+            is_platform_admin=is_platform_admin,
+        )
+        if cred is None:
+            raise CredentialNotFoundError(str(credential_id))
+        prov_norm = provider.strip().lower()
+        if cred.provider.strip().lower() != prov_norm:
+            raise ValidationError(
+                f"凭据提供商为 {cred.provider}，与请求的 provider {provider} 不一致"
+            )
+        prefix_msg = litellm_prefix_violation_message(provider, raw_rm)
+        if prefix_msg:
+            raise ValidationError(prefix_msg)
+        normalized_rm = build_litellm_model_id(provider, raw_rm)
         row = await self._models.create(
             team_id=team_id,
             name=name,
             capability=capability,
-            real_model=real_model,
+            real_model=normalized_rm,
             credential_id=credential_id,
             provider=provider,
             weight=weight,
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=tags,
+            enabled=enabled,
         )
-        await self.reload_litellm_router()
+        if reload_router:
+            await self.reload_litellm_router()
         return row
 
     async def update_gateway_model(
@@ -655,13 +703,64 @@ class GatewayManagementWriteService:
         model_id: uuid.UUID,
         *,
         team_id: uuid.UUID,
+        is_platform_admin: bool,
         fields: dict[str, Any],
     ) -> Any:
         repo = self._models
         existing = await repo.get(model_id)
         if existing is None or (existing.team_id is not None and existing.team_id != team_id):
             raise ManagementEntityNotFoundError("model", str(model_id))
-        updated = await repo.update(model_id, **fields)
+
+        update_fields = dict(fields)
+        if "credential_id" in update_fields and update_fields["credential_id"] is not None:
+            new_cid_raw = update_fields["credential_id"]
+            new_cid = new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
+            cred = await self._creds.get_bindable_for_team_gateway_model(
+                new_cid,
+                team_id=team_id,
+                is_platform_admin=is_platform_admin,
+            )
+            if cred is None:
+                raise CredentialNotFoundError(str(new_cid))
+            if cred.provider.strip().lower() != existing.provider.strip().lower():
+                raise ValidationError(
+                    f"凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致"
+                )
+        if "real_model" in update_fields and update_fields["real_model"] is not None:
+            raw_rm = str(update_fields["real_model"]).strip()
+            if not raw_rm:
+                raise ValidationError("上游模型 ID 不能为空")
+            prefix_msg = litellm_prefix_violation_message(existing.provider, raw_rm)
+            if prefix_msg:
+                raise ValidationError(prefix_msg)
+            update_fields["real_model"] = build_litellm_model_id(existing.provider, raw_rm)
+
+        new_name_raw = update_fields.get("name")
+        if new_name_raw is not None:
+            new_name = str(new_name_raw).strip()
+            if not new_name:
+                raise ValidationError("注册别名不能为空")
+            update_fields["name"] = new_name
+            if new_name != existing.name:
+                tags = existing.tags or {}
+                if (
+                    existing.team_id is None
+                    and tags.get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY
+                ):
+                    raise ValidationError("配置托管的系统模型不可修改注册别名")
+                owner_team_id = existing.team_id
+                if await repo.name_exists_in_scope(
+                    owner_team_id, new_name, exclude_id=model_id
+                ):
+                    raise ValidationError(f"注册别名已存在: {new_name}")
+                await rename_gateway_model_name_references(
+                    self._session,
+                    team_id=owner_team_id,
+                    old_name=existing.name,
+                    new_name=new_name,
+                )
+
+        updated = await repo.update(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
         await self.reload_litellm_router()

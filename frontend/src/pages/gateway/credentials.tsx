@@ -2,7 +2,7 @@
  * AI Gateway · 凭据（个人 / 团队）
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -32,10 +32,15 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import {
-  CreateTeamManagedCredentialDialog,
-  type TeamManagedCredentialCreateValues,
-} from '@/features/gateway-credentials/create-team-managed-credential-dialog'
+  CreateCredentialDialog,
+  type CreateCredentialValues,
+} from '@/features/gateway-credentials/create-credential-dialog'
 import { PersonalCredentialsPanel } from '@/features/gateway-credentials/personal-credentials-panel'
+import {
+  defaultApiBaseForProvider,
+  providerLabel,
+  type CredentialFormScope,
+} from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 
@@ -53,12 +58,40 @@ function canEditGatewayCredential(
   return (c.scope === 'team' && canWrite) || (c.scope === 'system' && isPlatformAdmin)
 }
 
+function CredentialApiBaseCell({
+  credential,
+}: Readonly<{ credential: ProviderCredential }>): React.JSX.Element {
+  const base = credential.api_base ?? ''
+  if (!base) return <span className="text-muted-foreground">—</span>
+  const defaultBase = defaultApiBaseForProvider(credential.provider)
+  const isDefault = Boolean(defaultBase) && base === defaultBase
+  const keys = credential.extra ? Object.keys(credential.extra) : []
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="break-all">{base}</span>
+        {isDefault ? (
+          <Badge variant="outline" className="px-1 py-0 text-[10px]">
+            默认
+          </Badge>
+        ) : null}
+      </div>
+      {keys.length > 0 ? (
+        <span className="font-mono text-[10px] text-muted-foreground">
+          extra: {keys.join(', ')}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 export default function GatewayCredentialsPage(): React.JSX.Element {
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
+  const [pendingProvider, setPendingProvider] = useState<string | undefined>(undefined)
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
     null
   )
@@ -68,6 +101,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   const setActiveTab = useCallback(
     (next: CredentialTab): void => {
       setOpen(false)
+      setPendingProvider(undefined)
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
@@ -84,6 +118,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     const raw = searchParams.get('tab')
     if (raw !== null && raw !== 'personal' && raw !== 'team') {
       setOpen(false)
+      setPendingProvider(undefined)
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
@@ -101,11 +136,29 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     enabled: activeTab === 'team',
   })
 
-  const createMutation = useMutation({
+  const closeCreateDialog = useCallback((): void => {
+    setOpen(false)
+    setPendingProvider(undefined)
+  }, [])
+
+  const createManagedMutation = useMutation({
     mutationFn: gatewayApi.createCredential,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      setOpen(false)
+      closeCreateDialog()
+      toast({ title: '凭据已创建' })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '创建失败', description: e.message })
+    },
+  })
+
+  const createUserMutation = useMutation({
+    mutationFn: gatewayApi.createMyCredential,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
+      void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
+      closeCreateDialog()
       toast({ title: '凭据已创建' })
     },
     onError: (e: Error) => {
@@ -150,15 +203,45 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     },
   })
 
-  const onCreateSubmit = (v: TeamManagedCredentialCreateValues): void => {
-    createMutation.mutate({
+  const onCreateSubmit = (v: CreateCredentialValues): void => {
+    if (v.scope === 'user') {
+      createUserMutation.mutate({
+        provider: v.provider,
+        name: v.name,
+        api_key: v.api_key,
+        api_base: v.api_base ?? null,
+        extra: v.extra,
+      })
+      return
+    }
+    createManagedMutation.mutate({
       provider: v.provider,
       name: v.name,
       api_key: v.api_key,
-      api_base: v.api_base?.trim() ? v.api_base : undefined,
+      api_base: v.api_base,
+      extra: v.extra,
       scope: v.scope,
     })
   }
+
+  const allowedScopes = useMemo<ReadonlyArray<CredentialFormScope>>(() => {
+    const scopes: CredentialFormScope[] = ['user']
+    if (canWrite) scopes.push('team')
+    if (isPlatformAdmin) scopes.push('system')
+    return scopes
+  }, [canWrite, isPlatformAdmin])
+  const defaultScope: CredentialFormScope = activeTab === 'personal' ? 'user' : 'team'
+  const createSubmitting = createManagedMutation.isPending || createUserMutation.isPending
+
+  const handleOpenCreate = useCallback((provider?: string): void => {
+    setPendingProvider(provider)
+    setOpen(true)
+  }, [])
+
+  const handleDialogOpenChange = useCallback((next: boolean): void => {
+    setOpen(next)
+    if (!next) setPendingProvider(undefined)
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -173,8 +256,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
             <TabsTrigger value="personal">个人</TabsTrigger>
             <TabsTrigger value="team">团队</TabsTrigger>
           </TabsList>
-          {activeTab === 'team' && canWrite ? (
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            {activeTab === 'team' && canWrite ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -185,21 +268,21 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
               >
                 导入
               </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setOpen(true)
-                }}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                新增
-              </Button>
-            </div>
-          ) : null}
+            ) : null}
+            <Button
+              size="sm"
+              onClick={() => {
+                handleOpenCreate()
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              新增
+            </Button>
+          </div>
         </div>
 
         <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
-          <PersonalCredentialsPanel />
+          <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
         </TabsContent>
 
         <TabsContent value="team" className="mt-4 focus-visible:outline-none">
@@ -235,7 +318,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                               size="sm"
                               variant="secondary"
                               onClick={() => {
-                                setOpen(true)
+                                handleOpenCreate()
                               }}
                             >
                               新增
@@ -271,9 +354,21 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                           <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
                             {c.api_key_masked}
                           </td>
-                          <td className="px-4 py-2 font-mono text-xs">{c.provider}</td>
+                          <td className="px-4 py-2 text-xs">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{providerLabel(c.provider)}</span>
+                              <span
+                                className="font-mono text-[10px] text-muted-foreground"
+                                title={c.provider}
+                              >
+                                {c.provider}
+                              </span>
+                            </div>
+                          </td>
                           <td className="px-4 py-2 text-xs">{c.scope}</td>
-                          <td className="px-4 py-2 text-xs">{c.api_base ?? '—'}</td>
+                          <td className="px-4 py-2 text-xs">
+                            <CredentialApiBaseCell credential={c} />
+                          </td>
                           <td className="px-4 py-2">
                             {editable ? (
                               <Switch
@@ -327,10 +422,13 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         </TabsContent>
       </Tabs>
 
-      <CreateTeamManagedCredentialDialog
+      <CreateCredentialDialog
         open={open}
-        onOpenChange={setOpen}
-        isPlatformAdmin={isPlatformAdmin}
+        onOpenChange={handleDialogOpenChange}
+        allowedScopes={allowedScopes}
+        defaultScope={defaultScope}
+        defaultProvider={pendingProvider}
+        submitting={createSubmitting}
         onSubmit={onCreateSubmit}
       />
 

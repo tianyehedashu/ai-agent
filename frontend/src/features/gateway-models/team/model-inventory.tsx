@@ -31,7 +31,10 @@ interface ModelInventoryProps {
   models: GatewayModel[]
   allModels: GatewayModel[]
   selectedId: string | null
-  onSelect: (id: string) => void
+  /** 无 ``getModelHref`` 时用于行点击选中（链接模式可省略） */
+  onSelect?: (id: string) => void
+  /** 有则行渲染为 Link（凭据筛选等深链场景） */
+  getModelHref?: (modelId: string) => string
   isLoading: boolean
   search: string
   onSearchChange: (v: string) => void
@@ -50,6 +53,8 @@ interface ModelInventoryProps {
   testingAll?: boolean
   onRegister?: () => void
   onPreloadRegister?: () => void
+  /** 列表行链至详情时预加载详情 chunk */
+  onPreloadRowNavigate?: () => void
 }
 
 export const ModelInventory = memo(function ModelInventory({
@@ -57,6 +62,7 @@ export const ModelInventory = memo(function ModelInventory({
   allModels,
   selectedId,
   onSelect,
+  getModelHref,
   isLoading,
   search,
   onSearchChange,
@@ -75,6 +81,7 @@ export const ModelInventory = memo(function ModelInventory({
   testingAll,
   onRegister,
   onPreloadRegister,
+  onPreloadRowNavigate,
 }: ModelInventoryProps): React.JSX.Element {
   const showToolbar = allModels.length > 0
 
@@ -198,7 +205,9 @@ export const ModelInventory = memo(function ModelInventory({
                 usageDays={usageDays}
                 usageRow={usageByRouteName.get(m.name)}
                 usageLoading={usageLoading}
-                onSelect={onSelect}
+                href={getModelHref?.(m.id)}
+                onSelect={getModelHref ? undefined : onSelect}
+                onPreloadNavigate={getModelHref ? onPreloadRowNavigate : undefined}
               />
             ))}
           </ul>

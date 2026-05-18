@@ -59,6 +59,21 @@ export interface RegisterModelFormProps {
   onSubmit: (body: GatewayModelCreateBody) => void
   onCancel: () => void
   isSubmitting?: boolean
+  /** 嵌入凭据详情等面板：无外层 Card、紧凑页脚 */
+  embedded?: boolean
+  /** 锁定为当前凭据（隐藏凭据下拉） */
+  lockCredentialId?: string
+  lockCredentialLabel?: string
+  initialProvider?: string
+  cancelLabel?: string
+}
+
+function buildInitialValues(lockCredentialId?: string, initialProvider?: string): ModelFormValues {
+  return {
+    ...emptyForm,
+    credentialId: lockCredentialId ?? '',
+    provider: initialProvider ?? emptyForm.provider,
+  }
 }
 
 export function RegisterModelForm({
@@ -67,9 +82,17 @@ export function RegisterModelForm({
   onSubmit,
   onCancel,
   isSubmitting,
+  embedded = false,
+  lockCredentialId,
+  lockCredentialLabel,
+  initialProvider,
+  cancelLabel = '返回模型清单',
 }: RegisterModelFormProps): React.JSX.Element {
+  const lockCredential = lockCredentialId !== undefined && lockCredentialId !== ''
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [values, setValues] = useState<ModelFormValues>(emptyForm)
+  const [values, setValues] = useState<ModelFormValues>(() =>
+    buildInitialValues(lockCredentialId, initialProvider)
+  )
 
   const selectedPreset = useMemo(
     () => presets.find((p) => p.id === values.presetId),
@@ -85,7 +108,7 @@ export function RegisterModelForm({
     values.name.trim() !== '' &&
     values.realModel.trim() !== '' &&
     values.credentialId !== '' &&
-    credentials.length > 0
+    (lockCredential || credentials.length > 0)
 
   function handlePresetChange(presetId: string): void {
     if (presetId === MANUAL_PRESET) {
@@ -101,8 +124,10 @@ export function RegisterModelForm({
       name: preset.id,
       capability: preset.capability,
       realModel: preset.real_model,
-      provider: preset.provider,
-      credentialId: matchingCredential?.id ?? prev.credentialId,
+      provider: lockCredential ? prev.provider : preset.provider,
+      credentialId: lockCredential
+        ? prev.credentialId
+        : (matchingCredential?.id ?? prev.credentialId),
     }))
   }
 
@@ -132,14 +157,20 @@ export function RegisterModelForm({
   }
 
   return (
-    <Card className="mx-auto w-full max-w-2xl">
-      <CardHeader>
-        <CardTitle>注册团队模型</CardTitle>
-        <CardDescription>
-          选择预设可快速填充；填写别名、上游模型 ID 与团队凭据后即可注册。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card
+      className={cn(
+        embedded ? 'flex h-full min-h-0 flex-col border-0 shadow-none' : 'mx-auto w-full max-w-2xl'
+      )}
+    >
+      {embedded ? null : (
+        <CardHeader>
+          <CardTitle>注册团队模型</CardTitle>
+          <CardDescription>
+            选择预设可快速填充；填写别名、上游模型 ID 与团队凭据后即可注册。
+          </CardDescription>
+        </CardHeader>
+      )}
+      <CardContent className={cn(embedded && 'flex-1 overflow-y-auto')}>
         <TooltipProvider delayDuration={200}>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -172,40 +203,52 @@ export function RegisterModelForm({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <Label>凭据 *</Label>
-                <Select
-                  value={values.credentialId || NO_CREDENTIAL}
-                  onValueChange={handleCredentialChange}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="选择团队凭据" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_CREDENTIAL}>未选择</SelectItem>
-                    {credentialOptions.map((credential) => (
-                      <SelectItem key={credential.id} value={credential.id}>
-                        {credential.name} · {credential.provider}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {credentials.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    请先到{' '}
-                    <Link to="/gateway/credentials?tab=team" className="text-primary underline">
-                      凭据管理
-                    </Link>{' '}
-                    添加并启用团队凭据。
+              {lockCredential ? (
+                <div className="sm:col-span-2">
+                  <Label>凭据</Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {lockCredentialLabel ?? values.credentialId}
+                    <span className="ml-2 font-mono text-xs">({values.provider})</span>
                   </p>
-                ) : null}
-              </div>
+                </div>
+              ) : (
+                <div className="sm:col-span-2">
+                  <Label>凭据 *</Label>
+                  <Select
+                    value={values.credentialId || NO_CREDENTIAL}
+                    onValueChange={handleCredentialChange}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="选择团队凭据" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CREDENTIAL}>未选择</SelectItem>
+                      {credentialOptions.map((credential) => (
+                        <SelectItem key={credential.id} value={credential.id}>
+                          {credential.name} · {credential.provider}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {credentials.length === 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      请先到{' '}
+                      <Link to="/gateway/credentials?tab=team" className="text-primary underline">
+                        凭据管理
+                      </Link>{' '}
+                      添加并启用团队凭据。
+                    </p>
+                  ) : null}
+                </div>
+              )}
 
               <div>
                 <Label>提供商</Label>
                 <Input
                   className="mt-1"
                   value={values.provider}
+                  readOnly={lockCredential}
+                  disabled={lockCredential}
                   onChange={(e) => {
                     setValues({ ...values, provider: e.target.value })
                   }}
@@ -246,21 +289,47 @@ export function RegisterModelForm({
               </div>
 
               <div className="sm:col-span-2">
-                <Label>注册别名 *</Label>
+                <div className="mb-1 flex items-center gap-1">
+                  <Label>注册别名 *</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" aria-label="注册别名说明" className="inline-flex">
+                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      客户端 OpenAI 兼容请求里的 model 名称；勿与上游厂商 LiteLLM id（如
+                      dashscope/qwen-max）混淆。
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <Input
-                  className="mt-1 font-mono"
+                  className="mt-0 font-mono"
                   value={values.name}
                   onChange={(e) => {
                     setValues({ ...values, name: e.target.value })
                   }}
-                  placeholder="dashscope/qwen-max"
+                  placeholder="qwen-max-prod"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <Label>上游模型 ID *</Label>
+                <div className="mb-1 flex items-center gap-1">
+                  <Label>上游模型 ID *</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" aria-label="上游模型 ID 说明" className="inline-flex">
+                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      可填短 id（如 qwen-max）或完整 LiteLLM 串（如 dashscope/qwen-max）；短 id
+                      在保存时由服务端按所选凭据的 provider 规范化。带 / 时前缀须与 provider 一致。
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <Input
-                  className="mt-1 font-mono"
+                  className="mt-0 font-mono"
                   value={values.realModel}
                   onChange={(e) => {
                     setValues({ ...values, realModel: e.target.value })
@@ -325,9 +394,9 @@ export function RegisterModelForm({
           </div>
         </TooltipProvider>
       </CardContent>
-      <CardFooter className="flex justify-end gap-2 border-t bg-muted/20 px-6 py-4">
+      <CardFooter className="flex shrink-0 justify-end gap-2 border-t bg-muted/20 px-4 py-3">
         <Button type="button" variant="ghost" onClick={onCancel}>
-          返回模型清单
+          {cancelLabel}
         </Button>
         <Button type="button" disabled={isSubmitting === true || !canSubmit} onClick={submit}>
           {isSubmitting ? '注册中…' : '注册'}

@@ -28,6 +28,7 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import decrypt_value, derive_encryption_key
+from libs.llm.litellm_model_id import build_litellm_model_id
 
 
 class SqlModelCatalogAdapter:
@@ -121,7 +122,7 @@ class SqlModelCatalogAdapter:
                 return None
 
         return RegisteredModelResolution(
-            litellm_model=row.real_model,
+            litellm_model=build_litellm_model_id(row.provider, row.real_model),
             provider=row.provider,
             api_key=api_key,
             api_base=cred.api_base,

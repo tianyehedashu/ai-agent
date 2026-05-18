@@ -1,4 +1,8 @@
-"""将 Gateway 领域异常映射为 HTTP 响应（仅 Presentation 层使用）"""
+"""将 Gateway 领域异常映射为 HTTP 响应（仅 Presentation 层使用）
+
+适用范围：管理 API 路由（``management_router`` / proxy 鉴权 deps）。
+ProxyUseCase 业务错误另由 ``gateway_proxy_business_error_classify`` 转换为 SDK 兼容载荷。
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ from domains.gateway.domain.errors import (
     CredentialApiKeyDecryptError,
     CredentialNameConflictError,
     CredentialNotFoundError,
+    EntitlementPlanExhaustedError,
     GatewayTeamHeaderInvalidError,
     GatewayTeamHeaderRequiredError,
     ManagementEntityNotFoundError,
@@ -49,6 +54,22 @@ def _http_exception_for_gateway_domain(exc: Exception) -> HTTPException | None:
         return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, SystemCredentialAdminRequiredError):
         return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
+    if isinstance(exc, EntitlementPlanExhaustedError):
+        headers: dict[str, str] = {}
+        if exc.retry_at:
+            headers["X-Plan-Retry-At"] = exc.retry_at
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "gateway/entitlement_exhausted",
+                "message": str(exc),
+                "plan_id": exc.plan_id,
+                "quota_label": exc.quota_label,
+                "reason": exc.reason,
+                "retry_at": exc.retry_at,
+            },
+            headers=headers or None,
+        )
     return None
 
 

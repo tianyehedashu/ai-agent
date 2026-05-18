@@ -6,11 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import case, func, or_, select
 
-from domains.gateway.domain.types import CONFIG_MANAGED_BY
+from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
-
-MANAGED_BY_TAG_KEY = "managed_by"
 
 if TYPE_CHECKING:
     import uuid
@@ -80,12 +78,34 @@ class GatewayModelRepository:
             return None
         return row
 
-    async def name_exists_on_team(self, team_id: uuid.UUID, name: str) -> bool:
-        stmt = (
-            select(func.count())
-            .select_from(GatewayModel)
-            .where(GatewayModel.team_id == team_id, GatewayModel.name == name)
-        )
+    async def name_exists_on_team(
+        self,
+        team_id: uuid.UUID,
+        name: str,
+        *,
+        exclude_id: uuid.UUID | None = None,
+    ) -> bool:
+        clauses = [GatewayModel.team_id == team_id, GatewayModel.name == name]
+        if exclude_id is not None:
+            clauses.append(GatewayModel.id != exclude_id)
+        stmt = select(func.count()).select_from(GatewayModel).where(*clauses)
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one() or 0) > 0
+
+    async def name_exists_in_scope(
+        self,
+        team_id: uuid.UUID | None,
+        name: str,
+        *,
+        exclude_id: uuid.UUID | None = None,
+    ) -> bool:
+        """``team_id`` 为 ``None`` 时检查全局模型名；否则等同 ``name_exists_on_team``。"""
+        if team_id is not None:
+            return await self.name_exists_on_team(team_id, name, exclude_id=exclude_id)
+        clauses = [GatewayModel.team_id.is_(None), GatewayModel.name == name]
+        if exclude_id is not None:
+            clauses.append(GatewayModel.id != exclude_id)
+        stmt = select(func.count()).select_from(GatewayModel).where(*clauses)
         result = await self._session.execute(stmt)
         return int(result.scalar_one() or 0) > 0
 
@@ -124,6 +144,7 @@ class GatewayModelRepository:
         rpm_limit: int | None = None,
         tpm_limit: int | None = None,
         tags: dict[str, Any] | None = None,
+        enabled: bool = True,
     ) -> GatewayModel:
         model = GatewayModel(
             team_id=team_id,
@@ -136,6 +157,7 @@ class GatewayModelRepository:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=tags,
+            enabled=enabled,
         )
         self._session.add(model)
         await self._session.flush()
@@ -175,7 +197,7 @@ class GatewayModelRepository:
                 GatewayModel.team_id.is_(None),
                 GatewayModel.credential_id == credential_id,
                 GatewayModel.tags.isnot(None),
-                GatewayModel.tags[MANAGED_BY_TAG_KEY].astext == CONFIG_MANAGED_BY,
+                GatewayModel.tags[GATEWAY_MODEL_MANAGED_BY_TAG].astext == CONFIG_MANAGED_BY,
             )
         )
         result = await self._session.execute(stmt)
@@ -328,6 +350,62 @@ class GatewayRouteRepository:
                 updated += 1
         if updated:
             await self._session.flush()
+        return updated
+
+    async def rename_model_name_in_team_routes(
+        self,
+        team_id: uuid.UUID,
+        old_name: str,
+        new_name: str,
+    ) -> int:
+        """将指定团队路由 primary/fallback 列表中的模型名 old_name 替换为 new_name。"""
+        if old_name == new_name:
+            return 0
+        stmt = select(GatewayRoute).where(GatewayRoute.team_id == team_id)
+        routes = list((await self._session.execute(stmt)).scalars().all())
+        updated = self._rename_model_name_in_route_arrays(routes, old_name, new_name)
+        if updated:
+            await self._session.flush()
+        return updated
+
+    async def rename_model_name_in_global_routes(self, old_name: str, new_name: str) -> int:
+        """将系统级路由（team_id IS NULL）中的模型名 old_name 替换为 new_name。"""
+        if old_name == new_name:
+            return 0
+        stmt = select(GatewayRoute).where(GatewayRoute.team_id.is_(None))
+        routes = list((await self._session.execute(stmt)).scalars().all())
+        updated = self._rename_model_name_in_route_arrays(routes, old_name, new_name)
+        if updated:
+            await self._session.flush()
+        return updated
+
+    def _rename_model_name_in_route_arrays(
+        self,
+        routes: list[GatewayRoute],
+        old_name: str,
+        new_name: str,
+    ) -> int:
+        array_fields = (
+            "primary_models",
+            "fallbacks_general",
+            "fallbacks_content_policy",
+            "fallbacks_context_window",
+        )
+        updated = 0
+        for route in routes:
+            changed = False
+            for field in array_fields:
+                current = list(getattr(route, field) or ())
+                if old_name not in current:
+                    continue
+                setattr(
+                    route,
+                    field,
+                    [new_name if name == old_name else name for name in current],
+                )
+                changed = True
+            if changed:
+                updated += 1
         return updated
 
 

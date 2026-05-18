@@ -470,6 +470,189 @@ class TestGatewayManagementApi:
         assert not any(m["id"] == mid for m in r_models_after.json())
 
     @pytest.mark.asyncio
+    async def test_team_create_model_normalizes_dashscope_real_model(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """团队 POST /models：短 id 落库为 LiteLLM 全称；前缀与 provider 不一致时 400。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        cred_name = f"dscope-{uuid.uuid4().hex[:8]}"
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "dashscope",
+                "name": cred_name,
+                "api_key": "sk-dashscope-int-test-key-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        model_name = f"alias-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            "/api/v1/gateway/models",
+            headers=headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "qwen-max",
+                "credential_id": cid,
+                "provider": "dashscope",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        assert r_model.json()["real_model"] == "dashscope/qwen-max"
+
+        r_bad = await dev_client.post(
+            "/api/v1/gateway/models",
+            headers=headers,
+            json={
+                "name": f"alias-bad-{uuid.uuid4().hex[:6]}",
+                "capability": "chat",
+                "real_model": "openai/gpt-4",
+                "credential_id": cid,
+                "provider": "dashscope",
+            },
+        )
+        assert r_bad.status_code == 400, r_bad.text
+
+    @pytest.mark.asyncio
+    async def test_team_create_model_rejects_provider_cred_mismatch(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """团队 POST /models：provider 与凭据 provider 不一致时 400。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        r_openai = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"oa-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-openai-mismatch-test-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_openai.status_code == 201, r_openai.text
+        cid = r_openai.json()["id"]
+        r_model = await dev_client.post(
+            "/api/v1/gateway/models",
+            headers=headers,
+            json={
+                "name": f"mismatch-{uuid.uuid4().hex[:6]}",
+                "capability": "chat",
+                "real_model": "qwen-max",
+                "credential_id": cid,
+                "provider": "dashscope",
+            },
+        )
+        assert r_model.status_code == 400, r_model.text
+        detail = r_model.json().get("detail", "")
+        assert isinstance(detail, str)
+        assert "凭据" in detail
+
+    @pytest.mark.asyncio
+    async def test_create_managed_credential_azure_with_api_version_extra(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """Azure 凭据可携带 api_version 等 extra 字段；scope=team 落库正确。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        name = f"azure-{uuid.uuid4().hex[:8]}"
+        r = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "azure",
+                "name": name,
+                "api_key": "az-int-test-key-1234567890",
+                "api_base": "https://my-azure.openai.azure.com",
+                "extra": {"api_version": "2024-08-01-preview"},
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["provider"] == "azure"
+        assert body["scope"] == "team"
+        assert body["api_base"] == "https://my-azure.openai.azure.com"
+        assert body["extra"] == {"api_version": "2024-08-01-preview"}
+
+    @pytest.mark.asyncio
+    async def test_create_managed_credential_bedrock_with_aws_extras(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """Bedrock 凭据：api_key 装 access_key_id；secret/region/session_token 放 extra。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        name = f"bedrock-{uuid.uuid4().hex[:8]}"
+        r = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "bedrock",
+                "name": name,
+                "api_key": "AKIAFAKEINTEGRATIONACCESSKEY",
+                "extra": {
+                    "aws_secret_access_key": "secret-int-test-value",
+                    "aws_region_name": "us-east-1",
+                },
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["provider"] == "bedrock"
+        assert body["extra"]["aws_region_name"] == "us-east-1"
+        assert body["extra"]["aws_secret_access_key"] == "secret-int-test-value"
+
+    @pytest.mark.asyncio
+    async def test_create_managed_credential_rejects_unknown_provider(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """未在 MANAGED_GATEWAY_CREDENTIAL_PROVIDERS 白名单内的 provider → 422。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        r = await dev_client.post(
+            "/api/v1/gateway/credentials",
+            headers=headers,
+            json={
+                "provider": "nonexistent-vendor",
+                "name": f"bad-{uuid.uuid4().hex[:6]}",
+                "api_key": "irrelevant",
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "nonexistent-vendor" in r.json().get("detail", "")
+
+    @pytest.mark.asyncio
     async def test_my_models_crud(
         self,
         dev_client: AsyncClient,

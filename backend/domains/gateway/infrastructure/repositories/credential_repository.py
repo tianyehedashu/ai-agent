@@ -31,6 +31,28 @@ class ProviderCredentialRepository:
     async def get(self, credential_id: uuid.UUID) -> ProviderCredential | None:
         return await self._session.get(ProviderCredential, credential_id)
 
+    async def get_bindable_for_team_gateway_model(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        team_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> ProviderCredential | None:
+        """团队注册或更新 ``GatewayModel`` 时可绑定的凭据。
+
+        与 ``GatewayManagementReadService.get_managed_credential_for_team`` 可见集合一致：
+        当前 ``team_id`` 下 ``scope=team`` 的凭据，或（``is_platform_admin`` 为真时）``scope=system``。
+        ``user`` scope 不可直接绑定团队模型。
+        """
+        row = await self.get(credential_id)
+        if row is None:
+            return None
+        if row.scope == "team" and row.scope_id == team_id:
+            return row
+        if row.scope == "system" and is_platform_admin:
+            return row
+        return None
+
     async def list_by_ids(self, credential_ids: list[uuid.UUID]) -> list[ProviderCredential]:
         if not credential_ids:
             return []

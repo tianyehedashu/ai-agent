@@ -188,6 +188,79 @@ export interface PersonalGatewayModelCreateBody {
   tags?: Record<string, unknown> | null
 }
 
+// --- 凭据上游探测 / 批量导入（与 presentation/schemas/credential_upstream_catalog.py 对齐） ---
+
+export type CredentialProbeSupport = 'full' | 'partial' | 'unsupported' | 'error'
+
+export type CredentialProbeUpstream = 'openai_compatible' | 'none'
+
+export interface CredentialUpstreamItem {
+  id: string
+  owned_by?: string | null
+}
+
+export interface CredentialProbeResult {
+  credential_id: string
+  probe_at: string
+  support: CredentialProbeSupport
+  upstream: CredentialProbeUpstream
+  items: CredentialUpstreamItem[]
+  message?: string | null
+  http_status?: number | null
+}
+
+export interface PersonalModelBatchImportBody {
+  provider: string
+  upstream_model_ids: string[]
+  model_types: string[]
+  display_name_prefix?: string | null
+  enabled?: boolean
+  tags?: Record<string, unknown> | null
+}
+
+export interface PersonalModelBatchImportCreatedItem {
+  upstream_model_id: string
+  gateway_model_ids: string[]
+}
+
+export interface BatchImportFailureItem {
+  upstream_model_id: string
+  reason: string
+}
+
+export interface PersonalModelBatchImportResponse {
+  credential_id: string
+  created: PersonalModelBatchImportCreatedItem[]
+  failed: BatchImportFailureItem[]
+}
+
+export interface TeamGatewayModelBatchImportItem {
+  upstream_model_id: string
+  name?: string | null
+}
+
+export interface TeamGatewayModelBatchImportBody {
+  provider: string
+  capability?: string
+  weight?: number
+  rpm_limit?: number | null
+  tpm_limit?: number | null
+  tags?: Record<string, unknown> | null
+  enabled?: boolean
+  items: TeamGatewayModelBatchImportItem[]
+}
+
+export interface TeamGatewayModelBatchImportCreatedItem {
+  upstream_model_id: string
+  gateway_model_id: string
+}
+
+export interface TeamGatewayModelBatchImportResponse {
+  credential_id: string
+  created: TeamGatewayModelBatchImportCreatedItem[]
+  failed: BatchImportFailureItem[]
+}
+
 export interface PersonalGatewayModelUpdateBody {
   display_name?: string
   model_id?: string
@@ -223,10 +296,12 @@ export interface GatewayModelCreateBody {
   rpm_limit?: number | null
   tpm_limit?: number | null
   tags?: Record<string, unknown> | null
+  enabled?: boolean
 }
 
 /** PATCH /models/{id}，与 GatewayModelUpdate 对齐 */
 export interface GatewayModelUpdateBody {
+  name?: string | null
   real_model?: string | null
   credential_id?: string | null
   weight?: number | null
@@ -449,6 +524,25 @@ export const gatewayApi = {
   updateMyCredential: (id: string, body: GatewayCredentialUpdateBody) =>
     apiClient.patch<ProviderCredential>(`${base}/my-credentials/${id}`, body),
   deleteMyCredential: (id: string) => apiClient.delete<unknown>(`${base}/my-credentials/${id}`),
+
+  probeMyCredential: (credentialId: string) =>
+    apiClient.post<CredentialProbeResult>(`${base}/my-credentials/${credentialId}/probe`, {}),
+  batchImportMyModelsFromUpstream: (credentialId: string, body: PersonalModelBatchImportBody) =>
+    apiClient.post<PersonalModelBatchImportResponse>(
+      `${base}/my-credentials/${credentialId}/batch-import-models`,
+      body
+    ),
+
+  probeTeamCredential: (credentialId: string) =>
+    apiClient.post<CredentialProbeResult>(`${base}/credentials/${credentialId}/probe`, {}),
+  batchImportTeamModelsFromUpstream: (
+    credentialId: string,
+    body: TeamGatewayModelBatchImportBody
+  ) =>
+    apiClient.post<TeamGatewayModelBatchImportResponse>(
+      `${base}/credentials/${credentialId}/batch-import-models`,
+      body
+    ),
 
   listMyModels: (params?: { provider?: string }) =>
     apiClient.get<PersonalGatewayModel[]>(`${base}/my-models`, params),

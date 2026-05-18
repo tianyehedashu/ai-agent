@@ -211,5 +211,26 @@ class VirtualKeyRepository:
             await self._session.flush()
         return changed
 
+    async def rename_model_name_in_team_allowed_lists(
+        self,
+        team_id: uuid.UUID,
+        old_name: str,
+        new_name: str,
+    ) -> int:
+        """将指定团队 vkey 白名单中的虚拟模型名 old_name 替换为 new_name。"""
+        if old_name == new_name:
+            return 0
+        keys = await self.list_by_team(team_id, include_system=True, include_inactive=True)
+        changed = 0
+        for key in keys:
+            allowed = list(key.allowed_models or ())
+            if old_name not in allowed:
+                continue
+            key.allowed_models = [new_name if m == old_name else m for m in allowed]
+            changed += 1
+        if changed:
+            await self._session.flush()
+        return changed
+
 
 __all__ = ["VirtualKeyRepository"]

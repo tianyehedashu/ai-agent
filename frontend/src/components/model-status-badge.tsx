@@ -21,6 +21,8 @@ export interface ModelStatusBadgeProps {
   testedAt: string | null
   /** 失败时后端落库的 last_test_reason，用于 tooltip 排查 */
   reason?: string | null
+  /** 窄列表行：仅图标+短标签，相对时间见 tooltip */
+  compact?: boolean
   className?: string
 }
 
@@ -55,6 +57,7 @@ export function ModelStatusBadge({
   status,
   testedAt,
   reason,
+  compact = false,
   className,
 }: ModelStatusBadgeProps): React.JSX.Element {
   const key: 'success' | 'failed' | 'unknown' =
@@ -76,10 +79,20 @@ export function ModelStatusBadge({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge className={cn('gap-1 px-2 py-0.5 font-medium', visual.className, className)}>
-            <Icon className="h-3 w-3" aria-hidden="true" />
+          <Badge
+            className={cn(
+              'shrink-0 whitespace-nowrap font-medium',
+              compact ? 'gap-0.5 px-1.5 py-0.5 text-[11px]' : 'gap-1 px-2 py-0.5',
+              visual.className,
+              className
+            )}
+          >
+            <Icon
+              className={cn('shrink-0', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')}
+              aria-hidden="true"
+            />
             <span>{visual.label}</span>
-            {relative ? (
+            {!compact && relative ? (
               <span className="text-[10px] font-normal opacity-80">· {relative}</span>
             ) : null}
           </Badge>

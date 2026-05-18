@@ -19,6 +19,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { GATEWAY_USAGE_AGGREGATION_OPTIONS } from '@/features/gateway-usage/usage-aggregation'
 
 const PAGE_SIZE = 100
 
@@ -100,18 +101,19 @@ export default function GatewayLogsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-          {(['user', 'workspace'] as const).map((value) => (
+          {GATEWAY_USAGE_AGGREGATION_OPTIONS.map((option) => (
             <Button
-              key={value}
+              key={option.value}
               size="sm"
-              variant={usageAggregation === value ? 'default' : 'ghost'}
+              variant={usageAggregation === option.value ? 'default' : 'ghost'}
               className="h-7 px-3 text-xs"
+              title={option.description}
               onClick={() => {
-                setUsageAggregation(value)
+                setUsageAggregation(option.value)
                 setSelectedId(null)
               }}
             >
-              {value === 'user' ? '按账号' : '当前工作区'}
+              {option.label}
             </Button>
           ))}
         </div>

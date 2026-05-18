@@ -139,9 +139,16 @@ class GatewayModelCreate(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
+    enabled: bool = True
 
 
 class GatewayModelUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="虚拟模型别名；同一工作区内 (team_id, name) 唯一",
+    )
     real_model: str | None = None
     credential_id: uuid.UUID | None = None
     weight: int | None = None

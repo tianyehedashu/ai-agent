@@ -1,8 +1,13 @@
 /**
  * AI Gateway · 凭据详情（编辑、轮换密钥、启用/禁用、关联模型）
+ *
+ * 设计要点：
+ * - 表单状态被抽到 {@link CredentialEditForm}，由父组件用 `key={cred.id::api_key_masked}`
+ *   重挂代替 `useEffect` 派生 state，避免 react-query 后台 refetch 重置用户正在编辑的表单。
+ * - 头部「启用」Switch 走独立的乐观更新 mutation，UI 即时响应。
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight } from 'lucide-react'
@@ -11,15 +16,30 @@ import { Link, useParams } from 'react-router-dom'
 import {
   gatewayApi,
   type GatewayCredentialUpdateBody,
-  type GatewayModel,
   type ProviderCredential,
 } from '@/api/gateway'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
+import { ExtraFieldsRenderer } from '@/features/gateway-credentials/credential-extra-fields'
+import {
+  compactExtra,
+  extraToFormValues,
+  type CredentialExtraValues,
+} from '@/features/gateway-credentials/credential-extra-utils'
+import { CredentialModelsCard } from '@/features/gateway-credentials/credential-linked-models'
+import { CredentialUpstreamModelsPanel } from '@/features/gateway-credentials/credential-upstream-models-panel'
+import {
+  apiKeyLabelForProvider,
+  defaultApiBaseForProvider,
+  extraFieldsForProvider,
+  getProviderSchema,
+  providerLabel,
+} from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 
@@ -38,13 +58,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
 
-  const [name, setName] = useState('')
-  const [apiBase, setApiBase] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [isActive, setIsActive] = useState(true)
-  const [showFullCurrentKey, setShowFullCurrentKey] = useState(false)
-  const [revealedCurrentKey, setRevealedCurrentKey] = useState<string | null>(null)
-
   const {
     data: cred,
     isLoading,
@@ -58,64 +71,31 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
 
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
+  const schema = cred ? getProviderSchema(cred.provider) : undefined
 
-  useEffect(() => {
-    if (!cred) return
-    setName(cred.name)
-    setApiBase(cred.api_base ?? '')
-    setApiKey('')
-    setIsActive(cred.is_active)
-  }, [cred])
-
-  useEffect(() => {
-    setShowFullCurrentKey(false)
-    setRevealedCurrentKey(null)
-  }, [cred?.id, cred?.api_key_masked])
-
-  const revealKeyMutation = useMutation({
-    mutationFn: () => gatewayApi.revealCredential(id),
-    onSuccess: (data) => {
-      setRevealedCurrentKey(data.api_key)
+  // 头部「启用/禁用」走独立 mutation + 乐观更新，UI 即时响应，不再依赖本地 isActive state
+  const toggleActiveMutation = useMutation({
+    mutationFn: (nextActive: boolean) => gatewayApi.updateCredential(id, { is_active: nextActive }),
+    onMutate: async (nextActive: boolean) => {
+      await queryClient.cancelQueries({ queryKey: ['gateway', 'credential', id] })
+      const previous = queryClient.getQueryData<ProviderCredential>(['gateway', 'credential', id])
+      if (previous) {
+        queryClient.setQueryData<ProviderCredential>(['gateway', 'credential', id], {
+          ...previous,
+          is_active: nextActive,
+        })
+      }
+      return { previous }
     },
-    onError: (e: Error) => {
-      toast({
-        variant: 'destructive',
-        title: '无法显示完整密钥',
-        description: e.message,
-      })
-      setShowFullCurrentKey(false)
+    onError: (e: Error, _next, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(['gateway', 'credential', id], ctx.previous)
+      }
+      toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
-  })
-
-  const synced = useMemo(() => {
-    if (!cred) return true
-    return (
-      name === cred.name &&
-      (apiBase.trim() || '') === (cred.api_base ?? '') &&
-      isActive === cred.is_active &&
-      apiKey === ''
-    )
-  }, [cred, name, apiBase, isActive, apiKey])
-
-  const { data: linkedModels, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', 'by-credential', id],
-    queryFn: () => gatewayApi.listModels({ credential_id: id }),
-    enabled: id.length > 0,
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ cid, body }: { cid: string; body: GatewayCredentialUpdateBody }) =>
-      gatewayApi.updateCredential(cid, body),
-    onSuccess: () => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', id] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models', 'by-credential', id] })
-      setApiKey('')
-      toast({ title: '凭据已更新' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
   })
 
@@ -153,21 +133,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     )
   }
 
-  function handleSave(): void {
-    if (!editable || !name.trim()) return
-    const body: GatewayCredentialUpdateBody = {
-      is_active: isActive,
-      api_base: apiBase.trim() || null,
-    }
-    if (!configManaged) {
-      body.name = name.trim()
-    }
-    if (apiKey.trim()) {
-      body.api_key = apiKey.trim()
-    }
-    updateMutation.mutate({ cid: id, body })
-  }
-
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
@@ -182,7 +147,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         <div>
           <h2 className="text-2xl font-semibold">{cred.name}</h2>
           <p className="text-sm text-muted-foreground">
-            <span className="font-mono">{cred.provider}</span>
+            <span className="font-medium text-foreground">{providerLabel(cred.provider)}</span>
+            <span className="ml-1.5 font-mono text-[11px]">({cred.provider})</span>
             <span className="mx-2">·</span>
             <span>{cred.scope}</span>
             {cred.scope === 'system' ? <span className="ml-2 text-xs">（系统全局）</span> : null}
@@ -192,21 +158,23 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               </span>
             ) : null}
           </p>
+          {schema?.helpText ? (
+            <p className="mt-1 text-xs text-muted-foreground">{schema.helpText}</p>
+          ) : null}
         </div>
         {editable ? (
           <div className="flex items-center gap-2 rounded-md border px-3 py-2">
             <Label htmlFor="cred-header-active" className="cursor-pointer text-sm font-normal">
-              {isActive ? '已启用' : '已禁用'}
+              {cred.is_active ? '已启用' : '已禁用'}
             </Label>
             <Switch
               id="cred-header-active"
-              checked={isActive}
-              disabled={updateMutation.isPending}
+              checked={cred.is_active}
+              disabled={toggleActiveMutation.isPending}
               onCheckedChange={(checked) => {
-                setIsActive(checked)
-                updateMutation.mutate({ cid: id, body: { is_active: checked } })
+                toggleActiveMutation.mutate(checked)
               }}
-              aria-label={isActive ? '停用凭据' : '启用凭据'}
+              aria-label={cred.is_active ? '停用凭据' : '启用凭据'}
             />
           </div>
         ) : (
@@ -216,7 +184,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>凭据与密钥</CardTitle>
@@ -225,176 +193,302 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <Label htmlFor="cred-current-key">当前 API Key</Label>
-                {editable ? (
-                  <div className="flex items-center gap-2 sm:pb-0.5">
-                    <Label
-                      htmlFor="cred-show-full-key"
-                      className="cursor-pointer text-xs font-normal text-muted-foreground"
-                    >
-                      显示完整密钥
-                    </Label>
-                    <Switch
-                      id="cred-show-full-key"
-                      checked={showFullCurrentKey}
-                      disabled={revealKeyMutation.isPending}
-                      onCheckedChange={(checked) => {
-                        setShowFullCurrentKey(checked)
-                        if (!checked) {
-                          setRevealedCurrentKey(null)
-                          revealKeyMutation.reset()
-                          return
-                        }
-                        revealKeyMutation.mutate()
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-              <Input
-                id="cred-current-key"
-                readOnly
-                className="mt-1.5 font-mono text-xs"
-                value={
-                  showFullCurrentKey
-                    ? revealKeyMutation.isPending && revealedCurrentKey === null
-                      ? '加载中…'
-                      : (revealedCurrentKey ?? '')
-                    : cred.api_key_masked
-                }
-              />
-            </div>
-            {editable ? (
-              <>
-                <div>
-                  <Label htmlFor="cred-detail-name">名称</Label>
-                  <Input
-                    id="cred-detail-name"
-                    className="mt-1.5"
-                    value={name}
-                    readOnly={configManaged}
-                    disabled={configManaged}
-                    onChange={(e) => {
-                      setName(e.target.value)
-                    }}
-                  />
-                  {configManaged ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      该凭据由 app.toml / 环境变量同步维护，重命名会导致重复凭据。
-                    </p>
-                  ) : null}
-                </div>
-                <div>
-                  <Label htmlFor="cred-detail-new-key">新 API Key（留空则不变）</Label>
-                  <Input
-                    id="cred-detail-new-key"
-                    type="password"
-                    autoComplete="new-password"
-                    className="mt-1.5"
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value)
-                    }}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cred-detail-base">api_base</Label>
-                  <Input
-                    id="cred-detail-base"
-                    className="mt-1.5"
-                    value={apiBase}
-                    onChange={(e) => {
-                      setApiBase(e.target.value)
-                    }}
-                    placeholder="https://..."
-                  />
-                </div>
-                {cred.extra !== null && Object.keys(cred.extra).length > 0 ? (
-                  <div>
-                    <Label>extra（只读）</Label>
-                    <pre className="mt-1.5 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed">
-                      {JSON.stringify(cred.extra, null, 2)}
-                    </pre>
-                  </div>
-                ) : null}
-                <Button
-                  disabled={updateMutation.isPending || !name.trim() || synced}
-                  onClick={() => {
-                    handleSave()
-                  }}
-                >
-                  {updateMutation.isPending ? '保存中…' : '保存更改'}
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                你无权编辑此凭据（系统凭据需平台管理员）。
-              </p>
-            )}
+            <CredentialEditForm
+              // 用 cred.id + api_key_masked 复合 key：
+              //  · 切换凭据时重挂（清空所有 form state）
+              //  · 同一凭据轮换 key 成功后也重挂（清空「显示完整密钥」状态）
+              //  · 同一凭据的 is_active 改变不会触发重挂（避免编辑中表单被吞）
+              key={`${cred.id}::${cred.api_key_masked}`}
+              cred={cred}
+              editable={editable}
+              configManaged={configManaged}
+            />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>使用此凭据的注册模型</CardTitle>
-            <CardDescription>
-              在{' '}
-              <Link
-                to="/gateway/models?tab=team&view=register"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                注册模型
-              </Link>{' '}
-              中可继续调整绑定。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">名称</th>
-                  <th className="px-4 py-2 text-left font-medium">调用面</th>
-                  <th className="px-4 py-2 text-left font-medium">上游模型</th>
-                  <th className="px-4 py-2 text-left font-medium">启用</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modelsLoading ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
-                      加载中…
-                    </td>
-                  </tr>
-                ) : (linkedModels?.length ?? 0) === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
-                      暂无注册模型使用此凭据
-                    </td>
-                  </tr>
-                ) : (
-                  (linkedModels ?? []).map((m: GatewayModel) => (
-                    <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="px-4 py-2">
-                        <Link
-                          to={`/gateway/models/${encodeURIComponent(m.id)}?tab=team&credentialId=${encodeURIComponent(id)}`}
-                          className="font-mono text-xs text-primary underline-offset-4 hover:underline"
-                        >
-                          {m.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 text-xs">{m.capability}</td>
-                      <td className="px-4 py-2 font-mono text-xs">{m.real_model}</td>
-                      <td className="px-4 py-2 text-xs">{m.enabled ? '是' : '否'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+        <CredentialUpstreamModelsPanel
+          scope="team"
+          credentialId={id}
+          provider={cred.provider}
+          disabled={!editable}
+        />
+
+        <CredentialLinkedModelsSection credentialId={id} canManageModels={editable} />
       </div>
     </div>
+  )
+}
+
+/**
+ * 拉取并展示该凭据关联的注册模型。独立成段，避免与编辑表单耦合 query 失效逻辑。
+ */
+function CredentialLinkedModelsSection({
+  credentialId,
+  canManageModels,
+}: Readonly<{
+  credentialId: string
+  canManageModels: boolean
+}>): React.JSX.Element {
+  const { data: linkedModels, isLoading: modelsLoading } = useQuery({
+    queryKey: ['gateway', 'models', 'by-credential', credentialId],
+    queryFn: () => gatewayApi.listModels({ credential_id: credentialId }),
+    enabled: credentialId.length > 0,
+  })
+  return (
+    <CredentialModelsCard
+      credentialId={credentialId}
+      models={linkedModels}
+      isLoading={modelsLoading}
+      canManageModels={canManageModels}
+    />
+  )
+}
+
+/**
+ * 凭据编辑表单：表单 state 由 `cred` lazy init，**不再用 useEffect 派生**。
+ * 父组件需通过 `key` 触发重挂以在切换凭据或轮换 key 后重置状态。
+ */
+function CredentialEditForm({
+  cred,
+  editable,
+  configManaged,
+}: Readonly<{
+  cred: ProviderCredential
+  editable: boolean
+  configManaged: boolean
+}>): React.JSX.Element {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
+  const [name, setName] = useState<string>(() => cred.name)
+  const [apiBase, setApiBase] = useState<string>(() => cred.api_base ?? '')
+  const [apiKey, setApiKey] = useState<string>('')
+  const [extra, setExtra] = useState<CredentialExtraValues>(() => extraToFormValues(cred.extra))
+  const [showFullCurrentKey, setShowFullCurrentKey] = useState(false)
+  const [revealedCurrentKey, setRevealedCurrentKey] = useState<string | null>(null)
+
+  const credId = cred.id
+
+  const revealKeyMutation = useMutation({
+    mutationFn: () => gatewayApi.revealCredential(credId),
+    onSuccess: (data) => {
+      setRevealedCurrentKey(data.api_key)
+    },
+    onError: (e: Error) => {
+      toast({
+        variant: 'destructive',
+        title: '无法显示完整密钥',
+        description: e.message,
+      })
+      setShowFullCurrentKey(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (body: GatewayCredentialUpdateBody) => gatewayApi.updateCredential(credId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', credId] })
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['gateway', 'models', 'by-credential', credId],
+      })
+      setApiKey('')
+      toast({ title: '凭据已更新' })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '更新失败', description: e.message })
+    },
+  })
+
+  const provider = cred.provider
+  const schema = getProviderSchema(provider)
+  const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
+  const apiKeyLabel = apiKeyLabelForProvider(provider)
+  const defaultApiBase = defaultApiBaseForProvider(provider)
+  const baseIsDefault = defaultApiBase.length > 0 && apiBase === defaultApiBase
+  const apiBasePlaceholder =
+    schema?.apiBasePlaceholder ??
+    (defaultApiBase.length > 0 ? defaultApiBase : 'https://example.com/v1')
+  const apiBaseRequired = schema?.apiBaseRequired ?? false
+  const apiBaseMissing = apiBaseRequired && !apiBase.trim()
+  const requiredExtraMissing = extraFields.some((f) => f.required && !(extra[f.key] ?? '').trim())
+
+  const compactedNow = useMemo(() => compactExtra(extra), [extra])
+  const compactedOrig = useMemo(() => compactExtra(extraToFormValues(cred.extra)), [cred.extra])
+  const synced =
+    name === cred.name &&
+    (apiBase.trim() || '') === (cred.api_base ?? '') &&
+    apiKey === '' &&
+    JSON.stringify(compactedNow) === JSON.stringify(compactedOrig)
+
+  const canSave = Boolean(name.trim()) && !apiBaseMissing && !requiredExtraMissing && !synced
+
+  const credExtra = cred.extra
+  const hasUnknownExtra =
+    extraFields.length === 0 && credExtra !== null && Object.keys(credExtra).length > 0
+
+  function handleSave(): void {
+    if (!editable || !name.trim()) return
+    const body: GatewayCredentialUpdateBody = {
+      api_base: apiBase.trim() || null,
+      extra: Object.keys(compactedNow).length > 0 ? compactedNow : null,
+    }
+    if (!configManaged) body.name = name.trim()
+    if (apiKey.trim()) body.api_key = apiKey.trim()
+    updateMutation.mutate(body)
+  }
+
+  return (
+    <>
+      <div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <Label htmlFor="cred-current-key">当前 {apiKeyLabel}</Label>
+          {editable ? (
+            <div className="flex items-center gap-2 sm:pb-0.5">
+              <Label
+                htmlFor="cred-show-full-key"
+                className="cursor-pointer text-xs font-normal text-muted-foreground"
+              >
+                显示完整密钥
+              </Label>
+              <Switch
+                id="cred-show-full-key"
+                checked={showFullCurrentKey}
+                disabled={revealKeyMutation.isPending}
+                onCheckedChange={(checked) => {
+                  setShowFullCurrentKey(checked)
+                  if (!checked) {
+                    setRevealedCurrentKey(null)
+                    revealKeyMutation.reset()
+                    return
+                  }
+                  revealKeyMutation.mutate()
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+        <Input
+          id="cred-current-key"
+          readOnly
+          className="mt-1.5 font-mono text-xs"
+          value={
+            showFullCurrentKey
+              ? revealKeyMutation.isPending && revealedCurrentKey === null
+                ? '加载中…'
+                : (revealedCurrentKey ?? '')
+              : cred.api_key_masked
+          }
+        />
+      </div>
+      {editable ? (
+        <>
+          <div>
+            <Label htmlFor="cred-detail-name">名称</Label>
+            <Input
+              id="cred-detail-name"
+              className="mt-1.5"
+              value={name}
+              readOnly={configManaged}
+              disabled={configManaged}
+              onChange={(e) => {
+                setName(e.target.value)
+              }}
+            />
+            {configManaged ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                该凭据由 app.toml / 环境变量同步维护，重命名会导致重复凭据。
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <Label htmlFor="cred-detail-new-key">新 {apiKeyLabel}（留空则不变）</Label>
+            <Input
+              id="cred-detail-new-key"
+              type="password"
+              autoComplete="new-password"
+              className="mt-1.5"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value)
+              }}
+              placeholder={schema?.apiKeyPlaceholder}
+            />
+            {schema?.apiKeyHelpText ? (
+              <p className="mt-1 text-xs text-muted-foreground">{schema.apiKeyHelpText}</p>
+            ) : null}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="cred-detail-base">
+                api_base
+                {apiBaseRequired ? (
+                  <span className="ml-1 text-destructive">*</span>
+                ) : (
+                  <span className="ml-1 text-[11px] text-muted-foreground">（可选）</span>
+                )}
+              </Label>
+              {baseIsDefault ? (
+                <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                  默认
+                </Badge>
+              ) : null}
+            </div>
+            <Input
+              id="cred-detail-base"
+              className="mt-1.5"
+              value={apiBase}
+              onChange={(e) => {
+                setApiBase(e.target.value)
+              }}
+              placeholder={apiBasePlaceholder}
+            />
+            {defaultApiBase.length > 0 && !baseIsDefault ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                该 provider 的默认地址：
+                <button
+                  type="button"
+                  className="ml-1 font-mono text-primary underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setApiBase(defaultApiBase)
+                  }}
+                >
+                  {defaultApiBase}
+                </button>
+              </p>
+            ) : null}
+          </div>
+          {extraFields.length > 0 ? (
+            <ExtraFieldsRenderer
+              fields={extraFields}
+              values={extra}
+              onChange={setExtra}
+              idPrefix="cred-detail-extra"
+            />
+          ) : hasUnknownExtra ? (
+            <div>
+              <Label>extra（未知字段，只读）</Label>
+              <pre className="mt-1.5 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed">
+                {JSON.stringify(credExtra, null, 2)}
+              </pre>
+              <p className="mt-1 text-xs text-muted-foreground">
+                当前 provider 未声明 extra schema；如需编辑请在 schema 中追加字段。
+              </p>
+            </div>
+          ) : null}
+          <Button
+            disabled={updateMutation.isPending || !canSave}
+            onClick={() => {
+              handleSave()
+            }}
+          >
+            {updateMutation.isPending ? '保存中…' : '保存更改'}
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">你无权编辑此凭据（系统凭据需平台管理员）。</p>
+      )}
+    </>
   )
 }

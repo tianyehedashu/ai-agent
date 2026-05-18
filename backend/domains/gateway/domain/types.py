@@ -252,6 +252,7 @@ class TimeSeriesPoint:
 # app.toml / 环境变量同步写入的系统凭据固定名与 extra 标记（与 GatewayModel.tags.managed_by 同源语义）。
 CONFIG_MANAGED_CREDENTIAL_NAME = "app-config-default"
 CONFIG_MANAGED_BY = "config"
+GATEWAY_MODEL_MANAGED_BY_TAG = "managed_by"
 
 
 def is_config_managed_system_credential(
@@ -271,6 +272,27 @@ def is_config_managed_system_credential(
 # 用户 BYOK：``/my-credentials`` 所支持的提供商标识（与路由/LiteLLM 对齐，不含 custom）。
 USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
     {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
+)
+
+# 团队/系统凭据创建支持的 provider 标识 ——
+# 与前端 ``provider-schemas.ts`` 的 schema 表保持一致，并涵盖 USER 集合作为子集。
+MANAGED_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "anthropic",
+        "azure",
+        "bedrock",
+        "gemini",
+        "vertex_ai",
+        "dashscope",
+        "deepseek",
+        "volcengine",
+        "zhipuai",
+        "cohere",
+        "mistral",
+        "fireworks",
+        "together_ai",
+    }
 )
 
 # personal team gateway_models 允许的 model_types（与选择器 type 对齐）。
@@ -293,6 +315,8 @@ PERSONAL_MODEL_PROVIDERS: frozenset[str] = frozenset(
 __all__ = [
     "CONFIG_MANAGED_BY",
     "CONFIG_MANAGED_CREDENTIAL_NAME",
+    "GATEWAY_MODEL_MANAGED_BY_TAG",
+    "MANAGED_GATEWAY_CREDENTIAL_PROVIDERS",
     "PERSONAL_MODEL_PROVIDERS",
     "PERSONAL_MODEL_TYPES",
     "USER_GATEWAY_CREDENTIAL_PROVIDERS",

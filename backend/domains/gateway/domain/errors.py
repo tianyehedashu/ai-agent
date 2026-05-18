@@ -152,6 +152,56 @@ class BudgetExceededError(GatewayError):
         self.used = used
 
 
+class EntitlementPlanExhaustedError(GatewayError):
+    """下游客户套餐 (EntitlementPlan) 滚动桶耗尽
+
+    发生于客户向网关调用前的入站校验阶段（``ProxyUseCase`` 入口）。语义为
+    "客户已购额度用完"，**不**可经 fallback 突破；HTTP 429 + 业务码
+    ``gateway/entitlement_exhausted``。``retry_at`` 表示最早窗口内成员到期时刻。
+    """
+
+    def __init__(
+        self,
+        *,
+        plan_id: str,
+        quota_label: str,
+        reason: str,
+        retry_at: str | None = None,
+    ) -> None:
+        super().__init__(
+            f"客户套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})"
+        )
+        self.plan_id = plan_id
+        self.quota_label = quota_label
+        self.reason = reason
+        self.retry_at = retry_at
+
+
+class ProviderPlanExhaustedError(GatewayError):
+    """上游厂商套餐 (ProviderPlan) 滚动桶耗尽
+
+    发生于 LiteLLM Router 选中某个 deployment 后的 pre-call 钩子；语义为
+    "对应凭据的厂商订阅 / 预付费包的 quota 用完"。Router 会将该 deployment
+    cooldown，自动切下条凭据 / fallback 模型；调用方一般不会直接看到该错误。
+    """
+
+    def __init__(
+        self,
+        *,
+        plan_id: str,
+        quota_label: str,
+        reason: str,
+        cooldown_seconds: int,
+    ) -> None:
+        super().__init__(
+            f"上游套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})"
+        )
+        self.plan_id = plan_id
+        self.quota_label = quota_label
+        self.reason = reason
+        self.cooldown_seconds = cooldown_seconds
+
+
 class RateLimitExceededError(GatewayError):
     """限流超限"""
 
@@ -181,6 +231,7 @@ __all__ = [
     "CredentialApiKeyDecryptError",
     "CredentialNameConflictError",
     "CredentialNotFoundError",
+    "EntitlementPlanExhaustedError",
     "GatewayError",
     "GatewayTeamHeaderInvalidError",
     "GatewayTeamHeaderRequiredError",
@@ -192,6 +243,7 @@ __all__ = [
     "PersonalTeamNotInitializedError",
     "PlatformApiKeyInvalidError",
     "PlatformApiKeyMissingGatewayProxyScopeError",
+    "ProviderPlanExhaustedError",
     "RateLimitExceededError",
     "RouteNotFoundError",
     "SystemCredentialAdminRequiredError",

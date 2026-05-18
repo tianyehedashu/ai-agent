@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GATEWAY_USAGE_AGGREGATION_OPTIONS } from '@/features/gateway-usage/usage-aggregation'
 
 const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] = [
   { value: '1d', days: 1, label: '24 小时' },
@@ -49,17 +50,18 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         <h2 className="text-2xl font-semibold tracking-tight">概览</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
-            {(['user', 'workspace'] as const).map((value) => (
+            {GATEWAY_USAGE_AGGREGATION_OPTIONS.map((option) => (
               <Button
-                key={value}
+                key={option.value}
                 size="sm"
-                variant={usageAggregation === value ? 'default' : 'ghost'}
+                variant={usageAggregation === option.value ? 'default' : 'ghost'}
                 className="h-7 px-3 text-xs"
+                title={option.description}
                 onClick={() => {
-                  setUsageAggregation(value)
+                  setUsageAggregation(option.value)
                 }}
               >
-                {value === 'user' ? '按账号' : '当前工作区'}
+                {option.label}
               </Button>
             ))}
           </div>

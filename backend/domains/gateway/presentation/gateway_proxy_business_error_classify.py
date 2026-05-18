@@ -9,6 +9,7 @@ from fastapi import status
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
+    EntitlementPlanExhaustedError,
     GuardrailBlockedError,
     ModelNotAllowedError,
     RateLimitExceededError,
@@ -56,6 +57,13 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             message=str(exc),
             openai_error_type="budget_exceeded",
             anthropic_error_type="api_error",
+        )
+    if isinstance(exc, EntitlementPlanExhaustedError):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_429_TOO_MANY_REQUESTS,
+            message=str(exc),
+            openai_error_type="entitlement_exhausted",
+            anthropic_error_type="rate_limit_error",
         )
     if isinstance(exc, GuardrailBlockedError):
         return ProxyUseCaseBusinessFailure(

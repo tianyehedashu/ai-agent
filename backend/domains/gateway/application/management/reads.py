@@ -87,18 +87,14 @@ class GatewayManagementReadService:
         is_platform_admin: bool,
     ) -> ProviderCredential:
         """与 ``list_credentials_for_team`` 可见集合一致：团队凭据 +（仅平台管理员）系统凭据。"""
-        row = await self._creds.get(credential_id)
+        row = await self._creds.get_bindable_for_team_gateway_model(
+            credential_id,
+            team_id=team_id,
+            is_platform_admin=is_platform_admin,
+        )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
-        if row.scope == "team":
-            if row.scope_id != team_id:
-                raise CredentialNotFoundError(str(credential_id))
-            return row
-        if row.scope == "system":
-            if not is_platform_admin:
-                raise CredentialNotFoundError(str(credential_id))
-            return row
-        raise CredentialNotFoundError(str(credential_id))
+        return row
 
     async def get_user_credential_for_owner(
         self, credential_id: UUID, user_id: UUID

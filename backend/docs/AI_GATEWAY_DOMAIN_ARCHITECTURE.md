@@ -51,10 +51,12 @@ domains/gateway/
 │   ├── management/                # 管理面读写分包（与 CQRS 读/写侧对应）
 │   │   ├── reads.py               # GatewayManagementReadService
 │   │   ├── writes.py              # GatewayManagementWriteService
-│   │   └── usage_reads.py         # GatewayUsageReadService（兼容用量 API）
+│   │   ├── usage_reads.py         # GatewayUsageReadService（兼容用量 API）
+│   │   ├── ports.py               # 管理面子域出站端口（如 UpstreamModelListPort）
+│   │   └── credential_upstream_catalog.py  # 凭据上游探测与批量导入编排
 │   ├── proxy_use_case.py          # 对外 LLM 代理编排（OpenAI 与 Anthropic 经 chat 共用）
 │   └── jobs.py                    # 后台循环；rollup SQL 在 infrastructure 仓储
-├── domain/                       # 类型、虚拟 Key 算法、领域错误、ManagementTeamContext
+├── domain/                       # 类型、虚拟 Key 算法、领域错误、ManagementTeamContext、credential_probe、upstream_catalog_policy
 └── infrastructure/             # ORM、仓储、Router 单例、回调、护栏
     └── models/__init__.py        # 再导出 Team / TeamMember（与 Alembic 聚合 import），权威定义在 tenancy
 
@@ -87,6 +89,13 @@ domains/agent/infrastructure/llm/gateway.py   # LLMGateway
 | 用量只读（兼容层） | `GatewayUsageReadService` | Identity `/usage/*` 等，不暴露 Gateway ORM |
 
 实现分包目录为 `application/management/`（`reads.py` / `writes.py` / `usage_reads.py`），与「Query/Command」一一对应，便于团队沟通时口头用「管理读服务 / 管理写服务」指代两侧。
+
+**凭据上游列举与批量导入（管理面）**
+
+- **编排**：`application/management/credential_upstream_catalog.py` 中的 `CredentialUpstreamCatalogService` —— 读取凭据、解密 API Key（失败则返回 `support="error"` 且**不**出站请求）、调用上游列举、将个人/团队模型批量写入 `GatewayManagementWriteService`（单行失败记入 `failed`，预期领域错误经 `ValidationError` / `HttpMappableDomainError` 映射为用户可读 `reason`；未预期异常记日志并返回通用文案）。
+- **出站端口**：`application/management/ports.py` 中的 `UpstreamModelListPort` / `RawUpstreamListResult`（与跨域 `application/ports.py` 的代理桥接契约区分）；默认实现为 `infrastructure/upstream/openai_compatible_model_list_adapter.py`。
+- **纯策略**：`domain/upstream_catalog_policy.py` 的 `resolve_openai_compatible_models_list_url`（无 I/O）；探测结果值对象在 `domain/credential_probe.py`。
+- **HTTP**：`presentation/management_router.py` —— `POST /api/v1/gateway/credentials/{credential_id}/probe`、`POST /api/v1/gateway/my-credentials/{credential_id}/probe`；`POST .../batch-import-models`（团队与个人各一路径）。响应体由路由层将 `CredentialProbeResult` 映射为 `schemas/credential_upstream_catalog.py` 中的 Pydantic 模型（presentation 不依赖 `from_result` 之类跨层捷径）。
 
 **后台任务**：`jobs.py` 调度；rollup 实现在 `infrastructure/repositories/metrics_rollup_repository.py`。
 

@@ -36,7 +36,7 @@ export default function GatewayLayout(): React.JSX.Element {
       { to: 'overview', label: '概览', icon: BarChart3 },
       { to: 'keys', label: '虚拟 Key', icon: Key },
       { to: 'credentials', label: '凭据', icon: Database },
-      { to: 'models', label: '注册模型', icon: Network },
+      { to: 'models', label: '模型', icon: Network },
       { to: 'routes', label: '虚拟路由', icon: Route },
       { to: 'budgets', label: '预算配额', icon: Receipt },
       { to: 'logs', label: '调用日志', icon: FileText },
