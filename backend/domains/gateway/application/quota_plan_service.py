@@ -82,9 +82,7 @@ class QuotaPlanService:
 
     def __init__(self) -> None:
         # key: (ns, plan_id, quota_id, minute_unix_30s_bucket)
-        self._snapshot_cache: dict[
-            tuple[str, uuid.UUID, uuid.UUID, int], _SnapshotCacheEntry
-        ] = {}
+        self._snapshot_cache: dict[tuple[str, uuid.UUID, uuid.UUID, int], _SnapshotCacheEntry] = {}
 
     # ------------------------------------------------------------------
     # check_and_reserve
@@ -116,7 +114,11 @@ class QuotaPlanService:
             limit_usd = spec.limit_usd
             limit_tokens = spec.limit_tokens
             limit_requests = spec.limit_requests
-            if limit_usd is not None and limit_usd > 0 and snap.used_usd + estimate_usd >= limit_usd:
+            if (
+                limit_usd is not None
+                and limit_usd > 0
+                and snap.used_usd + estimate_usd >= limit_usd
+            ):
                 return QuotaPlanCheckResult(
                     allowed=False,
                     snapshots=snapshots,
@@ -436,11 +438,7 @@ class QuotaPlanService:
                     used_requests += int(r.decode() if isinstance(r, bytes) else r)
 
         exhausted_reason = None
-        if (
-            spec.limit_usd is not None
-            and spec.limit_usd > 0
-            and used_cost >= spec.limit_usd
-        ):
+        if spec.limit_usd is not None and spec.limit_usd > 0 and used_cost >= spec.limit_usd:
             exhausted_reason = "usd"
         elif (
             spec.limit_tokens is not None
@@ -456,11 +454,7 @@ class QuotaPlanService:
             exhausted_reason = "requests"
         elif forced_exhausted:
             exhausted_reason = (
-                "requests"
-                if spec.limit_requests
-                else "tokens"
-                if spec.limit_tokens
-                else "usd"
+                "requests" if spec.limit_requests else "tokens" if spec.limit_tokens else "usd"
             )
 
         return PlanQuotaSnapshot(

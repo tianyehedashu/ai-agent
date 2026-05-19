@@ -156,6 +156,36 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
                         len(audit.models_without_upstream),
                         audit.models_without_upstream[:5],
                     )
+                from domains.gateway.application.route_audit import audit_gateway_routes
+
+                route_report = await audit_gateway_routes(session)
+                if route_report.issues:
+                    logger.warning(
+                        "Gateway route references: %d issues across %d routes (sample: %s)",
+                        len(route_report.issues),
+                        route_report.total_routes,
+                        [
+                            (i.virtual_model, i.field, list(i.missing_names))
+                            for i in route_report.issues[:5]
+                        ],
+                    )
+                if route_report.cross_team_virtual_model_collisions:
+                    logger.warning(
+                        "Gateway routes: %d virtual_model names shared across teams "
+                        "(Router uses gw/t/{team_id}/ prefix; sample: %s)",
+                        len(route_report.cross_team_virtual_model_collisions),
+                        [
+                            (c.virtual_model, list(c.team_ids))
+                            for c in route_report.cross_team_virtual_model_collisions[:5]
+                        ],
+                    )
+                if route_report.virtual_model_shadowed_by_model:
+                    logger.info(
+                        "Gateway routes shadowed by GatewayModel rows: %d sample=%s "
+                        "(GatewayModel.name 命中时优先于路由调度)",
+                        len(route_report.virtual_model_shadowed_by_model),
+                        route_report.virtual_model_shadowed_by_model[:5],
+                    )
                 await session.commit()
                 await reload_router(session)
         except Exception as exc:
@@ -279,7 +309,7 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
 
     # 关闭时
     await shutdown_app_background_tasks(_fastapi_app)
-    from domains.gateway.application.proxy_use_case import (  # pylint: disable=import-outside-toplevel
+    from domains.gateway.application.proxy_deferred_tasks import (  # pylint: disable=import-outside-toplevel
         shutdown_proxy_deferred_tasks,
     )
 

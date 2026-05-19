@@ -30,6 +30,8 @@ from domains.gateway.presentation.schemas.common import (
     GatewayModelTestResponse,
     GatewayModelUpdate,
     GatewayModelUsageSummaryResponse,
+    MultiCredentialGatewayModelCreate,
+    MultiCredentialGatewayModelResponse,
     PlatformCredentialStatItem,
 )
 from domains.identity.presentation.deps import AdminUser
@@ -193,6 +195,48 @@ async def create_model(
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return GatewayModelResponse.model_validate(model)
+
+
+@router.post(
+    "/models/multi-credential",
+    response_model=MultiCredentialGatewayModelResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_multi_credential_model(
+    body: MultiCredentialGatewayModelCreate,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> MultiCredentialGatewayModelResponse:
+    """同 ``(provider, real_model)`` 多凭据一键注册 + 自动 ``GatewayRoute``，启用 Router 负载均衡。"""
+    try:
+        result = await writes.create_multi_credential_gateway_model(
+            team_id=team.team_id,
+            name=body.name,
+            capability=body.capability,
+            real_model=body.real_model,
+            provider=body.provider,
+            credential_ids=list(body.credential_ids),
+            is_platform_admin=team.is_platform_admin,
+            strategy=body.strategy.value,
+            weight=body.weight,
+            rpm_limit=body.rpm_limit,
+            tpm_limit=body.tpm_limit,
+            tags=body.tags,
+            enabled=body.enabled,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    route = result.route
+    models = result.models
+    return MultiCredentialGatewayModelResponse(
+        route_id=route.id,
+        virtual_model=route.virtual_model,
+        strategy=route.strategy,
+        primary_models=list(route.primary_models or []),
+        created_model_ids=[m.id for m in models],
+    )
 
 
 @router.patch("/models/{model_id}", response_model=GatewayModelResponse)

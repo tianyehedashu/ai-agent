@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 import uuid
 
+from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import _models_to_deployments
 
 
@@ -29,7 +30,7 @@ def test_models_to_deployments_includes_credential_model_info() -> None:
 
     out = _models_to_deployments([m], {cred_id: cred})
     assert len(out) == 1
-    assert out[0]["model_name"] == "my-virtual"
+    assert out[0]["model_name"] == encode_router_model_name(team_id, "my-virtual")
     assert out[0]["litellm_params"]["model"] == "gpt-4o-mini"
     info = out[0]["model_info"]
     assert info["gateway_credential_id"] == str(cred_id)

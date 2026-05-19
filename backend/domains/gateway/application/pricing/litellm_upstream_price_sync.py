@@ -85,6 +85,7 @@ class LitellmUpstreamPriceSyncService:
                 output_cost_per_token=out_rate,
                 source="litellm_fallback",
                 effective_from=now,
+                version=existing.version + 1,
             )
             return 0, 1, 0
         await self._upstream.create(
@@ -102,6 +103,7 @@ class LitellmUpstreamPriceSyncService:
         self,
         *,
         gateway_models: list[tuple[str, str, str]] | None = None,
+        allowed_providers: set[str] | None = None,
     ) -> LitellmUpstreamSyncReport:
         """``gateway_models``: ``(provider, upstream_model, capability)`` 来自已注册模型。"""
         import litellm
@@ -109,6 +111,7 @@ class LitellmUpstreamPriceSyncService:
         created = 0
         updated = 0
         skipped_manual = 0
+        skipped_provider = 0
         now = datetime.now(UTC)
         model_cost: dict[str, dict[str, Any]] = dict(getattr(litellm, "model_cost", {}) or {})
         seen: set[tuple[str, str, str]] = set()
@@ -118,6 +121,9 @@ class LitellmUpstreamPriceSyncService:
             if rates is None:
                 continue
             provider, upstream_model = _parse_litellm_model_key(model_id)
+            if allowed_providers is not None and provider not in allowed_providers:
+                skipped_provider += 1
+                continue
             inp_rate, out_rate = rates
             key = (provider, upstream_model, _DEFAULT_CAPABILITY)
             if key in seen:
@@ -136,6 +142,9 @@ class LitellmUpstreamPriceSyncService:
             skipped_manual += s
 
         for provider, upstream_model, capability in gateway_models or []:
+            if allowed_providers is not None and provider not in allowed_providers:
+                skipped_provider += 1
+                continue
             entry = model_cost.get(upstream_model)
             if entry is None:
                 continue
@@ -160,10 +169,11 @@ class LitellmUpstreamPriceSyncService:
             skipped_manual += s
 
         logger.info(
-            "litellm upstream sync done created=%s updated=%s skipped_manual=%s",
+            "litellm upstream sync done created=%s updated=%s skipped_manual=%s skipped_provider=%s",
             created,
             updated,
             skipped_manual,
+            skipped_provider,
         )
         return LitellmUpstreamSyncReport(
             created=created,

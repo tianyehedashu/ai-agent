@@ -410,7 +410,9 @@ def _extract_status_code(exc: Any) -> int | None:
     return None
 
 
-def _credential_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
+def _credential_from_model_info_kwargs(
+    kwargs: dict[str, Any],
+) -> tuple[uuid.UUID | None, str | None]:
     """从 LiteLLM Router deployment 的 model_info 取凭据（与 router_singleton 写入字段一致）。"""
     for container_key in ("litellm_params", "standard_logging_object"):
         container = kwargs.get(container_key)
@@ -429,7 +431,9 @@ def _credential_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUI
     return None, None
 
 
-def _deployment_from_model_info_kwargs(kwargs: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
+def _deployment_from_model_info_kwargs(
+    kwargs: dict[str, Any],
+) -> tuple[uuid.UUID | None, str | None]:
     """从 LiteLLM Router deployment 的 ``model_info`` 取 ``GatewayModel`` 主键与注册别名。"""
     for container_key in ("litellm_params", "standard_logging_object"):
         container = kwargs.get(container_key)

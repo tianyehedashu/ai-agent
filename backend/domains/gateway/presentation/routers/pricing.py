@@ -41,8 +41,10 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.schemas.pricing import (
     DownstreamPricingResponse,
     DownstreamPricingUpsert,
+    EffectiveProviderResponse,
     FxRateResponse,
     LitellmUpstreamSyncReportResponse,
+    LitellmUpstreamSyncRequest,
     PricingEstimateRequest,
     PricingEstimateResponse,
     PricingRateAdminView,
@@ -98,10 +100,22 @@ async def sync_upstream_from_litellm(
     _admin: RequiredGatewayAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     writes: MgmtWrites,
+    body: LitellmUpstreamSyncRequest | None = None,
 ) -> LitellmUpstreamSyncReportResponse:
-    report = await writes.sync_upstream_from_litellm()
+    report = await writes.sync_upstream_from_litellm(
+        providers=body.providers if body is not None else None
+    )
     await db.commit()
     return LitellmUpstreamSyncReportResponse.model_validate(report.to_dict())
+
+
+@router.get("/effective-providers", response_model=list[EffectiveProviderResponse])
+async def list_effective_pricing_providers(
+    _admin: RequiredGatewayAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[EffectiveProviderResponse]:
+    rows = await _catalog_reads(db).list_effective_providers()
+    return [EffectiveProviderResponse.model_validate(r) for r in rows]
 
 
 @router.post("/estimate", response_model=PricingEstimateResponse)
@@ -136,9 +150,7 @@ async def pricing_reconciliation(
     month: int = Query(..., ge=1, le=12),
 ) -> PricingReconciliationResponse:
     _ = admin
-    payload = await team_month_reconciliation(
-        db, team_id=team.team_id, year=year, month=month
-    )
+    payload = await team_month_reconciliation(db, team_id=team.team_id, year=year, month=month)
     return PricingReconciliationResponse.model_validate(payload)
 
 
@@ -174,7 +186,9 @@ async def list_upstream_pricing(
     ]
 
 
-@router.post("/upstream", response_model=UpstreamPricingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upstream", response_model=UpstreamPricingResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_upstream_pricing(
     body: UpstreamPricingUpsert,
     _admin: RequiredGatewayAdmin,
@@ -220,7 +234,9 @@ async def list_downstream_pricing(
     return [DownstreamPricingResponse.model_validate(r) for r in rows]
 
 
-@router.post("/downstream", response_model=DownstreamPricingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/downstream", response_model=DownstreamPricingResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_downstream_pricing(
     body: DownstreamPricingUpsert,
     team: CurrentTeam,

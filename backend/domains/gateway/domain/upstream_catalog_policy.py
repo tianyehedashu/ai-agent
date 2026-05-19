@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-_ANTHROPIC_UNSUPPORTED = (
-    "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，或使用带 OpenAI 兼容列表端点的代理。"
-)
+_ANTHROPIC_UNSUPPORTED = "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，或使用带 OpenAI 兼容列表端点的代理。"
 
 
 def resolve_openai_compatible_models_list_url(

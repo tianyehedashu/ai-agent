@@ -32,7 +32,9 @@ class DownstreamModelPricing(BaseModel):
         nullable=False,
         comment="global | team | entitlement_plan",
     )
-    scope_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    scope_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     gateway_model_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gateway_models.id", ondelete="CASCADE"),

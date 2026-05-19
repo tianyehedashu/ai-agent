@@ -10,8 +10,9 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application import proxy_use_case
+from domains.gateway.application import proxy_response_adapter, proxy_use_case
 from domains.gateway.application.budget_service import BudgetCheckResult, BudgetService
+from domains.gateway.application.proxy_response_adapter import settle_usage
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
 
@@ -91,9 +92,7 @@ class CommitRecordingBudgetService(BudgetService):
         delta_tokens: int,
         budget_model_name: str | None = None,
     ) -> None:
-        self.commits.append(
-            (scope, scope_id, period, budget_model_name, delta_tokens, delta_cost)
-        )
+        self.commits.append((scope, scope_id, period, budget_model_name, delta_tokens, delta_cost))
 
 
 class FakeBudgetRepository:
@@ -108,11 +107,16 @@ class FakeBudgetRepository:
         *,
         model_name: str | None = None,
     ) -> FakeBudget | None:
-        if scope in {"team", "user"} and scope_id is not None and period in {
-            "daily",
-            "monthly",
-            "total",
-        }:
+        if (
+            scope in {"team", "user"}
+            and scope_id is not None
+            and period
+            in {
+                "daily",
+                "monthly",
+                "total",
+            }
+        ):
             if model_name is None:
                 return FakeBudget(model_name=None)
             if model_name == "gpt-4o-mini":
@@ -137,26 +141,19 @@ async def test_chat_failure_releases_all_request_reservations(
     async def fail_direct(_kwargs: dict[str, object]) -> object:
         raise RuntimeError("upstream failed")
 
-    async def build_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, object] | None = None
+    async def prepare_litellm_kwargs(
+        _ctx: ProxyContext, body: dict[str, object]
     ) -> dict[str, object]:
-        _ = user_kwargs
-        return {}
+        return {**body, "metadata": {}}
 
-    class _FakeGatewayModelRepository:
-        def __init__(self, _session: object) -> None:
-            pass
-
-        async def get_by_name(self, _team_id: object, _name: str) -> None:
-            return None
+    async def _none_resolve(_session: object, _team_id: object, _name: str) -> None:
+        return None
 
     monkeypatch.setattr(proxy_use_case, "BudgetRepository", FakeBudgetRepository)
-    monkeypatch.setattr(
-        proxy_use_case, "GatewayModelRepository", _FakeGatewayModelRepository
-    )
+    monkeypatch.setattr(proxy_use_case, "resolve_model_or_route", _none_resolve)
     monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", use_direct)
     monkeypatch.setattr(use_case, "_direct_chat_completion", fail_direct)
-    monkeypatch.setattr(use_case, "_build_metadata", build_metadata)
+    monkeypatch.setattr(use_case, "_prepare_litellm_kwargs", prepare_litellm_kwargs)
 
     ctx = ProxyContext(
         team_id=team_id,
@@ -250,10 +247,10 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
             _ = delta_tokens
             _ = delta_requests
 
-    monkeypatch.setattr(proxy_use_case, "get_session_context", lambda: _DummySessionCM())
-    monkeypatch.setattr(proxy_use_case, "BudgetRepository", _FakeSettleRepo)
+    monkeypatch.setattr(proxy_response_adapter, "get_session_context", lambda: _DummySessionCM())
+    monkeypatch.setattr(proxy_response_adapter, "BudgetRepository", _FakeSettleRepo)
 
-    await proxy_use_case._settle_usage(
+    await settle_usage(
         ctx,
         budget,
         tokens=7,

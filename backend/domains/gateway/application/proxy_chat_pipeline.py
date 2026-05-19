@@ -108,9 +108,9 @@ async def invoke_litellm_with_direct_fallback(
             return await direct_call()
         return await router_call()
     except Exception as exc:
-        if use_case._is_router_model_miss(exc) and await use_case._should_use_internal_direct_litellm(
-            ctx, model
-        ):
+        if use_case._is_router_model_miss(
+            exc
+        ) and await use_case._should_use_internal_direct_litellm(ctx, model):
             try:
                 return await direct_call()
             except Exception:

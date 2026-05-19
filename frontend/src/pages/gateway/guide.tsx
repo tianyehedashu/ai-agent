@@ -8,7 +8,7 @@
  * - 典型返回：4 个 Tab 横向对比（OpenAI/Anthropic × 非流式/流式），用 Badge 突出 content-type
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { Link } from 'react-router-dom'
@@ -498,16 +498,47 @@ export default function GatewayGuidePage(): React.JSX.Element {
   )
 }
 
-function GuideAnchorNav({ active }: Readonly<{ active: string }>): React.JSX.Element {
-  const handleClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    const id = href.slice(1)
-    const target = document.getElementById(id)
-    if (!target) return
-    event.preventDefault()
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    window.history.replaceState(null, '', href)
-  }, [])
+function scrollToGuideSection(href: string): void {
+  const target = document.getElementById(href.slice(1))
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  window.history.replaceState(null, '', href)
+}
 
+const GuideNavTab = memo(function GuideNavTab({
+  href,
+  label,
+  isActive,
+}: Readonly<{
+  href: string
+  label: string
+  isActive: boolean
+}>): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      role="tab"
+      aria-selected={isActive}
+      aria-current={isActive ? 'true' : undefined}
+      onClick={(event) => {
+        event.preventDefault()
+        scrollToGuideSection(href)
+      }}
+      className={cn(
+        'shrink-0 rounded-md px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        isActive
+          ? 'bg-muted font-medium text-foreground shadow-sm'
+          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+      )}
+    >
+      {label}
+    </a>
+  )
+})
+
+const GuideAnchorNav = memo(function GuideAnchorNav({
+  active,
+}: Readonly<{ active: string }>): React.JSX.Element {
   return (
     <nav
       aria-label="调用指南目录"
@@ -518,33 +549,13 @@ function GuideAnchorNav({ active }: Readonly<{ active: string }>): React.JSX.Ele
         aria-orientation="horizontal"
         className="-mx-1 flex items-center gap-0.5 overflow-x-auto px-1 text-sm"
       >
-        {GUIDE_NAV_ITEMS.map(([href, label]) => {
-          const isActive = href === active
-          return (
-            <a
-              key={href}
-              href={href}
-              role="tab"
-              aria-selected={isActive}
-              aria-current={isActive ? 'true' : undefined}
-              onClick={(event) => {
-                handleClick(event, href)
-              }}
-              className={cn(
-                'shrink-0 rounded-md px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                isActive
-                  ? 'bg-muted font-medium text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-              )}
-            >
-              {label}
-            </a>
-          )
-        })}
+        {GUIDE_NAV_ITEMS.map(([href, label]) => (
+          <GuideNavTab key={href} href={href} label={label} isActive={href === active} />
+        ))}
       </div>
     </nav>
   )
-}
+})
 
 function QuickStepItem({ item }: Readonly<{ item: QuickStep }>): React.JSX.Element {
   const content = (

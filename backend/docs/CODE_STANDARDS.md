@@ -59,10 +59,14 @@ backend/
 │   │   │   ├── bridge_attribution.py       # GatewayBridgeAttribution
 │   │   │   ├── litellm_bridge_payload.py   # acompletion / aembedding kwargs 拆分
 │   │   │   ├── gateway_access_use_case.py
-│   │   │   ├── proxy_use_case.py
+│   │   │   ├── proxy_use_case.py             # /v1 代理编排门面，不承载大块领域规则
+│   │   │   ├── proxy_metadata_builder.py     # metadata / 定价 / 归因 kwargs 构建
+│   │   │   ├── proxy_litellm_client.py       # LiteLLM Router / 直连技术适配
+│   │   │   ├── proxy_response_adapter.py     # 响应适配、成本计算、预算结算
+│   │   │   ├── proxy_deferred_tasks.py       # 代理异步结算任务收口
 │   │   │   ├── jobs.py
 │   │   │   └── management/        # reads / writes / usage_reads（管理面 CQRS）
-│   │   ├── domain/                # VirtualKey、领域错误、UsageAggregation 等
+│   │   ├── domain/                # VirtualKey、领域错误、UsageAggregation、proxy_policy 等
 │   │   └── infrastructure/        # ORM、仓储、Router 单例、回调、护栏
 │   │
 │   ├── agent/                     # Agent 核心业务：对话、工具、记忆、LLM 编排
@@ -125,6 +129,52 @@ backend/
 | `application/` | 用例编排、事务、对外 **Ports** | `domain`、同域 `infrastructure`（经接口或工厂） |
 | `domain/` | 实体、领域服务、仓储 **接口**、域类型 | `libs.types` 等极少通用类型 |
 | `infrastructure/` | 仓储实现、ORM、外部系统适配 | `domain`（实现其接口） |
+
+### DDD 反退化约束（适用于全部域）
+
+> 适用于所有 `domains/*`；Gateway 是历史最重灾区，故另起小节列规则。
+
+- **拒绝 Domain 退化（Anemic Domain Model）**：
+  - 凡新增「不变量、白名单、策略选择、计划生成」一类纯逻辑，必须先落到
+    `domains/<域>/domain/` 的值对象、领域服务或 policy 函数；不允许只写在 application
+    私有方法里。
+  - `domain/` 模块禁止 import SQLAlchemy `Session` / ORM 实体（不属于 `domain/types`
+    的）/ Redis / LiteLLM / FastAPI / httpx；策略需要数据时由 application 先查出**纯值
+    快照**再传给 domain 函数。
+  - 出现 ≥3 个对同一概念的 `if scope == ... / elif ...` 分支时，应抽成 domain 值对象或
+    枚举驱动的 policy。
+- **拒绝 Application 加重（Fat Use Case / God Service）**：
+  - 单个 `*UseCase` 不得同时承担「校验 + 限流 + 预算 + metadata + 外部 SDK 调用 + 响应
+    适配 + 结算」；应按**变化原因**拆成独立 application 模块。
+  - UseCase 内允许的变化原因仅为「编排顺序变化」；其它原因（换 SDK、换字段映射、
+    换归因来源）触发的修改属于拆分不到位。
+  - 单个 application 文件 > 800 行、或单类私有方法 > 15 个，PR 必须给出拆分说明或显式
+    follow-up todo。
+- **跨模块协作禁止依赖私有符号**：application 服务之间不得 import 对方的 `_` 前缀函数；
+  如果某行为需要被复用，必须晋升为模块级公开函数 / 类并写入 `__all__`。
+- **测试 monkeypatch 目标必须真实**：拆分后单测的 `monkeypatch.setattr` 应指向真正实现
+  的模块路径，而不是经由再导出别名的 facade。
+
+### Gateway 热路径分层约束
+
+- `ProxyUseCase` 是 `/v1/*` 代理编排门面，只串联 preflight、metadata、LiteLLM 调用与
+  响应结算；新增能力不得继续把完整业务分支直接塞回 `proxy_use_case.py`。
+- **Domain 层**（`domains/gateway/domain/proxy_policy.py` 等）承载：
+  - 模型/能力白名单 (`assert_model_allowed`、`assert_capability_allowed`)
+  - 注册模型 capability 与 HTTP 入口匹配 (`assert_registered_model_capability`)
+  - 预算 scope 选择与「该扫描哪些行」的 plan (`budget_scope_targets`、
+    `build_budget_check_plan`、`BudgetCheckQuery`)
+  - 限流 token 维度选择 (`rate_limit_target`)、错误文案的 `first_present_limit` 等纯函数
+- **Application 层**按职责拆分协作模块：
+  - `proxy_metadata_builder.py` —— Gateway metadata、归因、下游单价 kwargs
+  - `proxy_litellm_client.py` —— LiteLLM Router / 直连技术适配
+  - `proxy_response_adapter.py` —— 响应适配、`response_cost` 注入、预算/套餐结算
+  - `proxy_deferred_tasks.py` —— 后台 fire-and-forget 任务登记 + shutdown 收口
+  - `proxy_chat_pipeline.py` / `proxy_stream_settlement.py` —— Chat/Anthropic 流水线
+- 禁止在 `proxy_use_case.py` 顶层加「兼容再导出」别名（如 `_settle_usage`、`_enrich_*`、
+  `register_proxy_deferred_task` 等）；旧调用方一律改到正确模块。
+- Code review / `code-check` 遇到 Gateway 代理改动时，必须显式回答：
+  「新增规则落在了 domain 还是 application？为什么不下沉？」
 
 ## 共享组件库 (`libs/`)
 

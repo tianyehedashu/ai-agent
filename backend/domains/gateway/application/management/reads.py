@@ -94,9 +94,7 @@ class GatewayManagementReadService:
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._plan_usage = GatewayPlanUsageReadService(session)
 
-    async def list_teams_with_roles_for_user(
-        self, user_id: UUID
-    ) -> list[tuple[Team, str | None]]:
+    async def list_teams_with_roles_for_user(self, user_id: UUID) -> list[tuple[Team, str | None]]:
         return await self._teams.list_teams_with_roles_for_user(user_id)
 
     async def get_team(self, team_id: UUID) -> Team | None:
@@ -113,9 +111,7 @@ class GatewayManagementReadService:
         team_role: str = "owner",
         is_platform_admin: bool = False,
     ) -> list[GatewayVirtualKey]:
-        keys = await self._vkeys.list_by_team(
-            team_id, include_system=False, include_inactive=False
-        )
+        keys = await self._vkeys.list_by_team(team_id, include_system=False, include_inactive=False)
         filtered = filter_virtual_keys_visible_to_actor(
             keys,
             actor_user_id=actor_user_id,
@@ -239,9 +235,7 @@ class GatewayManagementReadService:
         """
         if aggregation == UsageAggregation.USER:
             return UsageAxis.user(ctx.user_id)
-        member_only = (
-            not ctx.is_platform_admin and ctx.team_role == "member" and vkey_id is None
-        )
+        member_only = not ctx.is_platform_admin and ctx.team_role == "member" and vkey_id is None
         return UsageAxis.workspace(
             ctx.team_id,
             member_user_id=ctx.user_id if member_only else None,

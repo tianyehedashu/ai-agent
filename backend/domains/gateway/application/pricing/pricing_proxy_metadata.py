@@ -7,12 +7,12 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
 from domains.gateway.application.pricing.pricing_management import build_pricing_service
 from domains.gateway.application.pricing.pricing_service import (
     RateUnavailableError,
     downstream_rate_to_custom_cost,
 )
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 
 _CUSTOM_PRICING_FIELD_NAMES: frozenset[str] = frozenset(
     {
@@ -78,17 +78,26 @@ async def attach_downstream_pricing_metadata(
     entitlement_plan_id: uuid.UUID | None,
     billing_package: str | None,
 ) -> None:
-    """向 ``metadata`` 注入下游单价（供回调结算 revenue）。"""
+    """向 ``metadata`` 注入下游单价（供回调结算 revenue）。
+
+    ``virtual_model`` 既支持 ``GatewayModel.name``（单 deployment），也支持
+    ``GatewayRoute.virtual_model``（多 deployment）；后者以路由主选 ``GatewayModel``
+    的 ``provider`` / ``real_model`` 作为定价基准，回调中真实 deployment 命中后由
+    ``custom_logger`` 用 ``model_info`` 中的凭据归因覆写日志。
+    """
     if billing_package is not None:
         meta["gateway_billing_package"] = billing_package
 
-    record = await GatewayModelRepository(session).get_by_name(team_id, virtual_model)
-    if record is None:
+    resolved_name = await resolve_model_or_route(session, team_id, virtual_model)
+    if resolved_name is None:
         return
 
+    record = resolved_name.record
     meta["gateway_gateway_model_id"] = str(record.id)
     meta["gateway_provider"] = record.provider
     meta["gateway_upstream_model"] = record.real_model
+    if resolved_name.via_route is not None:
+        meta["gateway_via_route"] = resolved_name.via_route
 
     svc = build_pricing_service(session)
     try:

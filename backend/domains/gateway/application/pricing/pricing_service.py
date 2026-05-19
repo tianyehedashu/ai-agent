@@ -257,9 +257,7 @@ class PricingService:
         if resolved.upstream is None:
             up_cost = MoneyUSD(amount=Decimal("0"))
         else:
-            up_cost = calculate_cost_from_rate(
-                resolved.upstream, usage, zero_amount=upstream_zero
-            )
+            up_cost = calculate_cost_from_rate(resolved.upstream, usage, zero_amount=upstream_zero)
         down_cost = calculate_cost_from_rate(
             resolved.downstream,
             usage,

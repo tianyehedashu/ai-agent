@@ -45,11 +45,7 @@ class UpstreamSyncService:
             id_set = set(model_ids)
             models = [m for m in models if m.id in id_set]
         existing = await self._downstream.list_for_scope(scope=scope, scope_id=scope_id)
-        covered = {
-            (r.gateway_model_id,)
-            for r in existing
-            if r.gateway_model_id is not None
-        }
+        covered = {(r.gateway_model_id,) for r in existing if r.gateway_model_id is not None}
         for model in models:
             if (model.id,) in covered:
                 skipped += 1

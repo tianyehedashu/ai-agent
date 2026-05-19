@@ -401,17 +401,21 @@ async def _process_plan_lifecycle_for_table(
     """
     now = datetime.now(UTC)
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(
+                    f"""
                 SELECT id, valid_from, valid_until, auto_renew
                 FROM {table}
                 WHERE is_active = TRUE AND valid_until <= :now
                 """
-            ),
-            {"now": now},
+                ),
+                {"now": now},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     deactivated = 0
     renewed = 0
     for row in rows:
@@ -460,7 +464,10 @@ async def gateway_plan_lifecycle_loop() -> None:
                 if e_off or e_on or p_off or p_on:
                     logger.info(
                         "gateway_plan_lifecycle: entitlement off=%d renew=%d, provider off=%d renew=%d",
-                        e_off, e_on, p_off, p_on,
+                        e_off,
+                        e_on,
+                        p_off,
+                        p_on,
                     )
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_plan_lifecycle error: %s", exc)

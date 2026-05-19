@@ -20,13 +20,12 @@ from domains.gateway.domain.litellm_credential_extra_keys import (
     credential_extra_keys_for_litellm,
     litellm_api_key_param_name,
 )
+from domains.gateway.domain.router_model_name import encode_router_model_name
 from libs.crypto import decrypt_value, derive_encryption_key
 from libs.llm.litellm_model_id import build_litellm_model_id
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    import uuid
-
     from litellm.router import Router  # type: ignore[import-not-found]
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,6 +86,14 @@ def ensure_gateway_callbacks() -> None:
     litellm.callbacks = callbacks
 
 
+_PRICING_INJECT_KEYS: tuple[str, ...] = (
+    "input_cost_per_token",
+    "output_cost_per_token",
+    "cache_creation_input_token_cost",
+    "cache_read_input_token_cost",
+)
+
+
 def _build_litellm_params(
     *,
     real_model: str,
@@ -95,8 +102,16 @@ def _build_litellm_params(
     rpm_limit: int | None,
     tpm_limit: int | None,
     tags: dict[str, Any] | None,
+    pricing: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """构造单个 deployment 的 litellm_params"""
+    """构造单个 deployment 的 litellm_params。
+
+    ``pricing`` 为 deployment-level 单价（来自 ``upstream_model_pricing`` 当前有效行）。
+    LiteLLM 在 ``model_list[i].litellm_params`` 中读到 ``input_cost_per_token`` 等字段时，
+    会按 deployment 维度结算成本，从而让 ``cost-based-routing`` 在「同 ``model_name``
+    多 deployment」（含跨 provider）情形下真正按价格择优。全局 ``litellm.register_model``
+    仍然作为兜底。
+    """
     params: dict[str, Any] = {
         "model": build_litellm_model_id(provider, real_model),
     }
@@ -120,12 +135,16 @@ def _build_litellm_params(
         params["rpm"] = rpm_limit
     if tpm_limit:
         params["tpm"] = tpm_limit
-    # 单价由 PricingService.sync_to_litellm_registry() 全局注册，不再从 deployment tags 注入。
+    if pricing:
+        for key in _PRICING_INJECT_KEYS:
+            val = pricing.get(key)
+            if val is not None:
+                params[key] = val
     return params
 
 
 # Router deployment 专用，不应透传给 ``anthropic_messages`` 直连调用。
-_ROUTER_ONLY_LITELLM_PARAM_KEYS: frozenset[str] = frozenset({"rpm", "tpm"})
+_ROUTER_ONLY_LITELLM_PARAM_KEYS: frozenset[str] = frozenset({"rpm", "tpm", *_PRICING_INJECT_KEYS})
 
 
 def filter_litellm_params_for_direct_anthropic(dep: dict[str, Any]) -> dict[str, Any]:
@@ -133,40 +152,63 @@ def filter_litellm_params_for_direct_anthropic(dep: dict[str, Any]) -> dict[str,
     return {k: v for k, v in dep.items() if k not in _ROUTER_ONLY_LITELLM_PARAM_KEYS}
 
 
-async def resolve_deployment_litellm_params(
-    db: AsyncSession,
-    team_id: uuid.UUID,
-    virtual_model: str,
-) -> dict[str, Any] | None:
-    """按虚拟模型名解析出站 LiteLLM 参数（api_key / api_base / litellm model id）。"""
-    from domains.gateway.infrastructure.repositories.credential_repository import (
-        ProviderCredentialRepository,
-    )
-    from domains.gateway.infrastructure.repositories.model_repository import (
-        GatewayModelRepository,
-    )
+PricingLookup = dict[tuple[str, str, str], dict[str, float]]
 
-    record = await GatewayModelRepository(db).get_by_name(team_id, virtual_model)
-    if record is None:
+
+def _pricing_for_model(
+    src: GatewayModel,
+    pricing_lookup: PricingLookup | None,
+) -> dict[str, float] | None:
+    if not pricing_lookup:
         return None
-    cred = await ProviderCredentialRepository(db).get(record.credential_id)
-    if cred is None:
-        return None
-    return _build_litellm_params(
-        real_model=record.real_model,
-        provider=record.provider,
-        credential=cred,
-        rpm_limit=record.rpm_limit,
-        tpm_limit=record.tpm_limit,
-        tags=record.tags,
-    )
+    cap = str(src.capability or "chat")
+    return pricing_lookup.get((src.provider, src.real_model, cap))
+
+
+def _build_deployment(
+    *,
+    model_name: str,
+    src: GatewayModel,
+    cred: ProviderCredential,
+    via_route: str | None = None,
+    pricing_lookup: PricingLookup | None = None,
+) -> dict[str, Any]:
+    """构造单个 deployment dict（model_list 一行）。"""
+    pricing = _pricing_for_model(src, pricing_lookup)
+    return {
+        "model_name": model_name,
+        "litellm_params": _build_litellm_params(
+            real_model=src.real_model,
+            provider=src.provider,
+            credential=cred,
+            rpm_limit=src.rpm_limit,
+            tpm_limit=src.tpm_limit,
+            tags=src.tags,
+            pricing=pricing,
+        ),
+        "model_info": {
+            "id": str(src.id),
+            "team_id": str(src.team_id) if src.team_id else None,
+            "capability": src.capability,
+            "weight": src.weight,
+            "gateway_model_name": src.name,
+            "gateway_credential_id": str(cred.id),
+            "gateway_credential_name": cred.name,
+            "gateway_credential_scope": cred.scope,
+            "gateway_via_route": via_route,
+        },
+    }
 
 
 def _models_to_deployments(
     models: list[GatewayModel],
     credentials: dict[Any, ProviderCredential],
+    pricing_lookup: PricingLookup | None = None,
 ) -> list[dict[str, Any]]:
-    """把 GatewayModel 列表转成 LiteLLM Router 的 model_list"""
+    """把 GatewayModel 列表转成 LiteLLM Router 的 model_list（每行单 deployment）。
+
+    ``model_name`` 使用 ``gw/t/{team_id}/`` 或 ``gw/s/`` 前缀，避免跨团队同名冲突。
+    """
     deployments: list[dict[str, Any]] = []
     for m in models:
         cred = credentials.get(m.credential_id)
@@ -174,45 +216,131 @@ def _models_to_deployments(
             logger.warning("GatewayModel %s missing credential %s, skip", m.name, m.credential_id)
             continue
         deployments.append(
-            {
-                "model_name": m.name,
-                "litellm_params": _build_litellm_params(
-                    real_model=m.real_model,
-                    provider=m.provider,
-                    credential=cred,
-                    rpm_limit=m.rpm_limit,
-                    tpm_limit=m.tpm_limit,
-                    tags=m.tags,
-                ),
-                "model_info": {
-                    "id": str(m.id),
-                    "team_id": str(m.team_id) if m.team_id else None,
-                    "capability": m.capability,
-                    "weight": m.weight,
-                    "gateway_model_name": m.name,
-                    "gateway_credential_id": str(cred.id),
-                    "gateway_credential_name": cred.name,
-                    "gateway_credential_scope": cred.scope,
-                },
-            }
+            _build_deployment(
+                model_name=encode_router_model_name(m.team_id, m.name),
+                src=m,
+                cred=cred,
+                pricing_lookup=pricing_lookup,
+            )
         )
     return deployments
 
 
+def _routes_to_virtual_deployments(
+    routes: list[GatewayRoute],
+    models: list[GatewayModel],
+    credentials: dict[Any, ProviderCredential],
+    reserved_model_names: frozenset[str],
+    pricing_lookup: PricingLookup | None = None,
+) -> list[dict[str, Any]]:
+    """把 ``GatewayRoute.virtual_model`` 注册为多 deployment，激活 Router 内置负载均衡。
+
+    一个 route 引用的 ``primary_models`` 中每条 ``GatewayModel`` 都被复制为一行
+    ``model_name=virtual_model`` 的 deployment，由 ``routing_strategy`` 在它们之间调度。
+    ``reserved_model_names`` 是已被 ``_models_to_deployments`` 占用的 ``GatewayModel.name``
+    集合；当 virtual_model 与之冲突时跳过路由，避免同名 deployment 语义模糊。
+    """
+    if not routes:
+        return []
+    by_team_name: dict[tuple[str | None, str], GatewayModel] = {}
+    for m in models:
+        team_key = str(m.team_id) if m.team_id else None
+        by_team_name[(team_key, m.name)] = m
+
+    def _resolve(team_id: Any, name: str) -> GatewayModel | None:
+        team_key = str(team_id) if team_id else None
+        return by_team_name.get((team_key, name)) or by_team_name.get((None, name))
+
+    deployments: list[dict[str, Any]] = []
+    for r in routes:
+        if r.virtual_model in reserved_model_names:
+            # 同名 GatewayModel 优先；路由仅作为 fallback 关系图
+            continue
+        for primary_name in r.primary_models or ():
+            src = _resolve(r.team_id, primary_name)
+            if src is None:
+                logger.warning(
+                    "GatewayRoute %s primary %s has no matching GatewayModel, skip",
+                    r.virtual_model,
+                    primary_name,
+                )
+                continue
+            cred = credentials.get(src.credential_id)
+            if cred is None:
+                logger.warning(
+                    "GatewayRoute %s primary %s missing credential %s, skip",
+                    r.virtual_model,
+                    primary_name,
+                    src.credential_id,
+                )
+                continue
+            deployments.append(
+                _build_deployment(
+                    model_name=encode_router_model_name(r.team_id, r.virtual_model),
+                    src=src,
+                    cred=cred,
+                    via_route=r.virtual_model,
+                    pricing_lookup=pricing_lookup,
+                )
+            )
+    return deployments
+
+
+def _encode_fallback_model_name(
+    route: GatewayRoute,
+    gateway_model_name: str,
+    by_team_name: dict[tuple[str | None, str], GatewayModel],
+) -> str:
+    team_key = str(route.team_id) if route.team_id else None
+    src = by_team_name.get((team_key, gateway_model_name)) or by_team_name.get(
+        (None, gateway_model_name)
+    )
+    if src is not None:
+        return encode_router_model_name(src.team_id, src.name)
+    return gateway_model_name
+
+
 def _routes_to_fallbacks(
     routes: list[GatewayRoute],
+    models: list[GatewayModel],
 ) -> tuple[list[dict[str, list[str]]], list[dict[str, list[str]]], list[dict[str, list[str]]]]:
-    """从 routes 解出三类 fallback 列表"""
+    """从 routes 解出三类 fallback 列表（键与目标均为 Router 编码后的 ``model_name``）。"""
+    by_team_name: dict[tuple[str | None, str], GatewayModel] = {}
+    for m in models:
+        team_key = str(m.team_id) if m.team_id else None
+        by_team_name[(team_key, m.name)] = m
+
     general: list[dict[str, list[str]]] = []
     cp: list[dict[str, list[str]]] = []
     cw: list[dict[str, list[str]]] = []
     for r in routes:
+        route_key = encode_router_model_name(r.team_id, r.virtual_model)
         if r.fallbacks_general:
-            general.append({r.virtual_model: list(r.fallbacks_general)})
+            general.append(
+                {
+                    route_key: [
+                        _encode_fallback_model_name(r, n, by_team_name) for n in r.fallbacks_general
+                    ]
+                }
+            )
         if r.fallbacks_content_policy:
-            cp.append({r.virtual_model: list(r.fallbacks_content_policy)})
+            cp.append(
+                {
+                    route_key: [
+                        _encode_fallback_model_name(r, n, by_team_name)
+                        for n in r.fallbacks_content_policy
+                    ]
+                }
+            )
         if r.fallbacks_context_window:
-            cw.append({r.virtual_model: list(r.fallbacks_context_window)})
+            cw.append(
+                {
+                    route_key: [
+                        _encode_fallback_model_name(r, n, by_team_name)
+                        for n in r.fallbacks_context_window
+                    ]
+                }
+            )
     return general, cp, cw
 
 
@@ -228,6 +356,34 @@ def _resolve_strategy(routes: list[GatewayRoute]) -> str:
     if not counts:
         return "simple-shuffle"
     return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
+async def _load_upstream_pricing_lookup(db: AsyncSession) -> PricingLookup:
+    """预取 active 上游单价表，形成 ``(provider, upstream_model, capability) → 单价`` lookup。"""
+    from domains.gateway.infrastructure.repositories.pricing_repository import (
+        UpstreamPricingRepository,
+    )
+
+    try:
+        rows = await UpstreamPricingRepository(db).list_active()
+    except Exception:  # pragma: no cover - 启动期表未就绪等情况
+        logger.warning("Failed to load upstream pricing for Router deployments", exc_info=True)
+        return {}
+    lookup: PricingLookup = {}
+    for row in rows:
+        key = (row.provider, row.upstream_model, str(row.capability or "chat"))
+        entry: dict[str, float] = {}
+        if row.input_cost_per_token is not None:
+            entry["input_cost_per_token"] = float(row.input_cost_per_token)
+        if row.output_cost_per_token is not None:
+            entry["output_cost_per_token"] = float(row.output_cost_per_token)
+        if row.cache_creation_input_token_cost is not None:
+            entry["cache_creation_input_token_cost"] = float(row.cache_creation_input_token_cost)
+        if row.cache_read_input_token_cost is not None:
+            entry["cache_read_input_token_cost"] = float(row.cache_read_input_token_cost)
+        if entry:
+            lookup[key] = entry
+    return lookup
 
 
 async def _build_router_kwargs(
@@ -252,8 +408,13 @@ async def _build_router_kwargs(
             credentials[cid] = cred
 
     routes = await GatewayRouteRepository(db).list_all_active()
-    deployments = _models_to_deployments(models, credentials)
-    fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes)
+    pricing_lookup = await _load_upstream_pricing_lookup(db)
+    deployments = _models_to_deployments(models, credentials, pricing_lookup)
+    reserved_names = frozenset(m.name for m in models if m.enabled)
+    deployments.extend(
+        _routes_to_virtual_deployments(routes, models, credentials, reserved_names, pricing_lookup)
+    )
+    fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models)
 
     redis_url = settings.gateway_router_redis_url or settings.redis_url
 
@@ -356,11 +517,11 @@ def reset_router() -> None:
 
 
 __all__ = [
+    "PricingLookup",
     "ensure_gateway_callbacks",
     "filter_litellm_params_for_direct_anthropic",
     "get_router",
     "get_router_sync",
     "reload_router",
     "reset_router",
-    "resolve_deployment_litellm_params",
 ]

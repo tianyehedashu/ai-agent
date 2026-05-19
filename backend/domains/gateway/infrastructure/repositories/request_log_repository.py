@@ -401,8 +401,12 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
-                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
+                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label(
+                    "success"
+                ),
+                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label(
+                    "failure"
+                ),
             )
             .where(and_(*clauses))
             .group_by(GatewayRequestLog.credential_id)

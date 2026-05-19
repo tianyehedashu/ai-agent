@@ -175,8 +175,7 @@ class EntitlementGuard:
                 retry_at=retry_at,
             )
         unit_prices: dict[uuid.UUID, tuple[Decimal | None, Decimal | None]] = {
-            q.id: (q.unit_price_usd_per_token, q.unit_price_usd_per_request)
-            for q in quotas
+            q.id: (q.unit_price_usd_per_token, q.unit_price_usd_per_request) for q in quotas
         }
         return EntitlementCheckResult(
             plan_id=plan.id,
@@ -253,11 +252,7 @@ class EntitlementGuard:
         plans = await self._repo.list_for_scope(scope, scope_id)
         if not plans:
             return dict.fromkeys(virtual_models, "none")
-        active_plans = [
-            p
-            for p in plans
-            if p.is_active and p.valid_from <= when < p.valid_until
-        ]
+        active_plans = [p for p in plans if p.is_active and p.valid_from <= when < p.valid_until]
         result: dict[str, EntitlementListStatus] = {}
         for vm in virtual_models:
             matched: EntitlementPlan | None = None

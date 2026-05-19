@@ -204,7 +204,10 @@ class MarginSummaryReadModel:
 
 
 def _entitlement_revenue_decimal(
-    *, requests: int, tokens: int, cost_usd: Decimal,
+    *,
+    requests: int,
+    tokens: int,
+    cost_usd: Decimal,
     unit_price_per_token: Decimal | None,
     unit_price_per_request: Decimal | None,
 ) -> Decimal:
@@ -386,9 +389,7 @@ class GatewayPlanUsageReadService:
             cost = Decimal(row.cost_usd or 0)
             # 默认 revenue = cost；后续可叠加按 entitlement_plan unit_price 计算的精确值
             revenue = cost
-            cred_snap = (
-                row.credential_name_snapshot if group_by == "credential" else None
-            )
+            cred_snap = row.credential_name_snapshot if group_by == "credential" else None
             group_key_str, label = resolve_margin_group_label(
                 group_by,
                 row.group_key,
@@ -417,6 +418,7 @@ class GatewayPlanUsageReadService:
             group_by=group_by,
             items=items,
         )
+
 
 __all__ = [
     "EntitlementUsageReadModel",

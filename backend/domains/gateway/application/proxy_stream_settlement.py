@@ -1,9 +1,4 @@
-"""流式代理结束时的 token / 成本结算（与 callback 幂等协作）。
-
-依赖 ``ProxyUseCase`` 的内部协作 API ``_settle_usage``。该耦合在 ``ProxyUseCase``
-类 docstring 中已显式登记；本模块仅被 ``ProxyUseCase`` 的公开入口（流式
-``chat_completion`` / ``anthropic_messages``）调用。
-"""
+"""流式代理结束时的 token / 成本结算（与 callback 幂等协作）。"""
 
 from __future__ import annotations
 
@@ -62,14 +57,14 @@ async def finalize_deferred_stream_settlement(
 ) -> None:
     """流式结束：commit token；defer 时由本函数与 callback 幂等 commit 成本。
 
-    ``gateway_defer_cost_settlement`` 为真时，proxy 路径 ``_settle_usage`` 的 ``cost`` 为 0，
+    ``gateway_defer_cost_settlement`` 为真时，proxy 路径 ``settle_usage`` 的 ``cost`` 为 0，
     若 usage 可解析出成本则主动调用 ``commit_budget_from_callback``（Redis NX 幂等），
     避免仅依赖 LiteLLM callback 导致 Anthropic 原生流等场景漏计。
     """
     from domains.gateway.application.budget_callback_settlement import (
         commit_budget_from_callback,
     )
-    from domains.gateway.application.proxy_use_case import _settle_usage
+    from domains.gateway.application.proxy_response_adapter import settle_usage
 
     tokens = 0
     cost = Decimal("0")
@@ -95,7 +90,7 @@ async def finalize_deferred_stream_settlement(
             budget_model=ctx.budget_model,
         )
 
-    await _settle_usage(
+    await settle_usage(
         ctx,
         budget,
         tokens=tokens,

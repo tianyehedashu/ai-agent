@@ -133,10 +133,7 @@ class ProviderPlanQuota(BaseModel):
     __table_args__ = (UniqueConstraint("plan_id", "label", name="uq_provider_plan_quota_label"),)
 
     def __repr__(self) -> str:
-        return (
-            f"<ProviderPlanQuota plan={self.plan_id} {self.label} "
-            f"win={self.window_seconds}s>"
-        )
+        return f"<ProviderPlanQuota plan={self.plan_id} {self.label} win={self.window_seconds}s>"
 
 
 __all__ = ["ProviderPlan", "ProviderPlanQuota"]

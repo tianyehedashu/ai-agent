@@ -69,9 +69,7 @@ def settle_request_log_amounts(
     if isinstance(downstream_custom, dict):
         rate = pricing_rate_from_metadata(downstream_custom)
 
-    revenue_usd = (
-        cost_usd if rate is None else calculate_cost_from_rate(rate, usage).amount
-    )
+    revenue_usd = cost_usd if rate is None else calculate_cost_from_rate(rate, usage).amount
 
     extra: dict[str, Any] = {
         "hit_chain": metadata.get("gateway_pricing_hit_chain"),

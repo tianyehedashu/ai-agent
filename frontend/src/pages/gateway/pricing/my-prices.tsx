@@ -1,55 +1,74 @@
 import type React from 'react'
+import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { formatRateLine } from '@/features/gateway-pricing/format'
+import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
+import { cn } from '@/lib/utils'
 import { useUserPreferenceStore } from '@/stores/user-preference'
+
+const columns: readonly PricingTableColumn[] = [
+  { key: 'model', label: '模型', className: 'px-3 py-2' },
+  { key: 'rate', label: '单价（/ 1M tokens）', className: 'px-3 py-2' },
+  { key: 'source', label: '来源', className: 'px-3 py-2' },
+]
 
 export default function GatewayPricingMyPricesPage(): React.JSX.Element {
   const currency = useUserPreferenceStore((s) => s.displayCurrency)
-  const { data, isLoading } = useQuery({
+  const [searchParams] = useSearchParams()
+  const targetModel = searchParams.get('model')?.trim() ?? ''
+  const pricesQuery = useQuery({
     queryKey: ['gateway-pricing-my', currency],
     queryFn: () => gatewayApi.listMyPrices({ currency }),
   })
 
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">加载中…</p>
-  }
-
-  const rows = data ?? []
-  if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">暂无定价数据，请联系管理员配置上游成本。</p>
-  }
+  const rows = useMemo(() => {
+    const raw = pricesQuery.data ?? []
+    if (!targetModel) return raw
+    return [...raw].sort((left, right) => {
+      const leftHit = left.model_name === targetModel || left.gateway_model_id === targetModel
+      const rightHit = right.model_name === targetModel || right.gateway_model_id === targetModel
+      if (leftHit === rightHit) return 0
+      return leftHit ? -1 : 1
+    })
+  }, [pricesQuery.data, targetModel])
 
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/40 text-left text-muted-foreground">
-          <tr>
-            <th className="px-3 py-2">模型</th>
-            <th className="px-3 py-2">单价（/ 1M tokens）</th>
-            <th className="px-3 py-2">来源</th>
+    <PricingTable
+      columns={columns}
+      loading={pricesQuery.isLoading}
+      error={pricesQuery.isError}
+      empty={rows.length === 0}
+      onRetry={() => {
+        void pricesQuery.refetch()
+      }}
+    >
+      {rows.map((row) => {
+        const highlighted =
+          Boolean(targetModel) &&
+          (row.model_name === targetModel || row.gateway_model_id === targetModel)
+        return (
+          <tr
+            key={row.gateway_model_id ?? row.model_name}
+            className={cn('cv-auto-row border-t', highlighted ? 'bg-primary/5' : undefined)}
+          >
+            <td className="px-3 py-2 font-mono">{row.model_name}</td>
+            <td className="px-3 py-2 tabular-nums">
+              {formatRateLine(
+                row.input_cost_per_million_display,
+                row.output_cost_per_million_display,
+                currency
+              )}
+            </td>
+            <td className="px-3 py-2 text-muted-foreground">
+              {row.inheritance_strategy === 'mirror' ? '跟随上游' : '团队覆盖'}
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.gateway_model_id ?? row.model_name} className="cv-auto-row border-t">
-              <td className="px-3 py-2 font-mono">{row.model_name}</td>
-              <td className="px-3 py-2 tabular-nums">
-                {formatRateLine(
-                  row.input_cost_per_million_display,
-                  row.output_cost_per_million_display,
-                  currency
-                )}
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {row.inheritance_strategy === 'mirror' ? '跟随上游' : '团队覆盖'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        )
+      })}
+    </PricingTable>
   )
 }

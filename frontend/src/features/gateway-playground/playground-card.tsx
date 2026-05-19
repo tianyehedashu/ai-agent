@@ -6,7 +6,7 @@
  * - 模型：按模式过滤团队 / 个人模型
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { useQueries } from '@tanstack/react-query'
@@ -28,6 +28,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 import { useUserPreferenceStore } from '@/stores/user-preference'
 
 import { VisionInput } from './modes/vision-input'
@@ -249,6 +250,39 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
     Boolean(trimmedKey && trimmedModel && trimmedPrompt) &&
     (playgroundMode !== 'vision' || Boolean(trimmedVisionUrl))
 
+  const showOutputPanel = status !== 'idle' || Boolean(content || error)
+
+  const keyManualMode =
+    virtualKeys.length === 0 ||
+    selectedKeyId === null ||
+    (revealError !== null && selectedKey !== null)
+  const keyFieldUserEdited =
+    keyManualMode && apiKey.trim() !== '' && (plain === null || apiKey !== plain)
+
+  const handleApiKeyChange = useCallback((value: string) => {
+    userEditedKeyRef.current = true
+    setApiKey(value)
+  }, [])
+
+  const handleShowKeyToggle = useCallback(() => {
+    setShowKey((v) => !v)
+  }, [])
+
+  const handleSelectKey = useCallback(
+    (id: string | null) => {
+      selectKey(id)
+      setShowKey(false)
+    },
+    [selectKey]
+  )
+
+  const handleUserEditedReset = useCallback(() => {
+    userEditedKeyRef.current = false
+  }, [])
+
+  const outputEndpoint = useMemo(() => `${baseUrl}${endpointPath}`, [baseUrl, endpointPath])
+  const outputPriceRow = useMemo(() => priceByName.get(trimmedModel), [priceByName, trimmedModel])
+
   const handleSend = (): void => {
     const params = {
       baseUrl,
@@ -321,7 +355,12 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
           </Tabs>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
+      <CardContent
+        className={cn(
+          'grid gap-4',
+          showOutputPanel && 'xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]'
+        )}
+      >
         <div className="min-w-0 space-y-4">
           {showApiFlavorTabs ? (
             <Tabs
@@ -347,27 +386,17 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
               apiKeyId={apiKeyId}
               apiKey={apiKey}
               showKey={showKey}
-              onApiKeyChange={(value) => {
-                userEditedKeyRef.current = true
-                setApiKey(value)
-              }}
-              onShowKeyToggle={() => {
-                setShowKey((v) => !v)
-              }}
+              onApiKeyChange={handleApiKeyChange}
+              onShowKeyToggle={handleShowKeyToggle}
               virtualKeys={virtualKeys}
               selectedKeyId={selectedKeyId}
               selectedKey={selectedKey}
               isLoadingKeys={isLoadingKeys}
               isRevealing={isRevealing}
               revealError={revealError}
-              userEdited={userEditedKeyRef.current && apiKey !== plain}
-              onSelectKey={(id) => {
-                selectKey(id)
-                setShowKey(false)
-              }}
-              onUserEditedReset={() => {
-                userEditedKeyRef.current = false
-              }}
+              userEdited={keyFieldUserEdited}
+              onSelectKey={handleSelectKey}
+              onUserEditedReset={handleUserEditedReset}
             />
             <PlaygroundModelField
               modelSelectId={modelSelectId}
@@ -513,22 +542,24 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
           </div>
         </div>
 
-        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
-          <PlaygroundOutputPanel
-            status={status}
-            content={content}
-            metadata={metadata}
-            error={error}
-            rawResponse={rawResponse}
-            lastRequest={lastRequest}
-            priceRow={priceByName.get(trimmedModel)}
-            currency={displayCurrency}
-            flavor={playgroundMode === 'chat' ? apiFlavor : 'openai'}
-            stream={showStreamSwitch ? stream : false}
-            endpoint={`${baseUrl}${endpointPath}`}
-            playgroundMode={playgroundMode}
-          />
-        </div>
+        {showOutputPanel ? (
+          <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+            <PlaygroundOutputPanel
+              status={status}
+              content={content}
+              metadata={metadata}
+              error={error}
+              rawResponse={rawResponse}
+              lastRequest={lastRequest}
+              priceRow={outputPriceRow}
+              currency={displayCurrency}
+              flavor={playgroundMode === 'chat' ? apiFlavor : 'openai'}
+              stream={showStreamSwitch ? stream : false}
+              endpoint={outputEndpoint}
+              playgroundMode={playgroundMode}
+            />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

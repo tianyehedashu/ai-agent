@@ -30,6 +30,21 @@ class UpstreamPricingUpsert(BaseModel):
     )
 
 
+class LitellmUpstreamSyncRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    providers: list[str] | None = Field(default=None, description="为空时使用已配置凭据提供商")
+
+
+class EffectiveProviderResponse(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    provider: str
+    credential_count: int
+    has_managed: bool
+    has_user: bool
+
+
 class UpstreamPricingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -174,7 +189,9 @@ class FxRateResponse(BaseModel):
 __all__ = [
     "DownstreamPricingResponse",
     "DownstreamPricingUpsert",
+    "EffectiveProviderResponse",
     "FxRateResponse",
+    "LitellmUpstreamSyncRequest",
     "MoneyDisplaySchema",
     "PricingRateAdminView",
     "PricingRateMemberView",

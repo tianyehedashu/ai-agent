@@ -75,7 +75,7 @@ async def test_finalize_deferred_stream_calls_callback_when_cost_positive() -> N
             mock_commit,
         ),
         patch(
-            "domains.gateway.application.proxy_use_case._settle_usage",
+            "domains.gateway.application.proxy_response_adapter.settle_usage",
             mock_settle,
         ),
     ):

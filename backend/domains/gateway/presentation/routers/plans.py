@@ -389,9 +389,7 @@ async def list_apikey_grant_entitlements(
             team_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
-        rows = await reads.list_entitlement_plans_with_quotas_for_scope(
-            "apikey_grant", grant_id
-        )
+        rows = await reads.list_entitlement_plans_with_quotas_for_scope("apikey_grant", grant_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return [_entitlement_plan_to_response(plan, quotas) for plan, quotas in rows]

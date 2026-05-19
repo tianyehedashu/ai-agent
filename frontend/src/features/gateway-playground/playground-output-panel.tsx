@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 
 import { Link } from 'react-router-dom'
 
@@ -52,17 +52,15 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
   stream: boolean
   endpoint: string
   playgroundMode: PlaygroundMode
-}>): React.JSX.Element {
+}>): React.JSX.Element | null {
+  const responseJson = useMemo(() => (rawResponse ? safeStringify(rawResponse) : ''), [rawResponse])
+  const requestJson = useMemo(() => (lastRequest ? safeStringify(lastRequest) : ''), [lastRequest])
+  const hasResponseBody = content.length > 0 || rawResponse !== null || lastRequest !== null
+
   if (status === 'idle' && !content && !error) {
-    return (
-      <div
-        className="rounded-md border border-dashed bg-muted/30 p-4 text-center text-xs text-muted-foreground"
-        aria-live="polite"
-      >
-        发送后将展示结果预览、实际请求体与响应 JSON。
-      </div>
-    )
+    return null
   }
+
   const showStreamCursor = status === 'streaming'
   return (
     <div
@@ -82,7 +80,7 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
         playgroundMode={playgroundMode}
       />
       {error ? <ErrorBlock error={error} requestId={metadata?.requestId} /> : null}
-      {content || rawResponse || lastRequest ? (
+      {hasResponseBody ? (
         <Tabs defaultValue="text" className="w-full">
           <TabsList className="h-8">
             <TabsTrigger value="text" className="h-6 px-3 text-xs">
@@ -120,13 +118,13 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
           {lastRequest ? (
             <TabsContent value="request">
               <pre className="max-h-72 overflow-auto rounded-md border bg-background p-4 text-xs leading-relaxed">
-                <code translate="no">{safeStringify(lastRequest)}</code>
+                <code translate="no">{requestJson}</code>
               </pre>
             </TabsContent>
           ) : null}
           <TabsContent value="response">
             <pre className="max-h-72 overflow-auto rounded-md border bg-background p-4 text-xs leading-relaxed">
-              <code translate="no">{safeStringify(rawResponse)}</code>
+              <code translate="no">{responseJson}</code>
             </pre>
           </TabsContent>
         </Tabs>

@@ -18,11 +18,9 @@ class FxRatePort(Protocol):
     ) -> Decimal:
         """返回 1 单位 from_currency = ? to_currency。"""
 
-    def default_display_currency(self) -> DisplayCurrency:
-        ...
+    def default_display_currency(self) -> DisplayCurrency: ...
 
-    def supported_currencies(self) -> list[str]:
-        ...
+    def supported_currencies(self) -> list[str]: ...
 
 
 __all__ = ["FxRatePort"]

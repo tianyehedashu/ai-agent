@@ -402,7 +402,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
             yield ac
 
         # LiteLLM / Gateway 异步 success 回调可能仍占用 db_session；先收口代理 fire-and-forget 任务。
-        from domains.gateway.application.proxy_use_case import shutdown_proxy_deferred_tasks
+        from domains.gateway.application.proxy_deferred_tasks import (
+            shutdown_proxy_deferred_tasks,
+        )
 
         await shutdown_proxy_deferred_tasks()
 
@@ -462,7 +464,9 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
-        from domains.gateway.application.proxy_use_case import shutdown_proxy_deferred_tasks
+        from domains.gateway.application.proxy_deferred_tasks import (
+            shutdown_proxy_deferred_tasks,
+        )
 
         await shutdown_proxy_deferred_tasks()
 

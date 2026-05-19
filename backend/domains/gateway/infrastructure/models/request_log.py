@@ -64,7 +64,9 @@ class GatewayRequestLog(Base):
     vkey_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
     route_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     credential_name_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     entitlement_plan_id: Mapped[uuid.UUID | None] = mapped_column(

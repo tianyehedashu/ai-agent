@@ -195,6 +195,7 @@ async def invalidate_pricing_resolution_cache(
         from libs.db.redis import get_redis_client
 
         client = await get_redis_client()
+
         async def _collect(pattern: str) -> list[bytes | str]:
             out: list[bytes | str] = []
             async for k in client.scan_iter(match=pattern):

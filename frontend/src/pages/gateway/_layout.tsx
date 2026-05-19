@@ -30,12 +30,17 @@ import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
 
+/** 以下页面不展示币种切换：指南、上游成本（固定 USD） */
+const HIDE_CURRENCY_TOGGLE_PATH_RE = /\/gateway\/(?:guide|pricing\/upstream)(?:\/|$)/
+
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
   const location = useLocation()
-  // 调用指南页不展示价格信息，隐藏全局币种切换按钮，避免视觉噪声。
-  const showCurrencyToggle = !/\/gateway\/guide(?:\/|$)/.test(location.pathname)
+  const showCurrencyToggle = useMemo(
+    () => !HIDE_CURRENCY_TOGGLE_PATH_RE.test(location.pathname),
+    [location.pathname]
+  )
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [

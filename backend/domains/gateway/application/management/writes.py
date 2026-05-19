@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -12,10 +13,14 @@ from domains.gateway.application.litellm_real_model_prefix import litellm_prefix
 from domains.gateway.application.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
 )
+from domains.gateway.application.management.multi_credential_types import (
+    MultiCredentialGatewayModelResult,
+)
 from domains.gateway.application.model_reference_prune import (
     prune_gateway_model_name_references,
     rename_gateway_model_name_references,
 )
+from domains.gateway.application.routing_strategy_validation import validate_routing_strategy
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -146,11 +151,7 @@ def _image_generation_probe_preview(img_response: Any) -> str:
             b64: str | None
             if isinstance(first, dict):
                 url = first.get("url") if isinstance(first.get("url"), str) else None
-                b64 = (
-                    first.get("b64_json")
-                    if isinstance(first.get("b64_json"), str)
-                    else None
-                )
+                b64 = first.get("b64_json") if isinstance(first.get("b64_json"), str) else None
             else:
                 url = getattr(first, "url", None)
                 b64 = getattr(first, "b64_json", None)
@@ -322,9 +323,7 @@ class GatewayManagementWriteService:
         await prune_gateway_model_name_references(self._session, frozenset({model_name}))
         await self.reload_litellm_router()
 
-    async def test_personal_model(
-        self, user_id: uuid.UUID, model_id: uuid.UUID
-    ) -> dict[str, Any]:
+    async def test_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> dict[str, Any]:
         team_id = await self._ensure_personal_team_id(user_id)
         return await self.test_gateway_model(model_id, team_id=team_id)
 
@@ -689,7 +688,9 @@ class GatewayManagementWriteService:
     ) -> None:
         rows = await self._creds.list_user_by_provider(actor_user_id, provider)
         for row in rows:
-            await self.delete_user_credential(row.id, actor_user_id=actor_user_id, reload_router=False)
+            await self.delete_user_credential(
+                row.id, actor_user_id=actor_user_id, reload_router=False
+            )
         if rows:
             await self.reload_litellm_router()
 
@@ -746,6 +747,92 @@ class GatewayManagementWriteService:
             await self.reload_litellm_router()
         return row
 
+    async def create_multi_credential_gateway_model(
+        self,
+        *,
+        team_id: uuid.UUID,
+        name: str,
+        capability: str,
+        real_model: str,
+        provider: str,
+        credential_ids: list[uuid.UUID],
+        is_platform_admin: bool,
+        strategy: str = "simple-shuffle",
+        weight: int = 1,
+        rpm_limit: int | None = None,
+        tpm_limit: int | None = None,
+        tags: dict[str, Any] | None = None,
+        enabled: bool = True,
+    ) -> MultiCredentialGatewayModelResult:
+        """为同一 ``(provider, real_model)`` 在多个凭据上一键注册并生成 ``GatewayRoute``。
+
+        - 每个 ``credential_id`` 都建一行 ``GatewayModel``，别名为 ``<name>--<credentialId 短哈希>``；
+        - 自动创建 ``GatewayRoute(virtual_model=name, primary_models=[...all aliases])``，
+          客户端调用 ``model=name`` 时由 Router 在多 deployment 间按 ``strategy`` 调度；
+        - 与 Phase 2 ``_routes_to_virtual_deployments`` 联动后激活原生负载均衡（least-busy /
+          cost-based / weighted-shuffle）。
+        - 若 ``name`` 已被 ``GatewayModel`` / ``GatewayRoute`` 占用，全部回滚并抛 ``ValidationError``。
+        """
+        cleaned_name = (name or "").strip()
+        if not cleaned_name:
+            raise ValidationError("虚拟模型名不能为空")
+        if not credential_ids:
+            raise ValidationError("credential_ids 不能为空")
+        if len(set(credential_ids)) != len(credential_ids):
+            raise ValidationError("credential_ids 不能包含重复项")
+        strategy_norm = validate_routing_strategy(strategy)
+
+        repo = self._models
+        if await repo.name_exists_on_team(team_id, cleaned_name):
+            raise ValidationError(f"虚拟模型名 {cleaned_name} 与现有 GatewayModel 别名冲突")
+        existing_route = await self._routes.get_by_virtual_model(team_id, cleaned_name)
+        if existing_route is not None:
+            raise ValidationError(f"虚拟模型名 {cleaned_name} 已存在 GatewayRoute")
+
+        from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+
+        created_models: list[GatewayModel] = []
+        route = None
+        try:
+            for cid in credential_ids:
+                short = uuid.UUID(str(cid)).hex[:8]
+                alias = f"{cleaned_name}--{short}"
+                suffix = 0
+                base_alias = alias
+                while await repo.name_exists_on_team(team_id, alias):
+                    suffix += 1
+                    alias = f"{base_alias}-{suffix}"
+                row = await self.create_gateway_model(
+                    team_id=team_id,
+                    name=alias,
+                    capability=capability,
+                    real_model=real_model,
+                    credential_id=cid,
+                    provider=provider,
+                    weight=weight,
+                    rpm_limit=rpm_limit,
+                    tpm_limit=tpm_limit,
+                    tags=tags,
+                    is_platform_admin=is_platform_admin,
+                    enabled=enabled,
+                    reload_router=False,
+                )
+                created_models.append(row)
+            route = await self._routes.create(
+                team_id=team_id,
+                virtual_model=cleaned_name,
+                primary_models=[m.name for m in created_models],
+                strategy=strategy_norm,
+            )
+        except Exception:
+            for r in created_models:
+                with suppress(Exception):
+                    await repo.delete(r.id)
+            raise
+        await self.reload_litellm_router()
+        assert route is not None
+        return MultiCredentialGatewayModelResult(route=route, models=created_models)
+
     async def update_gateway_model(
         self,
         model_id: uuid.UUID,
@@ -762,7 +849,9 @@ class GatewayManagementWriteService:
         update_fields = dict(fields)
         if "credential_id" in update_fields and update_fields["credential_id"] is not None:
             new_cid_raw = update_fields["credential_id"]
-            new_cid = new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
+            new_cid = (
+                new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
+            )
             cred = await self._creds.get_bindable_for_team_gateway_model(
                 new_cid,
                 team_id=team_id,
@@ -797,9 +886,7 @@ class GatewayManagementWriteService:
                 ):
                     raise ValidationError("配置托管的系统模型不可修改注册别名")
                 owner_team_id = existing.team_id
-                if await repo.name_exists_in_scope(
-                    owner_team_id, new_name, exclude_id=model_id
-                ):
+                if await repo.name_exists_in_scope(owner_team_id, new_name, exclude_id=model_id):
                     raise ValidationError(f"注册别名已存在: {new_name}")
                 await rename_gateway_model_name_references(
                     self._session,
@@ -961,7 +1048,7 @@ class GatewayManagementWriteService:
             fallbacks_general=fallbacks_general,
             fallbacks_content_policy=fallbacks_content_policy,
             fallbacks_context_window=fallbacks_context_window,
-            strategy=strategy,
+            strategy=validate_routing_strategy(strategy),
             retry_policy=retry_policy,
         )
         await self.reload_litellm_router()
@@ -978,7 +1065,10 @@ class GatewayManagementWriteService:
         existing = await repo.get(route_id)
         if existing is None or (existing.team_id is not None and existing.team_id != team_id):
             raise ManagementEntityNotFoundError("route", str(route_id))
-        updated = await repo.update(route_id, **fields)
+        patch = dict(fields)
+        if patch.get("strategy") is not None:
+            patch["strategy"] = validate_routing_strategy(str(patch["strategy"]))
+        updated = await repo.update(route_id, **patch)
         if updated is None:
             raise ManagementEntityNotFoundError("route", str(route_id))
         await self.reload_litellm_router()
@@ -1321,10 +1411,19 @@ class GatewayManagementWriteService:
         )
 
         fx = build_static_fx_adapter()
-        inp, out, cc, cr, extra = parse_amount_per_million(
-            amount_per_million, currency, fx
-        )
+        inp, out, cc, cr, extra = parse_amount_per_million(amount_per_million, currency, fx)
         repo = UpstreamPricingRepository(self._session)
+        now = datetime.now(UTC)
+        existing = await repo.get_active(
+            provider=provider,
+            upstream_model=upstream_model,
+            capability=capability,
+            at=now,
+        )
+        version = 1
+        if existing is not None:
+            await repo.close_effective(existing, at=now)
+            version = existing.version + 1
         row = await repo.create(
             provider=provider,
             upstream_model=upstream_model,
@@ -1335,6 +1434,8 @@ class GatewayManagementWriteService:
             cache_read_input_token_cost=cr,
             extra=extra,
             source="manual",
+            effective_from=now,
+            version=version,
         )
         svc = PricingService(repo, DownstreamPricingRepository(self._session))
         await svc.sync_to_litellm_registry()
@@ -1345,7 +1446,7 @@ class GatewayManagementWriteService:
         await invalidate_pricing_resolution_cache()
         return row
 
-    async def sync_upstream_from_litellm(self):
+    async def sync_upstream_from_litellm(self, providers: Iterable[str] | None = None):
         from domains.gateway.application.pricing.litellm_upstream_price_sync import (
             LitellmUpstreamPriceSyncService,
         )
@@ -1362,16 +1463,18 @@ class GatewayManagementWriteService:
         )
 
         upstream_repo = UpstreamPricingRepository(self._session)
-        models = await GatewayModelRepository(self._session).list_for_team(
-            None, only_enabled=False
-        )
+        if providers is None:
+            summaries = await self._creds.list_effective_provider_summaries()
+            allowed_providers = {s.provider for s in summaries}
+        else:
+            allowed_providers = {p for p in providers if p}
+        models = await GatewayModelRepository(self._session).list_for_team(None, only_enabled=False)
         gateway_models = [
-            (m.provider, m.real_model, str(m.capability or "chat"))
-            for m in models
-            if m.real_model
+            (m.provider, m.real_model, str(m.capability or "chat")) for m in models if m.real_model
         ]
         report = await LitellmUpstreamPriceSyncService(upstream_repo).sync_from_litellm_model_cost(
             gateway_models=gateway_models,
+            allowed_providers=allowed_providers,
         )
         pricing_svc = PricingService(upstream_repo, DownstreamPricingRepository(self._session))
         await pricing_svc.sync_to_litellm_registry()
@@ -1393,12 +1496,25 @@ class GatewayManagementWriteService:
         )
 
         repo = DownstreamPricingRepository(self._session)
+        now = datetime.now(UTC)
+        existing = await repo.get_active_for_scope(
+            scope=scope,
+            scope_id=scope_id,
+            gateway_model_id=gateway_model_id,
+            at=now,
+        )
+        version = 1
+        if existing is not None:
+            await repo.close_effective(existing, at=now)
+            version = existing.version + 1
         if inheritance_strategy == "mirror":
             row = await repo.create(
                 scope=scope,
                 scope_id=scope_id,
                 gateway_model_id=gateway_model_id,
                 inheritance_strategy="mirror",
+                effective_from=now,
+                version=version,
             )
             from domains.gateway.application.pricing.pricing_resolution_cache import (
                 invalidate_pricing_resolution_cache,
@@ -1415,9 +1531,15 @@ class GatewayManagementWriteService:
         from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 
         fx = build_static_fx_adapter()
-        inp, out, cc, cr, extra = parse_amount_per_million(
-            amount_per_million, currency, fx
-        )
+        inp, out, cc, cr, extra = parse_amount_per_million(amount_per_million, currency, fx)
+        per_request_raw = amount_per_million.get("per_request")
+        per_request_usd: Decimal | None = None
+        if per_request_raw is not None:
+            from decimal import Decimal
+
+            per_request_usd = Decimal(str(per_request_raw))
+            if currency.upper() == "CNY":
+                per_request_usd = per_request_usd * fx.get_rate("CNY", "USD")
         row = await repo.create(
             scope=scope,
             scope_id=scope_id,
@@ -1427,7 +1549,10 @@ class GatewayManagementWriteService:
             output_cost_per_token=out,
             cache_creation_input_token_cost=cc,
             cache_read_input_token_cost=cr,
+            per_request_usd=per_request_usd,
             extra=extra,
+            effective_from=now,
+            version=version,
         )
         from domains.gateway.application.pricing.pricing_resolution_cache import (
             invalidate_pricing_resolution_cache,

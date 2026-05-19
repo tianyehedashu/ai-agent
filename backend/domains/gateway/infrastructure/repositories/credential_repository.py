@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
@@ -17,6 +18,14 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True)
+class EffectiveProviderSummary:
+    provider: str
+    credential_count: int
+    has_managed: bool
+    has_user: bool
 
 
 class ProviderCredentialRepository:
@@ -133,6 +142,39 @@ class ProviderCredentialRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_effective_provider_summaries(self) -> list[EffectiveProviderSummary]:
+        stmt = (
+            select(
+                ProviderCredential.provider,
+                ProviderCredential.scope,
+                func.count(ProviderCredential.id),
+            )
+            .where(ProviderCredential.is_active.is_(True))
+            .group_by(ProviderCredential.provider, ProviderCredential.scope)
+            .order_by(ProviderCredential.provider)
+        )
+        result = await self._session.execute(stmt)
+        by_provider: dict[str, dict[str, int | bool]] = {}
+        for provider, scope, count in result.all():
+            item = by_provider.setdefault(
+                provider,
+                {"credential_count": 0, "has_managed": False, "has_user": False},
+            )
+            item["credential_count"] = int(item["credential_count"]) + int(count)
+            if scope in ("system", "team"):
+                item["has_managed"] = True
+            if scope == "user":
+                item["has_user"] = True
+        return [
+            EffectiveProviderSummary(
+                provider=provider,
+                credential_count=int(payload["credential_count"]),
+                has_managed=bool(payload["has_managed"]),
+                has_user=bool(payload["has_user"]),
+            )
+            for provider, payload in by_provider.items()
+        ]
 
     async def find_system_by_provider_and_name(
         self, provider: str, name: str
@@ -273,4 +315,4 @@ class ProviderCredentialRepository:
         return new_cred
 
 
-__all__ = ["ProviderCredentialRepository"]
+__all__ = ["EffectiveProviderSummary", "ProviderCredentialRepository"]

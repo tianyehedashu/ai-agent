@@ -87,6 +87,7 @@ class UpstreamPricingRepository:
         extra: dict[str, Any] | None = None,
         effective_from: datetime | None = None,
         source: str = "manual",
+        version: int = 1,
     ) -> UpstreamModelPricing:
         row = UpstreamModelPricing(
             provider=provider,
@@ -99,6 +100,7 @@ class UpstreamPricingRepository:
             extra=extra,
             effective_from=effective_from or datetime.now(UTC),
             source=source,
+            version=version,
         )
         self._session.add(row)
         await self._session.flush()
@@ -189,6 +191,7 @@ class DownstreamPricingRepository:
         per_request_usd: Decimal | None = None,
         extra: dict[str, Any] | None = None,
         effective_from: datetime | None = None,
+        version: int = 1,
     ) -> DownstreamModelPricing:
         row = DownstreamModelPricing(
             scope=scope,
@@ -202,6 +205,7 @@ class DownstreamPricingRepository:
             per_request_usd=per_request_usd,
             extra=extra,
             effective_from=effective_from or datetime.now(UTC),
+            version=version,
         )
         self._session.add(row)
         await self._session.flush()
@@ -210,7 +214,9 @@ class DownstreamPricingRepository:
     async def get_by_id(self, row_id: uuid.UUID) -> DownstreamModelPricing | None:
         return await self._session.get(DownstreamModelPricing, row_id)
 
-    async def close_effective(self, row: DownstreamModelPricing, *, at: datetime | None = None) -> None:
+    async def close_effective(
+        self, row: DownstreamModelPricing, *, at: datetime | None = None
+    ) -> None:
         row.effective_to = at or datetime.now(UTC)
         await self._session.flush()
 

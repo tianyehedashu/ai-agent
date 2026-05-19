@@ -9,11 +9,10 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.proxy_use_case import (
-    ProxyContext,
-    ProxyUseCase,
-    _enrich_anthropic_response_cost,
+from domains.gateway.application.proxy_response_adapter import (
+    enrich_anthropic_response_cost,
 )
+from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 from domains.gateway.infrastructure.router_singleton import (
     filter_litellm_params_for_direct_anthropic,
@@ -88,7 +87,7 @@ def test_enrich_anthropic_response_cost_injects_field(
     class _Resp:
         pass
 
-    enriched = _enrich_anthropic_response_cost(
+    enriched = enrich_anthropic_response_cost(
         data,
         source_obj=_Resp(),
         metadata={},
@@ -133,6 +132,7 @@ async def test_anthropic_messages_passes_body_fields_to_router(
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
@@ -213,6 +213,7 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 

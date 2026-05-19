@@ -100,6 +100,33 @@
 - 业务在 `domains/`，技术基础在 `libs/`，bootstrap 仅做装配，符合 CLAUDE.md 与 CODE_STANDARDS。
 - agent / identity / evaluation 域边界清晰；presentation → application → domain ← infrastructure 分层明确。
 
+### 1.1 Gateway ProxyUseCase 防退化检查【已修复 + 兼容分支已清理】
+
+- **问题**：`backend/domains/gateway/application/proxy_use_case.py` 曾集中承载模型/
+  能力校验、metadata 构建、LiteLLM 调用、响应适配与结算，Domain 层只承担少量类型和
+  值对象，存在应用层继续膨胀的风险。
+- **第一轮已做**：新增 `domains/gateway/domain/proxy_policy.py` 承载模型/能力白名单、
+  注册模型 capability 匹配、预算 scope / model-key、限流目标等纯领域策略；新增
+  `proxy_metadata_builder.py`、`proxy_litellm_client.py`、`proxy_response_adapter.py`、
+  `proxy_deferred_tasks.py`，让 `ProxyUseCase` 回到编排门面。
+- **第二轮已做（删除兼容分支 + BudgetCheckPlan 入域）**：
+  - `proxy_use_case.py` 顶层删除全部内部下划线再导出（`_settle_usage`、
+    `_enrich_anthropic_response_cost`、`_enrich_openai_compat_response_cost`、
+    `register_proxy_deferred_task`、`shutdown_proxy_deferred_tasks` 等），bootstrap、
+    conftest、集成/单元测试改成直接 `from proxy_deferred_tasks` /
+    `from proxy_response_adapter` 导入。
+  - `proxy_response_adapter.py` 把 `_enrich_*` 提升为公开 `enrich_*`，加入 `__all__`，
+    明确这些是稳定的下游 `response_cost` 注入行为。
+  - `domain/proxy_policy.py` 新增值对象 `BudgetCheckQuery` 与纯函数
+    `build_budget_check_plan(targets, periods, request_model)`：把「单次代理调用要扫描
+    哪些预算行」从 application 私有 for 循环抽成纯领域计划。
+  - `ProxyUseCase._check_budget` 改成「按计划查仓储 + 调 BudgetService」的薄编排，业务
+    不再分散在 application 私有方法中。
+- **后续检查项**：凡修改 `/v1/*` 代理热路径，`code-check` 必须显式回答：
+  「新增规则落在了 domain 还是 application？为什么没下沉？」详细规则见
+  `.cursor/commands/code-check.md` §2 / §3 / §4 与
+  `backend/docs/CODE_STANDARDS.md` 的「DDD 反退化约束」「Gateway 热路径分层约束」两节。
+
 ### 2. 目录与归属
 
 - **backend/config/**：存放 toml 等配置文件；**bootstrap/config.py**：应用 Settings 与加载逻辑，分工合理。

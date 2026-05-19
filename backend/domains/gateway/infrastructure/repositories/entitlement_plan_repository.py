@@ -33,9 +33,7 @@ class EntitlementPlanRepository:
     async def get(self, plan_id: uuid.UUID) -> EntitlementPlan | None:
         return await self._session.get(EntitlementPlan, plan_id)
 
-    async def list_for_scope(
-        self, scope: str, scope_id: uuid.UUID
-    ) -> list[EntitlementPlan]:
+    async def list_for_scope(self, scope: str, scope_id: uuid.UUID) -> list[EntitlementPlan]:
         stmt = (
             select(EntitlementPlan)
             .where(
@@ -108,9 +106,7 @@ class EntitlementPlanRepository:
             groups[q.plan_id].append(q)
         return [(p, groups[p.id]) for p in plans]
 
-    async def list_active_due(
-        self, now: datetime | None = None
-    ) -> list[EntitlementPlan]:
+    async def list_active_due(self, now: datetime | None = None) -> list[EntitlementPlan]:
         when = now or datetime.now(UTC)
         stmt = select(EntitlementPlan).where(
             EntitlementPlan.is_active.is_(True),
@@ -190,9 +186,7 @@ class EntitlementPlanRepository:
         await self._session.flush()
         return [await self.add_quota(plan_id=plan_id, **q) for q in quotas]
 
-    async def update(
-        self, plan_id: uuid.UUID, **fields: Any
-    ) -> EntitlementPlan | None:
+    async def update(self, plan_id: uuid.UUID, **fields: Any) -> EntitlementPlan | None:
         plan = await self.get(plan_id)
         if plan is None:
             return None

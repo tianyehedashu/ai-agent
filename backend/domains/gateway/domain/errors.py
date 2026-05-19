@@ -186,9 +186,7 @@ class EntitlementPlanExhaustedError(GatewayError):
         reason: str,
         retry_at: str | None = None,
     ) -> None:
-        super().__init__(
-            f"客户套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})"
-        )
+        super().__init__(f"客户套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})")
         self.plan_id = plan_id
         self.quota_label = quota_label
         self.reason = reason
@@ -211,9 +209,7 @@ class ProviderPlanExhaustedError(GatewayError):
         reason: str,
         cooldown_seconds: int,
     ) -> None:
-        super().__init__(
-            f"上游套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})"
-        )
+        super().__init__(f"上游套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})")
         self.plan_id = plan_id
         self.quota_label = quota_label
         self.reason = reason

@@ -10,7 +10,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
-from domains.gateway.domain.types import VirtualKeyBatchRevokeReason
+from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamMemberAdd,
@@ -162,6 +162,41 @@ class GatewayModelCreate(BaseModel):
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
     enabled: bool = True
+
+
+class MultiCredentialGatewayModelCreate(BaseModel):
+    """同一 ``(provider, real_model)`` 在多个凭据上一键注册并自动生成 ``GatewayRoute``。
+
+    后端会为每个 ``credential_id`` 创建独立 ``GatewayModel``，别名形如 ``<name>--<cred短哈希>``；
+    同时建立 ``GatewayRoute(virtual_model=name, primary_models=[...])``。客户端调用 ``model=name``
+    即可由 Router 在所有 deployment 间按 ``strategy`` 调度。"""
+
+    name: str = Field(
+        ..., min_length=1, max_length=200, description="对外虚拟模型名；将创建同名 GatewayRoute"
+    )
+    capability: str
+    real_model: str
+    provider: str
+    credential_ids: list[uuid.UUID] = Field(..., min_length=1)
+    strategy: RoutingStrategy = Field(
+        default=RoutingStrategy.SIMPLE_SHUFFLE,
+        description="LiteLLM Router 调度策略（见 RoutingStrategy 枚举）",
+    )
+    weight: int = 1
+    rpm_limit: int | None = None
+    tpm_limit: int | None = None
+    tags: dict[str, Any] | None = None
+    enabled: bool = True
+
+
+class MultiCredentialGatewayModelResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    route_id: uuid.UUID
+    virtual_model: str
+    strategy: str
+    primary_models: list[str]
+    created_model_ids: list[uuid.UUID]
 
 
 class GatewayModelUpdate(BaseModel):
@@ -410,7 +445,7 @@ class RouteCreate(BaseModel):
     fallbacks_general: list[str] = Field(default_factory=list)
     fallbacks_content_policy: list[str] = Field(default_factory=list)
     fallbacks_context_window: list[str] = Field(default_factory=list)
-    strategy: str = "simple-shuffle"
+    strategy: RoutingStrategy = RoutingStrategy.SIMPLE_SHUFFLE
     retry_policy: dict[str, Any] | None = None
 
 
@@ -419,7 +454,7 @@ class RouteUpdate(BaseModel):
     fallbacks_general: list[str] | None = None
     fallbacks_content_policy: list[str] | None = None
     fallbacks_context_window: list[str] | None = None
-    strategy: str | None = None
+    strategy: RoutingStrategy | None = None
     retry_policy: dict[str, Any] | None = None
     enabled: bool | None = None
 

@@ -40,7 +40,7 @@ from domains.agent.infrastructure.models import (  # noqa: F401  # isort:skip
     message as _message_model,
 )
 from domains.agent.infrastructure.llm.gateway import LLMGateway
-from domains.gateway.application.proxy_use_case import shutdown_proxy_deferred_tasks
+from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 from domains.tenancy.application.team_service import TeamService
@@ -154,7 +154,9 @@ def _disable_redis_counters(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def _registered_user_context(test_user: Any, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+def _registered_user_context(
+    test_user: Any, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[None]:
     """把当前协程的 PermissionContext 设为已登录注册用户。"""
     clear_permission_context()
     set_permission_context(
@@ -216,14 +218,18 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
 
     # 同一 team 只有一条 active system vkey，且就是日志里那条
     active_vkeys = (
-        await db_session.execute(
-            select(GatewayVirtualKey).where(
-                GatewayVirtualKey.team_id == team.id,
-                GatewayVirtualKey.is_system.is_(True),
-                GatewayVirtualKey.is_active.is_(True),
+        (
+            await db_session.execute(
+                select(GatewayVirtualKey).where(
+                    GatewayVirtualKey.team_id == team.id,
+                    GatewayVirtualKey.is_system.is_(True),
+                    GatewayVirtualKey.is_active.is_(True),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(active_vkeys) == 1
     assert active_vkeys[0].id == row.vkey_id
 
@@ -275,14 +281,18 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
     assert len(vkey_ids) == 1, "多次 chat 都必须命中同一条 active system vkey"
 
     active_vkeys = (
-        await db_session.execute(
-            select(GatewayVirtualKey).where(
-                GatewayVirtualKey.team_id == team.id,
-                GatewayVirtualKey.is_system.is_(True),
-                GatewayVirtualKey.is_active.is_(True),
+        (
+            await db_session.execute(
+                select(GatewayVirtualKey).where(
+                    GatewayVirtualKey.team_id == team.id,
+                    GatewayVirtualKey.is_system.is_(True),
+                    GatewayVirtualKey.is_active.is_(True),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(active_vkeys) == 1
 
 

@@ -29,9 +29,7 @@ class ProviderPlanRepository:
     async def get(self, plan_id: uuid.UUID) -> ProviderPlan | None:
         return await self._session.get(ProviderPlan, plan_id)
 
-    async def list_for_credential(
-        self, credential_id: uuid.UUID
-    ) -> list[ProviderPlan]:
+    async def list_for_credential(self, credential_id: uuid.UUID) -> list[ProviderPlan]:
         stmt = (
             select(ProviderPlan)
             .where(ProviderPlan.credential_id == credential_id)
@@ -67,10 +65,14 @@ class ProviderPlanRepository:
             )
         else:
             clauses.append(ProviderPlan.real_model.is_(None))
-        stmt = select(ProviderPlan).where(and_(*clauses)).order_by(
-            # 精确匹配优先（real_model 不为 NULL 时，real_model 等于 ``real_model`` 优先）
-            ProviderPlan.real_model.is_(None).asc(),
-            ProviderPlan.valid_from.desc(),
+        stmt = (
+            select(ProviderPlan)
+            .where(and_(*clauses))
+            .order_by(
+                # 精确匹配优先（real_model 不为 NULL 时，real_model 等于 ``real_model`` 优先）
+                ProviderPlan.real_model.is_(None).asc(),
+                ProviderPlan.valid_from.desc(),
+            )
         )
         result = await self._session.execute(stmt)
         return result.scalars().first()
@@ -199,10 +201,7 @@ class ProviderPlanRepository:
         for row in existing.scalars().all():
             await self._session.delete(row)
         await self._session.flush()
-        return [
-            await self.add_quota(plan_id=plan_id, **q)
-            for q in quotas
-        ]
+        return [await self.add_quota(plan_id=plan_id, **q) for q in quotas]
 
     async def get_with_quotas(
         self, plan_id: uuid.UUID

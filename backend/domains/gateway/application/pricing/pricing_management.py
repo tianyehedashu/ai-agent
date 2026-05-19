@@ -86,9 +86,9 @@ def build_money_projector(fx: FxRatePort | None = None) -> MoneyProjector:
     return MoneyProjector(fx)
 
 
-def parse_amount_per_million(body: dict[str, Decimal | None], currency: str, fx: FxRatePort) -> tuple[
-    Decimal, Decimal, Decimal | None, Decimal | None, dict[str, Any]
-]:
+def parse_amount_per_million(
+    body: dict[str, Decimal | None], currency: str, fx: FxRatePort
+) -> tuple[Decimal, Decimal, Decimal | None, Decimal | None, dict[str, Any]]:
     extra_audit: dict[str, Any] = {
         "input_currency": currency,
         "input_amount_per_million": {},

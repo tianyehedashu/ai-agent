@@ -32,6 +32,8 @@ export interface UpstreamPricingRow {
   output_cost_per_token_usd: string
   input_cost_per_million_display?: MoneyDisplay | null
   output_cost_per_million_display?: MoneyDisplay | null
+  cache_creation_input_token_cost_usd?: string | null
+  cache_read_input_token_cost_usd?: string | null
   effective_from: string
   effective_to: string | null
   version: number
@@ -101,6 +103,17 @@ export interface LitellmUpstreamSyncResult {
   skipped_manual: number
 }
 
+export interface EffectiveProvider {
+  provider: string
+  credential_count: number
+  has_managed: boolean
+  has_user: boolean
+}
+
+export interface LitellmUpstreamSyncBody {
+  providers?: string[] | null
+}
+
 export interface PricingEstimateBody {
   gateway_model_id: string
   input_tokens?: number
@@ -141,6 +154,9 @@ export const pricingApi = {
   getFxRates: () => apiClient.get<FxRateInfo>(`${GATEWAY_API_BASE}/pricing/fx`),
 
   // --- 上游计价 ---
+  /** 列出实际已配置凭据的 provider，用作上游同步白名单 */
+  getEffectiveProviders: () =>
+    apiClient.get<EffectiveProvider[]>(`${GATEWAY_API_BASE}/pricing/effective-providers`),
   /** 列出上游计价（按 provider / currency 过滤） */
   listUpstreamPricing: (params?: { provider?: string; currency?: DisplayCurrency }) =>
     apiClient.get<UpstreamPricingRow[]>(`${GATEWAY_API_BASE}/pricing/upstream`, params),
@@ -151,10 +167,10 @@ export const pricingApi = {
   auditUpstreamPricing: () =>
     apiClient.get<UpstreamPricingAuditResult>(`${GATEWAY_API_BASE}/pricing/upstream/audit`),
   /** 从 LiteLLM 价格表同步上游计价（manual 行不会被覆盖） */
-  syncUpstreamFromLitellm: () =>
+  syncUpstreamFromLitellm: (body?: LitellmUpstreamSyncBody) =>
     apiClient.post<LitellmUpstreamSyncResult>(
       `${GATEWAY_API_BASE}/pricing/upstream/sync-from-litellm`,
-      {}
+      body ?? {}
     ),
 
   // --- 下游计价 ---

@@ -122,6 +122,8 @@ export type {
   MyPriceRow,
   UpstreamPricingAuditResult,
   LitellmUpstreamSyncResult,
+  EffectiveProvider,
+  LitellmUpstreamSyncBody,
   PricingEstimateBody,
   PricingEstimateResult,
   PricingReconciliationResult,

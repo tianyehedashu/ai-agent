@@ -122,9 +122,7 @@ async def commit_budget_from_callback(
                     scope_uuid = uuid.UUID(scope_id)
                     for period in periods:
                         for mk in model_keys:
-                            record = await repo.get_for(
-                                scope, scope_uuid, period, model_name=mk
-                            )
+                            record = await repo.get_for(scope, scope_uuid, period, model_name=mk)
                             if record is None:
                                 continue
                             await repo.settle_usage(

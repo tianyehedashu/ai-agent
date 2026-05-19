@@ -82,9 +82,7 @@ class ProviderPlanGuard:
         when = now or datetime.now(UTC)
         async with get_session_context() as session:
             repo = ProviderPlanRepository(session)
-            plan = await repo.get_active_for_credential_model(
-                credential_id, real_model, now=when
-            )
+            plan = await repo.get_active_for_credential_model(credential_id, real_model, now=when)
             if plan is None:
                 return None, [], []
             quotas = await repo.list_quotas(plan.id)
@@ -102,9 +100,7 @@ class ProviderPlanGuard:
             exhausted = result.exhausted_snapshot
             label = exhausted.spec.label if exhausted is not None else "(unknown)"
             reason = (
-                exhausted.exhausted_reason or "requests"
-                if exhausted is not None
-                else "requests"
+                exhausted.exhausted_reason or "requests" if exhausted is not None else "requests"
             )
             cooldown_seconds = (
                 exhausted.spec.window_seconds
@@ -197,9 +193,7 @@ def get_provider_plan_guard() -> ProviderPlanGuard:
             get_quota_plan_service,
         )
 
-        _provider_plan_guard_singleton = ProviderPlanGuard(
-            quota_service=get_quota_plan_service()
-        )
+        _provider_plan_guard_singleton = ProviderPlanGuard(quota_service=get_quota_plan_service())
     return _provider_plan_guard_singleton
 
 

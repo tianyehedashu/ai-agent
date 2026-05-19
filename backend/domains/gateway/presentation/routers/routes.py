@@ -48,7 +48,7 @@ async def create_route(
         fallbacks_general=body.fallbacks_general,
         fallbacks_content_policy=body.fallbacks_content_policy,
         fallbacks_context_window=body.fallbacks_context_window,
-        strategy=body.strategy,
+        strategy=body.strategy.value,
         retry_policy=body.retry_policy,
     )
     return RouteResponse.model_validate(route)

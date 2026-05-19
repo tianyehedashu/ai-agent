@@ -25,6 +25,9 @@ from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay
 from domains.gateway.domain.pricing_calculator import PricingRate
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.models.pricing_downstream import DownstreamModelPricing
+from domains.gateway.infrastructure.repositories.credential_repository import (
+    ProviderCredentialRepository,
+)
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.pricing_repository import (
     DownstreamPricingRepository,
@@ -166,8 +169,12 @@ def resolved_to_admin_view_dict(
         }
     margin_display: dict[str, str] | None = None
     if resolved.upstream is not None:
-        margin_in = resolved.downstream.input_cost_per_token - resolved.upstream.input_cost_per_token
-        margin_out = resolved.downstream.output_cost_per_token - resolved.upstream.output_cost_per_token
+        margin_in = (
+            resolved.downstream.input_cost_per_token - resolved.upstream.input_cost_per_token
+        )
+        margin_out = (
+            resolved.downstream.output_cost_per_token - resolved.upstream.output_cost_per_token
+        )
         margin_disp = projector.project(margin_in + margin_out, target=currency)
         margin_display = MoneyDisplay(
             amount=margin_disp.amount * _MILLION,
@@ -190,6 +197,20 @@ class PricingCatalogReadService:
 
     def _svc(self) -> PricingService:
         return build_pricing_service(self.session)
+
+    async def list_effective_providers(self) -> list[dict[str, str | int | bool]]:
+        summaries = await ProviderCredentialRepository(
+            self.session
+        ).list_effective_provider_summaries()
+        return [
+            {
+                "provider": s.provider,
+                "credential_count": s.credential_count,
+                "has_managed": s.has_managed,
+                "has_user": s.has_user,
+            }
+            for s in summaries
+        ]
 
     async def list_downstream(
         self,
@@ -285,9 +306,7 @@ class PricingCatalogReadService:
                 fx=fx,
                 projector=projector,
             )
-        strategy = (
-            resolved.downstream_row.inheritance_strategy if resolved.downstream_row else None
-        )
+        strategy = resolved.downstream_row.inheritance_strategy if resolved.downstream_row else None
         return rate_to_member_price_dict(
             gateway_model_id=gateway_model_id,
             model_name=model.name,

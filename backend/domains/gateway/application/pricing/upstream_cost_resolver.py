@@ -60,14 +60,14 @@ def _extract_usage_from_response(response_obj: Any) -> TokenUsage:
             input_tokens=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
             cache_read_tokens=int(
-                usage.get("cache_read_input_tokens")
-                or usage.get("cached_tokens")
-                or 0
+                usage.get("cache_read_input_tokens") or usage.get("cached_tokens") or 0
             ),
             cache_creation_tokens=int(usage.get("cache_creation_input_tokens") or 0),
         )
     return TokenUsage(
-        input_tokens=int(getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0),
+        input_tokens=int(
+            getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0
+        ),
         output_tokens=int(
             getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0) or 0
         ),

@@ -72,9 +72,9 @@ class CredentialUpstreamCatalogService:
             GatewayModelRepository,
         )
 
-        return await GatewayModelRepository(self._session).list_name_real_model_pairs_for_credential(
-            credential_id
-        )
+        return await GatewayModelRepository(
+            self._session
+        ).list_name_real_model_pairs_for_credential(credential_id)
 
     async def _enrich_probe_items(
         self,
@@ -110,9 +110,7 @@ class CredentialUpstreamCatalogService:
     ) -> CredentialProbeResult:
         now = datetime.now(UTC)
         if raw.ok:
-            items = tuple(
-                UpstreamModelItem(id=mid, owned_by=ob) for mid, ob in raw.items
-            )
+            items = tuple(UpstreamModelItem(id=mid, owned_by=ob) for mid, ob in raw.items)
             return CredentialProbeResult(
                 credential_id=credential_id,
                 probe_at=now,

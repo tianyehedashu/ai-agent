@@ -14,21 +14,14 @@ ProxyUseCase - 网关调用编排
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Awaitable
 from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from bootstrap.config import settings
 from domains.gateway.application.anthropic_native_adapt import (
-    anthropic_response_to_dict,
-    anthropic_stream_chunk_to_bytes,
-    anthropic_usage_total_tokens,
     estimate_anthropic_request_tokens,
-    extract_usage_from_anthropic_stream_event,
     validate_anthropic_messages_body,
 )
 from domains.gateway.application.budget_service import (
@@ -41,21 +34,24 @@ from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
 )
-from domains.gateway.application.pricing.pricing_proxy_metadata import (
-    apply_downstream_custom_pricing_kwargs,
-    attach_downstream_pricing_metadata,
-    downstream_custom_from_metadata,
-    upstream_custom_from_metadata,
+from domains.gateway.application.model_or_route_resolution import (
+    resolve_model_or_route,
 )
 from domains.gateway.application.proxy_chat_pipeline import (
     invoke_litellm_with_direct_fallback,
     prepare_chat_proxy_request,
 )
-from domains.gateway.application.proxy_stream_settlement import (
-    finalize_deferred_stream_settlement,
+from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
+from domains.gateway.application.proxy_metadata_builder import ProxyMetadataBuilder
+from domains.gateway.application.proxy_response_adapter import (
+    adapt_anthropic_response,
+    adapt_anthropic_stream,
+    adapt_response,
+    adapt_stream,
+    pricing_kwargs_from_litellm,
+    schedule_settle_usage,
 )
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
-from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
@@ -64,58 +60,31 @@ from domains.gateway.domain.errors import (
     ModelNotAllowedError,
     RateLimitExceededError,
 )
+from domains.gateway.domain.proxy_policy import (
+    assert_capability_allowed,
+    assert_model_allowed,
+    assert_registered_model_capability,
+    budget_scope_targets,
+    build_budget_check_plan,
+    first_present_limit,
+    rate_limit_target,
+)
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import (
     GatewayCapability,
     GatewayInboundVia,
     VirtualKeyPrincipal,
 )
-from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
-)
-from domains.gateway.infrastructure.repositories.model_repository import (
-    GatewayModelRepository,
-    GatewayRouteRepository,
-)
-from domains.gateway.infrastructure.router_singleton import (
-    filter_litellm_params_for_direct_anthropic,
-    get_router,
-    resolve_deployment_litellm_params,
-)
-from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
-from libs.db.database import get_session_context
+from domains.gateway.infrastructure.router_singleton import get_router
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, AsyncIterator
+    from collections.abc import AsyncIterator
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
-
-# 代理侧 fire-and-forget 任务（如非流式响应后的异步结算），不进入 app.state.background_tasks。
-_proxy_deferred_tasks: set[asyncio.Task[Any]] = set()
-
-
-def register_proxy_deferred_task(task: asyncio.Task[Any]) -> None:
-    """登记须在进程/测试 teardown 时取消并等待的代理后台任务。"""
-    _proxy_deferred_tasks.add(task)
-
-    def _done(t: asyncio.Task[Any]) -> None:
-        _proxy_deferred_tasks.discard(t)
-
-    task.add_done_callback(_done)
-
-
-async def shutdown_proxy_deferred_tasks() -> None:
-    """取消并等待所有已登记的代理延迟任务（用于应用关闭与 ASGI 测试 fixture 收尾）。"""
-    pending = [t for t in list(_proxy_deferred_tasks) if not t.done()]
-    for t in pending:
-        t.cancel()
-    if pending:
-        await asyncio.gather(*pending, return_exceptions=True)
 
 
 BudgetReservation = tuple[str, str | None, str, str | None]
@@ -171,13 +140,25 @@ class ProxyContext:
 
 
 class ProxyUseCase:
-    """对外 LLM 代理用例。
+    """对外 LLM 代理用例（``/v1/*`` 编排门面）。
 
-    **公开入口**：``chat_completion`` / ``anthropic_messages`` / ``embedding`` 等。
+    **公开入口**：``chat_completion`` / ``anthropic_messages`` / ``embedding`` /
+    ``image_generation`` / ``audio_transcription`` / ``audio_speech`` /
+    ``rerank`` / ``moderation`` / ``video_generation``。
 
-    **Application 内部协作 API**：以下 ``_``-前缀方法是 ``proxy_chat_pipeline`` 与
-    ``proxy_stream_settlement`` 共用的内部协作面，不属于公开接口，禁止跨 application
-    或在 presentation / domain 层直接调用：
+    **职责拆分**：
+
+    - 纯领域规则（白名单、能力匹配、预算扫描计划、限流目标选择）→
+      ``domains.gateway.domain.proxy_policy``。
+    - Metadata / 归因 / 下游定价注入 → ``ProxyMetadataBuilder``
+      （``proxy_metadata_builder``）。
+    - LiteLLM Router / 内部直连 → ``ProxyLiteLLMClient`` （``proxy_litellm_client``）。
+    - 响应适配、成本计算、预算/套餐结算 → ``proxy_response_adapter``。
+    - 后台 fire-and-forget 结算任务收口 → ``proxy_deferred_tasks``。
+
+    **Application 内部协作 API**：以下 ``_``-前缀方法仅供 ``proxy_chat_pipeline``
+    与 ``proxy_stream_settlement`` 复用，禁止跨 application 或在
+    presentation / domain 层直接调用：
 
     - 校验：``_check_model`` / ``_check_capability`` /
       ``_assert_request_capability_matches_model``
@@ -186,8 +167,7 @@ class ProxyUseCase:
     - LiteLLM 调用：``_prepare_litellm_kwargs`` /
       ``_should_use_internal_direct_litellm`` / ``_is_router_model_miss``
 
-    重构这些方法时务必同步更新 ``proxy_chat_pipeline.prepare_chat_proxy_request`` 与
-    ``invoke_litellm_with_direct_fallback``。
+    重构这些方法时务必同步更新 ``proxy_chat_pipeline`` 与 ``proxy_stream_settlement``。
     """
 
     def __init__(
@@ -202,6 +182,8 @@ class ProxyUseCase:
         self._entitlement_guard = entitlement_guard or EntitlementGuard(
             session, quota_service=get_quota_plan_service()
         )
+        self._metadata_builder = ProxyMetadataBuilder(session)
+        self._litellm = ProxyLiteLLMClient(session)
 
     # ---------------------------------------------------------------------
     # 校验
@@ -209,50 +191,44 @@ class ProxyUseCase:
 
     def _check_model(self, model: str, ctx: ProxyContext) -> None:
         allowed_models = ctx.allowed_models or (ctx.vkey.allowed_models if ctx.vkey else ())
-        if allowed_models and model not in allowed_models:
-            raise ModelNotAllowedError(model)
+        assert_model_allowed(model, allowed_models)
 
     def _check_capability(self, ctx: ProxyContext) -> None:
         allowed_capabilities = ctx.allowed_capabilities or (
             ctx.vkey.allowed_capabilities if ctx.vkey else ()
         )
-        if allowed_capabilities and ctx.capability not in allowed_capabilities:
-            raise CapabilityNotAllowedError(ctx.capability.value)
+        assert_capability_allowed(ctx.capability, allowed_capabilities)
 
     async def _assert_request_capability_matches_model(
         self,
         ctx: ProxyContext,
         model: str,
     ) -> None:
-        """注册别名 ``GatewayModel.capability`` 须与当前 HTTP 入口 ``ctx.capability`` 一致。"""
+        """注册别名或路由主选 ``GatewayModel.capability`` 须与当前 HTTP 入口一致。"""
         name = model.strip()
         if not name:
             return
-        record = await GatewayModelRepository(self._session).get_by_name(ctx.team_id, name)
-        if record is None:
+        resolved = await resolve_model_or_route(self._session, ctx.team_id, name)
+        if resolved is None:
             return
-        registered = str(record.capability).strip().lower()
-        requested = ctx.capability.value
-        if registered != requested:
-            raise CapabilityNotAllowedError(
-                requested,
-                message=(
-                    f"模型 {name!r} 的主调用面为 {registered!r}，"
-                    f"当前接口需要 {requested!r}（请使用对应的 OpenAI 兼容端点）"
-                ),
-            )
+        assert_registered_model_capability(
+            model_name=name,
+            requested=ctx.capability,
+            registered_capability=str(resolved.record.capability),
+            via_route=resolved.route is not None,
+        )
 
     async def _check_limits(self, ctx: ProxyContext, estimate_tokens: int = 0) -> None:
         """vkey + team 维度限流"""
         if ctx.rpm_limit is not None or ctx.tpm_limit is not None:
-            rate_scope = "vkey" if ctx.vkey is not None else "platform_api_key_grant"
-            rate_scope_id = (
-                str(ctx.vkey.vkey_id)
-                if ctx.vkey is not None
-                else str(ctx.platform_api_key_grant_id or ctx.platform_api_key_id)
-                if (ctx.platform_api_key_grant_id or ctx.platform_api_key_id)
-                else None
+            target = rate_limit_target(
+                vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,
+                platform_api_key_grant_id=ctx.platform_api_key_grant_id,
+                platform_api_key_id=ctx.platform_api_key_id,
             )
+            if target is None:
+                return
+            rate_scope, rate_scope_id = target
             await self._budget.check_rate_limit(
                 scope=rate_scope,
                 scope_id=rate_scope_id,
@@ -280,9 +256,7 @@ class ProxyUseCase:
                     budget_model_name=budget_model_name,
                 )
 
-    async def _release_entitlement_reservations(
-        self, ctx: ProxyContext
-    ) -> None:
+    async def _release_entitlement_reservations(self, ctx: ProxyContext) -> None:
         state = ctx.entitlement_state
         if state is None or not state.reservations:
             return
@@ -317,71 +291,76 @@ class ProxyUseCase:
         )
 
     async def _check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
-        """检查 team/user/key 维度预算（含全模型汇总行与可选模型行）。"""
+        """按 ``BudgetCheckPlan`` 顺序扫描 team/user/key 维度预算。
+
+        预算扫描坐标的纯逻辑（哪些 scope×period×model_key 该查）由
+        ``domains.gateway.domain.proxy_policy.build_budget_check_plan`` 决定，本方法
+        只负责按计划查仓储、调用 ``BudgetService``、抛错与累积请求级预扣。
+        """
         repo = BudgetRepository(self._session)
-        scopes_to_check: list[tuple[str, uuid.UUID | None]] = [
-            ("team", ctx.team_id),
-        ]
-        if ctx.user_id:
-            scopes_to_check.append(("user", ctx.user_id))
-        if ctx.vkey:
-            scopes_to_check.append(("key", ctx.vkey.vkey_id))
+        targets = budget_scope_targets(
+            team_id=ctx.team_id,
+            user_id=ctx.user_id,
+            vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
+        )
+        plan = build_budget_check_plan(
+            targets=targets,
+            periods=(PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL),
+            request_model=ctx.budget_model,
+        )
 
         reservations: list[BudgetReservation] = []
-        periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
-        for scope, scope_id in scopes_to_check:
-            for period in periods:
-                rows: list[GatewayBudget] = []
-                agg = await repo.get_for(scope, scope_id, period, model_name=None)
-                if agg is not None:
-                    rows.append(agg)
-                if ctx.budget_model:
-                    spec = await repo.get_for(scope, scope_id, period, model_name=ctx.budget_model)
-                    if spec is not None:
-                        rows.append(spec)
-                for budget in rows:
-                    check = await self._budget.check_budget(
-                        scope=scope,
-                        scope_id=str(scope_id) if scope_id else None,
-                        period=period,
-                        limit_usd=budget.limit_usd,
-                        limit_tokens=budget.limit_tokens,
+        for query in plan:
+            budget = await repo.get_for(
+                query.scope, query.scope_id, query.period, model_name=query.model_name
+            )
+            if budget is None:
+                continue
+            scope_id_str = str(query.scope_id)
+            check = await self._budget.check_budget(
+                scope=query.scope,
+                scope_id=scope_id_str,
+                period=query.period,
+                limit_usd=budget.limit_usd,
+                limit_tokens=budget.limit_tokens,
+                limit_requests=budget.limit_requests,
+                budget_model_name=budget.model_name,
+            )
+            if not check.allowed:
+                await self._release_budget_reservations(reservations)
+                raise BudgetExceededError(
+                    scope=query.scope,
+                    period=query.period,
+                    limit=float(
+                        first_present_limit(
+                            (
+                                budget.limit_usd,
+                                budget.limit_tokens,
+                                budget.limit_requests,
+                            )
+                        )
+                    ),
+                    used=float(
+                        check.used_usd
+                        if check.reason == "usd"
+                        else check.used_tokens
+                        if check.reason == "tokens"
+                        else check.used_requests
+                    ),
+                )
+            if budget.limit_requests:
+                try:
+                    await self._budget.reserve(
+                        scope=query.scope,
+                        scope_id=scope_id_str,
+                        period=query.period,
                         limit_requests=budget.limit_requests,
                         budget_model_name=budget.model_name,
                     )
-                    if not check.allowed:
-                        await self._release_budget_reservations(reservations)
-                        raise BudgetExceededError(
-                            scope=scope,
-                            period=period,
-                            limit=float(
-                                budget.limit_usd
-                                or budget.limit_tokens
-                                or budget.limit_requests
-                                or 0
-                            ),
-                            used=float(
-                                check.used_usd
-                                if check.reason == "usd"
-                                else check.used_tokens
-                                if check.reason == "tokens"
-                                else check.used_requests
-                            ),
-                        )
-                    if budget.limit_requests:
-                        scope_id_str = str(scope_id) if scope_id else None
-                        try:
-                            await self._budget.reserve(
-                                scope=scope,
-                                scope_id=scope_id_str,
-                                period=period,
-                                limit_requests=budget.limit_requests,
-                                budget_model_name=budget.model_name,
-                            )
-                        except Exception:
-                            await self._release_budget_reservations(reservations)
-                            raise
-                        reservations.append((scope, scope_id_str, period, budget.model_name))
+                except Exception:
+                    await self._release_budget_reservations(reservations)
+                    raise
+                reservations.append((query.scope, scope_id_str, query.period, budget.model_name))
         return reservations
 
     @staticmethod
@@ -399,21 +378,9 @@ class ProxyUseCase:
     async def _credential_metadata_for_virtual_model(
         self, team_id: uuid.UUID, virtual_model: str | None
     ) -> dict[str, Any]:
-        """按虚拟模型名解析 GatewayModel → 凭据，供日志归因（与 Router deployment model_info 对齐）。"""
-        if not virtual_model:
-            return {}
-        record = await GatewayModelRepository(self._session).get_by_name(team_id, virtual_model)
-        if record is None:
-            return {}
-        cred = await ProviderCredentialRepository(self._session).get(record.credential_id)
-        if cred is None:
-            return {}
-        return {
-            "gateway_credential_id": str(cred.id),
-            "gateway_credential_name_snapshot": cred.name,
-            "gateway_credential_scope": cred.scope,
-            "gateway_provider": record.provider,
-        }
+        return await self._metadata_builder.credential_metadata_for_virtual_model(
+            team_id, virtual_model
+        )
 
     async def _build_metadata(
         self,
@@ -421,131 +388,27 @@ class ProxyUseCase:
         *,
         user_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        team = await TeamRepository(self._session).get(ctx.team_id)
-        verbose_log = bool(ctx.store_full_messages)
-        meta: dict[str, Any] = {
-            "gateway_team_id": str(ctx.team_id),
-            "gateway_user_id": str(ctx.user_id) if ctx.user_id else None,
-            "gateway_vkey_id": str(ctx.vkey.vkey_id) if ctx.vkey else None,
-            "gateway_inbound_via": ctx.inbound_via,
-            "gateway_platform_api_key_id": (
-                str(ctx.platform_api_key_id) if ctx.platform_api_key_id else None
-            ),
-            "gateway_platform_api_key_grant_id": (
-                str(ctx.platform_api_key_grant_id) if ctx.platform_api_key_grant_id else None
-            ),
-            "gateway_capability": ctx.capability.value,
-            "gateway_request_id": ctx.request_id,
-            "gateway_team_snapshot": ({"name": team.name, "kind": team.kind} if team else None),
-            "gateway_vkey_name_snapshot": ctx.vkey.vkey_name if ctx.vkey else None,
-            "guardrail_enabled": ctx.guardrail_enabled,
-            "gateway_entitlement_plan_id": (
-                str(ctx.entitlement_state.plan_id) if ctx.entitlement_state is not None else None
-            ),
-            "gateway_store_full_messages": verbose_log,
-            "gateway_log_prompt_max_chars": int(settings.gateway_request_log_prompt_max_chars),
-            "gateway_log_response_max_chars": int(
-                settings.gateway_request_log_response_verbose_max_chars
-                if verbose_log
-                else settings.gateway_request_log_response_preview_max_chars
-            ),
-        }
-        if user_kwargs:
-            user_meta = user_kwargs.get("metadata") or {}
-            if isinstance(user_meta, dict):
-                meta.update(
-                    {
-                        k: v
-                        for k, v in user_meta.items()
-                        if k not in meta and not str(k).startswith("gateway_")
-                    }
-                )
-            raw_model = user_kwargs.get("model")
-            virtual_model = str(raw_model).strip() if raw_model is not None else None
-            if virtual_model:
-                meta.update(
-                    await self._credential_metadata_for_virtual_model(ctx.team_id, virtual_model)
-                )
-                snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
-                if snap is not None:
-                    meta["gateway_route_snapshot"] = snap
-                billing_package = (
-                    "entitlement" if ctx.entitlement_state is not None else None
-                )
-                await attach_downstream_pricing_metadata(
-                    self._session,
-                    meta,
-                    team_id=ctx.team_id,
-                    virtual_model=virtual_model,
-                    entitlement_plan_id=(
-                        ctx.entitlement_state.plan_id
-                        if ctx.entitlement_state is not None
-                        else None
-                    ),
-                    billing_package=billing_package,
-                )
-        return meta
+        return await self._metadata_builder.build(ctx, user_kwargs=user_kwargs)
 
     async def _prepare_litellm_kwargs(
         self,
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        """拼装 metadata，并把下游单价注入 LiteLLM kwargs（``response_cost`` 用下游价）。"""
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
-        apply_downstream_custom_pricing_kwargs(kwargs)
-        return kwargs
+        return await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
 
     async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
-        """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
-        if settings.gateway_proxy_disable_internal_direct_litellm:
-            return False
-        if ctx.vkey is None or not ctx.vkey.is_system:
-            return False
-
-        model_record = await GatewayModelRepository(self._session).get_by_name(ctx.team_id, model)
-        if model_record is not None and model_record.enabled:
-            return False
-
-        route = await GatewayRouteRepository(self._session).get_by_virtual_model(ctx.team_id, model)
-        return route is None
+        return await self._litellm.should_use_internal_direct_litellm(ctx, model)
 
     @staticmethod
     def _is_router_model_miss(exc: Exception) -> bool:
-        message = str(exc).lower()
-        return any(
-            marker in message
-            for marker in (
-                "no deployments available",
-                "no deployment",
-                "no models available",
-                "unable to find deployment",
-                "model not found",
-                "could not find model",
-            )
-        )
+        return ProxyLiteLLMClient.is_router_model_miss(exc)
 
     async def _direct_chat_completion(self, kwargs: dict[str, Any]) -> Any:
-        from litellm import acompletion
-
-        from domains.gateway.infrastructure.router_singleton import (
-            ensure_gateway_callbacks,
-        )
-
-        ensure_gateway_callbacks()
-        return await acompletion(**kwargs)
+        return await self._litellm.direct_chat_completion(kwargs)
 
     async def _direct_embedding(self, kwargs: dict[str, Any]) -> Any:
-        from litellm import aembedding
-
-        from domains.gateway.infrastructure.router_singleton import (
-            ensure_gateway_callbacks,
-        )
-
-        ensure_gateway_callbacks()
-        return await aembedding(**kwargs)
+        return await self._litellm.direct_embedding(kwargs)
 
     async def _merge_direct_deployment_litellm_params(
         self,
@@ -553,41 +416,15 @@ class ProxyUseCase:
         ctx: ProxyContext,
         virtual_model: str,
     ) -> dict[str, Any]:
-        """直连 LiteLLM 时注入 deployment 凭据，并将 ``model`` 换为 litellm model id。"""
-        dep = await resolve_deployment_litellm_params(
-            self._session, ctx.team_id, virtual_model
+        return await self._litellm.merge_direct_deployment_litellm_params(
+            kwargs, ctx, virtual_model
         )
-        if dep is None:
-            return kwargs
-        merged = dict(kwargs)
-        dep_filtered = filter_litellm_params_for_direct_anthropic(dep)
-        litellm_model = dep_filtered.pop("model", None)
-        if litellm_model:
-            merged["model"] = litellm_model
-        for key, val in dep_filtered.items():
-            if key not in merged or merged.get(key) in (None, ""):
-                merged[key] = val
-        return merged
 
     async def _direct_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
-        from litellm import anthropic_messages as litellm_anthropic_messages
-
-        from domains.gateway.infrastructure.router_singleton import (
-            ensure_gateway_callbacks,
-        )
-
-        ensure_gateway_callbacks()
-        return await litellm_anthropic_messages(**kwargs)
+        return await self._litellm.direct_anthropic_messages(kwargs)
 
     async def _router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
-        router = await get_router(self._session)
-        aanthropic = getattr(router, "aanthropic_messages", None)
-        if not callable(aanthropic):
-            return await self._direct_anthropic_messages(kwargs)
-        result = aanthropic(**kwargs)
-        if isinstance(result, Awaitable):
-            return await result
-        return result
+        return await self._litellm.router_anthropic_messages(kwargs)
 
     # ---------------------------------------------------------------------
     # 主入口
@@ -628,7 +465,7 @@ class ProxyUseCase:
             router_call=_router,
         )
         if prepared.stream:
-            return _adapt_stream(
+            return adapt_stream(
                 response,
                 ctx,
                 self._budget,
@@ -636,7 +473,7 @@ class ProxyUseCase:
                 metadata=prepared.metadata,
                 downstream_custom=prepared.downstream_custom,
             )
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -681,7 +518,7 @@ class ProxyUseCase:
             router_call=_router,
         )
         if prepared.stream:
-            return _adapt_anthropic_stream(
+            return adapt_anthropic_stream(
                 response,
                 ctx,
                 self._budget,
@@ -689,7 +526,7 @@ class ProxyUseCase:
                 metadata=prepared.metadata,
                 downstream_custom=prepared.downstream_custom,
             )
-        return _adapt_anthropic_response(
+        return adapt_anthropic_response(
             response,
             ctx,
             self._budget,
@@ -720,7 +557,7 @@ class ProxyUseCase:
             raise
 
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             if await self._should_use_internal_direct_litellm(ctx, model):
                 response = await self._direct_embedding(kwargs)
@@ -731,7 +568,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -761,7 +598,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             router = await get_router(self._session)
             response = await router.aimage_generation(**kwargs)
@@ -769,7 +606,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -795,7 +632,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             router = await get_router(self._session)
             response = await router.atranscription(**kwargs)
@@ -803,7 +640,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -839,7 +676,7 @@ class ProxyUseCase:
             await self._release_entitlement_reservations(ctx)
             raise
         # TTS 多为二进制返回，无 usage；仍结算请求/占位 token 与 DB 用量，与 limit_requests 预扣对齐
-        _schedule_settle_usage(
+        schedule_settle_usage(
             ctx,
             self._budget,
             tokens=0,
@@ -865,7 +702,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         from litellm import arerank
 
         try:
@@ -874,7 +711,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -905,7 +742,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         from litellm import amoderation
 
         try:
@@ -914,7 +751,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -946,7 +783,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         from litellm import avideo_generation
 
         try:
@@ -955,7 +792,7 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(
+        return adapt_response(
             response,
             ctx,
             self._budget,
@@ -964,355 +801,6 @@ class ProxyUseCase:
             upstream_custom=up_c,
             downstream_custom=down_c,
         )
-
-
-# =============================================================================
-# 响应适配 + 结算
-# =============================================================================
-
-
-def _to_dict(obj: Any) -> dict[str, Any]:
-    if isinstance(obj, dict):
-        return obj
-    for attr in ("model_dump", "dict"):
-        method = getattr(obj, attr, None)
-        if callable(method):
-            with suppress(Exception):
-                return method()
-    return {}
-
-
-def _pricing_kwargs_from_litellm(
-    kwargs: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, float] | None, dict[str, float] | None]:
-    meta = kwargs.get("metadata")
-    metadata = meta if isinstance(meta, dict) else {}
-    return (
-        metadata,
-        upstream_custom_from_metadata(metadata),
-        downstream_custom_from_metadata(metadata),
-    )
-
-
-def _calc_upstream_cost(
-    response: Any,
-    *,
-    metadata: dict[str, Any],
-    model: str | None,
-) -> Decimal:
-    from domains.gateway.application.pricing.upstream_cost_resolver import (
-        resolve_upstream_cost_usd,
-    )
-
-    amount, _source = resolve_upstream_cost_usd(
-        response=response,
-        model=model,
-        metadata=metadata,
-    )
-    return amount
-
-
-def _enrich_openai_compat_response_cost(
-    data: dict[str, Any],
-    *,
-    source_obj: Any,
-    metadata: dict[str, Any],
-    downstream_custom: dict[str, float] | None,
-    model: str | None,
-) -> dict[str, Any]:
-    """向 OpenAI 兼容 JSON 注入下游 ``response_cost``（USD）。"""
-    from domains.gateway.application.pricing.pricing_display_cost import (
-        read_hidden_response_cost_usd,
-        resolve_downstream_display_cost_usd,
-    )
-
-    if data.get("response_cost") is not None:
-        return data
-    hidden = read_hidden_response_cost_usd(source_obj)
-    if hidden is not None and downstream_custom is None:
-        return {**data, "response_cost": float(hidden)}
-    usage = data.get("usage")
-    if not isinstance(usage, dict):
-        return data
-    if not usage.get("total_tokens") and hidden is None:
-        return data
-    cost = resolve_downstream_display_cost_usd(
-        source_obj,
-        metadata=metadata,
-        model=model,
-    )
-    if cost <= 0:
-        return data
-    return {**data, "response_cost": float(cost)}
-
-
-def _enrich_anthropic_response_cost(
-    data: dict[str, Any],
-    *,
-    source_obj: Any,
-    metadata: dict[str, Any],
-    downstream_custom: dict[str, float] | None,
-    model: str | None,
-) -> dict[str, Any]:
-    """向 Anthropic message JSON 注入下游 ``response_cost``（USD，与 OpenAI 兼容面一致）。"""
-    from domains.gateway.application.pricing.pricing_display_cost import (
-        read_hidden_response_cost_usd,
-        resolve_downstream_display_cost_usd,
-    )
-
-    if data.get("response_cost") is not None:
-        return data
-    hidden = read_hidden_response_cost_usd(source_obj)
-    if hidden is not None and downstream_custom is None:
-        return {**data, "response_cost": float(hidden)}
-    usage = data.get("usage")
-    if not isinstance(usage, dict):
-        return data
-    if anthropic_usage_total_tokens(usage) <= 0 and hidden is None:
-        return data
-    cost = resolve_downstream_display_cost_usd(
-        source_obj,
-        metadata=metadata,
-        model=model,
-    )
-    if cost <= 0:
-        return data
-    return {**data, "response_cost": float(cost)}
-
-
-def _adapt_anthropic_response(
-    response: Any,
-    ctx: ProxyContext,
-    budget: BudgetService,
-    entitlement_guard: EntitlementGuard | None = None,
-    *,
-    metadata: dict[str, Any],
-    upstream_custom: dict[str, float] | None,
-    downstream_custom: dict[str, float] | None,
-) -> dict[str, Any]:
-    data = anthropic_response_to_dict(response)
-    tokens = anthropic_usage_total_tokens(data.get("usage"))
-    upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
-    from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
-
-    cost = proxy_budget_cost_usd(metadata, upstream)
-    _schedule_settle_usage(
-        ctx,
-        budget,
-        tokens=tokens,
-        cost=cost,
-        requests=1,
-        entitlement_guard=entitlement_guard,
-        request_id=ctx.request_id,
-    )
-    return _enrich_anthropic_response_cost(
-        data,
-        source_obj=response,
-        metadata=metadata,
-        downstream_custom=downstream_custom,
-        model=ctx.budget_model,
-    )
-
-
-async def _adapt_anthropic_stream(
-    stream: Any,
-    ctx: ProxyContext,
-    budget: BudgetService,
-    entitlement_guard: EntitlementGuard | None = None,
-    *,
-    metadata: dict[str, Any],
-    downstream_custom: dict[str, float] | None,
-) -> AsyncIterator[bytes]:
-    """Anthropic 原生 SSE 流；流末按 usage 兜底结算成本（与 callback 幂等）。"""
-    _ = downstream_custom
-    last_usage: dict[str, Any] | None = None
-    async for chunk in stream:
-        if isinstance(chunk, dict):
-            usage_patch = extract_usage_from_anthropic_stream_event(chunk)
-            if usage_patch is not None:
-                last_usage = usage_patch
-        out = anthropic_stream_chunk_to_bytes(chunk)
-        if out is not None:
-            yield out
-    await finalize_deferred_stream_settlement(
-        ctx,
-        budget,
-        metadata,
-        last_usage,
-        entitlement_guard,
-    )
-
-
-def _adapt_response(
-    response: Any,
-    ctx: ProxyContext,
-    budget: BudgetService,
-    entitlement_guard: EntitlementGuard | None = None,
-    *,
-    metadata: dict[str, Any],
-    upstream_custom: dict[str, float] | None,
-    downstream_custom: dict[str, float] | None,
-) -> dict[str, Any]:
-    _ = upstream_custom
-    data = _to_dict(response)
-    usage = data.get("usage") or {}
-    tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
-    from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
-
-    upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
-    cost = proxy_budget_cost_usd(metadata, upstream)
-    _schedule_settle_usage(
-        ctx,
-        budget,
-        tokens=tokens,
-        cost=cost,
-        requests=1,
-        entitlement_guard=entitlement_guard,
-        request_id=ctx.request_id,
-    )
-    return _enrich_openai_compat_response_cost(
-        data,
-        source_obj=response,
-        metadata=metadata,
-        downstream_custom=downstream_custom,
-        model=ctx.budget_model,
-    )
-
-
-async def _adapt_stream(
-    stream: Any,
-    ctx: ProxyContext,
-    budget: BudgetService,
-    entitlement_guard: EntitlementGuard | None = None,
-    *,
-    metadata: dict[str, Any],
-    downstream_custom: dict[str, float] | None,
-) -> AsyncGenerator[dict[str, Any], None]:
-    """转为 SSE 友好的 dict 流；流末按 usage 兜底结算成本（与 callback 幂等）。"""
-    last_usage: dict[str, Any] | None = None
-    async for chunk in stream:
-        data = _to_dict(chunk)
-        usage = data.get("usage")
-        if isinstance(usage, dict):
-            last_usage = usage
-            if usage.get("total_tokens"):
-                data = _enrich_openai_compat_response_cost(
-                    data,
-                    source_obj=chunk,
-                    metadata=metadata,
-                    downstream_custom=downstream_custom,
-                    model=ctx.budget_model,
-                )
-        yield data
-    await finalize_deferred_stream_settlement(
-        ctx,
-        budget,
-        metadata,
-        last_usage,
-        entitlement_guard,
-    )
-
-
-async def _settle_usage(
-    ctx: ProxyContext,
-    budget: BudgetService,
-    *,
-    tokens: int,
-    cost: Decimal,
-    requests: int,
-    entitlement_guard: EntitlementGuard | None = None,
-    request_id: str | None = None,
-) -> None:
-    scope_items = (
-        ("team", str(ctx.team_id)),
-        ("user", str(ctx.user_id) if ctx.user_id else None),
-        ("key", str(ctx.vkey.vkey_id) if ctx.vkey else None),
-    )
-    periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
-    model_keys: list[str | None] = [None]
-    if ctx.budget_model:
-        model_keys.append(ctx.budget_model)
-
-    for scope, scope_id in scope_items:
-        if scope_id is None:
-            continue
-        for period in periods:
-            for mk in model_keys:
-                with suppress(Exception):
-                    await budget.commit(
-                        scope=scope,
-                        scope_id=scope_id,
-                        period=period,
-                        delta_cost=cost,
-                        delta_tokens=tokens,
-                        budget_model_name=mk,
-                    )
-
-    # 命中 entitlement 套餐时累加真实用量到 entitlement Redis 桶
-    state = ctx.entitlement_state
-    if entitlement_guard is not None and state is not None and state.specs:
-        with suppress(Exception):
-            await entitlement_guard.commit(
-                state.plan_id,
-                state.specs,
-                delta_tokens=tokens,
-                delta_usd=cost,
-            )
-
-    if request_id and cost > 0:
-        with suppress(Exception):
-            from domains.gateway.application.budget_callback_settlement import (
-                record_proxy_cost_commit,
-            )
-
-            await record_proxy_cost_commit(request_id, cost)
-
-    with suppress(Exception):
-        async with get_session_context() as session:
-            repo = BudgetRepository(session)
-            for scope, scope_id in scope_items:
-                if scope_id is None:
-                    continue
-                scope_uuid = uuid.UUID(scope_id)
-                for period in periods:
-                    for mk in model_keys:
-                        record = await repo.get_for(scope, scope_uuid, period, model_name=mk)
-                        if record is None:
-                            continue
-                        await repo.settle_usage(
-                            record.id,
-                            delta_usd=cost,
-                            delta_tokens=tokens,
-                            delta_requests=requests,
-                        )
-
-
-def _schedule_settle_usage(
-    ctx: ProxyContext,
-    budget: BudgetService,
-    *,
-    tokens: int,
-    cost: Decimal,
-    requests: int,
-    entitlement_guard: EntitlementGuard | None = None,
-    request_id: str | None = None,
-) -> None:
-    """异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。"""
-
-    async def _settle() -> None:
-        await _settle_usage(
-            ctx,
-            budget,
-            tokens=tokens,
-            cost=cost,
-            requests=requests,
-            entitlement_guard=entitlement_guard,
-            request_id=request_id,
-        )
-
-    with suppress(RuntimeError):
-        settle_task = asyncio.create_task(_settle())
-        register_proxy_deferred_task(settle_task)
 
 
 __all__ = [

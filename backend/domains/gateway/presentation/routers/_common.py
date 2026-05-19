@@ -105,8 +105,7 @@ def validate_personal_model_provider(provider: str) -> str:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                f"不支持的提供商: {provider}。"
-                f"支持: {', '.join(sorted(PERSONAL_MODEL_PROVIDERS))}"
+                f"不支持的提供商: {provider}。支持: {', '.join(sorted(PERSONAL_MODEL_PROVIDERS))}"
             ),
         )
     return p

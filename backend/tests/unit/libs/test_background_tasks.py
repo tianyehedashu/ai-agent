@@ -53,7 +53,7 @@ async def test_completed_task_removed_from_set() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_shutdown_proxy_deferred_tasks() -> None:
-    from domains.gateway.application.proxy_use_case import (
+    from domains.gateway.application.proxy_deferred_tasks import (
         register_proxy_deferred_task,
         shutdown_proxy_deferred_tasks,
     )
