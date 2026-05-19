@@ -70,7 +70,23 @@ function Invoke-RemoteBash {
 function Initialize-Remote {
     Test-SSHConnection
     Log-Info "Initializing remote environment..."
-    ssh $REMOTE_HOST "bash -c 'set -euo pipefail; if ! command -v docker &>/dev/null; then curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker \$USER; fi; if ! docker compose version &>/dev/null; then sudo apt-get update && sudo apt-get install -y docker-compose-plugin; fi; echo [OK] Remote environment ready; docker --version; docker compose version'"
+    # 任何多行 bash 都走 Invoke-RemoteBash —— 不要回退到 "ssh + 长单行字符串 + 转义" 的写法，
+    # 那种写法一旦混入中文/PowerShell 特殊字符会再次踩 CRLF / 转义坑。
+    $bootstrap = @'
+set -euo pipefail
+if ! command -v docker &>/dev/null; then
+    curl -fsSL https://get.docker.com | sudo sh
+    sudo usermod -aG docker "$USER"
+fi
+if ! docker compose version &>/dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y docker-compose-plugin
+fi
+echo "[OK] Remote environment ready"
+docker --version
+docker compose version
+'@
+    Invoke-RemoteBash -Script $bootstrap -ErrorMessage "Remote bootstrap failed"
     Log-Ok "Remote environment initialized"
 }
 

@@ -1,9 +1,9 @@
 """Gateway ORM Models
 
-Team / TeamMember 权威在 domains.tenancy；此处再导出供 Alembic 与既有聚合 import 路径。
+只暴露 gateway 域自己的 ORM。Team / TeamMember 权威在 ``domains.tenancy``，
+按 AGENTS.md 规范请直接 ``from domains.tenancy.infrastructure.models.team import Team``，
+不要走 gateway 这层 re-export（已删除）。
 """
-
-from domains.tenancy.infrastructure.models.team import Team, TeamMember
 
 from .alert import GatewayAlertEvent, GatewayAlertRule
 from .budget import GatewayBudget
@@ -33,7 +33,5 @@ __all__ = [
     "ProviderCredential",
     "ProviderPlan",
     "ProviderPlanQuota",
-    "Team",
-    "TeamMember",
     "UpstreamModelPricing",
 ]
