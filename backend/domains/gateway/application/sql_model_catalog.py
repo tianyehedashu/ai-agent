@@ -9,17 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import app_config
-from domains.agent.application.ports.model_catalog_port import (
-    ModelCapabilitySnapshot,
-    ModelCatalogPort,
-    RegisteredModelResolution,
-)
 from domains.gateway.application.config_catalog_sync import (
     gateway_model_to_selector_item,
     model_types_for_gateway_registration,
     tags_to_capability_snapshot,
 )
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.application.model_catalog_port import (
+    ModelCapabilitySnapshot,
+    ModelCatalogPort,
+    RegisteredModelResolution,
+)
 from domains.gateway.application.personal_models import gateway_model_to_selector_user_item
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.credential_repository import (

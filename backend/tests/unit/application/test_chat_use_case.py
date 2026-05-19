@@ -5,12 +5,13 @@ import uuid
 
 import pytest
 
-from domains.agent.application import ChatUseCase, SessionUseCase
+from domains.agent.application import ChatUseCase
 from domains.agent.domain.types import (
     AgentEvent,
     EventType,
 )
 from domains.identity.infrastructure.models.user import User
+from libs.api.deps import build_session_use_case
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -28,7 +29,7 @@ class TestChatUseCase:
             ChatModelResolutionUseCase,
         )
 
-        session_use_case = SessionUseCase(db_session)
+        session_use_case = build_session_use_case(db_session)
         catalog = AsyncMock()
         catalog.list_visible_models = AsyncMock(
             return_value=[{"id": "deepseek/deepseek-chat", "display_name": "DeepSeek"}]
@@ -37,7 +38,7 @@ class TestChatUseCase:
         return ChatUseCase(
             db_session,
             session_use_case=session_use_case,
-            session_use_case_factory=lambda d: SessionUseCase(d),
+            session_use_case_factory=build_session_use_case,
             model_catalog=catalog,
             model_resolution_use_case=model_resolution,
         )
@@ -72,7 +73,7 @@ class TestChatUseCase:
             service.title_service.generate_and_update = AsyncMock()
 
             with patch(
-                "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                "domains.agent.application.chat_engine.LangGraphAgentEngine"
             ) as mock_engine_class:
                 mock_engine = AsyncMock()
                 mock_engine.run = mock_run_generator
@@ -88,7 +89,7 @@ class TestChatUseCase:
                     events.append(event)
 
                 assert len(events) > 0
-                sessions = await SessionUseCase(db_session).list_sessions(str(user.id))
+                sessions = await build_session_use_case(db_session).list_sessions(str(user.id))
                 assert len(sessions) > 0
         finally:
             clear_permission_context()
@@ -99,7 +100,9 @@ class TestChatUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            session = await SessionUseCase(db_session).create_session(user_id=str(user.id))
+            session = await build_session_use_case(db_session).create_session(
+                user_id=str(user.id)
+            )
             message = "Hello"
 
             mock_event = AgentEvent(
@@ -113,7 +116,7 @@ class TestChatUseCase:
             service.title_service.generate_and_update = AsyncMock()
 
             with patch(
-                "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                "domains.agent.application.chat_engine.LangGraphAgentEngine"
             ) as mock_engine_class:
                 mock_engine = AsyncMock()
                 mock_engine.run = mock_run_generator
@@ -151,7 +154,7 @@ class TestChatUseCase:
             service.title_service.generate_and_update = AsyncMock()
 
             with patch(
-                "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                "domains.agent.application.chat_engine.LangGraphAgentEngine"
             ) as mock_engine_class:
                 mock_engine = AsyncMock()
                 mock_engine.run = mock_run_generator
@@ -165,9 +168,11 @@ class TestChatUseCase:
                 ):
                     pass
 
-                sessions = await SessionUseCase(db_session).list_sessions(str(user.id))
+                sessions = await build_session_use_case(db_session).list_sessions(str(user.id))
                 assert len(sessions) > 0
-                messages = await SessionUseCase(db_session).get_messages(str(sessions[0].id))
+                messages = await build_session_use_case(db_session).get_messages(
+                    str(sessions[0].id)
+                )
                 assert len(messages) >= 2
         finally:
             clear_permission_context()
@@ -187,7 +192,7 @@ class TestChatUseCase:
             service.title_service.generate_and_update = AsyncMock()
 
             with patch(
-                "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                "domains.agent.application.chat_engine.LangGraphAgentEngine"
             ) as mock_engine_class:
                 mock_engine = AsyncMock()
                 mock_engine.run = mock_run_generator_error
@@ -247,7 +252,9 @@ class TestChatUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            session = await SessionUseCase(db_session).create_session(user_id=str(user.id))
+            session = await build_session_use_case(db_session).create_session(
+                user_id=str(user.id)
+            )
             session_id = str(session.id)
 
             # Mock LLM Gateway 避免实际 API 调用
@@ -304,7 +311,6 @@ class TestChatUseCase:
             mock_llm_response = AsyncMock()
             mock_llm_response.content = "Python 编程学习"
             service.llm_gateway.chat = AsyncMock(return_value=mock_llm_response)
-
             # Mock get_session_context 返回测试会话，用于后台任务
             @asynccontextmanager
             async def mock_session_context():
@@ -312,7 +318,7 @@ class TestChatUseCase:
 
             with (
                 patch(
-                    "domains.agent.application.chat_use_case.LangGraphAgentEngine"
+                    "domains.agent.application.chat_engine.LangGraphAgentEngine"
                 ) as mock_engine_class,
                 patch(
                     "domains.agent.application.chat_use_case.get_session_context",
@@ -334,17 +340,18 @@ class TestChatUseCase:
                     events.append(event)
 
                 # 验证会话已创建
-                sessions = await SessionUseCase(db_session).list_sessions(str(user.id))
+                sessions = await build_session_use_case(db_session).list_sessions(str(user.id))
                 assert len(sessions) > 0
                 session = sessions[0]
 
-                # 验证后台任务被创建（标题生成任务）
-                assert len(service._background_tasks) > 0, "应该创建了标题生成的后台任务"
-
-                # 等待后台任务完成
+                # 等待后台任务完成（任务可能在 chat 流式过程中已结束并从集合移除）
                 import asyncio
 
-                await asyncio.gather(*service._background_tasks, return_exceptions=True)
+                pending = list(service._background_tasks)
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                assert service.llm_gateway.chat.called
 
                 # 刷新会话以获取最新数据
                 await db_session.refresh(session)
@@ -357,8 +364,5 @@ class TestChatUseCase:
                 assert (
                     "Python" in session.title or "编程" in session.title or "学习" in session.title
                 )
-                # 验证标题生成服务被调用（通过检查 LLM 是否被调用）
-                # LLM 应该被调用用于生成标题
-                assert service.llm_gateway.chat.called
         finally:
             clear_permission_context()

@@ -13,7 +13,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
 from domains.identity.application.session_migration_service import (
-    migrate_anonymous_data_on_auth,
+    AnonymousDataReassignmentService,
 )
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
@@ -47,9 +47,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_db: SQLAlchemyUserDatabase[User, uuid.UUID],
         *,
         tenant_provisioner: DefaultTenantProvisionerPort | None = None,
+        anonymous_reassignment_service: AnonymousDataReassignmentService | None = None,
     ) -> None:
         super().__init__(user_db)
         self._tenant_provisioner = tenant_provisioner
+        self._anonymous_reassignment_service = anonymous_reassignment_service
 
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
         return self._tenant_provisioner or _default_tenant_provisioner()
@@ -70,8 +72,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not anonymous_user_id:
             return
 
-        db = self.user_db.session
-        result = await migrate_anonymous_data_on_auth(db, user.id, anonymous_user_id)
+        if self._anonymous_reassignment_service is None:
+            logger.warning("Anonymous data reassignment service is not configured")
+            return
+
+        result = await self._anonymous_reassignment_service.migrate(user.id, anonymous_user_id)
         if result.total > 0:
             logger.info(
                 "Post-auth migration for user %s: %d sessions, %d video_tasks",

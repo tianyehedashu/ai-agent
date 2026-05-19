@@ -4,56 +4,17 @@ Stats Service - 统计服务
 提供系统和用户统计信息。属于 Runtime 领域的应用服务。
 """
 
-from typing import Any, Protocol
+from typing import Any
 import uuid
 
-
-class IdentityStatsPort(Protocol):
-    async def count_users(self) -> int:
-        """统计用户总数"""
-        ...
-
-
-class SessionStatsPort(Protocol):
-    async def count_total(self) -> int:
-        """统计会话总数"""
-        ...
-
-    async def count_active_today(self) -> int:
-        """统计今日活跃会话数"""
-        ...
-
-    async def count_by_user(self, user_id: str) -> int:
-        """统计指定用户的会话数"""
-        ...
-
-    async def sum_tokens_by_user(self, user_id: str) -> int:
-        """统计指定用户所有会话 token 总量"""
-        ...
-
-    async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
-        """列出指定用户的会话 ID"""
-        ...
-
-
-class AgentStatsRepositoryPort(Protocol):
-    async def count_total(self) -> int:
-        """统计 Agent 总数"""
-        ...
-
-    async def count_by_user(self, user_id: uuid.UUID) -> int:
-        """统计指定用户的 Agent 数"""
-        ...
-
-
-class MessageStatsRepositoryPort(Protocol):
-    async def count_total(self) -> int:
-        """统计消息总数"""
-        ...
-
-    async def count_by_session_ids(self, session_ids: list[uuid.UUID]) -> int:
-        """统计一组会话下的消息数量"""
-        ...
+from domains.agent.domain.interfaces.agent_repository import (
+    AgentRepository as AgentRepositoryPort,
+)
+from domains.agent.domain.interfaces.message_repository import (
+    MessageRepository as MessageRepositoryPort,
+)
+from domains.identity.application.ports import IdentityApplicationPort
+from domains.session.application.ports import SessionApplicationPort
 
 
 class StatsService:
@@ -65,10 +26,10 @@ class StatsService:
     def __init__(
         self,
         *,
-        identity: IdentityStatsPort,
-        sessions: SessionStatsPort,
-        agents: AgentStatsRepositoryPort,
-        messages: MessageStatsRepositoryPort,
+        identity: IdentityApplicationPort,
+        sessions: SessionApplicationPort,
+        agents: AgentRepositoryPort,
+        messages: MessageRepositoryPort,
     ) -> None:
         self.identity = identity
         self.sessions = sessions

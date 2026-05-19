@@ -7,7 +7,4 @@
 from domains.agent.domain.interfaces.agent_repository import AgentRepository
 from domains.agent.domain.interfaces.message_repository import MessageRepository
 
-# Re-export from session domain for backward compatibility
-from domains.session.domain.interfaces import SessionRepositoryInterface as SessionRepository
-
-__all__ = ["AgentRepository", "MessageRepository", "SessionRepository"]
+__all__ = ["AgentRepository", "MessageRepository"]

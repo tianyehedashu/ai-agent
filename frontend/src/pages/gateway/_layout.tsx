@@ -37,6 +37,7 @@ export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
   const location = useLocation()
+  const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
   const showCurrencyToggle = useMemo(
     () => !HIDE_CURRENCY_TOGGLE_PATH_RE.test(location.pathname),
     [location.pathname]
@@ -98,7 +99,12 @@ export default function GatewayLayout(): React.JSX.Element {
           ))}
         </nav>
       </aside>
-      <section className="flex-1 overflow-y-auto px-6 py-6">
+      <section
+        className={cn(
+          'flex-1 overflow-y-auto px-6 pb-6',
+          isGuidePage ? 'bg-muted/[0.12] pt-0' : 'pt-6'
+        )}
+      >
         {showCurrencyToggle ? (
           <div className="mb-4 flex justify-end">
             <CurrencyToggle />

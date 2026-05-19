@@ -7,13 +7,18 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.tenancy.application.ports import TeamSnapshot
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.models.team import Team, TeamMember
 from domains.tenancy.infrastructure.repositories.team_repository import (
     TeamMemberRepository,
     TeamRepository,
 )
-from libs.exceptions import TeamNotFoundError
+from libs.exceptions import (
+    PersonalTeamNotInitializedError,
+    TeamNotFoundError,
+    TeamPermissionDeniedError,
+)
 from libs.iam.tenancy import MembershipPort, TenantId
 
 
@@ -114,6 +119,10 @@ class TeamService:
     async def get_team(self, team_id: uuid.UUID) -> Team | None:
         return await self._teams.get(team_id)
 
+    async def get_personal(self, user_id: uuid.UUID) -> Team | None:
+        """获取用户 personal team ORM（同域 application 编排用）。"""
+        return await self._teams.get_personal(user_id)
+
     async def list_team_members(self, team_id: uuid.UUID) -> list[TeamMember]:
         return await self._members.list_by_team(team_id)
 
@@ -138,6 +147,50 @@ class TeamService:
         self, team_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
         return await self._teams.get_display_names_by_ids(team_ids)
+
+    @staticmethod
+    def _to_snapshot(team: Team) -> TeamSnapshot:
+        return TeamSnapshot(
+            id=team.id,
+            is_active=team.is_active,
+            kind=team.kind,
+            owner_user_id=team.owner_user_id,
+        )
+
+    async def get_team_snapshot(self, team_id: uuid.UUID) -> TeamSnapshot | None:
+        team = await self._teams.get(team_id)
+        return self._to_snapshot(team) if team is not None else None
+
+    async def get_personal_team_snapshot(self, user_id: uuid.UUID) -> TeamSnapshot | None:
+        team = await self._teams.get_personal(user_id)
+        return self._to_snapshot(team) if team is not None else None
+
+    async def resolve_team_for_gateway_proxy(
+        self,
+        user_id: uuid.UUID,
+        x_team_id: str | None,
+    ) -> tuple[TeamSnapshot, str]:
+        from contextlib import suppress
+
+        team: Team | None = None
+        if x_team_id:
+            with suppress(ValueError):
+                team = await self._teams.get(uuid.UUID(x_team_id))
+        if team is None:
+            team = await self._teams.get_personal(user_id)
+        if team is None:
+            raise PersonalTeamNotInitializedError(
+                message="Personal team is not initialized for this user",
+                resource="Team",
+            )
+        role = await self._membership.member_role(
+            self._session,
+            tenant_id=TenantId(team.id),
+            user_id=user_id,
+        )
+        if role is None:
+            raise TeamPermissionDeniedError(str(team.id))
+        return self._to_snapshot(team), role
 
 
 __all__ = ["TeamService"]

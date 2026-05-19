@@ -26,8 +26,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from bootstrap.config import settings
-from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.sandbox import SandboxManager, SandboxPolicy
+from domains.agent.application.startup import (
+    agent_streamable_http_lifespan,
+    run_agent_shutdown,
+    run_agent_startup,
+)
 
 # 从各领域的 presentation 层导入路由
 from domains.agent.presentation.agent_router import router as agent_router
@@ -41,8 +44,7 @@ from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
-from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
-from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.application.startup import run_gateway_shutdown, run_gateway_startup
 from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
@@ -53,7 +55,7 @@ from domains.identity.presentation.usage_router import router as usage_router
 from domains.session.presentation import session_router
 from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
 from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
-from libs.db.database import get_session_context, init_db
+from libs.db.database import init_db
 from libs.db.redis import close_redis, init_redis
 from libs.exceptions import (
     AIAgentError,
@@ -134,61 +136,7 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     # 初始化数据库
     await init_db()
 
-    if settings.gateway_catalog_sync_on_startup:
-        try:
-            async with get_session_context() as session:
-                await sync_app_config_gateway_catalog(session)
-                from domains.gateway.application.pricing.pricing_management import (
-                    build_pricing_service,
-                )
-
-                pricing_svc = build_pricing_service(session)
-                await pricing_svc.sync_to_litellm_registry()
-                from domains.gateway.application.pricing.upstream_pricing_audit import (
-                    audit_upstream_pricing_keys,
-                )
-
-                audit = await audit_upstream_pricing_keys(session)
-                if audit.models_without_upstream:
-                    logger.warning(
-                        "Gateway upstream pricing: %d models missing upstream rows (sample: %s)",
-                        len(audit.models_without_upstream),
-                        audit.models_without_upstream[:5],
-                    )
-                from domains.gateway.application.route_audit import audit_gateway_routes
-
-                route_report = await audit_gateway_routes(session)
-                if route_report.issues:
-                    logger.warning(
-                        "Gateway route references: %d issues across %d routes (sample: %s)",
-                        len(route_report.issues),
-                        route_report.total_routes,
-                        [
-                            (i.virtual_model, i.field, list(i.missing_names))
-                            for i in route_report.issues[:5]
-                        ],
-                    )
-                if route_report.cross_team_virtual_model_collisions:
-                    logger.warning(
-                        "Gateway routes: %d virtual_model names shared across teams "
-                        "(Router uses gw/t/{team_id}/ prefix; sample: %s)",
-                        len(route_report.cross_team_virtual_model_collisions),
-                        [
-                            (c.virtual_model, list(c.team_ids))
-                            for c in route_report.cross_team_virtual_model_collisions[:5]
-                        ],
-                    )
-                if route_report.virtual_model_shadowed_by_model:
-                    logger.info(
-                        "Gateway routes shadowed by GatewayModel rows: %d sample=%s "
-                        "(GatewayModel.name 命中时优先于路由调度)",
-                        len(route_report.virtual_model_shadowed_by_model),
-                        route_report.virtual_model_shadowed_by_model[:5],
-                    )
-                await session.commit()
-                await reload_router(session)
-        except Exception as exc:
-            logger.warning("Gateway catalog startup sync failed: %s", exc, exc_info=True)
+    await run_gateway_startup(_fastapi_app)
 
     # 初始化 Redis
     try:
@@ -196,128 +144,17 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     except (ConnectionError, OSError) as e:
         logger.warning("Redis not available: %s", e)
 
-    # 初始化全局 checkpointer（在应用启动时创建并 setup）
-    try:
-        global_checkpointer = LangGraphCheckpointer(storage_type="postgres")
-        await global_checkpointer.setup()
-        # 将全局 checkpointer 保存到应用状态中
-        _fastapi_app.state.checkpointer = global_checkpointer
-        logger.info("Global checkpointer initialized and setup completed")
-    except Exception as e:
-        logger.error("Failed to initialize global checkpointer: %s", e, exc_info=True)
-        # 如果初始化失败，使用 MemorySaver 作为后备
-        global_checkpointer = LangGraphCheckpointer(storage_type="memory")
-        await global_checkpointer.setup()
-        _fastapi_app.state.checkpointer = global_checkpointer
-        logger.warning("Using MemorySaver as fallback for checkpointer")
-
-    # 清理孤儿容器（上次异常关闭遗留的）
-    # 在初始化 SandboxManager 之前清理，避免冲突
-    try:
-        from domains.agent.infrastructure.sandbox.executor import (  # pylint: disable=import-outside-toplevel
-            PersistentDockerExecutor,
-        )
-
-        orphans = await PersistentDockerExecutor.cleanup_orphaned_containers(
-            max_age_seconds=300  # 清理超过 5 分钟的孤儿容器
-        )
-        if orphans:
-            logger.info(
-                "Cleaned up %d orphaned containers on startup: %s",
-                len(orphans),
-                orphans,
-            )
-    except Exception as e:
-        # 清理失败不应阻止应用启动
-        logger.warning("Failed to cleanup orphaned containers: %s", e)
-
-    # 初始化并启动沙箱管理器（从配置加载策略）
-    try:
-        from libs.config import (  # pylint: disable=import-outside-toplevel
-            get_execution_config_service,
-        )
-
-        config_service = get_execution_config_service()
-        execution_config = config_service.load_for_agent("default")
-        sandbox_policy = SandboxPolicy.from_config(
-            execution_config.sandbox.docker.sandbox_policy,
-        )
-        logger.debug("Loaded SandboxPolicy from config: %s", sandbox_policy)
-    except Exception as e:
-        logger.warning("Failed to load SandboxPolicy from config, using defaults: %s", e)
-        sandbox_policy = None
-
-    sandbox_manager = SandboxManager.get_instance(policy=sandbox_policy)
-    await sandbox_manager.start()
-    _fastapi_app.state.sandbox_manager = sandbox_manager
-    logger.info("SandboxManager started")
+    await run_agent_startup(_fastapi_app)
 
     init_background_tasks(_fastapi_app)
 
-    # 初始化 AI Gateway：Router 单例 + 后台任务
-    try:
-        from domains.gateway.application.jobs import (  # pylint: disable=import-outside-toplevel
-            schedule_gateway_jobs,
-        )
-        from domains.gateway.infrastructure.router_singleton import (  # pylint: disable=import-outside-toplevel
-            get_router,
-        )
-        from libs.db.database import get_session_factory  # pylint: disable=import-outside-toplevel
-
-        gw_factory = get_session_factory()
-        async with gw_factory() as db:
-            await get_router(db)
-        schedule_gateway_jobs(_fastapi_app)
-        logger.info("AI Gateway initialized: Router + background jobs scheduled")
-    except Exception as e:
-        logger.warning("Failed to initialize AI Gateway: %s", e)
-
-    # 初始化默认系统级 MCP 服务器
-    try:
-        from domains.agent.application.mcp_init import (  # pylint: disable=import-outside-toplevel
-            init_default_mcp_servers,
-        )
-
-        await init_default_mcp_servers()
-        logger.info("Default MCP servers initialization completed")
-    except Exception as e:
-        # 初始化失败不应阻止应用启动
-        logger.warning("Failed to initialize default MCP servers: %s", e)
-
-    # FastMCP Streamable HTTP 服务器初始化
-    # 使用 initialize_mcp_servers() 统一管理初始化和生命周期
-    # 详见 mcp_server_router.py 中的文档说明
-    from domains.agent.presentation.mcp_server_router import (  # pylint: disable=import-outside-toplevel
-        initialize_mcp_servers,
-        sync_dynamic_prompts_for_streamable_http,
-        sync_dynamic_tools_for_streamable_http,
-    )
-    from libs.db.database import get_session_factory  # pylint: disable=import-outside-toplevel
-
-    async with initialize_mcp_servers():
-        try:
-            session_factory = get_session_factory()
-            async with session_factory() as db:
-                await sync_dynamic_tools_for_streamable_http(db)
-                await sync_dynamic_prompts_for_streamable_http(db)
-                await db.commit()
-            logger.info("Dynamic tools and prompts synced for Streamable HTTP MCP servers")
-        except Exception as e:
-            logger.warning("Failed to sync dynamic tools/prompts on startup: %s", e)
+    async with agent_streamable_http_lifespan():
         yield
 
     # 关闭时
     await shutdown_app_background_tasks(_fastapi_app)
-    from domains.gateway.application.proxy_deferred_tasks import (  # pylint: disable=import-outside-toplevel
-        shutdown_proxy_deferred_tasks,
-    )
-
-    await shutdown_proxy_deferred_tasks()
-
-    # 停止沙箱管理器（会清理所有沙箱容器）
-    if hasattr(_fastapi_app.state, "sandbox_manager"):
-        await _fastapi_app.state.sandbox_manager.stop()
-        logger.info("SandboxManager stopped")
+    await run_gateway_shutdown(_fastapi_app)
+    await run_agent_shutdown(_fastapi_app)
 
     # 清理 LiteLLM 异步客户端
     try:
@@ -331,13 +168,6 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
             logger.info("LiteLLM async clients closed successfully")
     except Exception as e:
         logger.warning("Error closing LiteLLM async clients: %s", e)
-
-    # 清理 checkpointer
-    if hasattr(_fastapi_app.state, "checkpointer"):
-        try:
-            await _fastapi_app.state.checkpointer.cleanup()
-        except Exception as e:
-            logger.warning("Error cleaning up checkpointer: %s", e)
 
     await close_redis()
 

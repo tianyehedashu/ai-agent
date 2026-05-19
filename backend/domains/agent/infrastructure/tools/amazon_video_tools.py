@@ -108,11 +108,13 @@ class AmazonVideoSubmitTool(BaseTool):
                 from domains.agent.application.video_task_use_case import (
                     VideoTaskUseCase,  # pylint: disable=import-outside-toplevel
                 )
-                from domains.session.application import (
-                    SessionUseCase,  # pylint: disable=import-outside-toplevel
+                from libs.api.deps import (  # pylint: disable=import-outside-toplevel
+                    build_session_use_case,
                 )
 
-                use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
+                use_case = VideoTaskUseCase(
+                    db, session_use_case=build_session_use_case(db)
+                )
 
                 # 解析 session_id
                 session_uuid = None
@@ -187,11 +189,13 @@ class AmazonVideoPollTool(BaseTool):
                 from domains.agent.application.video_task_use_case import (
                     VideoTaskUseCase,  # pylint: disable=import-outside-toplevel
                 )
-                from domains.session.application import (
-                    SessionUseCase,  # pylint: disable=import-outside-toplevel
+                from libs.api.deps import (  # pylint: disable=import-outside-toplevel
+                    build_session_use_case,
                 )
 
-                use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
+                use_case = VideoTaskUseCase(
+                    db, session_use_case=build_session_use_case(db)
+                )
 
                 # 轮询任务
                 task = await use_case.poll_task(

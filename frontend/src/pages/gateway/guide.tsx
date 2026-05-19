@@ -15,25 +15,15 @@ import { Link } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PlaygroundCard } from '@/features/gateway-playground/playground-card'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  FileText,
-  ChevronDown,
-  Sparkles,
-  Terminal,
-  Zap,
-} from '@/lib/lucide-icons'
+import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import {
   buildCapabilityModules,
@@ -49,58 +39,16 @@ type ApiFlavor = 'openai' | 'anthropic'
 type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-sse'
 
 const QUICK_STEPS = [
-  {
-    step: 1,
-    title: '创建虚拟 Key',
-    description: '明文仅显示一次，请妥善保存。',
-    href: '/gateway/keys',
-    linkLabel: '前往虚拟 Key',
-  },
-  {
-    step: 2,
-    title: '选择模型或路由',
-    description: 'model 填模型别名或虚拟路由名。',
-    href: '/gateway/models',
-    linkLabel: '查看模型',
-  },
-  {
-    step: 3,
-    title: '复制示例并调用',
-    description: '把 Base URL 与 Key 填入 SDK 或 curl。',
-    href: '#examples',
-    linkLabel: '查看示例',
-  },
+  { step: 1, title: '创建虚拟 Key', href: '/gateway/keys' },
+  { step: 2, title: '选择模型或路由', href: '/gateway/models' },
+  { step: 3, title: '复制示例并调用', href: '#examples' },
 ] as const
 
 const TROUBLESHOOTING = [
-  {
-    code: '401',
-    title: '鉴权失败',
-    hint: '检查 Header、Key 明文和撤销状态。',
-    href: '/gateway/keys',
-    linkLabel: '虚拟 Key',
-  },
-  {
-    code: '404',
-    title: '模型不存在',
-    hint: 'model 需匹配模型别名或路由名。',
-    href: '/gateway/models',
-    linkLabel: '模型',
-  },
-  {
-    code: '429',
-    title: '限流',
-    hint: '检查 RPM/TPM、套餐或预算。',
-    href: '/gateway/budgets',
-    linkLabel: '预算配额',
-  },
-  {
-    code: '5xx',
-    title: '上游失败',
-    hint: '到调用日志查看 request_id 与上游错误。',
-    href: '/gateway/logs',
-    linkLabel: '调用日志',
-  },
+  { code: '401', title: '鉴权失败', href: '/gateway/keys', linkLabel: '虚拟 Key' },
+  { code: '404', title: '模型不存在', href: '/gateway/models', linkLabel: '模型' },
+  { code: '429', title: '限流', href: '/gateway/budgets', linkLabel: '预算配额' },
+  { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
 ] as const
 
 const GUIDE_NAV_ITEMS = [
@@ -110,6 +58,8 @@ const GUIDE_NAV_ITEMS = [
   ['#reference', '能力参考'],
   ['#troubleshooting', '异常排查'],
 ] as const
+
+const GUIDE_CARD_CLASS = 'border-border/60 bg-background shadow-sm'
 
 const ANTHROPIC_NATIVE_FIELDS = [
   'thinking',
@@ -199,301 +149,260 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const activeAnchor = useActiveGuideAnchor()
 
   return (
-    <div className="space-y-5">
-      <header className="space-y-1">
+    <div className="w-full">
+      <header className="py-6">
         <h2 className="text-balance text-2xl font-semibold tracking-tight">调用指南</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          先在控制台完成一次试调，再复制生产接入所需的 Base URL、鉴权 Header 和示例代码。
-        </p>
       </header>
 
       <GuideAnchorNav active={activeAnchor} />
 
-      <section aria-labelledby="quick-start-heading" className="scroll-mt-20">
-        <h3 id="quick-start-heading" className="sr-only">
-          快速上手
-        </h3>
-        <div className="grid gap-2 rounded-xl border bg-background p-2 md:grid-cols-3">
-          {QUICK_STEPS.map((item) => (
-            <QuickStepItem key={item.step} item={item} />
-          ))}
-        </div>
-      </section>
+      <div className="mt-4 space-y-4">
+        <section aria-labelledby="quick-start-heading" className="scroll-mt-20">
+          <h3 id="quick-start-heading" className="sr-only">
+            快速上手
+          </h3>
+          <div className="grid gap-3 rounded-xl border border-border/60 bg-background p-3 shadow-sm md:grid-cols-3">
+            {QUICK_STEPS.map((item) => (
+              <QuickStepItem key={item.step} item={item} />
+            ))}
+          </div>
+        </section>
 
-      <section id="playground" aria-labelledby="playground-heading" className="scroll-mt-20">
-        <h3 id="playground-heading" className="sr-only">
-          在线试调
-        </h3>
-        <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
-      </section>
+        <section id="playground" aria-labelledby="playground-heading" className="scroll-mt-20">
+          <h3 id="playground-heading" className="sr-only">
+            在线试调
+          </h3>
+          <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+        </section>
 
-      <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">
-        <Card>
-          <CardHeader>
-            <CardTitle id="config-heading" className="text-base">
-              接入配置
-            </CardTitle>
-            <CardDescription>
-              生产凭证建议仅保存在服务端。域名默认跟随站点，也可通过 VITE_API_URL 配置。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-3">
-              <ConfigRow
-                label="Base URL"
-                value={snippets.baseUrl}
-                mono
-                copyKey="baseUrl"
-                copied={copiedKey === 'baseUrl'}
-                onCopy={handleCopy}
-              />
-              <ConfigRow
-                label="鉴权 Header"
-                value={
-                  apiFlavor === 'openai'
-                    ? snippets.openai.authHeader
-                    : snippets.anthropic.authHeader
-                }
-                mono
-                copyKey={`${apiFlavor}AuthHeader`}
-                copied={copiedKey === `${apiFlavor}AuthHeader`}
-                onCopy={handleCopy}
-              />
-              <ConfigRow
-                label="model"
-                value={activeModel}
-                mono
-                hint={
-                  activeModel === PLACEHOLDER_MODEL
-                    ? '从上方试调选择模型后会同步。'
-                    : '已从试调区同步。'
-                }
-              />
-            </div>
-            <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
-                更多配置与 Anthropic 原生字段
-                <ChevronDown
-                  className="h-4 w-4 text-muted-foreground transition-transform"
-                  aria-hidden="true"
+        <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">
+          <Card className={GUIDE_CARD_CLASS}>
+            <CardHeader className="pb-4">
+              <CardTitle id="config-heading" className="text-base">
+                接入配置
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-5">
+              <div className="grid gap-3 lg:grid-cols-3">
+                <ConfigRow
+                  label="Base URL"
+                  value={snippets.baseUrl}
+                  mono
+                  copyKey="baseUrl"
+                  copied={copiedKey === 'baseUrl'}
+                  onCopy={handleCopy}
                 />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 pt-4">
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <ConfigRow
-                    label="Anthropic SDK baseURL"
-                    value={snippets.anthropicBaseUrl}
-                    mono
-                    hint="Anthropic 官方 SDK 的 baseURL，末尾不含 /v1。"
-                    copyKey="anthropicBaseUrl"
-                    copied={copiedKey === 'anthropicBaseUrl'}
-                    onCopy={handleCopy}
+                <ConfigRow
+                  label="鉴权 Header"
+                  value={
+                    apiFlavor === 'openai'
+                      ? snippets.openai.authHeader
+                      : snippets.anthropic.authHeader
+                  }
+                  mono
+                  copyKey={`${apiFlavor}AuthHeader`}
+                  copied={copiedKey === `${apiFlavor}AuthHeader`}
+                  onCopy={handleCopy}
+                />
+                <ConfigRow label="model" value={activeModel} mono />
+              </div>
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
+                  更多配置
+                  <ChevronDown
+                    className="h-4 w-4 text-muted-foreground transition-transform"
+                    aria-hidden="true"
                   />
-                  <ConfigRow
-                    label="流式 stream"
-                    value="true"
-                    mono
-                    hint="在 JSON body 设置 stream: true，响应为 SSE。"
-                    copyKey="streamHint"
-                    copyText={snippets.streamHint}
-                    copied={copiedKey === 'streamHint'}
-                    onCopy={handleCopy}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-4">
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <ConfigRow
+                      label="Anthropic SDK baseURL"
+                      value={snippets.anthropicBaseUrl}
+                      mono
+                      copyKey="anthropicBaseUrl"
+                      copied={copiedKey === 'anthropicBaseUrl'}
+                      onCopy={handleCopy}
+                    />
+                    <ConfigRow
+                      label="流式 stream"
+                      value="true"
+                      mono
+                      copyKey="streamHint"
+                      copyText={snippets.streamHint}
+                      copied={copiedKey === 'streamHint'}
+                      onCopy={handleCopy}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ANTHROPIC_NATIVE_FIELDS.map((name) => (
+                      <Badge key={name} variant="outline" className="font-mono text-xs">
+                        {name}
+                      </Badge>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section
+          id="examples"
+          aria-labelledby="examples-heading"
+          className="scroll-mt-20 space-y-3"
+        >
+          <Card className={GUIDE_CARD_CLASS}>
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle id="examples-heading" className="text-base">
+                    代码示例
+                  </CardTitle>
+                </div>
+                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
+                  <Zap
+                    className={cn(
+                      'h-4 w-4',
+                      exampleStream ? 'text-amber-500' : 'text-muted-foreground'
+                    )}
+                    aria-hidden="true"
+                  />
+                  <Label htmlFor="example-stream" className="cursor-pointer text-sm">
+                    SSE
+                  </Label>
+                  <Switch
+                    id="example-stream"
+                    checked={exampleStream}
+                    onCheckedChange={setExampleStream}
                   />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">Anthropic 原生通道</Badge>
-                  {ANTHROPIC_NATIVE_FIELDS.map((name) => (
-                    <Badge key={name} variant="outline" className="font-mono text-xs">
-                      {name}
-                    </Badge>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section id="examples" aria-labelledby="examples-heading" className="scroll-mt-20 space-y-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <CardTitle id="examples-heading" className="text-base">
-                  代码示例
-                </CardTitle>
-                <CardDescription>
-                  切换 API 风格、流式模式和语言；下方返回示例会同步。
-                </CardDescription>
               </div>
-              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
-                <Zap
-                  className={cn(
-                    'h-4 w-4',
-                    exampleStream ? 'text-amber-500' : 'text-muted-foreground'
-                  )}
-                  aria-hidden="true"
-                />
-                <Label htmlFor="example-stream" className="cursor-pointer text-sm">
-                  流式 SSE
-                </Label>
-                <Switch
-                  id="example-stream"
-                  checked={exampleStream}
-                  onCheckedChange={setExampleStream}
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs
-              value={apiFlavor}
-              onValueChange={(v) => {
-                setApiFlavor(v as ApiFlavor)
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
-                <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
-              </TabsList>
+            </CardHeader>
+            <CardContent className="pt-5">
+              <Tabs
+                value={apiFlavor}
+                onValueChange={(v) => {
+                  setApiFlavor(v as ApiFlavor)
+                }}
+              >
+                <TabsList>
+                  <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
+                  <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="openai" className="space-y-3">
-                <EndpointBadge
-                  endpoint={snippets.openai.endpoint}
-                  authHeader={snippets.openai.authHeader}
-                  mode={exampleStream ? 'stream' : 'json'}
-                  copyKey="openaiEndpoint"
-                  copied={copiedKey === 'openaiEndpoint'}
-                  onCopy={handleCopy}
-                />
-                <FlavorExamples
-                  curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
-                  ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
-                  py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
-                  keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
-                  copiedKey={copiedKey}
-                  onCopy={handleCopy}
-                />
-              </TabsContent>
-
-              <TabsContent value="anthropic" className="space-y-3">
-                <EndpointBadge
-                  endpoint={snippets.anthropic.endpoint}
-                  authHeader={snippets.anthropic.authHeader}
-                  mode={exampleStream ? 'stream' : 'json'}
-                  copyKey="anthropicEndpoint"
-                  copied={copiedKey === 'anthropicEndpoint'}
-                  onCopy={handleCopy}
-                />
-                <FlavorExamples
-                  curl={exampleStream ? snippets.anthropic.curlStream : snippets.anthropic.curl}
-                  ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
-                  py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
-                  keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
-                  copiedKey={copiedKey}
-                  onCopy={handleCopy}
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section
-        id="reference"
-        aria-labelledby="reference-heading"
-        className="scroll-mt-20 space-y-3"
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle id="reference-heading" className="text-base">
-              能力与返回参考
-            </CardTitle>
-            <CardDescription>
-              生产接入时再展开查看。能力示例跟随上方 API 风格，返回示例跟随流式设置。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <GuideReferenceSection title="按能力查看示例" defaultOpen>
-              <div id="capabilities" className="scroll-mt-20 space-y-3">
-                {capabilityModules.map((mod) => (
-                  <CapabilityGuideCard
-                    key={mod.id}
-                    module={mod}
-                    apiFlavor={apiFlavor}
+                <TabsContent value="openai" className="space-y-3">
+                  <EndpointBadge
+                    endpoint={snippets.openai.endpoint}
+                    mode={exampleStream ? 'stream' : 'json'}
+                    copyKey="openaiEndpoint"
+                    copied={copiedKey === 'openaiEndpoint'}
+                    onCopy={handleCopy}
+                  />
+                  <FlavorExamples
+                    curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
+                    ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
+                    py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
+                    keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
                   />
+                </TabsContent>
+
+                <TabsContent value="anthropic" className="space-y-3">
+                  <EndpointBadge
+                    endpoint={snippets.anthropic.endpoint}
+                    mode={exampleStream ? 'stream' : 'json'}
+                    copyKey="anthropicEndpoint"
+                    copied={copiedKey === 'anthropicEndpoint'}
+                    onCopy={handleCopy}
+                  />
+                  <FlavorExamples
+                    curl={exampleStream ? snippets.anthropic.curlStream : snippets.anthropic.curl}
+                    ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
+                    py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
+                    keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
+                    copiedKey={copiedKey}
+                    onCopy={handleCopy}
+                  />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section
+          id="reference"
+          aria-labelledby="reference-heading"
+          className="scroll-mt-20 space-y-3"
+        >
+          <Card className={GUIDE_CARD_CLASS}>
+            <CardHeader className="pb-4">
+              <CardTitle id="reference-heading" className="text-base">
+                能力与返回参考
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-5">
+              <GuideReferenceSection title="按能力查看示例" defaultOpen>
+                <div id="capabilities" className="scroll-mt-20 space-y-3">
+                  {capabilityModules.map((mod) => (
+                    <CapabilityGuideCard
+                      key={mod.id}
+                      module={mod}
+                      apiFlavor={apiFlavor}
+                      copiedKey={copiedKey}
+                      onCopy={handleCopy}
+                    />
+                  ))}
+                </div>
+              </GuideReferenceSection>
+
+              <GuideReferenceSection title="典型返回">
+                <ResponseExamples
+                  responseTab={responseTab}
+                  setResponseTab={setResponseTab}
+                  snippets={snippets}
+                  copiedKey={copiedKey}
+                  onCopy={handleCopy}
+                />
+              </GuideReferenceSection>
+
+              <GuideReferenceSection title="查询可用模型">
+                <CodeExampleCard
+                  title="curl"
+                  icon={Terminal}
+                  code={snippets.modelsCurl}
+                  copyKey="modelsCurl"
+                  copied={copiedKey === 'modelsCurl'}
+                  onCopy={handleCopy}
+                  embedded
+                />
+              </GuideReferenceSection>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section
+          id="troubleshooting"
+          aria-labelledby="troubleshooting-heading"
+          className="scroll-mt-20"
+        >
+          <Card className={GUIDE_CARD_CLASS}>
+            <CardHeader className="pb-4">
+              <CardTitle id="troubleshooting-heading" className="text-base">
+                异常排查
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-5">
+              <div className="grid gap-3 md:grid-cols-2">
+                {TROUBLESHOOTING.map((item) => (
+                  <TroubleshootingCard key={item.code} item={item} />
                 ))}
               </div>
-            </GuideReferenceSection>
-
-            <GuideReferenceSection title="典型返回">
-              <ResponseExamples
-                responseTab={responseTab}
-                setResponseTab={setResponseTab}
-                snippets={snippets}
-                copiedKey={copiedKey}
-                onCopy={handleCopy}
-              />
-            </GuideReferenceSection>
-
-            <GuideReferenceSection title="查询可用模型">
-              <p className="mb-3 text-sm text-muted-foreground">
-                使用{' '}
-                <span className="font-mono" translate="no">
-                  GET /v1/models
-                </span>{' '}
-                查看当前 Key 可见模型；也可在
-                <Link
-                  to="/gateway/models"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  模型
-                </Link>
-                、
-                <Link
-                  to="/gateway/routes"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  虚拟路由
-                </Link>
-                页面确认名称。
-              </p>
-              <CodeExampleCard
-                title="curl"
-                icon={Terminal}
-                code={snippets.modelsCurl}
-                copyKey="modelsCurl"
-                copied={copiedKey === 'modelsCurl'}
-                onCopy={handleCopy}
-                embedded
-              />
-            </GuideReferenceSection>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section
-        id="troubleshooting"
-        aria-labelledby="troubleshooting-heading"
-        className="scroll-mt-20"
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle id="troubleshooting-heading" className="text-base">
-              异常排查
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-2">
-              {TROUBLESHOOTING.map((item) => (
-                <TroubleshootingCard key={item.code} item={item} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </div>
   )
 }
@@ -542,7 +451,7 @@ const GuideAnchorNav = memo(function GuideAnchorNav({
   return (
     <nav
       aria-label="调用指南目录"
-      className="sticky top-0 z-20 -mx-6 border-b border-border/60 bg-background/85 px-6 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+      className="sticky -top-12 z-30 -mx-6 -mt-12 border-b border-border/60 bg-background/95 px-6 pb-1.5 pt-12 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       <div
         role="tablist"
@@ -568,7 +477,6 @@ function QuickStepItem({ item }: Readonly<{ item: QuickStep }>): React.JSX.Eleme
       </Badge>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{item.title}</p>
-        <p className="text-xs text-muted-foreground">{item.description}</p>
       </div>
       {item.href.startsWith('#') ? null : (
         <ExternalLink
@@ -651,9 +559,6 @@ function ResponseExamples({
       </TabsList>
       <TabsContent value="openai-json">
         <ResponseExample
-          title="POST /v1/chat/completions"
-          contentType="application/json"
-          mode="json"
           code={snippets.openai.responseJson}
           copyKey="openaiResponseJson"
           copied={copiedKey === 'openaiResponseJson'}
@@ -662,9 +567,6 @@ function ResponseExamples({
       </TabsContent>
       <TabsContent value="openai-sse">
         <ResponseExample
-          title="POST /v1/chat/completions（stream: true）"
-          contentType="text/event-stream"
-          mode="sse"
           code={snippets.openai.responseSse}
           copyKey="openaiResponseSse"
           copied={copiedKey === 'openaiResponseSse'}
@@ -673,9 +575,6 @@ function ResponseExamples({
       </TabsContent>
       <TabsContent value="anthropic-json">
         <ResponseExample
-          title="POST /v1/messages"
-          contentType="application/json"
-          mode="json"
           code={snippets.anthropic.responseJson}
           copyKey="anthropicResponseJson"
           copied={copiedKey === 'anthropicResponseJson'}
@@ -684,9 +583,6 @@ function ResponseExamples({
       </TabsContent>
       <TabsContent value="anthropic-sse">
         <ResponseExample
-          title="POST /v1/messages（stream: true）"
-          contentType="text/event-stream"
-          mode="sse"
           code={snippets.anthropic.responseSse}
           copyKey="anthropicResponseSse"
           copied={copiedKey === 'anthropicResponseSse'}
@@ -708,7 +604,6 @@ function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>):
             </Badge>
             {item.title}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">{item.hint}</p>
         </div>
         <Link
           to={item.href}
@@ -738,10 +633,7 @@ function CapabilityGuideCard({
   return (
     <Collapsible defaultOpen={module.id === 'tools'} className="rounded-md border">
       <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-sm font-medium">{module.title}</p>
-          <p className="text-xs text-muted-foreground">{module.description}</p>
-        </div>
+        <p className="min-w-0 text-sm font-medium">{module.title}</p>
         <ChevronDown
           className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform"
           aria-hidden="true"
@@ -764,7 +656,6 @@ function CapabilityGuideCard({
 function ConfigRow({
   label,
   value,
-  hint,
   mono,
   copyKey,
   copyText,
@@ -773,7 +664,6 @@ function ConfigRow({
 }: Readonly<{
   label: string
   value: string
-  hint?: string
   mono?: boolean
   copyKey?: string
   copyText?: string
@@ -791,12 +681,12 @@ function ConfigRow({
         >
           {value}
         </p>
-        {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       {copyKey && onCopy ? (
         <CopyButton
           copied={copied ?? false}
           label={`复制 ${label}`}
+          compact
           onCopy={() => {
             onCopy(copyKey, textToCopy)
           }}
@@ -808,58 +698,44 @@ function ConfigRow({
 
 function EndpointBadge({
   endpoint,
-  authHeader,
   mode,
   copyKey,
   copied,
   onCopy,
 }: Readonly<{
   endpoint: string
-  authHeader: string
   mode: 'json' | 'stream'
   copyKey: string
   copied: boolean
   onCopy: (key: string, text: string) => void
 }>): React.JSX.Element {
+  const [method, ...pathParts] = endpoint.split(' ')
+  const path = pathParts.join(' ')
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-      <Badge variant="secondary" className="font-mono">
-        {endpoint.split(' ')[0]}
+    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+      <Badge variant="secondary" className="shrink-0 font-mono">
+        {method}
       </Badge>
-      <span className="font-mono text-foreground/90" translate="no">
-        {endpoint.split(' ').slice(1).join(' ')}
+      <span className="min-w-0 flex-1 truncate font-mono text-foreground/90" translate="no">
+        {path}
       </span>
-      {mode === 'stream' ? (
-        <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600">
-          <Zap className="h-3 w-3" aria-hidden="true" />
-          流式 SSE
-        </Badge>
-      ) : (
-        <Badge variant="outline" className="gap-1">
-          <FileText className="h-3 w-3" aria-hidden="true" />
-          非流式 JSON
-        </Badge>
-      )}
-      <Separator orientation="vertical" className="h-4" />
-      <span className="text-muted-foreground">鉴权</span>
-      <span className="font-mono text-foreground/90" translate="no">
-        {authHeader}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
+      <Badge
+        variant="outline"
+        className={cn(
+          'shrink-0 font-mono',
+          mode === 'stream' && 'border-amber-500/40 text-amber-600'
+        )}
+      >
+        {mode === 'stream' ? 'SSE' : 'JSON'}
+      </Badge>
+      <CopyButton
+        copied={copied}
+        label="复制端点"
+        compact
+        onCopy={() => {
           onCopy(copyKey, endpoint)
         }}
-        className="ml-auto inline-flex items-center gap-1 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        aria-label="复制端点"
-      >
-        {copied ? (
-          <Check className="h-3 w-3" aria-hidden="true" />
-        ) : (
-          <Copy className="h-3 w-3" aria-hidden="true" />
-        )}
-        {copied ? '已复制' : '复制端点'}
-      </button>
+      />
     </div>
   )
 }
@@ -954,54 +830,20 @@ function ResponseTabTrigger({
 }
 
 function ResponseExample({
-  title,
-  contentType,
-  mode,
   code,
   copyKey,
   copied,
   onCopy,
 }: Readonly<{
-  title: string
-  contentType: string
-  mode: 'json' | 'sse'
   code: string
   copyKey: string
   copied: boolean
   onCopy: (key: string, text: string) => void
 }>): React.JSX.Element {
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {mode === 'sse' ? (
-          <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600">
-            <Zap className="h-3 w-3" aria-hidden="true" />
-            流式 SSE
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="gap-1">
-            <FileText className="h-3 w-3" aria-hidden="true" />
-            非流式 JSON
-          </Badge>
-        )}
-        <span className="font-mono text-foreground/90" translate="no">
-          {title}
-        </span>
-        <Badge variant="secondary" className="font-mono">
-          Content-Type: {contentType}
-        </Badge>
-        {mode === 'sse' ? (
-          <Badge variant="secondary" className="gap-1">
-            <Sparkles className="h-3 w-3" aria-hidden="true" />
-            增量推送 / 多帧
-          </Badge>
-        ) : (
-          <Badge variant="secondary">一次性返回</Badge>
-        )}
-      </div>
+    <div>
       <CodeExampleCard
-        title={mode === 'sse' ? '响应（按帧解析）' : '响应'}
-        icon={mode === 'sse' ? Zap : FileText}
+        title="响应"
         code={code}
         copyKey={copyKey}
         copied={copied}
@@ -1035,6 +877,7 @@ function CodeExampleCard({
         <CopyButton
           copied={copied}
           label={`复制 ${title}`}
+          compact={embedded}
           onCopy={() => {
             onCopy(copyKey, code)
           }}
@@ -1066,12 +909,32 @@ function CodeExampleCard({
 function CopyButton({
   copied,
   label,
+  compact,
   onCopy,
 }: Readonly<{
   copied: boolean
   label: string
+  compact?: boolean
   onCopy: () => void
 }>): React.JSX.Element {
+  if (compact) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        aria-label={label}
+        onClick={onCopy}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </Button>
+    )
+  }
   return (
     <Button
       type="button"

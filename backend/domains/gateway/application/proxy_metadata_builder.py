@@ -15,7 +15,7 @@ from domains.gateway.application.router_model_name import router_model_name_for_
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
-from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
+from domains.tenancy.application.team_service import TeamService
 
 if TYPE_CHECKING:
     import uuid
@@ -63,7 +63,7 @@ class ProxyMetadataBuilder:
         user_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """生成单次代理调用的 Gateway metadata。"""
-        team = await TeamRepository(self._session).get(ctx.team_id)
+        team = await TeamService(self._session).get_team(ctx.team_id)
         verbose_log = bool(ctx.store_full_messages)
         meta: dict[str, Any] = {
             "gateway_team_id": str(ctx.team_id),

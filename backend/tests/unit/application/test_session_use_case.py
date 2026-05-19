@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 
+from domains.agent.application.message_use_case import MessageUseCase
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from domains.session.domain.entities import SessionOwner
@@ -38,7 +39,7 @@ class TestSessionUseCase:
         """Test: Create session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        use_case = SessionUseCase(db_session)
+        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
 
         # Act
         session = await use_case.create_session(
@@ -59,7 +60,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(anonymous_user_id=anonymous_id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
 
             # Act
             session = await use_case.create_session(
@@ -82,7 +83,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="Test Session",
@@ -101,7 +102,7 @@ class TestSessionUseCase:
     async def test_get_session_not_found(self, db_session):
         """Test: Get non-existent session."""
         # Arrange
-        use_case = SessionUseCase(db_session)
+        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
 
         # Act
         found = await use_case.get_session(str(uuid.uuid4()))
@@ -117,7 +118,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             user_id = str(user.id)
 
             await use_case.create_session(
@@ -145,7 +146,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="Original Title",
@@ -170,7 +171,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="To Delete",
@@ -189,7 +190,7 @@ class TestSessionUseCase:
     async def test_delete_session_not_found(self, db_session):
         """Test: Delete non-existent session raises exception."""
         # Arrange
-        use_case = SessionUseCase(db_session)
+        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
 
         # Act & Assert
         with pytest.raises(NotFoundError):
@@ -203,7 +204,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="Message Test",
@@ -231,7 +232,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="Message Test",
@@ -264,7 +265,7 @@ class TestSessionUseCase:
         ctx = PermissionContext(user_id=user.id, role="user")
         set_permission_context(ctx)
         try:
-            use_case = SessionUseCase(db_session)
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await use_case.create_session(
                 user_id=str(user.id),
                 title="Ownership Test",

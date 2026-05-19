@@ -54,11 +54,7 @@ from domains.gateway.application.proxy_response_adapter import (
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.domain.errors import (
     BudgetExceededError,
-    CapabilityNotAllowedError,
     EntitlementPlanExhaustedError,
-    GuardrailBlockedError,
-    ModelNotAllowedError,
-    RateLimitExceededError,
 )
 from domains.gateway.domain.proxy_policy import (
     assert_capability_allowed,
@@ -804,11 +800,6 @@ class ProxyUseCase:
 
 
 __all__ = [
-    "BudgetExceededError",
-    "CapabilityNotAllowedError",
-    "GuardrailBlockedError",
-    "ModelNotAllowedError",
     "ProxyContext",
     "ProxyUseCase",
-    "RateLimitExceededError",
 ]

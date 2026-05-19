@@ -1,13 +1,11 @@
 import { memo, useMemo } from 'react'
 
-import { Link } from 'react-router-dom'
-
 import type { MyPriceRow } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { estimateUsageCostDisplay } from '@/features/gateway-pricing/estimate-usage-cost'
 import { usePricingEstimate } from '@/features/gateway-pricing/use-pricing-estimate'
-import { AlertCircle, CheckCircle2, Loader2, Sparkles } from '@/lib/lucide-icons'
+import { AlertCircle, Loader2 } from '@/lib/lucide-icons'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import type { DisplayCurrency } from '@/types/money'
@@ -92,7 +90,7 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
               </TabsTrigger>
             ) : null}
             <TabsTrigger value="response" className="h-6 px-3 text-xs">
-              响应{stream ? '（流式摘要）' : ''}
+              响应
             </TabsTrigger>
           </TabsList>
           <TabsContent value="text" className="space-y-3">
@@ -206,18 +204,13 @@ function ResponseModeHeader({
         {modeBadge}
       </Badge>
       {stream ? (
-        <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600">
-          {streaming ? (
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-          ) : (
-            <Sparkles className="h-3 w-3" aria-hidden="true" />
-          )}
-          流式 SSE {streaming ? '接收中' : ''}
+        <Badge variant="outline" className="gap-1 border-amber-500/40 font-mono text-amber-600">
+          {streaming ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+          SSE
         </Badge>
       ) : (
-        <Badge variant="outline" className="gap-1">
-          <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-          非流式 JSON
+        <Badge variant="outline" className="gap-1 font-mono">
+          JSON
         </Badge>
       )}
       <span className="ml-1 truncate font-mono text-muted-foreground" translate="no">
@@ -235,7 +228,6 @@ function ErrorBlock({
     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
       <div className="mb-1 flex items-center gap-2 font-medium">
         <AlertCircle className="h-4 w-4" aria-hidden="true" />
-        调用失败
         {error.httpStatus ? (
           <Badge variant="outline" className="border-destructive/40 font-mono text-destructive">
             {error.httpStatus}
@@ -256,13 +248,6 @@ function ErrorBlock({
           request_id: {requestId}
         </p>
       ) : null}
-      <p className="mt-2 text-xs">
-        可前往{' '}
-        <Link to="/gateway/logs" className="underline-offset-4 hover:underline">
-          调用日志
-        </Link>{' '}
-        查看完整请求与上游错误详情。
-      </p>
     </div>
   )
 }

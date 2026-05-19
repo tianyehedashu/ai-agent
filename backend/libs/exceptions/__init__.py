@@ -217,31 +217,12 @@ class HttpMappableDomainError(AIAgentError):
     """可由 Presentation 映射为 HTTP 的领域错误基类。"""
 
 
-class TeamNotFoundError(HttpMappableDomainError):
-    """团队不存在"""
-
-    def __init__(self, team_id: str) -> None:
-        super().__init__(f"团队不存在: {team_id}")
-        self.team_id = team_id
-
-
-class TeamPermissionDeniedError(HttpMappableDomainError):
-    """团队权限不足"""
-
-    def __init__(self, team_id: str, required_role: str | None = None) -> None:
-        msg = f"团队 {team_id} 权限不足"
-        if required_role:
-            msg += f"，需要角色: {required_role}"
-        super().__init__(msg)
-        self.team_id = team_id
-
-
-class PersonalTeamNotInitializedError(HttpMappableDomainError):
-    """用户 personal team 未初始化（管理面）"""
-
-    def __init__(self) -> None:
-        super().__init__("Personal team not initialized; please contact admin")
-
+# 团队错误权威定义在 tenancy 域；此处 re-export 保持 ``from libs.exceptions import ...`` 兼容。
+from domains.tenancy.domain.errors import (  # noqa: E402
+    PersonalTeamNotInitializedError,
+    TeamNotFoundError,
+    TeamPermissionDeniedError,
+)
 
 __all__ = [
     "AIAgentError",

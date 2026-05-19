@@ -12,6 +12,7 @@ from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.gateway import LLMGateway
 from domains.identity.domain.types import Principal
+from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from utils.logging import get_logger
@@ -25,10 +26,28 @@ class TitleUseCase:
     提供灵活的标题生成策略，支持异步处理，不阻塞对话流程。
     """
 
-    def __init__(self, db: AsyncSession, llm_gateway: LLMGateway | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        llm_gateway: LLMGateway | None = None,
+        title_llm: TitleLlmPort | None = None,
+    ):
+        from domains.agent.application.message_use_case import MessageUseCase
+
         self.db = db
-        self.session_use_case = SessionUseCase(db)
-        self.llm_gateway = llm_gateway or LLMGateway(config=settings)
+        self.session_use_case = SessionUseCase(
+            db,
+            message_service=MessageUseCase(db),
+        )
+        gateway = llm_gateway or LLMGateway(config=settings)
+        self.llm_gateway = gateway
+        if title_llm is None:
+            from domains.agent.application.title_generation_service import (
+                LlmTitleGenerationAdapter,
+            )
+
+            title_llm = LlmTitleGenerationAdapter(gateway)
+        self._title_llm: TitleLlmPort = title_llm
         self.domain_service = SessionDomainService()
 
     def _create_owner_from_user_id(self, user_id: str) -> SessionOwner:
@@ -57,7 +76,7 @@ class TitleUseCase:
 
 只返回标题，不要其他内容。标题应该简洁明了，能够概括对话主题。"""
 
-            response = await self.llm_gateway.chat(
+            response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
                 model=settings.fast_model,
                 max_tokens=20,
@@ -100,7 +119,7 @@ class TitleUseCase:
 
 只返回标题，不要其他内容。标题应该简洁明了，能够概括整个对话的主题。"""
 
-            response = await self.llm_gateway.chat(
+            response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
                 model=settings.fast_model,
                 max_tokens=20,

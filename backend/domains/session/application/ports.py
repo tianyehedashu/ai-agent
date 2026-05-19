@@ -10,7 +10,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    import uuid
+
     from domains.session.domain.entities import SessionOwner
+
+
+class TitleLlmPort(Protocol):
+    """标题生成所需的 LLM 调用端口（由 Agent 域实现）。"""
+
+    async def chat(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        model: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> object:
+        """与 LLMGateway.chat 兼容的薄封装"""
+        ...
 
 
 class SessionApplicationPort(Protocol):
@@ -99,8 +116,17 @@ class SessionApplicationPort(Protocol):
         """统计指定用户所有会话 token 总量"""
         ...
 
-    async def list_session_ids_by_user(self, user_id: str) -> list[Any]:
+    async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
         """列出指定用户的会话 ID"""
+        ...
+
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID | str,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名会话归并到正式用户"""
         ...
 
     async def update_session_mcp_config(self, session_id: str, enabled_servers: list[str]) -> dict:

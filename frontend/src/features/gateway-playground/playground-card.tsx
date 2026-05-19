@@ -13,7 +13,7 @@ import { useQueries } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -322,20 +322,16 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-border/60 bg-background shadow-sm">
+      <CardHeader className="pb-4">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="space-y-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <CardTitle className="text-base">在线试调</CardTitle>
-              <CardDescription>
-                调用{' '}
-                <span className="font-mono" translate="no">
-                  {baseUrl}
-                  {endpointPath}
-                </span>
-                。试调 Key 仅用于控制台；生产环境请在服务端持有凭证。
-              </CardDescription>
+              <span className="truncate font-mono text-xs text-muted-foreground" translate="no">
+                {baseUrl}
+                {endpointPath}
+              </span>
             </div>
             <PlaygroundStatusBadge status={status} />
           </div>
@@ -357,7 +353,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
       </CardHeader>
       <CardContent
         className={cn(
-          'grid gap-4',
+          'grid gap-5',
           showOutputPanel && 'xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]'
         )}
       >
@@ -502,7 +498,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
                   disabled={isRunning}
                 />
                 <Label htmlFor={streamId} className="cursor-pointer text-sm">
-                  流式响应（SSE）
+                  SSE
                 </Label>
               </div>
             ) : null}

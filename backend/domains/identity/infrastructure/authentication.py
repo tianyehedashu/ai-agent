@@ -22,11 +22,15 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
+from domains.identity.application.session_migration_service import (
+    AnonymousDataReassignmentService,
+)
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.user_manager import UserManager
 from libs.db.database import get_db
 from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
+from libs.identity_bridge_deps import get_anonymous_reassignment_service
 
 # 密码哈希上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -76,9 +80,16 @@ async def get_user_db(
 async def get_user_manager(
     user_db: SQLAlchemyUserDatabase = Depends(get_user_db),
     tenant_provisioner: DefaultTenantProvisionerPort = Depends(get_default_tenant_provisioner),
+    anonymous_reassignment_service: AnonymousDataReassignmentService = Depends(
+        get_anonymous_reassignment_service
+    ),
 ) -> AsyncGenerator[UserManager, None]:
     """获取用户管理器"""
-    yield UserManager(user_db, tenant_provisioner=tenant_provisioner)
+    yield UserManager(
+        user_db,
+        tenant_provisioner=tenant_provisioner,
+        anonymous_reassignment_service=anonymous_reassignment_service,
+    )
 
 
 # FastAPI Users 实例

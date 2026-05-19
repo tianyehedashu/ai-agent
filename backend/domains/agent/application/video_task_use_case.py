@@ -253,6 +253,19 @@ class VideoTaskUseCase:
 
         return self._to_dict(task)
 
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID | str,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名视频任务归并到正式用户。"""
+        uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        return await self.repo.reassign_anonymous_to_user(
+            user_id=uid,
+            anonymous_user_id=anonymous_user_id,
+        )
+
     async def update_task(
         self,
         task_id: uuid.UUID,

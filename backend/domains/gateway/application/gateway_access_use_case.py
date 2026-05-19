@@ -1,16 +1,13 @@
 """Gateway 鉴权与团队上下文（应用层 UseCase）
 
-读多写少：团队解析、虚拟 Key 校验为查询语义；`touch` 为单次写操作、与校验同属一条鉴权用例，
-故合并为本 UseCase，避免为单行写入单独维护 Command 类型（与 CQRS 不冲突，见域文档说明）。
+读多写少：团队解析、虚拟 Key 校验为查询语义；`touch` 为单次写操作、与校验同属一条鉴权用例。
 
-成员角色仅经 ``MembershipPort``，不直接使用 ``TeamMemberRepository``。
-
-平台 ``sk-*`` + ``gateway:proxy`` 的验签与团队 grant 解析亦收拢于此，Presentation 仅依赖本用例。
+成员角色仅经 ``MembershipPort``；团队数据经 ``TeamService``（tenancy 应用层），禁止直接使用 ``TeamRepository``。
+平台 ``sk-*`` 的验签与 grant 解析经 ``ApiKeyUseCase``（identity 应用层），禁止 import identity ORM。
 """
 
 from __future__ import annotations
 
-from contextlib import suppress
 from typing import TYPE_CHECKING
 import uuid
 
@@ -45,13 +42,13 @@ from domains.identity.domain.api_key_types import (
     ApiKeyGatewayGrantEntity,
     ApiKeyScope,
 )
-from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
-from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
+from domains.tenancy.application.ports import TeamResolutionPort, TeamSnapshot
+from domains.tenancy.application.team_service import TeamService
+from libs.exceptions import PersonalTeamNotInitializedError
 from libs.iam.tenancy import MembershipPort, TenantId
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
-    from domains.tenancy.infrastructure.models.team import Team
 
 
 class GatewayAccessUseCase:
@@ -62,11 +59,19 @@ class GatewayAccessUseCase:
         session: AsyncSession,
         *,
         membership: MembershipPort | None = None,
+        team_resolution: TeamResolutionPort | None = None,
     ) -> None:
+        from domains.tenancy.infrastructure.membership_adapter import (
+            TenancyMembershipAdapter,
+        )
+
         self._session = session
         self._vkeys = VirtualKeyRepository(session)
-        self._teams = TeamRepository(session)
-        self._membership = membership or TenancyMembershipAdapter()
+        membership_impl = membership or TenancyMembershipAdapter()
+        self._membership = membership_impl
+        self._teams: TeamResolutionPort = team_resolution or TeamService(
+            session, membership=membership_impl
+        )
 
     async def validate_bearer_virtual_key(self, plain: str) -> GatewayVirtualKey:
         record = await self._vkeys.get_by_hash(hash_vkey(plain))
@@ -94,21 +99,11 @@ class GatewayAccessUseCase:
 
     async def resolve_team_for_gateway_proxy(
         self, user_id: uuid.UUID, x_team_id: str | None
-    ) -> tuple[Team, str]:
-        team: Team | None = None
-        if x_team_id:
-            with suppress(ValueError):
-                team = await self._teams.get(uuid.UUID(x_team_id))
-        if team is None:
-            team = await self._teams.get_personal(user_id)
-        if team is None:
-            raise NoPersonalTeamForProxyError()
-        role = await self._membership.member_role(
-            self._session, tenant_id=TenantId(team.id), user_id=user_id
-        )
-        if role is None:
-            raise TeamPermissionDeniedError(str(team.id))
-        return team, role
+    ) -> tuple[TeamSnapshot, str]:
+        try:
+            return await self._teams.resolve_team_for_gateway_proxy(user_id, x_team_id)
+        except PersonalTeamNotInitializedError as exc:
+            raise NoPersonalTeamForProxyError() from exc
 
     async def authenticate_platform_sk_for_gateway_proxy(
         self,
@@ -144,12 +139,7 @@ class GatewayAccessUseCase:
         self,
         api_key: ApiKeyEntity,
         x_team_id: str | None,
-    ) -> tuple[Team, str, ApiKeyGatewayGrantEntity]:
-        """解析平台 API Key 的 Gateway 团队授权。
-
-        ``X-Team-Id`` 只用于选择该 API Key 已持有的 grant；若未授权则拒绝，
-        不再回退为“用户所属团队皆可用”。
-        """
+    ) -> tuple[TeamSnapshot, str, ApiKeyGatewayGrantEntity]:
         grants = tuple(g for g in api_key.gateway_grants if g.is_active)
         if not grants:
             raise ApiKeyGatewayGrantRequiredError()
@@ -161,7 +151,7 @@ class GatewayAccessUseCase:
             except ValueError as exc:
                 raise GatewayTeamHeaderInvalidError(x_team_id) from exc
         else:
-            personal = await self._teams.get_personal(api_key.user_id)
+            personal = await self._teams.get_personal_team(api_key.user_id)
             if personal is not None:
                 personal_grant = next((g for g in grants if g.team_id == personal.id), None)
                 if personal_grant is not None:
@@ -176,12 +166,14 @@ class GatewayAccessUseCase:
         if grant is None:
             raise ApiKeyGatewayGrantDeniedError(str(target_team_id))
 
-        team = await self._teams.get(target_team_id)
+        team = await self._teams.get_team(target_team_id)
         if team is None or not team.is_active:
             raise TeamNotFoundError(str(target_team_id))
 
         role = await self._membership.member_role(
-            self._session, tenant_id=TenantId(team.id), user_id=api_key.user_id
+            self._session,
+            tenant_id=TenantId(team.id),
+            user_id=api_key.user_id,
         )
         if role is None:
             raise TeamPermissionDeniedError(str(team.id))

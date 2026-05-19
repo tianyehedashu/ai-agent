@@ -18,10 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.agent.application import AgentUseCase, ChatUseCase
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
-from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
-from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
-from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.application.memory_service import MemoryService
+from domains.agent.application.message_use_case import MessageUseCase
 from domains.agent.application.product_image_gen_task_use_case import (
     ProductImageGenTaskUseCase,
 )
@@ -36,6 +34,9 @@ from domains.agent.infrastructure.repositories.message_repository import Message
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application import UserUseCase
+from domains.identity.application.session_migration_service import (
+    AnonymousDataReassignmentService,
+)
 from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db
 from libs.iam.deps import get_default_tenant_provisioner
@@ -46,7 +47,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DbSession",
+    "build_session_use_case",
     "get_agent_service",
+    "get_anonymous_reassignment_service",
     "get_chat_model_resolution_service",
     "get_chat_service",
     "get_checkpoint_service",
@@ -112,6 +115,19 @@ def get_sandbox_service(request: Request) -> SandboxLifecycleService | None:
     return None
 
 
+def build_session_use_case(
+    db: AsyncSession,
+    *,
+    sandbox_service: SandboxLifecycleService | None = None,
+) -> SessionUseCase:
+    """组装 SessionUseCase（注入 Message 应用端口）。"""
+    return SessionUseCase(
+        db,
+        message_service=MessageUseCase(db),
+        sandbox_service=sandbox_service,
+    )
+
+
 async def get_session_service(
     db: DbSession,
     request: Request,
@@ -121,7 +137,7 @@ async def get_session_service(
     自动注入沙箱生命周期服务（如果可用），实现会话与沙箱生命周期联动。
     """
     sandbox_service = get_sandbox_service(request)
-    return SessionUseCase(db, sandbox_service=sandbox_service)
+    return build_session_use_case(db, sandbox_service=sandbox_service)
 
 
 async def get_title_service(db: DbSession) -> TitleUseCase:
@@ -141,7 +157,7 @@ async def get_chat_service(
     return ChatUseCase(
         db,
         session_use_case=session_service,
-        session_use_case_factory=SessionUseCase,
+        session_use_case_factory=build_session_use_case,
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,
@@ -162,24 +178,30 @@ async def get_stats_service(db: DbSession) -> StatsService:
     """获取统计服务"""
     return StatsService(
         identity=UserUseCase(db),
-        sessions=SessionUseCase(db),
+        sessions=build_session_use_case(db),
         agents=AgentRepository(db),
         messages=MessageRepository(db),
     )
 
 
-async def get_mcp_service(db: DbSession) -> MCPManagementUseCase:
+async def get_mcp_service(db: DbSession):
     """获取 MCP 管理服务"""
+    from domains.agent.application.mcp_use_case import MCPManagementUseCase
+
     return MCPManagementUseCase(db)
 
 
-async def get_mcp_dynamic_tool_service(db: DbSession) -> MCPDynamicToolUseCase:
+async def get_mcp_dynamic_tool_service(db: DbSession):
     """获取 MCP 动态工具用例"""
+    from domains.agent.application.mcp_dynamic_tool_use_case import MCPDynamicToolUseCase
+
     return MCPDynamicToolUseCase(db)
 
 
-async def get_mcp_dynamic_prompt_service(db: DbSession) -> MCPDynamicPromptUseCase:
+async def get_mcp_dynamic_prompt_service(db: DbSession):
     """获取 MCP 动态 Prompt 用例"""
+    from domains.agent.application.mcp_dynamic_prompt_use_case import MCPDynamicPromptUseCase
+
     return MCPDynamicPromptUseCase(db)
 
 
@@ -189,6 +211,15 @@ async def get_video_task_service(
 ) -> VideoTaskUseCase:
     """获取视频生成任务服务"""
     return VideoTaskUseCase(db, session_use_case=session_service)
+
+
+async def get_anonymous_reassignment_service(db: DbSession) -> AnonymousDataReassignmentService:
+    """匿名数据归并服务（登录/注册后统一入口）。"""
+    from libs.api.identity_bridge_deps import (
+        get_anonymous_reassignment_service as _get_anonymous_reassignment_service,
+    )
+
+    return await _get_anonymous_reassignment_service(db)
 
 
 async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:

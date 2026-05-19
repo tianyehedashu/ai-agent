@@ -442,16 +442,18 @@ class GatewayManagementReadService:
         team_id: UUID,
         is_platform_admin: bool,
     ) -> None:
-        from sqlalchemy import select
+        from domains.identity.application.api_key_use_case import ApiKeyUseCase
+        from libs.exceptions import NotFoundError
 
-        from domains.identity.infrastructure.models.api_key import ApiKeyGatewayGrant
-
-        stmt = select(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.id == grant_id)
-        row = (await self._session.execute(stmt)).scalar_one_or_none()
-        if row is None:
-            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id))
-        if not is_platform_admin and row.team_id != team_id:
-            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id))
+        keys = ApiKeyUseCase(self._session)
+        try:
+            await keys.assert_gateway_grant_in_team(
+                grant_id,
+                team_id=team_id,
+                is_platform_admin=is_platform_admin,
+            )
+        except NotFoundError as exc:
+            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id)) from exc
 
     async def assert_entitlement_plan_in_team(
         self,

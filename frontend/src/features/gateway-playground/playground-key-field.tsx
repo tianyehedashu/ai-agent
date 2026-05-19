@@ -48,7 +48,7 @@ export const PlaygroundKeyField = memo(function PlaygroundKeyField({
   isLoadingKeys,
   isRevealing,
   revealError,
-  userEdited,
+  userEdited: _userEdited,
   onSelectKey,
   onUserEditedReset,
 }: Readonly<PlaygroundKeyFieldProps>): React.JSX.Element {
@@ -136,9 +136,7 @@ export const PlaygroundKeyField = memo(function PlaygroundKeyField({
         isRevealing={isRevealing}
         selectedKey={selectedKey}
         keysCount={virtualKeys.length}
-        userEdited={userEdited}
         revealError={revealError}
-        manualMode={manualMode}
       />
     </div>
   )
@@ -150,35 +148,27 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
   isRevealing,
   selectedKey,
   keysCount,
-  userEdited,
   revealError,
-  manualMode,
 }: Readonly<{
   hintId: string
   isLoadingKeys: boolean
   isRevealing: boolean
   selectedKey: VirtualKey | null
   keysCount: number
-  userEdited: boolean
   revealError: Error | null
-  manualMode: boolean
-}>): React.JSX.Element {
+}>): React.JSX.Element | null {
   if (isLoadingKeys) {
     return (
       <p id={hintId} className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-        正在加载虚拟 Key 列表…
+        加载中…
       </p>
     )
   }
   if (revealError && selectedKey) {
     return (
       <p id={hintId} className="text-xs text-destructive">
-        无法获取 Key 明文：{revealError.message}。请改用手动粘贴，或前往{' '}
-        <Link to="/gateway/keys" className="underline-offset-4 hover:underline">
-          虚拟 Key
-        </Link>{' '}
-        检查权限。
+        {revealError.message}
       </p>
     )
   }
@@ -186,55 +176,19 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
     return (
       <p id={hintId} className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-        正在获取「{selectedKey.name}」的明文…
-      </p>
-    )
-  }
-  if (userEdited && manualMode) {
-    return (
-      <p id={hintId} className="text-xs text-muted-foreground">
-        已使用手动输入的 Key。
-      </p>
-    )
-  }
-  if (selectedKey && !manualMode) {
-    return (
-      <p id={hintId} className="text-xs text-muted-foreground">
-        已选择 <span className="text-foreground/80">{selectedKey.name}</span>
-        <span className="font-mono" translate="no">
-          {' '}
-          ({selectedKey.masked_key})
-        </span>
-        。可在{' '}
-        <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
-          虚拟 Key
-        </Link>{' '}
-        页管理。
+        加载 Key…
       </p>
     )
   }
   if (keysCount === 0) {
     return (
       <p id={hintId} className="text-xs text-muted-foreground">
-        暂无可用虚拟 Key。请前往{' '}
+        暂无 Key。{' '}
         <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
-          虚拟 Key
-        </Link>{' '}
-        创建，或手动粘贴{' '}
-        <span className="font-mono" translate="no">
-          sk-gw-*
-        </span>
-        。
+          创建
+        </Link>
       </p>
     )
   }
-  return (
-    <p id={hintId} className="text-xs text-muted-foreground">
-      从下拉选择已保存的 Key，或选择「手动粘贴」后输入{' '}
-      <span className="font-mono" translate="no">
-        sk-gw-*
-      </span>
-      。
-    </p>
-  )
+  return null
 })

@@ -14,12 +14,8 @@ import uuid
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from domains.agent.infrastructure.repositories.video_gen_task_repository import (
-        VideoGenTaskRepository,
-    )
-    from domains.session.infrastructure.repositories import SessionRepository
+    from domains.agent.application.ports import VideoTaskApplicationPort
+    from domains.session.application.ports import SessionApplicationPort
 
 logger = get_logger(__name__)
 
@@ -46,11 +42,11 @@ class AnonymousDataReassignmentService:
     def __init__(
         self,
         *,
-        session_repo: SessionRepository,
-        video_task_repo: VideoGenTaskRepository,
+        session_service: SessionApplicationPort,
+        video_task_service: VideoTaskApplicationPort,
     ) -> None:
-        self.session_repo = session_repo
-        self.video_task_repo = video_task_repo
+        self.session_service = session_service
+        self.video_task_service = video_task_service
 
     async def migrate(
         self,
@@ -69,11 +65,11 @@ class AnonymousDataReassignmentService:
         if isinstance(user_id, str):
             user_id = uuid.UUID(user_id)
 
-        session_count = await self.session_repo.reassign_anonymous_to_user(
+        session_count = await self.session_service.reassign_anonymous_to_user(
             user_id=user_id,
             anonymous_user_id=anonymous_user_id,
         )
-        task_count = await self.video_task_repo.reassign_anonymous_to_user(
+        task_count = await self.video_task_service.reassign_anonymous_to_user(
             user_id=user_id,
             anonymous_user_id=anonymous_user_id,
         )
@@ -93,16 +89,17 @@ class AnonymousDataReassignmentService:
 
 
 async def migrate_anonymous_data_on_auth(
-    db: AsyncSession,
     user_id: uuid.UUID | str,
     anonymous_user_id: str | None,
+    *,
+    session_service: SessionApplicationPort,
+    video_task_service: VideoTaskApplicationPort,
 ) -> MigrationResult:
     """认证成功后迁移匿名数据的便捷函数
 
     在登录或注册时调用，将当前浏览器的匿名数据迁移到正式账号。
 
     Args:
-        db: 数据库会话
         user_id: 正式用户 ID
         anonymous_user_id: 匿名用户 ID（从 Cookie 获取）
 
@@ -112,14 +109,9 @@ async def migrate_anonymous_data_on_auth(
     if not anonymous_user_id:
         return MigrationResult()
 
-    from domains.agent.infrastructure.repositories.video_gen_task_repository import (
-        VideoGenTaskRepository,
-    )
-    from domains.session.infrastructure.repositories import SessionRepository
-
     service = AnonymousDataReassignmentService(
-        session_repo=SessionRepository(db),
-        video_task_repo=VideoGenTaskRepository(db),
+        session_service=session_service,
+        video_task_service=video_task_service,
     )
     return await service.migrate(user_id, anonymous_user_id)
 

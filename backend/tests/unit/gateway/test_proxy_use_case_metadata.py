@@ -20,7 +20,7 @@ async def test_build_metadata_ignores_user_gateway_prefix_keys(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamRepository.get",
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -75,7 +75,7 @@ async def test_build_metadata_verbose_sets_response_max_chars(
     from bootstrap.config import settings
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamRepository.get",
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -120,7 +120,7 @@ async def test_build_metadata_apikey_inbound_sets_platform_key_id(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamRepository.get",
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -151,7 +151,7 @@ async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamRepository.get",
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     snap = {
@@ -205,7 +205,7 @@ async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamRepository.get",
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     monkeypatch.setattr(

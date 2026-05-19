@@ -19,8 +19,22 @@ from bootstrap.config import settings
 # （历史上 gateway.infrastructure.models.__init__ 曾 re-export tenancy.Team —
 #  这条捷径让分层边界变模糊，已删除，env.py 直接显式 import 即可）。
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
+from domains.agent.infrastructure.models.mcp_dynamic_prompt import MCPDynamicPrompt  # noqa: F401
+from domains.agent.infrastructure.models.mcp_dynamic_tool import MCPDynamicTool  # noqa: F401
+from domains.agent.infrastructure.models.mcp_server import MCPServer  # noqa: F401
 from domains.agent.infrastructure.models.memory import Memory  # noqa: F401
 from domains.agent.infrastructure.models.message import Message  # noqa: F401
+from domains.agent.infrastructure.models.product_image_gen_task import (  # noqa: F401
+    ProductImageGenTask,
+)
+from domains.agent.infrastructure.models.product_info_job import ProductInfoJob  # noqa: F401
+from domains.agent.infrastructure.models.product_info_job_step import (  # noqa: F401
+    ProductInfoJobStep,
+)
+from domains.agent.infrastructure.models.product_info_prompt_template import (  # noqa: F401
+    ProductInfoPromptTemplate,
+)
+from domains.agent.infrastructure.models.video_gen_task import VideoGenTask  # noqa: F401
 from domains.gateway.infrastructure.models.alert import (  # noqa: F401
     GatewayAlertEvent,
     GatewayAlertRule,

@@ -10,14 +10,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from bootstrap.config import settings
 from domains.agent.domain.types import ToolCall
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.evaluation.application.evaluation_use_case import EvaluationUseCase
 from domains.identity.presentation.deps import RequiredAuthUser
 from evaluation.gaia import GAIAEvaluator, GAIAReport
-from evaluation.llm_judge import JudgeScore, LLMJudge
+from evaluation.llm_judge import JudgeScore
 from evaluation.task_completion import EvaluationReport
-from evaluation.tool_accuracy import ToolAccuracyEvaluator, ToolAccuracyReport
+from evaluation.tool_accuracy import ToolAccuracyReport
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluation"])
 
@@ -90,7 +89,6 @@ async def evaluate_gaia(
             detail="Invalid benchmark type for GAIA evaluation",
         )
 
-    # 创建评估器
     evaluator = GAIAEvaluator()
 
     # 加载基准测试集
@@ -136,7 +134,8 @@ async def evaluate_tool_accuracy(
     current_user: RequiredAuthUser,
 ):
     """工具调用准确率评估"""
-    evaluator = ToolAccuracyEvaluator()
+    use_case = EvaluationUseCase()
+    evaluator = use_case.tool_accuracy_evaluator()
 
     for tool_call_data in request.tool_calls:
         tool_call = ToolCall(**tool_call_data)
@@ -163,15 +162,14 @@ async def evaluate_with_llm_judge(
     current_user: RequiredAuthUser,
 ):
     """使用 LLM-as-Judge 评估响应质量"""
-    llm_gateway = LLMGateway(config=settings)
-    judge = LLMJudge(llm_gateway=llm_gateway, judge_model=request.judge_model)
-
+    use_case = EvaluationUseCase()
+    judge = use_case.llm_judge()
+    judge.judge_model = request.judge_model
     score = await judge.evaluate(
         query=request.query,
         response=request.response,
         expected=request.expected,
     )
-
     return score
 
 

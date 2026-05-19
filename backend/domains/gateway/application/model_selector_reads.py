@@ -10,8 +10,8 @@ from domains.gateway.application.entitlement_model_status import annotate_items_
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 
 if TYPE_CHECKING:
-    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
     from domains.gateway.application.entitlement_guard import EntitlementGuard
+    from domains.gateway.application.model_catalog_port import ModelCatalogPort
 
 
 async def list_available_system_models(

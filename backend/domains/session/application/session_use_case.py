@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.agent.domain.types import MessageRole
-from domains.agent.infrastructure.repositories import MessageRepository
 from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.infrastructure.repositories import SessionRepository
@@ -20,11 +19,9 @@ from utils.logging import get_logger
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.agent.domain.interfaces.message_repository import (
-        MessageRepository as MessageRepositoryInterface,
-    )
+    from domains.agent.application.ports.message_port import MessageApplicationPort
+    from domains.agent.domain.interfaces.message_repository import MessageEntity
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
-    from domains.agent.infrastructure.models.message import Message
     from domains.session.domain.interfaces.session_repository import (
         SessionRepository as SessionRepositoryInterface,
     )
@@ -54,7 +51,7 @@ class SessionUseCase:
         self,
         db: AsyncSession,
         session_repo: SessionRepositoryInterface | None = None,
-        message_repo: MessageRepositoryInterface | None = None,
+        message_service: MessageApplicationPort | None = None,
         sandbox_service: SandboxLifecycleService | None = None,
     ) -> None:
         """初始化会话用例
@@ -62,13 +59,14 @@ class SessionUseCase:
         Args:
             db: 数据库会话
             session_repo: 会话仓储（可选，默认使用默认实现）
-            message_repo: 消息仓储（可选，默认使用默认实现）
+            message_service: 消息应用端口（须由组合根注入，禁止默认实例化 agent infrastructure）
             sandbox_service: 沙箱生命周期服务（可选，用于会话删除时联动清理沙箱）
         """
+        if message_service is None:
+            raise ValueError("message_service is required; inject MessageUseCase from composition root")
         self.db = db
-        # 支持依赖注入，默认使用默认实现
         self.session_repo = session_repo or SessionRepository(db)
-        self.message_repo = message_repo or MessageRepository(db)
+        self.message_service = message_service
         self.domain_service = SessionDomainService()
         # 可选的沙箱服务，用于生命周期联动
         self.sandbox_service = sandbox_service
@@ -329,9 +327,9 @@ class SessionUseCase:
         session_id: str,
         skip: int = 0,
         limit: int = 50,
-    ) -> list[Message]:
+    ) -> list[MessageEntity]:
         """获取会话的消息列表"""
-        return await self.message_repo.find_by_session(
+        return await self.message_service.find_by_session(
             session_id=uuid.UUID(session_id),
             skip=skip,
             limit=limit,
@@ -346,7 +344,7 @@ class SessionUseCase:
         tool_call_id: str | None = None,
         metadata: dict | None = None,
         token_count: int | None = None,
-    ) -> Message:
+    ) -> MessageEntity:
         """添加消息
 
         同时更新会话的消息计数和 Token 计数。
@@ -360,7 +358,7 @@ class SessionUseCase:
         role_value = role.value if isinstance(role, MessageRole) else role
 
         # 创建消息
-        message = await self.message_repo.create(
+        message = await self.message_service.create(
             session_id=uuid.UUID(session_id),
             role=role_value,
             content=content,
@@ -381,7 +379,7 @@ class SessionUseCase:
 
     async def count_messages(self, session_id: str) -> int:
         """统计会话的消息数量"""
-        return await self.message_repo.count_by_session(uuid.UUID(session_id))
+        return await self.message_service.count_by_session(uuid.UUID(session_id))
 
     async def count_total(self) -> int:
         """统计会话总数"""
@@ -402,6 +400,19 @@ class SessionUseCase:
     async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
         """列出指定用户的会话 ID"""
         return await self.session_repo.list_ids_by_user(uuid.UUID(user_id))
+
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID | str,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名会话归并到正式用户"""
+        uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        return await self.session_repo.reassign_anonymous_to_user(
+            user_id=uid,
+            anonymous_user_id=anonymous_user_id,
+        )
 
     async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:
         """增加会话的视频任务计数

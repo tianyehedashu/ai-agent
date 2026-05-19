@@ -1,7 +1,5 @@
 import type React from 'react'
 
-import { Link } from 'react-router-dom'
-
 import type { MyPriceRow } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -214,34 +212,19 @@ function ModelHint({
   selected: ModelCandidate | undefined
   empty: boolean
   mode: PlaygroundMode
-}>): React.JSX.Element {
+}>): React.JSX.Element | null {
   if (loading) {
-    return <p className="text-xs text-muted-foreground">正在读取可用模型…</p>
+    return <p className="text-xs text-muted-foreground">加载中…</p>
   }
   if (empty) {
     return (
       <p className="text-xs text-muted-foreground">
-        当前没有支持「{PLAYGROUND_MODE_LABELS[mode]}」的模型。可去{' '}
-        <Link to="/gateway/models" className="text-primary underline-offset-4 hover:underline">
-          模型
-        </Link>{' '}
-        注册或选择「手动输入」。
+        暂无支持「{PLAYGROUND_MODE_LABELS[mode]}」的模型。
       </p>
     )
   }
   if (selected?.status === 'failed') {
-    return (
-      <p className="text-xs text-destructive">
-        该模型最近一次连通性测试失败，可以试调验证或先回到「模型」页修复凭据。
-      </p>
-    )
+    return <p className="text-xs text-destructive">连通性测试失败。</p>
   }
-  if (selected?.status === 'success') {
-    return <p className="text-xs text-muted-foreground">该模型最近一次连通性测试已通过。</p>
-  }
-  return (
-    <p className="text-xs text-muted-foreground">
-      已按「{PLAYGROUND_MODE_LABELS[mode]}」过滤；亦支持手动输入虚拟路由名。
-    </p>
-  )
+  return null
 }

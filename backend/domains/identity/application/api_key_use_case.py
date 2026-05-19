@@ -24,10 +24,9 @@ from domains.identity.domain.services.api_key_service import (
 from domains.identity.infrastructure.repositories.api_key_repository import (
     ApiKeyRepository,
 )
-from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
-from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
+from domains.tenancy.application.team_service import TeamService
 from libs.exceptions import NotFoundError, ValidationError
-from libs.iam.tenancy import TenantId
+from libs.iam.tenancy import MembershipPort, TenantId
 
 if TYPE_CHECKING:
     import uuid
@@ -55,8 +54,13 @@ class ApiKeyUseCase:
         self.generator = generator or ApiKeyGenerator(encryption_key)
         self.domain_service = ApiKeyDomainService(self.generator)
         self._encryption_key = encryption_key
-        self._teams = TeamRepository(db)
-        self._membership = TenancyMembershipAdapter()
+        from domains.tenancy.infrastructure.membership_adapter import (
+            TenancyMembershipAdapter,
+        )
+
+        membership_impl = TenancyMembershipAdapter()
+        self._teams = TeamService(db, membership=membership_impl)
+        self._membership: MembershipPort = membership_impl
 
     # =======================================================================
     # CRUD 操作
@@ -493,6 +497,20 @@ class ApiKeyUseCase:
                     f"gateway grant requires team owner/admin role: {grant.team_id}"
                 )
         return grants
+
+    async def assert_gateway_grant_in_team(
+        self,
+        grant_id: uuid.UUID,
+        *,
+        team_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        """校验 Gateway grant 存在且属于指定团队（管理面鉴权）。"""
+        row = await self.repo.get_gateway_grant_by_id(grant_id)
+        if row is None:
+            raise NotFoundError("ApiKeyGatewayGrant", str(grant_id))
+        if not is_platform_admin and row.team_id != team_id:
+            raise NotFoundError("ApiKeyGatewayGrant", str(grant_id))
 
     @staticmethod
     def _grant_request_from_entity(

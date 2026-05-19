@@ -22,9 +22,8 @@ from domains.agent.application.chat_model_resolution_use_case import ChatModelRe
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.presentation.deps import AuthUser
-from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import AttachOptionalTeamContext
-from libs.api.deps import get_checkpoint_service, get_sandbox_service
+from libs.api.deps import build_session_use_case, get_checkpoint_service, get_sandbox_service
 from libs.db.database import get_session_context
 from libs.db.permission_context import (
     PermissionContext,
@@ -41,14 +40,14 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
     """为 SSE 生成器创建独立 ChatUseCase，避免复用 FastAPI 依赖 session。"""
     sandbox_service = get_sandbox_service(request)
-    session_service = SessionUseCase(db, sandbox_service=sandbox_service)
+    session_service = build_session_use_case(db, sandbox_service=sandbox_service)
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
     model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
     return ChatUseCase(
         db,
         session_use_case=session_service,
-        session_use_case_factory=SessionUseCase,
+        session_use_case_factory=build_session_use_case,
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,

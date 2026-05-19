@@ -64,7 +64,7 @@ domains/gateway/
 │   └── jobs.py                    # 后台循环；rollup SQL 在 infrastructure 仓储
 ├── domain/                       # 类型、虚拟 Key 算法、领域错误、proxy_policy、credential_probe、upstream_catalog_policy
 └── infrastructure/             # ORM、仓储、Router 单例、回调、护栏
-    └── models/__init__.py        # 再导出 Team / TeamMember（与 Alembic 聚合 import），权威定义在 tenancy
+    └── models/__init__.py        # 只再导出 Gateway 域 ORM；Team / TeamMember 权威定义在 tenancy
 
 domains/gateway/domain/usage_read_model.py  # UsageAggregation（管理面日志/大盘读模型）
 domains/agent/infrastructure/llm/gateway.py   # LLMGateway
@@ -74,7 +74,7 @@ domains/agent/infrastructure/llm/gateway.py   # LLMGateway
 
 - `presentation → application（UseCase + 管理面 management 读写服务）→ domain`
 - `infrastructure` 由 application 经仓储调用；**禁止** domain 依赖 infrastructure。
-- **团队与成员**：`domains.gateway.application` 使用 `domains.tenancy` 的 `TeamService` / `TeamRepository` 与 `Team` ORM；**成员角色**经 `libs.iam.tenancy.MembershipPort`（默认 `TenancyMembershipAdapter`），**禁止**在 Gateway 应用层直接使用 `TeamMemberRepository`。`gateway.infrastructure.models` 仅再导出 `Team` / `TeamMember` 供 Alembic 聚合 import。团队管理 HTTP 在 `domains.tenancy.presentation.teams_router`（仅依赖 `TeamService` 与 identity 依赖，**不**引用 `domains.gateway.application`）。
+- **团队与成员**：`domains.gateway.application` 使用 `domains.tenancy` 的 `TeamService` / `TeamRepository` 与 `Team` ORM；**成员角色**经 `libs.iam.tenancy.MembershipPort`（默认 `TenancyMembershipAdapter`），**禁止**在 Gateway 应用层直接使用 `TeamMemberRepository`。`gateway.infrastructure.models` 不再再导出 `Team` / `TeamMember`；Alembic 需要注册团队 ORM 时应直接从 `domains.tenancy.infrastructure.models.team` 显式导入。团队管理 HTTP 在 `domains.tenancy.presentation.teams_router`（仅依赖 `TeamService` 与 identity 依赖，**不**引用 `domains.gateway.application`）。
 - **可映射 HTTP 的领域错误**：`TeamNotFoundError`、`TeamPermissionDeniedError`、`PersonalTeamNotInitializedError` 与基类 `HttpMappableDomainError` 定义在 **`libs.exceptions`**；`libs/iam/team_http.map_team_access_exception_to_http` 负责上述团队错误的 HTTP 映射。`GatewayError` 继承 `HttpMappableDomainError`；`gateway.presentation.http_error_map` 先委托团队映射再处理其余 Gateway 异常。`tenancy.presentation.team_dependencies` **不**依赖 `domains.gateway.presentation`。
 
 **CQRS（管理面）**

@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application import UserUseCase
 from domains.identity.application.principal_service import ANONYMOUS_USER_COOKIE
-from domains.identity.application.session_migration_service import migrate_anonymous_data_on_auth
+from domains.identity.application.session_migration_service import (
+    AnonymousDataReassignmentService,
+)
 from domains.identity.infrastructure.authentication import (
     auth_backend,
     current_active_user,
@@ -27,6 +29,7 @@ from domains.identity.presentation.schemas import (
 )
 from libs.db.database import get_db
 from libs.exceptions import AuthenticationError
+from libs.identity_bridge_deps import get_anonymous_reassignment_service
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -125,6 +128,9 @@ async def login_for_token_pair(
     login_data: UserLogin,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    reassignment_service: AnonymousDataReassignmentService = Depends(
+        get_anonymous_reassignment_service
+    ),
 ) -> TokenResponse:
     """登录并获取 Token 对（access_token + refresh_token）
 
@@ -147,7 +153,7 @@ async def login_for_token_pair(
     # 迁移匿名数据（与 on_after_login 逻辑一致）
     anonymous_user_id = request.cookies.get(ANONYMOUS_USER_COOKIE)
     if anonymous_user_id:
-        result = await migrate_anonymous_data_on_auth(db, user.id, anonymous_user_id)
+        result = await reassignment_service.migrate(user.id, anonymous_user_id)
         if result.total > 0:
             logger.info(
                 "Post-login migration for user %s: %d sessions, %d video_tasks",

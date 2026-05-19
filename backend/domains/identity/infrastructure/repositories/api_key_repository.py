@@ -257,6 +257,14 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_gateway_grant_by_id(
+        self, grant_id: uuid.UUID
+    ) -> ApiKeyGatewayGrant | None:
+        """按 grant ID 查询 Gateway 授权行。"""
+        stmt = select(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.id == grant_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_gateway_grant(
         self, api_key_id: uuid.UUID, team_id: uuid.UUID
     ) -> ApiKeyGatewayGrant | None:

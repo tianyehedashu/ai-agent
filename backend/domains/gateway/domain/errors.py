@@ -4,12 +4,12 @@ Gateway Domain Errors - 领域错误
 
 from __future__ import annotations
 
-from libs.exceptions import (
-    HttpMappableDomainError,
+from domains.tenancy.domain.errors import (
     PersonalTeamNotInitializedError,
     TeamNotFoundError,
     TeamPermissionDeniedError,
 )
+from libs.exceptions import HttpMappableDomainError
 
 
 class GatewayError(HttpMappableDomainError):

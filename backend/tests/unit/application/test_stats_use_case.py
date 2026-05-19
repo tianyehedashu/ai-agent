@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from domains.agent.application import AgentUseCase
+from domains.agent.application.message_use_case import MessageUseCase
 from domains.agent.application.stats_service import StatsService
 from domains.agent.infrastructure.repositories.agent_repository import AgentRepository
 from domains.agent.infrastructure.repositories.message_repository import MessageRepository
@@ -23,7 +24,7 @@ from libs.db.permission_context import (
 def _make_stats_service(db_session) -> StatsService:
     return StatsService(
         identity=UserUseCase(db_session),
-        sessions=SessionUseCase(db_session),
+        sessions=SessionUseCase(db_session, message_service=MessageUseCase(db_session)),
         agents=AgentRepository(db_session),
         messages=MessageRepository(db_session),
     )
@@ -58,7 +59,7 @@ class TestStatsService:
                 system_prompt="Test",
             )
 
-            session_service = SessionUseCase(db_session)
+            session_service = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await session_service.create_session(user_id=str(user.id))
 
             await session_service.add_message(
@@ -108,7 +109,7 @@ class TestStatsService:
                 system_prompt="Test",
             )
 
-            session_service = SessionUseCase(db_session)
+            session_service = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
             session = await session_service.create_session(user_id=str(user.id))
 
             await session_service.add_message(

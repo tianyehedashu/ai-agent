@@ -43,9 +43,7 @@ export function VisionInput({
             ;(e.target as HTMLImageElement).style.display = 'none'
           }}
         />
-      ) : (
-        <p className="text-xs text-muted-foreground">支持公网 URL 或 data URL</p>
-      )}
+      ) : null}
     </div>
   )
 }

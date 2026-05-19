@@ -10,11 +10,7 @@ from domains.agent.infrastructure.repositories.message_repository import (
     MessageRepository,
 )
 
-# Re-export from session domain for backward compatibility
-from domains.session.infrastructure.repositories import SessionRepository
-
 __all__ = [
     "AgentRepository",
     "MessageRepository",
-    "SessionRepository",
 ]

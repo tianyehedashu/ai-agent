@@ -22,7 +22,6 @@ from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_user_id,
     get_mcp_vendor_creator_id,
 )
-from domains.session.application import SessionUseCase
 from libs.config import get_llm_config
 from libs.db.database import get_session_context
 from libs.db.permission_context import (
@@ -115,7 +114,9 @@ async def video_create_task(
     try:
         async with get_session_context() as db:
             vendor_creator_id = get_mcp_vendor_creator_id()
-            use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
+            from libs.api.deps import build_session_use_case
+
+            use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
             task = await use_case.create_task(
                 principal_id=str(user_id),
                 session_id=None,
@@ -178,7 +179,9 @@ async def video_poll_task(task_id: str) -> str:
     set_permission_context(PermissionContext(user_id=user_id, anonymous_user_id=None))
     try:
         async with get_session_context() as db:
-            use_case = VideoTaskUseCase(db, session_use_case=SessionUseCase(db))
+            from libs.api.deps import build_session_use_case
+
+            use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
             task = await use_case.poll_task(UUID(task_id), once=True)
         return json.dumps(
             {
