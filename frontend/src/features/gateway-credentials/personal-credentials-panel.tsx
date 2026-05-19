@@ -11,7 +11,6 @@ import type React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
-import { providerConfigApi } from '@/api/provider-config'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,7 +109,6 @@ export function PersonalCredentialsPanel({
   const invalidate = useCallback((): void => {
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
-    void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
   }, [queryClient])
 
@@ -185,10 +183,16 @@ export function PersonalCredentialsPanel({
   })
 
   const testMutation = useMutation({
-    mutationFn: (provider: string) => providerConfigApi.test(provider),
+    mutationFn: (credentialId: string) => gatewayApi.probeMyCredential(credentialId),
     onSuccess: (data) => {
-      if (data.success) toast({ title: 'Key 有效' })
-      else toast({ variant: 'destructive', title: 'Key 验证失败' })
+      if (data.support !== 'error') toast({ title: 'Key 有效' })
+      else {
+        toast({
+          variant: 'destructive',
+          title: 'Key 验证失败',
+          description: data.message ?? '上游探测失败',
+        })
+      }
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '验证失败', description: e.message })
@@ -266,7 +270,8 @@ export function PersonalCredentialsPanel({
                       size="sm"
                       disabled={!hasAuthSession || testIsPending}
                       onClick={() => {
-                        testMutate(provider)
+                        const active = rows.find((row) => row.is_active) ?? rows[0]
+                        testMutate(active.id)
                       }}
                     >
                       {testIsPending ? '验证中…' : '验证'}

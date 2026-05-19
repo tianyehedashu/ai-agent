@@ -37,7 +37,6 @@ from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
 from domains.agent.presentation.product_info_router import router as product_info_router
-from domains.agent.presentation.provider_config_router import router as provider_config_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.video_task_router import router as video_task_router
@@ -626,13 +625,6 @@ app.include_router(mcp_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Man
 app.include_router(mcp_server_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Server"])
 # 同时挂载 /mcp，便于 Cursor 等客户端使用 http://localhost:8000/mcp/llm-server
 app.include_router(mcp_server_router, prefix="/mcp", tags=["MCP Server"])
-
-# 设置 - 用户 LLM 提供商配置
-app.include_router(
-    provider_config_router,
-    prefix=f"{api_router_prefix}/settings/providers",
-    tags=["Settings - Provider Config"],
-)
 
 # 用量与配额
 app.include_router(

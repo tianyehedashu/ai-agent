@@ -164,7 +164,6 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     mutationFn: gatewayApi.createMyCredential,
     onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
       openAddModelsAfterCreate(cred, 'user')
     },
     onError: (e: Error) => {

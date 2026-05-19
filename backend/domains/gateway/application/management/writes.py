@@ -634,66 +634,6 @@ class GatewayManagementWriteService:
         if reload_router:
             await self.reload_litellm_router()
 
-    async def sync_user_provider_legacy_row(
-        self,
-        *,
-        actor_user_id: uuid.UUID,
-        provider: str,
-        api_key_encrypted: str,
-        api_base: str | None,
-        is_active: bool,
-    ) -> Any:
-        """与旧版单条 UserProviderConfig 双写：更新或创建 user scope 凭据（优先 name=default）。"""
-        rows = await self._creds.list_user_by_provider(actor_user_id, provider)
-        target: Any | None = None
-        for row in rows:
-            if row.name == "default":
-                target = row
-                break
-        if target is None:
-            for row in rows:
-                if row.name == provider:
-                    target = row
-                    break
-        if target is None and len(rows) == 1:
-            target = rows[0]
-        if target is not None:
-            updated = await self._creds.update(
-                target.id,
-                api_key_encrypted=api_key_encrypted,
-                api_base=api_base,
-                extra=None,
-                is_active=is_active,
-                name=None,
-            )
-            if updated is None:
-                raise CredentialNotFoundError(str(target.id))
-            await self.reload_litellm_router()
-            return updated
-        created = await self._creds.create(
-            scope="user",
-            scope_id=actor_user_id,
-            provider=provider,
-            name="default",
-            api_key_encrypted=api_key_encrypted,
-            api_base=api_base,
-            extra=None,
-            is_active=is_active,
-        )
-        await self.reload_litellm_router()
-        return created
-
-    async def delete_all_user_credentials_for_provider(
-        self, *, actor_user_id: uuid.UUID, provider: str
-    ) -> None:
-        rows = await self._creds.list_user_by_provider(actor_user_id, provider)
-        for row in rows:
-            await self.delete_user_credential(
-                row.id, actor_user_id=actor_user_id, reload_router=False
-            )
-        if rows:
-            await self.reload_litellm_router()
-
     async def create_gateway_model(
         self,
         *,
