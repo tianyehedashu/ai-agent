@@ -22,6 +22,8 @@ from domains.gateway.domain.errors import (
     PlatformApiKeyInvalidError,
     PlatformApiKeyMissingGatewayProxyScopeError,
     SystemCredentialAdminRequiredError,
+    SystemVirtualKeyForbiddenError,
+    VirtualKeyDecryptError,
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
 )
@@ -46,7 +48,9 @@ def _http_exception_for_gateway_domain(exc: Exception) -> HTTPException | None:
         return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, VirtualKeyNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, CredentialApiKeyDecryptError):
+    if isinstance(exc, SystemVirtualKeyForbiddenError):
+        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
+    if isinstance(exc, (CredentialApiKeyDecryptError, VirtualKeyDecryptError)):
         return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))

@@ -1,11 +1,5 @@
 /**
  * usePlaygroundVirtualKey 行为单测
- *
- * 重点覆盖：
- * - 旧 v1 单把缓存自动迁移到 v2 列表
- * - autoEnsure：缓存为空时自动调用 createKey 创建一把并写入缓存
- * - 校验：listKeys 中已不存在的 Key 会从缓存中清除
- * - selectKey / regenerate / forget 行为
  */
 
 import React, { act } from 'react'
@@ -14,37 +8,35 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { VirtualKey, VirtualKeyCreated } from '@/api/gateway'
+import type { VirtualKey } from '@/api/gateway'
+import {
+  LEGACY_STORAGE_KEYS,
+  resetPlaygroundVkeyLegacyMigration,
+} from '@/features/gateway-playground/playground-vkey-persist'
+import {
+  readPersistedPlaygroundVkeySelection,
+  usePlaygroundVkeySelectionStore,
+} from '@/stores/playground-vkey-selection'
 
 import { usePlaygroundVirtualKey } from './use-playground-virtual-key'
 
-const createKeyMock = vi.fn(
-  (_body: Record<string, unknown>): Promise<VirtualKeyCreated> =>
-    Promise.reject(new Error('createKeyMock not configured'))
-)
 const listKeysMock = vi.fn((): Promise<VirtualKey[]> => Promise.resolve([]))
+const revealKeyMock = vi.fn(
+  (_id: string): Promise<{ plain_key: string }> =>
+    Promise.reject(new Error('revealKeyMock not configured'))
+)
 
 vi.mock('@/api/gateway', () => ({
   gatewayApi: {
-    createKey: (body: Record<string, unknown>) => createKeyMock(body),
     listKeys: () => listKeysMock(),
+    revealKey: (id: string) => revealKeyMock(id),
   },
 }))
 
-const STORAGE_KEY_V1 = 'gateway:playground:vkey:v1'
-const STORAGE_KEY_V2 = 'gateway:playground:vkey:v2'
+const STORAGE_KEY_V1 = LEGACY_STORAGE_KEYS[0]
+const STORAGE_KEY_V2 = LEGACY_STORAGE_KEYS[1]
 
-interface PersistedV2 {
-  v: number
-  items: { id: string; plain: string }[]
-  lastSelectedId: string | null
-}
-
-function readPersistedV2(): PersistedV2 {
-  return JSON.parse(window.localStorage.getItem(STORAGE_KEY_V2) ?? '{}') as PersistedV2
-}
-
-function makeVKey(id: string, name = 'k', isActive = true): VirtualKey {
+function makeVKey(id: string, name = 'k', overrides: Partial<VirtualKey> = {}): VirtualKey {
   return {
     id,
     team_id: 't',
@@ -56,17 +48,14 @@ function makeVKey(id: string, name = 'k', isActive = true): VirtualKey {
     tpm_limit: null,
     store_full_messages: false,
     guardrail_enabled: true,
-    is_active: isActive,
+    is_active: true,
     is_system: false,
     expires_at: null,
     last_used_at: null,
     usage_count: 0,
     created_at: '2026-05-18T00:00:00Z',
+    ...overrides,
   }
-}
-
-function makeCreated(id: string, plain: string, name = 'auto'): VirtualKeyCreated {
-  return { ...makeVKey(id, name), plain_key: plain }
 }
 
 function wrapper(): React.FC<{ children: React.ReactNode }> {
@@ -76,172 +65,161 @@ function wrapper(): React.FC<{ children: React.ReactNode }> {
 
 beforeEach(() => {
   window.localStorage.clear()
-  createKeyMock.mockReset()
+  resetPlaygroundVkeyLegacyMigration()
+  usePlaygroundVkeySelectionStore.setState({ lastSelectedId: null })
   listKeysMock.mockReset()
+  revealKeyMock.mockReset()
   listKeysMock.mockResolvedValue([])
 })
 
 describe('usePlaygroundVirtualKey', () => {
-  test('autoEnsure 在缓存为空时调用 createKey 并写入 v2 缓存', async () => {
-    listKeysMock.mockResolvedValueOnce([])
-    // 第二次（invalidate 后）已包含新创建的 key
-    listKeysMock.mockResolvedValueOnce([makeVKey('k1')])
-    createKeyMock.mockResolvedValue(makeCreated('k1', 'sk-gw-PLAIN1'))
+  test('过滤掉 system 与 inactive Key', async () => {
+    listKeysMock.mockResolvedValue([
+      makeVKey('k1', 'normal'),
+      makeVKey('sys', 's', { is_system: true }),
+      makeVKey('dead', 'd', { is_active: false }),
+    ])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-PLAIN-K1' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: true }), {
-      wrapper: wrapper(),
-    })
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
 
     await waitFor(() => {
-      expect(result.current.selected?.plain).toBe('sk-gw-PLAIN1')
+      expect(result.current.keys.map((k) => k.id)).toEqual(['k1'])
     })
-    expect(createKeyMock).toHaveBeenCalledTimes(1)
-    expect(result.current.items).toHaveLength(1)
-    const persisted = readPersistedV2()
-    expect(persisted.v).toBe(2)
-    expect(persisted.items[0]?.plain).toBe('sk-gw-PLAIN1')
   })
 
-  test('autoEnsure=false 时不会触发自动创建', async () => {
-    createKeyMock.mockResolvedValue(makeCreated('k1', 'sk-gw-PLAIN1'))
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
-    })
-    await waitFor(() => {
-      expect(listKeysMock).toHaveBeenCalled()
-    })
-    expect(createKeyMock).not.toHaveBeenCalled()
-    expect(result.current.selected).toBeNull()
-  })
-
-  test('v1 缓存自动迁移到 v2 列表，并保留明文', async () => {
-    window.localStorage.setItem(
-      STORAGE_KEY_V1,
-      JSON.stringify({ v: 1, id: 'old', plain: 'sk-gw-OLD', name: '历史 Key' })
-    )
-    listKeysMock.mockResolvedValue([makeVKey('old')])
-
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
-    })
-
-    expect(result.current.items).toHaveLength(1)
-    expect(result.current.selected?.plain).toBe('sk-gw-OLD')
-    expect(window.localStorage.getItem(STORAGE_KEY_V1)).toBeNull()
-    const migrated = readPersistedV2()
-    expect(migrated.v).toBe(2)
-    expect(migrated.items[0]?.id).toBe('old')
-    // 服务端确认仍然存在，缓存不变
-    await waitFor(() => {
-      expect(listKeysMock).toHaveBeenCalled()
-    })
-    expect(result.current.items).toHaveLength(1)
-  })
-
-  test('listKeys 返回中失活或不存在的缓存项会被自动清除', async () => {
-    window.localStorage.setItem(
-      STORAGE_KEY_V2,
-      JSON.stringify({
-        v: 2,
-        items: [
-          { id: 'alive', plain: 'p1', name: 'a', createdAt: '', lastUsedAt: '' },
-          { id: 'dead', plain: 'p2', name: 'b', createdAt: '', lastUsedAt: '' },
-        ],
-        lastSelectedId: 'dead',
-      })
-    )
-    listKeysMock.mockResolvedValue([makeVKey('alive', 'a', true), makeVKey('dead', 'b', false)])
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
-    })
-    await waitFor(() => {
-      expect(result.current.items.map((i) => i.id)).toEqual(['alive'])
-    })
-    expect(result.current.selected?.id).toBe('alive')
-  })
-
-  test('regenerate 把新 Key 插入到列表头部并标记为选中', async () => {
-    window.localStorage.setItem(
-      STORAGE_KEY_V2,
-      JSON.stringify({
-        v: 2,
-        items: [{ id: 'k1', plain: 'p1', name: 'a', createdAt: '', lastUsedAt: '' }],
-        lastSelectedId: 'k1',
-      })
-    )
-    // listKeys 任何时候被调用都返回 k1+k2，避免与 regenerate 时序竞争
+  test('首次进入且无持久化选中时，自动选第一把可用 Key 并 reveal 明文', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
-    createKeyMock.mockResolvedValue(makeCreated('k2', 'sk-gw-NEW'))
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-FIRST' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
-    })
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
 
-    // 等初次 listKeys 落定，让校验 effect 先用基线 keys 跑过一次
     await waitFor(() => {
-      expect(listKeysMock).toHaveBeenCalled()
+      expect(result.current.selectedKeyId).toBe('k1')
     })
-
-    await act(async () => {
-      await result.current.regenerate()
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-FIRST')
     })
-
-    expect(result.current.items.map((i) => i.id)).toEqual(['k2', 'k1'])
-    expect(result.current.selected?.id).toBe('k2')
+    expect(revealKeyMock).toHaveBeenCalledWith('k1')
+    expect(readPersistedPlaygroundVkeySelection()).toBe('k1')
   })
 
-  test('selectKey 切换 lastSelectedId 并影响 selected', () => {
-    window.localStorage.setItem(
-      STORAGE_KEY_V2,
-      JSON.stringify({
-        v: 2,
-        items: [
-          { id: 'k1', plain: 'p1', name: 'a', createdAt: '', lastUsedAt: '' },
-          { id: 'k2', plain: 'p2', name: 'b', createdAt: '', lastUsedAt: '' },
-        ],
-        lastSelectedId: 'k1',
-      })
-    )
+  test('selectKey 切换：reveal 新 Key 明文,持久化 id', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
+    revealKeyMock.mockImplementation((id: string) => Promise.resolve({ plain_key: `plain-${id}` }))
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+
+    await waitFor(() => {
+      expect(result.current.plain).toBe('plain-k1')
     })
-    expect(result.current.selected?.id).toBe('k1')
+
     act(() => {
       result.current.selectKey('k2')
     })
-    expect(result.current.selected?.id).toBe('k2')
+
+    expect(result.current.plain).toBeNull()
+    await waitFor(() => {
+      expect(result.current.plain).toBe('plain-k2')
+    })
+    expect(readPersistedPlaygroundVkeySelection()).toBe('k2')
   })
 
-  test('forget(id) 移除单条；forget() 清空全部', async () => {
+  test('selectKey(null) 清空选中与明文', async () => {
+    listKeysMock.mockResolvedValue([makeVKey('k1')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K1' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-K1')
+    })
+
+    act(() => {
+      result.current.selectKey(null)
+    })
+
+    expect(result.current.selectedKey).toBeNull()
+    expect(result.current.plain).toBeNull()
+    expect(readPersistedPlaygroundVkeySelection()).toBeNull()
+  })
+
+  test('服务端撤销当前选中 Key 时,本地选中被自动清空', async () => {
+    usePlaygroundVkeySelectionStore.setState({ lastSelectedId: 'gone' })
+    listKeysMock.mockResolvedValue([makeVKey('alive')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-ALIVE' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+
+    await waitFor(() => {
+      expect(result.current.selectedKeyId).toBe('alive')
+    })
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-ALIVE')
+    })
+  })
+
+  test('reveal 失败时暴露 revealError 并保持 plain 为 null', async () => {
+    listKeysMock.mockResolvedValue([makeVKey('k1')])
+    revealKeyMock.mockRejectedValue(new Error('400 decrypt failed'))
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+
+    await waitFor(() => {
+      expect(result.current.revealError?.message).toBe('400 decrypt failed')
+    })
+    expect(result.current.plain).toBeNull()
+  })
+
+  test('迁移 v2 缓存:抽取 lastSelectedId,丢弃明文,清掉旧 key', async () => {
     window.localStorage.setItem(
       STORAGE_KEY_V2,
       JSON.stringify({
         v: 2,
         items: [
-          { id: 'k1', plain: 'p1', name: 'a', createdAt: '', lastUsedAt: '' },
-          { id: 'k2', plain: 'p2', name: 'b', createdAt: '', lastUsedAt: '' },
+          { id: 'm1', plain: 'should-be-dropped', name: 'old', createdAt: '', lastUsedAt: '' },
         ],
-        lastSelectedId: 'k2',
+        lastSelectedId: 'm1',
       })
     )
-    listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ autoEnsure: false }), {
-      wrapper: wrapper(),
-    })
-    // 等 listKeys 落地，避免后续 forget 操作被校验 effect 干扰
+    listKeysMock.mockResolvedValue([makeVKey('m1', 'migrated'), makeVKey('m2')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-FROM-SERVER' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+
     await waitFor(() => {
-      expect(listKeysMock).toHaveBeenCalled()
+      expect(window.localStorage.getItem(STORAGE_KEY_V2)).toBeNull()
     })
-    act(() => {
-      result.current.forget('k2')
+    await waitFor(() => {
+      expect(readPersistedPlaygroundVkeySelection()).toBe('m1')
     })
-    expect(result.current.items.map((i) => i.id)).toEqual(['k1'])
-    expect(result.current.selected?.id).toBe('k1')
-    act(() => {
-      result.current.forget()
+
+    await waitFor(() => {
+      expect(result.current.selectedKeyId).toBe('m1')
     })
-    expect(result.current.items).toEqual([])
-    expect(result.current.selected).toBeNull()
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-FROM-SERVER')
+    })
+    expect(revealKeyMock).toHaveBeenCalledWith('m1')
+  })
+
+  test('迁移 v1 单把缓存', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY_V1,
+      JSON.stringify({ v: 1, id: 'legacy', plain: 'dropped', name: 'old' })
+    )
+    listKeysMock.mockResolvedValue([makeVKey('legacy')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-LEGACY' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(STORAGE_KEY_V1)).toBeNull()
+    })
+    await waitFor(() => {
+      expect(readPersistedPlaygroundVkeySelection()).toBe('legacy')
+    })
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-LEGACY')
+    })
   })
 })

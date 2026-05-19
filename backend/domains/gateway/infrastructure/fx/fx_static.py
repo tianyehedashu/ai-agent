@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 import logging
+from typing import TYPE_CHECKING
 
-from domains.gateway.application.pricing.fx_port import FxRatePort
-from domains.gateway.domain.money import DisplayCurrency
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from domains.gateway.application.pricing.fx_port import FxRatePort
+    from domains.gateway.domain.money import DisplayCurrency
 
 logger = logging.getLogger(__name__)
 

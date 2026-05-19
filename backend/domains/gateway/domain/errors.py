@@ -83,11 +83,15 @@ class VirtualKeyNotFoundError(GatewayError):
         super().__init__(f"虚拟 Key 不存在: {key_id}")
 
 
-class SystemVirtualKeyRevokeForbiddenError(GatewayError):
-    """禁止撤销系统内部桥接 Key"""
+class SystemVirtualKeyForbiddenError(GatewayError):
+    """禁止访问/操作系统内部桥接 Key"""
 
     def __init__(self, key_id: str) -> None:
-        super().__init__(f"系统虚拟 Key 不可撤销: {key_id}")
+        super().__init__(f"系统虚拟 Key 不可访问: {key_id}")
+
+
+# 向后兼容别名（batch revoke reason、历史测试/import）
+SystemVirtualKeyRevokeForbiddenError = SystemVirtualKeyForbiddenError
 
 
 class VirtualKeyInvalidError(GatewayError):
@@ -95,6 +99,13 @@ class VirtualKeyInvalidError(GatewayError):
 
     def __init__(self, message: str = "虚拟 Key 无效") -> None:
         super().__init__(message)
+
+
+class VirtualKeyDecryptError(GatewayError):
+    """虚拟 Key 明文解密失败（密钥轮转 / 数据损坏）"""
+
+    def __init__(self) -> None:
+        super().__init__("虚拟 Key 明文解密失败")
 
 
 class CredentialNotFoundError(GatewayError):
@@ -141,10 +152,10 @@ class ModelNotAllowedError(GatewayError):
 
 
 class CapabilityNotAllowedError(GatewayError):
-    """能力不在白名单"""
+    """能力不在白名单，或模型主调用面与当前 HTTP 入口不匹配"""
 
-    def __init__(self, capability: str) -> None:
-        super().__init__(f"能力不在白名单: {capability}")
+    def __init__(self, capability: str, *, message: str | None = None) -> None:
+        super().__init__(message or f"能力不在白名单: {capability}")
         self.capability = capability
 
 
@@ -254,9 +265,11 @@ __all__ = [
     "RateLimitExceededError",
     "RouteNotFoundError",
     "SystemCredentialAdminRequiredError",
+    "SystemVirtualKeyForbiddenError",
     "SystemVirtualKeyRevokeForbiddenError",
     "TeamNotFoundError",
     "TeamPermissionDeniedError",
+    "VirtualKeyDecryptError",
     "VirtualKeyInvalidError",
     "VirtualKeyNotFoundError",
 ]

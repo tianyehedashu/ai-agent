@@ -12,8 +12,10 @@
 
 from __future__ import annotations
 
+from binascii import Error as BinasciiError
 from typing import TYPE_CHECKING, Annotated
 
+from cryptography.fernet import InvalidToken
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +28,7 @@ from domains.gateway.application.management.credential_upstream_catalog import (
     CredentialUpstreamCatalogService,
 )
 from domains.gateway.domain.credential_probe import CredentialProbeResult
+from domains.gateway.domain.errors import VirtualKeyDecryptError
 from domains.gateway.domain.types import (
     MANAGED_GATEWAY_CREDENTIAL_PROVIDERS,
     PERSONAL_MODEL_PROVIDERS,
@@ -38,11 +41,15 @@ from domains.gateway.presentation.schemas.credential_upstream_catalog import (
     CredentialProbeResponse,
     UpstreamModelItemResponse,
 )
-from libs.crypto import derive_encryption_key
+from libs.crypto import decrypt_value, derive_encryption_key
 from libs.db.database import get_db
+from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
+
+
+logger = get_logger(__name__)
 
 
 def credential_probe_to_response(result: CredentialProbeResult) -> CredentialProbeResponse:
@@ -149,6 +156,19 @@ def encryption_key() -> str:
     return derive_encryption_key(settings.secret_key.get_secret_value())
 
 
+def decrypt_vkey_for_reveal(record: GatewayVirtualKey, *, encryption_key: str) -> str:
+    """解密并返回 vkey 完整明文；与 ``VirtualKey`` 创建时存入的 ``encrypted_key`` 对称。"""
+    try:
+        return decrypt_value(record.encrypted_key, encryption_key).strip()
+    except (InvalidToken, BinasciiError, UnicodeDecodeError, ValueError) as exc:
+        logger.warning(
+            "vkey plain reveal decrypt failed key_id=%s exc_type=%s",
+            record.id,
+            type(exc).__name__,
+        )
+        raise VirtualKeyDecryptError from exc
+
+
 def vkey_to_response(record: GatewayVirtualKey) -> VirtualKeyResponse:
     return VirtualKeyResponse(
         id=record.id,
@@ -176,6 +196,7 @@ __all__ = [
     "MgmtReads",
     "MgmtWrites",
     "credential_probe_to_response",
+    "decrypt_vkey_for_reveal",
     "effective_model_type_query",
     "encryption_key",
     "validate_managed_credential_provider",

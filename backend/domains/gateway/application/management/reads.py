@@ -23,6 +23,10 @@ from domains.gateway.domain.errors import (
 from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.domain.usage_read_model import UsageAggregation
+from domains.gateway.domain.virtual_key_access import (
+    assert_virtual_key_accessible_by_actor,
+    filter_virtual_keys_visible_to_actor,
+)
 from domains.gateway.infrastructure.models.entitlement_plan import (
     EntitlementPlan,
     EntitlementPlanQuota,
@@ -101,8 +105,48 @@ class GatewayManagementReadService:
     async def list_team_members(self, team_id: UUID) -> list[TeamMember]:
         return await self._teams.list_team_members(team_id)
 
-    async def list_virtual_keys_for_team(self, team_id: UUID) -> list[GatewayVirtualKey]:
-        return await self._vkeys.list_by_team(team_id, include_system=False, include_inactive=True)
+    async def list_virtual_keys_for_team(
+        self,
+        team_id: UUID,
+        *,
+        actor_user_id: UUID | None = None,
+        team_role: str = "owner",
+        is_platform_admin: bool = False,
+    ) -> list[GatewayVirtualKey]:
+        keys = await self._vkeys.list_by_team(
+            team_id, include_system=False, include_inactive=False
+        )
+        filtered = filter_virtual_keys_visible_to_actor(
+            keys,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
+        return list(filtered)
+
+    async def get_virtual_key_for_team_member(
+        self,
+        key_id: UUID,
+        *,
+        team_id: UUID,
+        actor_user_id: UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> GatewayVirtualKey:
+        """按 revoke/reveal 同款权限取一条 active vkey。"""
+        record = await self._vkeys.get(key_id)
+        assert_virtual_key_accessible_by_actor(
+            record,
+            key_id=str(key_id),
+            team_id=team_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+            require_active=True,
+        )
+        if record is None:
+            raise VirtualKeyNotFoundError(str(key_id))
+        return record
 
     async def list_credentials_for_team(
         self, team_id: UUID, *, include_system: bool

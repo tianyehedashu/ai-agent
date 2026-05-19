@@ -7,7 +7,7 @@
 AI Agent 系统是一个功能完整的 AI Agent 开发和运行平台，包含：
 
 - **Agent Core** - 核心执行引擎，实现 ReAct 模式的 Agent 循环
-- **AI Gateway** - OpenAI 与 Anthropic（`/v1/messages`）兼容入口、模型路由、凭证、预算、团队和日志管理
+- **AI Gateway** - OpenAI 兼容入口与 Anthropic 原生 `POST /v1/messages`（LiteLLM `anthropic_unified`，透传 thinking / cache / tools 等厂商字段）、模型路由、凭证、预算、团队和日志管理
 - **MCP 集成** - 系统级 MCP Server 管理与 Streamable HTTP 入口
 - **基础设施** - API 网关、数据库、向量库、缓存
 

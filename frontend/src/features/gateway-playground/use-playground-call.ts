@@ -23,12 +23,18 @@ import {
   parseOpenAiSseBuffer,
   type OpenAiCompatChunk,
 } from './openai-sse'
+import {
+  buildPlaygroundRequestBody,
+  buildVisionRequestBody,
+  maskAuthHeadersForDisplay,
+} from './playground-request'
 
 import type {
   PlaygroundApiFlavor,
   PlaygroundError,
   PlaygroundMetadata,
   PlaygroundRawResponse,
+  PlaygroundRequestSnapshot,
   PlaygroundStatus,
 } from './types'
 
@@ -49,6 +55,8 @@ interface CallParams {
   flavor: PlaygroundApiFlavor
   /** Anthropic 必须；OpenAI 可选 */
   maxTokens?: number
+  /** 视觉理解：OpenAI 多模态 content */
+  imageUrl?: string
 }
 
 interface UsePlaygroundCallReturn {
@@ -57,13 +65,12 @@ interface UsePlaygroundCallReturn {
   metadata: PlaygroundMetadata | null
   error: PlaygroundError | null
   rawResponse: PlaygroundRawResponse
+  lastRequest: PlaygroundRequestSnapshot | null
   isRunning: boolean
   send: (params: CallParams) => Promise<void>
   cancel: () => void
   reset: () => void
 }
-
-const DEFAULT_ANTHROPIC_MAX_TOKENS = 1024
 
 export function usePlaygroundCall(): UsePlaygroundCallReturn {
   const [status, setStatus] = useState<PlaygroundStatus>('idle')
@@ -71,6 +78,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
   const [metadata, setMetadata] = useState<PlaygroundMetadata | null>(null)
   const [error, setError] = useState<PlaygroundError | null>(null)
   const [rawResponse, setRawResponse] = useState<PlaygroundRawResponse>(null)
+  const [lastRequest, setLastRequest] = useState<PlaygroundRequestSnapshot | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -87,6 +95,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     setMetadata(null)
     setError(null)
     setRawResponse(null)
+    setLastRequest(null)
   }, [])
 
   const cancel = useCallback(() => {
@@ -102,24 +111,29 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     setMetadata(null)
     setError(null)
     setRawResponse(null)
+    setLastRequest(null)
 
     const startedAt = performance.now()
     const baseTrimmed = params.baseUrl.replace(/\/$/, '')
     const isAnthropic = params.flavor === 'anthropic'
 
+    const visionUrl = params.imageUrl?.trim()
     const url = isAnthropic ? `${baseTrimmed}/messages` : `${baseTrimmed}/chat/completions`
-    const body = isAnthropic
-      ? JSON.stringify({
+    const bodyObject = visionUrl
+      ? buildVisionRequestBody({
           model: params.model,
-          max_tokens: params.maxTokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+          prompt: params.prompt,
+          imageUrl: visionUrl,
           stream: params.stream,
-          messages: [{ role: 'user', content: params.prompt }],
         })
-      : JSON.stringify({
+      : buildPlaygroundRequestBody({
           model: params.model,
+          prompt: params.prompt,
           stream: params.stream,
-          messages: [{ role: 'user', content: params.prompt }],
+          flavor: params.flavor,
+          maxTokens: params.maxTokens,
         })
+    const body = JSON.stringify(bodyObject)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -129,6 +143,13 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     } else {
       headers.Authorization = `Bearer ${params.apiKey}`
     }
+
+    setLastRequest({
+      method: 'POST',
+      url,
+      headers: maskAuthHeadersForDisplay(headers),
+      body: bodyObject,
+    })
 
     let response: Response
     try {
@@ -234,6 +255,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     metadata,
     error,
     rawResponse,
+    lastRequest,
     isRunning: status === 'pending' || status === 'streaming',
     send,
     cancel,
@@ -376,7 +398,11 @@ async function streamOpenAi(
     requestId: lastJson?.id ?? requestId,
     responseCostUsd: extractResponseCostUsd(lastJson),
   })
-  setters.setRawResponse(lastJson)
+  setters.setRawResponse({
+    type: 'openai.stream.summary',
+    text: acc,
+    lastChunk: lastJson,
+  })
   setters.setStatus('done')
 }
 

@@ -25,6 +25,8 @@ from libs.llm.litellm_model_id import build_litellm_model_id
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    import uuid
+
     from litellm.router import Router  # type: ignore[import-not-found]
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -120,6 +122,44 @@ def _build_litellm_params(
         params["tpm"] = tpm_limit
     # 单价由 PricingService.sync_to_litellm_registry() 全局注册，不再从 deployment tags 注入。
     return params
+
+
+# Router deployment 专用，不应透传给 ``anthropic_messages`` 直连调用。
+_ROUTER_ONLY_LITELLM_PARAM_KEYS: frozenset[str] = frozenset({"rpm", "tpm"})
+
+
+def filter_litellm_params_for_direct_anthropic(dep: dict[str, Any]) -> dict[str, Any]:
+    """从 deployment 参数中剔除 Router 调度字段，避免传入 Anthropic Messages API。"""
+    return {k: v for k, v in dep.items() if k not in _ROUTER_ONLY_LITELLM_PARAM_KEYS}
+
+
+async def resolve_deployment_litellm_params(
+    db: AsyncSession,
+    team_id: uuid.UUID,
+    virtual_model: str,
+) -> dict[str, Any] | None:
+    """按虚拟模型名解析出站 LiteLLM 参数（api_key / api_base / litellm model id）。"""
+    from domains.gateway.infrastructure.repositories.credential_repository import (
+        ProviderCredentialRepository,
+    )
+    from domains.gateway.infrastructure.repositories.model_repository import (
+        GatewayModelRepository,
+    )
+
+    record = await GatewayModelRepository(db).get_by_name(team_id, virtual_model)
+    if record is None:
+        return None
+    cred = await ProviderCredentialRepository(db).get(record.credential_id)
+    if cred is None:
+        return None
+    return _build_litellm_params(
+        real_model=record.real_model,
+        provider=record.provider,
+        credential=cred,
+        rpm_limit=record.rpm_limit,
+        tpm_limit=record.tpm_limit,
+        tags=record.tags,
+    )
 
 
 def _models_to_deployments(
@@ -317,8 +357,10 @@ def reset_router() -> None:
 
 __all__ = [
     "ensure_gateway_callbacks",
+    "filter_litellm_params_for_direct_anthropic",
     "get_router",
     "get_router_sync",
     "reload_router",
     "reset_router",
+    "resolve_deployment_litellm_params",
 ]

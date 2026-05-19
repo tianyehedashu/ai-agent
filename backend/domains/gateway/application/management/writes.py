@@ -21,6 +21,7 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
     SystemCredentialAdminRequiredError,
+    SystemVirtualKeyRevokeForbiddenError,
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
@@ -29,8 +30,10 @@ from domains.gateway.domain.types import (
     GATEWAY_MODEL_MANAGED_BY_TAG,
     PERSONAL_MODEL_PROVIDERS,
     PERSONAL_MODEL_TYPES,
+    VirtualKeyBatchRevokeReason,
     is_config_managed_system_credential,
 )
+from domains.gateway.domain.virtual_key_access import assert_virtual_key_accessible_by_actor
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
@@ -370,14 +373,15 @@ class GatewayManagementWriteService:
         is_platform_admin: bool,
     ) -> None:
         record = await self._vkeys.get(key_id)
-        if record is None or record.team_id != team_id:
-            raise VirtualKeyNotFoundError(str(key_id))
-        if (
-            not is_platform_admin
-            and team_role == "member"
-            and record.created_by_user_id != actor_user_id
-        ):
-            raise TeamPermissionDeniedError(str(team_id))
+        assert_virtual_key_accessible_by_actor(
+            record,
+            key_id=str(key_id),
+            team_id=team_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+            require_active=False,
+        )
         await self._vkeys.revoke(key_id)
 
     async def revoke_virtual_keys_batch(
@@ -388,9 +392,9 @@ class GatewayManagementWriteService:
         actor_user_id: uuid.UUID | None,
         team_role: str,
         is_platform_admin: bool,
-    ) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, str]]]:
+    ) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
         revoked: list[uuid.UUID] = []
-        failed: list[tuple[uuid.UUID, str]] = []
+        failed: list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]] = []
         seen: set[uuid.UUID] = set()
         for key_id in key_ids:
             if key_id in seen:
@@ -406,6 +410,8 @@ class GatewayManagementWriteService:
                 )
             except VirtualKeyNotFoundError:
                 failed.append((key_id, "not_found"))
+            except SystemVirtualKeyRevokeForbiddenError:
+                failed.append((key_id, "system_key"))
             except TeamPermissionDeniedError:
                 failed.append((key_id, "permission_denied"))
             else:

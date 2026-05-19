@@ -43,6 +43,7 @@ async def _create_vkey(
     return row.id
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_revoke_virtual_keys_batch_revokes_multiple(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
@@ -71,6 +72,7 @@ async def test_revoke_virtual_keys_batch_revokes_multiple(db_session, test_user)
     assert (await repo.get(key_b)).is_active is False
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_revoke_virtual_keys_batch_reports_not_found(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
@@ -87,3 +89,77 @@ async def test_revoke_virtual_keys_batch_reports_not_found(db_session, test_user
 
     assert revoked == []
     assert failed == [(missing, "not_found")]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_revoke_virtual_keys_batch_reports_permission_denied(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    writes = GatewayManagementWriteService(db_session)
+    key_id = await _create_vkey(
+        db_session, team_id=team.id, user_id=test_user.id, name="owner-key"
+    )
+    other_member = uuid.uuid4()
+
+    revoked, failed = await writes.revoke_virtual_keys_batch(
+        [key_id],
+        team_id=team.id,
+        actor_user_id=other_member,
+        team_role="member",
+        is_platform_admin=False,
+    )
+
+    assert revoked == []
+    assert failed == [(key_id, "permission_denied")]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_revoke_virtual_keys_batch_rejects_system_key(db_session, test_user) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    repo = VirtualKeyRepository(db_session)
+    _, key_id_str, key_hash = generate_vkey()
+    system_key = await repo.get_or_create_system_key(
+        team.id,
+        encrypted_key="enc-sys",
+        key_hash=key_hash,
+        key_id_str=key_id_str,
+    )
+    writes = GatewayManagementWriteService(db_session)
+
+    revoked, failed = await writes.revoke_virtual_keys_batch(
+        [system_key.id],
+        team_id=team.id,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+    )
+
+    assert revoked == []
+    assert failed == [(system_key.id, "system_key")]
+    refreshed = await repo.get(system_key.id)
+    assert refreshed is not None
+    assert refreshed.is_active is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_revoke_virtual_keys_batch_deduplicates_ids(db_session, test_user) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    writes = GatewayManagementWriteService(db_session)
+    key_id = await _create_vkey(
+        db_session, team_id=team.id, user_id=test_user.id, name="dup-key"
+    )
+
+    revoked, failed = await writes.revoke_virtual_keys_batch(
+        [key_id, key_id],
+        team_id=team.id,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+    )
+
+    assert revoked == [key_id]
+    assert failed == []

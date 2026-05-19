@@ -12,6 +12,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,7 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from '@/lib/lucide-icons'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
@@ -63,6 +73,9 @@ export function PersonalCredentialsPanel({
   const [showKey, setShowKey] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
   const [addModelsCred, setAddModelsCred] = useState<ProviderCredential | null>(null)
+  const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
+    null
+  )
   const [formName, setFormName] = useState('')
   const [formApiKey, setFormApiKey] = useState('')
   const [formApiBase, setFormApiBase] = useState('')
@@ -96,6 +109,7 @@ export function PersonalCredentialsPanel({
 
   const invalidate = useCallback((): void => {
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
+    void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
     void queryClient.invalidateQueries({ queryKey: ['provider-configs'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
   }, [queryClient])
@@ -146,6 +160,27 @@ export function PersonalCredentialsPanel({
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '保存失败', description: e.message })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: gatewayApi.deleteMyCredential,
+    onSuccess: (_data, credentialId) => {
+      invalidateCredentialProbeCache(queryClient, 'user', credentialId)
+      invalidate()
+      setCredentialPendingDelete(null)
+      if (editCred?.id === credentialId) {
+        setEditCred(null)
+        resetEditForm()
+      }
+      if (addModelsCred?.id === credentialId) {
+        setAddModelsCred(null)
+      }
+      toast({ title: '凭据已删除', description: '关联的个人注册模型已一并移除' })
+    },
+    onError: (e: Error) => {
+      setCredentialPendingDelete(null)
+      toast({ variant: 'destructive', title: '删除失败', description: e.message })
     },
   })
 
@@ -291,6 +326,20 @@ export function PersonalCredentialsPanel({
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {hasAuthSession ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => {
+                              setCredentialPendingDelete(c)
+                            }}
+                            aria-label="删除凭据"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -310,6 +359,7 @@ export function PersonalCredentialsPanel({
       openEdit,
       onAddCredential,
       setAddModelsCred,
+      deleteMutation.isPending,
     ]
   )
 
@@ -419,6 +469,40 @@ export function PersonalCredentialsPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={credentialPendingDelete !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setCredentialPendingDelete(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除凭据</AlertDialogTitle>
+            <AlertDialogDescription>
+              {credentialPendingDelete
+                ? `确定删除「${credentialPendingDelete.name}」？将同时删除所有引用该凭据的个人注册模型，并更新虚拟 Key / 路由中的模型白名单。`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending || credentialPendingDelete === null}
+              onClick={() => {
+                if (credentialPendingDelete) {
+                  deleteMutation.mutate(credentialPendingDelete.id)
+                }
+              }}
+            >
+              {deleteMutation.isPending ? '删除中…' : '删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {addModelsCred ? (
         <Suspense

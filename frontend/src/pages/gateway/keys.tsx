@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { gatewayApi, type VirtualKey } from '@/api/gateway'
+import { gatewayApi, type EntitlementPlan, type VirtualKey } from '@/api/gateway'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +33,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 import { Copy, Plus, Trash2 } from '@/lib/lucide-icons'
@@ -51,11 +52,12 @@ export default function GatewayKeysPage(): React.JSX.Element {
     queryFn: () => gatewayApi.listKeys(),
   })
 
-  const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system), [keys])
-  const selectableKeys = useMemo(() => visibleKeys.filter((k) => k.is_active), [visibleKeys])
+  const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
+  const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
+  const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(visibleVkeyIds)
   const allSelectableSelected =
-    selectableKeys.length > 0 && selectableKeys.every((k) => selectedIds.has(k.id))
-  const someSelectableSelected = selectableKeys.some((k) => selectedIds.has(k.id))
+    visibleKeys.length > 0 && visibleKeys.every((k) => selectedIds.has(k.id))
+  const someSelectableSelected = visibleKeys.some((k) => selectedIds.has(k.id))
 
   const createMutation = useMutation({
     mutationFn: gatewayApi.createKey,
@@ -70,7 +72,16 @@ export default function GatewayKeysPage(): React.JSX.Element {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => gatewayApi.revokeKey(id),
-    onSuccess: () => {
+    onSuccess: (_result, id) => {
+      queryClient.setQueryData<VirtualKey[]>(['gateway', 'keys'], (prev) =>
+        (prev ?? []).filter((k) => k.id !== id)
+      )
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
       toast({ title: '已撤销' })
     },
@@ -82,8 +93,12 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const batchRevokeMutation = useMutation({
     mutationFn: (ids: string[]) => gatewayApi.revokeKeysBatch(ids),
     onSuccess: (result) => {
+      const revokedSet = new Set(result.revoked)
+      queryClient.setQueryData<VirtualKey[]>(['gateway', 'keys'], (prev) =>
+        (prev ?? []).filter((k) => !revokedSet.has(k.id))
+      )
+      setSelectedIds(new Set(result.failed.map((item) => item.key_id)))
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
-      setSelectedIds(new Set())
       setBatchRevokeOpen(false)
       if (result.failed.length === 0) {
         toast({ title: `已撤销 ${String(result.revoked.length)} 个虚拟 Key` })
@@ -102,7 +117,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
 
   const toggleSelectAll = (checked: boolean): void => {
     if (checked) {
-      setSelectedIds(new Set(selectableKeys.map((k) => k.id)))
+      setSelectedIds(new Set(visibleKeys.map((k) => k.id)))
       return
     }
     setSelectedIds(new Set())
@@ -181,7 +196,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                             ? 'indeterminate'
                             : false
                       }
-                      disabled={selectableKeys.length === 0}
+                      disabled={visibleKeys.length === 0}
                       aria-label="全选可用虚拟 Key"
                       onCheckedChange={(checked) => {
                         toggleSelectAll(checked === true)
@@ -244,7 +259,10 @@ export default function GatewayKeysPage(): React.JSX.Element {
                     {`${String(k.rpm_limit ?? '∞')} / ${String(k.tpm_limit ?? '∞')}`}
                   </td>
                   <td className="px-4 py-2 text-xs">
-                    <KeyEntitlementsCell vkeyId={k.id} />
+                    <KeyEntitlementsCell
+                      activePlans={activeByVkeyId.get(k.id) ?? []}
+                      isLoading={isLoadingByVkeyId.get(k.id) ?? false}
+                    />
                   </td>
                   <td className="px-4 py-2 text-xs">{k.guardrail_enabled ? '已启用' : '关闭'}</td>
                   <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
@@ -307,21 +325,15 @@ export default function GatewayKeysPage(): React.JSX.Element {
   )
 }
 
-function KeyEntitlementsCell({ vkeyId }: Readonly<{ vkeyId: string }>): React.JSX.Element {
-  const { data, isLoading } = useQuery({
-    queryKey: ['gateway', 'keys', vkeyId, 'entitlements'],
-    queryFn: () => gatewayApi.listVkeyEntitlements(vkeyId),
-    enabled: vkeyId.length > 0,
-  })
+function KeyEntitlementsCell({
+  activePlans,
+  isLoading,
+}: Readonly<{
+  activePlans: EntitlementPlan[]
+  isLoading: boolean
+}>): React.JSX.Element {
   if (isLoading) return <span className="text-muted-foreground">加载中…</span>
-  const active = (data ?? []).filter((plan) => {
-    const now = Date.now()
-    return (
-      plan.is_active &&
-      new Date(plan.valid_from).getTime() <= now &&
-      new Date(plan.valid_until).getTime() > now
-    )
-  })
+  const active = activePlans
   if (active.length === 0) return <span className="text-muted-foreground">未配置</span>
   return (
     <div className="flex flex-wrap gap-1">

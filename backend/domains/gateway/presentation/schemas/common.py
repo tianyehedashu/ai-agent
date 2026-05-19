@@ -10,6 +10,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.types import VirtualKeyBatchRevokeReason
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamMemberAdd,
@@ -59,13 +60,19 @@ class VirtualKeyCreateResponse(VirtualKeyResponse):
     plain_key: str = Field(description="完整的 sk-gw-... Key（仅创建时返回一次）")
 
 
+class VirtualKeyRevealResponse(BaseModel):
+    """显式 reveal 接口返回的完整明文（与 ``VirtualKeyCreateResponse.plain_key`` 同语义）。"""
+
+    plain_key: str = Field(description="完整的 sk-gw-... Key 明文")
+
+
 class VirtualKeyBatchRevokeRequest(BaseModel):
     key_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=100)
 
 
 class VirtualKeyBatchRevokeFailureItem(BaseModel):
     key_id: uuid.UUID
-    reason: str
+    reason: VirtualKeyBatchRevokeReason
 
 
 class VirtualKeyBatchRevokeResponse(BaseModel):

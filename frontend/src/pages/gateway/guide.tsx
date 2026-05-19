@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
@@ -31,11 +32,17 @@ import {
   FileText,
   Key,
   List,
+  ChevronDown,
   Sparkles,
   Terminal,
   Zap,
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import {
+  buildCapabilityModules,
+  type CapabilityGuideModule,
+  type FlavorCodeTriple,
+} from '@/pages/gateway/guide-capability-snippets'
 
 const PLACEHOLDER_KEY = 'sk-gw-your-virtual-key'
 const PLACEHOLDER_MODEL = 'your-model-or-route-alias'
@@ -361,6 +368,10 @@ export default function GatewayGuidePage(): React.JSX.Element {
     () => buildSnippets(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
     [gatewayV1Base, activeModel]
   )
+  const capabilityModules = useMemo(
+    () => buildCapabilityModules(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
+    [gatewayV1Base, activeModel]
+  )
   const [copy, copiedKey] = useCopyToClipboardKeyed<string>()
   const handleCopy = useCallback(
     (key: string, text: string) => {
@@ -383,11 +394,13 @@ export default function GatewayGuidePage(): React.JSX.Element {
         <div className="space-y-2">
           <h2 className="text-balance text-2xl font-semibold tracking-tight">调用指南</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            兼容 OpenAI 与 Anthropic SDK。下方在线试调会为你自动准备一把虚拟 Key（
+            兼容 OpenAI 与 Anthropic
+            SDK。在线试调支持对话、视觉理解、图片生成与视频生成（含图生视频），按模型 capability
+            自动过滤；需选择或粘贴虚拟 Key（
             <span className="font-mono" translate="no">
               sk-gw-*
             </span>
-            ，仅本浏览器缓存），可直接调用团队模型、个人模型或
+            ），可调用团队/个人模型或
             <Link to="/gateway/routes" className="text-primary underline-offset-4 hover:underline">
               虚拟路由
             </Link>
@@ -516,6 +529,31 @@ export default function GatewayGuidePage(): React.JSX.Element {
             copied={copiedKey === 'streamHint'}
             onCopy={handleCopy}
           />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Badge variant="secondary">Anthropic 原生通道</Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              thinking
+            </Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              cache_control
+            </Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              tool_result
+            </Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              image
+            </Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              top_k
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono" translate="no">
+              POST /v1/messages
+            </span>{' '}
+            经 LiteLLM anthropic_unified 直连上游，保留 Anthropic 请求/响应字段（含 cache_*
+            token）。
+          </p>
         </CardContent>
       </Card>
 
@@ -605,6 +643,27 @@ export default function GatewayGuidePage(): React.JSX.Element {
         </Card>
       </section>
 
+      <section id="capabilities" aria-labelledby="capabilities-heading" className="space-y-3">
+        <h3 id="capabilities-heading" className="text-sm font-medium text-muted-foreground">
+          按能力查看示例
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          除上方基础对话外，以下为常用高级能力（curl / TypeScript / Python）。切换 API
+          风格与「示例代码」区一致。
+        </p>
+        <div className="space-y-3">
+          {capabilityModules.map((mod) => (
+            <CapabilityGuideCard
+              key={mod.id}
+              module={mod}
+              apiFlavor={apiFlavor}
+              copiedKey={copiedKey}
+              onCopy={handleCopy}
+            />
+          ))}
+        </div>
+      </section>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">典型返回</CardTitle>
@@ -621,8 +680,8 @@ export default function GatewayGuidePage(): React.JSX.Element {
             <span className="font-mono" translate="no">
               event: message_stop
             </span>{' '}
-            结束）。 完整响应可在上方「在线试调」的 <span className="font-medium">Raw JSON</span>{' '}
-            视图查看。
+            结束）。完整请求/响应可在上方「在线试调」的{' '}
+            <span className="font-medium">请求 / 响应</span> 视图查看。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -749,45 +808,88 @@ export default function GatewayGuidePage(): React.JSX.Element {
       </Card>
 
       <Alert>
-        <AlertTitle>实用提示</AlertTitle>
-        <AlertDescription className="space-y-2">
-          <p>生产环境请在服务端保存并转发虚拟 Key，不要把 Key 写进前端 bundle 或浏览器请求。</p>
-          <p>
-            平台{' '}
-            <span className="font-mono" translate="no">
-              sk-*
-            </span>
-            （设置 → API 密钥）与管理 API 不同；OpenAI / Anthropic 兼容调用请使用此处的{' '}
-            <span className="font-mono" translate="no">
-              sk-gw-*
-            </span>
-            。
-          </p>
-          <p>
-            Anthropic SDK 的{' '}
-            <span className="font-mono" translate="no">
-              baseURL
-            </span>{' '}
-            不要带{' '}
-            <span className="font-mono" translate="no">
-              /v1
-            </span>
-            ；curl 直接 POST{' '}
-            <span className="font-mono" translate="no">
-              /v1/messages
-            </span>{' '}
-            即可。
-          </p>
-          <p>
-            调用异常时，优先在
-            <Link to="/gateway/logs" className="text-primary underline-offset-4 hover:underline">
-              调用日志
-            </Link>
-            按时间与 model 筛选排查。
-          </p>
+        <AlertTitle>提示</AlertTitle>
+        <AlertDescription>
+          <ul className="list-disc space-y-0.5 pl-4 text-sm">
+            <li>生产环境 Key 仅服务端持有，勿写进前端。</li>
+            <li>
+              兼容调用用{' '}
+              <span className="font-mono" translate="no">
+                sk-gw-*
+              </span>
+              ，非设置页{' '}
+              <span className="font-mono" translate="no">
+                sk-*
+              </span>
+              。
+            </li>
+            <li>
+              Anthropic{' '}
+              <span className="font-mono" translate="no">
+                baseURL
+              </span>{' '}
+              勿带{' '}
+              <span className="font-mono" translate="no">
+                /v1
+              </span>
+              。
+            </li>
+            <li>
+              异常排查 →{' '}
+              <Link to="/gateway/logs" className="text-primary underline-offset-4 hover:underline">
+                调用日志
+              </Link>
+            </li>
+          </ul>
         </AlertDescription>
       </Alert>
     </div>
+  )
+}
+
+function CapabilityGuideCard({
+  module,
+  apiFlavor,
+  copiedKey,
+  onCopy,
+}: Readonly<{
+  module: CapabilityGuideModule
+  apiFlavor: ApiFlavor
+  copiedKey: string | null
+  onCopy: (key: string, text: string) => void
+}>): React.JSX.Element {
+  const snippets: FlavorCodeTriple = apiFlavor === 'openai' ? module.openai : module.anthropic
+  const keyPrefix = `cap-${module.id}-${apiFlavor}`
+
+  return (
+    <Collapsible defaultOpen={module.id === 'tools'}>
+      <Card>
+        <CardHeader className="pb-2">
+          <CollapsibleTrigger className="flex w-full items-start justify-between gap-2 text-left [&[data-state=open]>svg]:rotate-180">
+            <div className="space-y-1">
+              <CardTitle className="text-base">{module.title}</CardTitle>
+              <CardDescription>{module.description}</CardDescription>
+            </div>
+            <ChevronDown
+              className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform"
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-3 pt-0">
+            <FlavorExamples
+              curl={snippets.curl}
+              ts={snippets.ts}
+              py={snippets.py}
+              keyPrefix={keyPrefix}
+              copiedKey={copiedKey}
+              onCopy={onCopy}
+            />
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   )
 }
 

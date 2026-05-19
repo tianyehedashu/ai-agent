@@ -2,8 +2,6 @@
 
 from decimal import Decimal
 
-import pytest
-
 from domains.gateway.application.pricing.money_projector import MoneyProjector
 from domains.gateway.domain.money import DisplayCurrency
 

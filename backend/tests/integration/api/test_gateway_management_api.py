@@ -1072,3 +1072,164 @@ class TestGatewayManagementApi:
             headers=headers_b,
         )
         assert r9.status_code == 404, r9.text
+
+    @pytest.mark.asyncio
+    async def test_reveal_virtual_key_returns_plain(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=headers,
+            json={"name": f"reveal-{uuid.uuid4().hex[:6]}"},
+        )
+        assert r_create.status_code == 201, r_create.text
+        created = r_create.json()
+        plain_at_create = created["plain_key"]
+        key_id = created["id"]
+
+        r_reveal = await dev_client.get(
+            f"/api/v1/gateway/keys/{key_id}/reveal",
+            headers=headers,
+        )
+        assert r_reveal.status_code == 200, r_reveal.text
+        assert r_reveal.json()["plain_key"] == plain_at_create
+
+        r_missing = await dev_client.get(
+            f"/api/v1/gateway/keys/{uuid.uuid4()}/reveal",
+            headers=headers,
+        )
+        assert r_missing.status_code == 404, r_missing.text
+
+        r_revoke = await dev_client.delete(
+            f"/api/v1/gateway/keys/{key_id}",
+            headers=headers,
+        )
+        assert r_revoke.status_code == 204, r_revoke.text
+
+        r_reveal_revoked = await dev_client.get(
+            f"/api/v1/gateway/keys/{key_id}/reveal",
+            headers=headers,
+        )
+        assert r_reveal_revoked.status_code == 404, r_reveal_revoked.text
+
+    @pytest.mark.asyncio
+    async def test_list_keys_member_sees_only_own(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        owner = test_user
+        member = User(
+            email=f"member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Member User",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Shared Keys Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        owner_headers = {**auth_headers, "X-Team-Id": str(shared.id)}
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        r_owner_key = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=owner_headers,
+            json={"name": f"owner-key-{uuid.uuid4().hex[:6]}"},
+        )
+        assert r_owner_key.status_code == 201, r_owner_key.text
+        owner_key_id = r_owner_key.json()["id"]
+
+        r_member_key = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=member_headers,
+            json={"name": f"member-key-{uuid.uuid4().hex[:6]}"},
+        )
+        assert r_member_key.status_code == 201, r_member_key.text
+        member_key_id = r_member_key.json()["id"]
+
+        r_owner_list = await dev_client.get("/api/v1/gateway/keys", headers=owner_headers)
+        assert r_owner_list.status_code == 200, r_owner_list.text
+        owner_ids = {item["id"] for item in r_owner_list.json()}
+        assert owner_ids == {owner_key_id, member_key_id}
+
+        r_member_list = await dev_client.get("/api/v1/gateway/keys", headers=member_headers)
+        assert r_member_list.status_code == 200, r_member_list.text
+        member_ids = {item["id"] for item in r_member_list.json()}
+        assert member_ids == {member_key_id}
+
+        r_reveal_other = await dev_client.get(
+            f"/api/v1/gateway/keys/{owner_key_id}/reveal",
+            headers=member_headers,
+        )
+        assert r_reveal_other.status_code == 403, r_reveal_other.text
+
+    @pytest.mark.asyncio
+    async def test_batch_revoke_virtual_keys(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+
+        key_ids: list[str] = []
+        for i in range(2):
+            r_create = await dev_client.post(
+                "/api/v1/gateway/keys",
+                headers=headers,
+                json={"name": f"batch-revoke-{i}-{uuid.uuid4().hex[:6]}"},
+            )
+            assert r_create.status_code == 201, r_create.text
+            key_ids.append(r_create.json()["id"])
+
+        r_batch = await dev_client.post(
+            "/api/v1/gateway/keys/revoke-batch",
+            headers=headers,
+            json={"key_ids": key_ids},
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        payload = r_batch.json()
+        assert payload["revoked"] == key_ids
+        assert payload["failed"] == []
+
+        r_list = await dev_client.get("/api/v1/gateway/keys", headers=headers)
+        assert r_list.status_code == 200, r_list.text
+        listed_ids = {item["id"] for item in r_list.json()}
+        for key_id in key_ids:
+            assert key_id not in listed_ids
+
+        missing_id = str(uuid.uuid4())
+        r_partial = await dev_client.post(
+            "/api/v1/gateway/keys/revoke-batch",
+            headers=headers,
+            json={"key_ids": [missing_id]},
+        )
+        assert r_partial.status_code == 200, r_partial.text
+        partial = r_partial.json()
+        assert partial["revoked"] == []
+        assert len(partial["failed"]) == 1
+        assert partial["failed"][0]["key_id"] == missing_id
+        assert partial["failed"][0]["reason"] == "not_found"

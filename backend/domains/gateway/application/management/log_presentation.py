@@ -29,11 +29,13 @@ def _mask_pricing_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any] | 
 
 
 def _orm_row_to_dict(record: object) -> dict[str, Any]:
+    """从 ORM 已加载列构建 dict，避免 async 会话下 getattr 触发隐式 IO。"""
     state = sa_inspect(record, raiseerr=True)
     orm_mapper = state.mapper
     if orm_mapper is None:
         raise TypeError("record is not a mapped ORM instance")
-    return {attr.key: getattr(record, attr.key) for attr in orm_mapper.column_attrs}
+    loaded = state.dict
+    return {attr.key: loaded[attr.key] for attr in orm_mapper.column_attrs if attr.key in loaded}
 
 
 def request_log_to_dict(record: object, team: ManagementTeamContext) -> dict[str, Any]:

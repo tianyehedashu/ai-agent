@@ -15,6 +15,7 @@ ProxyUseCase - 网关调用编排
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
@@ -22,6 +23,14 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.anthropic_native_adapt import (
+    anthropic_response_to_dict,
+    anthropic_stream_chunk_to_bytes,
+    anthropic_usage_total_tokens,
+    estimate_anthropic_request_tokens,
+    extract_usage_from_anthropic_stream_event,
+    validate_anthropic_messages_body,
+)
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
     PERIOD_MONTHLY,
@@ -37,6 +46,13 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     attach_downstream_pricing_metadata,
     downstream_custom_from_metadata,
     upstream_custom_from_metadata,
+)
+from domains.gateway.application.proxy_chat_pipeline import (
+    invoke_litellm_with_direct_fallback,
+    prepare_chat_proxy_request,
+)
+from domains.gateway.application.proxy_stream_settlement import (
+    finalize_deferred_stream_settlement,
 )
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
@@ -63,7 +79,11 @@ from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
-from domains.gateway.infrastructure.router_singleton import get_router
+from domains.gateway.infrastructure.router_singleton import (
+    filter_litellm_params_for_direct_anthropic,
+    get_router,
+    resolve_deployment_litellm_params,
+)
 from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
 from libs.db.database import get_session_context
 from utils.logging import get_logger
@@ -151,6 +171,25 @@ class ProxyContext:
 
 
 class ProxyUseCase:
+    """对外 LLM 代理用例。
+
+    **公开入口**：``chat_completion`` / ``anthropic_messages`` / ``embedding`` 等。
+
+    **Application 内部协作 API**：以下 ``_``-前缀方法是 ``proxy_chat_pipeline`` 与
+    ``proxy_stream_settlement`` 共用的内部协作面，不属于公开接口，禁止跨 application
+    或在 presentation / domain 层直接调用：
+
+    - 校验：``_check_model`` / ``_check_capability`` /
+      ``_assert_request_capability_matches_model``
+    - 限流与预算：``_check_limits`` / ``_check_budget`` / ``_check_entitlement``
+    - 释放：``_release_budget_reservations`` / ``_release_entitlement_reservations``
+    - LiteLLM 调用：``_prepare_litellm_kwargs`` /
+      ``_should_use_internal_direct_litellm`` / ``_is_router_model_miss``
+
+    重构这些方法时务必同步更新 ``proxy_chat_pipeline.prepare_chat_proxy_request`` 与
+    ``invoke_litellm_with_direct_fallback``。
+    """
+
     def __init__(
         self,
         session: AsyncSession,
@@ -179,6 +218,29 @@ class ProxyUseCase:
         )
         if allowed_capabilities and ctx.capability not in allowed_capabilities:
             raise CapabilityNotAllowedError(ctx.capability.value)
+
+    async def _assert_request_capability_matches_model(
+        self,
+        ctx: ProxyContext,
+        model: str,
+    ) -> None:
+        """注册别名 ``GatewayModel.capability`` 须与当前 HTTP 入口 ``ctx.capability`` 一致。"""
+        name = model.strip()
+        if not name:
+            return
+        record = await GatewayModelRepository(self._session).get_by_name(ctx.team_id, name)
+        if record is None:
+            return
+        registered = str(record.capability).strip().lower()
+        requested = ctx.capability.value
+        if registered != requested:
+            raise CapabilityNotAllowedError(
+                requested,
+                message=(
+                    f"模型 {name!r} 的主调用面为 {registered!r}，"
+                    f"当前接口需要 {requested!r}（请使用对应的 OpenAI 兼容端点）"
+                ),
+            )
 
     async def _check_limits(self, ctx: ProxyContext, estimate_tokens: int = 0) -> None:
         """vkey + team 维度限流"""
@@ -485,6 +547,48 @@ class ProxyUseCase:
         ensure_gateway_callbacks()
         return await aembedding(**kwargs)
 
+    async def _merge_direct_deployment_litellm_params(
+        self,
+        kwargs: dict[str, Any],
+        ctx: ProxyContext,
+        virtual_model: str,
+    ) -> dict[str, Any]:
+        """直连 LiteLLM 时注入 deployment 凭据，并将 ``model`` 换为 litellm model id。"""
+        dep = await resolve_deployment_litellm_params(
+            self._session, ctx.team_id, virtual_model
+        )
+        if dep is None:
+            return kwargs
+        merged = dict(kwargs)
+        dep_filtered = filter_litellm_params_for_direct_anthropic(dep)
+        litellm_model = dep_filtered.pop("model", None)
+        if litellm_model:
+            merged["model"] = litellm_model
+        for key, val in dep_filtered.items():
+            if key not in merged or merged.get(key) in (None, ""):
+                merged[key] = val
+        return merged
+
+    async def _direct_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import anthropic_messages as litellm_anthropic_messages
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await litellm_anthropic_messages(**kwargs)
+
+    async def _router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
+        router = await get_router(self._session)
+        aanthropic = getattr(router, "aanthropic_messages", None)
+        if not callable(aanthropic):
+            return await self._direct_anthropic_messages(kwargs)
+        result = aanthropic(**kwargs)
+        if isinstance(result, Awaitable):
+            return await result
+        return result
+
     # ---------------------------------------------------------------------
     # 主入口
     # ---------------------------------------------------------------------
@@ -495,71 +599,104 @@ class ProxyUseCase:
         body: dict[str, Any],
     ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
         """处理 /v1/chat/completions"""
-        ctx.capability = GatewayCapability.CHAT
-        model = str(body.get("model", "")).strip()
-        if not model:
-            raise ValueError("model is required")
-        ctx.budget_model = model
-
-        self._check_model(model, ctx)
-        self._check_capability(ctx)
-        # 估算 token：粗略按 messages 总长度 / 4
         estimate_tokens = sum(
             len(str(m.get("content", ""))) for m in (body.get("messages") or [])
         ) // 4 + int(body.get("max_tokens") or 0)
-        await self._check_limits(ctx, estimate_tokens=estimate_tokens)
-        reservations = await self._check_budget(ctx)
-        try:
-            await self._check_entitlement(ctx, model, estimate_tokens=estimate_tokens)
-        except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
-            raise
+        prepared = await prepare_chat_proxy_request(
+            self,
+            ctx,
+            body,
+            estimate_tokens=estimate_tokens,
+            require_model=True,
+        )
+        use_direct = await self._should_use_internal_direct_litellm(ctx, prepared.model)
 
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        metadata = kwargs.get("metadata")
-        downstream_custom = downstream_custom_from_metadata(metadata)
-        upstream_custom = upstream_custom_from_metadata(metadata)
+        async def _direct() -> Any:
+            return await self._direct_chat_completion(prepared.kwargs)
 
-        stream = bool(body.get("stream"))
-        if stream and isinstance(metadata, dict):
-            metadata["gateway_defer_cost_settlement"] = True
-        try:
-            if await self._should_use_internal_direct_litellm(ctx, model):
-                response = await self._direct_chat_completion(kwargs)
-            else:
-                router = await get_router(self._session)
-                response = await router.acompletion(**kwargs)
-        except Exception as exc:
-            if self._is_router_model_miss(exc) and await self._should_use_internal_direct_litellm(
-                ctx, model
-            ):
-                try:
-                    response = await self._direct_chat_completion(kwargs)
-                except Exception:
-                    await self._release_budget_reservations(reservations)
-                    await self._release_entitlement_reservations(ctx)
-                    raise
-            else:
-                await self._release_budget_reservations(reservations)
-                await self._release_entitlement_reservations(ctx)
-                raise
-        if stream:
+        async def _router() -> Any:
+            router = await get_router(self._session)
+            return await router.acompletion(**prepared.kwargs)
+
+        response = await invoke_litellm_with_direct_fallback(
+            self,
+            ctx,
+            prepared.model,
+            prepared.reservations,
+            use_direct=use_direct,
+            direct_call=_direct,
+            router_call=_router,
+        )
+        if prepared.stream:
             return _adapt_stream(
                 response,
                 ctx,
                 self._budget,
                 self._entitlement_guard,
-                metadata=metadata if isinstance(metadata, dict) else {},
-                downstream_custom=downstream_custom,
+                metadata=prepared.metadata,
+                downstream_custom=prepared.downstream_custom,
             )
         return _adapt_response(
             response,
             ctx,
             self._budget,
             self._entitlement_guard,
-            metadata=metadata if isinstance(metadata, dict) else {},
-            upstream_custom=upstream_custom,
-            downstream_custom=downstream_custom,
+            metadata=prepared.metadata,
+            upstream_custom=prepared.upstream_custom,
+            downstream_custom=prepared.downstream_custom,
+        )
+
+    async def anthropic_messages(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, Any] | AsyncIterator[bytes]:
+        """处理 ``POST /v1/messages``（LiteLLM Anthropic 原生通道）。"""
+        prepared = await prepare_chat_proxy_request(
+            self,
+            ctx,
+            body,
+            estimate_tokens=estimate_anthropic_request_tokens(body),
+            require_model=False,
+            body_validator=validate_anthropic_messages_body,
+        )
+        use_direct = await self._should_use_internal_direct_litellm(ctx, prepared.model)
+
+        async def _direct() -> Any:
+            direct_kw = await self._merge_direct_deployment_litellm_params(
+                prepared.kwargs, ctx, prepared.model
+            )
+            return await self._direct_anthropic_messages(direct_kw)
+
+        async def _router() -> Any:
+            return await self._router_anthropic_messages(prepared.kwargs)
+
+        response = await invoke_litellm_with_direct_fallback(
+            self,
+            ctx,
+            prepared.model,
+            prepared.reservations,
+            use_direct=use_direct,
+            direct_call=_direct,
+            router_call=_router,
+        )
+        if prepared.stream:
+            return _adapt_anthropic_stream(
+                response,
+                ctx,
+                self._budget,
+                self._entitlement_guard,
+                metadata=prepared.metadata,
+                downstream_custom=prepared.downstream_custom,
+            )
+        return _adapt_anthropic_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=prepared.metadata,
+            upstream_custom=prepared.upstream_custom,
+            downstream_custom=prepared.downstream_custom,
         )
 
     async def embedding(
@@ -611,7 +748,11 @@ class ProxyUseCase:
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.IMAGE
         ctx.budget_model = self._optional_body_model(body)
+        if ctx.budget_model:
+            self._check_model(ctx.budget_model, ctx)
         self._check_capability(ctx)
+        if ctx.budget_model:
+            await self._assert_request_capability_matches_model(ctx, ctx.budget_model)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
         try:
@@ -796,6 +937,7 @@ class ProxyUseCase:
         ctx.budget_model = model
         self._check_model(model, ctx)
         self._check_capability(ctx)
+        await self._assert_request_capability_matches_model(ctx, model)
         await self._check_limits(ctx)
         reservations = await self._check_budget(ctx)
         try:
@@ -904,6 +1046,103 @@ def _enrich_openai_compat_response_cost(
     return {**data, "response_cost": float(cost)}
 
 
+def _enrich_anthropic_response_cost(
+    data: dict[str, Any],
+    *,
+    source_obj: Any,
+    metadata: dict[str, Any],
+    downstream_custom: dict[str, float] | None,
+    model: str | None,
+) -> dict[str, Any]:
+    """向 Anthropic message JSON 注入下游 ``response_cost``（USD，与 OpenAI 兼容面一致）。"""
+    from domains.gateway.application.pricing.pricing_display_cost import (
+        read_hidden_response_cost_usd,
+        resolve_downstream_display_cost_usd,
+    )
+
+    if data.get("response_cost") is not None:
+        return data
+    hidden = read_hidden_response_cost_usd(source_obj)
+    if hidden is not None and downstream_custom is None:
+        return {**data, "response_cost": float(hidden)}
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return data
+    if anthropic_usage_total_tokens(usage) <= 0 and hidden is None:
+        return data
+    cost = resolve_downstream_display_cost_usd(
+        source_obj,
+        metadata=metadata,
+        model=model,
+    )
+    if cost <= 0:
+        return data
+    return {**data, "response_cost": float(cost)}
+
+
+def _adapt_anthropic_response(
+    response: Any,
+    ctx: ProxyContext,
+    budget: BudgetService,
+    entitlement_guard: EntitlementGuard | None = None,
+    *,
+    metadata: dict[str, Any],
+    upstream_custom: dict[str, float] | None,
+    downstream_custom: dict[str, float] | None,
+) -> dict[str, Any]:
+    data = anthropic_response_to_dict(response)
+    tokens = anthropic_usage_total_tokens(data.get("usage"))
+    upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
+    from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
+
+    cost = proxy_budget_cost_usd(metadata, upstream)
+    _schedule_settle_usage(
+        ctx,
+        budget,
+        tokens=tokens,
+        cost=cost,
+        requests=1,
+        entitlement_guard=entitlement_guard,
+        request_id=ctx.request_id,
+    )
+    return _enrich_anthropic_response_cost(
+        data,
+        source_obj=response,
+        metadata=metadata,
+        downstream_custom=downstream_custom,
+        model=ctx.budget_model,
+    )
+
+
+async def _adapt_anthropic_stream(
+    stream: Any,
+    ctx: ProxyContext,
+    budget: BudgetService,
+    entitlement_guard: EntitlementGuard | None = None,
+    *,
+    metadata: dict[str, Any],
+    downstream_custom: dict[str, float] | None,
+) -> AsyncIterator[bytes]:
+    """Anthropic 原生 SSE 流；流末按 usage 兜底结算成本（与 callback 幂等）。"""
+    _ = downstream_custom
+    last_usage: dict[str, Any] | None = None
+    async for chunk in stream:
+        if isinstance(chunk, dict):
+            usage_patch = extract_usage_from_anthropic_stream_event(chunk)
+            if usage_patch is not None:
+                last_usage = usage_patch
+        out = anthropic_stream_chunk_to_bytes(chunk)
+        if out is not None:
+            yield out
+    await finalize_deferred_stream_settlement(
+        ctx,
+        budget,
+        metadata,
+        last_usage,
+        entitlement_guard,
+    )
+
+
 def _adapt_response(
     response: Any,
     ctx: ProxyContext,
@@ -949,8 +1188,7 @@ async def _adapt_stream(
     metadata: dict[str, Any],
     downstream_custom: dict[str, float] | None,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """转为 SSE 友好的 dict 流；成本由 callback 落库后结算。"""
-    total_tokens = 0
+    """转为 SSE 友好的 dict 流；流末按 usage 兜底结算成本（与 callback 幂等）。"""
     last_usage: dict[str, Any] | None = None
     async for chunk in stream:
         data = _to_dict(chunk)
@@ -966,17 +1204,12 @@ async def _adapt_stream(
                     model=ctx.budget_model,
                 )
         yield data
-    if last_usage:
-        total_tokens = int(last_usage.get("total_tokens", 0) or 0)
-
-    await _settle_usage(
+    await finalize_deferred_stream_settlement(
         ctx,
         budget,
-        tokens=total_tokens,
-        cost=Decimal("0"),
-        requests=1,
-        entitlement_guard=entitlement_guard,
-        request_id=ctx.request_id,
+        metadata,
+        last_usage,
+        entitlement_guard,
     )
 
 

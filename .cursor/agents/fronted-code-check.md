@@ -79,6 +79,85 @@ function useUserCard(userId: string) {
 | 代码检查 | ESLint + TypeScript + Prettier |
 | 测试 | Vitest + Testing Library |
 
+## 前端目录结构规范
+
+### 标准目录职责
+
+```text
+frontend/src/
+├── api/           # API 调用层：HTTP 封装、请求/响应类型、后端接口适配
+├── components/    # 跨业务通用组件：ui/、layout/、shared/、chat/ 等
+├── constants/     # 跨模块常量；仅放稳定、无副作用的配置值
+├── features/      # 按业务功能分包：Gateway、模型、凭据、用量等可复用业务块
+├── hooks/         # 跨业务可复用 Hooks；单功能私有 Hooks 留在 feature 内
+├── lib/           # 通用工具函数；不得承载业务规则
+├── pages/         # 路由页面：组合 features、处理页面级布局和路由参数
+├── stores/        # Zustand 全局状态；避免组件直接操作 localStorage
+├── styles/        # 全局样式或主题入口（如存在）
+└── types/         # 全局 TypeScript 类型；局部类型优先就近定义
+```
+
+| 目录 | 放置规则 | 禁止事项 |
+|------|---------|---------|
+| `api/` | 统一封装后端接口、DTO 转换、错误归一化 | 在组件里散落 `fetch`/`axios` 调用或重复定义接口类型 |
+| `components/ui/` | shadcn/ui 基础组件与轻量扩展 | 写入业务逻辑、调用 API、读取 store |
+| `components/layout/` | 应用壳、导航、侧栏、顶部栏等布局组件 | 混入具体业务表单和请求逻辑 |
+| `components/shared/` | 多业务复用的无领域组件 | 放只被单个 feature 使用的组件 |
+| `features/<feature>/` | 功能内组件、Hooks、工具、测试、局部类型 | 被 `pages/` 或其他 feature 复制实现同一业务规则 |
+| `pages/` | 路由入口和页面编排，优先组合 `features/` | 堆积复杂业务逻辑、长表单状态、API 细节 |
+| `stores/` | 认证、偏好、跨页面选择等全局状态 | 存放服务端数据缓存；服务端数据用 React Query |
+| `types/` | 多模块共享类型、后端公共响应类型 | 为单个组件的 props 创建全局类型 |
+
+### Feature 分包约定
+
+**默认就近，复用后上提；先 feature 内聚，再抽公共层。**
+
+```text
+features/gateway-playground/
+├── modes/                     # 子模式组件；仅服务当前 feature
+├── playground-card.tsx         # feature 主组件
+├── playground-request.ts       # 请求组装/领域逻辑
+├── playground-request.test.ts  # 与逻辑文件同目录测试
+├── use-playground-call.ts      # feature 私有 Hook
+└── types.ts                    # feature 内共享类型
+```
+
+1. **业务内聚**：同一功能的 UI、Hook、工具、测试优先放在同一个 `features/<feature>/` 下。
+2. **页面只编排**：`pages/gateway/*` 这类路由页面负责权限、URL 参数、布局和 feature 组合；复杂逻辑下沉到 `features/gateway-*`。
+3. **测试就近**：新增逻辑文件、Hook 或复杂组件时，测试文件与被测文件同目录，命名为 `*.test.ts` 或 `*.test.tsx`。
+4. **类型就近**：只在当前 feature 内复用的类型放 `features/<feature>/types.ts`；跨 feature 复用后再提升到 `types/`。
+5. **避免反向依赖**：`features/` 可以引用 `api/`、`components/`、`hooks/`、`lib/`、`stores/`、`types/`；禁止通用层反向引用具体 feature。
+
+### 放置决策
+
+| 需求 | 优先放置位置 |
+|------|-------------|
+| 新增后端接口调用 | `api/<domain>.ts`，必要时补 `api/<domain>.test.ts` |
+| 新增路由页面 | `pages/<domain>/<page>.tsx`，页面组合 feature 组件 |
+| 新增业务组件 | `features/<feature>/<component>.tsx` |
+| 新增跨业务 UI 组件 | `components/shared/`；基础控件放 `components/ui/` |
+| 新增业务 Hook | 单 feature 使用放 `features/<feature>/use-*.ts`；跨业务复用放 `hooks/` |
+| 新增状态 | 服务端数据用 React Query；跨页面客户端状态放 `stores/`；局部状态留组件内 |
+| 新增工具函数 | 纯通用工具放 `lib/`；业务规则放对应 `features/<feature>/` |
+
+### 命名与导入
+
+```typescript
+// ✅ 使用路径别名，避免深层相对路径
+import { Button } from '@/components/ui/button'
+import { gatewayApi } from '@/api/gateway'
+import type { GatewayModel } from '@/types'
+
+// ✅ feature 内部可以相对导入同目录模块
+import { buildPlaygroundRequest } from './playground-request'
+```
+
+1. 文件名使用 kebab-case：`playground-output-panel.tsx`、`use-playground-call.ts`。
+2. React 组件导出使用 PascalCase，Hook 使用 `useXxx`，工具函数使用动词短语。
+3. 跨目录导入优先使用 `@/` 别名；同目录或同 feature 的近邻文件可使用相对路径。
+4. 禁止从 `pages/` 导入业务逻辑；可复用逻辑必须先下沉到 `features/`、`hooks/`、`lib/` 或 `api/`。
+5. 禁止引入新的重复目录或拼写错误目录；例如前端检查 Agent 文件名如需新增，应统一为 `frontend-*`，避免 `fronted-*` 继续扩散。
+
 ## 执行流程
 
 ### 1. 运行代码检查

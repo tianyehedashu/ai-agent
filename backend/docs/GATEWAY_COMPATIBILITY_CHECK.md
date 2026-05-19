@@ -207,9 +207,30 @@ async for chunk in response:
 
 ---
 
-## 五、测试建议
+## 五、Anthropic 原生字段覆盖（`POST /v1/messages`）
 
-### 5.1 功能测试
+| 字段 / 能力 | Gateway 支持 | 说明 |
+|-------------|--------------|------|
+| `model` / `max_tokens` / `messages` | ✅ | 必填 |
+| `system` | ✅ | 字符串或 text block 数组 |
+| `temperature` / `top_p` / `top_k` | ✅ | 透传 |
+| `stop_sequences` | ✅ | 透传 |
+| `stream` | ✅ | Anthropic SSE 事件 |
+| `tools` / `tool_choice` | ✅ | 透传 |
+| `thinking` | ✅ | Extended Thinking |
+| `cache_control` | ✅ | Prompt Caching（ephemeral） |
+| 多模态 `image` / `document` | ✅ | 由 LiteLLM + 模型能力决定 |
+| `tool_result` 多轮 | ✅ | 原生 messages 结构 |
+| `metadata` | ✅ | 合并进网关日志；勿用 `gateway_*` 前缀 |
+| 请求头 `anthropic-beta` | ⚠️ | 客户端可传；网关不自动注入 |
+
+**OpenAI 兼容**（`POST /v1/chat/completions`）仍支持 `extra_headers`、`stream_options`、`response_format` 等 LiteLLM 透传字段。
+
+---
+
+## 六、测试建议
+
+### 6.1 功能测试
 
 1. **非流式调用测试**
    ```python

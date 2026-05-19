@@ -339,6 +339,16 @@ def test_anthropic_messages(
     _print_http_response(r)
     if r.status_code != 200:
         r.raise_for_status()
+    data = r.json()
+    usage = data.get("usage") if isinstance(data, dict) else None
+    if isinstance(usage, dict):
+        cache_read = usage.get("cache_read_input_tokens")
+        cache_create = usage.get("cache_creation_input_tokens")
+        if cache_read is not None or cache_create is not None:
+            print(
+                f"  cache_read_input_tokens={cache_read!r}, "
+                f"cache_creation_input_tokens={cache_create!r}"
+            )
 
 
 def test_anthropic_messages_x_api_key(

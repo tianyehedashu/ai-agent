@@ -20,6 +20,7 @@ from domains.gateway.presentation.schemas.common import (
     VirtualKeyCreate,
     VirtualKeyCreateResponse,
     VirtualKeyResponse,
+    VirtualKeyRevealResponse,
 )
 from libs.crypto import encrypt_value
 from libs.exceptions import HttpMappableDomainError
@@ -27,6 +28,7 @@ from libs.exceptions import HttpMappableDomainError
 from ._common import (
     MgmtReads,
     MgmtWrites,
+    decrypt_vkey_for_reveal,
     encryption_key,
     vkey_to_response,
 )
@@ -39,7 +41,12 @@ async def list_keys(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[VirtualKeyResponse]:
-    keys = await reads.list_virtual_keys_for_team(team.team_id)
+    keys = await reads.list_virtual_keys_for_team(
+        team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
+        is_platform_admin=team.is_platform_admin,
+    )
     return [vkey_to_response(k) for k in keys]
 
 
@@ -72,6 +79,27 @@ async def create_key(
     )
     base = vkey_to_response(record).model_dump()
     return VirtualKeyCreateResponse(**base, plain_key=plain)
+
+
+@router.get("/keys/{key_id}/reveal", response_model=VirtualKeyRevealResponse)
+async def reveal_key(
+    key_id: uuid.UUID,
+    team: RequiredTeamMember,
+    reads: MgmtReads,
+) -> VirtualKeyRevealResponse:
+    """解密并返回当前用户可见 vkey 的完整明文（与 revoke 同权限模型）。"""
+    try:
+        record = await reads.get_virtual_key_for_team_member(
+            key_id,
+            team_id=team.team_id,
+            actor_user_id=team.user_id,
+            team_role=team.team_role,
+            is_platform_admin=team.is_platform_admin,
+        )
+        plain = decrypt_vkey_for_reveal(record, encryption_key=encryption_key())
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return VirtualKeyRevealResponse(plain_key=plain)
 
 
 @router.post("/keys/revoke-batch", response_model=VirtualKeyBatchRevokeResponse)

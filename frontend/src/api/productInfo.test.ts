@@ -12,12 +12,14 @@ function createMockResponse<T>(data: T): {
   status: number
   headers: Headers
   json: () => Promise<T>
+  text: () => Promise<string>
 } {
   return {
     ok: true,
     status: 200,
     headers: new Headers({ 'Content-Type': 'application/json' }),
     json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data)),
   }
 }
 

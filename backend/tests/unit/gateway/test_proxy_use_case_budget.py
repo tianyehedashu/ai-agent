@@ -143,7 +143,17 @@ async def test_chat_failure_releases_all_request_reservations(
         _ = user_kwargs
         return {}
 
+    class _FakeGatewayModelRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def get_by_name(self, _team_id: object, _name: str) -> None:
+            return None
+
     monkeypatch.setattr(proxy_use_case, "BudgetRepository", FakeBudgetRepository)
+    monkeypatch.setattr(
+        proxy_use_case, "GatewayModelRepository", _FakeGatewayModelRepository
+    )
     monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", use_direct)
     monkeypatch.setattr(use_case, "_direct_chat_completion", fail_direct)
     monkeypatch.setattr(use_case, "_build_metadata", build_metadata)

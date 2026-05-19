@@ -9,18 +9,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.anthropic_openai_bridge import (
-    anthropic_messages_request_to_openai_chat,
-    openai_chat_completion_response_to_anthropic_message,
-    openai_chat_stream_chunks_to_anthropic_sse,
-)
 from domains.gateway.application.proxy_use_case import ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
@@ -85,32 +79,23 @@ async def create_message(
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    """Anthropic ``Messages``：经 OpenAI 形 body 复用 ``ProxyUseCase.chat_completion``。"""
-    try:
-        openai_body = anthropic_messages_request_to_openai_chat(body)
-    except ValueError as exc:
-        raise _wrap_anthropic_business_errors(exc) from exc
-
+    """Anthropic ``Messages``：LiteLLM ``anthropic_unified`` 原生通道。"""
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.CHAT)
 
     try:
-        result = await use_case.chat_completion(ctx, openai_body)
+        result = await use_case.anthropic_messages(ctx, body)
+    except ValueError as exc:
+        raise _wrap_anthropic_business_errors(exc) from exc
     except Exception as exc:
         logger.warning("anthropic messages failed: %s", exc)
         raise _wrap_anthropic_business_errors(exc) from exc
 
-    if openai_body.get("stream"):
-        stream = cast("AsyncIterator[dict[str, Any]]", result)
-        message_id = f"msg_{uuid.uuid4().hex}"
-        model = str(body.get("model", "")).strip()
+    if body.get("stream"):
+        stream = cast("AsyncIterator[bytes]", result)
 
         async def _sse() -> AsyncIterator[bytes]:
-            async for part in openai_chat_stream_chunks_to_anthropic_sse(
-                stream,
-                model=model,
-                message_id=message_id,
-            ):
+            async for part in stream:
                 yield part
 
         return StreamingResponse(
@@ -124,12 +109,8 @@ async def create_message(
             error_type="api_error",
             message="Unexpected response shape",
         )
-    try:
-        anthropic_body = openai_chat_completion_response_to_anthropic_message(result)
-    except ValueError as exc:
-        raise _wrap_anthropic_business_errors(exc) from exc
     return Response(
-        content=orjson.dumps(anthropic_body),
+        content=orjson.dumps(result),
         media_type="application/json",
     )
 

@@ -52,3 +52,20 @@ def test_admin_keeps_cost() -> None:
     )
     data = request_log_to_dict(record, team)
     assert data["cost_usd"] == Decimal("0.01")
+
+
+def test_orm_row_to_dict_skips_unloaded_columns() -> None:
+    """列表 defer 的大字段未加载时不应出现在 dict 中（且不得触发 lazy load）。"""
+    record = _fake_log()
+    data = request_log_to_dict(
+        record,
+        ManagementTeamContext(
+            team_id=uuid.uuid4(),
+            team_kind="shared",
+            team_role="admin",
+            user_id=uuid.uuid4(),
+            is_platform_admin=True,
+        ),
+    )
+    assert "id" in data
+    assert "prompt_redacted" not in data

@@ -2,13 +2,13 @@
 
 from decimal import Decimal
 
-from domains.gateway.infrastructure.callbacks.custom_logger import (
-    _build_pricing_snapshot,
-    _extract_gateway_metadata,
-)
 from domains.gateway.application.pricing.pricing_settlement import (
     merge_pricing_snapshot,
     settle_request_log_amounts,
+)
+from domains.gateway.infrastructure.callbacks.custom_logger import (
+    _build_pricing_snapshot,
+    _extract_gateway_metadata,
 )
 
 
