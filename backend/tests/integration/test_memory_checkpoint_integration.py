@@ -28,9 +28,9 @@ async def llm_gateway():
 @pytest.fixture
 async def vector_store(tmp_path):
     """创建向量存储实例。集成测试使用独立目录，避免并行或跨测试污染。"""
-    from libs.db.vector import ChromaStore
+    from libs.db.vector import EphemeralChromaStore
 
-    return ChromaStore(persist_directory=str(tmp_path / "chroma"))
+    return EphemeralChromaStore()
 
 
 @pytest.fixture

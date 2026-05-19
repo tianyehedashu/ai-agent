@@ -11,6 +11,7 @@ Embedding 使用统一的 EmbeddingService，支持：
 """
 
 from abc import ABC, abstractmethod
+import os
 from typing import Any
 
 import chromadb
@@ -241,15 +242,38 @@ class ChromaStore(VectorStore):
     """Chroma 向量存储 (开发环境)"""
 
     def __init__(self, persist_directory: str | None = None) -> None:
-        self.persist_directory = persist_directory or "./chroma_data"
+        self.persist_directory = persist_directory or os.environ.get(
+            "CHROMA_PATH", "./chroma_data"
+        )
         self._client = None
         self._collections: dict[str, Any] = {}
         self._embedding_service: EmbeddingService | None = None
+
+    def close(self) -> None:
+        """释放客户端引用，便于测试 teardown 与 Windows 文件锁回收。"""
+        self._collections.clear()
+        self._client = None
+        self._embedding_service = None
 
     def _get_client(self):
         """获取 Chroma 客户端"""
         if self._client is None:
             self._client = chromadb.PersistentClient(path=self.persist_directory)
+        return self._client
+
+
+class EphemeralChromaStore(ChromaStore):
+    """Chroma 内存客户端（pytest 使用，避免 Windows 持久化目录文件锁）。"""
+
+    def __init__(self) -> None:
+        self.persist_directory = ""
+        self._client = None
+        self._collections: dict[str, Any] = {}
+        self._embedding_service: EmbeddingService | None = None
+
+    def _get_client(self):
+        if self._client is None:
+            self._client = chromadb.EphemeralClient()
         return self._client
 
     def _get_embedding_service(self) -> EmbeddingService:
@@ -389,11 +413,28 @@ class ChromaStore(VectorStore):
             pass
 
 
+_chroma_singleton: ChromaStore | None = None
+
+
 def get_vector_store() -> VectorStore:
-    """获取向量存储实例"""
+    """获取向量存储实例（debug 下为进程内单例 Chroma，避免多实例争用同一路径）。"""
+    global _chroma_singleton
     if settings.debug:
-        return ChromaStore()
+        if _chroma_singleton is None:
+            if os.environ.get("PYTEST_CHROMA_EPHEMERAL") == "1":
+                _chroma_singleton = EphemeralChromaStore()
+            else:
+                _chroma_singleton = ChromaStore()
+        return _chroma_singleton
     return QdrantStore()
+
+
+def reset_vector_store() -> None:
+    """关闭并清空 debug 模式下的 Chroma 单例（测试 teardown 使用）。"""
+    global _chroma_singleton
+    if _chroma_singleton is not None:
+        _chroma_singleton.close()
+        _chroma_singleton = None
 
 
 # 别名，用于兼容性

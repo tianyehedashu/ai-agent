@@ -120,6 +120,8 @@ out/
 # ============================================
 .pytest_cache/
 .pytest-basetemp/
+.pytest-basetemp-*/
+.pytest-basetemp.stale.*/
 .coverage
 .coverage.*
 htmlcov/

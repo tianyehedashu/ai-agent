@@ -1,4 +1,4 @@
-"""将 ProviderCredential ORM 组装为带 api_key_masked 的管理 API 响应。"""
+"""将 CredentialReadModel 组装为带 api_key_masked 的管理 API 响应。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from binascii import Error as BinasciiError
 
 from cryptography.fernet import InvalidToken
 
+from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
 from domains.gateway.domain.types import is_config_managed_system_credential
-from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.presentation.schemas.common import CredentialResponse
 from libs.crypto import decrypt_value
 from utils.logging import get_logger
@@ -27,7 +27,7 @@ def mask_plain_secret_for_display(plain: str) -> str:
 
 
 def decrypt_credential_api_key_for_reveal(
-    cred: ProviderCredential,
+    cred: CredentialReadModel,
     *,
     encryption_key: str,
 ) -> str:
@@ -44,7 +44,7 @@ def decrypt_credential_api_key_for_reveal(
 
 
 def build_credential_response(
-    cred: ProviderCredential,
+    cred: CredentialReadModel,
     *,
     encryption_key: str,
 ) -> CredentialResponse:

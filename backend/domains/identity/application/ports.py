@@ -6,7 +6,12 @@ identity domain to other bounded contexts.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    import uuid
+
+    from domains.identity.domain.api_key_types import ApiKeyEntity
 
 
 class IdentityApplicationPort(Protocol):
@@ -17,4 +22,30 @@ class IdentityApplicationPort(Protocol):
         ...
 
 
-__all__ = ["IdentityApplicationPort"]
+class ApiKeyVerificationPort(Protocol):
+    """平台 sk-* 验签（Gateway 代理入站）。"""
+
+    async def verify_api_key(self, plain_key: str) -> ApiKeyEntity | None:
+        """验证 API Key，成功返回实体（含 gateway_grants），失败返回 None。"""
+        ...
+
+
+class ApiKeyGatewayGrantQueryPort(Protocol):
+    """Gateway 管理面对 api_key_gateway_grants 的归属校验。"""
+
+    async def assert_gateway_grant_in_team(
+        self,
+        grant_id: uuid.UUID,
+        *,
+        team_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        """grant 存在且属于团队（或平台管理员）。"""
+        ...
+
+
+__all__ = [
+    "ApiKeyGatewayGrantQueryPort",
+    "ApiKeyVerificationPort",
+    "IdentityApplicationPort",
+]

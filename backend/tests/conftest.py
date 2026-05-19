@@ -49,7 +49,13 @@ _CLIENT_TEARDOWN_SLEEP = float(os.environ.get("PYTEST_CLIENT_TEARDOWN_SLEEP", "0
 
 # 使用 pytest 的配置钩子进一步抑制警告
 def pytest_configure(config):
-    """配置 pytest，抑制第三方库警告"""
+    """配置 pytest，抑制第三方库警告；每会话使用独立 basetemp 目录。"""
+    import uuid
+
+    backend_root = Path(__file__).resolve().parent.parent
+    unique_basetemp = backend_root / f".pytest-basetemp-{uuid.uuid4().hex[:8]}"
+    config.option.basetemp = str(unique_basetemp)
+
     config.addinivalue_line(
         "filterwarnings",
         "ignore::RuntimeWarning:litellm",
@@ -537,6 +543,18 @@ async def permission_context(test_user: User):
         yield ctx
     finally:
         clear_permission_context()
+
+
+@pytest.fixture(autouse=True)
+def isolate_chroma_vector_store(monkeypatch):
+    """pytest 使用 Chroma 内存客户端，避免 Windows 持久化目录 WinError 32。"""
+    # pylint: disable=import-outside-toplevel
+    from libs.db.vector import reset_vector_store
+
+    reset_vector_store()
+    monkeypatch.setenv("PYTEST_CHROMA_EPHEMERAL", "1")
+    yield
+    reset_vector_store()
 
 
 @pytest.fixture(scope="session", autouse=True)

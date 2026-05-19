@@ -24,7 +24,6 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.gateway_access_use_case import GatewayAccessUseCase
 from domains.gateway.domain.errors import VirtualKeyInvalidError
 from domains.gateway.domain.types import (
     ApiKeyGatewayGrantPrincipal,
@@ -105,7 +104,11 @@ async def _gateway_principal_from_vkey_plain(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access = GatewayAccessUseCase(db)
+    from domains.gateway.application.gateway_access_factory import (
+        build_gateway_access_use_case,
+    )
+
+    access = build_gateway_access_use_case(db)
     try:
         record = await access.validate_bearer_virtual_key(plain)
     except VirtualKeyInvalidError as exc:
@@ -220,7 +223,11 @@ async def bearer_vkey_or_apikey_auth(
             platform_api_key_id=None,
         )
 
-    access = GatewayAccessUseCase(db)
+    from domains.gateway.application.gateway_access_factory import (
+        build_gateway_access_use_case,
+    )
+
+    access = build_gateway_access_use_case(db)
     try:
         auth = await access.authenticate_platform_sk_for_gateway_proxy(plain, x_team_id)
     except HttpMappableDomainError as exc:

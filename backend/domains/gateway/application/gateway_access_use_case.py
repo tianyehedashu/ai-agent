@@ -36,7 +36,7 @@ from domains.gateway.domain.virtual_key_service import (
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
-from domains.identity.application.api_key_use_case import ApiKeyUseCase
+from domains.identity.application.ports import ApiKeyVerificationPort
 from domains.identity.domain.api_key_types import (
     ApiKeyEntity,
     ApiKeyGatewayGrantEntity,
@@ -60,6 +60,7 @@ class GatewayAccessUseCase:
         *,
         membership: MembershipPort | None = None,
         team_resolution: TeamResolutionPort | None = None,
+        api_key_verification: ApiKeyVerificationPort,
     ) -> None:
         from domains.tenancy.infrastructure.membership_adapter import (
             TenancyMembershipAdapter,
@@ -72,6 +73,7 @@ class GatewayAccessUseCase:
         self._teams: TeamResolutionPort = team_resolution or TeamService(
             session, membership=membership_impl
         )
+        self._api_keys = api_key_verification
 
     async def validate_bearer_virtual_key(self, plain: str) -> GatewayVirtualKey:
         record = await self._vkeys.get_by_hash(hash_vkey(plain))
@@ -111,8 +113,7 @@ class GatewayAccessUseCase:
         x_team_id: str | None,
     ) -> PlatformApiKeyGatewayProxyAuth:
         """校验平台 ``sk-*``、校验 ``gateway:proxy`` scope，并按 grant 解析计费团队。"""
-        keys = ApiKeyUseCase(self._session)
-        entity = await keys.verify_api_key(plain)
+        entity = await self._api_keys.verify_api_key(plain)
         if entity is None or not entity.is_valid:
             raise PlatformApiKeyInvalidError()
         if not entity.can_access(ApiKeyScope.GATEWAY_PROXY):

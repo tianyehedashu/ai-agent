@@ -7,6 +7,16 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from domains.gateway.application.management.credential_read_mappers import credential_from_orm
+from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.application.management.plan_read_mappers import (
+    entitlement_plan_from_orm,
+    provider_plan_from_orm,
+)
+from domains.gateway.application.management.plan_read_models import (
+    EntitlementPlanReadModel,
+    ProviderPlanReadModel,
+)
 from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
 from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
@@ -14,6 +24,8 @@ from domains.gateway.application.management.usage_reads import (
     MarginSummaryReadModel,
     ProviderPlanCostReadModel,
 )
+from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
+from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
@@ -29,14 +41,9 @@ from domains.gateway.domain.virtual_key_access import (
 )
 from domains.gateway.infrastructure.models.entitlement_plan import (
     EntitlementPlan,
-    EntitlementPlanQuota,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
-from domains.gateway.infrastructure.models.provider_plan import (
-    ProviderPlan,
-    ProviderPlanQuota,
-)
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -58,6 +65,8 @@ from domains.gateway.infrastructure.repositories.request_log_repository import (
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.identity.application.api_key_use_case import ApiKeyUseCase
+from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort
 from domains.tenancy.application.team_service import TeamService
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from libs.iam.tenancy import MembershipPort
@@ -66,7 +75,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.infrastructure.models.alert import GatewayAlertRule
-    from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
     from domains.tenancy.domain.management_context import ManagementTeamContext
     from domains.tenancy.infrastructure.models.team import Team, TeamMember
 
@@ -79,9 +87,13 @@ class GatewayManagementReadService:
         session: AsyncSession,
         *,
         membership: MembershipPort | None = None,
+        api_key_grants: ApiKeyGatewayGrantQueryPort | None = None,
     ) -> None:
         self._session = session
         self._membership = membership or TenancyMembershipAdapter()
+        self._api_key_grants: ApiKeyGatewayGrantQueryPort = (
+            api_key_grants or ApiKeyUseCase(session)
+        )
         self._teams = TeamService(session, membership=self._membership)
         self._vkeys = VirtualKeyRepository(session)
         self._creds = ProviderCredentialRepository(session)
@@ -110,7 +122,7 @@ class GatewayManagementReadService:
         actor_user_id: UUID | None = None,
         team_role: str = "owner",
         is_platform_admin: bool = False,
-    ) -> list[GatewayVirtualKey]:
+    ) -> list[VirtualKeyReadModel]:
         keys = await self._vkeys.list_by_team(team_id, include_system=False, include_inactive=False)
         filtered = filter_virtual_keys_visible_to_actor(
             keys,
@@ -118,7 +130,7 @@ class GatewayManagementReadService:
             team_role=team_role,
             is_platform_admin=is_platform_admin,
         )
-        return list(filtered)
+        return [virtual_key_from_orm(k) for k in filtered]
 
     async def get_virtual_key_for_team_member(
         self,
@@ -128,7 +140,7 @@ class GatewayManagementReadService:
         actor_user_id: UUID | None,
         team_role: str,
         is_platform_admin: bool,
-    ) -> GatewayVirtualKey:
+    ) -> VirtualKeyReadModel:
         """按 revoke/reveal 同款权限取一条 active vkey。"""
         record = await self._vkeys.get(key_id)
         assert_virtual_key_accessible_by_actor(
@@ -142,12 +154,13 @@ class GatewayManagementReadService:
         )
         if record is None:
             raise VirtualKeyNotFoundError(str(key_id))
-        return record
+        return virtual_key_from_orm(record)
 
     async def list_credentials_for_team(
         self, team_id: UUID, *, include_system: bool
-    ) -> list[ProviderCredential]:
-        return await self._creds.list_for_team(team_id, include_system=include_system)
+    ) -> list[CredentialReadModel]:
+        rows = await self._creds.list_for_team(team_id, include_system=include_system)
+        return [credential_from_orm(c) for c in rows]
 
     async def get_managed_credential_for_team(
         self,
@@ -155,7 +168,7 @@ class GatewayManagementReadService:
         *,
         team_id: UUID,
         is_platform_admin: bool,
-    ) -> ProviderCredential:
+    ) -> CredentialReadModel:
         """与 ``list_credentials_for_team`` 可见集合一致：团队凭据 +（仅平台管理员）系统凭据。"""
         row = await self._creds.get_bindable_for_team_gateway_model(
             credential_id,
@@ -164,21 +177,22 @@ class GatewayManagementReadService:
         )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
-        return row
+        return credential_from_orm(row)
 
     async def get_user_credential_for_owner(
         self, credential_id: UUID, user_id: UUID
-    ) -> ProviderCredential:
+    ) -> CredentialReadModel:
         """与 ``list_user_credentials`` 可见集合一致：仅当前用户的 user-scope 凭据。"""
         row = await self._creds.get(credential_id)
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
         if row.scope != "user" or row.scope_id != user_id:
             raise CredentialNotFoundError(str(credential_id))
-        return row
+        return credential_from_orm(row)
 
-    async def list_user_credentials(self, user_id: UUID) -> list[ProviderCredential]:
-        return await self._creds.list_for_user(user_id)
+    async def list_user_credentials(self, user_id: UUID) -> list[CredentialReadModel]:
+        rows = await self._creds.list_for_user(user_id)
+        return [credential_from_orm(c) for c in rows]
 
     async def list_personal_gateway_models(
         self,
@@ -403,8 +417,7 @@ class GatewayManagementReadService:
     # ------------------------------------------------------------------
     # ProviderPlan / EntitlementPlan reads
     #
-    # 路由层会用这些方法做归属校验后再执行 CRUD/usage；返回 ORM 元组直接用
-    # ``model_validate`` 构造 Response，避免 dict↔Response 双层映射重复。
+    # 套餐列表/详情返回 application 读模型；presentation 再映射为 HTTP Schema。
     # ------------------------------------------------------------------
     async def assert_credential_in_team(
         self,
@@ -442,12 +455,10 @@ class GatewayManagementReadService:
         team_id: UUID,
         is_platform_admin: bool,
     ) -> None:
-        from domains.identity.application.api_key_use_case import ApiKeyUseCase
         from libs.exceptions import NotFoundError
 
-        keys = ApiKeyUseCase(self._session)
         try:
-            await keys.assert_gateway_grant_in_team(
+            await self._api_key_grants.assert_gateway_grant_in_team(
                 grant_id,
                 team_id=team_id,
                 is_platform_admin=is_platform_admin,
@@ -479,23 +490,33 @@ class GatewayManagementReadService:
 
     async def list_provider_plans_with_quotas_for_credential(
         self, credential_id: UUID
-    ) -> list[tuple[ProviderPlan, list[ProviderPlanQuota]]]:
-        return await self._provider_plans.list_with_quotas_for_credential(credential_id)
+    ) -> list[ProviderPlanReadModel]:
+        rows = await self._provider_plans.list_with_quotas_for_credential(credential_id)
+        return [provider_plan_from_orm(plan, quotas) for plan, quotas in rows]
 
     async def list_entitlement_plans_with_quotas_for_scope(
         self, scope: str, scope_id: UUID
-    ) -> list[tuple[EntitlementPlan, list[EntitlementPlanQuota]]]:
-        return await self._entitlement_plans.list_with_quotas_for_scope(scope, scope_id)
+    ) -> list[EntitlementPlanReadModel]:
+        rows = await self._entitlement_plans.list_with_quotas_for_scope(scope, scope_id)
+        return [entitlement_plan_from_orm(plan, quotas) for plan, quotas in rows]
 
     async def get_provider_plan_with_quotas(
         self, plan_id: UUID
-    ) -> tuple[ProviderPlan, list[ProviderPlanQuota]] | None:
-        return await self._provider_plans.get_with_quotas(plan_id)
+    ) -> ProviderPlanReadModel | None:
+        row = await self._provider_plans.get_with_quotas(plan_id)
+        if row is None:
+            return None
+        plan, quotas = row
+        return provider_plan_from_orm(plan, quotas)
 
     async def get_entitlement_plan_with_quotas(
         self, plan_id: UUID
-    ) -> tuple[EntitlementPlan, list[EntitlementPlanQuota]] | None:
-        return await self._entitlement_plans.get_with_quotas(plan_id)
+    ) -> EntitlementPlanReadModel | None:
+        row = await self._entitlement_plans.get_with_quotas(plan_id)
+        if row is None:
+            return None
+        plan, quotas = row
+        return entitlement_plan_from_orm(plan, quotas)
 
     async def get_entitlement_usage(
         self,
