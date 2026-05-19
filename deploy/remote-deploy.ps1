@@ -49,6 +49,24 @@ function Test-SSHConnection {
     Log-Ok "SSH connected"
 }
 
+# 通过 base64 把多行 bash 脚本安全送到远端执行。
+# 直接用 ssh + here-string / pipe 在 Windows 上会带 CRLF，导致诸如
+# `set: pipefail: invalid option name` 之类的奇怪失败 —— 历史教训勿删。
+function Invoke-RemoteBash {
+    param(
+        [Parameter(Mandatory=$true)][string]$Script,
+        [string]$ErrorMessage = "Remote command failed"
+    )
+    $normalized = $Script -replace "`r`n","`n" -replace "`r","`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
+    $b64 = [Convert]::ToBase64String($bytes)
+    ssh $REMOTE_HOST "echo $b64 | base64 -d | bash"
+    if ($LASTEXITCODE -ne 0) {
+        Log-Error "$ErrorMessage (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+}
+
 function Initialize-Remote {
     Test-SSHConnection
     Log-Info "Initializing remote environment..."
@@ -114,22 +132,24 @@ function Sync-Code {
     }
 
     Log-Info "Extracting on remote..."
-    # tar 覆盖不会删除已移除文件；清理已知会触发前端 tsc 失败的残留路径
-    $extractCmd = @"
+    # tar 覆盖不会删除已移除文件，必须显式清理已知会让 tsc / pytest / alembic 失败的残留。
+    $extractScript = @'
 set -euo pipefail
-mkdir -p $REMOTE_DIR
-cd $REMOTE_DIR
+mkdir -p __REMOTE_DIR__
+cd __REMOTE_DIR__
 rm -rf frontend/src/pages/studio
 rm -f frontend/src/api/userModel.ts frontend/src/api/userModel.test.ts
 rm -f frontend/src/pages/settings/components/model-tab.tsx
 rm -f frontend/src/pages/settings/components/provider-config-tab.tsx
 rm -f frontend/src/hooks/use-monaco-lsp.ts
+rm -f backend/domains/gateway/application/user_models_migration.py
 tar xzf /tmp/ai-agent-deploy.tar.gz
 rm -f /tmp/ai-agent-deploy.tar.gz
-find . -maxdepth 3 \( -name '*.sh' -o -name '*.yml' -o -name '*.yaml' -o -name 'Dockerfile*' -o -name '.env*' -o -name '*.toml' -o -name '*.conf' \) -exec sed -i 's/\r$//' {} +
+find . -maxdepth 3 \( -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile*" -o -name ".env*" -o -name "*.toml" -o -name "*.conf" \) -exec sed -i "s/\r$//" {} +
 chmod +x deploy/*.sh
-"@
-    ssh $REMOTE_HOST $extractCmd
+'@
+    $extractScript = $extractScript.Replace('__REMOTE_DIR__', $REMOTE_DIR)
+    Invoke-RemoteBash -Script $extractScript -ErrorMessage "Remote extract failed"
 
     Remove-Item -Force $tarFile -ErrorAction SilentlyContinue
     Log-Ok "Code sync completed"
