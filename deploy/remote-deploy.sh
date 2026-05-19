@@ -88,6 +88,17 @@ sync_code() {
 
     remote_exec "mkdir -p $REMOTE_DIR"
 
+    # tar/rsync 均不会删除远端已移除文件，先清理已知会导致构建失败的残留
+    remote_exec bash <<CLEAN_EOF
+set -euo pipefail
+cd $REMOTE_DIR 2>/dev/null || exit 0
+rm -rf frontend/src/pages/studio
+rm -f frontend/src/api/userModel.ts frontend/src/api/userModel.test.ts
+rm -f frontend/src/pages/settings/components/model-tab.tsx
+rm -f frontend/src/pages/settings/components/provider-config-tab.tsx
+rm -f frontend/src/hooks/use-monaco-lsp.ts
+CLEAN_EOF
+
     if command -v rsync &>/dev/null; then
         log_info "使用 rsync 同步..."
         rsync -avz --delete \
@@ -145,6 +156,11 @@ sync_code() {
 set -euo pipefail
 mkdir -p $REMOTE_DIR
 cd $REMOTE_DIR
+rm -rf frontend/src/pages/studio
+rm -f frontend/src/api/userModel.ts frontend/src/api/userModel.test.ts
+rm -f frontend/src/pages/settings/components/model-tab.tsx
+rm -f frontend/src/pages/settings/components/provider-config-tab.tsx
+rm -f frontend/src/hooks/use-monaco-lsp.ts
 tar xzf /tmp/ai-agent-deploy.tar.gz
 rm -f /tmp/ai-agent-deploy.tar.gz
 EXTRACT_EOF
@@ -161,13 +177,16 @@ remote_deploy() {
 
     log_info "在远程服务器上执行部署..."
 
-    remote_exec bash <<DEPLOY_EOF
+    if ! remote_exec bash <<DEPLOY_EOF
 set -euo pipefail
 cd $REMOTE_DIR
-
 chmod +x deploy/deploy.sh
 ./deploy/deploy.sh $deploy_args
 DEPLOY_EOF
+    then
+        log_error "远程部署失败"
+        exit 1
+    fi
 
     log_ok "远程部署完成"
 }

@@ -150,8 +150,20 @@ start_infra() {
     step_done "Infrastructure ready"
 }
 
+# --- Stop app before migration (avoid DB lock contention with live traffic) ---
+stop_app_for_migration() {
+    if dc ps --status running 2>/dev/null | grep -qE "(backend|frontend)"; then
+        step_start "Stopping app services before migration..."
+        dc stop backend frontend
+        step_done "App services stopped"
+    else
+        log_info "App services not running, skipping stop"
+    fi
+}
+
 # --- Database migration ---
 run_migrations() {
+    stop_app_for_migration
     step_start "Running database migrations..."
     dc run --rm backend alembic upgrade head
     step_done "Migrations complete"

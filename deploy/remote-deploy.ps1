@@ -23,6 +23,12 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Ensure OpenSSH is on PATH (make deploy invokes this script from a minimal environment)
+$openSshDir = Join-Path $env:SystemRoot "System32\OpenSSH"
+if ((Test-Path $openSshDir) -and ($env:Path -notlike "*$openSshDir*")) {
+    $env:Path = "$openSshDir;$env:Path"
+}
+
 $REMOTE_HOST = "web01"
 $REMOTE_DIR = "/home/leo/ai-agent"
 $SCRIPT_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -108,7 +114,22 @@ function Sync-Code {
     }
 
     Log-Info "Extracting on remote..."
-    ssh $REMOTE_HOST "set -euo pipefail && mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && tar xzf /tmp/ai-agent-deploy.tar.gz && rm -f /tmp/ai-agent-deploy.tar.gz && find . -maxdepth 3 \( -name '*.sh' -o -name '*.yml' -o -name '*.yaml' -o -name 'Dockerfile*' -o -name '.env*' -o -name '*.toml' -o -name '*.conf' \) -exec sed -i 's/\r$//' {} + && chmod +x deploy/*.sh"
+    # tar 覆盖不会删除已移除文件；清理已知会触发前端 tsc 失败的残留路径
+    $extractCmd = @"
+set -euo pipefail
+mkdir -p $REMOTE_DIR
+cd $REMOTE_DIR
+rm -rf frontend/src/pages/studio
+rm -f frontend/src/api/userModel.ts frontend/src/api/userModel.test.ts
+rm -f frontend/src/pages/settings/components/model-tab.tsx
+rm -f frontend/src/pages/settings/components/provider-config-tab.tsx
+rm -f frontend/src/hooks/use-monaco-lsp.ts
+tar xzf /tmp/ai-agent-deploy.tar.gz
+rm -f /tmp/ai-agent-deploy.tar.gz
+find . -maxdepth 3 \( -name '*.sh' -o -name '*.yml' -o -name '*.yaml' -o -name 'Dockerfile*' -o -name '.env*' -o -name '*.toml' -o -name '*.conf' \) -exec sed -i 's/\r$//' {} +
+chmod +x deploy/*.sh
+"@
+    ssh $REMOTE_HOST $extractCmd
 
     Remove-Item -Force $tarFile -ErrorAction SilentlyContinue
     Log-Ok "Code sync completed"
@@ -119,6 +140,10 @@ function Invoke-RemoteDeploy {
 
     Log-Info "Executing deploy on remote server..."
     ssh $REMOTE_HOST "cd $REMOTE_DIR && chmod +x deploy/deploy.sh && ./deploy/deploy.sh $DeployArgs"
+    if ($LASTEXITCODE -ne 0) {
+        Log-Error "Remote deploy failed (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
     Log-Ok "Remote deploy completed"
 }
 
