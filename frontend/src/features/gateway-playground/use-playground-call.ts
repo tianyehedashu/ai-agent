@@ -24,6 +24,11 @@ import {
   type OpenAiCompatChunk,
 } from './openai-sse'
 import {
+  buildNetworkPlaygroundError,
+  extractPlaygroundHttpError,
+  readPlaygroundErrorBody,
+} from './playground-error'
+import {
   buildPlaygroundRequestBody,
   buildVisionRequestBody,
   maskAuthHeadersForDisplay,
@@ -165,7 +170,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
         return
       }
       setStatus('error')
-      setError({ message: e instanceof Error ? e.message : '网络请求失败' })
+      setError(buildNetworkPlaygroundError(e, url))
       return
     }
 
@@ -176,20 +181,14 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
       undefined
 
     if (!response.ok) {
-      let errorJson: unknown = null
-      try {
-        errorJson = await response.json()
-      } catch {
-        // 非 JSON 错误体
-      }
+      const errorJson = await readPlaygroundErrorBody(response)
       const fallback = `HTTP ${String(response.status)} ${response.statusText}`
-      const playgroundError = isAnthropic
-        ? extractAnthropicError(
-            errorJson as AnthropicErrorEnvelope | null,
-            response.status,
-            fallback
-          )
-        : extractOpenAiCompatError(errorJson as OpenAiCompatChunk | null, response.status, fallback)
+      const playgroundError = extractPlaygroundHttpError(
+        errorJson,
+        response.status,
+        fallback,
+        params.flavor
+      )
       setStatus('error')
       setError(playgroundError)
       setMetadata({
@@ -360,6 +359,13 @@ async function streamOpenAi(
       buffer = parsed.rest
       let deltaBatch = ''
       for (const chunk of parsed.chunks) {
+        if (chunk.error) {
+          setters.setStatus('error')
+          setters.setError(
+            extractOpenAiCompatError(chunk, httpStatus, chunk.error.message ?? '流式返回错误')
+          )
+          return
+        }
         lastJson = chunk
         const delta = chunk.choices?.[0]?.delta?.content
         if (typeof delta === 'string' && delta.length > 0) {
@@ -434,6 +440,17 @@ async function streamAnthropic(
       let deltaBatch = ''
       for (const evt of parsed.events) {
         lastEvent = evt
+        if (evt.type === 'error' && 'error' in evt) {
+          setters.setStatus('error')
+          setters.setError(
+            extractAnthropicError(
+              evt as AnthropicErrorEnvelope,
+              httpStatus,
+              evt.error?.message ?? '流式返回错误'
+            )
+          )
+          return
+        }
         if (evt.type === 'message_start' && 'message' in evt && evt.message) {
           messageId = evt.message.id ?? messageId
           model = evt.message.model ?? model

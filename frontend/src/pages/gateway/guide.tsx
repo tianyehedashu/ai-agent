@@ -13,7 +13,6 @@ import type React from 'react'
 
 import { Link } from 'react-router-dom'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,8 +29,6 @@ import {
   Copy,
   ExternalLink,
   FileText,
-  Key,
-  List,
   ChevronDown,
   Sparkles,
   Terminal,
@@ -43,6 +40,7 @@ import {
   type CapabilityGuideModule,
   type FlavorCodeTriple,
 } from '@/pages/gateway/guide-capability-snippets'
+import { buildGuideSnippets, type GuideSnippets } from '@/pages/gateway/guide-snippets'
 
 const PLACEHOLDER_KEY = 'sk-gw-your-virtual-key'
 const PLACEHOLDER_MODEL = 'your-model-or-route-alias'
@@ -50,273 +48,25 @@ const PLACEHOLDER_MODEL = 'your-model-or-route-alias'
 type ApiFlavor = 'openai' | 'anthropic'
 type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-sse'
 
-interface FlavorSnippets {
-  endpoint: string
-  authHeader: string
-  curl: string
-  curlStream: string
-  ts: string
-  tsStream: string
-  py: string
-  pyStream: string
-  responseJson: string
-  responseSse: string
-}
-
-interface Snippets {
-  baseUrl: string
-  authHeader: string
-  modelsCurl: string
-  streamHint: string
-  openai: FlavorSnippets
-  anthropic: FlavorSnippets
-}
-
-function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
-  const authHeader = `Authorization: Bearer ${key}`
-  const anthropicBase = baseUrl.replace(/\/v1\/?$/, '')
-  return {
-    baseUrl,
-    authHeader,
-    modelsCurl: `curl "${baseUrl}/models" \\
-  -H "${authHeader}"`,
-    streamHint: `// 流式：在请求体中设置 stream: true
-{
-  "model": "${model}",
-  "stream": true,
-  "messages": [{"role": "user", "content": "Hello"}]
-}`,
-    openai: {
-      endpoint: `POST ${baseUrl}/chat/completions`,
-      authHeader,
-      curl: `curl "${baseUrl}/chat/completions" \\
-  -H "Content-Type: application/json" \\
-  -H "${authHeader}" \\
-  -d '{
-    "model": "${model}",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`,
-      curlStream: `curl -N "${baseUrl}/chat/completions" \\
-  -H "Content-Type: application/json" \\
-  -H "${authHeader}" \\
-  -d '{
-    "model": "${model}",
-    "stream": true,
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`,
-      ts: `import OpenAI from "openai";
-
-const client = new OpenAI({
-  apiKey: "${key}",
-  baseURL: "${baseUrl}",
-});
-
-const completion = await client.chat.completions.create({
-  model: "${model}",
-  messages: [{ role: "user", content: "Hello" }],
-});
-
-console.log(completion.choices[0]?.message?.content);`,
-      tsStream: `import OpenAI from "openai";
-
-const client = new OpenAI({
-  apiKey: "${key}",
-  baseURL: "${baseUrl}",
-});
-
-const stream = await client.chat.completions.create({
-  model: "${model}",
-  stream: true,
-  messages: [{ role: "user", content: "Hello" }],
-});
-
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
-}`,
-      py: `from openai import OpenAI
-
-client = OpenAI(
-    api_key="${key}",
-    base_url="${baseUrl}",
-)
-
-completion = client.chat.completions.create(
-    model="${model}",
-    messages=[{"role": "user", "content": "Hello"}],
-)
-
-print(completion.choices[0].message.content)`,
-      pyStream: `from openai import OpenAI
-
-client = OpenAI(
-    api_key="${key}",
-    base_url="${baseUrl}",
-)
-
-stream = client.chat.completions.create(
-    model="${model}",
-    stream=True,
-    messages=[{"role": "user", "content": "Hello"}],
-)
-
-for chunk in stream:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)`,
-      responseJson: `{
-  "id": "chatcmpl-...",
-  "object": "chat.completion",
-  "created": 1717000000,
-  "model": "${model}",
-  "choices": [
-    {
-      "index": 0,
-      "message": { "role": "assistant", "content": "Hello!" },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": { "prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10 }
-}`,
-      responseSse: `data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":8,"completion_tokens":2,"total_tokens":10}}
-
-data: [DONE]`,
-    },
-    anthropic: {
-      endpoint: `POST ${baseUrl}/messages`,
-      authHeader: `x-api-key: ${key}`,
-      curl: `curl "${baseUrl}/messages" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${key}" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{
-    "model": "${model}",
-    "max_tokens": 1024,
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`,
-      curlStream: `curl -N "${baseUrl}/messages" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${key}" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{
-    "model": "${model}",
-    "max_tokens": 1024,
-    "stream": true,
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`,
-      ts: `import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  apiKey: "${key}",
-  baseURL: "${anthropicBase}",
-});
-
-const message = await client.messages.create({
-  model: "${model}",
-  max_tokens: 1024,
-  messages: [{ role: "user", content: "Hello" }],
-});
-
-console.log(
-  message.content[0]?.type === "text" ? message.content[0].text : ""
-);`,
-      tsStream: `import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  apiKey: "${key}",
-  baseURL: "${anthropicBase}",
-});
-
-const stream = await client.messages.stream({
-  model: "${model}",
-  max_tokens: 1024,
-  messages: [{ role: "user", content: "Hello" }],
-});
-
-for await (const event of stream) {
-  if (
-    event.type === "content_block_delta" &&
-    event.delta.type === "text_delta"
-  ) {
-    process.stdout.write(event.delta.text);
-  }
-}`,
-      py: `from anthropic import Anthropic
-
-client = Anthropic(api_key="${key}", base_url="${anthropicBase}")
-
-message = client.messages.create(
-    model="${model}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}],
-)
-
-print(message.content[0].text if message.content else "")`,
-      pyStream: `from anthropic import Anthropic
-
-client = Anthropic(api_key="${key}", base_url="${anthropicBase}")
-
-with client.messages.stream(
-    model="${model}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}],
-) as stream:
-    for text in stream.text_stream:
-        print(text, end="", flush=True)`,
-      responseJson: `{
-  "id": "msg_...",
-  "type": "message",
-  "role": "assistant",
-  "model": "${model}",
-  "content": [{ "type": "text", "text": "Hello!" }],
-  "stop_reason": "end_turn",
-  "stop_sequence": null,
-  "usage": { "input_tokens": 8, "output_tokens": 2 }
-}`,
-      responseSse: `event: message_start
-data: {"type":"message_start","message":{"id":"msg_...","role":"assistant","model":"${model}","content":[]}}
-
-event: content_block_start
-data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
-
-event: content_block_stop
-data: {"type":"content_block_stop","index":0}
-
-event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}
-
-event: message_stop
-data: {"type":"message_stop"}`,
-    },
-  }
-}
-
 const QUICK_STEPS = [
   {
     step: 1,
     title: '创建虚拟 Key',
-    description: '在「虚拟 Key」页创建 sk-gw-*，明文仅展示一次，请立即保存。',
+    description: '明文仅显示一次，请妥善保存。',
     href: '/gateway/keys',
     linkLabel: '前往虚拟 Key',
   },
   {
     step: 2,
     title: '选择模型或路由',
-    description: '请求中的 model 填已注册模型别名，或虚拟路由名称。',
+    description: 'model 填模型别名或虚拟路由名。',
     href: '/gateway/models',
     linkLabel: '查看模型',
   },
   {
     step: 3,
     title: '复制示例并调用',
-    description: '将 Base URL 与 Key 填入 OpenAI / Anthropic SDK 或 curl 即可发起调用。',
+    description: '把 Base URL 与 Key 填入 SDK 或 curl。',
     href: '#examples',
     linkLabel: '查看示例',
   },
@@ -326,35 +76,93 @@ const TROUBLESHOOTING = [
   {
     code: '401',
     title: '鉴权失败',
-    hint: '检查 Bearer / x-api-key 是否正确、Key 是否已撤销。',
+    hint: '检查 Header、Key 明文和撤销状态。',
     href: '/gateway/keys',
     linkLabel: '虚拟 Key',
   },
   {
     code: '404',
     title: '模型不存在',
-    hint: 'model 需与网关已注册别名或虚拟路由名一致。',
+    hint: 'model 需匹配模型别名或路由名。',
     href: '/gateway/models',
     linkLabel: '模型',
   },
   {
     code: '429',
     title: '限流',
-    hint: '检查虚拟 Key 的 RPM/TPM 上限，或团队预算配额。',
+    hint: '检查 RPM/TPM、套餐或预算。',
     href: '/gateway/budgets',
     linkLabel: '预算配额',
   },
   {
     code: '5xx',
     title: '上游失败',
-    hint: '多为凭据或上游不可用，先到调用日志查看 request_id 与错误详情。',
+    hint: '到调用日志查看 request_id 与上游错误。',
     href: '/gateway/logs',
     linkLabel: '调用日志',
   },
 ] as const
 
-function preloadGatewayKeysPage(): void {
-  void import('@/pages/gateway/keys')
+const GUIDE_NAV_ITEMS = [
+  ['#playground', '在线试调'],
+  ['#config', '接入配置'],
+  ['#examples', '代码示例'],
+  ['#reference', '能力参考'],
+  ['#troubleshooting', '异常排查'],
+] as const
+
+const ANTHROPIC_NATIVE_FIELDS = [
+  'thinking',
+  'cache_control',
+  'tool_result',
+  'image',
+  'top_k',
+] as const
+
+type QuickStep = (typeof QUICK_STEPS)[number]
+type TroubleshootingItem = (typeof TROUBLESHOOTING)[number]
+
+const GUIDE_NAV_IDS = GUIDE_NAV_ITEMS.map(([href]) => href.slice(1))
+
+/**
+ * scroll-spy：基于 IntersectionObserver 监听各 section，
+ * 选取最靠近视口上沿的可见 section 作为当前位置。
+ */
+function useActiveGuideAnchor(): string {
+  const [active, setActive] = useState<string>(GUIDE_NAV_ITEMS[0][0])
+
+  useEffect(() => {
+    const targets = GUIDE_NAV_IDS.map((id) => document.getElementById(id)).filter(
+      (el): el is HTMLElement => el !== null
+    )
+    if (targets.length === 0) return
+
+    const visibility = new Map<string, number>()
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          visibility.set(entry.target.id, entry.intersectionRatio)
+        }
+        let best: { id: string; ratio: number } | null = null
+        for (const [id, ratio] of visibility) {
+          if (ratio <= 0) continue
+          if (!best || ratio > best.ratio) best = { id, ratio }
+        }
+        if (!best) return
+        const next = `#${best.id}`
+        setActive((prev) => (prev === next ? prev : next))
+      },
+      { rootMargin: '-80px 0px -55% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
+    )
+    targets.forEach((el) => {
+      observer.observe(el)
+    })
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return active
 }
 
 export default function GatewayGuidePage(): React.JSX.Element {
@@ -365,7 +173,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
 
   const snippets = useMemo(
-    () => buildSnippets(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
+    () => buildGuideSnippets(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
     [gatewayV1Base, activeModel]
   )
   const capabilityModules = useMemo(
@@ -388,186 +196,134 @@ export default function GatewayGuidePage(): React.JSX.Element {
     setResponseTab(`${apiFlavor}-${exampleStream ? 'sse' : 'json'}` as ResponseTab)
   }, [apiFlavor, exampleStream])
 
+  const activeAnchor = useActiveGuideAnchor()
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <h2 className="text-balance text-2xl font-semibold tracking-tight">调用指南</h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            兼容 OpenAI 与 Anthropic
-            SDK。在线试调支持对话、视觉理解、图片生成与视频生成（含图生视频），按模型 capability
-            自动过滤；需选择或粘贴虚拟 Key（
-            <span className="font-mono" translate="no">
-              sk-gw-*
-            </span>
-            ），可调用团队/个人模型或
-            <Link to="/gateway/routes" className="text-primary underline-offset-4 hover:underline">
-              虚拟路由
-            </Link>
-            。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" asChild>
-            <Link
-              to="/gateway/keys"
-              onMouseEnter={preloadGatewayKeysPage}
-              onFocus={preloadGatewayKeysPage}
-            >
-              <Key className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              创建虚拟 Key
-            </Link>
-          </Button>
-          <Button size="sm" variant="outline" asChild>
-            <Link to="/gateway/logs">
-              <List className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              查看调用日志
-            </Link>
-          </Button>
-        </div>
+    <div className="space-y-5">
+      <header className="space-y-1">
+        <h2 className="text-balance text-2xl font-semibold tracking-tight">调用指南</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          先在控制台完成一次试调，再复制生产接入所需的 Base URL、鉴权 Header 和示例代码。
+        </p>
       </header>
 
-      <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+      <GuideAnchorNav active={activeAnchor} />
 
-      <section aria-labelledby="quick-start-heading">
-        <h3 id="quick-start-heading" className="mb-3 text-sm font-medium text-muted-foreground">
+      <section aria-labelledby="quick-start-heading" className="scroll-mt-20">
+        <h3 id="quick-start-heading" className="sr-only">
           快速上手
         </h3>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-2 rounded-xl border bg-background p-2 md:grid-cols-3">
           {QUICK_STEPS.map((item) => (
-            <Card key={item.step}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="h-6 w-6 justify-center rounded-full p-0">
-                    {item.step}
-                  </Badge>
-                  <CardTitle className="text-base">{item.title}</CardTitle>
-                </div>
-                <CardDescription>{item.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {item.href.startsWith('#') ? (
-                  <a
-                    href={item.href}
-                    className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    {item.linkLabel}
-                  </a>
-                ) : (
-                  <Link
-                    to={item.href}
-                    className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    {item.linkLabel}
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
+            <QuickStepItem key={item.step} item={item} />
           ))}
         </div>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">调用配置</CardTitle>
-          <CardDescription>
-            兼容入口挂载在根路径{' '}
-            <span className="font-mono" translate="no">
-              /v1/*
-            </span>
-            ，与管理 API（
-            <span className="font-mono" translate="no">
-              /api/v1/gateway/*
-            </span>
-            ）不同。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ConfigRow
-            label="Base URL"
-            value={snippets.baseUrl}
-            mono
-            copyKey="baseUrl"
-            copied={copiedKey === 'baseUrl'}
-            onCopy={handleCopy}
-          />
-          <ConfigRow
-            label="OpenAI 鉴权 Header"
-            value={snippets.openai.authHeader}
-            mono
-            copyKey="openaiAuthHeader"
-            copied={copiedKey === 'openaiAuthHeader'}
-            onCopy={handleCopy}
-          />
-          <ConfigRow
-            label="Anthropic 鉴权 Header"
-            value={snippets.anthropic.authHeader}
-            mono
-            hint="Anthropic 兼容亦支持 Authorization: Bearer；建议加 anthropic-version: 2023-06-01"
-            copyKey="anthropicAuthHeader"
-            copied={copiedKey === 'anthropicAuthHeader'}
-            onCopy={handleCopy}
-          />
-          <ConfigRow
-            label="model 字段"
-            value={activeModel}
-            mono
-            hint={
-              activeModel === PLACEHOLDER_MODEL
-                ? '替换为模型页中的别名，或虚拟路由名称；在上方「在线试调」选择后会自动联动到示例。'
-                : '已从「在线试调」联动；也可在模型页或虚拟路由页确认名称。'
-            }
-          />
-          <ConfigRow
-            label="流式 stream"
-            value="true"
-            mono
-            hint="在 JSON body 中设置 stream: true，响应为 SSE（OpenAI: data: [DONE] ；Anthropic: event: message_stop）"
-            copyKey="streamHint"
-            copyText={snippets.streamHint}
-            copied={copiedKey === 'streamHint'}
-            onCopy={handleCopy}
-          />
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Badge variant="secondary">Anthropic 原生通道</Badge>
-            <Badge variant="outline" className="font-mono text-xs">
-              thinking
-            </Badge>
-            <Badge variant="outline" className="font-mono text-xs">
-              cache_control
-            </Badge>
-            <Badge variant="outline" className="font-mono text-xs">
-              tool_result
-            </Badge>
-            <Badge variant="outline" className="font-mono text-xs">
-              image
-            </Badge>
-            <Badge variant="outline" className="font-mono text-xs">
-              top_k
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-mono" translate="no">
-              POST /v1/messages
-            </span>{' '}
-            经 LiteLLM anthropic_unified 直连上游，保留 Anthropic 请求/响应字段（含 cache_*
-            token）。
-          </p>
-        </CardContent>
-      </Card>
-
-      <section id="examples" aria-labelledby="examples-heading" className="space-y-3">
-        <h3 id="examples-heading" className="text-sm font-medium text-muted-foreground">
-          示例代码
+      <section id="playground" aria-labelledby="playground-heading" className="scroll-mt-20">
+        <h3 id="playground-heading" className="sr-only">
+          在线试调
         </h3>
+        <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+      </section>
+
+      <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">
+        <Card>
+          <CardHeader>
+            <CardTitle id="config-heading" className="text-base">
+              接入配置
+            </CardTitle>
+            <CardDescription>
+              生产凭证建议仅保存在服务端。域名默认跟随站点，也可通过 VITE_API_URL 配置。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-3">
+              <ConfigRow
+                label="Base URL"
+                value={snippets.baseUrl}
+                mono
+                copyKey="baseUrl"
+                copied={copiedKey === 'baseUrl'}
+                onCopy={handleCopy}
+              />
+              <ConfigRow
+                label="鉴权 Header"
+                value={
+                  apiFlavor === 'openai'
+                    ? snippets.openai.authHeader
+                    : snippets.anthropic.authHeader
+                }
+                mono
+                copyKey={`${apiFlavor}AuthHeader`}
+                copied={copiedKey === `${apiFlavor}AuthHeader`}
+                onCopy={handleCopy}
+              />
+              <ConfigRow
+                label="model"
+                value={activeModel}
+                mono
+                hint={
+                  activeModel === PLACEHOLDER_MODEL
+                    ? '从上方试调选择模型后会同步。'
+                    : '已从试调区同步。'
+                }
+              />
+            </div>
+            <Collapsible>
+              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
+                更多配置与 Anthropic 原生字段
+                <ChevronDown
+                  className="h-4 w-4 text-muted-foreground transition-transform"
+                  aria-hidden="true"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-4">
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <ConfigRow
+                    label="Anthropic SDK baseURL"
+                    value={snippets.anthropicBaseUrl}
+                    mono
+                    hint="Anthropic 官方 SDK 的 baseURL，末尾不含 /v1。"
+                    copyKey="anthropicBaseUrl"
+                    copied={copiedKey === 'anthropicBaseUrl'}
+                    onCopy={handleCopy}
+                  />
+                  <ConfigRow
+                    label="流式 stream"
+                    value="true"
+                    mono
+                    hint="在 JSON body 设置 stream: true，响应为 SSE。"
+                    copyKey="streamHint"
+                    copyText={snippets.streamHint}
+                    copied={copiedKey === 'streamHint'}
+                    onCopy={handleCopy}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">Anthropic 原生通道</Badge>
+                  {ANTHROPIC_NATIVE_FIELDS.map((name) => (
+                    <Badge key={name} variant="outline" className="font-mono text-xs">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section id="examples" aria-labelledby="examples-heading" className="scroll-mt-20 space-y-3">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="space-y-1">
-                <CardTitle className="text-base">选择 API 风格 & 是否流式</CardTitle>
+                <CardTitle id="examples-heading" className="text-base">
+                  代码示例
+                </CardTitle>
                 <CardDescription>
-                  顶部切换 API 风格 / 流式开关后，示例代码与下方「典型返回」会同步联动。
+                  切换 API 风格、流式模式和语言；下方返回示例会同步。
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
@@ -579,7 +335,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
                   aria-hidden="true"
                 />
                 <Label htmlFor="example-stream" className="cursor-pointer text-sm">
-                  流式（SSE）
+                  流式 SSE
                 </Label>
                 <Switch
                   id="example-stream"
@@ -643,206 +399,313 @@ export default function GatewayGuidePage(): React.JSX.Element {
         </Card>
       </section>
 
-      <section id="capabilities" aria-labelledby="capabilities-heading" className="space-y-3">
-        <h3 id="capabilities-heading" className="text-sm font-medium text-muted-foreground">
-          按能力查看示例
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          除上方基础对话外，以下为常用高级能力（curl / TypeScript / Python）。切换 API
-          风格与「示例代码」区一致。
-        </p>
-        <div className="space-y-3">
-          {capabilityModules.map((mod) => (
-            <CapabilityGuideCard
-              key={mod.id}
-              module={mod}
-              apiFlavor={apiFlavor}
-              copiedKey={copiedKey}
-              onCopy={handleCopy}
-            />
-          ))}
-        </div>
+      <section
+        id="reference"
+        aria-labelledby="reference-heading"
+        className="scroll-mt-20 space-y-3"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle id="reference-heading" className="text-base">
+              能力与返回参考
+            </CardTitle>
+            <CardDescription>
+              生产接入时再展开查看。能力示例跟随上方 API 风格，返回示例跟随流式设置。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <GuideReferenceSection title="按能力查看示例" defaultOpen>
+              <div id="capabilities" className="scroll-mt-20 space-y-3">
+                {capabilityModules.map((mod) => (
+                  <CapabilityGuideCard
+                    key={mod.id}
+                    module={mod}
+                    apiFlavor={apiFlavor}
+                    copiedKey={copiedKey}
+                    onCopy={handleCopy}
+                  />
+                ))}
+              </div>
+            </GuideReferenceSection>
+
+            <GuideReferenceSection title="典型返回">
+              <ResponseExamples
+                responseTab={responseTab}
+                setResponseTab={setResponseTab}
+                snippets={snippets}
+                copiedKey={copiedKey}
+                onCopy={handleCopy}
+              />
+            </GuideReferenceSection>
+
+            <GuideReferenceSection title="查询可用模型">
+              <p className="mb-3 text-sm text-muted-foreground">
+                使用{' '}
+                <span className="font-mono" translate="no">
+                  GET /v1/models
+                </span>{' '}
+                查看当前 Key 可见模型；也可在
+                <Link
+                  to="/gateway/models"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  模型
+                </Link>
+                、
+                <Link
+                  to="/gateway/routes"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  虚拟路由
+                </Link>
+                页面确认名称。
+              </p>
+              <CodeExampleCard
+                title="curl"
+                icon={Terminal}
+                code={snippets.modelsCurl}
+                copyKey="modelsCurl"
+                copied={copiedKey === 'modelsCurl'}
+                onCopy={handleCopy}
+                embedded
+              />
+            </GuideReferenceSection>
+          </CardContent>
+        </Card>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">典型返回</CardTitle>
-          <CardDescription>
-            非流式为单个 JSON；流式为{' '}
-            <span className="font-mono" translate="no">
-              text/event-stream
-            </span>
-            （OpenAI 以{' '}
-            <span className="font-mono" translate="no">
-              data: [DONE]
-            </span>{' '}
-            结束，Anthropic 以{' '}
-            <span className="font-mono" translate="no">
-              event: message_stop
-            </span>{' '}
-            结束）。完整请求/响应可在上方「在线试调」的{' '}
-            <span className="font-medium">请求 / 响应</span> 视图查看。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs
-            value={responseTab}
-            onValueChange={(v) => {
-              setResponseTab(v as ResponseTab)
-            }}
-          >
-            <TabsList className="flex h-auto flex-wrap gap-1">
-              <ResponseTabTrigger value="openai-json" flavor="OpenAI" mode="json" />
-              <ResponseTabTrigger value="openai-sse" flavor="OpenAI" mode="sse" />
-              <ResponseTabTrigger value="anthropic-json" flavor="Anthropic" mode="json" />
-              <ResponseTabTrigger value="anthropic-sse" flavor="Anthropic" mode="sse" />
-            </TabsList>
-            <TabsContent value="openai-json">
-              <ResponseExample
-                title="POST /v1/chat/completions"
-                contentType="application/json"
-                mode="json"
-                code={snippets.openai.responseJson}
-                copyKey="openaiResponseJson"
-                copied={copiedKey === 'openaiResponseJson'}
-                onCopy={handleCopy}
-              />
-            </TabsContent>
-            <TabsContent value="openai-sse">
-              <ResponseExample
-                title="POST /v1/chat/completions（stream: true）"
-                contentType="text/event-stream"
-                mode="sse"
-                code={snippets.openai.responseSse}
-                copyKey="openaiResponseSse"
-                copied={copiedKey === 'openaiResponseSse'}
-                onCopy={handleCopy}
-              />
-            </TabsContent>
-            <TabsContent value="anthropic-json">
-              <ResponseExample
-                title="POST /v1/messages"
-                contentType="application/json"
-                mode="json"
-                code={snippets.anthropic.responseJson}
-                copyKey="anthropicResponseJson"
-                copied={copiedKey === 'anthropicResponseJson'}
-                onCopy={handleCopy}
-              />
-            </TabsContent>
-            <TabsContent value="anthropic-sse">
-              <ResponseExample
-                title="POST /v1/messages（stream: true）"
-                contentType="text/event-stream"
-                mode="sse"
-                code={snippets.anthropic.responseSse}
-                copyKey="anthropicResponseSse"
-                copied={copiedKey === 'anthropicResponseSse'}
-                onCopy={handleCopy}
-              />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">查询可用模型</CardTitle>
-          <CardDescription>
-            使用{' '}
-            <span className="font-mono" translate="no">
-              GET /v1/models
-            </span>{' '}
-            列出当前 Key 可见模型；也可在
-            <Link to="/gateway/models" className="text-primary underline-offset-4 hover:underline">
-              模型
-            </Link>
-            、
-            <Link to="/gateway/routes" className="text-primary underline-offset-4 hover:underline">
-              虚拟路由
-            </Link>
-            页面确认名称。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CodeExampleCard
-            title="curl"
-            icon={Terminal}
-            code={snippets.modelsCurl}
-            copyKey="modelsCurl"
-            copied={copiedKey === 'modelsCurl'}
-            onCopy={handleCopy}
-            embedded
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">常见问题</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {TROUBLESHOOTING.map((item, index) => (
-            <div key={item.code}>
-              {index > 0 ? <Separator className="mb-3" /> : null}
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium">
-                    <Badge variant="outline" className="mr-2 font-mono" translate="no">
-                      {item.code}
-                    </Badge>
-                    {item.title}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.hint}</p>
-                </div>
-                <Link
-                  to={item.href}
-                  className="shrink-0 text-sm text-primary underline-offset-4 hover:underline"
-                >
-                  {item.linkLabel} →
-                </Link>
-              </div>
+      <section
+        id="troubleshooting"
+        aria-labelledby="troubleshooting-heading"
+        className="scroll-mt-20"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle id="troubleshooting-heading" className="text-base">
+              异常排查
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
+              {TROUBLESHOOTING.map((item) => (
+                <TroubleshootingCard key={item.code} item={item} />
+              ))}
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  )
+}
 
-      <Alert>
-        <AlertTitle>提示</AlertTitle>
-        <AlertDescription>
-          <ul className="list-disc space-y-0.5 pl-4 text-sm">
-            <li>生产环境 Key 仅服务端持有，勿写进前端。</li>
-            <li>
-              兼容调用用{' '}
-              <span className="font-mono" translate="no">
-                sk-gw-*
-              </span>
-              ，非设置页{' '}
-              <span className="font-mono" translate="no">
-                sk-*
-              </span>
-              。
-            </li>
-            <li>
-              Anthropic{' '}
-              <span className="font-mono" translate="no">
-                baseURL
-              </span>{' '}
-              勿带{' '}
-              <span className="font-mono" translate="no">
-                /v1
-              </span>
-              。
-            </li>
-            <li>
-              异常排查 →{' '}
-              <Link to="/gateway/logs" className="text-primary underline-offset-4 hover:underline">
-                调用日志
-              </Link>
-            </li>
-          </ul>
-        </AlertDescription>
-      </Alert>
+function GuideAnchorNav({ active }: Readonly<{ active: string }>): React.JSX.Element {
+  const handleClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const id = href.slice(1)
+    const target = document.getElementById(id)
+    if (!target) return
+    event.preventDefault()
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.history.replaceState(null, '', href)
+  }, [])
+
+  return (
+    <nav
+      aria-label="调用指南目录"
+      className="sticky top-0 z-20 -mx-6 border-b border-border/60 bg-background/85 px-6 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+    >
+      <div
+        role="tablist"
+        aria-orientation="horizontal"
+        className="-mx-1 flex items-center gap-0.5 overflow-x-auto px-1 text-sm"
+      >
+        {GUIDE_NAV_ITEMS.map(([href, label]) => {
+          const isActive = href === active
+          return (
+            <a
+              key={href}
+              href={href}
+              role="tab"
+              aria-selected={isActive}
+              aria-current={isActive ? 'true' : undefined}
+              onClick={(event) => {
+                handleClick(event, href)
+              }}
+              className={cn(
+                'shrink-0 rounded-md px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                isActive
+                  ? 'bg-muted font-medium text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+              )}
+            >
+              {label}
+            </a>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
+function QuickStepItem({ item }: Readonly<{ item: QuickStep }>): React.JSX.Element {
+  const content = (
+    <div className="flex min-w-0 items-start gap-3 rounded-lg px-3 py-2 hover:bg-muted/50">
+      <Badge
+        variant="secondary"
+        className="mt-0.5 h-6 w-6 shrink-0 justify-center rounded-full p-0"
+      >
+        {item.step}
+      </Badge>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{item.title}</p>
+        <p className="text-xs text-muted-foreground">{item.description}</p>
+      </div>
+      {item.href.startsWith('#') ? null : (
+        <ExternalLink
+          className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+      )}
+    </div>
+  )
+
+  if (item.href.startsWith('#')) {
+    return (
+      <a
+        href={item.href}
+        className="rounded-lg underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {content}
+      </a>
+    )
+  }
+
+  return (
+    <Link
+      to={item.href}
+      className="rounded-lg underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {content}
+    </Link>
+  )
+}
+
+function GuideReferenceSection({
+  title,
+  children,
+  defaultOpen,
+}: Readonly<{
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}>): React.JSX.Element {
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="rounded-lg border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
+        {title}
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform"
+          aria-hidden="true"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t p-3">{children}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function ResponseExamples({
+  responseTab,
+  setResponseTab,
+  snippets,
+  copiedKey,
+  onCopy,
+}: Readonly<{
+  responseTab: ResponseTab
+  setResponseTab: (tab: ResponseTab) => void
+  snippets: GuideSnippets
+  copiedKey: string | null
+  onCopy: (key: string, text: string) => void
+}>): React.JSX.Element {
+  return (
+    <Tabs
+      value={responseTab}
+      onValueChange={(v) => {
+        setResponseTab(v as ResponseTab)
+      }}
+    >
+      <TabsList className="flex h-auto flex-wrap gap-1">
+        <ResponseTabTrigger value="openai-json" flavor="OpenAI" mode="json" />
+        <ResponseTabTrigger value="openai-sse" flavor="OpenAI" mode="sse" />
+        <ResponseTabTrigger value="anthropic-json" flavor="Anthropic" mode="json" />
+        <ResponseTabTrigger value="anthropic-sse" flavor="Anthropic" mode="sse" />
+      </TabsList>
+      <TabsContent value="openai-json">
+        <ResponseExample
+          title="POST /v1/chat/completions"
+          contentType="application/json"
+          mode="json"
+          code={snippets.openai.responseJson}
+          copyKey="openaiResponseJson"
+          copied={copiedKey === 'openaiResponseJson'}
+          onCopy={onCopy}
+        />
+      </TabsContent>
+      <TabsContent value="openai-sse">
+        <ResponseExample
+          title="POST /v1/chat/completions（stream: true）"
+          contentType="text/event-stream"
+          mode="sse"
+          code={snippets.openai.responseSse}
+          copyKey="openaiResponseSse"
+          copied={copiedKey === 'openaiResponseSse'}
+          onCopy={onCopy}
+        />
+      </TabsContent>
+      <TabsContent value="anthropic-json">
+        <ResponseExample
+          title="POST /v1/messages"
+          contentType="application/json"
+          mode="json"
+          code={snippets.anthropic.responseJson}
+          copyKey="anthropicResponseJson"
+          copied={copiedKey === 'anthropicResponseJson'}
+          onCopy={onCopy}
+        />
+      </TabsContent>
+      <TabsContent value="anthropic-sse">
+        <ResponseExample
+          title="POST /v1/messages（stream: true）"
+          contentType="text/event-stream"
+          mode="sse"
+          code={snippets.anthropic.responseSse}
+          copyKey="anthropicResponseSse"
+          copied={copiedKey === 'anthropicResponseSse'}
+          onCopy={onCopy}
+        />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>): React.JSX.Element {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">
+            <Badge variant="outline" className="mr-2 font-mono" translate="no">
+              {item.code}
+            </Badge>
+            {item.title}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{item.hint}</p>
+        </div>
+        <Link
+          to={item.href}
+          className="shrink-0 text-sm text-primary underline-offset-4 hover:underline"
+        >
+          {item.linkLabel}
+        </Link>
+      </div>
     </div>
   )
 }
@@ -862,33 +725,27 @@ function CapabilityGuideCard({
   const keyPrefix = `cap-${module.id}-${apiFlavor}`
 
   return (
-    <Collapsible defaultOpen={module.id === 'tools'}>
-      <Card>
-        <CardHeader className="pb-2">
-          <CollapsibleTrigger className="flex w-full items-start justify-between gap-2 text-left [&[data-state=open]>svg]:rotate-180">
-            <div className="space-y-1">
-              <CardTitle className="text-base">{module.title}</CardTitle>
-              <CardDescription>{module.description}</CardDescription>
-            </div>
-            <ChevronDown
-              className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform"
-              aria-hidden="true"
-            />
-          </CollapsibleTrigger>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="space-y-3 pt-0">
-            <FlavorExamples
-              curl={snippets.curl}
-              ts={snippets.ts}
-              py={snippets.py}
-              keyPrefix={keyPrefix}
-              copiedKey={copiedKey}
-              onCopy={onCopy}
-            />
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
+    <Collapsible defaultOpen={module.id === 'tools'} className="rounded-md border">
+      <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-medium">{module.title}</p>
+          <p className="text-xs text-muted-foreground">{module.description}</p>
+        </div>
+        <ChevronDown
+          className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform"
+          aria-hidden="true"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t p-3">
+        <FlavorExamples
+          curl={snippets.curl}
+          ts={snippets.ts}
+          py={snippets.py}
+          keyPrefix={keyPrefix}
+          copiedKey={copiedKey}
+          onCopy={onCopy}
+        />
+      </CollapsibleContent>
     </Collapsible>
   )
 }
@@ -1015,30 +872,50 @@ function FlavorExamples({
   const tsKey = `${keyPrefix}-ts`
   const pyKey = `${keyPrefix}-py`
   return (
-    <div className="space-y-3">
-      <CodeExampleCard
-        title="curl"
-        icon={Terminal}
-        code={curl}
-        copyKey={curlKey}
-        copied={copiedKey === curlKey}
-        onCopy={onCopy}
-      />
-      <CodeExampleCard
-        title="TypeScript（SDK）"
-        code={ts}
-        copyKey={tsKey}
-        copied={copiedKey === tsKey}
-        onCopy={onCopy}
-      />
-      <CodeExampleCard
-        title="Python（SDK）"
-        code={py}
-        copyKey={pyKey}
-        copied={copiedKey === pyKey}
-        onCopy={onCopy}
-      />
-    </div>
+    <Tabs defaultValue="curl" className="space-y-2">
+      <TabsList className="h-8">
+        <TabsTrigger value="curl" className="h-6 px-3 text-xs">
+          curl
+        </TabsTrigger>
+        <TabsTrigger value="ts" className="h-6 px-3 text-xs">
+          TypeScript
+        </TabsTrigger>
+        <TabsTrigger value="py" className="h-6 px-3 text-xs">
+          Python
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="curl">
+        <CodeExampleCard
+          title="curl"
+          icon={Terminal}
+          code={curl}
+          copyKey={curlKey}
+          copied={copiedKey === curlKey}
+          onCopy={onCopy}
+          embedded
+        />
+      </TabsContent>
+      <TabsContent value="ts">
+        <CodeExampleCard
+          title="TypeScript SDK"
+          code={ts}
+          copyKey={tsKey}
+          copied={copiedKey === tsKey}
+          onCopy={onCopy}
+          embedded
+        />
+      </TabsContent>
+      <TabsContent value="py">
+        <CodeExampleCard
+          title="Python SDK"
+          code={py}
+          copyKey={pyKey}
+          copied={copiedKey === pyKey}
+          onCopy={onCopy}
+          embedded
+        />
+      </TabsContent>
+    </Tabs>
   )
 }
 
@@ -1152,7 +1029,7 @@ function CodeExampleCard({
           }}
         />
       </div>
-      <pre className="max-h-72 overflow-auto rounded-md border bg-muted/50 p-4 pr-24 text-xs leading-relaxed">
+      <pre className="overflow-x-auto rounded-md border bg-muted/50 p-4 pr-24 text-xs leading-relaxed">
         <code translate="no">{code}</code>
       </pre>
     </div>

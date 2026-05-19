@@ -50,7 +50,16 @@ import { useSyncApiKeyFromVkey } from './use-sync-api-key-from-vkey'
 
 import type { PlaygroundApiFlavor } from './types'
 
-const DEFAULT_PROMPT = '用一句话介绍你自己。'
+const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
+  chat: '请用三句话介绍 AI Gateway 的作用，并给出一个适合接入的场景。',
+  vision: '请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。',
+  image_gen:
+    '写实风格的 SaaS 产品发布海报，主体是一台展示 AI Gateway 控制台的笔记本电脑，蓝紫渐变背景，干净科技感，16:9。',
+  video_gen:
+    '生成一段 6 秒产品演示短视频：镜头从团队仪表盘推进到模型调用日志，风格简洁、科技感、平滑运镜。',
+}
+const DEFAULT_PROMPT = DEFAULT_PROMPTS.chat
+const DEFAULT_PROMPT_VALUES = new Set<string>(Object.values(DEFAULT_PROMPTS))
 const IMAGE_GEN_SIZES = ['1024x1024', '1024x1792', '1792x1024'] as const
 
 const MODEL_STATUS_RANK: Record<'success' | 'null' | 'failed', number> = {
@@ -225,6 +234,9 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
 
   const handleModeChange = (mode: PlaygroundMode): void => {
     setPlaygroundMode(mode)
+    if (!prompt.trim() || DEFAULT_PROMPT_VALUES.has(prompt)) {
+      setPrompt(DEFAULT_PROMPTS[mode])
+    }
     resetAllCalls()
   }
 
@@ -233,11 +245,9 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
 
-  const canSubmit = ((): boolean => {
-    if (!trimmedKey || !trimmedModel || !trimmedPrompt) return false
-    if (playgroundMode === 'vision' && !trimmedVisionUrl) return false
-    return true
-  })()
+  const canSubmit =
+    Boolean(trimmedKey && trimmedModel && trimmedPrompt) &&
+    (playgroundMode !== 'vision' || Boolean(trimmedVisionUrl))
 
   const handleSend = (): void => {
     const params = {
@@ -285,12 +295,12 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
             <div className="space-y-1">
               <CardTitle className="text-base">在线试调</CardTitle>
               <CardDescription>
-                直接调用{' '}
+                调用{' '}
                 <span className="font-mono" translate="no">
                   {baseUrl}
                   {endpointPath}
                 </span>
-                ，按试调模式选择端点与参数。
+                。试调 Key 仅用于控制台；生产环境请在服务端持有凭证。
               </CardDescription>
             </div>
             <PlaygroundStatusBadge status={status} />
@@ -311,210 +321,214 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
           </Tabs>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {showApiFlavorTabs ? (
-          <Tabs
-            value={apiFlavor}
-            onValueChange={(v) => {
-              setApiFlavor(v as PlaygroundApiFlavor)
-              resetAllCalls()
-            }}
-          >
-            <TabsList className="h-8">
-              <TabsTrigger value="openai" className="h-7 px-2.5 text-xs">
-                OpenAI
-              </TabsTrigger>
-              <TabsTrigger value="anthropic" className="h-7 px-2.5 text-xs">
-                Anthropic
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        ) : null}
+      <CardContent className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
+        <div className="min-w-0 space-y-4">
+          {showApiFlavorTabs ? (
+            <Tabs
+              value={apiFlavor}
+              onValueChange={(v) => {
+                setApiFlavor(v as PlaygroundApiFlavor)
+                resetAllCalls()
+              }}
+            >
+              <TabsList className="h-8">
+                <TabsTrigger value="openai" className="h-7 px-2.5 text-xs">
+                  OpenAI
+                </TabsTrigger>
+                <TabsTrigger value="anthropic" className="h-7 px-2.5 text-xs">
+                  Anthropic
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <PlaygroundKeyField
-            apiKeyId={apiKeyId}
-            apiKey={apiKey}
-            showKey={showKey}
-            onApiKeyChange={(value) => {
-              userEditedKeyRef.current = true
-              setApiKey(value)
-            }}
-            onShowKeyToggle={() => {
-              setShowKey((v) => !v)
-            }}
-            virtualKeys={virtualKeys}
-            selectedKeyId={selectedKeyId}
-            selectedKey={selectedKey}
-            isLoadingKeys={isLoadingKeys}
-            isRevealing={isRevealing}
-            revealError={revealError}
-            userEdited={userEditedKeyRef.current && apiKey !== plain}
-            onSelectKey={(id) => {
-              selectKey(id)
-              setShowKey(false)
-            }}
-            onUserEditedReset={() => {
-              userEditedKeyRef.current = false
-            }}
-          />
-          <PlaygroundModelField
-            modelSelectId={modelSelectId}
-            modelCustomId={modelCustomId}
-            model={model}
-            customModel={customModel}
-            onModelChange={setModel}
-            onCustomModelChange={(nextCustom, nextModel) => {
-              setCustomModel(nextCustom)
-              if (nextModel !== undefined) setModel(nextModel)
-            }}
-            teamCandidates={teamCandidates}
-            personalCandidates={personalCandidates}
-            filteredModels={filteredModels}
-            selectedCandidate={selectedCandidate}
-            priceByName={priceByName}
-            currency={displayCurrency}
-            playgroundMode={playgroundMode}
-            modelsLoading={teamModelsQuery.isLoading || myModelsQuery.isLoading}
-          />
-        </div>
-
-        {playgroundMode === 'vision' ? (
-          <VisionInput
-            imageUrlId={visionImageUrlId}
-            imageUrl={visionImageUrl}
-            onImageUrlChange={setVisionImageUrl}
-            disabled={isRunning}
-          />
-        ) : null}
-
-        {playgroundMode === 'video_gen' ? (
-          <VisionInput
-            imageUrlId={videoImageUrlId}
-            imageUrl={videoImageUrl}
-            onImageUrlChange={setVideoImageUrl}
-            disabled={isRunning}
-            label="参考图片 URL（可选）"
-          />
-        ) : null}
-
-        <div className="space-y-1.5">
-          <Label htmlFor={promptId}>
-            {playgroundMode === 'image_gen'
-              ? '提示词'
-              : playgroundMode === 'video_gen'
-                ? '视频描述'
-                : '用户消息'}
-          </Label>
-          <Textarea
-            id={promptId}
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value)
-            }}
-            rows={3}
-            placeholder="输入要发送给模型的内容…"
-          />
-        </div>
-
-        {playgroundMode === 'image_gen' ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={imageSizeId}>尺寸</Label>
-              <Select value={imageSize} onValueChange={setImageSize}>
-                <SelectTrigger id={imageSizeId} className="font-mono text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_GEN_SIZES.map((size) => (
-                    <SelectItem key={size} value={size} className="font-mono">
-                      {size}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={imageCountId}>数量 (n)</Label>
-              <Input
-                id={imageCountId}
-                type="number"
-                min={1}
-                max={4}
-                value={imageN}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10)
-                  if (!Number.isNaN(n)) setImageN(Math.min(4, Math.max(1, n)))
-                }}
-                className="font-mono"
-              />
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <PlaygroundKeyField
+              apiKeyId={apiKeyId}
+              apiKey={apiKey}
+              showKey={showKey}
+              onApiKeyChange={(value) => {
+                userEditedKeyRef.current = true
+                setApiKey(value)
+              }}
+              onShowKeyToggle={() => {
+                setShowKey((v) => !v)
+              }}
+              virtualKeys={virtualKeys}
+              selectedKeyId={selectedKeyId}
+              selectedKey={selectedKey}
+              isLoadingKeys={isLoadingKeys}
+              isRevealing={isRevealing}
+              revealError={revealError}
+              userEdited={userEditedKeyRef.current && apiKey !== plain}
+              onSelectKey={(id) => {
+                selectKey(id)
+                setShowKey(false)
+              }}
+              onUserEditedReset={() => {
+                userEditedKeyRef.current = false
+              }}
+            />
+            <PlaygroundModelField
+              modelSelectId={modelSelectId}
+              modelCustomId={modelCustomId}
+              model={model}
+              customModel={customModel}
+              onModelChange={setModel}
+              onCustomModelChange={(nextCustom, nextModel) => {
+                setCustomModel(nextCustom)
+                if (nextModel !== undefined) setModel(nextModel)
+              }}
+              teamCandidates={teamCandidates}
+              personalCandidates={personalCandidates}
+              filteredModels={filteredModels}
+              selectedCandidate={selectedCandidate}
+              priceByName={priceByName}
+              currency={displayCurrency}
+              playgroundMode={playgroundMode}
+              modelsLoading={teamModelsQuery.isLoading || myModelsQuery.isLoading}
+            />
           </div>
-        ) : null}
 
-        <div className="flex flex-wrap items-center gap-3">
-          {showStreamSwitch ? (
-            <div className="flex items-center gap-2">
-              <Switch
-                id={streamId}
-                checked={stream}
-                onCheckedChange={setStream}
-                disabled={isRunning}
-              />
-              <Label htmlFor={streamId} className="cursor-pointer">
-                流式响应（SSE）
-              </Label>
+          {playgroundMode === 'vision' ? (
+            <VisionInput
+              imageUrlId={visionImageUrlId}
+              imageUrl={visionImageUrl}
+              onImageUrlChange={setVisionImageUrl}
+              disabled={isRunning}
+            />
+          ) : null}
+
+          {playgroundMode === 'video_gen' ? (
+            <VisionInput
+              imageUrlId={videoImageUrlId}
+              imageUrl={videoImageUrl}
+              onImageUrlChange={setVideoImageUrl}
+              disabled={isRunning}
+              label="参考图片 URL（可选）"
+            />
+          ) : null}
+
+          <div className="space-y-1.5">
+            <Label htmlFor={promptId}>
+              {playgroundMode === 'image_gen'
+                ? '提示词'
+                : playgroundMode === 'video_gen'
+                  ? '视频描述'
+                  : '用户消息'}
+            </Label>
+            <Textarea
+              id={promptId}
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value)
+              }}
+              rows={4}
+              placeholder={DEFAULT_PROMPTS[playgroundMode]}
+            />
+          </div>
+
+          {playgroundMode === 'image_gen' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor={imageSizeId}>尺寸</Label>
+                <Select value={imageSize} onValueChange={setImageSize}>
+                  <SelectTrigger id={imageSizeId} className="font-mono text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_GEN_SIZES.map((size) => (
+                      <SelectItem key={size} value={size} className="font-mono">
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={imageCountId}>数量 (n)</Label>
+                <Input
+                  id={imageCountId}
+                  type="number"
+                  min={1}
+                  max={4}
+                  value={imageN}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.target.value, 10)
+                    if (!Number.isNaN(n)) setImageN(Math.min(4, Math.max(1, n)))
+                  }}
+                  className="font-mono"
+                />
+              </div>
             </div>
           ) : null}
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            {isRunning ? (
-              <Button type="button" variant="outline" size="sm" onClick={cancel}>
-                <StopCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                中止
-              </Button>
-            ) : (
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-2">
+            {showStreamSwitch ? (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={streamId}
+                  checked={stream}
+                  onCheckedChange={setStream}
+                  disabled={isRunning}
+                />
+                <Label htmlFor={streamId} className="cursor-pointer text-sm">
+                  流式响应（SSE）
+                </Label>
+              </div>
+            ) : null}
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+              {isRunning ? (
+                <Button type="button" variant="outline" size="sm" onClick={cancel}>
+                  <StopCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  中止
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetAllCalls}
+                  disabled={status === 'idle' && !content && !error}
+                >
+                  <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  清空
+                </Button>
+              )}
               <Button
                 type="button"
-                variant="ghost"
                 size="sm"
-                onClick={resetAllCalls}
-                disabled={status === 'idle' && !content && !error}
+                disabled={!canSubmit || isRunning}
+                aria-busy={isRunning}
+                onClick={handleSend}
               >
-                <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                清空
+                {isRunning ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <PlayCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                )}
+                发送
               </Button>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canSubmit || isRunning}
-              aria-busy={isRunning}
-              onClick={handleSend}
-            >
-              {isRunning ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <PlayCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              )}
-              发送
-            </Button>
+            </div>
           </div>
         </div>
 
-        <PlaygroundOutputPanel
-          status={status}
-          content={content}
-          metadata={metadata}
-          error={error}
-          rawResponse={rawResponse}
-          lastRequest={lastRequest}
-          priceRow={priceByName.get(trimmedModel)}
-          currency={displayCurrency}
-          flavor={playgroundMode === 'chat' ? apiFlavor : 'openai'}
-          stream={showStreamSwitch ? stream : false}
-          endpoint={`${baseUrl}${endpointPath}`}
-          playgroundMode={playgroundMode}
-        />
+        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+          <PlaygroundOutputPanel
+            status={status}
+            content={content}
+            metadata={metadata}
+            error={error}
+            rawResponse={rawResponse}
+            lastRequest={lastRequest}
+            priceRow={priceByName.get(trimmedModel)}
+            currency={displayCurrency}
+            flavor={playgroundMode === 'chat' ? apiFlavor : 'openai'}
+            stream={showStreamSwitch ? stream : false}
+            endpoint={`${baseUrl}${endpointPath}`}
+            playgroundMode={playgroundMode}
+          />
+        </div>
       </CardContent>
     </Card>
   )

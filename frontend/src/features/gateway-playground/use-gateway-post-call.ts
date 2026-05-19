@@ -4,7 +4,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { extractOpenAiCompatError, type OpenAiCompatChunk } from './openai-sse'
+import {
+  buildNetworkPlaygroundError,
+  extractPlaygroundHttpError,
+  readPlaygroundErrorBody,
+} from './playground-error'
 import { maskAuthHeadersForDisplay } from './playground-request'
 
 import type {
@@ -128,7 +132,7 @@ export function useGatewayPostCall(): UseGatewayPostCallReturn {
           return
         }
         setStatus('error')
-        setError({ message: e instanceof Error ? e.message : '网络请求失败' })
+        setError(buildNetworkPlaygroundError(e, url))
         return
       }
 
@@ -140,17 +144,10 @@ export function useGatewayPostCall(): UseGatewayPostCallReturn {
       const elapsedMs = Math.round(performance.now() - startedAt)
 
       if (!response.ok) {
-        let errorJson: unknown = null
-        try {
-          errorJson = await response.json()
-        } catch {
-          // ignore
-        }
+        const errorJson = await readPlaygroundErrorBody(response)
         const fallback = `HTTP ${String(response.status)} ${response.statusText}`
         setStatus('error')
-        setError(
-          extractOpenAiCompatError(errorJson as OpenAiCompatChunk | null, response.status, fallback)
-        )
+        setError(extractPlaygroundHttpError(errorJson, response.status, fallback, 'openai'))
         setMetadata({ httpStatus: response.status, elapsedMs, requestId })
         setRawResponse(errorJson)
         return

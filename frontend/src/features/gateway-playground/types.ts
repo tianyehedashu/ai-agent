@@ -23,6 +23,7 @@ export interface PlaygroundError {
   httpStatus?: number
   code?: string | null
   message: string
+  hint?: string
 }
 
 /** 试调最近一次 POST 的请求快照（Key 已脱敏），供 UI「请求」Tab 展示。 */

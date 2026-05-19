@@ -1,5 +1,5 @@
 ﻿/**
- * AI Gateway ? ????? / ???
+ * AI Gateway · 模型（个人 / 团队）
  */
 
 import { Suspense, lazy, startTransition, useCallback, useEffect } from 'react'
@@ -92,33 +92,33 @@ export default function GatewayModelsPage(): React.JSX.Element {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">??</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">模型</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {scopeTab === 'shared' ? (
             <>
-              ??????? LiteLLM ?????????{' '}
+              团队别名映射至 LiteLLM 上游；对外暴露名在{' '}
               <Link
                 to="/gateway/routes"
                 className="text-primary underline-offset-4 hover:underline"
               >
-                ????
+                虚拟路由
               </Link>{' '}
-              ????????????????????????????
+              编排。点击列表项进入详情；注册新模型请使用「添加模型」。
             </>
           ) : (
             <>
-              ?????? LiteLLM Router???????{' '}
+              个人模型进入 LiteLLM Router，可用于对话与{' '}
               <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
-                ?? Key
+                虚拟 Key
               </Link>{' '}
-              / OpenAI ?? API??????????????{' '}
+              / OpenAI 兼容 API。点击列表进入详情；需先配置{' '}
               <Link
                 to="/gateway/credentials?tab=personal"
                 className="text-primary underline-offset-4 hover:underline"
               >
-                ????
+                个人凭据
               </Link>
-              ?
+              。
             </>
           )}
         </p>
@@ -139,7 +139,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
                   onFocus={preloadPersonalModelsWorkspace}
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" />
-                  ??????
+                  返回模型列表
                 </Link>
               </Button>
               <Suspense fallback={<ModelsPanelFallback />}>
@@ -162,7 +162,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
                 onFocus={preloadTeamModelsWorkspace}
               >
                 <ChevronLeft className="mr-1 h-4 w-4" />
-                ??????
+                返回模型列表
               </Link>
             </Button>
             <Suspense fallback={<ModelsPanelFallback />}>

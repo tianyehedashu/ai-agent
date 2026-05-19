@@ -27,20 +27,19 @@ export function buildCapabilityModules(
     {
       id: 'tools',
       title: '工具调用（Tools）',
-      description:
-        'OpenAI 使用 tools + tool_choice；Anthropic 使用 tools + tool_choice，多轮时 assistant 返回 tool_use，user 侧用 tool_result 回传结果。',
+      description: '适合需要实时数据、业务系统查询或函数执行的模型。',
       openai: {
         curl: `curl "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "${authOpenai}" \\
   -d '{
     "model": "${model}",
-    "messages": [{"role": "user", "content": "北京今天天气？"}],
+    "messages": [{"role": "user", "content": "查询北京今天的天气，并说明是否适合户外跑步。"}],
     "tools": [{
       "type": "function",
       "function": {
         "name": "get_weather",
-        "description": "查询城市天气",
+        "description": "查询指定城市的实时天气",
         "parameters": {
           "type": "object",
           "properties": {"city": {"type": "string"}},
@@ -52,12 +51,12 @@ export function buildCapabilityModules(
   }'`,
         ts: `const completion = await client.chat.completions.create({
   model: "${model}",
-  messages: [{ role: "user", content: "北京今天天气？" }],
+  messages: [{ role: "user", content: "查询北京今天的天气，并说明是否适合户外跑步。" }],
   tools: [{
     type: "function",
     function: {
       name: "get_weather",
-      description: "查询城市天气",
+      description: "查询指定城市的实时天气",
       parameters: {
         type: "object",
         properties: { city: { type: "string" } },
@@ -69,12 +68,12 @@ export function buildCapabilityModules(
 });`,
         py: `completion = client.chat.completions.create(
     model="${model}",
-    messages=[{"role": "user", "content": "北京今天天气？"}],
+    messages=[{"role": "user", "content": "查询北京今天的天气，并说明是否适合户外跑步。"}],
     tools=[{
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "查询城市天气",
+            "description": "查询指定城市的实时天气",
             "parameters": {
                 "type": "object",
                 "properties": {"city": {"type": "string"}},
@@ -93,10 +92,10 @@ export function buildCapabilityModules(
   -d '{
     "model": "${model}",
     "max_tokens": 1024,
-    "messages": [{"role": "user", "content": "北京今天天气？"}],
+    "messages": [{"role": "user", "content": "查询北京今天的天气，并说明是否适合户外跑步。"}],
     "tools": [{
       "name": "get_weather",
-      "description": "查询城市天气",
+      "description": "查询指定城市的实时天气",
       "input_schema": {
         "type": "object",
         "properties": {"city": {"type": "string"}},
@@ -108,10 +107,10 @@ export function buildCapabilityModules(
         ts: `const message = await client.messages.create({
   model: "${model}",
   max_tokens: 1024,
-  messages: [{ role: "user", content: "北京今天天气？" }],
+  messages: [{ role: "user", content: "查询北京今天的天气，并说明是否适合户外跑步。" }],
   tools: [{
     name: "get_weather",
-    description: "查询城市天气",
+    description: "查询指定城市的实时天气",
     input_schema: {
       type: "object",
       properties: { city: { type: "string" } },
@@ -123,10 +122,10 @@ export function buildCapabilityModules(
         py: `message = client.messages.create(
     model="${model}",
     max_tokens=1024,
-    messages=[{"role": "user", "content": "北京今天天气？"}],
+    messages=[{"role": "user", "content": "查询北京今天的天气，并说明是否适合户外跑步。"}],
     tools=[{
         "name": "get_weather",
-        "description": "查询城市天气",
+        "description": "查询指定城市的实时天气",
         "input_schema": {
             "type": "object",
             "properties": {"city": {"type": "string"}},
@@ -140,8 +139,7 @@ export function buildCapabilityModules(
     {
       id: 'vision',
       title: '视觉理解（图片输入）',
-      description:
-        'OpenAI 在 messages.content 使用 image_url；Anthropic 使用 image block（base64 或 URL）。需模型支持 vision。',
+      description: '适合图片理解、结构化提取、质检和风险识别。',
       openai: {
         curl: `curl "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
@@ -151,7 +149,7 @@ export function buildCapabilityModules(
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "描述这张图"},
+        {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
         {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}}
       ]
     }]
@@ -161,7 +159,7 @@ export function buildCapabilityModules(
   messages: [{
     role: "user",
     content: [
-      { type: "text", text: "描述这张图" },
+      { type: "text", text: "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。" },
       { type: "image_url", image_url: { url: "https://example.com/photo.jpg" } },
     ],
   }],
@@ -171,7 +169,7 @@ export function buildCapabilityModules(
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "描述这张图"},
+            {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
             {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}},
         ],
     }],
@@ -188,7 +186,7 @@ export function buildCapabilityModules(
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "描述这张图"},
+        {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
         {
           "type": "image",
           "source": {
@@ -205,7 +203,7 @@ export function buildCapabilityModules(
   messages: [{
     role: "user",
     content: [
-      { type: "text", text: "描述这张图" },
+      { type: "text", text: "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。" },
       { type: "image", source: { type: "url", url: "https://example.com/photo.jpg" } },
     ],
   }],
@@ -216,7 +214,7 @@ export function buildCapabilityModules(
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "描述这张图"},
+            {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
             {"type": "image", "source": {"type": "url", "url": "https://example.com/photo.jpg"}},
         ],
     }],
@@ -226,8 +224,7 @@ export function buildCapabilityModules(
     {
       id: 'caching',
       title: 'Prompt Caching',
-      description:
-        'Anthropic 在 system / message 的 text block 上设置 cache_control（ephemeral）。OpenAI 侧取决于上游模型与 LiteLLM 能力，常用 extra_headers 开启 provider 特性。',
+      description: '适合长系统提示、长文档上下文或多轮复用的固定前缀。',
       openai: {
         curl: `# OpenAI 兼容：视模型/供应商而定，可尝试 extra_headers
 curl "${baseUrl}/chat/completions" \\
@@ -236,8 +233,8 @@ curl "${baseUrl}/chat/completions" \\
   -d '{
     "model": "${model}",
     "messages": [
-      {"role": "system", "content": "长系统提示..."},
-      {"role": "user", "content": "继续对话"}
+      {"role": "system", "content": "你是合同审阅助手。以下长期规则会在多轮审阅中复用..."},
+      {"role": "user", "content": "基于这些规则审阅第 12 条，列出风险和修改建议。"}
     ],
     "metadata": {"session_id": "demo-1"}
   }'`,
@@ -252,16 +249,16 @@ await fetch("${baseUrl}/chat/completions", {
   body: JSON.stringify({
     model: "${model}",
     messages: [
-      { role: "system", content: "长系统提示..." },
-      { role: "user", content: "继续对话" },
+      { role: "system", content: "你是合同审阅助手。以下长期规则会在多轮审阅中复用..." },
+      { role: "user", content: "基于这些规则审阅第 12 条，列出风险和修改建议。" },
     ],
   }),
 });`,
         py: `client.chat.completions.create(
     model="${model}",
     messages=[
-        {"role": "system", "content": "长系统提示..."},
-        {"role": "user", "content": "继续对话"},
+        {"role": "system", "content": "你是合同审阅助手。以下长期规则会在多轮审阅中复用..."},
+        {"role": "user", "content": "基于这些规则审阅第 12 条，列出风险和修改建议。"},
     ],
     extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
 )`,
@@ -276,38 +273,37 @@ await fetch("${baseUrl}/chat/completions", {
     "max_tokens": 1024,
     "system": [{
       "type": "text",
-      "text": "长系统提示（可缓存）...",
+      "text": "你是合同审阅助手。以下长期规则会在多轮审阅中复用...",
       "cache_control": {"type": "ephemeral"}
     }],
-    "messages": [{"role": "user", "content": "继续对话"}]
+    "messages": [{"role": "user", "content": "基于这些规则审阅第 12 条，列出风险和修改建议。"}]
   }'`,
         ts: `await client.messages.create({
   model: "${model}",
   max_tokens: 1024,
   system: [{
     type: "text",
-    text: "长系统提示（可缓存）...",
+    text: "你是合同审阅助手。以下长期规则会在多轮审阅中复用...",
     cache_control: { type: "ephemeral" },
   }],
-  messages: [{ role: "user", content: "继续对话" }],
+  messages: [{ role: "user", content: "基于这些规则审阅第 12 条，列出风险和修改建议。" }],
 });`,
         py: `client.messages.create(
     model="${model}",
     max_tokens=1024,
     system=[{
         "type": "text",
-        "text": "长系统提示（可缓存）...",
+        "text": "你是合同审阅助手。以下长期规则会在多轮审阅中复用...",
         "cache_control": {"type": "ephemeral"},
     }],
-    messages=[{"role": "user", "content": "继续对话"}],
+    messages=[{"role": "user", "content": "基于这些规则审阅第 12 条，列出风险和修改建议。"}],
 )`,
       },
     },
     {
       id: 'thinking',
       title: 'Extended Thinking',
-      description:
-        'Anthropic 原生通道支持 thinking 参数；响应 usage 可含推理相关 token。OpenAI 兼容路径取决于具体模型是否支持 reasoning 字段。',
+      description: '适合多步骤规划、约束推理和需要更长推理预算的任务。',
       openai: {
         curl: `# 仅部分推理模型支持（如 o-series）；字段因模型而异
 curl "${baseUrl}/chat/completions" \\
@@ -315,18 +311,18 @@ curl "${baseUrl}/chat/completions" \\
   -H "${authOpenai}" \\
   -d '{
     "model": "${model}",
-    "messages": [{"role": "user", "content": "证明 sqrt(2) 无理"}],
+    "messages": [{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}],
     "max_completion_tokens": 2048
   }'`,
         ts: `// 推理模型示例（字段以模型文档为准）
 await client.chat.completions.create({
   model: "${model}",
-  messages: [{ role: "user", content: "证明 sqrt(2) 无理" }],
+  messages: [{ role: "user", content: "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。" }],
   max_completion_tokens: 2048,
 });`,
         py: `client.chat.completions.create(
     model="${model}",
-    messages=[{"role": "user", "content": "证明 sqrt(2) 无理"}],
+    messages=[{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}],
     max_completion_tokens=2048,
 )`,
       },
@@ -339,36 +335,35 @@ await client.chat.completions.create({
     "model": "${model}",
     "max_tokens": 16000,
     "thinking": {"type": "enabled", "budget_tokens": 8000},
-    "messages": [{"role": "user", "content": "证明 sqrt(2) 无理"}]
+    "messages": [{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}]
   }'`,
         ts: `await client.messages.create({
   model: "${model}",
   max_tokens: 16000,
   thinking: { type: "enabled", budget_tokens: 8000 },
-  messages: [{ role: "user", content: "证明 sqrt(2) 无理" }],
+  messages: [{ role: "user", content: "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。" }],
 });`,
         py: `client.messages.create(
     model="${model}",
     max_tokens=16000,
     thinking={"type": "enabled", "budget_tokens": 8000},
-    messages=[{"role": "user", "content": "证明 sqrt(2) 无理"}],
+    messages=[{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}],
 )`,
       },
     },
     {
       id: 'sse',
       title: '流式事件（SSE）',
-      description:
-        'OpenAI：data: {...} 行，以 data: [DONE] 结束。Anthropic：event: <name> + data: JSON，以 message_stop 结束。',
+      description: '适合长文本、边生成边展示和低首字延迟场景。',
       openai: {
         curl: `curl -N "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "${authOpenai}" \\
-  -d '{"model": "${model}", "stream": true, "messages": [{"role": "user", "content": "Hi"}]}'`,
+  -d '{"model": "${model}", "stream": true, "messages": [{"role": "user", "content": "逐步生成一段 80 字以内的产品发布公告。"}]}'`,
         ts: `const stream = await client.chat.completions.create({
   model: "${model}",
   stream: true,
-  messages: [{ role: "user", content: "Hi" }],
+  messages: [{ role: "user", content: "逐步生成一段 80 字以内的产品发布公告。" }],
 });
 for await (const chunk of stream) {
   const piece = chunk.choices[0]?.delta?.content;
@@ -377,7 +372,7 @@ for await (const chunk of stream) {
         py: `stream = client.chat.completions.create(
     model="${model}",
     stream=True,
-    messages=[{"role": "user", "content": "Hi"}],
+    messages=[{"role": "user", "content": "逐步生成一段 80 字以内的产品发布公告。"}],
 )
 for chunk in stream:
     print(chunk.choices[0].delta.content or "", end="", flush=True)`,
@@ -387,11 +382,11 @@ for chunk in stream:
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
-  -d '{"model": "${model}", "max_tokens": 1024, "stream": true, "messages": [{"role": "user", "content": "Hi"}]}'`,
+  -d '{"model": "${model}", "max_tokens": 1024, "stream": true, "messages": [{"role": "user", "content": "逐步生成一段 80 字以内的产品发布公告。"}]}'`,
         ts: `const stream = client.messages.stream({
   model: "${model}",
   max_tokens: 1024,
-  messages: [{ role: "user", content: "Hi" }],
+  messages: [{ role: "user", content: "逐步生成一段 80 字以内的产品发布公告。" }],
 });
 for await (const event of stream) {
   if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
@@ -401,7 +396,7 @@ for await (const event of stream) {
         py: `with client.messages.stream(
     model="${model}",
     max_tokens=1024,
-    messages=[{"role": "user", "content": "Hi"}],
+    messages=[{"role": "user", "content": "逐步生成一段 80 字以内的产品发布公告。"}],
 ) as stream:
     for text in stream.text_stream:
         print(text, end="", flush=True)`,
@@ -410,8 +405,7 @@ for await (const event of stream) {
     {
       id: 'metadata',
       title: 'metadata 与常用参数',
-      description:
-        'metadata 中自定义键会进入网关日志（勿用 gateway_ 前缀）。Anthropic 另支持 top_k、stop_sequences、temperature、top_p 等原生字段。',
+      description: '适合演示温度、停止词、追踪 ID 等可观测参数。',
       openai: {
         curl: `curl "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
@@ -422,7 +416,7 @@ for await (const event of stream) {
     "max_tokens": 512,
     "stop": ["###"],
     "metadata": {"trace_id": "req-001", "env": "prod"},
-    "messages": [{"role": "user", "content": "Hello"}]
+    "messages": [{"role": "user", "content": "用三句话总结本次请求的处理策略。"}]
   }'`,
         ts: `await client.chat.completions.create({
   model: "${model}",
@@ -430,7 +424,7 @@ for await (const event of stream) {
   max_tokens: 512,
   stop: ["###"],
   metadata: { trace_id: "req-001", env: "prod" },
-  messages: [{ role: "user", content: "Hello" }],
+  messages: [{ role: "user", content: "用三句话总结本次请求的处理策略。" }],
 });`,
         py: `client.chat.completions.create(
     model="${model}",
@@ -438,7 +432,7 @@ for await (const event of stream) {
     max_tokens=512,
     stop=["###"],
     metadata={"trace_id": "req-001", "env": "prod"},
-    messages=[{"role": "user", "content": "Hello"}],
+    messages=[{"role": "user", "content": "用三句话总结本次请求的处理策略。"}],
 )`,
       },
       anthropic: {
@@ -454,7 +448,7 @@ for await (const event of stream) {
     "top_k": 40,
     "stop_sequences": ["###"],
     "metadata": {"trace_id": "req-001"},
-    "messages": [{"role": "user", "content": "Hello"}]
+    "messages": [{"role": "user", "content": "用三句话总结本次请求的处理策略。"}]
   }'`,
         ts: `await client.messages.create({
   model: "${model}",
@@ -464,7 +458,7 @@ for await (const event of stream) {
   top_k: 40,
   stop_sequences: ["###"],
   metadata: { trace_id: "req-001" },
-  messages: [{ role: "user", content: "Hello" }],
+  messages: [{ role: "user", content: "用三句话总结本次请求的处理策略。" }],
 });`,
         py: `client.messages.create(
     model="${model}",
@@ -474,7 +468,7 @@ for await (const event of stream) {
     top_k=40,
     stop_sequences=["###"],
     metadata={"trace_id": "req-001"},
-    messages=[{"role": "user", "content": "Hello"}],
+    messages=[{"role": "user", "content": "用三句话总结本次请求的处理策略。"}],
 )`,
       },
     },
@@ -487,7 +481,7 @@ for await (const event of stream) {
         curl: `curl "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "${authOpenai}" \\
-  -d '{"model": "${model}", "messages": [{"role": "user", "content": "Hi"}]}'`,
+  -d '{"model": "${model}", "messages": [{"role": "user", "content": "发送一个最小测试请求，用于验证错误处理和日志链路。"}]}'`,
         ts: `// 429: error.type === "rate_limit_exceeded"
 // 402: error.type === "budget_exceeded"
 try {
@@ -509,14 +503,14 @@ curl -i "${baseUrl}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
-  -d '{"model": "${model}", "max_tokens": 32, "messages": [{"role": "user", "content": "Hi"}]}'`,
+  -d '{"model": "${model}", "max_tokens": 32, "messages": [{"role": "user", "content": "发送一个最小测试请求，用于验证错误处理和日志链路。"}]}'`,
         ts: `// 429: detail.error.type === "rate_limit_error"
 // 402: detail.error.type === "api_error"（预算用尽）
 try {
   await client.messages.create({
     model: "${model}",
     max_tokens: 32,
-    messages: [{ role: "user", content: "Hi" }],
+    messages: [{ role: "user", content: "发送一个最小测试请求，用于验证错误处理和日志链路。" }],
   });
 } catch (e) {
   console.error(e.status, e.error?.type);
@@ -527,7 +521,7 @@ try:
     client.messages.create(
         model="${model}",
         max_tokens=32,
-        messages=[{"role": "user", "content": "Hi"}],
+        messages=[{"role": "user", "content": "发送一个最小测试请求，用于验证错误处理和日志链路。"}],
     )
 except Exception as e:
     print(getattr(e, "status_code", None), e)`,

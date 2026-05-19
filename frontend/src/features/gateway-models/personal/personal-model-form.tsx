@@ -200,7 +200,7 @@ export function PersonalModelForm({
                   type="button"
                   className="flex w-full items-center justify-between"
                 >
-                  <span>?????????</span>
+                  <span>从凭据探测上游模型</span>
                   <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
                 </Button>
               </CollapsibleTrigger>

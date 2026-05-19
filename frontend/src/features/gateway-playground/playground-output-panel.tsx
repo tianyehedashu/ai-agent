@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 import { Link } from 'react-router-dom'
 
 import type { MyPriceRow } from '@/api/gateway'
@@ -24,7 +26,7 @@ import type {
   PlaygroundStatus,
 } from './types'
 
-export function PlaygroundOutputPanel({
+export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
   status,
   content,
   metadata,
@@ -79,7 +81,7 @@ export function PlaygroundOutputPanel({
         streaming={status === 'streaming'}
         playgroundMode={playgroundMode}
       />
-      {error ? <ErrorBlock error={error} /> : null}
+      {error ? <ErrorBlock error={error} requestId={metadata?.requestId} /> : null}
       {content || rawResponse || lastRequest ? (
         <Tabs defaultValue="text" className="w-full">
           <TabsList className="h-8">
@@ -134,7 +136,7 @@ export function PlaygroundOutputPanel({
       ) : null}
     </div>
   )
-}
+})
 
 function PlaygroundMetadataFooter({
   metadata,
@@ -227,7 +229,10 @@ function ResponseModeHeader({
   )
 }
 
-function ErrorBlock({ error }: Readonly<{ error: PlaygroundError }>): React.JSX.Element {
+function ErrorBlock({
+  error,
+  requestId,
+}: Readonly<{ error: PlaygroundError; requestId?: string }>): React.JSX.Element {
   return (
     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
       <div className="mb-1 flex items-center gap-2 font-medium">
@@ -244,7 +249,15 @@ function ErrorBlock({ error }: Readonly<{ error: PlaygroundError }>): React.JSX.
           </Badge>
         ) : null}
       </div>
-      <p className="whitespace-pre-wrap break-words">{error.message}</p>
+      <p className="whitespace-pre-wrap break-words font-medium">{error.message}</p>
+      {error.hint ? (
+        <p className="mt-1 whitespace-pre-wrap break-words text-xs">{error.hint}</p>
+      ) : null}
+      {requestId ? (
+        <p className="mt-1 font-mono text-xs text-destructive/90" translate="no">
+          request_id: {requestId}
+        </p>
+      ) : null}
       <p className="mt-2 text-xs">
         可前往{' '}
         <Link to="/gateway/logs" className="underline-offset-4 hover:underline">
