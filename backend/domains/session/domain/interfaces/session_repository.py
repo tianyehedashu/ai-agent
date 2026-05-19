@@ -147,3 +147,38 @@ class SessionRepository(ABC):
             count: 视频任务增量
         """
         ...
+
+    @abstractmethod
+    async def count_total(self) -> int:
+        """统计会话总数"""
+        ...
+
+    @abstractmethod
+    async def count_active_today(self) -> int:
+        """统计今日活跃会话数"""
+        ...
+
+    @abstractmethod
+    async def count_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户的会话数"""
+        ...
+
+    @abstractmethod
+    async def sum_tokens_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户所有会话 token 总量"""
+        ...
+
+    @abstractmethod
+    async def list_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        """列出指定用户的会话 ID"""
+        ...
+
+    @abstractmethod
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名会话归并到正式用户"""
+        ...

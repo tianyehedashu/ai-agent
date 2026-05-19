@@ -383,6 +383,26 @@ class SessionUseCase:
         """统计会话的消息数量"""
         return await self.message_repo.count_by_session(uuid.UUID(session_id))
 
+    async def count_total(self) -> int:
+        """统计会话总数"""
+        return await self.session_repo.count_total()
+
+    async def count_active_today(self) -> int:
+        """统计今日活跃会话数"""
+        return await self.session_repo.count_active_today()
+
+    async def count_by_user(self, user_id: str) -> int:
+        """统计指定用户的会话数"""
+        return await self.session_repo.count_by_user(uuid.UUID(user_id))
+
+    async def sum_tokens_by_user(self, user_id: str) -> int:
+        """统计指定用户所有会话 token 总量"""
+        return await self.session_repo.sum_tokens_by_user(uuid.UUID(user_id))
+
+    async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
+        """列出指定用户的会话 ID"""
+        return await self.session_repo.list_ids_by_user(uuid.UUID(user_id))
+
     async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:
         """增加会话的视频任务计数
 

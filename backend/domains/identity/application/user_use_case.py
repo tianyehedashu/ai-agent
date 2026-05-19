@@ -53,6 +53,10 @@ class UserUseCase:
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
         return self._tenant_provisioner or _default_tenant_provisioner()
 
+    async def count_users(self) -> int:
+        """统计用户总数。"""
+        return await self.user_repo.count_all()
+
     # =========================================================================
     # User CRUD
     # =========================================================================

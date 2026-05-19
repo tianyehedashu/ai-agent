@@ -69,3 +69,17 @@ class MessageRepository(MessageRepositoryInterface):
             select(func.count(Message.id)).where(Message.session_id == session_id)
         )
         return result.scalar() or 0
+
+    async def count_total(self) -> int:
+        """统计消息总数"""
+        result = await self.db.execute(select(func.count(Message.id)))
+        return result.scalar() or 0
+
+    async def count_by_session_ids(self, session_ids: list[uuid.UUID]) -> int:
+        """统计一组会话下的消息数量"""
+        if not session_ids:
+            return 0
+        result = await self.db.execute(
+            select(func.count(Message.id)).where(Message.session_id.in_(session_ids))
+        )
+        return result.scalar() or 0

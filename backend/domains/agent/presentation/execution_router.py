@@ -13,8 +13,8 @@ from pydantic import BaseModel
 import tomli_w
 
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
-from domains.identity.infrastructure.models.user import User
 from domains.identity.presentation.deps import get_current_user
+from domains.identity.presentation.schemas import CurrentUser
 from libs.config.execution_config import ExecutionConfig
 from libs.config.service import (
     ExecutionConfigService,
@@ -150,7 +150,7 @@ async def get_template(
 async def get_agent_config(
     agent_id: str,
     resolve: bool = True,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     service: ExecutionConfigService = Depends(get_config_service),
 ) -> dict[str, Any]:
     """
@@ -181,7 +181,7 @@ async def get_agent_config(
 async def update_agent_config(
     agent_id: str,
     config: dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ConfigUpdateResponse:
     """
      Agent
@@ -216,7 +216,7 @@ async def update_agent_config(
 async def patch_agent_config(
     agent_id: str,
     config_patch: dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     service: ExecutionConfigService = Depends(get_config_service),
 ) -> ConfigUpdateResponse:
     """
@@ -253,7 +253,7 @@ async def patch_agent_config(
 @router.delete("/agents/{agent_id}/config")
 async def delete_agent_config(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, str]:
     """
      Agent
@@ -281,7 +281,7 @@ async def delete_agent_config(
 @router.post("/validate")
 async def validate_config(
     config: dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     service: ExecutionConfigService = Depends(get_config_service),
 ) -> ConfigValidationResult:
     """
@@ -316,7 +316,7 @@ async def validate_config(
 async def preview_resolved_config(
     agent_id: str,
     runtime_overrides: dict[str, Any] | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     service: ExecutionConfigService = Depends(get_config_service),
 ) -> ResolvedConfig:
     """
@@ -455,7 +455,7 @@ async def list_mcp_servers() -> list[MCPServerInfo]:
 @router.get("/agents/{agent_id}/effective-tools")
 async def get_effective_tools(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     service: ExecutionConfigService = Depends(get_config_service),
 ) -> dict[str, Any]:
     """

@@ -20,9 +20,6 @@ from domains.agent.infrastructure.models.product_info_prompt_template import (
 )
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask, VideoGenTaskStatus
 
-# Re-export from session domain for backward compatibility
-from domains.session.infrastructure.models import Session
-
 __all__ = [
     "Agent",
     "Memory",
@@ -34,7 +31,6 @@ __all__ = [
     "ProductInfoJobStep",
     "ProductInfoJobStepStatus",
     "ProductInfoPromptTemplate",
-    "Session",
     "VideoGenTask",
     "VideoGenTaskStatus",
 ]

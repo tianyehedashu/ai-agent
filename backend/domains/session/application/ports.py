@@ -83,6 +83,26 @@ class SessionApplicationPort(Protocol):
         """统计会话的消息数量"""
         ...
 
+    async def count_total(self) -> int:
+        """统计会话总数"""
+        ...
+
+    async def count_active_today(self) -> int:
+        """统计今日活跃会话数"""
+        ...
+
+    async def count_by_user(self, user_id: str) -> int:
+        """统计指定用户的会话数"""
+        ...
+
+    async def sum_tokens_by_user(self, user_id: str) -> int:
+        """统计指定用户所有会话 token 总量"""
+        ...
+
+    async def list_session_ids_by_user(self, user_id: str) -> list[Any]:
+        """列出指定用户的会话 ID"""
+        ...
+
     async def update_session_mcp_config(self, session_id: str, enabled_servers: list[str]) -> dict:
         """更新会话的 MCP 配置"""
         ...

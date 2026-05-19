@@ -7,6 +7,8 @@ Video Gen Task Repository - 视频生成任务仓储
 from typing import Any
 import uuid
 
+from sqlalchemy import update
+
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
 from libs.db.base_repository import OwnedRepositoryBase
 
@@ -70,6 +72,23 @@ class VideoGenTaskRepository(OwnedRepositoryBase[VideoGenTask]):
         await self.db.flush()
         await self.db.refresh(task)
         return task
+
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名视频任务归并到正式用户"""
+        result = await self.db.execute(
+            update(VideoGenTask)
+            .where(
+                VideoGenTask.anonymous_user_id == anonymous_user_id,
+                VideoGenTask.user_id.is_(None),
+            )
+            .values(user_id=user_id, anonymous_user_id=None)
+        )
+        return result.rowcount or 0
 
     async def update(
         self,

@@ -6,14 +6,27 @@ import uuid
 
 import pytest
 
-from domains.agent.application import AgentUseCase, SessionUseCase
+from domains.agent.application import AgentUseCase
 from domains.agent.application.stats_service import StatsService
+from domains.agent.infrastructure.repositories.agent_repository import AgentRepository
+from domains.agent.infrastructure.repositories.message_repository import MessageRepository
+from domains.identity.application import UserUseCase
 from domains.identity.infrastructure.models.user import User
+from domains.session.application import SessionUseCase
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
+
+
+def _make_stats_service(db_session) -> StatsService:
+    return StatsService(
+        identity=UserUseCase(db_session),
+        sessions=SessionUseCase(db_session),
+        agents=AgentRepository(db_session),
+        messages=MessageRepository(db_session),
+    )
 
 
 @pytest.mark.unit
@@ -24,7 +37,7 @@ class TestStatsService:
     async def test_get_system_stats(self, db_session):
         """Test: Get system statistics."""
         # Arrange
-        stats_service = StatsService(db_session)
+        stats_service = _make_stats_service(db_session)
 
         # Create some test data.
         user = User(
@@ -76,7 +89,7 @@ class TestStatsService:
     async def test_get_user_stats(self, db_session):
         """Test: Get user statistics."""
         # Arrange
-        stats_service = StatsService(db_session)
+        stats_service = _make_stats_service(db_session)
         user = User(
             email=f"test_{uuid.uuid4()}@example.com",
             hashed_password="hashed",
@@ -126,7 +139,7 @@ class TestStatsService:
     async def test_get_user_stats_empty(self, db_session):
         """Test: Get statistics for empty user."""
         # Arrange
-        stats_service = StatsService(db_session)
+        stats_service = _make_stats_service(db_session)
         user = User(
             email=f"empty_{uuid.uuid4()}@example.com",
             hashed_password="hashed",

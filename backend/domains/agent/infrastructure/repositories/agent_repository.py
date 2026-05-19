@@ -6,6 +6,7 @@ Agent Repository - Agent 仓储实现
 
 import uuid
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.domain.interfaces.agent_repository import (
@@ -149,3 +150,13 @@ class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
 
         await self.db.delete(agent)
         return True
+
+    async def count_total(self) -> int:
+        """统计 Agent 总数"""
+        result = await self.db.execute(select(func.count(Agent.id)))
+        return result.scalar() or 0
+
+    async def count_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户的 Agent 数"""
+        result = await self.db.execute(select(func.count(Agent.id)).where(Agent.user_id == user_id))
+        return result.scalar() or 0

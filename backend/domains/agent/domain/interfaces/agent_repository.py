@@ -79,3 +79,13 @@ class AgentRepository(ABC):
     async def delete(self, agent_id: uuid.UUID) -> bool:
         """删除 Agent"""
         ...
+
+    @abstractmethod
+    async def count_total(self) -> int:
+        """统计 Agent 总数"""
+        ...
+
+    @abstractmethod
+    async def count_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户的 Agent 数"""
+        ...

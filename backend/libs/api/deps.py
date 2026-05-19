@@ -31,6 +31,8 @@ from domains.agent.application.product_info_prompt_service import (
 from domains.agent.application.product_info_use_case import ProductInfoUseCase
 from domains.agent.application.stats_service import StatsService
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
+from domains.agent.infrastructure.repositories.agent_repository import AgentRepository
+from domains.agent.infrastructure.repositories.message_repository import MessageRepository
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application import UserUseCase
@@ -158,7 +160,12 @@ async def get_memory_service(db: DbSession) -> MemoryService:
 
 async def get_stats_service(db: DbSession) -> StatsService:
     """获取统计服务"""
-    return StatsService(db)
+    return StatsService(
+        identity=UserUseCase(db),
+        sessions=SessionUseCase(db),
+        agents=AgentRepository(db),
+        messages=MessageRepository(db),
+    )
 
 
 async def get_mcp_service(db: DbSession) -> MCPManagementUseCase:

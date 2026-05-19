@@ -1,5 +1,5 @@
 """
-Anonymous Data Migration Service - 匿名用户数据迁移服务
+Anonymous Data Reassignment Service - 匿名用户数据归并服务
 
 当匿名用户注册或登录后，将其匿名期间创建的数据迁移到正式用户账号下。
 包括：Session、VideoGenTask。
@@ -11,12 +11,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import text
-
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.agent.infrastructure.repositories.video_gen_task_repository import (
+        VideoGenTaskRepository,
+    )
+    from domains.session.infrastructure.repositories import SessionRepository
 
 logger = get_logger(__name__)
 
@@ -33,15 +36,21 @@ class MigrationResult:
         return self.sessions + self.video_tasks
 
 
-class AnonymousDataMigrationService:
-    """匿名数据迁移服务
+class AnonymousDataReassignmentService:
+    """匿名数据归并服务
 
     将匿名用户的 Session 和 VideoGenTask 迁移到正式用户账号。
     仅迁移 user_id IS NULL 的记录，避免重复迁移。
     """
 
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
+    def __init__(
+        self,
+        *,
+        session_repo: SessionRepository,
+        video_task_repo: VideoGenTaskRepository,
+    ) -> None:
+        self.session_repo = session_repo
+        self.video_task_repo = video_task_repo
 
     async def migrate(
         self,
@@ -60,33 +69,14 @@ class AnonymousDataMigrationService:
         if isinstance(user_id, str):
             user_id = uuid.UUID(user_id)
 
-        params = {"user_id": user_id, "anonymous_user_id": anonymous_user_id}
-
-        # 迁移 sessions
-        session_result = await self.db.execute(
-            text("""
-                UPDATE sessions
-                SET user_id = :user_id, anonymous_user_id = NULL
-                WHERE anonymous_user_id = :anonymous_user_id
-                  AND user_id IS NULL
-                RETURNING id
-            """),
-            params,
+        session_count = await self.session_repo.reassign_anonymous_to_user(
+            user_id=user_id,
+            anonymous_user_id=anonymous_user_id,
         )
-        session_count = len(session_result.fetchall())
-
-        # 迁移 video_gen_tasks
-        task_result = await self.db.execute(
-            text("""
-                UPDATE video_gen_tasks
-                SET user_id = :user_id, anonymous_user_id = NULL
-                WHERE anonymous_user_id = :anonymous_user_id
-                  AND user_id IS NULL
-                RETURNING id
-            """),
-            params,
+        task_count = await self.video_task_repo.reassign_anonymous_to_user(
+            user_id=user_id,
+            anonymous_user_id=anonymous_user_id,
         )
-        task_count = len(task_result.fetchall())
 
         result = MigrationResult(sessions=session_count, video_tasks=task_count)
 
@@ -100,10 +90,6 @@ class AnonymousDataMigrationService:
             )
 
         return result
-
-
-# 保留向后兼容的别名
-SessionMigrationService = AnonymousDataMigrationService
 
 
 async def migrate_anonymous_data_on_auth(
@@ -126,16 +112,14 @@ async def migrate_anonymous_data_on_auth(
     if not anonymous_user_id:
         return MigrationResult()
 
-    service = AnonymousDataMigrationService(db)
+    from domains.agent.infrastructure.repositories.video_gen_task_repository import (
+        VideoGenTaskRepository,
+    )
+    from domains.session.infrastructure.repositories import SessionRepository
+
+    service = AnonymousDataReassignmentService(
+        session_repo=SessionRepository(db),
+        video_task_repo=VideoGenTaskRepository(db),
+    )
     return await service.migrate(user_id, anonymous_user_id)
 
-
-# 向后兼容
-async def migrate_anonymous_sessions_on_auth(
-    db: AsyncSession,
-    user_id: uuid.UUID | str,
-    anonymous_user_id: str | None,
-) -> int:
-    """向后兼容的迁移函数"""
-    result = await migrate_anonymous_data_on_auth(db, user_id, anonymous_user_id)
-    return result.sessions

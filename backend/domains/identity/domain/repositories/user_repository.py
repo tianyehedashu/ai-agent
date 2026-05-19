@@ -55,3 +55,8 @@ class UserRepository(ABC):
     ) -> UserEntity | None:
         """更新用户"""
         ...
+
+    @abstractmethod
+    async def count_all(self) -> int:
+        """统计用户总数"""
+        ...

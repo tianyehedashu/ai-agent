@@ -13,60 +13,70 @@ import uuid
 import pytest
 
 from domains.identity.application.session_migration_service import (
-    AnonymousDataMigrationService,
+    AnonymousDataReassignmentService,
     MigrationResult,
     migrate_anonymous_data_on_auth,
 )
 
 # =============================================================================
-# AnonymousDataMigrationService 测试
+# AnonymousDataReassignmentService 测试
 # =============================================================================
 
 
 @pytest.mark.unit
-class TestAnonymousDataMigrationService:
-    """匿名数据迁移服务测试"""
+class TestAnonymousDataReassignmentService:
+    """匿名数据归并服务测试"""
 
-    def _mock_execute_result(self, row_count: int) -> MagicMock:
-        """创建模拟的 SQL 执行结果"""
-        result = MagicMock()
-        result.fetchall.return_value = [MagicMock()] * row_count
-        return result
+    def _make_service(
+        self,
+        *,
+        session_count: int,
+        video_task_count: int,
+    ) -> tuple[AnonymousDataReassignmentService, AsyncMock, AsyncMock]:
+        session_repo = AsyncMock()
+        video_task_repo = AsyncMock()
+        session_repo.reassign_anonymous_to_user.return_value = session_count
+        video_task_repo.reassign_anonymous_to_user.return_value = video_task_count
+        return (
+            AnonymousDataReassignmentService(
+                session_repo=session_repo,
+                video_task_repo=video_task_repo,
+            ),
+            session_repo,
+            video_task_repo,
+        )
 
     @pytest.mark.asyncio
     async def test_migrate_sessions_and_video_tasks(self):
         """测试: 同时迁移 sessions 和 video_gen_tasks"""
-        mock_db = AsyncMock()
         user_id = uuid.uuid4()
         anonymous_id = str(uuid.uuid4())
 
-        # 模拟: 3 个 session + 2 个 video_task 被迁移
-        mock_db.execute.side_effect = [
-            self._mock_execute_result(3),  # sessions
-            self._mock_execute_result(2),  # video_gen_tasks
-        ]
-
-        service = AnonymousDataMigrationService(mock_db)
+        service, session_repo, video_task_repo = self._make_service(
+            session_count=3,
+            video_task_count=2,
+        )
         result = await service.migrate(user_id, anonymous_id)
 
         assert result.sessions == 3
         assert result.video_tasks == 2
         assert result.total == 5
-        assert mock_db.execute.call_count == 2
+        session_repo.reassign_anonymous_to_user.assert_awaited_once_with(
+            user_id=user_id,
+            anonymous_user_id=anonymous_id,
+        )
+        video_task_repo.reassign_anonymous_to_user.assert_awaited_once_with(
+            user_id=user_id,
+            anonymous_user_id=anonymous_id,
+        )
 
     @pytest.mark.asyncio
     async def test_migrate_no_anonymous_data(self):
         """测试: 无匿名数据时返回零"""
-        mock_db = AsyncMock()
         user_id = uuid.uuid4()
         anonymous_id = str(uuid.uuid4())
 
-        mock_db.execute.side_effect = [
-            self._mock_execute_result(0),  # sessions
-            self._mock_execute_result(0),  # video_gen_tasks
-        ]
-
-        service = AnonymousDataMigrationService(mock_db)
+        service, _, _ = self._make_service(session_count=0, video_task_count=0)
         result = await service.migrate(user_id, anonymous_id)
 
         assert result.sessions == 0
@@ -76,47 +86,33 @@ class TestAnonymousDataMigrationService:
     @pytest.mark.asyncio
     async def test_migrate_with_string_user_id(self):
         """测试: 支持字符串格式的 user_id"""
-        mock_db = AsyncMock()
         user_id_str = str(uuid.uuid4())
         anonymous_id = str(uuid.uuid4())
 
-        mock_db.execute.side_effect = [
-            self._mock_execute_result(1),
-            self._mock_execute_result(0),
-        ]
-
-        service = AnonymousDataMigrationService(mock_db)
+        service, session_repo, _ = self._make_service(session_count=1, video_task_count=0)
         result = await service.migrate(user_id_str, anonymous_id)
 
         assert result.sessions == 1
         assert result.video_tasks == 0
 
-        # 验证传给 SQL 的 user_id 是 UUID 类型
-        call_args = mock_db.execute.call_args_list[0]
-        params = call_args[0][1]  # 第二个位置参数是参数字典
-        assert isinstance(params["user_id"], uuid.UUID)
+        # 验证传给仓储的 user_id 是 UUID 类型
+        call_kwargs = session_repo.reassign_anonymous_to_user.call_args.kwargs
+        assert isinstance(call_kwargs["user_id"], uuid.UUID)
 
     @pytest.mark.asyncio
-    async def test_migrate_sql_contains_user_id_is_null_guard(self):
-        """测试: SQL 包含 user_id IS NULL 条件（防止覆盖已绑定的数据）"""
-        mock_db = AsyncMock()
+    async def test_migrate_delegates_guard_to_repositories(self):
+        """测试: 防覆盖保护由各域仓储封装，应用服务不写裸 SQL"""
         user_id = uuid.uuid4()
         anonymous_id = str(uuid.uuid4())
 
-        mock_db.execute.side_effect = [
-            self._mock_execute_result(0),
-            self._mock_execute_result(0),
-        ]
-
-        service = AnonymousDataMigrationService(mock_db)
+        service, session_repo, video_task_repo = self._make_service(
+            session_count=0,
+            video_task_count=0,
+        )
         await service.migrate(user_id, anonymous_id)
 
-        # 验证两条 SQL 都包含 user_id IS NULL 保护
-        for call in mock_db.execute.call_args_list:
-            sql_text = str(call[0][0])
-            assert "user_id IS NULL" in sql_text, (
-                f"SQL should contain 'user_id IS NULL' guard: {sql_text}"
-            )
+        session_repo.reassign_anonymous_to_user.assert_awaited_once()
+        video_task_repo.reassign_anonymous_to_user.assert_awaited_once()
 
 
 # =============================================================================
@@ -153,15 +149,27 @@ class TestMigrateOnAuth:
         user_id = uuid.uuid4()
         anonymous_id = str(uuid.uuid4())
 
-        # Mock execute 返回
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = []
-        mock_db.execute.return_value = mock_result
+        with (
+            patch(
+                "domains.session.infrastructure.repositories.SessionRepository"
+            ) as mock_session_repo_cls,
+            patch(
+                "domains.agent.infrastructure.repositories.video_gen_task_repository."
+                "VideoGenTaskRepository"
+            ) as mock_video_repo_cls,
+        ):
+            mock_session_repo_cls.return_value.reassign_anonymous_to_user = AsyncMock(
+                return_value=1
+            )
+            mock_video_repo_cls.return_value.reassign_anonymous_to_user = AsyncMock(
+                return_value=2
+            )
 
-        result = await migrate_anonymous_data_on_auth(mock_db, user_id, anonymous_id)
+            result = await migrate_anonymous_data_on_auth(mock_db, user_id, anonymous_id)
 
         assert isinstance(result, MigrationResult)
-        assert mock_db.execute.call_count == 2  # sessions + video_gen_tasks
+        assert result.sessions == 1
+        assert result.video_tasks == 2
 
 
 # =============================================================================

@@ -4,8 +4,10 @@ Session Repository - 会话仓储实现
 实现会话数据访问，支持自动权限过滤。
 """
 
+from datetime import UTC, datetime
 import uuid
 
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.session.domain.interfaces.session_repository import (
@@ -193,3 +195,52 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         if session:
             session.video_task_count += count
             await self.db.flush()
+
+    async def count_total(self) -> int:
+        """统计会话总数"""
+        result = await self.db.execute(select(func.count(Session.id)))
+        return result.scalar() or 0
+
+    async def count_active_today(self) -> int:
+        """统计今日活跃会话数"""
+        today = datetime.now(UTC).date()
+        result = await self.db.execute(
+            select(func.count(Session.id)).where(func.date(Session.updated_at) == today)
+        )
+        return result.scalar() or 0
+
+    async def count_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户的会话数"""
+        result = await self.db.execute(
+            select(func.count(Session.id)).where(Session.user_id == user_id)
+        )
+        return result.scalar() or 0
+
+    async def sum_tokens_by_user(self, user_id: uuid.UUID) -> int:
+        """统计指定用户所有会话 token 总量"""
+        result = await self.db.execute(
+            select(func.sum(Session.token_count)).where(Session.user_id == user_id)
+        )
+        return result.scalar() or 0
+
+    async def list_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        """列出指定用户的会话 ID"""
+        result = await self.db.execute(select(Session.id).where(Session.user_id == user_id))
+        return list(result.scalars().all())
+
+    async def reassign_anonymous_to_user(
+        self,
+        *,
+        user_id: uuid.UUID,
+        anonymous_user_id: str,
+    ) -> int:
+        """把匿名会话归并到正式用户"""
+        result = await self.db.execute(
+            update(Session)
+            .where(
+                Session.anonymous_user_id == anonymous_user_id,
+                Session.user_id.is_(None),
+            )
+            .values(user_id=user_id, anonymous_user_id=None)
+        )
+        return result.rowcount or 0

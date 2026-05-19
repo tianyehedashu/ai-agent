@@ -82,3 +82,13 @@ class MessageRepository(ABC):
             消息数量
         """
         ...
+
+    @abstractmethod
+    async def count_total(self) -> int:
+        """统计消息总数"""
+        ...
+
+    @abstractmethod
+    async def count_by_session_ids(self, session_ids: list[uuid.UUID]) -> int:
+        """统计一组会话下的消息数量"""
+        ...

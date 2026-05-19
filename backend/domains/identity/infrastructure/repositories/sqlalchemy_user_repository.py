@@ -6,7 +6,7 @@ SQLAlchemy User Repository - 用户仓储实现
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.domain.repositories.user_repository import UserRepository
@@ -75,3 +75,8 @@ class SQLAlchemyUserRepository(UserRepository):
         await self.db.flush()
         await self.db.refresh(user)
         return user
+
+    async def count_all(self) -> int:
+        """统计用户总数"""
+        result = await self.db.execute(select(func.count(User.id)))
+        return result.scalar() or 0
