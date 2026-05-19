@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI Gateway · 凭据（个人 / 团队）
  */
 
@@ -6,7 +6,6 @@ import { lazy, Suspense, startTransition, useCallback, useMemo, useState } from 
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -50,6 +49,7 @@ import {
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useToast } from '@/hooks/use-toast'
+import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 
 const AddModelsDialog = lazy(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({

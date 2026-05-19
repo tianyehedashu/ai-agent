@@ -20,20 +20,34 @@ globalThis.fetch = mockFetch
 function createMockResponse(overrides: {
   ok?: boolean
   status?: number
-  json: () => Promise<unknown>
+  json?: () => Promise<unknown>
+  text?: () => Promise<string>
 }): {
   ok: boolean
   status: number
   headers: { get: (_name: string) => string | null }
   json: () => Promise<unknown>
+  text: () => Promise<string>
 } {
+  const { json, text, ...rest } = overrides
+  const jsonFn = json ?? (() => Promise.resolve({}))
+  const textFn =
+    text ??
+    (async () => {
+      const data = await jsonFn()
+      if (data === undefined || data === null) return ''
+      return typeof data === 'string' ? data : JSON.stringify(data)
+    })
+
   return {
     ok: true,
     status: 200,
     headers: {
       get: (_name: string) => null as string | null,
     },
-    ...overrides,
+    json: jsonFn,
+    text: textFn,
+    ...rest,
   }
 }
 
@@ -191,6 +205,20 @@ describe('ApiClient', () => {
           method: 'DELETE',
         })
       )
+    })
+
+    it('DELETE 204 无响应体时不应解析 JSON', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          status: 204,
+          text: () => Promise.resolve(''),
+        })
+      )
+
+      const result = await apiClient.delete('/api/v1/gateway/keys/1')
+
+      expect(result).toBeUndefined()
     })
   })
 

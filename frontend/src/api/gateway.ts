@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { DisplayCurrency, MoneyDisplay } from '@/types/money'
 import type { AvailableModelsResponse, ModelTestStatus, ModelType } from '@/types/user-model'
 
 // ============================
@@ -62,6 +63,18 @@ export interface VirtualKey {
 
 export interface VirtualKeyCreated extends VirtualKey {
   plain_key: string
+}
+
+export type VirtualKeyBatchRevokeReason = 'not_found' | 'permission_denied' | 'system_key'
+
+export interface VirtualKeyBatchRevokeFailure {
+  key_id: string
+  reason: VirtualKeyBatchRevokeReason
+}
+
+export interface VirtualKeyBatchRevokeResult {
+  revoked: string[]
+  failed: VirtualKeyBatchRevokeFailure[]
 }
 
 export interface ProviderCredential {
@@ -371,12 +384,14 @@ export interface GatewayBudget {
   period: 'daily' | 'monthly' | 'total'
   model_name: string | null
   limit_usd: number | null
+  soft_limit_usd?: number | null
   limit_tokens: number | null
   limit_requests: number | null
   current_usd: number
   current_tokens: number
   current_requests: number
   reset_at: string | null
+  budget_reset_at?: string | null
 }
 
 /** PUT /budgets 请求体（与 BudgetUpsert 一致） */
@@ -386,6 +401,7 @@ export interface BudgetUpsertBody {
   period: 'daily' | 'monthly' | 'total'
   model_name?: string | null
   limit_usd?: number | null
+  soft_limit_usd?: number | null
   limit_tokens?: number | null
   limit_requests?: number | null
 }
@@ -433,6 +449,7 @@ export interface GatewayLogItem {
   output_tokens: number
   cached_tokens: number
   cost_usd: number | string
+  revenue_usd?: number | string
   latency_ms: number
   ttfb_ms?: number | null
   cache_hit: boolean
@@ -450,6 +467,7 @@ export interface GatewayLogDetail extends GatewayLogItem {
   prompt_redacted?: Record<string, unknown> | null
   response_summary?: Record<string, unknown> | null
   metadata_extra?: Record<string, unknown> | null
+  pricing_snapshot?: Record<string, unknown> | null
 }
 
 export interface AlertRule {
@@ -667,6 +685,10 @@ export const gatewayApi = {
     guardrail_enabled?: boolean
   }) => apiClient.post<VirtualKeyCreated>(`${base}/keys`, body),
   revokeKey: (id: string) => apiClient.delete<unknown>(`${base}/keys/${id}`),
+  revokeKeysBatch: (keyIds: string[]) =>
+    apiClient.post<VirtualKeyBatchRevokeResult>(`${base}/keys/revoke-batch`, {
+      key_ids: keyIds,
+    }),
 
   listCredentials: () => apiClient.get<ProviderCredential[]>(`${base}/credentials`),
   getCredential: (id: string) => apiClient.get<ProviderCredential>(`${base}/credentials/${id}`),
@@ -836,4 +858,144 @@ export const gatewayApi = {
 
   dashboardMargin: (params?: { days?: number; group_by?: 'credential' | 'model' | 'team' }) =>
     apiClient.get<MarginSummary>(`${base}/dashboard/margin`, params),
+
+  // Pricing catalog
+  getFxRates: () =>
+    apiClient.get<{ usd_cny: string; adapter: string; default_display_currency: string }>(
+      `${base}/pricing/fx`
+    ),
+  listUpstreamPricing: (params?: { provider?: string; currency?: DisplayCurrency }) =>
+    apiClient.get<UpstreamPricingRow[]>(`${base}/pricing/upstream`, params),
+  createUpstreamPricing: (body: UpstreamPricingUpsertBody) =>
+    apiClient.post<UpstreamPricingRow>(`${base}/pricing/upstream`, body),
+  listDownstreamPricing: (params?: {
+    scope?: 'global' | 'team' | 'entitlement_plan'
+    scope_id?: string
+    currency?: DisplayCurrency
+  }) => apiClient.get<DownstreamPricingRow[]>(`${base}/pricing/downstream`, params),
+  createDownstreamPricing: (body: DownstreamPricingUpsertBody) =>
+    apiClient.post<DownstreamPricingRow>(`${base}/pricing/downstream`, body),
+  syncDownstreamPricing: (params?: { scope?: 'team' | 'entitlement_plan'; scope_id?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.scope) qs.set('scope', params.scope)
+    if (params?.scope_id) qs.set('scope_id', params.scope_id)
+    const q = qs.toString()
+    return apiClient.post<{ created: number; skipped: number }>(
+      `${base}/pricing/downstream/sync${q ? `?${q}` : ''}`,
+      {}
+    )
+  },
+  listMyPrices: (params?: { currency?: DisplayCurrency }) =>
+    apiClient.get<MyPriceRow[]>(`${base}/pricing/my`, params),
+  auditUpstreamPricing: () =>
+    apiClient.get<UpstreamPricingAuditResult>(`${base}/pricing/upstream/audit`),
+  syncUpstreamFromLitellm: () =>
+    apiClient.post<LitellmUpstreamSyncResult>(`${base}/pricing/upstream/sync-from-litellm`, {}),
+  estimatePricing: (body: PricingEstimateBody) =>
+    apiClient.post<PricingEstimateResult>(`${base}/pricing/estimate`, body),
+  pricingReconciliation: (params: { year: number; month: number }) =>
+    apiClient.get<PricingReconciliationResult>(`${base}/pricing/reconciliation`, params),
+}
+
+export interface UpstreamPricingRow {
+  id: string
+  provider: string
+  upstream_model: string
+  capability: string
+  input_cost_per_token_usd: string
+  output_cost_per_token_usd: string
+  input_cost_per_million_display?: MoneyDisplay | null
+  output_cost_per_million_display?: MoneyDisplay | null
+  effective_from: string
+  effective_to: string | null
+  version: number
+  source: string
+  display_currency?: string
+  fx_rate_used?: string
+}
+
+export interface UpstreamPricingUpsertBody {
+  provider: string
+  upstream_model: string
+  capability?: string
+  currency?: DisplayCurrency
+  amount_per_million: Record<string, number | null>
+}
+
+export interface DownstreamPricingRow {
+  id: string
+  scope: string
+  scope_id: string | null
+  gateway_model_id: string | null
+  inheritance_strategy: string
+  input_cost_per_token_usd?: string | null
+  output_cost_per_token_usd?: string | null
+  input_cost_per_million_display?: MoneyDisplay | null
+  output_cost_per_million_display?: MoneyDisplay | null
+  effective_from: string
+  effective_to: string | null
+  version: number
+}
+
+export interface DownstreamPricingUpsertBody {
+  scope: 'global' | 'team' | 'entitlement_plan'
+  scope_id?: string | null
+  gateway_model_id?: string | null
+  inheritance_strategy?: 'mirror' | 'manual'
+  currency?: DisplayCurrency
+  amount_per_million?: Record<string, number | null> | null
+}
+
+export interface MyPriceRow {
+  gateway_model_id: string | null
+  model_name: string | null
+  input_cost_per_million_display?: MoneyDisplay | null
+  output_cost_per_million_display?: MoneyDisplay | null
+  inheritance_strategy?: string | null
+  display_currency: string
+}
+
+export interface UpstreamPricingAuditResult {
+  models_without_upstream: string[]
+  upstream_without_model: string[]
+  registered_upstream_keys: number
+}
+
+export interface LitellmUpstreamSyncResult {
+  created: number
+  updated: number
+  skipped_manual: number
+}
+
+export interface PricingEstimateBody {
+  gateway_model_id: string
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+}
+
+export interface PricingEstimateResult {
+  gateway_model_id: string
+  hit_chain: string[]
+  upstream_cost_usd: string
+  downstream_revenue_usd: string
+  margin_usd: string
+  rate_snapshot: Record<string, unknown>
+  disclaimer: string
+}
+
+export interface PricingReconciliationResult {
+  team_id: string
+  period: string
+  requests: number
+  cost_usd: string
+  revenue_usd: string
+  margin_usd: string
+  top_models: Array<{
+    route_name: string | null
+    requests: number
+    cost_usd: string
+    revenue_usd: string
+    margin_usd: string
+  }>
 }

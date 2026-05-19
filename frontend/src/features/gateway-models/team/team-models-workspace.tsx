@@ -1,7 +1,6 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useState } from 'react'
+﻿import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
@@ -27,6 +26,7 @@ import {
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Loader2, Plus } from '@/lib/lucide-icons'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadRegisterModelForm } from './register-model-preload'

@@ -47,8 +47,18 @@ class GatewayBudget(BaseModel):
 
     # 限额
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    soft_limit_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 4),
+        nullable=True,
+        comment="软限额：达阈值告警但不阻断（对齐 LiteLLM soft_budget）",
+    )
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limit_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_parallel_requests: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="并发上限",
+    )
 
     # 当前用量
     current_usd: Mapped[Decimal] = mapped_column(
@@ -66,6 +76,11 @@ class GatewayBudget(BaseModel):
 
     # 重置
     reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    budget_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="下次预算重置时刻（显式，便于 UI 展示）",
+    )
 
     __table_args__ = (
         Index(

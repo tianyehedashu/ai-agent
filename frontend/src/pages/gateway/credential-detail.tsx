@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI Gateway · 凭据详情（编辑、轮换密钥、启用/禁用、关联模型）
  *
  * 设计要点：
@@ -10,7 +10,6 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Loader2 } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import {
@@ -44,6 +43,7 @@ import {
 } from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { ChevronRight, Loader2 } from '@/lib/lucide-icons'
 
 const AddModelsDialog = lazy(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({

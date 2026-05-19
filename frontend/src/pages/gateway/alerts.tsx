@@ -1,11 +1,10 @@
-/**
+﻿/**
  * AI Gateway · 告警规则
  */
 
 import { useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
 
 import { gatewayApi, type AlertRule, type AlertRuleCreateBody } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -29,6 +28,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Trash2 } from '@/lib/lucide-icons'
 
 function formatChannels(ch: Record<string, unknown>): string {
   try {

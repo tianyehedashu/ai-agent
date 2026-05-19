@@ -83,6 +83,13 @@ class VirtualKeyNotFoundError(GatewayError):
         super().__init__(f"虚拟 Key 不存在: {key_id}")
 
 
+class SystemVirtualKeyRevokeForbiddenError(GatewayError):
+    """禁止撤销系统内部桥接 Key"""
+
+    def __init__(self, key_id: str) -> None:
+        super().__init__(f"系统虚拟 Key 不可撤销: {key_id}")
+
+
 class VirtualKeyInvalidError(GatewayError):
     """虚拟 Key 无效（撤销/过期/格式错误）"""
 
@@ -247,6 +254,7 @@ __all__ = [
     "RateLimitExceededError",
     "RouteNotFoundError",
     "SystemCredentialAdminRequiredError",
+    "SystemVirtualKeyRevokeForbiddenError",
     "TeamNotFoundError",
     "TeamPermissionDeniedError",
     "VirtualKeyInvalidError",

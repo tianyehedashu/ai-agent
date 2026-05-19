@@ -1,13 +1,13 @@
-import { useCallback, useMemo } from 'react'
+﻿import { useCallback, useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import { personalModelDetailHref } from '@/features/gateway-models/paths'
 import { useToast } from '@/hooks/use-toast'
+import { Loader2 } from '@/lib/lucide-icons'
 
 import { PersonalModelForm, type PersonalModelFormValues } from './personal-model-form'
 

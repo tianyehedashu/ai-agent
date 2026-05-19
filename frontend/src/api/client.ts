@@ -58,6 +58,17 @@ export class ApiError extends Error {
   }
 }
 
+async function parseResponseBody<T>(response: Response): Promise<T> {
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T
+  }
+  const text = await response.text()
+  if (!text.trim()) {
+    return undefined as T
+  }
+  return JSON.parse(text) as T
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -242,7 +253,7 @@ class ApiClient {
       throw new ApiError(response.status, error.detail ?? error.message ?? 'Unknown error')
     }
 
-    return (await response.json()) as T
+    return parseResponseBody<T>(response)
   }
 
   async get<T>(
@@ -321,7 +332,7 @@ class ApiClient {
       }
       throw new ApiError(response.status, error.detail ?? 'Upload failed')
     }
-    return response.json() as Promise<T>
+    return parseResponseBody<T>(response)
   }
 
   // SSE 流式请求（支持取消）

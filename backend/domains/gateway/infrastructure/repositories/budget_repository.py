@@ -61,6 +61,7 @@ class BudgetRepository:
         period: str,
         model_name: str | None = None,
         limit_usd: Decimal | None = None,
+        soft_limit_usd: Decimal | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
         reset_at: datetime | None = None,
@@ -73,6 +74,7 @@ class BudgetRepository:
                 period=period,
                 model_name=model_name,
                 limit_usd=limit_usd,
+                soft_limit_usd=soft_limit_usd,
                 limit_tokens=limit_tokens,
                 limit_requests=limit_requests,
                 reset_at=reset_at,
@@ -81,6 +83,7 @@ class BudgetRepository:
             await self._session.flush()
             return budget
         existing.limit_usd = limit_usd
+        existing.soft_limit_usd = soft_limit_usd
         existing.limit_tokens = limit_tokens
         existing.limit_requests = limit_requests
         if reset_at is not None:

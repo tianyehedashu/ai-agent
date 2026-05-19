@@ -1,13 +1,13 @@
-import { useCallback, useMemo, useState } from 'react'
+﻿import { useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
+import { Loader2 } from '@/lib/lucide-icons'
 
 import { ModelInspector } from './model-inspector'
 

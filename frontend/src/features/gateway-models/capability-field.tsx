@@ -1,8 +1,6 @@
-/**
+﻿/**
  * 团队模型 capability 选择：标签与下拉均为中文，提交值仍为后端枚举。
  */
-
-import { Info } from 'lucide-react'
 
 import { Label } from '@/components/ui/label'
 import {
@@ -14,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CAPABILITIES, CAPABILITY_LABELS } from '@/features/gateway-models/constants'
+import { Info } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 export interface CapabilityFieldProps {

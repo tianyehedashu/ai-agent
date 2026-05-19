@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 个人凭据（/my-credentials）列表与编辑，用于 AI Gateway 凭据页「个人」Tab。
  *
  * 新增动作由外层 [`pages/gateway/credentials.tsx`](../../pages/gateway/credentials.tsx)
@@ -9,7 +9,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from 'lucide-react'
 
 import { gatewayApi, type ProviderCredential } from '@/api/gateway'
 import { providerConfigApi } from '@/api/provider-config'
@@ -27,6 +26,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
+import { Eye, EyeOff, Key, Loader2, Pencil, Plus } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'

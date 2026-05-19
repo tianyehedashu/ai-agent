@@ -32,6 +32,12 @@ from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
 )
+from domains.gateway.application.pricing.pricing_proxy_metadata import (
+    apply_downstream_custom_pricing_kwargs,
+    attach_downstream_pricing_metadata,
+    downstream_custom_from_metadata,
+    upstream_custom_from_metadata,
+)
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.domain.errors import (
@@ -401,7 +407,34 @@ class ProxyUseCase:
                 snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
                 if snap is not None:
                     meta["gateway_route_snapshot"] = snap
+                billing_package = (
+                    "entitlement" if ctx.entitlement_state is not None else None
+                )
+                await attach_downstream_pricing_metadata(
+                    self._session,
+                    meta,
+                    team_id=ctx.team_id,
+                    virtual_model=virtual_model,
+                    entitlement_plan_id=(
+                        ctx.entitlement_state.plan_id
+                        if ctx.entitlement_state is not None
+                        else None
+                    ),
+                    billing_package=billing_package,
+                )
         return meta
+
+    async def _prepare_litellm_kwargs(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """拼装 metadata，并把下游单价注入 LiteLLM kwargs（``response_cost`` 用下游价）。"""
+        metadata = await self._build_metadata(ctx, user_kwargs=body)
+        kwargs = dict(body)
+        kwargs["metadata"] = metadata
+        apply_downstream_custom_pricing_kwargs(kwargs)
+        return kwargs
 
     async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
         """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
@@ -482,11 +515,14 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
 
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        metadata = kwargs.get("metadata")
+        downstream_custom = downstream_custom_from_metadata(metadata)
+        upstream_custom = upstream_custom_from_metadata(metadata)
 
         stream = bool(body.get("stream"))
+        if stream and isinstance(metadata, dict):
+            metadata["gateway_defer_cost_settlement"] = True
         try:
             if await self._should_use_internal_direct_litellm(ctx, model):
                 response = await self._direct_chat_completion(kwargs)
@@ -508,8 +544,23 @@ class ProxyUseCase:
                 await self._release_entitlement_reservations(ctx)
                 raise
         if stream:
-            return _adapt_stream(response, ctx, self._budget, self._entitlement_guard)
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+            return _adapt_stream(
+                response,
+                ctx,
+                self._budget,
+                self._entitlement_guard,
+                metadata=metadata if isinstance(metadata, dict) else {},
+                downstream_custom=downstream_custom,
+            )
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=metadata if isinstance(metadata, dict) else {},
+            upstream_custom=upstream_custom,
+            downstream_custom=downstream_custom,
+        )
 
     async def embedding(
         self,
@@ -531,9 +582,8 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             raise
 
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         try:
             if await self._should_use_internal_direct_litellm(ctx, model):
                 response = await self._direct_embedding(kwargs)
@@ -544,7 +594,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
     async def image_generation(
         self,
@@ -561,9 +619,8 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         try:
             router = await get_router(self._session)
             response = await router.aimage_generation(**kwargs)
@@ -571,7 +628,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
     async def audio_transcription(
         self,
@@ -588,9 +653,8 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         try:
             router = await get_router(self._session)
             response = await router.atranscription(**kwargs)
@@ -598,7 +662,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
     async def audio_speech(
         self,
@@ -615,9 +687,7 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
         # 使用全局 litellm.aspeech 因为 Router 不一定暴露 aspeech
         from litellm import aspeech
 
@@ -653,9 +723,8 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         from litellm import arerank
 
         try:
@@ -664,7 +733,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
     async def moderation(
         self,
@@ -686,9 +763,8 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         from litellm import amoderation
 
         try:
@@ -697,7 +773,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
     async def video_generation(
         self,
@@ -719,9 +803,8 @@ class ProxyUseCase:
         except EntitlementPlanExhaustedError:
             await self._release_budget_reservations(reservations)
             raise
-        metadata = await self._build_metadata(ctx, user_kwargs=body)
-        kwargs = dict(body)
-        kwargs["metadata"] = metadata
+        kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, down_c = _pricing_kwargs_from_litellm(kwargs)
         from litellm import avideo_generation
 
         try:
@@ -730,7 +813,15 @@ class ProxyUseCase:
             await self._release_budget_reservations(reservations)
             await self._release_entitlement_reservations(ctx)
             raise
-        return _adapt_response(response, ctx, self._budget, self._entitlement_guard)
+        return _adapt_response(
+            response,
+            ctx,
+            self._budget,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
+            downstream_custom=down_c,
+        )
 
 
 # =============================================================================
@@ -749,16 +840,88 @@ def _to_dict(obj: Any) -> dict[str, Any]:
     return {}
 
 
+def _pricing_kwargs_from_litellm(
+    kwargs: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, float] | None, dict[str, float] | None]:
+    meta = kwargs.get("metadata")
+    metadata = meta if isinstance(meta, dict) else {}
+    return (
+        metadata,
+        upstream_custom_from_metadata(metadata),
+        downstream_custom_from_metadata(metadata),
+    )
+
+
+def _calc_upstream_cost(
+    response: Any,
+    *,
+    metadata: dict[str, Any],
+    model: str | None,
+) -> Decimal:
+    from domains.gateway.application.pricing.upstream_cost_resolver import (
+        resolve_upstream_cost_usd,
+    )
+
+    amount, _source = resolve_upstream_cost_usd(
+        response=response,
+        model=model,
+        metadata=metadata,
+    )
+    return amount
+
+
+def _enrich_openai_compat_response_cost(
+    data: dict[str, Any],
+    *,
+    source_obj: Any,
+    metadata: dict[str, Any],
+    downstream_custom: dict[str, float] | None,
+    model: str | None,
+) -> dict[str, Any]:
+    """向 OpenAI 兼容 JSON 注入下游 ``response_cost``（USD）。"""
+    from domains.gateway.application.pricing.pricing_display_cost import (
+        read_hidden_response_cost_usd,
+        resolve_downstream_display_cost_usd,
+    )
+
+    if data.get("response_cost") is not None:
+        return data
+    hidden = read_hidden_response_cost_usd(source_obj)
+    if hidden is not None and downstream_custom is None:
+        return {**data, "response_cost": float(hidden)}
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return data
+    if not usage.get("total_tokens") and hidden is None:
+        return data
+    cost = resolve_downstream_display_cost_usd(
+        source_obj,
+        metadata=metadata,
+        model=model,
+    )
+    if cost <= 0:
+        return data
+    return {**data, "response_cost": float(cost)}
+
+
 def _adapt_response(
     response: Any,
     ctx: ProxyContext,
     budget: BudgetService,
     entitlement_guard: EntitlementGuard | None = None,
+    *,
+    metadata: dict[str, Any],
+    upstream_custom: dict[str, float] | None,
+    downstream_custom: dict[str, float] | None,
 ) -> dict[str, Any]:
+    _ = upstream_custom
     data = _to_dict(response)
     usage = data.get("usage") or {}
     tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
-    cost = _calc_cost(response)
+    from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
+
+    upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
+    cost = proxy_budget_cost_usd(metadata, upstream)
     _schedule_settle_usage(
         ctx,
         budget,
@@ -766,8 +929,15 @@ def _adapt_response(
         cost=cost,
         requests=1,
         entitlement_guard=entitlement_guard,
+        request_id=ctx.request_id,
     )
-    return data
+    return _enrich_openai_compat_response_cost(
+        data,
+        source_obj=response,
+        metadata=metadata,
+        downstream_custom=downstream_custom,
+        model=ctx.budget_model,
+    )
 
 
 async def _adapt_stream(
@@ -775,8 +945,11 @@ async def _adapt_stream(
     ctx: ProxyContext,
     budget: BudgetService,
     entitlement_guard: EntitlementGuard | None = None,
+    *,
+    metadata: dict[str, Any],
+    downstream_custom: dict[str, float] | None,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """转为 SSE 友好的 dict 流，并在末帧结算"""
+    """转为 SSE 友好的 dict 流；成本由 callback 落库后结算。"""
     total_tokens = 0
     last_usage: dict[str, Any] | None = None
     async for chunk in stream:
@@ -784,18 +957,26 @@ async def _adapt_stream(
         usage = data.get("usage")
         if isinstance(usage, dict):
             last_usage = usage
+            if usage.get("total_tokens"):
+                data = _enrich_openai_compat_response_cost(
+                    data,
+                    source_obj=chunk,
+                    metadata=metadata,
+                    downstream_custom=downstream_custom,
+                    model=ctx.budget_model,
+                )
         yield data
-    # 末帧结算
     if last_usage:
         total_tokens = int(last_usage.get("total_tokens", 0) or 0)
-    cost = Decimal("0")  # 流式 cost 由 callbacks 落账
+
     await _settle_usage(
         ctx,
         budget,
         tokens=total_tokens,
-        cost=cost,
+        cost=Decimal("0"),
         requests=1,
         entitlement_guard=entitlement_guard,
+        request_id=ctx.request_id,
     )
 
 
@@ -807,6 +988,7 @@ async def _settle_usage(
     cost: Decimal,
     requests: int,
     entitlement_guard: EntitlementGuard | None = None,
+    request_id: str | None = None,
 ) -> None:
     scope_items = (
         ("team", str(ctx.team_id)),
@@ -844,6 +1026,14 @@ async def _settle_usage(
                 delta_usd=cost,
             )
 
+    if request_id and cost > 0:
+        with suppress(Exception):
+            from domains.gateway.application.budget_callback_settlement import (
+                record_proxy_cost_commit,
+            )
+
+            await record_proxy_cost_commit(request_id, cost)
+
     with suppress(Exception):
         async with get_session_context() as session:
             repo = BudgetRepository(session)
@@ -872,6 +1062,7 @@ def _schedule_settle_usage(
     cost: Decimal,
     requests: int,
     entitlement_guard: EntitlementGuard | None = None,
+    request_id: str | None = None,
 ) -> None:
     """异步结算（不 await 失败也不影响响应）；任务登记以便测试/进程退出时收口。"""
 
@@ -883,21 +1074,12 @@ def _schedule_settle_usage(
             cost=cost,
             requests=requests,
             entitlement_guard=entitlement_guard,
+            request_id=request_id,
         )
 
     with suppress(RuntimeError):
         settle_task = asyncio.create_task(_settle())
         register_proxy_deferred_task(settle_task)
-
-
-def _calc_cost(response: Any) -> Decimal:
-    try:
-        from litellm import completion_cost
-
-        cost = completion_cost(completion_response=response)
-        return Decimal(str(cost or 0))
-    except Exception:  # pragma: no cover
-        return Decimal("0")
 
 
 __all__ = [

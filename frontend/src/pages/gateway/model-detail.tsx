@@ -1,11 +1,10 @@
-/**
+﻿/**
  * AI Gateway · 模型详情（个人 / 团队深链）
  */
 
 import { Suspense, lazy } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
@@ -22,6 +21,7 @@ import {
 } from '@/features/gateway-models/paths'
 import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
+import { ChevronLeft, ChevronRight, Loader2 } from '@/lib/lucide-icons'
 
 const TeamModelDetailPane = lazy(() =>
   import('@/features/gateway-models/team/team-model-detail-pane').then((m) => ({

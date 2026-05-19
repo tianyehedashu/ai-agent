@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 
-import { ChevronDown, Info } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import type { GatewayModelCreateBody, GatewayModelPreset, ProviderCredential } from '@/api/gateway'
@@ -28,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { MANUAL_PRESET, NO_CREDENTIAL } from '@/features/gateway-models/constants'
 import { buildPresetTags, parsePositiveInt } from '@/features/gateway-models/utils'
+import { ChevronDown, Info } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 interface ModelFormValues {

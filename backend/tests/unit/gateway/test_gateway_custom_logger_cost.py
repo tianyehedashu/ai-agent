@@ -5,13 +5,17 @@ from types import SimpleNamespace
 
 import litellm
 
+from domains.gateway.application.pricing.upstream_cost_resolver import (
+    SOURCE_LITELLM_HIDDEN,
+    SOURCE_LITELLM_SLO,
+)
 from domains.gateway.infrastructure.callbacks.custom_logger import _calc_cost, _extract_usage
 
 
 def test_calc_cost_prefers_litellm_hidden_response_cost() -> None:
     response = SimpleNamespace(_hidden_params={"response_cost": "0.000123"})
 
-    cost = _calc_cost(
+    cost, source = _calc_cost(
         {
             "model": "zai/glm-4-flash",
             "standard_logging_object": {"response_cost": "0.999"},
@@ -20,6 +24,7 @@ def test_calc_cost_prefers_litellm_hidden_response_cost() -> None:
     )
 
     assert cost == Decimal("0.000123")
+    assert source == SOURCE_LITELLM_HIDDEN
 
 
 def test_calc_cost_reads_hidden_params_object() -> None:
@@ -27,25 +32,28 @@ def test_calc_cost_reads_hidden_params_object() -> None:
         _hidden_params=SimpleNamespace(response_cost=Decimal("0.000456"))
     )
 
-    assert _calc_cost({"model": "virtual-model"}, response) == Decimal("0.000456")
+    cost, _source = _calc_cost({"model": "virtual-model"}, response)
+    assert cost == Decimal("0.000456")
 
 
 def test_calc_cost_falls_back_to_standard_logging_object() -> None:
     response = SimpleNamespace(_hidden_params={})
 
-    cost = _calc_cost(
+    cost, source = _calc_cost(
         {"model": "virtual-model", "standard_logging_object": {"response_cost": 0.000789}},
         response,
     )
 
     assert cost == Decimal("0.000789")
+    assert source == SOURCE_LITELLM_SLO
 
 
 def test_calc_cost_uses_litellm_completion_cost_as_last_resort(monkeypatch) -> None:
     response = SimpleNamespace(_hidden_params={})
     monkeypatch.setattr(litellm, "completion_cost", lambda **_kwargs: 0.000111)
 
-    assert _calc_cost({"model": "known-model"}, response) == Decimal("0.000111")
+    cost, _source = _calc_cost({"model": "known-model"}, response)
+    assert cost == Decimal("0.000111")
 
 
 def test_extract_usage_reads_cached_tokens_from_details_dict() -> None:

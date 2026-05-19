@@ -1,11 +1,10 @@
-/**
+﻿/**
  * 统一「为凭据添加模型」弹窗：上游探测批量导入 + 团队手动注册。
  */
 
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { gatewayApi, type CredentialProbeResult, type GatewayModelCreateBody } from '@/api/gateway'
@@ -25,6 +24,7 @@ import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { credentialDetailHref, personalModelsRegisterHref } from '@/features/gateway-models/paths'
+import { Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 const RegisterModelForm = lazy(() =>

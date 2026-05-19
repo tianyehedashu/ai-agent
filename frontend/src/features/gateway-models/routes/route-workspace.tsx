@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Route, Loader2, Search } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayRouteUpdateBody } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { routingStrategyLabel } from '@/features/gateway-models/constants'
+import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
+import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
+import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-
-import { CreateRouteDialog } from './create-route-dialog'
-import { RouteTopologyEditor } from './route-topology-editor'
 
 export function RouteWorkspace(): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
@@ -24,22 +25,28 @@ export function RouteWorkspace(): React.JSX.Element {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createMode, setCreateMode] = useState(false)
+  const [createFormKey, setCreateFormKey] = useState(0)
 
   const { data: routes, isLoading } = useQuery({
     queryKey: ['gateway', 'routes'],
     queryFn: () => gatewayApi.listRoutes(),
+    staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const { data: models } = useQuery({
+  const { data: models, isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'models'],
     queryFn: () => gatewayApi.listModels(),
+    staleTime: GATEWAY_MODELS_STALE_MS,
   })
+
+  const pickerModels = useMemo(() => enabledGatewayModels(models ?? []), [models])
 
   useEffect(() => {
     if (!routeIdFromUrl || !routes?.length) return
     if (routes.some((r) => r.id === routeIdFromUrl)) {
       setSelectedId(routeIdFromUrl)
+      setCreateMode(false)
     }
   }, [routeIdFromUrl, routes])
 
@@ -63,8 +70,16 @@ export function RouteWorkspace(): React.JSX.Element {
     mutationFn: gatewayApi.createRoute,
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
-      setCreateOpen(false)
+      setCreateMode(false)
       setSelectedId(created.id)
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('routeId', created.id)
+          return n
+        },
+        { replace: true }
+      )
       toast({ title: '路由已创建' })
     },
     onError: (e: Error) => {
@@ -84,6 +99,36 @@ export function RouteWorkspace(): React.JSX.Element {
     },
   })
 
+  function selectRoute(id: string): void {
+    setCreateMode(false)
+    setSelectedId(id)
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.set('routeId', id)
+        return n
+      },
+      { replace: true }
+    )
+  }
+
+  function startCreate(): void {
+    setCreateMode(true)
+    setCreateFormKey((k) => k + 1)
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.delete('routeId')
+        return n
+      },
+      { replace: true }
+    )
+  }
+
+  function cancelCreate(): void {
+    setCreateMode(false)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -101,8 +146,9 @@ export function RouteWorkspace(): React.JSX.Element {
         {canWrite ? (
           <Button
             size="sm"
+            variant={createMode ? 'secondary' : 'default'}
             onClick={() => {
-              setCreateOpen(true)
+              startCreate()
             }}
           >
             <Route className="mr-1.5 h-4 w-4" />
@@ -141,23 +187,15 @@ export function RouteWorkspace(): React.JSX.Element {
                       type="button"
                       className={cn(
                         'w-full px-3 py-2.5 text-left hover:bg-muted/40',
-                        r.id === selectedId && 'bg-primary/10'
+                        !createMode && r.id === selectedId && 'bg-primary/10'
                       )}
                       onClick={() => {
-                        setSelectedId(r.id)
-                        setSearchParams(
-                          (prev) => {
-                            const n = new URLSearchParams(prev)
-                            n.set('routeId', r.id)
-                            return n
-                          },
-                          { replace: true }
-                        )
+                        selectRoute(r.id)
                       }}
                     >
                       <p className="font-mono text-sm font-medium">{r.virtual_model}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {r.strategy} · {r.primary_models.join(', ') || '—'}
+                        {routingStrategyLabel(r.strategy)} · {r.primary_models.join(', ') || '—'}
                       </p>
                       {!r.enabled ? <p className="mt-1 text-xs text-amber-600">已禁用</p> : null}
                     </button>
@@ -168,25 +206,29 @@ export function RouteWorkspace(): React.JSX.Element {
           </ScrollArea>
         </div>
 
-        <RouteTopologyEditor
-          route={selectedRoute}
-          models={models ?? []}
-          isSaving={updateMutation.isPending}
-          onSave={(id, body) => {
-            updateMutation.mutate({ id, body })
-          }}
-        />
+        {createMode ? (
+          <CreateRoutePanel
+            key={createFormKey}
+            pickerModels={pickerModels}
+            modelsLoading={modelsLoading}
+            onSubmit={(body) => {
+              createMutation.mutate(body)
+            }}
+            onCancel={cancelCreate}
+            isSubmitting={createMutation.isPending}
+          />
+        ) : (
+          <RouteTopologyEditor
+            route={selectedRoute}
+            models={models ?? []}
+            pickerModels={pickerModels}
+            isSaving={updateMutation.isPending}
+            onSave={(id, body) => {
+              updateMutation.mutate({ id, body })
+            }}
+          />
+        )}
       </div>
-
-      <CreateRouteDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        models={models ?? []}
-        onSubmit={(body) => {
-          createMutation.mutate(body)
-        }}
-        isSubmitting={createMutation.isPending}
-      />
     </div>
   )
 }

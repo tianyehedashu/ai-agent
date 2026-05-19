@@ -4,12 +4,18 @@ import type { GatewayModel, GatewayRoute } from '@/api/gateway'
 
 import {
   classifyFailureReason,
+  enabledGatewayModels,
+  excludeModelsFromList,
   formatUsageLine,
   matchesHealthFilter,
+  moveOrderedModelList,
   pickInspectorModelId,
   routesReferencingModel,
   runWithConcurrency,
+  stringArraysEqual,
   summarizeHealth,
+  toggleModelSet,
+  toggleOrderedModelList,
 } from './utils'
 
 import type { HealthFilter } from './constants'
@@ -124,6 +130,53 @@ describe('summarizeHealth', () => {
       model({ id: '3', last_test_status: null }),
     ])
     expect(summary).toEqual({ total: 3, success: 1, failed: 1, unknown: 1 })
+  })
+})
+
+describe('enabledGatewayModels', () => {
+  it('returns only enabled models', () => {
+    const items = enabledGatewayModels([
+      model({ enabled: true, last_test_status: null }),
+      model({ id: '2', enabled: false, last_test_status: null }),
+      model({ id: '3', enabled: true, last_test_status: null, name: 'b/c' }),
+    ])
+    expect(items.map((m) => m.name)).toEqual(['p/m', 'b/c'])
+  })
+})
+
+describe('toggleOrderedModelList', () => {
+  it('appends on check and removes on uncheck', () => {
+    expect(toggleOrderedModelList([], 'a', true)).toEqual(['a'])
+    expect(toggleOrderedModelList(['a'], 'b', true)).toEqual(['a', 'b'])
+    expect(toggleOrderedModelList(['a', 'b'], 'a', false)).toEqual(['b'])
+  })
+})
+
+describe('moveOrderedModelList', () => {
+  it('swaps adjacent items', () => {
+    expect(moveOrderedModelList(['a', 'b', 'c'], 1, -1)).toEqual(['b', 'a', 'c'])
+    expect(moveOrderedModelList(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('toggleModelSet', () => {
+  it('toggles membership without order semantics', () => {
+    expect(toggleModelSet(['x'], 'y', true)).toEqual(['x', 'y'])
+    expect(toggleModelSet(['x', 'y'], 'x', false)).toEqual(['y'])
+  })
+})
+
+describe('excludeModelsFromList', () => {
+  it('removes names present in exclude list', () => {
+    expect(excludeModelsFromList(['a', 'b', 'c'], ['b'])).toEqual(['a', 'c'])
+    expect(excludeModelsFromList(['a'], [])).toEqual(['a'])
+  })
+})
+
+describe('stringArraysEqual', () => {
+  it('compares order-sensitive', () => {
+    expect(stringArraysEqual(['a', 'b'], ['a', 'b'])).toBe(true)
+    expect(stringArraysEqual(['a', 'b'], ['b', 'a'])).toBe(false)
   })
 })
 

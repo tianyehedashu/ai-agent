@@ -1,7 +1,6 @@
-import { useCallback, useMemo } from 'react'
+﻿import { useCallback, useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, Pencil, Trash2, Zap } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
@@ -10,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import { personalModelEditHref, personalModelsIndexHref } from '@/features/gateway-models/paths'
+import { Loader2, Pencil, Trash2, Zap } from '@/lib/lucide-icons'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
 interface PersonalModelDetailPaneProps {

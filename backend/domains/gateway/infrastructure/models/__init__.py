@@ -12,11 +12,15 @@ from .gateway_model import GatewayModel
 from .gateway_route import GatewayRoute
 from .metrics_hourly import GatewayMetricsHourly
 from .provider_credential import ProviderCredential
+from .pricing_downstream import DownstreamModelPricing
+from .pricing_upstream import UpstreamModelPricing
 from .provider_plan import ProviderPlan, ProviderPlanQuota
 from .request_log import GatewayRequestLog
 from .virtual_key import GatewayVirtualKey
 
 __all__ = [
+    "DownstreamModelPricing",
+    "UpstreamModelPricing",
     "EntitlementPlan",
     "EntitlementPlanQuota",
     "GatewayAlertEvent",

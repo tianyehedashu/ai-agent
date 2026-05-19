@@ -1,10 +1,9 @@
-/**
+﻿/**
  * 凭据详情 · 关联注册模型：全宽列表，详情/注册走团队模型路由
  */
 
 import { memo, useCallback, useMemo } from 'react'
 
-import { ExternalLink, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import type { GatewayModel } from '@/api/gateway'
@@ -19,6 +18,7 @@ import {
 import { ModelInventoryRow } from '@/features/gateway-models/team/model-inventory-row'
 import { preloadModelNavigation } from '@/features/gateway-models/team/preloads'
 import { preloadTeamModelDetailPane } from '@/features/gateway-models/team/team-model-detail-preload'
+import { ExternalLink, Plus } from '@/lib/lucide-icons'
 
 const LINKED_MODEL_USAGE_DAYS = 7 satisfies UsagePeriodDays
 

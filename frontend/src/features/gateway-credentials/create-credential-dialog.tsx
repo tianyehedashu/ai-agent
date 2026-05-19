@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 统一「新增凭据」弹窗：覆盖 user / team / system 三种作用域。
  *
  * - scope=user → 调用 `POST /gateway/my-credentials`
@@ -9,8 +9,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-
-import { Eye, EyeOff } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Eye, EyeOff } from '@/lib/lucide-icons'
 
 import { ExtraFieldsRenderer } from './credential-extra-fields'
 import { compactExtra, type CredentialExtraValues } from './credential-extra-utils'

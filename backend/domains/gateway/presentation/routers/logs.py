@@ -11,6 +11,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from domains.gateway.application.management.log_presentation import request_log_to_dict
 from domains.gateway.domain.usage_read_model import (
     USAGE_AGGREGATION_QUERY_DESCRIPTION,
     UsageAggregation,
@@ -59,7 +60,7 @@ async def list_logs(
         credential_id=credential_id,
     )
     return RequestLogListResponse(
-        items=[RequestLogResponse.model_validate(i) for i in items],
+        items=[RequestLogResponse.model_validate(request_log_to_dict(i, team)) for i in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -82,7 +83,7 @@ async def get_log_detail(
         raise http_exception_from_gateway_domain(exc) from exc
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Log not found")
-    return RequestLogDetailResponse.model_validate(record)
+    return RequestLogDetailResponse.model_validate(request_log_to_dict(record, team))
 
 
 __all__ = ["router"]

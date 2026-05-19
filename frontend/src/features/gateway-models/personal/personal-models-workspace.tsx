@@ -1,7 +1,6 @@
-import { Suspense, useCallback, useMemo, useState } from 'react'
+﻿import { Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, Plus } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
@@ -23,6 +22,7 @@ import {
   personalModelsRegisterHref,
 } from '@/features/gateway-models/paths'
 import { channelLabel } from '@/features/gateway-models/utils'
+import { Loader2, Plus } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import { useAuthStore } from '@/stores/auth'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'

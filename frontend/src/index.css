@@ -79,6 +79,14 @@
   @apply bg-muted-foreground/50;
 }
 
+/* 长列表行：跳过屏外布局/绘制（见 Vercel rendering-content-visibility） */
+@layer utilities {
+  .cv-auto-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 2.5rem;
+  }
+}
+
 /* Markdown Styles */
 .markdown-body {
   @apply leading-7 text-foreground;

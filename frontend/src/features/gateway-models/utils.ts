@@ -1,4 +1,5 @@
 import type { GatewayModel, GatewayModelPreset, GatewayRoute } from '@/api/gateway'
+import { formatMoney } from '@/lib/money'
 import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
@@ -22,6 +23,19 @@ export function channelLabel(id: string): string {
   return MODEL_PROVIDER_NAME_BY_ID.get(id) ?? id
 }
 
+/** 已启用注册模型（虚拟路由模型池） */
+export function enabledGatewayModels(models: readonly GatewayModel[]): GatewayModel[] {
+  return models.filter((m) => m.enabled)
+}
+
+/** @deprecated 使用 enabledGatewayModels */
+export function enabledGatewayModelNames(models: readonly GatewayModel[]): string[] {
+  return enabledGatewayModels(models).map((m) => m.name)
+}
+
+/** React Query：与 ModelSelector 一致的模型列表缓存时间 */
+export const GATEWAY_MODELS_STALE_MS = 30_000
+
 /** 与概览页一致：对齐后端 Decimal / JSON 数字 */
 export function coalesceNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -39,11 +53,51 @@ export function parsePositiveInt(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-export function parseModelList(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
+/** 比较字符串数组（顺序敏感） */
+export function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((item, i) => item === b[i])
+}
+
+/** 从列表中剔除与主模型池重叠的别名（提交 Fallback 前调用） */
+export function excludeModelsFromList(
+  list: readonly string[],
+  exclude: readonly string[]
+): string[] {
+  if (exclude.length === 0) return [...list]
+  const excludeSet = new Set(exclude)
+  return list.filter((n) => !excludeSet.has(n))
+}
+
+/** 有序模型池：勾选加入末尾 */
+export function toggleOrderedModelList(
+  prev: readonly string[],
+  name: string,
+  checked: boolean
+): string[] {
+  if (checked) return prev.includes(name) ? [...prev] : [...prev, name]
+  return prev.filter((n) => n !== name)
+}
+
+/** 有序模型池：上移 / 下移 */
+export function moveOrderedModelList(
+  prev: readonly string[],
+  index: number,
+  dir: -1 | 1
+): string[] {
+  const next = [...prev]
+  const j = index + dir
+  if (j < 0 || j >= next.length) return next
+  const tmp = next[index]
+  next[index] = next[j]
+  next[j] = tmp
+  return next
+}
+
+/** 无序模型池：勾选切换 */
+export function toggleModelSet(prev: readonly string[], name: string, checked: boolean): string[] {
+  if (checked) return prev.includes(name) ? [...prev] : [...prev, name]
+  return prev.filter((n) => n !== name)
 }
 
 export function buildPresetTags(preset: GatewayModelPreset): Record<string, unknown> {
@@ -104,7 +158,8 @@ export function formatUsageLine(
   costUsd: unknown
 ): string {
   const label = days === 1 ? '24h' : `${String(days)}d`
-  return `${label} · ${String(requests)} 次 · ${String(tokens)} tok · $${coalesceNumber(costUsd).toFixed(4)}`
+  const costStr = formatMoney(coalesceNumber(costUsd), { currency: 'CNY', precision: 4 })
+  return `${label} · ${String(requests)} 次 · ${String(tokens)} tok · ${costStr}`
 }
 
 /** 反查引用某注册别名的虚拟路由 */

@@ -1,9 +1,8 @@
-import { memo, useMemo } from 'react'
-
-import { Loader2 } from 'lucide-react'
+﻿import { memo, useMemo } from 'react'
 
 import type { GatewayModel } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
+import { Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import { summarizeHealth } from '../utils'

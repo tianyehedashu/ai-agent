@@ -26,4 +26,5 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  // Gateway 子树通过 @/lib/lucide-icons 直连 ESM 图标，减轻 dev 冷启动（见 bundle-barrel-imports）
 })

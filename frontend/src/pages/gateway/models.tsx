@@ -1,10 +1,9 @@
-/**
+﻿/**
  * AI Gateway ? ????? / ???
  */
 
 import { Suspense, lazy, startTransition, useCallback, useEffect } from 'react'
 
-import { ChevronLeft, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -16,6 +15,7 @@ import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/person
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
+import { ChevronLeft, Loader2 } from '@/lib/lucide-icons'
 
 const PersonalModelsWorkspace = lazy(() =>
   import('@/features/gateway-models/personal/personal-models-workspace').then((m) => ({

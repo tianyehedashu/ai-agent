@@ -380,6 +380,38 @@ class GatewayManagementWriteService:
             raise TeamPermissionDeniedError(str(team_id))
         await self._vkeys.revoke(key_id)
 
+    async def revoke_virtual_keys_batch(
+        self,
+        key_ids: list[uuid.UUID],
+        *,
+        team_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, str]]]:
+        revoked: list[uuid.UUID] = []
+        failed: list[tuple[uuid.UUID, str]] = []
+        seen: set[uuid.UUID] = set()
+        for key_id in key_ids:
+            if key_id in seen:
+                continue
+            seen.add(key_id)
+            try:
+                await self.revoke_virtual_key(
+                    key_id,
+                    team_id=team_id,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
+                    is_platform_admin=is_platform_admin,
+                )
+            except VirtualKeyNotFoundError:
+                failed.append((key_id, "not_found"))
+            except TeamPermissionDeniedError:
+                failed.append((key_id, "permission_denied"))
+            else:
+                revoked.append(key_id)
+        return revoked, failed
+
     async def create_team_credential(
         self,
         *,
@@ -968,6 +1000,7 @@ class GatewayManagementWriteService:
         period: str,
         model_name: str | None = None,
         limit_usd: Decimal | None,
+        soft_limit_usd: Decimal | None = None,
         limit_tokens: int | None,
         limit_requests: int | None,
     ) -> Any:
@@ -977,6 +1010,7 @@ class GatewayManagementWriteService:
             period=period,
             model_name=model_name,
             limit_usd=limit_usd,
+            soft_limit_usd=soft_limit_usd,
             limit_tokens=limit_tokens,
             limit_requests=limit_requests,
         )
@@ -1262,6 +1296,142 @@ class GatewayManagementWriteService:
         ok = await self._entitlement_plans.delete(plan_id)
         if not ok:
             raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
+
+    async def upsert_upstream_pricing(
+        self,
+        *,
+        provider: str,
+        upstream_model: str,
+        capability: str,
+        currency: str,
+        amount_per_million: dict[str, Any],
+    ):
+        from domains.gateway.application.pricing.pricing_management import parse_amount_per_million
+        from domains.gateway.application.pricing.pricing_service import PricingService
+        from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
+        from domains.gateway.infrastructure.repositories.pricing_repository import (
+            DownstreamPricingRepository,
+            UpstreamPricingRepository,
+        )
+
+        fx = build_static_fx_adapter()
+        inp, out, cc, cr, extra = parse_amount_per_million(
+            amount_per_million, currency, fx
+        )
+        repo = UpstreamPricingRepository(self._session)
+        row = await repo.create(
+            provider=provider,
+            upstream_model=upstream_model,
+            capability=capability,
+            input_cost_per_token=inp,
+            output_cost_per_token=out,
+            cache_creation_input_token_cost=cc,
+            cache_read_input_token_cost=cr,
+            extra=extra,
+            source="manual",
+        )
+        svc = PricingService(repo, DownstreamPricingRepository(self._session))
+        await svc.sync_to_litellm_registry()
+        from domains.gateway.application.pricing.pricing_resolution_cache import (
+            invalidate_pricing_resolution_cache,
+        )
+
+        await invalidate_pricing_resolution_cache()
+        return row
+
+    async def sync_upstream_from_litellm(self):
+        from domains.gateway.application.pricing.litellm_upstream_price_sync import (
+            LitellmUpstreamPriceSyncService,
+        )
+        from domains.gateway.application.pricing.pricing_resolution_cache import (
+            invalidate_pricing_resolution_cache,
+        )
+        from domains.gateway.application.pricing.pricing_service import PricingService
+        from domains.gateway.infrastructure.repositories.model_repository import (
+            GatewayModelRepository,
+        )
+        from domains.gateway.infrastructure.repositories.pricing_repository import (
+            DownstreamPricingRepository,
+            UpstreamPricingRepository,
+        )
+
+        upstream_repo = UpstreamPricingRepository(self._session)
+        models = await GatewayModelRepository(self._session).list_for_team(
+            None, only_enabled=False
+        )
+        gateway_models = [
+            (m.provider, m.real_model, str(m.capability or "chat"))
+            for m in models
+            if m.real_model
+        ]
+        report = await LitellmUpstreamPriceSyncService(upstream_repo).sync_from_litellm_model_cost(
+            gateway_models=gateway_models,
+        )
+        pricing_svc = PricingService(upstream_repo, DownstreamPricingRepository(self._session))
+        await pricing_svc.sync_to_litellm_registry()
+        await invalidate_pricing_resolution_cache()
+        return report
+
+    async def upsert_downstream_pricing(
+        self,
+        *,
+        scope: str,
+        scope_id: uuid.UUID | None,
+        gateway_model_id: uuid.UUID | None,
+        inheritance_strategy: str,
+        currency: str = "CNY",
+        amount_per_million: dict[str, Any] | None = None,
+    ):
+        from domains.gateway.infrastructure.repositories.pricing_repository import (
+            DownstreamPricingRepository,
+        )
+
+        repo = DownstreamPricingRepository(self._session)
+        if inheritance_strategy == "mirror":
+            row = await repo.create(
+                scope=scope,
+                scope_id=scope_id,
+                gateway_model_id=gateway_model_id,
+                inheritance_strategy="mirror",
+            )
+            from domains.gateway.application.pricing.pricing_resolution_cache import (
+                invalidate_pricing_resolution_cache,
+            )
+
+            await invalidate_pricing_resolution_cache(
+                team_id=scope_id if scope == "team" else None,
+                gateway_model_id=gateway_model_id,
+            )
+            return row
+        if amount_per_million is None:
+            raise ValidationError("manual downstream pricing requires amount_per_million")
+        from domains.gateway.application.pricing.pricing_management import parse_amount_per_million
+        from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
+
+        fx = build_static_fx_adapter()
+        inp, out, cc, cr, extra = parse_amount_per_million(
+            amount_per_million, currency, fx
+        )
+        row = await repo.create(
+            scope=scope,
+            scope_id=scope_id,
+            gateway_model_id=gateway_model_id,
+            inheritance_strategy="manual",
+            input_cost_per_token=inp,
+            output_cost_per_token=out,
+            cache_creation_input_token_cost=cc,
+            cache_read_input_token_cost=cr,
+            extra=extra,
+        )
+        from domains.gateway.application.pricing.pricing_resolution_cache import (
+            invalidate_pricing_resolution_cache,
+        )
+
+        await invalidate_pricing_resolution_cache(
+            team_id=scope_id if scope == "team" else None,
+            gateway_model_id=gateway_model_id,
+        )
+        return row
 
 
 __all__ = ["GatewayManagementWriteService"]

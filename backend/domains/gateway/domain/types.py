@@ -171,6 +171,8 @@ EntitlementListStatus = Literal["active", "exhausted", "expired", "none", "reset
 # 连通性探针在列表 API 中的取值；未测过用 JSON null（Python None）
 ModelConnectivityStatus = Literal["success", "failed"]
 
+VirtualKeyBatchRevokeReason = Literal["not_found", "permission_denied", "system_key"]
+
 
 # =============================================================================
 # 值对象与 DTO
@@ -368,6 +370,7 @@ __all__ = [
     "TeamRole",
     "TimeSeriesPoint",
     "UsageRecord",
+    "VirtualKeyBatchRevokeReason",
     "VirtualKeyPrincipal",
     "allowed_capabilities_from_storage",
     "is_config_managed_system_credential",

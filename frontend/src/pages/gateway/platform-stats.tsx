@@ -5,13 +5,13 @@
 import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { LineChart } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 
 import { gatewayApi, type PlatformCredentialStat } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { LineChart } from '@/lib/lucide-icons'
 
 function coalesceNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -92,10 +92,10 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
           {isError && (
             <p className="px-6 py-8 text-center text-sm text-destructive">{error.message}</p>
           )}
-          {!isLoading && !isError && sorted.length === 0 && (
+          {!isLoading && !isError && sorted.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-muted-foreground">暂无数据</p>
-          )}
-          {!isLoading && !isError && sorted.length > 0 && (
+          ) : null}
+          {!isLoading && !isError && sorted.length > 0 ? (
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -111,7 +111,10 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
               </thead>
               <tbody>
                 {sorted.map((row: PlatformCredentialStat) => (
-                  <tr key={row.credential_id} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr
+                    key={row.credential_id}
+                    className="cv-auto-row border-b last:border-0 hover:bg-muted/20"
+                  >
                     <td className="px-4 py-2">
                       <div className="font-medium">{row.name}</div>
                       <div className="text-xs text-muted-foreground">{row.provider}</div>
@@ -144,7 +147,7 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
                 ))}
               </tbody>
             </table>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </div>

@@ -118,13 +118,7 @@ def _build_litellm_params(
         params["rpm"] = rpm_limit
     if tpm_limit:
         params["tpm"] = tpm_limit
-    if tags:
-        cost_in = tags.get("input_cost_per_token")
-        cost_out = tags.get("output_cost_per_token")
-        if cost_in is not None:
-            params["input_cost_per_token"] = float(cost_in)
-        if cost_out is not None:
-            params["output_cost_per_token"] = float(cost_out)
+    # 单价由 PricingService.sync_to_litellm_registry() 全局注册，不再从 deployment tags 注入。
     return params
 
 

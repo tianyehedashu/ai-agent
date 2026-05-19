@@ -155,60 +155,57 @@ def _to_uuid(value: Any) -> uuid.UUID | None:
     return None
 
 
-def _calc_cost(kwargs: dict[str, Any], response_obj: Any) -> Decimal:
-    """计算单次调用费用（USD）。
-
-    取值优先级：
-
-    1. ``response_obj._hidden_params["response_cost"]`` —— LiteLLM 在响应阶段
-       基于 deployment 的 ``input_cost_per_token`` / ``output_cost_per_token``
-       已经算过一次（见 ``litellm.litellm_core_utils.llm_response_utils.response_metadata``）。
-       对虚拟模型（``zai/glm-4-flash`` 等）这是唯一稳定的来源，因为
-       LiteLLM 内置 ``model_cost_map`` 不一定含虚拟模型。
-    2. ``kwargs["standard_logging_object"]["response_cost"]`` —— callback
-       payload 里的同一份数据，作为冗余。
-    3. ``litellm.completion_cost(response_obj, model=kwargs["model"])`` —— 兜底，
-       供 ``_hidden_params`` 未填充的边缘路径使用。
-
-    任何一步异常都不阻塞日志写入，最终回退 0 并 ``logger.debug``。
-    """
-    hidden_cost = _read_hidden_response_cost(response_obj)
-    if hidden_cost is not None:
-        return hidden_cost
+def _build_pricing_snapshot(
+    kwargs: dict[str, Any],
+    response_obj: Any,
+    cost_usd: Decimal,
+) -> dict[str, Any]:
+    """对齐 LiteLLM StandardLoggingPayload 子集 + 网关扩展字段。"""
+    from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 
     slo = kwargs.get("standard_logging_object")
+    snapshot: dict[str, Any] = {"response_cost": float(cost_usd)}
     if isinstance(slo, dict):
-        slo_cost = slo.get("response_cost")
-        if slo_cost is not None:
-            with suppress(Exception):
-                return Decimal(str(slo_cost))
+        if slo.get("model_map_information") is not None:
+            snapshot["model_map_information"] = slo.get("model_map_information")
+        snapshot["custom_pricing"] = slo.get("custom_pricing")
+    from datetime import UTC, datetime
 
-    try:
-        from litellm import completion_cost
+    fx = build_static_fx_adapter()
+    snapshot["fx_rate_used"] = str(fx.get_rate("USD", "CNY"))
+    snapshot["fx_source"] = "static"
+    snapshot["fx_as_of"] = datetime.now(UTC).strftime("%Y-%m-%d")
+    snapshot["display_currency"] = fx.default_display_currency()
+    metadata = _extract_gateway_metadata(kwargs)
+    from domains.gateway.application.pricing.pricing_display_cost import (
+        resolve_downstream_display_cost_usd,
+    )
 
-        cost = completion_cost(
-            completion_response=response_obj,
-            model=kwargs.get("model"),
-        )
-        return Decimal(str(cost or 0))
-    except Exception as exc:  # pragma: no cover
-        logger.debug("completion_cost fallback failed: %s", exc)
-        return Decimal("0")
+    display = resolve_downstream_display_cost_usd(
+        response_obj,
+        metadata=metadata,
+        model=kwargs.get("model"),
+    )
+    if display > 0:
+        snapshot["response_cost"] = float(display)
+    return snapshot
 
 
-def _read_hidden_response_cost(response_obj: Any) -> Decimal | None:
-    """从 ``response._hidden_params`` 中提取 ``response_cost``，兼容 dict 与 HiddenParams"""
-    if response_obj is None:
-        return None
-    hp = getattr(response_obj, "_hidden_params", None)
-    if hp is None:
-        return None
-    raw = hp.get("response_cost") if isinstance(hp, dict) else getattr(hp, "response_cost", None)
-    if raw is None:
-        return None
-    with suppress(Exception):
-        return Decimal(str(raw))
-    return None
+def _calc_cost(kwargs: dict[str, Any], response_obj: Any) -> tuple[Decimal, str]:
+    """计算单次调用的上游成本（USD）及来源标签。"""
+    from domains.gateway.application.pricing.upstream_cost_resolver import (
+        resolve_upstream_cost_usd,
+    )
+
+    metadata = _extract_gateway_metadata(kwargs)
+    slo = kwargs.get("standard_logging_object")
+    slo_dict = slo if isinstance(slo, dict) else None
+    return resolve_upstream_cost_usd(
+        response=response_obj,
+        model=kwargs.get("model"),
+        metadata=metadata,
+        standard_logging=slo_dict,
+    )
 
 
 def _extract_usage(response_obj: Any) -> tuple[int, int, int]:
@@ -558,7 +555,29 @@ async def _persist_event(
     provider_plan_id = _to_uuid(metadata.get("gateway_provider_plan_id"))
 
     input_tokens, output_tokens, cached_tokens = _extract_usage(response_obj)
-    cost_usd = _calc_cost(kwargs, response_obj) if status == "success" else Decimal("0")
+    if status == "success":
+        upstream_cost, cost_source = _calc_cost(kwargs, response_obj)
+    else:
+        upstream_cost, cost_source = Decimal("0"), "zero"
+    from domains.gateway.application.pricing.pricing_settlement import (
+        merge_pricing_snapshot,
+        settle_request_log_amounts,
+    )
+
+    cost_usd, revenue_usd, settlement_extra = settle_request_log_amounts(
+        metadata=metadata,
+        litellm_cost_usd=upstream_cost,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_tokens=cached_tokens,
+    )
+    settlement_extra["cost_source"] = cost_source
+    pricing_snapshot = merge_pricing_snapshot(
+        _build_pricing_snapshot(kwargs, response_obj, cost_usd),
+        settlement_extra,
+        cost_usd=cost_usd,
+        revenue_usd=revenue_usd,
+    )
 
     start_dt = _safe_dt(start_time)
     end_dt = _safe_dt(end_time) or datetime.now(UTC)
@@ -657,6 +676,8 @@ async def _persist_event(
                     output_tokens=output_tokens,
                     cached_tokens=cached_tokens,
                     cost_usd=cost_usd,
+                    revenue_usd=revenue_usd,
+                    pricing_snapshot=pricing_snapshot,
                     latency_ms=latency_ms,
                     ttfb_ms=ttfb_ms if isinstance(ttfb_ms, int) else None,
                     cache_hit=cache_hit,
@@ -669,6 +690,21 @@ async def _persist_event(
                 )
         except Exception as exc:  # pragma: no cover
             logger.warning("Failed to persist gateway request log: %s", exc)
+
+    # ---------- 流式 / 延迟成本：以 callback 落库金额为预算最终依据 ----------
+    if status == "success" and cost_usd > 0:
+        with suppress(Exception):
+            from domains.gateway.application.budget_callback_settlement import (
+                commit_budget_from_callback,
+            )
+
+            await commit_budget_from_callback(
+                metadata=metadata,
+                request_id=request_id_str,
+                cost_usd=cost_usd,
+                total_tokens=input_tokens + output_tokens,
+                budget_model=str(route_name) if route_name else None,
+            )
 
     # ---------- 写 Redis 实时计数 ----------
     with suppress(Exception):

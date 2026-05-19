@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI Gateway 二级布局：左侧二级导航 + 右侧 Outlet
  */
 
@@ -6,9 +6,15 @@ import { useMemo } from 'react'
 import type { ComponentType } from 'react'
 import type React from 'react'
 
+import { NavLink, Outlet } from 'react-router-dom'
+
+import { CurrencyToggle } from '@/components/currency-toggle'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
+  CircleDollarSign,
   Database,
   FileText,
   Key,
@@ -18,10 +24,7 @@ import {
   Receipt,
   Server,
   Users,
-} from 'lucide-react'
-import { NavLink, Outlet } from 'react-router-dom'
-
-import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+} from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
@@ -34,9 +37,11 @@ export default function GatewayLayout(): React.JSX.Element {
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
       { to: 'overview', label: '概览', icon: BarChart3 },
+      { to: 'guide', label: '调用指南', icon: BookOpen },
       { to: 'keys', label: '虚拟 Key', icon: Key },
       { to: 'credentials', label: '凭据', icon: Database },
       { to: 'models', label: '模型', icon: Network },
+      { to: 'pricing', label: '定价目录', icon: CircleDollarSign },
       { to: 'routes', label: '虚拟路由', icon: Route },
       { to: 'budgets', label: '预算配额', icon: Receipt },
       { to: 'logs', label: '调用日志', icon: FileText },
@@ -86,6 +91,9 @@ export default function GatewayLayout(): React.JSX.Element {
         </nav>
       </aside>
       <section className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mb-4 flex justify-end">
+          <CurrencyToggle />
+        </div>
         <Outlet />
       </section>
     </div>

@@ -38,6 +38,7 @@ from domains.gateway.presentation.routers import (
     my_credentials,
     my_models,
     plans,
+    pricing,
     routes,
     virtual_keys,
 )
@@ -55,5 +56,6 @@ router.include_router(logs.router)
 router.include_router(dashboard.router)
 router.include_router(alerts.router)
 router.include_router(plans.router)
+router.include_router(pricing.router)
 
 __all__ = ["router"]

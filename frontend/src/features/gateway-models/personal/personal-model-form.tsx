@@ -1,6 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
-
-import { Loader2, Info, ChevronDown } from 'lucide-react'
+﻿import { useCallback, useMemo, useState } from 'react'
 
 import type { PersonalGatewayModel } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -18,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CredentialUpstreamModelsPanel } from '@/features/gateway-credentials/credential-upstream-models-panel'
 import { NO_CREDENTIAL } from '@/features/gateway-models/constants'
+import { Loader2, Info, ChevronDown } from '@/lib/lucide-icons'
 import type { ModelType } from '@/types/user-model'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 

@@ -118,6 +118,18 @@ class GatewayRequestLog(Base):
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 6), nullable=False, server_default="0", default=Decimal("0")
     )
+    revenue_usd: Mapped[Decimal] = mapped_column(
+        Numeric(12, 6),
+        nullable=False,
+        server_default="0",
+        default=Decimal("0"),
+        comment="下游对客户计价（USD）",
+    )
+    pricing_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="LiteLLM StandardLoggingPayload 子集 + downstream_strategy/version + fx_rate_used",
+    )
 
     # 性能
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)

@@ -1,11 +1,10 @@
-/**
+﻿/**
  * 凭据上游模型探测：探测 / 刷新、不支持标记、多选后批量入库（与后端契约对齐）。
  */
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Search } from 'lucide-react'
 
 import {
   type CredentialProbeResult,
@@ -33,6 +32,7 @@ import {
 import { UpstreamModelList } from '@/features/gateway-credentials/upstream-model-list'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { useToast } from '@/hooks/use-toast'
+import { Loader2, RefreshCw, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import type { ModelType } from '@/types/user-model'
 import { MODEL_TYPE_LABELS } from '@/types/user-model'

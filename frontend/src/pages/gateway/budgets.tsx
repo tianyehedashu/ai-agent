@@ -5,7 +5,6 @@
 import { useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
 
 import { gatewayApi, type BudgetUpsertBody, type GatewayBudget } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -28,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Trash2 } from '@/lib/lucide-icons'
 
 function parseOptionalInt(raw: string): number | null {
   const t = raw.trim()
@@ -128,13 +128,23 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
               )}
               {items?.map((b: GatewayBudget) => {
                 const limitUsd = b.limit_usd ?? null
+                const softUsd = b.soft_limit_usd ?? null
                 const limitTok = b.limit_tokens ?? null
                 const usdRatio = limitUsd !== null && limitUsd > 0 ? b.current_usd / limitUsd : 0
                 const tokRatio = limitTok !== null && limitTok > 0 ? b.current_tokens / limitTok : 0
                 const ratio = Math.max(usdRatio, tokRatio)
-                const danger = ratio >= 0.9 && ratio > 0
+                const softRatio =
+                  softUsd !== null && softUsd > 0 && limitUsd !== null && limitUsd > 0
+                    ? b.current_usd / softUsd
+                    : 0
+                const barColor =
+                  ratio >= 1
+                    ? 'bg-destructive'
+                    : ratio >= 0.9 || softRatio >= 1
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
                 return (
-                  <tr key={b.id} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr key={b.id} className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
                     <td className="px-4 py-2 text-xs">{b.scope}</td>
                     <td
                       className="max-w-[140px] truncate px-4 py-2 text-xs"
@@ -148,22 +158,28 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
                         <div>
                           USD {b.current_usd.toFixed(4)} /{' '}
                           {limitUsd !== null ? `$${limitUsd.toFixed(2)}` : '∞'}
+                          {softUsd !== null ? (
+                            <span className="text-muted-foreground">
+                              {' '}
+                              · 软限 ${softUsd.toFixed(2)}
+                            </span>
+                          ) : null}
                         </div>
                         <div>
                           Token {b.current_tokens} / {limitTok ?? '∞'}
                         </div>
-                        {b.limit_requests !== null && (
+                        {b.limit_requests !== null ? (
                           <div>
                             请求 {b.current_requests} / {b.limit_requests}
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-32 overflow-hidden rounded bg-muted">
                           <div
-                            className={'h-full ' + (danger ? 'bg-destructive' : 'bg-primary')}
+                            className={`h-full ${barColor}`}
                             style={{
                               width: `${Math.min(100, (ratio > 0 ? ratio : 0) * 100).toFixed(1)}%`,
                             }}
@@ -173,7 +189,11 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-xs">
-                      {b.reset_at ? new Date(b.reset_at).toLocaleDateString() : '—'}
+                      {b.budget_reset_at
+                        ? new Date(b.budget_reset_at).toLocaleString()
+                        : b.reset_at
+                          ? new Date(b.reset_at).toLocaleDateString()
+                          : '—'}
                     </td>
                     <td className="px-4 py-2">
                       {isAdmin && (
@@ -213,6 +233,7 @@ interface CreateValues {
   period: 'daily' | 'monthly' | 'total'
   model_name: string
   limit_usd: string
+  soft_limit_usd: string
   limit_tokens: string
   limit_requests: string
 }
@@ -232,6 +253,7 @@ function CreateBudgetDialog({
     period: 'monthly',
     model_name: '',
     limit_usd: '100',
+    soft_limit_usd: '80',
     limit_tokens: '',
     limit_requests: '',
   })
@@ -302,6 +324,18 @@ function CreateBudgetDialog({
             />
           </div>
           <div className="col-span-2">
+            <Label>软限额 USD（可选）</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="达阈值告警，通常低于硬限额"
+              value={v.soft_limit_usd}
+              onChange={(e) => {
+                setV({ ...v, soft_limit_usd: e.target.value })
+              }}
+            />
+          </div>
+          <div className="col-span-2">
             <Label>限额 Token（可选）</Label>
             <Input
               type="text"
@@ -346,9 +380,11 @@ function CreateBudgetDialog({
                 body.model_name = modelTrim
               }
               const lu = parseOptionalUsd(v.limit_usd)
+              const ls = parseOptionalUsd(v.soft_limit_usd)
               const lt = parseOptionalInt(v.limit_tokens)
               const lr = parseOptionalInt(v.limit_requests)
               if (lu !== null) body.limit_usd = lu
+              if (ls !== null) body.soft_limit_usd = ls
               if (lt !== null) body.limit_tokens = lt
               if (lr !== null) body.limit_requests = lr
               if (lu === null && lt === null && lr === null) {

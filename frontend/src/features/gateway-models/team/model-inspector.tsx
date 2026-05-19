@@ -1,6 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+﻿import { memo, useEffect, useMemo, useState } from 'react'
 
-import { Copy, ExternalLink, Info, Loader2, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import type {
@@ -32,9 +31,13 @@ import {
   parsePositiveInt,
   routesReferencingModel,
 } from '@/features/gateway-models/utils'
+import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
+import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { Copy, ExternalLink, Info, Loader2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { useUserPreferenceStore } from '@/stores/user-preference'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
 
@@ -69,7 +72,10 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   onSave,
   onToggleEnabled,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
-  const { canWrite } = useGatewayPermission()
+  const { canWrite, isAdmin } = useGatewayPermission()
+  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
+  const { byName: priceByName } = useGatewayModelPrices(displayCurrency)
+  const myPrice = priceByName.get(model.name)
   const [usageScope, setUsageScope] = useState<'workspace' | 'user'>('workspace')
   const [modelName, setModelName] = useState(model.name)
   const [realModel, setRealModel] = useState(model.real_model)
@@ -231,6 +237,37 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             能力
           </h3>
           <ModelCapabilityBadges model={model} />
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            定价
+          </h3>
+          <PricingBadge row={myPrice} currency={displayCurrency} />
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Link
+              to={`/gateway/pricing/my-prices?model=${encodeURIComponent(model.name)}`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              我的价格
+            </Link>
+            {isAdmin ? (
+              <>
+                <Link
+                  to={`/gateway/pricing/downstream?model_id=${encodeURIComponent(model.id)}`}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  下游定价
+                </Link>
+                <Link
+                  to="/gateway/pricing/upstream"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  上游成本
+                </Link>
+              </>
+            ) : null}
+          </div>
         </section>
 
         <section className="space-y-3">

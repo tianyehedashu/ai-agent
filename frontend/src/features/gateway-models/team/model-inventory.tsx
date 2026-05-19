@@ -1,6 +1,4 @@
-import { memo } from 'react'
-
-import { Info, Loader2, Plus, Search } from 'lucide-react'
+﻿import { memo } from 'react'
 
 import type { GatewayModel, GatewayModelRouteUsageItem } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -14,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Info, Loader2, Plus, Search } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
 import { cn } from '@/lib/utils'
 

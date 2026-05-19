@@ -273,6 +273,19 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 
 本地窗口只是预测，**上游返回 402 / 429 / ``insufficient_quota`` / ``RESOURCE_EXHAUSTED`` 才是事实来源**。``custom_logger.async_log_failure_event`` 会识别这些信号，并调用 ``ProviderPlanGuard.mark_upstream_exhausted`` → ``QuotaPlanService.force_exhaust`` 把对应 ``ProviderPlan`` 的 quota 立即打满到下次 reset。这样不用引入复杂的厂商 header 同步，也能在真实偏差出现后快速收敛，避免连续浪费上游调用。
 
+### 4.8 模型定价目录（上下游分离）
+
+| 表 | 职责 |
+|----|------|
+| ``upstream_model_pricing`` | 厂商成本（USD / token），由 catalog 同步或管理员维护 |
+| ``downstream_model_pricing`` | 对客户售价；``mirror`` 跟随上游，``manual`` 覆盖 |
+
+**存储与展示**：库内金额一律 **USD**；读侧经 ``MoneyProjector`` + ``FxRatePort``（默认静态 ``gateway_fx_usd_cny``）投影为 ``MoneyDisplay``，前端默认 **CNY** 展示并可切换 USD。
+
+**计费链路**：``config_catalog_sync`` 写入上游表并 ``litellm.register_model``；代理回调 ``custom_logger`` 写 ``cost_usd`` / ``revenue_usd`` / ``pricing_snapshot``。命中 ``ProviderPlan`` / ``EntitlementPlan`` 时 cost/revenue 计 0（无 ``billing_mode`` 列）。
+
+**API**：``/api/v1/gateway/pricing/*``；管理员可见 ``PricingRateAdminView``（含上游与毛利），成员仅 ``PricingRateMemberView``。
+
 ---
 
 ## 5. 数据与持久化要点

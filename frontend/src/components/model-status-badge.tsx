@@ -38,6 +38,11 @@ export interface ModelStatusBadgeProps {
   entitlementStatus?: EntitlementStatus
   /** entitlement 自动恢复时刻（ISO），用于 resetting/exhausted 的 tooltip */
   entitlementResetAt?: string | null
+  /**
+   * 是否包裹 TooltipProvider。长列表应在父级包一层 Provider 并设为 false，避免每行一个 Provider。
+   * @default true
+   */
+  withProvider?: boolean
 }
 
 interface StatusVisual {
@@ -93,7 +98,7 @@ const VISUAL_BY_STATUS: Record<StatusKey, StatusVisual> = {
   },
 }
 
-export function ModelStatusBadge({
+function ModelStatusBadgeInner({
   status,
   testedAt,
   reason,
@@ -136,31 +141,40 @@ export function ModelStatusBadge({
               : `上次测试: ${absolute ?? '—'}${key === 'failed' ? '（失败，可点测试按钮重试）' : ''}`
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge
-            className={cn(
-              'shrink-0 whitespace-nowrap font-medium',
-              compact ? 'gap-0.5 px-1.5 py-0.5 text-[11px]' : 'gap-1 px-2 py-0.5',
-              visual.className,
-              className
-            )}
-          >
-            <Icon
-              className={cn('shrink-0', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')}
-              aria-hidden="true"
-            />
-            <span>{visual.label}</span>
-            {!compact && relative ? (
-              <span className="text-[10px] font-normal opacity-80">· {relative}</span>
-            ) : null}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-sm whitespace-pre-wrap break-words">
-          {tooltipText}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          className={cn(
+            'shrink-0 whitespace-nowrap font-medium',
+            compact ? 'gap-0.5 px-1.5 py-0.5 text-[11px]' : 'gap-1 px-2 py-0.5',
+            visual.className,
+            className
+          )}
+        >
+          <Icon
+            className={cn('shrink-0', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')}
+            aria-hidden="true"
+          />
+          <span>{visual.label}</span>
+          {!compact && relative ? (
+            <span className="text-[10px] font-normal opacity-80">· {relative}</span>
+          ) : null}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm whitespace-pre-wrap break-words">
+        {tooltipText}
+      </TooltipContent>
+    </Tooltip>
   )
+}
+
+export function ModelStatusBadge({
+  withProvider = true,
+  ...props
+}: ModelStatusBadgeProps): React.JSX.Element {
+  const badge = <ModelStatusBadgeInner {...props} />
+  if (withProvider) {
+    return <TooltipProvider delayDuration={200}>{badge}</TooltipProvider>
+  }
+  return badge
 }

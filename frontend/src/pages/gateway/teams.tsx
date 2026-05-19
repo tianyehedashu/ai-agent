@@ -1,11 +1,10 @@
-/**
+﻿/**
  * AI Gateway · 团队管理
  */
 
 import { useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
 
 import { gatewayApi, type GatewayTeam, type TeamMember } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -28,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Trash2 } from '@/lib/lucide-icons'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 export default function GatewayTeamsPage(): React.JSX.Element {
@@ -185,13 +185,13 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                     </td>
                   </tr>
                 ))}
-                {(members ?? []).length === 0 && (
+                {(members ?? []).length === 0 ? (
                   <tr>
                     <td className="px-4 py-6 text-center text-muted-foreground" colSpan={2}>
                       暂无成员
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </CardContent>

@@ -14,6 +14,9 @@ from domains.gateway.presentation.deps import (
 )
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
+    VirtualKeyBatchRevokeFailureItem,
+    VirtualKeyBatchRevokeRequest,
+    VirtualKeyBatchRevokeResponse,
     VirtualKeyCreate,
     VirtualKeyCreateResponse,
     VirtualKeyResponse,
@@ -69,6 +72,28 @@ async def create_key(
     )
     base = vkey_to_response(record).model_dump()
     return VirtualKeyCreateResponse(**base, plain_key=plain)
+
+
+@router.post("/keys/revoke-batch", response_model=VirtualKeyBatchRevokeResponse)
+async def revoke_keys_batch(
+    body: VirtualKeyBatchRevokeRequest,
+    team: RequiredTeamMember,
+    writes: MgmtWrites,
+) -> VirtualKeyBatchRevokeResponse:
+    revoked, failed = await writes.revoke_virtual_keys_batch(
+        body.key_ids,
+        team_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
+        is_platform_admin=team.is_platform_admin,
+    )
+    return VirtualKeyBatchRevokeResponse(
+        revoked=revoked,
+        failed=[
+            VirtualKeyBatchRevokeFailureItem(key_id=key_id, reason=reason)
+            for key_id, reason in failed
+        ],
+    )
 
 
 @router.delete("/keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)

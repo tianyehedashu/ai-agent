@@ -1,8 +1,7 @@
-import { Info } from 'lucide-react'
-
-import type { GatewayModel } from '@/api/gateway'
+﻿import type { GatewayModel } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Info } from '@/lib/lucide-icons'
 
 import { MODEL_TYPE_LABELS, capabilityLabel } from '../constants'
 

@@ -13,12 +13,17 @@ import GatewayAlertsPage from '@/pages/gateway/alerts'
 import GatewayBudgetsPage from '@/pages/gateway/budgets'
 import GatewayCredentialDetailPage from '@/pages/gateway/credential-detail'
 import GatewayCredentialsPage from '@/pages/gateway/credentials'
+import GatewayGuidePage from '@/pages/gateway/guide'
 import GatewayKeysPage from '@/pages/gateway/keys'
 import GatewayLogsPage from '@/pages/gateway/logs'
 import GatewayModelDetailPage from '@/pages/gateway/model-detail'
 import GatewayModelsPage from '@/pages/gateway/models'
 import GatewayOverviewPage from '@/pages/gateway/overview'
 import GatewayPlatformStatsPage from '@/pages/gateway/platform-stats'
+import GatewayPricingLayout from '@/pages/gateway/pricing/_layout'
+import GatewayPricingDownstreamPage from '@/pages/gateway/pricing/downstream'
+import GatewayPricingMyPricesPage from '@/pages/gateway/pricing/my-prices'
+import GatewayPricingUpstreamPage from '@/pages/gateway/pricing/upstream'
 import GatewayRoutesPage from '@/pages/gateway/routes'
 import GatewayTeamsPage from '@/pages/gateway/teams'
 import MCPPage from '@/pages/mcp'
@@ -64,6 +69,7 @@ function App(): React.JSX.Element {
                   <Route path="/gateway/*" element={<GatewayLayout />}>
                     <Route index element={<GatewayOverviewPage />} />
                     <Route path="overview" element={<GatewayOverviewPage />} />
+                    <Route path="guide" element={<GatewayGuidePage />} />
                     <Route path="keys" element={<GatewayKeysPage />} />
                     <Route path="credentials" element={<GatewayCredentialsPage />} />
                     <Route
@@ -73,6 +79,12 @@ function App(): React.JSX.Element {
                     <Route path="models" element={<GatewayModelsPage />} />
                     <Route path="models/:modelId" element={<GatewayModelDetailPage />} />
                     <Route path="routes" element={<GatewayRoutesPage />} />
+                    <Route path="pricing" element={<GatewayPricingLayout />}>
+                      <Route index element={<GatewayPricingMyPricesPage />} />
+                      <Route path="my-prices" element={<GatewayPricingMyPricesPage />} />
+                      <Route path="downstream" element={<GatewayPricingDownstreamPage />} />
+                      <Route path="upstream" element={<GatewayPricingUpstreamPage />} />
+                    </Route>
                     <Route path="platform-stats" element={<GatewayPlatformStatsPage />} />
                     <Route path="budgets" element={<GatewayBudgetsPage />} />
                     <Route path="logs" element={<GatewayLogsPage />} />

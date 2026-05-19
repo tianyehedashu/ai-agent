@@ -63,13 +63,37 @@ export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
   GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES
 )
 
+/** 与 backend domains.gateway.domain.types.RoutingStrategy 对齐 */
 export const ROUTING_STRATEGIES = [
   'simple-shuffle',
   'least-busy',
-  'usage-based-routing',
+  'usage-based-routing-v2',
   'latency-based-routing',
   'cost-based-routing',
 ] as const
+
+export type RoutingStrategy = (typeof ROUTING_STRATEGIES)[number]
+
+/** 路由策略中文展示（API 仍用英文枚举值） */
+export const ROUTING_STRATEGY_LABELS: Record<RoutingStrategy, string> = {
+  'simple-shuffle': '简单随机',
+  'least-busy': '最少繁忙',
+  'usage-based-routing-v2': '按用量路由',
+  'latency-based-routing': '按延迟路由',
+  'cost-based-routing': '按成本路由',
+}
+
+/** 历史路由数据可能仍存旧枚举值，仅用于展示 */
+const ROUTING_STRATEGY_LEGACY_LABELS: Record<string, string> = {
+  'usage-based-routing': '按用量路由',
+}
+
+export function routingStrategyLabel(strategy: string): string {
+  if (strategy in ROUTING_STRATEGY_LABELS) {
+    return ROUTING_STRATEGY_LABELS[strategy as RoutingStrategy]
+  }
+  return ROUTING_STRATEGY_LEGACY_LABELS[strategy] ?? strategy
+}
 
 export type HealthFilter = 'all' | 'success' | 'failed' | 'unknown'
 

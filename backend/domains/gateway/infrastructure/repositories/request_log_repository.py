@@ -65,6 +65,8 @@ class RequestLogRepository:
         output_tokens: int,
         cached_tokens: int,
         cost_usd: Decimal,
+        revenue_usd: Decimal | None = None,
+        pricing_snapshot: dict[str, Any] | None = None,
         latency_ms: int,
         ttfb_ms: int | None,
         cache_hit: bool,
@@ -102,6 +104,8 @@ class RequestLogRepository:
             output_tokens=output_tokens,
             cached_tokens=cached_tokens,
             cost_usd=cost_usd,
+            revenue_usd=revenue_usd if revenue_usd is not None else cost_usd,
+            pricing_snapshot=pricing_snapshot,
             latency_ms=latency_ms,
             ttfb_ms=ttfb_ms,
             cache_hit=cache_hit,
@@ -207,6 +211,73 @@ class RequestLogRepository:
             "failure": int(row.failure or 0),
             "avg_latency_ms": float(row.avg_latency or 0),
         }
+
+    async def aggregate_billing_summary_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+    ) -> dict[str, Any]:
+        clauses = [
+            *axis.base_clauses(),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+        ]
+        stmt = select(
+            func.count(GatewayRequestLog.id).label("requests"),
+            func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+            func.sum(GatewayRequestLog.revenue_usd).label("revenue_usd"),
+        ).where(and_(*clauses))
+        row = (await self._session.execute(stmt)).one()
+        cost = Decimal(row.cost_usd or 0)
+        revenue = Decimal(row.revenue_usd or 0)
+        return {
+            "requests": int(row.requests or 0),
+            "cost_usd": cost,
+            "revenue_usd": revenue,
+            "margin_usd": revenue - cost,
+        }
+
+    async def aggregate_top_routes_billing_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        clauses = [
+            *axis.base_clauses(),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+        ]
+        stmt = (
+            select(
+                GatewayRequestLog.route_name,
+                func.count(GatewayRequestLog.id).label("requests"),
+                func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+                func.sum(GatewayRequestLog.revenue_usd).label("revenue_usd"),
+            )
+            .where(and_(*clauses))
+            .group_by(GatewayRequestLog.route_name)
+            .order_by(func.sum(GatewayRequestLog.revenue_usd).desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            cost = Decimal(r.cost_usd or 0)
+            revenue = Decimal(r.revenue_usd or 0)
+            out.append(
+                {
+                    "route_name": r.route_name,
+                    "requests": int(r.requests or 0),
+                    "cost_usd": cost,
+                    "revenue_usd": revenue,
+                    "margin_usd": revenue - cost,
+                }
+            )
+        return out
 
     async def aggregate_by_route_names_by_axis(
         self,

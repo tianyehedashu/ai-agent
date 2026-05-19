@@ -139,6 +139,23 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
         try:
             async with get_session_context() as session:
                 await sync_app_config_gateway_catalog(session)
+                from domains.gateway.application.pricing.pricing_management import (
+                    build_pricing_service,
+                )
+
+                pricing_svc = build_pricing_service(session)
+                await pricing_svc.sync_to_litellm_registry()
+                from domains.gateway.application.pricing.upstream_pricing_audit import (
+                    audit_upstream_pricing_keys,
+                )
+
+                audit = await audit_upstream_pricing_keys(session)
+                if audit.models_without_upstream:
+                    logger.warning(
+                        "Gateway upstream pricing: %d models missing upstream rows (sample: %s)",
+                        len(audit.models_without_upstream),
+                        audit.models_without_upstream[:5],
+                    )
                 await session.commit()
                 await reload_router(session)
         except Exception as exc:

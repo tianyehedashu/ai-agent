@@ -1,17 +1,27 @@
-/**
+﻿/**
  * AI Gateway · 虚拟 Key 管理
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +35,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Copy, Plus, Trash2 } from '@/lib/lucide-icons'
 
 export default function GatewayKeysPage(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -32,11 +43,19 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
   const [open, setOpen] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
 
   const { data: keys, isLoading } = useQuery({
     queryKey: ['gateway', 'keys'],
     queryFn: () => gatewayApi.listKeys(),
   })
+
+  const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system), [keys])
+  const selectableKeys = useMemo(() => visibleKeys.filter((k) => k.is_active), [visibleKeys])
+  const allSelectableSelected =
+    selectableKeys.length > 0 && selectableKeys.every((k) => selectedIds.has(k.id))
+  const someSelectableSelected = selectableKeys.some((k) => selectedIds.has(k.id))
 
   const createMutation = useMutation({
     mutationFn: gatewayApi.createKey,
@@ -59,6 +78,44 @@ export default function GatewayKeysPage(): React.JSX.Element {
       toast({ variant: 'destructive', title: '撤销失败', description: e.message })
     },
   })
+
+  const batchRevokeMutation = useMutation({
+    mutationFn: (ids: string[]) => gatewayApi.revokeKeysBatch(ids),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
+      setSelectedIds(new Set())
+      setBatchRevokeOpen(false)
+      if (result.failed.length === 0) {
+        toast({ title: `已撤销 ${String(result.revoked.length)} 个虚拟 Key` })
+        return
+      }
+      toast({
+        variant: 'destructive',
+        title: '部分撤销失败',
+        description: `成功 ${String(result.revoked.length)} 个，失败 ${String(result.failed.length)} 个`,
+      })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '批量撤销失败', description: e.message })
+    },
+  })
+
+  const toggleSelectAll = (checked: boolean): void => {
+    if (checked) {
+      setSelectedIds(new Set(selectableKeys.map((k) => k.id)))
+      return
+    }
+    setSelectedIds(new Set())
+  }
+
+  const toggleSelect = (id: string, checked: boolean): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -93,11 +150,45 @@ export default function GatewayKeysPage(): React.JSX.Element {
         )}
       </div>
 
+      {canWrite && selectedIds.size > 0 ? (
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-2">
+          <span className="text-sm text-muted-foreground">已选 {selectedIds.size} 项</span>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => {
+              setBatchRevokeOpen(true)
+            }}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            批量撤销
+          </Button>
+        </div>
+      ) : null}
+
       <Card>
         <CardContent className="p-0">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
               <tr>
+                {canWrite ? (
+                  <th className="w-10 px-4 py-2 text-left font-medium">
+                    <Checkbox
+                      checked={
+                        allSelectableSelected
+                          ? true
+                          : someSelectableSelected
+                            ? 'indeterminate'
+                            : false
+                      }
+                      disabled={selectableKeys.length === 0}
+                      aria-label="全选可用虚拟 Key"
+                      onCheckedChange={(checked) => {
+                        toggleSelectAll(checked === true)
+                      }}
+                    />
+                  </th>
+                ) : null}
                 <th className="px-4 py-2 text-left font-medium">名称</th>
                 <th className="px-4 py-2 text-left font-medium">Key</th>
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
@@ -111,51 +202,68 @@ export default function GatewayKeysPage(): React.JSX.Element {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={canWrite ? 9 : 8}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
                     加载中...
                   </td>
                 </tr>
               )}
-              {!isLoading && (keys?.length ?? 0) === 0 && (
+              {!isLoading && visibleKeys.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={canWrite ? 9 : 8}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
                     暂无虚拟 Key
                   </td>
                 </tr>
               )}
-              {keys
-                ?.filter((k) => !k.is_system)
-                .map((k: VirtualKey) => (
-                  <tr key={k.id} className="border-b last:border-0 hover:bg-muted/20">
-                    <td className="px-4 py-2 font-medium">{k.name}</td>
-                    <td className="px-4 py-2 font-mono text-xs">{k.masked_key}</td>
-                    <td className="px-4 py-2 text-xs">
-                      {k.allowed_models.length === 0 ? '全部' : k.allowed_models.join(', ')}
-                    </td>
-                    <td className="px-4 py-2 text-xs tabular-nums">
-                      {`${String(k.rpm_limit ?? '∞')} / ${String(k.tpm_limit ?? '∞')}`}
-                    </td>
-                    <td className="px-4 py-2 text-xs">
-                      <KeyEntitlementsCell vkeyId={k.id} />
-                    </td>
-                    <td className="px-4 py-2 text-xs">{k.guardrail_enabled ? '已启用' : '关闭'}</td>
-                    <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
+              {visibleKeys.map((k: VirtualKey) => (
+                <tr key={k.id} className="border-b last:border-0 hover:bg-muted/20">
+                  {canWrite ? (
                     <td className="px-4 py-2">
-                      {canWrite && k.is_active && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            if (confirm(`确认撤销 ${k.name}?`)) revokeMutation.mutate(k.id)
+                      {k.is_active ? (
+                        <Checkbox
+                          checked={selectedIds.has(k.id)}
+                          aria-label={`选择 ${k.name}`}
+                          onCheckedChange={(checked) => {
+                            toggleSelect(k.id, checked === true)
                           }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      )}
+                        />
+                      ) : null}
                     </td>
-                  </tr>
-                ))}
+                  ) : null}
+                  <td className="px-4 py-2 font-medium">{k.name}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{k.masked_key}</td>
+                  <td className="px-4 py-2 text-xs">
+                    {k.allowed_models.length === 0 ? '全部' : k.allowed_models.join(', ')}
+                  </td>
+                  <td className="px-4 py-2 text-xs tabular-nums">
+                    {`${String(k.rpm_limit ?? '∞')} / ${String(k.tpm_limit ?? '∞')}`}
+                  </td>
+                  <td className="px-4 py-2 text-xs">
+                    <KeyEntitlementsCell vkeyId={k.id} />
+                  </td>
+                  <td className="px-4 py-2 text-xs">{k.guardrail_enabled ? '已启用' : '关闭'}</td>
+                  <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
+                  <td className="px-4 py-2">
+                    {canWrite && k.is_active && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => {
+                          if (confirm(`确认撤销 ${k.name}?`)) revokeMutation.mutate(k.id)
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </CardContent>
@@ -172,6 +280,29 @@ export default function GatewayKeysPage(): React.JSX.Element {
         }}
         plaintext={createdKey}
       />
+
+      <AlertDialog open={batchRevokeOpen} onOpenChange={setBatchRevokeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>批量撤销虚拟 Key</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定撤销已选的 {selectedIds.size} 个虚拟 Key？撤销后对应 Key 将无法继续调用。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchRevokeMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={batchRevokeMutation.isPending || selectedIds.size === 0}
+              onClick={() => {
+                batchRevokeMutation.mutate([...selectedIds])
+              }}
+            >
+              {batchRevokeMutation.isPending ? '撤销中…' : '确认撤销'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

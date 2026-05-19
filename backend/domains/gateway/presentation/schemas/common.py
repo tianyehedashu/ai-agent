@@ -59,6 +59,20 @@ class VirtualKeyCreateResponse(VirtualKeyResponse):
     plain_key: str = Field(description="完整的 sk-gw-... Key（仅创建时返回一次）")
 
 
+class VirtualKeyBatchRevokeRequest(BaseModel):
+    key_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=100)
+
+
+class VirtualKeyBatchRevokeFailureItem(BaseModel):
+    key_id: uuid.UUID
+    reason: str
+
+
+class VirtualKeyBatchRevokeResponse(BaseModel):
+    revoked: list[uuid.UUID] = Field(default_factory=list)
+    failed: list[VirtualKeyBatchRevokeFailureItem] = Field(default_factory=list)
+
+
 # =============================================================================
 # Credential
 # =============================================================================
@@ -433,6 +447,7 @@ class BudgetUpsert(BaseModel):
         description="非空时仅对该请求 model 字符串计量；省略为全模型汇总",
     )
     limit_usd: Decimal | None = None
+    soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
 
@@ -444,12 +459,14 @@ class BudgetResponse(BaseModel):
     period: str
     model_name: str | None = None
     limit_usd: Decimal | None = None
+    soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
     current_usd: Decimal = Decimal("0")
     current_tokens: int = 0
     current_requests: int = 0
     reset_at: datetime | None = None
+    budget_reset_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -480,6 +497,7 @@ class RequestLogResponse(BaseModel):
     output_tokens: int = 0
     cached_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
+    revenue_usd: Decimal = Decimal("0")
     latency_ms: int = 0
     ttfb_ms: int | None = None
     cache_hit: bool = False
@@ -500,6 +518,7 @@ class RequestLogDetailResponse(RequestLogResponse):
     prompt_redacted: dict[str, Any] | None = None
     response_summary: dict[str, Any] | None = None
     metadata_extra: dict[str, Any] | None = None
+    pricing_snapshot: dict[str, Any] | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

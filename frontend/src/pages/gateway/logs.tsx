@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { ChevronDown } from 'lucide-react'
 
 import { gatewayApi, type GatewayLogItem, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -23,7 +22,11 @@ import {
   credentialDisplayText,
   credentialDisplayTitle,
 } from '@/features/gateway-usage/credential-display'
+import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakdown'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { ChevronDown } from '@/lib/lucide-icons'
+import { coalesceMoney, formatMoney } from '@/lib/money'
+import { useUserPreferenceStore } from '@/stores/user-preference'
 
 const PAGE_SIZE = 100
 
@@ -34,6 +37,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
+  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
 
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
     queryKey: ['gateway', 'logs', usageAggregation],
@@ -158,7 +162,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
                       height: `${row.size.toString()}px`,
                       transform: `translateY(${row.start.toString()}px)`,
                     }}
-                    className={`${LOG_GRID_COLS} items-center border-b px-3 text-left text-xs hover:bg-muted/30`}
+                    className={`${LOG_GRID_COLS} cv-auto-row items-center border-b px-3 text-left text-xs hover:bg-muted/30`}
                     type="button"
                     onClick={() => {
                       setSelectedId(item.id)
@@ -188,7 +192,12 @@ export default function GatewayLogsPage(): React.JSX.Element {
                     <div className="tabular-nums">
                       {(item.input_tokens + item.output_tokens).toLocaleString()}
                     </div>
-                    <div className="tabular-nums">${Number(item.cost_usd).toFixed(5)}</div>
+                    <div className="tabular-nums">
+                      {formatMoney(coalesceMoney(item.revenue_usd ?? item.cost_usd), {
+                        currency: displayCurrency,
+                        precision: 4,
+                      })}
+                    </div>
                     <div className="tabular-nums">{item.latency_ms}ms</div>
                     <div className="truncate font-mono text-muted-foreground">
                       {item.request_id ?? item.id}
@@ -230,6 +239,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
           ) : null}
           {detail !== undefined ? (
             <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 text-xs">
+              <LogPricingBreakdown detail={detail} />
               <dl className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-2 rounded-md border bg-muted/20 p-3">
                 <dt className="text-muted-foreground">凭据</dt>
                 <dd className="min-w-0 break-words">

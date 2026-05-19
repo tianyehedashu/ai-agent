@@ -139,15 +139,43 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
     if int(model.max_reference_images or 0) > 0:
         tags["max_reference_images"] = int(model.max_reference_images)
 
-    # 与 LiteLLM 对齐的 USD/token 价格。仅在显式配置为正数时透传，
-    # 避免把默认 0 写入 tags 后误抑制 LiteLLM 内置 model_cost_map 的价目。
+    # 计费用单价写入 upstream_model_pricing（见 _upsert_upstream_pricing_from_model），不再写入 tags。
+    return tags
+
+
+async def _upsert_upstream_pricing_from_model(
+    session: AsyncSession,
+    *,
+    model: ModelInfo,
+    real_model: str,
+    capability: str,
+) -> None:
+    from decimal import Decimal
+
+    from domains.gateway.infrastructure.repositories.pricing_repository import (
+        UpstreamPricingRepository,
+    )
+
     input_cpt = getattr(model, "input_cost_per_token", 0.0) or 0.0
     output_cpt = getattr(model, "output_cost_per_token", 0.0) or 0.0
-    if input_cpt > 0:
-        tags["input_cost_per_token"] = float(input_cpt)
-    if output_cpt > 0:
-        tags["output_cost_per_token"] = float(output_cpt)
-    return tags
+    if input_cpt <= 0 or output_cpt <= 0:
+        return
+    repo = UpstreamPricingRepository(session)
+    existing = await repo.get_active(
+        provider=model.provider,
+        upstream_model=real_model,
+        capability=capability,
+    )
+    if existing is not None:
+        return
+    await repo.create(
+        provider=model.provider,
+        upstream_model=real_model,
+        capability=capability,
+        input_cost_per_token=Decimal(str(input_cpt)),
+        output_cost_per_token=Decimal(str(output_cpt)),
+        source="toml",
+    )
 
 
 def _infer_model_types_from_tags(tags: dict[str, Any], capability: str) -> list[str]:
@@ -252,6 +280,9 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
                 tpm_limit=None,
                 tags=tags,
             )
+            await _upsert_upstream_pricing_from_model(
+                session, model=model, real_model=real_model, capability=capability
+            )
             upserted += 1
             continue
 
@@ -272,6 +303,9 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
             provider=model.provider,
             enabled=True,
             tags=merged_tags,
+        )
+        await _upsert_upstream_pricing_from_model(
+            session, model=model, real_model=real_model, capability=capability
         )
         upserted += 1
 
