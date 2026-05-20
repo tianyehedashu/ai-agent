@@ -46,10 +46,10 @@ import { PlaygroundStatusBadge } from './playground-status-badge'
 import { usePlaygroundCall } from './use-playground-call'
 import { usePlaygroundImageCall } from './use-playground-image'
 import { usePlaygroundVideoCall } from './use-playground-video'
-import { usePlaygroundVirtualKey, type PlaygroundVkeyBootstrap } from './use-playground-virtual-key'
 import { useSyncApiKeyFromVkey } from './use-sync-api-key-from-vkey'
 
 import type { PlaygroundApiFlavor } from './types'
+import type { UsePlaygroundVirtualKeyReturn } from './use-playground-virtual-key'
 
 const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
   chat: '请用三句话介绍 AI Gateway 的作用，并给出一个适合接入的场景。',
@@ -72,13 +72,14 @@ const MODEL_STATUS_RANK: Record<'success' | 'null' | 'failed', number> = {
 interface PlaygroundCardProps {
   baseUrl: string
   onModelChange?: (model: string) => void
-  vkeyBootstrap?: PlaygroundVkeyBootstrap
+  /** 由父级调用 ``usePlaygroundVirtualKey`` 注入，避免重复 list/reveal 请求 */
+  virtualKey: UsePlaygroundVirtualKeyReturn
 }
 
 export function PlaygroundCard({
   baseUrl,
   onModelChange,
-  vkeyBootstrap,
+  virtualKey,
 }: PlaygroundCardProps): React.JSX.Element {
   const apiKeyId = useId()
   const modelSelectId = useId()
@@ -117,7 +118,7 @@ export function PlaygroundCard({
     plain,
     isRevealing,
     revealError,
-  } = usePlaygroundVirtualKey(vkeyBootstrap)
+  } = virtualKey
 
   const activeCall =
     playgroundMode === 'image_gen'

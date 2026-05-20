@@ -18,9 +18,11 @@ import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-select
 import { migrateLegacyPlaygroundVkeyStorage } from './playground-vkey-persist'
 
 export interface PlaygroundVkeyBootstrap {
-  /** 创建 Key 后导航带入的明文（仅当与 bootstrapKeyId 同时存在且匹配选中 id 时生效） */
+  /** 创建 Key 后导航带入的明文（仅当与 keyId 同时存在且匹配选中 id 时生效） */
   plain?: string | null
   keyId?: string | null
+  /** URL `?key_id=` 或导航 state；仅在 listKeys 结果包含该 id 时写入选中（避免跨团队无效 id） */
+  preferKeyId?: string | null
 }
 
 export interface UsePlaygroundVirtualKeyReturn {
@@ -87,6 +89,23 @@ export function usePlaygroundVirtualKey(
     if (visibleKeys.length === 0) return
     setLastSelectedId(visibleKeys[0].id)
   }, [selectedKeyId, visibleKeys, setLastSelectedId])
+
+  const preferKeyId = bootstrap?.preferKeyId ?? null
+
+  useEffect(() => {
+    if (!preferKeyId || keysQuery.isFetching || !keysQuery.data) return
+    if (!visibleKeys.some((k) => k.id === preferKeyId)) return
+    if (selectedKeyId === preferKeyId) return
+    explicitlyClearedRef.current = false
+    setLastSelectedId(preferKeyId)
+  }, [
+    preferKeyId,
+    keysQuery.isFetching,
+    keysQuery.data,
+    visibleKeys,
+    selectedKeyId,
+    setLastSelectedId,
+  ])
 
   const selectedKey = useMemo<VirtualKey | null>(
     () => visibleKeys.find((k) => k.id === selectedKeyId) ?? null,

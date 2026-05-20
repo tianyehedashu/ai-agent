@@ -29,7 +29,8 @@
  * ```
  */
 
-import { messageFromApiErrorBody } from '@/lib/gateway-api-error'
+import { ApiError } from '@/api/errors'
+import { messageFromApiErrorBody } from '@/lib/fastapi-error-detail'
 import {
   getAuthToken,
   getRefreshToken,
@@ -49,16 +50,7 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>
 }
 
-/** API 错误 - 携带 HTTP 状态码，便于上层精确判断 */
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string
-  ) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
+export { ApiError } from '@/api/errors'
 
 async function parseResponseBody<T>(response: Response): Promise<T> {
   if (response.status === 204 || response.status === 205) {
@@ -334,10 +326,11 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      const error = (await response.json().catch(() => ({ detail: 'Unknown error' }))) as {
-        detail?: string
-      }
-      throw new ApiError(response.status, error.detail ?? 'Upload failed')
+      const errorBody: unknown = await response
+        .json()
+        .catch(() => ({ detail: 'Unknown error' }) as const)
+      const message = messageFromApiErrorBody(errorBody, 'Upload failed')
+      throw new ApiError(response.status, message)
     }
     return parseResponseBody<T>(response)
   }

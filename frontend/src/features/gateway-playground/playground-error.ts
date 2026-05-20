@@ -1,3 +1,5 @@
+import { parseFastApiDetail } from '@/lib/fastapi-error-detail'
+
 import { extractAnthropicError, type AnthropicErrorEnvelope } from './anthropic-sse'
 import { extractOpenAiCompatError, type OpenAiCompatChunk } from './openai-sse'
 
@@ -5,37 +7,6 @@ import type { PlaygroundApiFlavor, PlaygroundError } from './types'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function parseDetailMessage(detail: unknown): string | null {
-  if (typeof detail === 'string') {
-    const trimmed = detail.trim()
-    return trimmed.length > 0 ? trimmed : null
-  }
-  if (Array.isArray(detail)) {
-    const parts = detail
-      .map((item) => {
-        if (!isRecord(item)) return null
-        const msg = item.msg ?? item.message
-        if (typeof msg === 'string' && msg.trim().length > 0) {
-          return msg.trim()
-        }
-        return null
-      })
-      .filter((part): part is string => part !== null)
-    return parts.length > 0 ? parts.join('；') : null
-  }
-  if (isRecord(detail)) {
-    if (isRecord(detail.error) && typeof detail.error.message === 'string') {
-      const trimmed = detail.error.message.trim()
-      if (trimmed.length > 0) return trimmed
-    }
-    if (typeof detail.message === 'string') {
-      const trimmed = detail.message.trim()
-      if (trimmed.length > 0) return trimmed
-    }
-  }
-  return null
 }
 
 function parseDetailCode(detail: unknown): string | null {
@@ -58,7 +29,7 @@ export function extractPlaygroundHttpError(
 ): PlaygroundError {
   if (isRecord(json) && 'detail' in json) {
     const detail = json.detail
-    const detailMessage = parseDetailMessage(detail)
+    const detailMessage = parseFastApiDetail(detail)
     if (detailMessage) {
       return {
         httpStatus,

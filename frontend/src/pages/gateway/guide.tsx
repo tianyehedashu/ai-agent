@@ -36,7 +36,6 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
-import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-selection'
 
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
@@ -146,16 +145,18 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const navState = (location.state ?? null) as GuideVkeyNavState | null
-  const setLastSelectedVkeyId = usePlaygroundVkeySelectionStore((s) => s.setLastSelectedId)
   const keyIdFromQuery = searchParams.get('key_id')
+  const preferKeyId = keyIdFromQuery ?? navState?.vkeyId ?? null
   const vkeyBootstrap = useMemo(
     () => ({
       plain: navState?.vkeyPlain ?? null,
-      keyId: keyIdFromQuery ?? navState?.vkeyId ?? null,
+      keyId: preferKeyId,
+      preferKeyId,
     }),
-    [navState?.vkeyPlain, navState?.vkeyId, keyIdFromQuery]
+    [navState?.vkeyPlain, preferKeyId]
   )
-  const { plain: revealedKey, isRevealing } = usePlaygroundVirtualKey(vkeyBootstrap)
+  const virtualKey = usePlaygroundVirtualKey(vkeyBootstrap)
+  const { plain: revealedKey, isRevealing } = virtualKey
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
@@ -183,13 +184,6 @@ export default function GatewayGuidePage(): React.JSX.Element {
       ),
     [gatewayV1Base, displayKey, activeModel, snippets]
   )
-
-  useEffect(() => {
-    const id = keyIdFromQuery ?? navState?.vkeyId ?? null
-    if (id) {
-      setLastSelectedVkeyId(id)
-    }
-  }, [keyIdFromQuery, navState?.vkeyId, setLastSelectedVkeyId])
 
   useEffect(() => {
     if (location.hash !== '#clients' && !keyIdFromQuery) return
@@ -251,7 +245,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
             <PlaygroundCard
               baseUrl={gatewayV1Base}
               onModelChange={handlePlaygroundModelChange}
-              vkeyBootstrap={vkeyBootstrap}
+              virtualKey={virtualKey}
             />
           </Suspense>
         </section>

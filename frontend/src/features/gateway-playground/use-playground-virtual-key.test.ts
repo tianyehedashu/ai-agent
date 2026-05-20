@@ -158,6 +158,50 @@ describe('usePlaygroundVirtualKey', () => {
     })
   })
 
+  test('preferKeyId 仅在列表包含该 id 时选中', async () => {
+    listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K2' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey({ preferKeyId: 'k2' }), {
+      wrapper: wrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.selectedKeyId).toBe('k2')
+    })
+    expect(revealKeyMock).toHaveBeenCalledWith('k2')
+  })
+
+  test('preferKeyId 不在列表时不强行选中', async () => {
+    listKeysMock.mockResolvedValue([makeVKey('k1')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K1' })
+
+    const { result } = renderHook(() => usePlaygroundVirtualKey({ preferKeyId: 'missing' }), {
+      wrapper: wrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.selectedKeyId).toBe('k1')
+    })
+    expect(revealKeyMock).toHaveBeenCalledWith('k1')
+  })
+
+  test('bootstrap 命中时跳过 reveal 并直接返回明文', async () => {
+    listKeysMock.mockResolvedValue([makeVKey('k1')])
+    revealKeyMock.mockResolvedValue({ plain_key: 'should-not-call' })
+
+    const { result } = renderHook(
+      () => usePlaygroundVirtualKey({ plain: 'sk-gw-BOOT', keyId: 'k1' }),
+      { wrapper: wrapper() }
+    )
+
+    await waitFor(() => {
+      expect(result.current.plain).toBe('sk-gw-BOOT')
+    })
+    expect(revealKeyMock).not.toHaveBeenCalled()
+    expect(result.current.revealError).toBeNull()
+  })
+
   test('reveal 失败时暴露 revealError 并保持 plain 为 null', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1')])
     revealKeyMock.mockRejectedValue(new Error('400 decrypt failed'))
