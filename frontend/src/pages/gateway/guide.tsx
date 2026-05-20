@@ -11,7 +11,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PlaygroundCard } from '@/features/gateway-playground/playground-card'
+import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
@@ -30,10 +31,19 @@ import {
   type CapabilityGuideModule,
   type FlavorCodeTriple,
 } from '@/pages/gateway/guide-capability-snippets'
-import { buildGuideSnippets, type GuideSnippets } from '@/pages/gateway/guide-snippets'
+import {
+  GuideClientRecipesSection,
+  type GuideClientRecipesKeyHint,
+} from '@/pages/gateway/guide-client-recipes'
+import {
+  buildClientRecipes,
+  buildGuideSnippets,
+  type GuideSnippets,
+} from '@/pages/gateway/guide-snippets'
+import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-selection'
 
 const PLACEHOLDER_KEY = 'sk-gw-your-virtual-key'
-const PLACEHOLDER_MODEL = 'your-model-or-route-alias'
+const PLACEHOLDER_MODEL = 'claude-opus-4-7'
 
 type ApiFlavor = 'openai' | 'anthropic'
 type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-sse'
@@ -54,6 +64,7 @@ const TROUBLESHOOTING = [
 const GUIDE_NAV_ITEMS = [
   ['#playground', '在线试调'],
   ['#config', '接入配置'],
+  ['#clients', '客户端配方'],
   ['#examples', '代码示例'],
   ['#reference', '能力参考'],
   ['#troubleshooting', '异常排查'],
@@ -116,19 +127,53 @@ function useActiveGuideAnchor(): string {
 }
 
 export default function GatewayGuidePage(): React.JSX.Element {
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const setLastSelectedVkeyId = usePlaygroundVkeySelectionStore((s) => s.setLastSelectedId)
+  const { plain: revealedKey, isRevealing } = usePlaygroundVirtualKey()
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
   const [exampleStream, setExampleStream] = useState(true)
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
 
+  const displayKey = revealedKey ?? PLACEHOLDER_KEY
+  const clientRecipesKeyHint: GuideClientRecipesKeyHint = revealedKey
+    ? 'revealed'
+    : isRevealing
+      ? 'revealing'
+      : 'placeholder'
+
   const snippets = useMemo(
-    () => buildGuideSnippets(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
-    [gatewayV1Base, activeModel]
+    () => buildGuideSnippets(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
+    [gatewayV1Base, displayKey, activeModel]
   )
+  const clientRecipes = useMemo(
+    () => buildClientRecipes(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL, snippets),
+    [gatewayV1Base, displayKey, activeModel, snippets]
+  )
+
+  const keyIdFromQuery = searchParams.get('key_id')
+
+  useEffect(() => {
+    if (keyIdFromQuery) {
+      setLastSelectedVkeyId(keyIdFromQuery)
+    }
+  }, [keyIdFromQuery, setLastSelectedVkeyId])
+
+  useEffect(() => {
+    if (location.hash !== '#clients' && !keyIdFromQuery) return
+    const frame = requestAnimationFrame(() => {
+      scrollToGuideSection('#clients')
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+    }
+  }, [location.hash, keyIdFromQuery])
+
   const capabilityModules = useMemo(
-    () => buildCapabilityModules(gatewayV1Base, PLACEHOLDER_KEY, activeModel || PLACEHOLDER_MODEL),
-    [gatewayV1Base, activeModel]
+    () => buildCapabilityModules(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
+    [gatewayV1Base, displayKey, activeModel]
   )
   const [copy, copiedKey] = useCopyToClipboardKeyed<string>()
   const handleCopy = useCallback(
@@ -173,6 +218,18 @@ export default function GatewayGuidePage(): React.JSX.Element {
             在线试调
           </h3>
           <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+        </section>
+
+        <section id="clients" aria-labelledby="clients-heading" className="scroll-mt-20">
+          <h3 id="clients-heading" className="sr-only">
+            客户端配方
+          </h3>
+          <GuideClientRecipesSection
+            recipes={clientRecipes}
+            copiedKey={copiedKey}
+            onCopy={handleCopy}
+            keyHint={clientRecipesKeyHint}
+          />
         </section>
 
         <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">

@@ -95,9 +95,7 @@ async def create_message(
         logger.warning("anthropic messages failed: %s", exc)
         raise _wrap_anthropic_business_errors(exc) from exc
 
-    rate_headers = await rate_limit_headers_for_context(
-        ctx, flavor="anthropic", use_case=use_case
-    )
+    rate_headers = await rate_limit_headers_for_context(ctx, flavor="anthropic")
 
     if proxy_body.get("stream"):
         stream = cast("AsyncIterator[bytes]", result)

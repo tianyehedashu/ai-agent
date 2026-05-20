@@ -10,7 +10,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application import proxy_response_adapter, proxy_use_case
+from domains.gateway.application import proxy_guard, proxy_response_adapter
 from domains.gateway.application.budget_service import BudgetCheckResult, BudgetService
 from domains.gateway.application.proxy_response_adapter import settle_usage
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
@@ -149,8 +149,8 @@ async def test_chat_failure_releases_all_request_reservations(
     async def _none_resolve(_session: object, _team_id: object, _name: str) -> None:
         return None
 
-    monkeypatch.setattr(proxy_use_case, "BudgetRepository", FakeBudgetRepository)
-    monkeypatch.setattr(proxy_use_case, "resolve_model_or_route", _none_resolve)
+    monkeypatch.setattr(proxy_guard, "BudgetRepository", FakeBudgetRepository)
+    monkeypatch.setattr(proxy_guard, "resolve_model_or_route", _none_resolve)
     monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", use_direct)
     monkeypatch.setattr(use_case, "_direct_chat_completion", fail_direct)
     monkeypatch.setattr(use_case, "_prepare_litellm_kwargs", prepare_litellm_kwargs)

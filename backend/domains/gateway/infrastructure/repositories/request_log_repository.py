@@ -117,6 +117,8 @@ class RequestLogRepository:
             prompt_redacted=prompt_redacted,
             response_summary=response_summary,
             metadata_extra=metadata_extra,
+            client_type=client_type,
+            client_ua=client_ua,
         )
         self._session.add(log)
         await self._session.flush()
@@ -213,6 +215,38 @@ class RequestLogRepository:
             "failure": int(row.failure or 0),
             "avg_latency_ms": float(row.avg_latency or 0),
         }
+
+    async def aggregate_by_client_type(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        clauses = [
+            *axis.base_clauses(),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+        ]
+        client_label = func.coalesce(GatewayRequestLog.client_type, "unknown")
+        stmt = (
+            select(
+                client_label.label("client_type"),
+                func.count(GatewayRequestLog.id).label("requests"),
+                func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+            )
+            .where(and_(*clauses))
+            .group_by(client_label)
+            .order_by(func.count(GatewayRequestLog.id).desc())
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            {
+                "client_type": str(row.client_type),
+                "requests": int(row.requests or 0),
+                "cost_usd": Decimal(row.cost_usd or 0),
+            }
+            for row in rows
+        ]
 
     async def aggregate_billing_summary_by_axis(
         self,

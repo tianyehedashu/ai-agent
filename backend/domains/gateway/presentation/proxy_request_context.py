@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy_rate_limit_headers import build_proxy_rate_limit_headers
+from domains.gateway.application.proxy_use_case import ProxyContext
 from domains.gateway.domain.client_type import infer_client_type, truncate_client_ua
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 from domains.gateway.presentation.gateway_proxy_context import proxy_context_from_gateway_principal
 from domains.gateway.presentation.proxy_header_passthrough import merge_extra_headers_from_request
-from domains.gateway.presentation.proxy_rate_limit_response import build_proxy_rate_limit_headers
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -21,7 +21,7 @@ def apply_inbound_proxy_request_context(
     request: Request,
 ) -> tuple[str | None, str]:
     """合并透传头；返回 ``(client_ua, client_type)``。"""
-    headers = {k: v for k, v in request.headers.items()}
+    headers = dict(request.headers.items())
     merge_extra_headers_from_request(body, headers)
     client_ua = truncate_client_ua(request.headers.get("user-agent"))
     return client_ua, infer_client_type(client_ua)
@@ -51,9 +51,9 @@ async def rate_limit_headers_for_context(
     ctx: ProxyContext,
     *,
     flavor: str,
-    use_case: ProxyUseCase,
 ) -> dict[str, str]:
-    return await build_proxy_rate_limit_headers(ctx, flavor=flavor, budget=use_case._budget)
+    """对外路由调用入口；reader 走 application 模块内置默认（Redis 实现）。"""
+    return await build_proxy_rate_limit_headers(ctx, flavor=flavor)
 
 
 __all__ = [

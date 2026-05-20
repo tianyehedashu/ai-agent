@@ -35,13 +35,13 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.gateway_proxy_context import (
     proxy_context_from_gateway_principal,
 )
+from domains.gateway.presentation.openai_compat_error_map import (
+    openai_http_exception_from_proxy_business_error,
+)
 from domains.gateway.presentation.proxy_request_context import (
     prepare_proxy_body,
     proxy_context_from_request,
     rate_limit_headers_for_context,
-)
-from domains.gateway.presentation.openai_compat_error_map import (
-    openai_http_exception_from_proxy_business_error,
 )
 from libs.db.database import get_db
 from utils.logging import get_logger
@@ -79,7 +79,7 @@ async def chat_completions(
         logger.warning("chat_completions failed: %s", exc)
         raise openai_http_exception_from_proxy_business_error(exc) from exc
 
-    rate_headers = await rate_limit_headers_for_context(ctx, flavor="openai", use_case=use_case)
+    rate_headers = await rate_limit_headers_for_context(ctx, flavor="openai")
 
     if proxy_body.get("stream"):
         stream = cast("AsyncIterator[dict[str, Any]]", result)

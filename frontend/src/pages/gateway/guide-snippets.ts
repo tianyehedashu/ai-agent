@@ -24,6 +24,89 @@ export interface GuideSnippets {
   anthropic: FlavorSnippets
 }
 
+export type ClientRecipeId = 'claude-code' | 'cursor' | 'openai-sdk' | 'anthropic-sdk'
+
+export interface ClientRecipe {
+  id: ClientRecipeId
+  title: string
+  summary: string
+  blocks: { label: string; code: string }[]
+}
+
+export function buildClientRecipes(
+  baseUrl: string,
+  key: string,
+  model: string,
+  snippets: GuideSnippets
+): ClientRecipe[] {
+  const anthropicBase = snippets.anthropicBaseUrl
+  return [
+    {
+      id: 'claude-code',
+      title: 'Claude Code',
+      summary: '使用 Anthropic Messages 协议；推荐 ANTHROPIC_AUTH_TOKEN。',
+      blocks: [
+        {
+          label: '环境变量',
+          code: `export ANTHROPIC_BASE_URL="${anthropicBase}"
+export ANTHROPIC_AUTH_TOKEN="${key}"
+export ANTHROPIC_MODEL="${model}"
+export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4-5"`,
+        },
+        {
+          label: '自检',
+          code: 'claude --print "ping"',
+        },
+        {
+          label: 'count_tokens',
+          code: `curl -s "${anthropicBase}/v1/messages/count_tokens" \\
+  -H "x-api-key: ${key}" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -H "content-type: application/json" \\
+  -d '{"model":"claude-haiku-4-5","messages":[{"role":"user","content":"hi"}]}'`,
+        },
+      ],
+    },
+    {
+      id: 'cursor',
+      title: 'Cursor',
+      summary:
+        'Settings → Models：Override OpenAI Base URL 与 API Key；模型名须与网关注册别名一致。',
+      blocks: [
+        {
+          label: '配置步骤',
+          code: `1. OpenAI API Key: ${key}
+2. Override OpenAI Base URL: ${baseUrl}
+3. Add Model: ${model}（与 GatewayModel.name 一致）
+4. 点击 Verify，期望 HTTP 200`,
+        },
+        {
+          label: '验证模型列表',
+          code: snippets.modelsCurl,
+        },
+      ],
+    },
+    {
+      id: 'openai-sdk',
+      title: 'OpenAI SDK',
+      summary: '与 OpenAI 兼容面一致；baseURL 须包含 /v1。',
+      blocks: [
+        { label: 'TypeScript', code: snippets.openai.ts },
+        { label: 'Python', code: snippets.openai.py },
+      ],
+    },
+    {
+      id: 'anthropic-sdk',
+      title: 'Anthropic SDK',
+      summary: 'baseURL 为服务根（无 /v1 尾段）。',
+      blocks: [
+        { label: 'TypeScript', code: snippets.anthropic.ts },
+        { label: 'Python', code: snippets.anthropic.py },
+      ],
+    },
+  ]
+}
+
 export function buildGuideSnippets(baseUrl: string, key: string, model: string): GuideSnippets {
   const authHeader = `Authorization: Bearer ${key}`
   const anthropicBase = baseUrl.replace(/\/v1\/?$/, '')

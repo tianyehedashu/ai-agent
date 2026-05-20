@@ -155,7 +155,6 @@ class GatewayRequestLog(Base):
     client_type: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,
-        index=True,
         comment="第三方客户端推断：claude-code / cursor / openai-sdk / anthropic-sdk / unknown",
     )
     client_ua: Mapped[str | None] = mapped_column(String(512), nullable=True)

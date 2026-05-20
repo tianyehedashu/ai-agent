@@ -1,4 +1,11 @@
-"""代理响应限流头（OpenAI / Anthropic 形）。"""
+"""代理响应限流头协议契约（OpenAI / Anthropic 形）—— 纯函数 + 不可变快照。
+
+属于 domain：仅描述「单次调用后的 remaining 计算规则」与「OpenAI / Anthropic
+限流响应头格式契约」，无任何 I/O。
+
+I/O 编排（查 Redis 用量、按 ProxyContext 选 scope/flavor）位于
+``application.proxy_rate_limit_headers.build_proxy_rate_limit_headers``。
+"""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from domains.gateway.domain.http_header_merge import merge_comma_separated_header_values
 

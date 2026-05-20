@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from domains.gateway.domain.provider_inference import infer_provider_name
 from domains.gateway.domain.http_header_merge import merge_anthropic_beta_values
+from domains.gateway.domain.provider_inference import infer_provider_name
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

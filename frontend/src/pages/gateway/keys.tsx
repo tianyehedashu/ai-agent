@@ -36,7 +36,7 @@ import { Switch } from '@/components/ui/switch'
 import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
-import { Copy, Plus, Trash2 } from '@/lib/lucide-icons'
+import { BookOpen, Copy, Plus, Trash2 } from '@/lib/lucide-icons'
 
 export default function GatewayKeysPage(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -44,6 +44,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
   const [open, setOpen] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
+  const [createdKeyId, setCreatedKeyId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
 
@@ -63,6 +64,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
     mutationFn: gatewayApi.createKey,
     onSuccess: (created) => {
       setCreatedKey(created.plain_key)
+      setCreatedKeyId(created.id)
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
     },
     onError: (e: Error) => {
@@ -267,18 +269,30 @@ export default function GatewayKeysPage(): React.JSX.Element {
                   <td className="px-4 py-2 text-xs">{k.guardrail_enabled ? '已启用' : '关闭'}</td>
                   <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
                   <td className="px-4 py-2">
-                    {canWrite && k.is_active && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          if (confirm(`确认撤销 ${k.name}?`)) revokeMutation.mutate(k.id)
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {k.is_active ? (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link
+                            to={`/gateway/guide?key_id=${k.id}#clients`}
+                            aria-label={`${k.name} 调用指南`}
+                          >
+                            <BookOpen className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                      {canWrite && k.is_active ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => {
+                            if (confirm(`确认撤销 ${k.name}?`)) revokeMutation.mutate(k.id)
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -291,8 +305,12 @@ export default function GatewayKeysPage(): React.JSX.Element {
         open={open}
         onOpenChange={(v) => {
           setOpen(v)
-          if (!v) setCreatedKey(null)
+          if (!v) {
+            setCreatedKey(null)
+            setCreatedKeyId(null)
+          }
         }}
+        createdKeyId={createdKeyId}
         onSubmit={(values) => {
           createMutation.mutate(values)
         }}
@@ -360,11 +378,13 @@ function CreateKeyDialog({
   onOpenChange,
   onSubmit,
   plaintext,
+  createdKeyId,
 }: Readonly<{
   open: boolean
   onOpenChange: (v: boolean) => void
   onSubmit: (v: CreateKeyValues) => void
   plaintext: string | null
+  createdKeyId: string | null
 }>): React.JSX.Element {
   const [values, setValues] = useState<CreateKeyValues>({
     name: '',
@@ -396,6 +416,11 @@ function CreateKeyDialog({
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
+            {createdKeyId ? (
+              <Button variant="outline" className="w-full" asChild>
+                <Link to={`/gateway/guide?key_id=${createdKeyId}#clients`}>打开调用指南</Link>
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3 py-2">

@@ -269,7 +269,7 @@ async def test_platform_api_key_grant_policy_checks_model_and_capability(db_sess
     uc = ProxyUseCase(db_session)
 
     with pytest.raises(ModelNotAllowedError):
-        uc._check_model("other-model", ctx)
+        uc.guard.check_model("other-model", ctx)
 
     with pytest.raises(CapabilityNotAllowedError):
-        uc._check_capability(ctx)
+        uc.guard.check_capability(ctx)

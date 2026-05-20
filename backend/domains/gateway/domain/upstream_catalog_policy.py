@@ -56,16 +56,37 @@ def resolve_openai_compatible_models_list_url(
 def derive_client_facing_model_alias(upstream_model_id: str) -> str:
     """从上游 ``model`` id 派生客户端常用短别名（如 Claude Code / Cursor 请求名）。
 
-    规则（启发式，运营可覆盖）：
-    - 去掉末尾 ``-YYYYMMDD`` 日期后缀
-    - 保留 ``claude-*`` / ``gpt-*`` / ``o*`` 等产品前缀段
+    支持两种厂商快照命名：
+
+    - Anthropic：``...-YYYYMMDD``（8 位日期紧贴产品名）
+      - 例：``claude-sonnet-4-5-20250929`` → ``claude-sonnet-4-5``
+    - OpenAI：``...-YYYY-MM-DD``（三段日期）
+      - 例：``gpt-4o-2024-08-06`` → ``gpt-4o``
+
+    其它（无识别日期后缀）原样返回，由运营手动覆盖。
     """
     raw = upstream_model_id.strip()
     if not raw:
         return raw
+
     parts = raw.split("-")
+
+    # OpenAI 形：尾部三段 "YYYY-MM-DD"
+    if (
+        len(parts) >= 4
+        and len(parts[-3]) == 4
+        and parts[-3].isdigit()
+        and len(parts[-2]) == 2
+        and parts[-2].isdigit()
+        and len(parts[-1]) == 2
+        and parts[-1].isdigit()
+    ):
+        return "-".join(parts[:-3])
+
+    # Anthropic 形：尾部一段 "YYYYMMDD"
     if len(parts) >= 2 and len(parts[-1]) == 8 and parts[-1].isdigit():
         return "-".join(parts[:-1])
+
     return raw
 
 

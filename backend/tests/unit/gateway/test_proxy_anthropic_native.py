@@ -156,7 +156,7 @@ async def test_anthropic_messages_passes_body_fields_to_router(
     async def noop_entitlement(*_a: object, **_k: object) -> None:
         return None
 
-    monkeypatch.setattr(use_case, "_check_entitlement", noop_entitlement)
+    monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
 
     body: dict[str, Any] = {
         "model": "claude-test",
@@ -231,7 +231,7 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
     async def noop_entitlement(*_a: object, **_k: object) -> None:
         return None
 
-    monkeypatch.setattr(use_case, "_check_entitlement", noop_entitlement)
+    monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
 
     stream = await use_case.anthropic_messages(
         ctx,

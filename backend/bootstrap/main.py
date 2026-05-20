@@ -175,7 +175,22 @@ app.add_middleware(
     allow_credentials=True,  # 允许携带 Cookie
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Anonymous-User-Id"],  # 允许前端 JS 读取自定义响应头
+    expose_headers=[
+        "X-Anonymous-User-Id",
+        "Retry-After",
+        "x-ratelimit-limit-requests",
+        "x-ratelimit-remaining-requests",
+        "x-ratelimit-reset-requests",
+        "x-ratelimit-limit-tokens",
+        "x-ratelimit-remaining-tokens",
+        "x-ratelimit-reset-tokens",
+        "anthropic-ratelimit-requests-limit",
+        "anthropic-ratelimit-requests-remaining",
+        "anthropic-ratelimit-requests-reset",
+        "anthropic-ratelimit-tokens-limit",
+        "anthropic-ratelimit-tokens-remaining",
+        "anthropic-ratelimit-tokens-reset",
+    ],
 )
 
 # 纯 ASGI 中间件（与 SSE/StreamingResponse 兼容；勿改用 @app.middleware + BaseHTTPMiddleware）

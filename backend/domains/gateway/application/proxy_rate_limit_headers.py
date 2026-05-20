@@ -1,24 +1,32 @@
-"""为对外代理响应附加限流头。"""
+"""为对外代理响应附加限流头（编排：经端口查窗口用量 → 调 domain policy 构头）。"""
 
 from __future__ import annotations
 
-from domains.gateway.application.budget_service import BudgetService
-from domains.gateway.application.proxy_ratelimit_headers import (
+from domains.gateway.application.proxy_use_case import ProxyContext
+from domains.gateway.domain.proxy_policy import rate_limit_target
+from domains.gateway.domain.proxy_rate_limit_port import RateLimitUsageReader
+from domains.gateway.domain.proxy_ratelimit_headers import (
     anthropic_rate_limit_response_headers,
     build_rate_limit_snapshot,
     openai_rate_limit_response_headers,
 )
-from domains.gateway.application.proxy_use_case import ProxyContext
-from domains.gateway.domain.proxy_policy import rate_limit_target
+from domains.gateway.infrastructure.redis_rate_limit_usage_reader import (
+    RedisRateLimitUsageReader,
+)
+
+
+def default_rate_limit_usage_reader() -> RateLimitUsageReader:
+    """Presentation 工厂默认实现；测试可注入自有 stub。"""
+    return RedisRateLimitUsageReader()
 
 
 async def build_proxy_rate_limit_headers(
     ctx: ProxyContext,
     *,
     flavor: str,
-    budget: BudgetService | None = None,
+    reader: RateLimitUsageReader | None = None,
 ) -> dict[str, str]:
-    """根据当前 Redis 窗口用量生成 OpenAI 或 Anthropic 形限流头。"""
+    """根据当前 60s 窗口用量生成 OpenAI 或 Anthropic 形限流头。"""
     rpm_limit = ctx.rpm_limit
     tpm_limit = ctx.tpm_limit
     if rpm_limit is None and tpm_limit is None and ctx.vkey is not None:
@@ -36,8 +44,8 @@ async def build_proxy_rate_limit_headers(
         return {}
 
     scope, scope_id = target
-    svc = budget or BudgetService()
-    rpm_used, tpm_used = await svc.peek_rate_limit_usage(scope=scope, scope_id=scope_id)
+    usage_reader = reader or default_rate_limit_usage_reader()
+    rpm_used, tpm_used = await usage_reader.peek_60s_window(scope=scope, scope_id=scope_id)
     snap = build_rate_limit_snapshot(
         rpm_limit=rpm_limit,
         rpm_used=rpm_used,
@@ -49,4 +57,4 @@ async def build_proxy_rate_limit_headers(
     return openai_rate_limit_response_headers(snap)
 
 
-__all__ = ["build_proxy_rate_limit_headers"]
+__all__ = ["build_proxy_rate_limit_headers", "default_rate_limit_usage_reader"]

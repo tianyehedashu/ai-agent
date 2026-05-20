@@ -14,7 +14,6 @@ ProxyUseCase - 网关调用编排
 
 from __future__ import annotations
 
-from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -24,23 +23,15 @@ from domains.gateway.application.anthropic_native_adapt import (
     estimate_anthropic_request_tokens,
     validate_anthropic_messages_body,
 )
-from domains.gateway.application.budget_service import (
-    PERIOD_DAILY,
-    PERIOD_MONTHLY,
-    PERIOD_TOTAL,
-    BudgetService,
-)
-from domains.gateway.application.entitlement_guard import (
-    EntitlementContext,
-    EntitlementGuard,
-)
-from domains.gateway.application.model_or_route_resolution import (
-    resolve_model_or_route,
-)
+from domains.gateway.application.budget_service import BudgetService
+from domains.gateway.application.entitlement_guard import EntitlementGuard
 from domains.gateway.application.prompt_cache_middleware import get_prompt_cache_middleware
 from domains.gateway.application.proxy_chat_pipeline import (
     invoke_litellm_with_direct_fallback,
     prepare_chat_proxy_request,
+)
+from domains.gateway.application.proxy_guard import (
+    ProxyGuard,
 )
 from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
 from domains.gateway.application.proxy_metadata_builder import ProxyMetadataBuilder
@@ -54,26 +45,13 @@ from domains.gateway.application.proxy_response_adapter import (
 )
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
-from domains.gateway.domain.errors import (
-    BudgetExceededError,
-    EntitlementPlanExhaustedError,
-)
-from domains.gateway.domain.proxy_policy import (
-    assert_capability_allowed,
-    assert_model_allowed,
-    assert_registered_model_capability,
-    budget_scope_targets,
-    build_budget_check_plan,
-    first_present_limit,
-    rate_limit_target,
-)
+from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import (
     GatewayCapability,
     GatewayInboundVia,
     VirtualKeyPrincipal,
 )
-from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.router_singleton import get_router
 from utils.logging import get_logger
 
@@ -83,9 +61,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
-
-
-BudgetReservation = tuple[str, str | None, str, str | None]
 
 
 @dataclass
@@ -156,18 +131,14 @@ class ProxyUseCase:
     - 响应适配、成本计算、预算/套餐结算 → ``proxy_response_adapter``。
     - 后台 fire-and-forget 结算任务收口 → ``proxy_deferred_tasks``。
 
-    **Application 内部协作 API**：以下 ``_``-前缀方法仅供 ``proxy_chat_pipeline``
-    与 ``proxy_stream_settlement`` 复用，禁止跨 application 或在
-    presentation / domain 层直接调用：
+    **入站护栏**：模型/能力校验、限流、预算、entitlement 预扣全部由
+    :class:`ProxyGuard` （``proxy_guard``）提供公开 API；本类内部与
+    ``proxy_chat_pipeline`` 都通过 :attr:`guard` 访问，**禁止**再为这些行为新增
+    ``_``-前缀方法。
 
-    - 校验：``_check_model`` / ``_check_capability`` /
-      ``_assert_request_capability_matches_model``
-    - 限流与预算：``_check_limits`` / ``_check_budget`` / ``_check_entitlement``
-    - 释放：``_release_budget_reservations`` / ``_release_entitlement_reservations``
-    - LiteLLM 调用：``_prepare_litellm_kwargs`` /
-      ``_should_use_internal_direct_litellm`` / ``_is_router_model_miss``
-
-    重构这些方法时务必同步更新 ``proxy_chat_pipeline`` 与 ``proxy_stream_settlement``。
+    **下游 LiteLLM 调用助手**（``_prepare_litellm_kwargs`` /
+    ``_should_use_internal_direct_litellm`` / ``_is_router_model_miss``）仅供
+    ``proxy_chat_pipeline`` / ``proxy_stream_settlement`` 复用，重构时同步更新。
     """
 
     def __init__(
@@ -182,188 +153,26 @@ class ProxyUseCase:
         self._entitlement_guard = entitlement_guard or EntitlementGuard(
             session, quota_service=get_quota_plan_service()
         )
+        self._guard = ProxyGuard(session, self._budget, self._entitlement_guard)
         self._metadata_builder = ProxyMetadataBuilder(session)
         self._litellm = ProxyLiteLLMClient(session)
         self._upstream_adapter = UpstreamAdapter()
         self._prompt_cache = get_prompt_cache_middleware()
 
-    # ---------------------------------------------------------------------
-    # 校验
-    # ---------------------------------------------------------------------
+    @property
+    def guard(self) -> ProxyGuard:
+        """入站护栏服务（公开访问点；供 ``proxy_chat_pipeline`` 与测试注入）。"""
+        return self._guard
 
-    def _check_model(self, model: str, ctx: ProxyContext) -> None:
-        allowed_models = ctx.allowed_models or (ctx.vkey.allowed_models if ctx.vkey else ())
-        assert_model_allowed(model, allowed_models)
+    @property
+    def budget_service(self) -> BudgetService:
+        """供 ``proxy_response_adapter`` 等内部协作模块只读访问预算结算句柄。"""
+        return self._budget
 
-    def _check_capability(self, ctx: ProxyContext) -> None:
-        allowed_capabilities = ctx.allowed_capabilities or (
-            ctx.vkey.allowed_capabilities if ctx.vkey else ()
-        )
-        assert_capability_allowed(ctx.capability, allowed_capabilities)
-
-    async def _assert_request_capability_matches_model(
-        self,
-        ctx: ProxyContext,
-        model: str,
-    ) -> None:
-        """注册别名或路由主选 ``GatewayModel.capability`` 须与当前 HTTP 入口一致。"""
-        name = model.strip()
-        if not name:
-            return
-        resolved = await resolve_model_or_route(self._session, ctx.team_id, name)
-        if resolved is None:
-            return
-        assert_registered_model_capability(
-            model_name=name,
-            requested=ctx.capability,
-            registered_capability=str(resolved.record.capability),
-            via_route=resolved.route is not None,
-        )
-
-    async def _check_limits(self, ctx: ProxyContext, estimate_tokens: int = 0) -> None:
-        """vkey + team 维度限流"""
-        if ctx.rpm_limit is not None or ctx.tpm_limit is not None:
-            target = rate_limit_target(
-                vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,
-                platform_api_key_grant_id=ctx.platform_api_key_grant_id,
-                platform_api_key_id=ctx.platform_api_key_id,
-            )
-            if target is None:
-                return
-            rate_scope, rate_scope_id = target
-            await self._budget.check_rate_limit(
-                scope=rate_scope,
-                scope_id=rate_scope_id,
-                rpm_limit=ctx.rpm_limit,
-                tpm_limit=ctx.tpm_limit,
-                estimate_tokens=estimate_tokens,
-            )
-        elif ctx.vkey is not None:
-            await self._budget.check_rate_limit(
-                scope="vkey",
-                scope_id=str(ctx.vkey.vkey_id),
-                rpm_limit=ctx.vkey.rpm_limit,
-                tpm_limit=ctx.vkey.tpm_limit,
-                estimate_tokens=estimate_tokens,
-            )
-        # team 维度（从团队设置中读 rpm/tpm，简化：通过 GatewayBudget 表表示）
-
-    async def _release_budget_reservations(self, reservations: list[BudgetReservation]) -> None:
-        for scope, scope_id, period, budget_model_name in reservations:
-            with suppress(Exception):
-                await self._budget.release(
-                    scope=scope,
-                    scope_id=scope_id,
-                    period=period,
-                    budget_model_name=budget_model_name,
-                )
-
-    async def _release_entitlement_reservations(self, ctx: ProxyContext) -> None:
-        state = ctx.entitlement_state
-        if state is None or not state.reservations:
-            return
-        with suppress(Exception):
-            await self._entitlement_guard.release(state.plan_id, state.reservations)
-        ctx.entitlement_state = None
-
-    async def _check_entitlement(
-        self, ctx: ProxyContext, model: str | None, *, estimate_tokens: int = 0
-    ) -> None:
-        """根据 ctx (vkey_id 或 apikey_grant_id) 解析活跃 entitlement plan 并预扣。
-
-        无匹配 plan = 默认放行；命中但任一桶耗尽抛 ``EntitlementPlanExhaustedError``。
-        """
-        ent_ctx = EntitlementContext(
-            vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,
-            apikey_grant_id=ctx.platform_api_key_grant_id,
-            virtual_model=model,
-            capability=ctx.capability.value if ctx.capability is not None else None,
-        )
-        result = await self._entitlement_guard.check_and_reserve(
-            ent_ctx, estimate_tokens=estimate_tokens
-        )
-        if result.plan_id is None:
-            ctx.entitlement_state = None
-            return
-        ctx.entitlement_state = EntitlementReservationState(
-            plan_id=result.plan_id,
-            plan_label=result.plan_label,
-            specs=result.specs,
-            reservations=result.reservations,
-        )
-
-    async def _check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
-        """按 ``BudgetCheckPlan`` 顺序扫描 team/user/key 维度预算。
-
-        预算扫描坐标的纯逻辑（哪些 scope×period×model_key 该查）由
-        ``domains.gateway.domain.proxy_policy.build_budget_check_plan`` 决定，本方法
-        只负责按计划查仓储、调用 ``BudgetService``、抛错与累积请求级预扣。
-        """
-        repo = BudgetRepository(self._session)
-        targets = budget_scope_targets(
-            team_id=ctx.team_id,
-            user_id=ctx.user_id,
-            vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
-        )
-        plan = build_budget_check_plan(
-            targets=targets,
-            periods=(PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL),
-            request_model=ctx.budget_model,
-        )
-
-        reservations: list[BudgetReservation] = []
-        for query in plan:
-            budget = await repo.get_for(
-                query.scope, query.scope_id, query.period, model_name=query.model_name
-            )
-            if budget is None:
-                continue
-            scope_id_str = str(query.scope_id)
-            check = await self._budget.check_budget(
-                scope=query.scope,
-                scope_id=scope_id_str,
-                period=query.period,
-                limit_usd=budget.limit_usd,
-                limit_tokens=budget.limit_tokens,
-                limit_requests=budget.limit_requests,
-                budget_model_name=budget.model_name,
-            )
-            if not check.allowed:
-                await self._release_budget_reservations(reservations)
-                raise BudgetExceededError(
-                    scope=query.scope,
-                    period=query.period,
-                    limit=float(
-                        first_present_limit(
-                            (
-                                budget.limit_usd,
-                                budget.limit_tokens,
-                                budget.limit_requests,
-                            )
-                        )
-                    ),
-                    used=float(
-                        check.used_usd
-                        if check.reason == "usd"
-                        else check.used_tokens
-                        if check.reason == "tokens"
-                        else check.used_requests
-                    ),
-                )
-            if budget.limit_requests:
-                try:
-                    await self._budget.reserve(
-                        scope=query.scope,
-                        scope_id=scope_id_str,
-                        period=query.period,
-                        limit_requests=budget.limit_requests,
-                        budget_model_name=budget.model_name,
-                    )
-                except Exception:
-                    await self._release_budget_reservations(reservations)
-                    raise
-                reservations.append((query.scope, scope_id_str, query.period, budget.model_name))
-        return reservations
+    @property
+    def entitlement_guard(self) -> EntitlementGuard:
+        """供 ``proxy_response_adapter`` 等内部协作模块只读访问 entitlement 句柄。"""
+        return self._entitlement_guard
 
     @staticmethod
     def _optional_body_model(body: dict[str, Any]) -> str | None:
@@ -563,9 +372,9 @@ class ProxyUseCase:
         if not model:
             raise ValueError("model is required")
         ctx.budget_model = model
-        self._check_model(model, ctx)
-        self._check_capability(ctx)
-        await self._assert_request_capability_matches_model(ctx, model)
+        self._guard.check_model(model, ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.assert_request_capability_matches_model(ctx, model)
 
         input_tokens = await self._estimate_anthropic_input_tokens(body, model)
         return {"input_tokens": input_tokens}
@@ -584,12 +393,12 @@ class ProxyUseCase:
         if not isinstance(messages, list):
             return estimate_anthropic_request_tokens(body)
         system = body.get("system")
+        merged_messages: list[Any] = []
+        if (isinstance(system, str) and system) or isinstance(system, list):
+            merged_messages.append({"role": "system", "content": system})
+        merged_messages.extend(messages)
         try:
-            counted = token_counter(
-                model=model,
-                messages=messages,
-                system=system,
-            )
+            counted = token_counter(model=model, messages=merged_messages)
             if isinstance(counted, int) and counted > 0:
                 return counted
         except Exception:
@@ -606,14 +415,14 @@ class ProxyUseCase:
         if not model:
             raise ValueError("model is required")
         ctx.budget_model = model
-        self._check_model(model, ctx)
-        self._check_capability(ctx)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+        self._guard.check_model(model, ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, model)
+            await self._guard.check_entitlement(ctx, model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
 
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
@@ -625,8 +434,8 @@ class ProxyUseCase:
                 router = await get_router(self._session)
                 response = await router.aembedding(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,
@@ -646,16 +455,16 @@ class ProxyUseCase:
         ctx.capability = GatewayCapability.IMAGE
         ctx.budget_model = self._optional_body_model(body)
         if ctx.budget_model:
-            self._check_model(ctx.budget_model, ctx)
-        self._check_capability(ctx)
+            self._guard.check_model(ctx.budget_model, ctx)
+        self._guard.check_capability(ctx)
         if ctx.budget_model:
-            await self._assert_request_capability_matches_model(ctx, ctx.budget_model)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+            await self._guard.assert_request_capability_matches_model(ctx, ctx.budget_model)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, ctx.budget_model)
+            await self._guard.check_entitlement(ctx, ctx.budget_model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -663,8 +472,8 @@ class ProxyUseCase:
             router = await get_router(self._session)
             response = await router.aimage_generation(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,
@@ -683,13 +492,13 @@ class ProxyUseCase:
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.AUDIO_TRANSCRIPTION
         ctx.budget_model = self._optional_body_model(body)
-        self._check_capability(ctx)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, ctx.budget_model)
+            await self._guard.check_entitlement(ctx, ctx.budget_model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -697,8 +506,8 @@ class ProxyUseCase:
             router = await get_router(self._session)
             response = await router.atranscription(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,
@@ -717,13 +526,13 @@ class ProxyUseCase:
     ) -> dict[str, Any] | bytes:
         ctx.capability = GatewayCapability.AUDIO_SPEECH
         ctx.budget_model = self._optional_body_model(body)
-        self._check_capability(ctx)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, ctx.budget_model)
+            await self._guard.check_entitlement(ctx, ctx.budget_model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         # 使用全局 litellm.aspeech 因为 Router 不一定暴露 aspeech
@@ -732,8 +541,8 @@ class ProxyUseCase:
         try:
             result = await aspeech(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         # TTS 多为二进制返回，无 usage；仍结算请求/占位 token 与 DB 用量，与 limit_requests 预扣对齐
         schedule_settle_usage(
@@ -753,13 +562,13 @@ class ProxyUseCase:
     ) -> dict[str, Any]:
         ctx.capability = GatewayCapability.RERANK
         ctx.budget_model = self._optional_body_model(body)
-        self._check_capability(ctx)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, ctx.budget_model)
+            await self._guard.check_entitlement(ctx, ctx.budget_model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -768,8 +577,8 @@ class ProxyUseCase:
         try:
             response = await arerank(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,
@@ -792,14 +601,14 @@ class ProxyUseCase:
         model = str(raw_model).strip() if raw_model is not None else ""
         ctx.budget_model = model or None
         if model:
-            self._check_model(model, ctx)
-        self._check_capability(ctx)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+            self._guard.check_model(model, ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, ctx.budget_model)
+            await self._guard.check_entitlement(ctx, ctx.budget_model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -808,8 +617,8 @@ class ProxyUseCase:
         try:
             response = await amoderation(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,
@@ -832,15 +641,15 @@ class ProxyUseCase:
         if not model:
             raise ValueError("model is required")
         ctx.budget_model = model
-        self._check_model(model, ctx)
-        self._check_capability(ctx)
-        await self._assert_request_capability_matches_model(ctx, model)
-        await self._check_limits(ctx)
-        reservations = await self._check_budget(ctx)
+        self._guard.check_model(model, ctx)
+        self._guard.check_capability(ctx)
+        await self._guard.assert_request_capability_matches_model(ctx, model)
+        await self._guard.check_limits(ctx)
+        reservations = await self._guard.check_budget(ctx)
         try:
-            await self._check_entitlement(ctx, model)
+            await self._guard.check_entitlement(ctx, model)
         except EntitlementPlanExhaustedError:
-            await self._release_budget_reservations(reservations)
+            await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -849,8 +658,8 @@ class ProxyUseCase:
         try:
             response = await avideo_generation(**kwargs)
         except Exception:
-            await self._release_budget_reservations(reservations)
-            await self._release_entitlement_reservations(ctx)
+            await self._guard.release_budget_reservations(reservations)
+            await self._guard.release_entitlement_reservations(ctx)
             raise
         return adapt_response(
             response,

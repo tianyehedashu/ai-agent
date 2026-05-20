@@ -1,9 +1,9 @@
 """Chat / Anthropic Messages 代理入站公共流水线（校验、预算、kwargs 准备）。
 
-依赖 ``ProxyUseCase`` 的「Application 内部协作 API」（``_check_*`` / ``_release_*``
-等 ``_``-前缀方法）。该耦合在 ``ProxyUseCase`` 类 docstring 中已显式登记；本模块仅
-被 ``ProxyUseCase`` 的公开入口（``chat_completion`` / ``anthropic_messages``）调用，
-不暴露给 presentation 或其它域。
+校验/限流/预算/entitlement 经 :class:`ProxyGuard` 公开 API 完成（``check_*`` /
+``release_*``），不再访问 ``ProxyUseCase`` 的 ``_``-前缀方法；下游 LiteLLM 调度
+（kwargs 准备、router miss 判定、直连降级判定）仍由 ``ProxyUseCase`` 内部 helper
+负责，本模块仅做编排穿透。
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     downstream_custom_from_metadata,
     upstream_custom_from_metadata,
 )
+from domains.gateway.application.proxy_guard import BudgetReservation
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.types import GatewayCapability
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 
-BudgetReservation = tuple[str, str | None, str, str | None]
 BodyValidator = Callable[[dict[str, Any]], None]
 
 
@@ -64,15 +64,16 @@ async def prepare_chat_proxy_request(
         raise ValueError("model is required")
     ctx.budget_model = model
 
-    use_case._check_model(model, ctx)
-    use_case._check_capability(ctx)
-    await use_case._assert_request_capability_matches_model(ctx, model)
-    await use_case._check_limits(ctx, estimate_tokens=estimate_tokens)
-    reservations = await use_case._check_budget(ctx)
+    guard = use_case.guard
+    guard.check_model(model, ctx)
+    guard.check_capability(ctx)
+    await guard.assert_request_capability_matches_model(ctx, model)
+    await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
+    reservations = await guard.check_budget(ctx)
     try:
-        await use_case._check_entitlement(ctx, model, estimate_tokens=estimate_tokens)
+        await guard.check_entitlement(ctx, model, estimate_tokens=estimate_tokens)
     except EntitlementPlanExhaustedError:
-        await use_case._release_budget_reservations(reservations)
+        await guard.release_budget_reservations(reservations)
         raise
 
     kwargs = await use_case._prepare_litellm_kwargs(ctx, body)
@@ -108,17 +109,18 @@ async def invoke_litellm_with_direct_fallback(
             return await direct_call()
         return await router_call()
     except Exception as exc:
+        guard = use_case.guard
         if use_case._is_router_model_miss(
             exc
         ) and await use_case._should_use_internal_direct_litellm(ctx, model):
             try:
                 return await direct_call()
             except Exception:
-                await use_case._release_budget_reservations(reservations)
-                await use_case._release_entitlement_reservations(ctx)
+                await guard.release_budget_reservations(reservations)
+                await guard.release_entitlement_reservations(ctx)
                 raise
-        await use_case._release_budget_reservations(reservations)
-        await use_case._release_entitlement_reservations(ctx)
+        await guard.release_budget_reservations(reservations)
+        await guard.release_entitlement_reservations(ctx)
         raise
 
 

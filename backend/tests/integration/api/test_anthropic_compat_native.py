@@ -200,3 +200,37 @@ async def test_post_messages_budget_exceeded_returns_anthropic_api_error(
 
     assert r.status_code == 402, r.text
     assert r.json()["detail"]["error"]["type"] == "api_error"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_messages_count_tokens_returns_input_tokens(
+    dev_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_count(
+        self: ProxyUseCase,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, int]:
+        _ = self, ctx
+        assert body.get("model") == "claude-test"
+        return {"input_tokens": 42}
+
+    monkeypatch.setattr(ProxyUseCase, "anthropic_count_tokens", fake_count)
+    app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
+    try:
+        r = await dev_client.post(
+            "/v1/messages/count_tokens",
+            headers={"Authorization": "Bearer sk-gw-test"},
+            json={
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(bearer_vkey_or_apikey_auth, None)
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"input_tokens": 42}
