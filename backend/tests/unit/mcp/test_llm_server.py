@@ -29,7 +29,7 @@ class TestLLMServerTools:
                 return_value=MagicMock(),
             ),
             patch(
-                "domains.agent.infrastructure.mcp_server.servers.llm_server.LLMGateway"
+                "domains.agent.infrastructure.mcp_server.servers.llm_server.AgentLlmFacade"
             ) as MockGateway,
         ):
             mock_gateway_instance = AsyncMock()
@@ -63,7 +63,7 @@ class TestLLMServerTools:
                 return_value=MagicMock(),
             ),
             patch(
-                "domains.agent.infrastructure.mcp_server.servers.llm_server.LLMGateway"
+                "domains.agent.infrastructure.mcp_server.servers.llm_server.AgentLlmFacade"
             ) as MockGateway,
         ):
             mock_gateway_instance = AsyncMock()
@@ -184,7 +184,7 @@ class TestLLMCreateParameters:
                 return_value=MagicMock(),
             ),
             patch(
-                "domains.agent.infrastructure.mcp_server.servers.llm_server.LLMGateway"
+                "domains.agent.infrastructure.mcp_server.servers.llm_server.AgentLlmFacade"
             ) as MockGateway,
         ):
             mock_gateway_instance = AsyncMock()
@@ -216,7 +216,7 @@ class TestLLMCreateParameters:
                 return_value=MagicMock(),
             ),
             patch(
-                "domains.agent.infrastructure.mcp_server.servers.llm_server.LLMGateway"
+                "domains.agent.infrastructure.mcp_server.servers.llm_server.AgentLlmFacade"
             ) as MockGateway,
         ):
             mock_gateway_instance = AsyncMock()

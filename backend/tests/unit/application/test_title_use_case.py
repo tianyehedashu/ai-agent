@@ -9,6 +9,7 @@ import pytest
 
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import TitleUseCase
+from domains.session.application.ports import TitleLlmChatResult
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -41,10 +42,10 @@ class TestTitleUseCase:
 
         # Mock LLM response
         with patch.object(
-            use_case.llm_gateway,
+            use_case._title_llm,
             "chat",
             new_callable=AsyncMock,
-            return_value="Python二分查找",
+            return_value=TitleLlmChatResult(content="Python二分查找"),
         ):
             # Act
             title = await use_case.generate_from_first_message(message)
@@ -64,10 +65,10 @@ class TestTitleUseCase:
 
         # Mock LLM response
         with patch.object(
-            use_case.llm_gateway,
+            use_case._title_llm,
             "chat",
             new_callable=AsyncMock,
-            return_value=long_title,
+            return_value=TitleLlmChatResult(content=long_title),
         ):
             # Act
             title = await use_case.generate_from_first_message(message)
@@ -86,7 +87,7 @@ class TestTitleUseCase:
 
         # Mock LLM error
         with patch.object(
-            use_case.llm_gateway,
+            use_case._title_llm,
             "chat",
             new_callable=AsyncMock,
             side_effect=Exception("LLM error"),
@@ -218,10 +219,10 @@ class TestTitleUseCase:
 
             # Mock LLM response
             with patch.object(
-                use_case.llm_gateway,
+                use_case._title_llm,
                 "chat",
                 new_callable=AsyncMock,
-                return_value="AI生成的标题",
+                return_value=TitleLlmChatResult(content="AI生成的标题"),
             ):
                 # Act
                 result = await use_case.generate_and_update(

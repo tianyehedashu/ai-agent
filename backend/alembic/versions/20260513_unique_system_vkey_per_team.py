@@ -4,7 +4,7 @@ Revision ID: 20260513_uvk
 Revises: 20260508_gw
 Create Date: 2026-05-13
 
-并发场景下 ``LLMGateway`` 同时启动标题生成 + chat 主流，会让两路调用同时
+并发场景下 ``AgentLlmFacade`` 同时启动标题生成 + chat 主流，会让两路调用同时
 进入 ``VirtualKeyRepository.get_or_create_system_key``。原实现只有应用层的
 read-modify-write，没有数据库唯一约束保护，会留下两条
 ``is_system=True AND is_active=True`` 的副本，并让随后的

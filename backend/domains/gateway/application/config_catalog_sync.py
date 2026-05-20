@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from bootstrap.config_loader import ModelInfo, app_config
-from domains.agent.application.ports.model_catalog_port import ModelCapabilitySnapshot
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     CONFIG_MANAGED_CREDENTIAL_NAME,
@@ -379,24 +379,6 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
     }
 
 
-def tags_to_capability_snapshot(tags: dict[str, Any]) -> ModelCapabilitySnapshot:
-    supports_image_gen = bool(tags.get("supports_image_gen", False))
-    default_txt2 = supports_image_gen
-    default_img2 = supports_image_gen
-    return ModelCapabilitySnapshot(
-        supports_tools=bool(tags.get("supports_tools", True)),
-        supports_reasoning=bool(tags.get("supports_reasoning", False)),
-        supports_json_mode=bool(tags.get("supports_json_mode", True)),
-        supports_vision=bool(tags.get("supports_vision", False)),
-        supports_image_gen=supports_image_gen,
-        supports_txt2img=bool(tags.get("supports_txt2img", default_txt2)),
-        supports_img2img=bool(tags.get("supports_img2img", default_img2)),
-        supports_video_gen=bool(tags.get("supports_video_gen", False)),
-        supports_image_to_video=bool(tags.get("supports_image_to_video", False)),
-        max_reference_images=int(tags.get("max_reference_images", 0) or 0),
-    )
-
-
 __all__ = [
     "MANAGED_BY_KEY",
     "MANAGED_CONFIG",
@@ -404,5 +386,4 @@ __all__ = [
     "model_types_for_gateway_registration",
     "selector_capabilities_from_tags",
     "sync_app_config_gateway_catalog",
-    "tags_to_capability_snapshot",
 ]

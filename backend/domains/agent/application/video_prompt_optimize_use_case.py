@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from bootstrap.config import settings
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -58,7 +58,7 @@ class VideoPromptOptimizeUseCase:
     """视频提示词优化用例"""
 
     def __init__(self) -> None:
-        self.gateway = LLMGateway(settings)
+        self.gateway = AgentLlmFacade(settings)
 
     async def optimize(
         self,

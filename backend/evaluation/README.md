@@ -62,10 +62,10 @@ print(f"总体准确率: {report.overall_accuracy:.2%}")
 
 ```python
 from evaluation.llm_judge import LLMJudge
-from core.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 
-llm_gateway = LLMGateway()
-judge = LLMJudge(llm_gateway=llm_gateway, judge_model="gpt-4")
+agent_llm_facade = AgentLlmFacade(config=settings)
+judge = LLMJudge(agent_llm_facade=agent_llm_facade, judge_model="gpt-4")
 
 score = await judge.evaluate(
     query="What is TDD?",

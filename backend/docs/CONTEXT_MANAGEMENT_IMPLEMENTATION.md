@@ -20,7 +20,7 @@
 │       ├── LangGraph Checkpointer (对话历史持久化)               │
 │       ├── LongTermMemoryStore (长期记忆 - 向量检索)             │
 │       ├── MemoryExtractor (记忆提取)                            │
-│       └── LLMGateway (LLM 调用)                                 │
+│       └── AgentLlmFacade (LLM 调用)                                 │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -68,7 +68,7 @@
 │       │                                                          │
 │       ├── LangGraph Checkpointer                                 │
 │       ├── LongTermMemoryStore                                    │
-│       └── LLMGateway                                             │
+│       └── AgentLlmFacade                                             │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -89,7 +89,7 @@ class SmartContextManager:
 
     def __init__(
         self,
-        llm_gateway: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
         config: SmartContextConfig,
     ):
         self.key_detector = KeyMessageDetector()
@@ -136,7 +136,7 @@ def __init__(self, ...):
 
     # 新增：智能压缩器
     self.compressor = SmartContextCompressor(
-        llm_gateway=llm_gateway,
+        agent_llm_facade=agent_llm_facade,
         config=CompressionConfig(
             max_history_tokens=80000,
             protect_first_n_turns=2,
@@ -244,7 +244,7 @@ async def _call_llm(self, state: AgentState) -> dict[str, Any]:
 
 **目标**: 利用云厂商的缓存 API 降低成本
 
-**修改文件**: `core/llm/gateway.py`
+**修改文件**: `domains/agent/infrastructure/llm/agent_llm_facade.py`
 
 ```python
 from core.llm.prompt_cache import get_prompt_cache_manager

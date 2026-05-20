@@ -7,12 +7,20 @@ Session Application Ports - 会话应用端口
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     import uuid
 
     from domains.session.domain.entities import SessionOwner
+
+
+@dataclass(frozen=True)
+class TitleLlmChatResult:
+    """标题生成 LLM 调用的最小结果（Session 域契约，不依赖 Agent DTO）。"""
+
+    content: str | None = None
 
 
 class TitleLlmPort(Protocol):
@@ -25,8 +33,8 @@ class TitleLlmPort(Protocol):
         model: str,
         max_tokens: int,
         temperature: float,
-    ) -> object:
-        """与 LLMGateway.chat 兼容的薄封装"""
+    ) -> TitleLlmChatResult:
+        """返回可解析为标题文本的内容。"""
         ...
 
 

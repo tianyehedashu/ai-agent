@@ -1,7 +1,7 @@
 """
 LiteLLM kwargs 与 Gateway 桥接层之间的纯拆分逻辑。
 
-供 ``LLMGateway``、单测或其它调用方复用，避免在 agent 域内重复维护
+供 ``AgentLlmFacade``、单测或其它调用方复用，避免在 agent 域内重复维护
 「pop 标准字段 + 剩余 extras」规则。
 """
 
@@ -23,8 +23,6 @@ class ChatBridgePayload:
     tools: Any
     tool_choice: Any
     response_format: Any
-    api_key: str | None
-    api_base: str | None
     extras: dict[str, Any] = field(default_factory=dict)
 
 
@@ -34,8 +32,6 @@ class EmbeddingBridgePayload:
 
     inputs: str | list[str]
     model: str
-    api_key: str | None
-    api_base: str | None
     extras: dict[str, Any] = field(default_factory=dict)
 
 
@@ -62,8 +58,8 @@ def split_chat_completion_for_bridge(
     tools = kw.pop("tools", None)
     tool_choice = kw.pop("tool_choice", None)
     response_format = kw.pop("response_format", None)
-    api_key = kw.pop("api_key", None)
-    api_base = kw.pop("api_base", None)
+    kw.pop("api_key", None)
+    kw.pop("api_base", None)
 
     return ChatBridgePayload(
         stream=stream,
@@ -74,8 +70,6 @@ def split_chat_completion_for_bridge(
         tools=tools,
         tool_choice=tool_choice,
         response_format=response_format,
-        api_key=api_key,
-        api_base=api_base,
         extras=dict(kw),
     )
 
@@ -90,14 +84,12 @@ def split_embedding_for_bridge(
     if inputs is None or not model_val:
         return None
 
-    api_key = kw.pop("api_key", None)
-    api_base = kw.pop("api_base", None)
+    kw.pop("api_key", None)
+    kw.pop("api_base", None)
 
     return EmbeddingBridgePayload(
         inputs=inputs,
         model=str(model_val),
-        api_key=api_key,
-        api_base=api_base,
         extras=dict(kw),
     )
 

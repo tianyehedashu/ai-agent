@@ -53,4 +53,24 @@ def resolve_openai_compatible_models_list_url(
     )
 
 
-__all__ = ["resolve_openai_compatible_models_list_url"]
+def derive_client_facing_model_alias(upstream_model_id: str) -> str:
+    """从上游 ``model`` id 派生客户端常用短别名（如 Claude Code / Cursor 请求名）。
+
+    规则（启发式，运营可覆盖）：
+    - 去掉末尾 ``-YYYYMMDD`` 日期后缀
+    - 保留 ``claude-*`` / ``gpt-*`` / ``o*`` 等产品前缀段
+    """
+    raw = upstream_model_id.strip()
+    if not raw:
+        return raw
+    parts = raw.split("-")
+    if len(parts) >= 2 and len(parts[-1]) == 8 and parts[-1].isdigit():
+        return "-".join(parts[:-1])
+    return raw
+
+
+__all__ = [
+    "derive_client_facing_model_alias",
+    "resolve_openai_compatible_models_list_url",
+]
+

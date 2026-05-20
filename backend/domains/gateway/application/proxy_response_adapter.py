@@ -25,6 +25,9 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     downstream_custom_from_metadata,
     upstream_custom_from_metadata,
 )
+from domains.gateway.application.prompt_cache_middleware import (
+    apply_gateway_cache_hit_to_metadata,
+)
 from domains.gateway.application.proxy_deferred_tasks import register_proxy_deferred_task
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
@@ -137,6 +140,8 @@ def adapt_response(
     _ = upstream_custom
     data = to_response_dict(response)
     usage = data.get("usage") or {}
+    if isinstance(usage, dict):
+        apply_gateway_cache_hit_to_metadata(metadata, usage)
     tokens = int(usage.get("total_tokens", 0) or 0) if isinstance(usage, dict) else 0
     from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
 
@@ -176,6 +181,7 @@ async def adapt_stream(
         usage = data.get("usage")
         if isinstance(usage, dict):
             last_usage = usage
+            apply_gateway_cache_hit_to_metadata(metadata, usage)
             if usage.get("total_tokens"):
                 data = enrich_openai_compat_response_cost(
                     data,

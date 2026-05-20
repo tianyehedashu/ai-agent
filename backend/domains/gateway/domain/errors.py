@@ -9,7 +9,7 @@ from domains.tenancy.domain.errors import (
     TeamNotFoundError,
     TeamPermissionDeniedError,
 )
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions.base import HttpMappableDomainError
 
 
 class GatewayError(HttpMappableDomainError):

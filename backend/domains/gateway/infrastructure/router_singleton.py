@@ -20,9 +20,9 @@ from domains.gateway.domain.litellm_credential_extra_keys import (
     credential_extra_keys_for_litellm,
     litellm_api_key_param_name,
 )
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.router_model_name import encode_router_model_name
 from libs.crypto import decrypt_value, derive_encryption_key
-from libs.llm.litellm_model_id import build_litellm_model_id
 from utils.logging import get_logger
 
 if TYPE_CHECKING:

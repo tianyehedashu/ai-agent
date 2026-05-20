@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.identity.domain.types import Principal
 from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
@@ -29,7 +29,7 @@ class TitleUseCase:
     def __init__(
         self,
         db: AsyncSession,
-        llm_gateway: LLMGateway | None = None,
+        agent_llm_facade: AgentLlmFacade | None = None,
         title_llm: TitleLlmPort | None = None,
     ):
         from domains.agent.application.message_use_case import MessageUseCase
@@ -39,14 +39,13 @@ class TitleUseCase:
             db,
             message_service=MessageUseCase(db),
         )
-        gateway = llm_gateway or LLMGateway(config=settings)
-        self.llm_gateway = gateway
+        facade = agent_llm_facade or AgentLlmFacade(config=settings)
         if title_llm is None:
             from domains.agent.application.title_generation_service import (
                 LlmTitleGenerationAdapter,
             )
 
-            title_llm = LlmTitleGenerationAdapter(gateway)
+            title_llm = LlmTitleGenerationAdapter(facade)
         self._title_llm: TitleLlmPort = title_llm
         self.domain_service = SessionDomainService()
 
@@ -56,14 +55,14 @@ class TitleUseCase:
         return SessionOwner.from_principal_id(user_id, is_anonymous)
 
     @staticmethod
-    def _normalize_llm_response(response: object) -> str:
-        """将 LLM 返回结果规范化为字符串"""
-        if isinstance(response, str):
-            return response
-        content = getattr(response, "content", None)
-        if isinstance(content, str):
-            return content
-        return str(response)
+    def _format_title(content: str | None) -> str | None:
+        if not content:
+            return None
+        title = content.strip().strip('"').strip("'").strip()
+        title = title.rstrip(")").rstrip(".").rstrip(")").rstrip("!")
+        if len(title) > 50:
+            title = title[:47] + "..."
+        return title or None
 
     async def generate_from_first_message(self, message: str) -> str | None:
         """根据第一条消息生成标题"""
@@ -83,11 +82,7 @@ class TitleUseCase:
                 temperature=0.7,
             )
 
-            title = self._normalize_llm_response(response).strip().strip('"').strip("'").strip()
-            title = title.rstrip(")").rstrip(".").rstrip(")").rstrip("!")
-            if len(title) > 50:
-                title = title[:47] + "..."
-
+            title = self._format_title(response.content)
             return title if title else None
         except Exception as e:
             logger.warning("Failed to generate title from first message: %s", e, exc_info=True)
@@ -126,11 +121,7 @@ class TitleUseCase:
                 temperature=0.7,
             )
 
-            title = self._normalize_llm_response(response).strip().strip('"').strip("'").strip()
-            title = title.rstrip(")").rstrip(".").rstrip(")").rstrip("!")
-            if len(title) > 50:
-                title = title[:47] + "..."
-
+            title = self._format_title(response.content)
             return title if title else None
         except Exception as e:
             logger.warning("Failed to generate title from summary: %s", e, exc_info=True)

@@ -107,7 +107,7 @@ from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 from domains.agent.application import ChatUseCase
 from domains.session.application import SessionUseCase
 from domains.session.application.ports import SessionApplicationPort
-from domains.agent.infrastructure.llm import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
 
 # 内部 LLM 走 Gateway 桥接时（端口在 gateway 应用层）

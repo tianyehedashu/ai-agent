@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from domains.agent.infrastructure.llm.gateway import LLMResponse
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmResponse
 from evaluation.llm_judge import LLMJudge, MultiDimensionJudge
 
 
@@ -31,7 +31,7 @@ class TestLLMJudge:
     async def test_evaluate_response(self, judge, mock_llm_gateway):
         """测试: 评估响应"""
         # Arrange
-        mock_response = LLMResponse(
+        mock_response = AgentLlmResponse(
             content='{"overall_score": 8.5, "relevance": 9, "accuracy": 8, "completeness": 8, "clarity": 9, "reasoning": "Good response"}',
         )
         mock_llm_gateway.chat.return_value = mock_response
@@ -52,7 +52,7 @@ class TestLLMJudge:
     async def test_evaluate_with_expected_output(self, judge, mock_llm_gateway):
         """测试: 带期望输出的评估"""
         # Arrange
-        mock_response = LLMResponse(
+        mock_response = AgentLlmResponse(
             content='{"overall_score": 9.0, "relevance": 9, "accuracy": 9, "completeness": 9, "clarity": 9, "reasoning": "Matches expected"}',
         )
         mock_llm_gateway.chat.return_value = mock_response
@@ -72,7 +72,7 @@ class TestLLMJudge:
     async def test_compare_responses(self, judge, mock_llm_gateway):
         """测试: 对比两个响应"""
         # Arrange
-        mock_response = LLMResponse(
+        mock_response = AgentLlmResponse(
             content='{"winner": "A", "score_a": 8.5, "score_b": 7.0, "reasoning": "Response A is better"}',
         )
         mock_llm_gateway.chat.return_value = mock_response
@@ -94,7 +94,7 @@ class TestLLMJudge:
     async def test_handle_invalid_json(self, judge, mock_llm_gateway):
         """测试: 处理无效 JSON"""
         # Arrange
-        mock_response = LLMResponse(content="Invalid JSON response")
+        mock_response = AgentLlmResponse(content="Invalid JSON response")
         mock_llm_gateway.chat.return_value = mock_response
 
         # Act
@@ -128,7 +128,7 @@ class TestMultiDimensionJudge:
     async def test_evaluate_all_dimensions(self, judge, mock_llm_gateway):
         """测试: 评估所有维度"""
         # Arrange
-        mock_response = LLMResponse(content="8.5")
+        mock_response = AgentLlmResponse(content="8.5")
         mock_llm_gateway.chat.return_value = mock_response
 
         # Act

@@ -38,7 +38,7 @@ from utils.logging import get_logger
 from utils.tokens import count_tokens
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.llm.gateway import LLMGateway
+    from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 logger = get_logger(__name__)
 
@@ -155,7 +155,7 @@ class SmartContextCompressor:
 
     def __init__(
         self,
-        llm_gateway: "LLMGateway | None" = None,
+        llm_gateway: "AgentLlmFacade | None" = None,
         config: CompressionConfig | None = None,
     ) -> None:
         """

@@ -5,53 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
+
 if TYPE_CHECKING:
     import uuid
-
-
-@dataclass(frozen=True)
-class ModelCapabilitySnapshot:
-    """与 LLM 参数适配相关的模型能力（与 config_loader.ModelInfo 字段对齐子集）。"""
-
-    supports_tools: bool = True
-    supports_reasoning: bool = False
-    supports_json_mode: bool = True
-    supports_vision: bool = False
-    supports_image_gen: bool = False
-    supports_txt2img: bool = True
-    supports_img2img: bool = False
-    supports_video_gen: bool = False
-    supports_image_to_video: bool = False
-    max_reference_images: int = 0
-
-    @property
-    def features(self) -> frozenset[str]:
-        result: set[str] = set()
-        if self.supports_vision:
-            result.add("vision")
-        if self.supports_tools:
-            result.add("tools")
-        if self.supports_reasoning:
-            result.add("reasoning")
-        if self.supports_json_mode:
-            result.add("json_mode")
-        if self.supports_image_gen:
-            result.add("image_gen")
-        if self.supports_txt2img:
-            result.add("txt2img")
-        if self.supports_img2img:
-            result.add("img2img")
-        if self.supports_video_gen:
-            result.add("video_gen")
-        if self.supports_image_to_video:
-            result.add("image_to_video")
-        return frozenset(result)
 
 
 @dataclass(frozen=True)
 class RegisteredModelResolution:
     """个人 Gateway 模型解析结果（供 Agent 对话 / 生图路径使用）。"""
 
+    virtual_model_name: str
     litellm_model: str
     provider: str
     api_key: str | None

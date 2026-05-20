@@ -40,12 +40,11 @@ from domains.agent.infrastructure.context.smart_compressor import (
     CompressionResult,
     SmartContextCompressor,
 )
-from domains.agent.infrastructure.llm.prompt_cache import get_prompt_cache_manager
 from utils.logging import get_logger
 from utils.tokens import count_tokens
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.llm.gateway import LLMGateway
+    from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 logger = get_logger(__name__)
 
@@ -116,7 +115,7 @@ class SmartContextManager:
 
     def __init__(
         self,
-        llm_gateway: "LLMGateway",
+        llm_gateway: "AgentLlmFacade",
         config: SmartContextConfig | None = None,
     ) -> None:
         self.llm_gateway = llm_gateway
@@ -140,7 +139,6 @@ class SmartContextManager:
                 summarization_threshold=self.config.summarize_threshold_ratio,
             ),
         )
-        self.cache_manager = get_prompt_cache_manager()
 
         # 固定消息（跨轮次保留）
         self._pinned_message_ids: set[str] = set()
@@ -231,15 +229,7 @@ class SmartContextManager:
         for msg in compressed_messages:
             final_messages.append(self._format_message(msg))
 
-        # 6. 应用提示词缓存
-        if self.config.cache_enabled and self.cache_manager.is_cache_supported(model):
-            final_messages = self.cache_manager.prepare_cacheable_messages(
-                messages=final_messages,
-                model=model,
-                system_prompt=system_content,
-            )
-            result.cache_applied = True
-            result.cache_provider = self.cache_manager.get_provider_from_model(model)
+        # 6. Prompt Cache 由 Gateway PromptCacheMiddleware 在出站时注入
 
         # 7. 计算统计信息
         result.messages = final_messages
@@ -388,8 +378,6 @@ class SmartContextManager:
 
     def get_stats(self) -> dict[str, Any]:
         """获取管理器统计信息"""
-        cache_stats = self.cache_manager.get_cache_stats()
-
         return {
             "config": {
                 "max_context_tokens": self.config.max_context_tokens,
@@ -400,14 +388,13 @@ class SmartContextManager:
             "pinned_messages": len(self._pinned_message_ids),
             "current_plan": self.plan_tracker.current_plan,
             "active_sub_tasks": len(self.plan_tracker.get_active_sub_tasks()),
-            "cache_stats": cache_stats,
+            "cache_stats": {},
         }
 
     def reset(self) -> None:
         """重置管理器状态"""
         self._pinned_message_ids.clear()
         self.plan_tracker.reset_plan()
-        self.cache_manager.reset_stats()
         logger.info("SmartContextManager reset")
 
 
@@ -415,7 +402,7 @@ class SmartContextManager:
 _smart_context_manager: SmartContextManager | None = None
 
 
-def get_smart_context_manager(llm_gateway: "LLMGateway") -> SmartContextManager:
+def get_smart_context_manager(llm_gateway: "AgentLlmFacade") -> SmartContextManager:
     """获取全局智能上下文管理器"""
     global _smart_context_manager
     if _smart_context_manager is None:

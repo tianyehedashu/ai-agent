@@ -1,0 +1,67 @@
+"""Gateway 模型能力值对象（与 ``GatewayModel.tags`` / 出站适配对齐）。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class ModelCapabilitySnapshot:
+    """与 LLM 参数适配相关的模型能力（与 config_loader.ModelInfo 字段对齐子集）。"""
+
+    supports_tools: bool = True
+    supports_reasoning: bool = False
+    supports_json_mode: bool = True
+    supports_vision: bool = False
+    supports_image_gen: bool = False
+    supports_txt2img: bool = True
+    supports_img2img: bool = False
+    supports_video_gen: bool = False
+    supports_image_to_video: bool = False
+    max_reference_images: int = 0
+
+    @property
+    def features(self) -> frozenset[str]:
+        result: set[str] = set()
+        if self.supports_vision:
+            result.add("vision")
+        if self.supports_tools:
+            result.add("tools")
+        if self.supports_reasoning:
+            result.add("reasoning")
+        if self.supports_json_mode:
+            result.add("json_mode")
+        if self.supports_image_gen:
+            result.add("image_gen")
+        if self.supports_txt2img:
+            result.add("txt2img")
+        if self.supports_img2img:
+            result.add("img2img")
+        if self.supports_video_gen:
+            result.add("video_gen")
+        if self.supports_image_to_video:
+            result.add("image_to_video")
+        return frozenset(result)
+
+
+def tags_to_capability_snapshot(tags: dict[str, Any]) -> ModelCapabilitySnapshot:
+    """从 ``GatewayModel.tags`` 构建能力快照。"""
+    supports_image_gen = bool(tags.get("supports_image_gen", False))
+    default_txt2 = supports_image_gen
+    default_img2 = supports_image_gen
+    return ModelCapabilitySnapshot(
+        supports_tools=bool(tags.get("supports_tools", True)),
+        supports_reasoning=bool(tags.get("supports_reasoning", False)),
+        supports_json_mode=bool(tags.get("supports_json_mode", True)),
+        supports_vision=bool(tags.get("supports_vision", False)),
+        supports_image_gen=supports_image_gen,
+        supports_txt2img=bool(tags.get("supports_txt2img", default_txt2)),
+        supports_img2img=bool(tags.get("supports_img2img", default_img2)),
+        supports_video_gen=bool(tags.get("supports_video_gen", False)),
+        supports_image_to_video=bool(tags.get("supports_image_to_video", False)),
+        max_reference_images=int(tags.get("max_reference_images", 0) or 0),
+    )
+
+
+__all__ = ["ModelCapabilitySnapshot", "tags_to_capability_snapshot"]

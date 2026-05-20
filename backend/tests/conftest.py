@@ -348,7 +348,7 @@ def _asgi_app_with_streaming_spec(app: object) -> object:
 def _apply_db_overrides(app: object, db_session: AsyncSession) -> None:
     """统一为 app 注入测试用 DB 会话（仅覆盖 get_db；get_session 由 patch get_session_factory 间接满足）。"""
     # pylint: disable=import-outside-toplevel
-    from libs.api.deps import get_db
+    from libs.db.database import get_db
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session

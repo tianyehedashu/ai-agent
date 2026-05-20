@@ -26,7 +26,7 @@ from domains.agent.domain.product_info.constants import (
     CAPABILITY_ORDER,
     DEFAULT_PROMPTS,
 )
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.models.product_info_job import (
     ProductInfoJob,
     ProductInfoJobStatus,
@@ -68,7 +68,7 @@ class ProductInfoUseCase:
         self._catalog = catalog
         self.job_repo = ProductInfoJobRepository(db)
         self.step_repo = ProductInfoJobStepRepository(db)
-        self._llm_gateway = LLMGateway(config=settings, model_catalog=catalog)
+        self._llm_gateway = AgentLlmFacade(config=settings, model_catalog=catalog)
         self._model_resolution = ChatModelResolutionUseCase(db, catalog)
 
     # ─── Job CRUD ────────────────────────────────────────────────────
@@ -167,10 +167,6 @@ class ProductInfoUseCase:
 
         resolved = await self._model_resolution.resolve_model(effective_model_id)
         model_override: dict[str, Any] = {"model": resolved.model}
-        if resolved.api_key:
-            model_override["api_key"] = resolved.api_key
-        if resolved.api_base:
-            model_override["api_base"] = resolved.api_base
 
         cap_config = CAPABILITIES.get(capability_id)
         if cap_config and cap_config.required_features:

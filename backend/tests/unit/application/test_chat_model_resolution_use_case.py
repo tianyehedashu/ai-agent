@@ -14,6 +14,7 @@ from domains.agent.application.chat_model_resolution_use_case import (
     VALID_MODEL_TYPES,
     ChatModelResolutionUseCase,
 )
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.identity.infrastructure.models.user import User
 from libs.db.permission_context import (
     PermissionContext,
@@ -21,7 +22,6 @@ from libs.db.permission_context import (
     set_permission_context,
 )
 from libs.exceptions import ValidationError
-from libs.llm.litellm_model_id import build_litellm_model_id
 
 
 @pytest.mark.unit
@@ -62,6 +62,7 @@ class TestBuildLitellmModel:
 
 @dataclass(frozen=True)
 class _FakeResolution:
+    virtual_model_name: str
     litellm_model: str
     api_key: str | None
     api_base: str | None
@@ -69,6 +70,7 @@ class _FakeResolution:
     model_types: list[str]
     is_active: bool
     last_test_status: str | None
+    gateway_model_id: uuid.UUID | None = None
 
 
 @pytest.mark.unit
@@ -93,21 +95,22 @@ class TestResolveModel:
 
     @pytest.mark.asyncio
     async def test_none_returns_default(self):
+        from bootstrap.config import settings
+
         resolved = await self.uc.resolve_model(None)
-        assert resolved.is_system is True
-        assert resolved.api_key is None
+        assert resolved.model == settings.default_model
 
     @pytest.mark.asyncio
     async def test_system_model_id(self):
         resolved = await self.uc.resolve_model("deepseek/deepseek-chat")
         assert resolved.model == "deepseek/deepseek-chat"
-        assert resolved.is_system is True
 
     @pytest.mark.asyncio
     async def test_personal_model_uuid(self):
         model_id = uuid.uuid4()
         self.catalog.resolve_registered_model = AsyncMock(
             return_value=_FakeResolution(
+                virtual_model_name="my-personal-model",
                 litellm_model="deepseek/deepseek-chat",
                 api_key="sk-resolve-me-12345",
                 api_base=None,
@@ -115,12 +118,11 @@ class TestResolveModel:
                 model_types=["text"],
                 is_active=True,
                 last_test_status=None,
+                gateway_model_id=model_id,
             )
         )
         resolved = await self.uc.resolve_model(str(model_id))
-        assert resolved.is_system is False
-        assert resolved.model == "deepseek/deepseek-chat"
-        assert resolved.api_key == "sk-resolve-me-12345"
+        assert resolved.model == "my-personal-model"
 
     @pytest.mark.asyncio
     async def test_unknown_uuid_raises(self):
@@ -129,9 +131,9 @@ class TestResolveModel:
             await self.uc.resolve_model(str(uuid.uuid4()))
 
     @pytest.mark.asyncio
-    async def test_non_uuid_string_treated_as_system(self):
+    async def test_non_uuid_string_treated_as_virtual_name(self):
         resolved = await self.uc.resolve_model("not-a-uuid-but-not-system-either")
-        assert resolved.is_system is True
+        assert resolved.model == "not-a-uuid-but-not-system-either"
 
 
 @pytest.mark.unit
@@ -207,8 +209,6 @@ class TestResolveTextChatModel:
             allowed_text_system_ids=frozenset(["deepseek/deepseek-chat"]),
         )
         assert r.model == "deepseek/deepseek-chat"
-        assert r.is_system is True
-        assert r.api_key is None
 
     @pytest.mark.asyncio
     async def test_none_uses_app_default(self, db_session):
@@ -217,7 +217,6 @@ class TestResolveTextChatModel:
         uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
         r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
         assert r.model == settings.default_model
-        assert r.is_system is True
 
     @pytest.mark.asyncio
     async def test_unknown_uuid_raises(self, db_session):

@@ -463,8 +463,6 @@ class AgentConfig(BaseModel):
     )
 
     # 对话 BYOK（仅用户自定义模型；系统模型保持为 None）
-    llm_api_key: str | None = None
-    llm_api_base: str | None = None
 
     @classmethod
     def create_default(

@@ -385,7 +385,7 @@ class AgentEngine:
         config: AgentConfig,
         context_manager: ContextManager,
         tool_executor: ToolExecutor,
-        llm_gateway: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
         memory_manager: MemoryManager,
         checkpointer: Checkpointer,
         termination: TerminationCondition = None,
@@ -394,7 +394,7 @@ class AgentEngine:
         self.config = config
         self.context = context_manager
         self.tools = tool_executor
-        self.llm = llm_gateway
+        self.llm = agent_llm_facade
         self.memory = memory_manager
         self.checkpointer = checkpointer
         self.termination = termination or TerminationCondition()
@@ -1260,7 +1260,7 @@ class MemoryManager:
     def __init__(
         self,
         vector_store: VectorStore,
-        llm: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
         db: Database,
     ):
         self.vectors = vector_store
@@ -1358,7 +1358,7 @@ class MemoryRetriever:
     def __init__(
         self,
         vector_store: VectorStore,
-        llm: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
     ):
         self.vectors = vector_store
         self.llm = llm

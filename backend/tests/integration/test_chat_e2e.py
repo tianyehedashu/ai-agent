@@ -15,7 +15,7 @@ from bootstrap.config import settings
 from domains.agent.domain.types import AgentConfig
 from domains.agent.infrastructure.engine.langgraph_agent import LangGraphAgentEngine
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 
 
@@ -70,7 +70,7 @@ class TestChatE2E:
         )
 
         # Mock LLM Gateway 响应
-        llm_gateway = LLMGateway(config=settings)
+        llm_gateway = AgentLlmFacade(config=settings)
 
         # Mock memory_store
         memory_store = AsyncMock(spec=LongTermMemoryStore)

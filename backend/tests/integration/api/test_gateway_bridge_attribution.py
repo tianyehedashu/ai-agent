@@ -1,6 +1,6 @@
 """Gateway bridge attribution API-flow 集成测试。
 
-历史 bug：``LLMGateway`` 在 bridge 异常时静默回退直连 LiteLLM，且
+历史 bug：``AgentLlmFacade`` 在 bridge 异常时静默回退直连 LiteLLM，且
 ``gateway_virtual_keys`` 缺少 partial unique index，并发 chat 启动时（标题
 生成 + 主流）会写入两条 active system vkey；之后
 ``scalar_one_or_none()`` 抛 ``MultipleResultsFound`` → bridge fallback →
@@ -9,7 +9,7 @@
 
 本套测试在 ``client`` HTTP fixture 之上（含真实 dep 注入 + LangGraph
 checkpointer + sync 后的 catalog + Redis mock），直接驱动
-``LLMGateway`` → ``GatewayBridge`` → ``ProxyUseCase`` → patched
+``AgentLlmFacade`` → ``GatewayBridge`` → ``ProxyUseCase`` → patched
 ``Router.acompletion`` → ``GatewayCustomLogger.async_log_success_event``
 → ``RequestLogRepository.insert``，断言：
 
@@ -17,7 +17,7 @@ checkpointer + sync 后的 catalog + Redis mock），直接驱动
 2. 并发调用（4 路同时跑）：每条日志的归因仍然齐全，且**只**用同一条
    active system vkey（partial unique index 生效）。
 3. 桥接异常不被 fallback 吃掉：``Router.acompletion`` 抛错时
-   ``LLMGateway.chat`` 必须把异常抛回调用方，杜绝静默直连 LiteLLM 让
+   ``AgentLlmFacade.chat`` 必须把异常抛回调用方，杜绝静默直连 LiteLLM 让
    日志失去归因。
 """
 
@@ -39,7 +39,7 @@ from domains.agent.infrastructure.models import (  # noqa: F401  # isort:skip
     memory as _memory_model,
     message as _message_model,
 )
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
@@ -71,7 +71,7 @@ def _make_fake_response(
     - ``usage.prompt_tokens_details``：dict，含 ``cached_tokens``
       （OpenAI / DeepSeek prompt cache）。
 
-    这两个嵌套字段历史上让 ``LLMResponse.usage`` 的 ``dict[str, int]`` 校验
+    这两个嵌套字段历史上让 ``AgentLlmResponse.usage`` 的 ``dict[str, int]`` 校验
     抛 ``ValidationError``，进而让 bridge 路径返回时 chat 直接 500。schema
     放宽到 ``dict[str, Any]`` 后必须仍能透传。
     """
@@ -153,6 +153,34 @@ def _disable_redis_counters(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _upstream_cost_from_litellm_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """集成测试替身响应：在存在下游价 metadata 时仍从 ``_hidden_params.response_cost`` 取上游成本。"""
+    from contextlib import suppress
+    from decimal import Decimal
+
+    from domains.gateway.application.pricing import upstream_cost_resolver as resolver
+
+    def _completion_cost(
+        response: Any,
+        *,
+        model: str | None = None,
+        custom_cost_per_token: dict[str, Any] | None = None,
+    ) -> Decimal | None:
+        del model, custom_cost_per_token
+        hp = getattr(response, "_hidden_params", None)
+        if hp is None:
+            return None
+        raw = hp.get("response_cost") if isinstance(hp, dict) else getattr(hp, "response_cost", None)
+        if raw is None:
+            return None
+        with suppress(Exception):
+            return Decimal(str(raw))
+        return None
+
+    monkeypatch.setattr(resolver, "_completion_cost_upstream", _completion_cost)
+
+
 @pytest.fixture
 def _registered_user_context(
     test_user: Any, monkeypatch: pytest.MonkeyPatch
@@ -199,7 +227,7 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
         _patched_acompletion(prompt_tokens=11, completion_tokens=5, cost=0.000456),
     )
 
-    gateway = LLMGateway(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
+    gateway = AgentLlmFacade(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
     await gateway.chat(
         messages=[{"role": "user", "content": "hi"}],
         model="zai/glm-4-flash",
@@ -262,7 +290,7 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
         _patched_acompletion(prompt_tokens=3, completion_tokens=2, cost=0.0001),
     )
 
-    gateway = LLMGateway(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
+    gateway = AgentLlmFacade(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
     for _ in range(4):
         await gateway.chat(
             messages=[{"role": "user", "content": "ping"}],
@@ -321,7 +349,7 @@ async def test_bridge_failure_is_not_silently_fallbacked(
         _patched_acompletion_raising(),
     )
 
-    gateway = LLMGateway(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
+    gateway = AgentLlmFacade(config=__import__("bootstrap.config", fromlist=["settings"]).settings)
 
     with pytest.raises(RuntimeError, match="simulated upstream failure"):
         await gateway.chat(
@@ -361,7 +389,7 @@ async def test_verbose_internal_override_persists_prompt_and_long_response_previ
     cfg = __import__("bootstrap.config", fromlist=["settings"]).settings
     token = set_internal_store_full_override(True)
     try:
-        gateway = LLMGateway(config=cfg)
+        gateway = AgentLlmFacade(config=cfg)
         await gateway.chat(
             messages=[{"role": "user", "content": "hello verbose"}],
             model="zai/glm-4-flash",

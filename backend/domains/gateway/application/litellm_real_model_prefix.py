@@ -1,6 +1,6 @@
 """网关注册模型：上游 ``real_model`` 与 ``provider`` 的 LiteLLM 前缀一致性校验。
 
-用户可见错误文案属于 Gateway 应用层，不放在 ``libs/llm``。
+用户可见错误文案属于 Gateway 应用层；LiteLLM 模型 ID 拼装见 ``domains.gateway.domain.litellm_model_id``。
 """
 
 from __future__ import annotations

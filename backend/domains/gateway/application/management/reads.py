@@ -325,7 +325,9 @@ class GatewayManagementReadService:
         usage_aggregation: UsageAggregation,
     ) -> dict[str, Any]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation)
-        return await self._logs.aggregate_summary_by_axis(axis, start, end)
+        summary = await self._logs.aggregate_summary_by_axis(axis, start, end)
+        summary["by_client_type"] = await self._logs.aggregate_by_client_type(axis, start, end)
+        return summary
 
     async def list_alert_rules(self, team_id: UUID) -> list[GatewayAlertRule]:
         return await self._alerts.list_rules_by_team(team_id)

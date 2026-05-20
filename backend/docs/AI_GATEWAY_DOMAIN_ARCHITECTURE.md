@@ -11,7 +11,7 @@
 |------|------|
 | **业务目标** | 统一多模型调用入口（LiteLLM Router）、团队/虚拟 Key、凭据池、预算与限流、可观测（日志/告警/rollup）。 |
 | **边界** | **Inbound**：根路径 **`/v1/*`** —— **OpenAI 兼容**（如 `POST /v1/chat/completions`）与 **Anthropic Messages**（`POST /v1/messages`）；鉴权为 **`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先），令牌为 **`sk-gw-*` 虚拟 Key** 或带 **`gateway:proxy`** scope 且命中 **Gateway grant** 的 **`sk-*`**（后者的 **`X-Team-Id`** 只用于选择已授权团队）。**管理面**：`/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
-| **与 Agent 域关系** | Agent 通过 `LLMGateway` + `GatewayProxyProtocol`（`domains/gateway/application/ports.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
+| **与 Agent 域关系** | Agent 通过 `AgentLlmFacade` + `GatewayProxyProtocol`（`domains/gateway/application/ports.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
 
 ---
 
@@ -67,7 +67,7 @@ domains/gateway/
     └── models/__init__.py        # 只再导出 Gateway 域 ORM；Team / TeamMember 权威定义在 tenancy
 
 domains/gateway/domain/usage_read_model.py  # UsageAggregation（管理面日志/大盘读模型）
-domains/agent/infrastructure/llm/gateway.py   # LLMGateway
+domains/agent/infrastructure/llm/agent_llm_facade.py   # AgentLlmFacade
 ```
 
 **依赖方向**
@@ -137,7 +137,7 @@ flowchart TB
   subgraph clients [Clients]
     UI[Web /gateway]
     Ext[OpenAI / Anthropic SDK -> /v1]
-    Agent[Agent LLMGateway]
+    Agent[AgentLlmFacade]
   end
   subgraph gateway_http [FastAPI Gateway]
     Mgmt["/api/v1/gateway/*"]
@@ -166,16 +166,14 @@ flowchart TB
 
 ### 3.1 本地开发与运行模式
 
-| 模式 | 依赖 | `gateway_internal_proxy_enabled` | 行为 |
-|------|------|-----------------------------------|------|
-| **完整 Gateway（对齐生产）** | 已执行 gateway 相关 DB 迁移；Redis 可用（Router 冷却/共享）；请求内能解析归因 `user_id` **或** 配置了委派 UUID | `True`（默认） | `LLMGateway` / `EmbeddingService`（API）优先经 `GatewayBridge` → `ProxyUseCase`，写入请求日志与预算链路。 |
-| **轻量直连（刻意降级）** | 可无 Redis / 未迁库；仅验证 Agent 逻辑 | `False` | 直连 LiteLLM，**不**走 Gateway 观测闭环；与生产口径不同，勿误以为本地通过即线上管控完备。 |
+| 模式 | 依赖 | 行为 |
+|------|------|------|
+| **完整 Gateway（默认，对齐生产）** | 已执行 gateway 相关 DB 迁移；Redis 可用（Router 冷却/共享）；请求内能解析归因 `user_id` **或** 配置了委派 UUID | `AgentLlmFacade` / `APIEmbedding` **仅**经 `GatewayBridge` → `ProxyUseCase`，写入请求日志与预算链路；桥接异常**向上抛出**，无静默直连 LiteLLM 回退。 |
+| **纯本地向量（FastEmbed）** | 安装 `fastembed` | `EmbeddingService(provider="local")` 不经 Gateway，无供应商 API，属刻意设计。 |
 
-**纯本地向量（FastEmbed）**：不经 Gateway，无供应商 API，属刻意设计。
+**无注册用户上下文**：若未配置 `gateway_internal_proxy_delegate_user_id`，`AgentLlmFacade.chat` / `APIEmbedding` 在调用前会 `RuntimeError`（无法归因），而非静默直连。
 
-**无注册用户上下文**：若未配置 `gateway_internal_proxy_delegate_user_id`，内部桥无法归因，将回退直连（除非 `gateway_internal_proxy_fail_closed=True`，此时桥接失败会抛错而非静默回退）。
-
-**推荐**：CI 或合并前至少保留一条「开桥 + 已解析 user_id 或委派 ID」的集成路径，避免生产专用代码腐烂。
+**推荐**：CI 或合并前至少保留 `tests/architecture/` 与 `tests/integration/api/test_gateway_bridge_attribution.py` 回归，避免桥接归因代码腐烂。
 
 ---
 
@@ -389,20 +387,24 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 
 | 层级 | 路径 | 关注点 |
 |------|------|--------|
-| 单元 | `tests/unit/gateway/` | Personal team、vkey、PII、仓储 |
+| **架构** | `tests/architecture/` | Agent 无 `litellm` / 无 `settings.*_api_key`；Gateway 无 `domains.agent` import |
+| 单元 | `tests/unit/gateway/`、`tests/unit/gateway/domain/` | UpstreamAdapter、Prompt Cache、`litellm_model_id`、`model_capability` |
+| 单元 | `tests/unit/agent/test_agent_llm_facade.py` 等 | 桥接门面、Embedding、消息格式化 |
+| 集成 | `tests/integration/api/test_gateway_bridge_attribution.py` | 内部桥归因、并发 vkey、桥接失败不静默回退 |
 | 集成 | `tests/integration/api/test_gateway_management_api.py` | JWT、`GET /teams`、`X-Team-Id` |
 
+CI：`.github/workflows/backend-architecture.yml` 强制跑架构守门 + 核心 gateway 单测。详见 `backend/docs/refactor-baseline.md`。
+
 ```bash
+uv run pytest tests/architecture/ tests/unit/gateway/domain/ -q --noconftest
 uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_api.py -q
 ```
 
 ### 6.2 配置（与 `bootstrap/config.py` 字段一致）
 
-环境变量由 Pydantic Settings 推导（通常为 **大写 + 下划线**，例如 `GATEWAY_INTERNAL_PROXY_ENABLED`），以下列出 **Settings 属性名**：
+环境变量由 Pydantic Settings 推导（通常为 **大写 + 下划线**），以下列出 **Settings 属性名**：
 
-- `gateway_internal_proxy_enabled`：内部 Chat/Embedding（API）是否优先走 `GatewayBridge`。
-- `gateway_internal_proxy_fail_closed`：桥接异常时是否**禁止**静默回退直连（`True` 则抛出）。
-- `gateway_internal_proxy_delegate_user_id`：无 `PermissionContext.user_id` 时用于 Gateway 归因的委派 UUID（后台任务、worker 等）。
+- `gateway_internal_proxy_delegate_user_id`：无 `PermissionContext.user_id` 时用于 Gateway 归因的委派 UUID（后台任务、worker 等）。内部 Chat/Embedding **始终**经 `GatewayBridge`（已无 `gateway_internal_proxy_enabled` / `fail_closed` 开关）。
 - `gateway_router_redis_url`：Router 跨进程状态；缺省可复用全局 `redis_url`。
 
 ### 6.3 前后端契约

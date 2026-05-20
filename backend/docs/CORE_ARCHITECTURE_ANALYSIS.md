@@ -14,7 +14,7 @@ AI Agent 系统的「核心」不仅是业务规则，还包括**可插拔的智
 
 | 能力 | 现行主要位置 |
 |------|----------------|
-| LLM 调用 / Agent 侧网关 | `domains/agent/infrastructure/llm/`（含 `LLMGateway`） |
+| LLM 调用 / Agent 侧网关 | `domains/agent/infrastructure/llm/`（含 `AgentLlmFacade`） |
 | AI Gateway（OpenAI 兼容、团队、凭据） | `domains/gateway/`（见 [AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./AI_GATEWAY_DOMAIN_ARCHITECTURE.md)） |
 | 工具 / MCP | `domains/agent/infrastructure/tools/` 等 |
 | 记忆 | `domains/agent/infrastructure/memory/` |

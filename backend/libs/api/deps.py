@@ -54,6 +54,7 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_login_services",
     "get_mcp_dynamic_prompt_service",
     "get_mcp_dynamic_tool_service",
     "get_mcp_service",
@@ -66,6 +67,7 @@ __all__ = [
     "get_stats_service",
     "get_title_service",
     "get_user_service",
+    "get_user_use_case",
     "get_video_task_service",
 ]
 
@@ -215,11 +217,25 @@ async def get_video_task_service(
 
 async def get_anonymous_reassignment_service(db: DbSession) -> AnonymousDataReassignmentService:
     """匿名数据归并服务（登录/注册后统一入口）。"""
-    from libs.api.identity_bridge_deps import (
-        get_anonymous_reassignment_service as _get_anonymous_reassignment_service,
-    )
+    from libs.identity_bridge_deps import build_anonymous_reassignment_service
 
-    return await _get_anonymous_reassignment_service(db)
+    return build_anonymous_reassignment_service(db)
+
+
+def get_user_use_case(db: DbSession) -> UserUseCase:
+    """Identity 写侧 UserUseCase（无 tenant_provisioner；FastAPI 依赖见 ``libs.identity_bridge_deps``）。"""
+    from libs.identity_bridge_deps import create_user_use_case
+
+    return create_user_use_case(db)
+
+
+async def get_login_services(
+    db: DbSession,
+) -> tuple[UserUseCase, AnonymousDataReassignmentService]:
+    """登录编排（UserUseCase + 匿名归并）；FastAPI 依赖见 ``libs.identity_bridge_deps.get_login_services``。"""
+    from libs.identity_bridge_deps import build_login_services
+
+    return build_login_services(db)
 
 
 async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:

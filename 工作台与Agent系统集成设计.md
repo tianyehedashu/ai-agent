@@ -501,12 +501,12 @@ class LangGraphCodeGen:
 │  └─ Schedule          →   定时任务 + Main Loop                                     │
 │                                                                                     │
 │  🧠 Agent节点                                                                       │
-│  ├─ LLMNode           →   LLMGateway.chat()                                        │
+│  ├─ LLMNode           →   AgentLlmFacade.chat()                                        │
 │  │   • model           →   model 配置                                              │
 │  │   • prompt          →   组装到上下文                                            │
 │  │   • temperature     →   generation 配置                                         │
 │  │                                                                                 │
-│  ├─ IntentNode        →   LLMGateway.chat() + 意图解析                             │
+│  ├─ IntentNode        →   AgentLlmFacade.chat() + 意图解析                             │
 │  │   • intents         →   转换为分类 prompt                                       │
 │  │   • routes          →   生成分支逻辑                                            │
 │  │                                                                                 │
@@ -744,7 +744,7 @@ class WorkflowConverter:
 │            │  ┌────────────────────────────────────────────────────────┐  │        │
 │            │  │                    Main Loop                            │  │        │
 │            │  │   5. 组装上下文 ─▶ ContextManager.build()              │  │        │
-│            │  │   6. 调用模型   ─▶ LLMGateway.chat()                   │  │        │
+│            │  │   6. 调用模型   ─▶ AgentLlmFacade.chat()                   │  │        │
 │            │  │   7. 执行工具   ─▶ ToolExecutor.execute()              │  │        │
 │            │  │   8. 更新记忆   ─▶ MemoryManager.process()             │  │        │
 │            │  └────────────────────────────────────────────────────────┘  │        │
@@ -1397,7 +1397,7 @@ class IMemoryManager(ABC):
         """检索记忆"""
         pass
 
-class ILLMGateway(ABC):
+class AgentLlmFacadeProtocol(ABC):
     """LLM Gateway 接口"""
     
     @abstractmethod

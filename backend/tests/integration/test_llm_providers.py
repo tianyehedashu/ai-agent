@@ -10,7 +10,7 @@ import os
 import pytest
 
 from bootstrap.config import settings
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 
 class TestLLMProviders:
@@ -21,7 +21,7 @@ class TestLLMProviders:
         """创建 LLM Gateway 实例"""
         from bootstrap.config import settings
 
-        return LLMGateway(config=settings)
+        return AgentLlmFacade(config=settings)
 
     # ========================================================================
     # DeepSeek 测试

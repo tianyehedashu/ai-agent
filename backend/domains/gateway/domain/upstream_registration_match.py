@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from libs.llm.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

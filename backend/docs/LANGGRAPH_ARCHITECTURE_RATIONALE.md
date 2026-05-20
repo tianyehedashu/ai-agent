@@ -33,7 +33,7 @@
 ### 1.2 优势分析
 
 #### ✅ 减少抽象层，提高性能
-- **无适配开销**：直接调用 `LLMGateway.chat()`，无需经过 LangChain 的 `BaseChatModel` 适配层
+- **无适配开销**：直接调用 `AgentLlmFacade.chat()`，无需经过 LangChain 的 `BaseChatModel` 适配层
 - **类型安全**：直接使用项目定义的 `Message`、`ToolCall` 等类型，无需转换
 - **控制精确**：完全控制 LLM 调用参数（temperature、max_tokens、tools 等）
 
@@ -45,7 +45,7 @@
 
 #### ✅ 更好的错误处理
 ```python
-# 直接使用 LLMGateway，错误信息更清晰
+# 直接使用 AgentLlmFacade，错误信息更清晰
 response = await self.llm_gateway.chat(...)
 # 如果出错，直接抛出 LiteLLM 的异常，便于调试
 
@@ -66,7 +66,7 @@ graph.add_node("llm", adapter.invoke)  # 需要适配器
 
 **当前方案（直接集成）**：
 ```python
-# 直接使用 LLMGateway
+# 直接使用 AgentLlmFacade
 async def _process_message(self, state: AgentState):
     response = await self.llm_gateway.chat(
         messages=lite_messages,
@@ -207,7 +207,7 @@ result = await graph.ainvoke(initial_state, config=config)
 │  ├─ 用户偏好、重要事实                                      │
 │  └─ 语义搜索和检索                                         │
 │                                                             │
-│  LLMGateway                                                 │
+│  AgentLlmFacade                                                 │
 │  ├─ LLM 调用统一接口                                        │
 │  ├─ 多模型支持                                              │
 │  └─ 工具调用处理                                            │
@@ -269,7 +269,7 @@ result = await graph.ainvoke(initial_state, config=config)
 
 | 决策 | 原因 | 合理性 |
 |------|------|--------|
-| 直接使用 LLMGateway | 减少抽象层，提高性能 | ✅ 合理 |
+| 直接使用 AgentLlmFacade | 减少抽象层，提高性能 | ✅ 合理 |
 | 使用 LangGraph Checkpointer | 官方推荐，支持多会话 | ✅ 合理 |
 | 不使用 LangChain Memory | 已废弃，功能受限 | ✅ 合理 |
 | 分离短期和长期记忆 | 职责清晰，易于管理 | ✅ 合理 |
@@ -280,7 +280,7 @@ result = await graph.ainvoke(initial_state, config=config)
 1. ✅ **保持当前架构**：不需要引入 LangChain 的 `BaseChatModel` 适配层
 2. ✅ **继续使用 LangGraph Checkpointer**：这是官方推荐的最佳实践
 3. ✅ **保持职责分离**：Checkpointer 管理短期记忆，LongTermMemoryStore 管理长期记忆
-4. ✅ **直接使用 LLMGateway**：保持简洁高效的调用方式
+4. ✅ **直接使用 AgentLlmFacade**：保持简洁高效的调用方式
 
 ---
 

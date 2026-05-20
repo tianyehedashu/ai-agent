@@ -9,20 +9,38 @@
 注意：对话历史由 LangGraph checkpointer 自动管理，无需额外的 ConversationMemory
 """
 
+from unittest.mock import AsyncMock
 import uuid
 
 import pytest
 
 from bootstrap.config import settings
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
+from tests.helpers.bridge_identity import patch_bridge_identity
+
+
+@pytest.fixture(autouse=True)
+def _gateway_bridge_identity_and_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """记忆集成测试：桥接归因 + 固定维度假嵌入，避免依赖真实 Gateway embedding。"""
+    dim = settings.embedding_dimension
+    with patch_bridge_identity():
+        monkeypatch.setattr(
+            "domains.agent.infrastructure.llm.embeddings.APIEmbedding.embed",
+            AsyncMock(return_value=[0.0] * dim),
+        )
+        monkeypatch.setattr(
+            "domains.agent.infrastructure.llm.embeddings.APIEmbedding.embed_batch",
+            AsyncMock(side_effect=lambda texts: [[0.0] * dim for _ in texts]),
+        )
+        yield
 
 
 @pytest.fixture
 async def llm_gateway():
     """创建 LLM Gateway 实例"""
-    return LLMGateway(config=settings)
+    return AgentLlmFacade(config=settings)
 
 
 @pytest.fixture
@@ -230,7 +248,7 @@ class TestMemoryCheckpointIntegration:
     async def test_memory_extraction_workflow(
         self,
         memory_store: LongTermMemoryStore,
-        llm_gateway: LLMGateway,
+        llm_gateway: AgentLlmFacade,
     ):
         """测试记忆提取工作流程"""
         session_id = str(uuid.uuid4())

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
 from domains.agent.domain.types import ToolCall
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,10 +21,10 @@ class EvaluationUseCase:
     """评估用例：封装对 LLM 与 benchmark 库的调用。"""
 
     def __init__(self) -> None:
-        self._llm = LLMGateway(config=settings)
+        self._llm = AgentLlmFacade(config=settings)
 
     @property
-    def llm_gateway(self) -> LLMGateway:
+    def llm_gateway(self) -> AgentLlmFacade:
         return self._llm
 
     def tool_accuracy_evaluator(self) -> ToolAccuracyEvaluator:

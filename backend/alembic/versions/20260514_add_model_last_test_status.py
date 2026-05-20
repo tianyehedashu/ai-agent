@@ -10,7 +10,7 @@ Create Date: 2026-05-14
   NULL（=未测过）
 - ``last_tested_at``: ``TIMESTAMPTZ`` nullable
 
-页面"测试连接"按钮触发 ``LLMGateway.chat`` / ``embed`` 最小调用后，把结果落到
+页面"测试连接"按钮触发 ``AgentLlmFacade.chat`` / ``embed`` 最小调用后，把结果落到
 这两个字段，列表页直接展示状态徽标与上次测试时间，避免测了就丢。
 """
 

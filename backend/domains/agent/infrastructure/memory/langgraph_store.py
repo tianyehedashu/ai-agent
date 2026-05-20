@@ -19,7 +19,7 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import PostgresStore
 
 from bootstrap.config import settings
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from libs.db.vector import VectorStore
 from utils.logging import get_logger
 
@@ -104,7 +104,7 @@ class LongTermMemoryStore:
 
     def __init__(
         self,
-        llm_gateway: LLMGateway,
+        llm_gateway: AgentLlmFacade,
         vector_store: VectorStore,
         store_type: Literal["postgres", "memory"] | None = None,
     ) -> None:

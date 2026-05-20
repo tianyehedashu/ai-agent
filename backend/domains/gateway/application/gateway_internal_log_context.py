@@ -1,7 +1,7 @@
 """内部经 GatewayBridge 调用时的请求日志详细程度（ContextVar）。
 
 供 Agent Chat 等路径在无法直接构造 ``GatewayCallContext.store_full_messages`` 时，
-通过 ``resolve_internal_store_full_messages`` + ContextVar 让 ``LLMGateway`` 注入桥接上下文。
+通过 ``resolve_internal_store_full_messages`` + ContextVar 让 ``AgentLlmFacade`` 注入桥接上下文。
 
 优先级（与计划一致）：单次请求显式 > 会话 ``config.gateway_verbose_request_log`` > ``None``（沿用 vkey 默认）。
 """

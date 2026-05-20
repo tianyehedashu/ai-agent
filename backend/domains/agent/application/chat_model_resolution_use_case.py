@@ -36,12 +36,9 @@ VALID_MODEL_TYPES = PERSONAL_MODEL_TYPES
 
 @dataclass(frozen=True)
 class ResolvedModel:
-    """解析后的模型信息，供 LLMGateway 使用"""
+    """解析后的 Gateway 虚拟模型名，供 AgentLlmFacade 经桥接调用。"""
 
     model: str
-    api_key: str | None = None
-    api_base: str | None = None
-    is_system: bool = True
 
 
 @dataclass(frozen=True)
@@ -142,12 +139,7 @@ class ChatModelResolutionUseCase:
             )
         if "text" not in resolution.model_types:
             raise ValidationError("该 Gateway 个人模型不支持对话（text）")
-        return ResolvedModel(
-            model=resolution.litellm_model,
-            api_key=resolution.api_key,
-            api_base=resolution.api_base,
-            is_system=False,
-        )
+        return ResolvedModel(model=resolution.virtual_model_name)
 
     async def _resolve_personal_image_gen(
         self, model_id: uuid.UUID
@@ -181,15 +173,12 @@ class ChatModelResolutionUseCase:
 
     async def resolve_model(self, model_ref: str | None) -> ResolvedModel:
         if not model_ref:
-            return ResolvedModel(model=settings.default_model, is_system=True)
-
-        if self._is_system_model(model_ref):
-            return ResolvedModel(model=model_ref, is_system=True)
+            return ResolvedModel(model=settings.default_model)
 
         try:
             personal_id = uuid.UUID(model_ref)
         except ValueError:
-            return ResolvedModel(model=model_ref, is_system=True)
+            return ResolvedModel(model=model_ref)
 
         resolved = await self._resolve_personal_text(personal_id)
         if resolved is not None:
@@ -203,7 +192,7 @@ class ChatModelResolutionUseCase:
         allowed_text_system_ids: frozenset[str],
     ) -> ResolvedModel:
         if not model_ref or not str(model_ref).strip():
-            return ResolvedModel(model=settings.default_model, is_system=True)
+            return ResolvedModel(model=settings.default_model)
 
         ref = str(model_ref).strip()
         try:
@@ -211,7 +200,7 @@ class ChatModelResolutionUseCase:
         except ValueError:
             if ref not in allowed_text_system_ids:
                 raise ValidationError(f"模型不在可用列表中: {ref}") from None
-            return ResolvedModel(model=ref, is_system=True)
+            return ResolvedModel(model=ref)
 
         resolved = await self._resolve_personal_text(personal_id)
         if resolved is not None:
@@ -309,13 +298,6 @@ class ChatModelResolutionUseCase:
         if resolved is not None:
             return resolved
         raise ValidationError("Gateway 个人模型不存在或无权使用")
-
-    @staticmethod
-    def _is_system_model(model_ref: str) -> bool:
-        if "/" in model_ref:
-            return True
-        known_prefixes = ("gpt-", "claude-", "o1", "o3")
-        return any(model_ref.startswith(p) for p in known_prefixes)
 
     @staticmethod
     def validate_model_types(types: list[str]) -> None:

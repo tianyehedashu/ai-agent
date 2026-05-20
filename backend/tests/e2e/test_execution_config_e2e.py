@@ -12,10 +12,7 @@
 import json
 from typing import Any
 
-import httpx
 import pytest
-
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
@@ -40,14 +37,8 @@ class TestExecutionConfigIntegration:
     以便支持不同的工具集和安全策略
     """
 
-    @pytest.fixture
-    async def async_client(self):
-        """异步 HTTP 客户端"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=120.0) as client:
-            yield client
-
     @pytest.mark.asyncio
-    async def test_chat_with_default_execution_config(self, async_client):
+    async def test_chat_with_default_execution_config(self, async_http_client):
         """
         Scenario: 使用默认执行环境配置进行对话
 
@@ -58,7 +49,7 @@ class TestExecutionConfigIntegration:
         """
         # When: 发送消息
         events = []
-        async with async_client.stream(
+        async with async_http_client.stream(
             "POST",
             "/api/v1/chat",
             json={"message": "你好，请简单介绍你自己"},
@@ -77,7 +68,7 @@ class TestExecutionConfigIntegration:
         assert "done" in event_types, "应收到 done 事件"
 
     @pytest.mark.asyncio
-    async def test_chat_with_tool_execution(self, async_client):
+    async def test_chat_with_tool_execution(self, async_http_client):
         """
         Scenario: 使用执行环境配置进行工具调用
 
@@ -89,7 +80,7 @@ class TestExecutionConfigIntegration:
         """
         # When: 请求执行需要工具的任务
         events = []
-        async with async_client.stream(
+        async with async_http_client.stream(
             "POST",
             "/api/v1/chat",
             json={"message": "请列出当前目录下的文件（使用工具）"},
@@ -117,7 +108,7 @@ class TestExecutionConfigIntegration:
             print("✓ 此次响应未触发工具调用（LLM 可能直接回答）")
 
     @pytest.mark.asyncio
-    async def test_agent_specific_config(self, async_client):
+    async def test_agent_specific_config(self, async_http_client):
         """
         Scenario: 使用 Agent 特定配置
 
@@ -128,7 +119,7 @@ class TestExecutionConfigIntegration:
         """
         # When: 使用特定 agent_id 发起对话
         events = []
-        async with async_client.stream(
+        async with async_http_client.stream(
             "POST",
             "/api/v1/chat",
             json={
@@ -159,12 +150,7 @@ class TestExecutionConfigAPI:
     以便在 UI 中配置 Agent 的执行环境
     """
 
-    @pytest.fixture
-    def sync_client(self):
-        """同步 HTTP 客户端"""
-        return httpx.Client(base_url=API_BASE_URL, timeout=30.0)
-
-    def test_list_execution_templates(self, sync_client):
+    def test_list_execution_templates(self, http_client):
         """
         Scenario: 获取执行环境模板列表
 
@@ -173,7 +159,7 @@ class TestExecutionConfigAPI:
         Then 应返回所有可用模板
         """
         # When: 请求模板列表
-        response = sync_client.get("/api/v1/execution/templates")
+        response = http_client.get("/api/v1/execution/templates")
 
         # Then: 如果 API 存在，验证响应
         if response.status_code == 200:
@@ -185,7 +171,7 @@ class TestExecutionConfigAPI:
         else:
             print(f"✓ API 返回: {response.status_code}")
 
-    def test_get_available_tools(self, sync_client):
+    def test_get_available_tools(self, http_client):
         """
         Scenario: 获取可用工具列表
 
@@ -194,7 +180,7 @@ class TestExecutionConfigAPI:
         Then 应返回所有注册的工具及其描述
         """
         # When: 请求工具列表
-        response = sync_client.get("/api/v1/execution/tools")
+        response = http_client.get("/api/v1/execution/tools")
 
         # Then: 验证响应
         if response.status_code == 200:
@@ -215,13 +201,8 @@ class TestConfiguredToolBehavior:
     以及哪些工具需要人工确认
     """
 
-    @pytest.fixture
-    async def async_client(self):
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=120.0) as client:
-            yield client
-
     @pytest.mark.asyncio
-    async def test_safe_tools_no_confirmation(self, async_client):
+    async def test_safe_tools_no_confirmation(self, async_http_client):
         """
         Scenario: 安全工具无需确认
 
@@ -230,7 +211,7 @@ class TestConfiguredToolBehavior:
         Then 工具应直接执行，无需等待确认
         """
         events = []
-        async with async_client.stream(
+        async with async_http_client.stream(
             "POST",
             "/api/v1/chat",
             json={"message": "请读取 README.md 文件的内容"},

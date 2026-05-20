@@ -37,7 +37,7 @@ from utils.logging import get_logger
 from utils.tokens import count_tokens
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.llm.gateway import LLMGateway
+    from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
     from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 
 logger = get_logger(__name__)
@@ -87,13 +87,13 @@ class SimpleMemAdapter:
 
     直接集成到现有架构，无需额外服务：
     - 使用 LongTermMemoryStore 存储
-    - 使用 LLMGateway 做提取和摘要
+    - 使用 AgentLlmFacade 做提取和摘要
     - 使用 BM25 做词法检索
     """
 
     def __init__(
         self,
-        llm_gateway: "LLMGateway",
+        llm_gateway: "AgentLlmFacade",
         memory_store: "LongTermMemoryStore",
         config: SimpleMemConfig | None = None,
     ) -> None:
@@ -416,7 +416,7 @@ _simplemem_adapter: SimpleMemAdapter | None = None
 
 
 def get_simplemem_adapter(
-    llm_gateway: "LLMGateway",
+    llm_gateway: "AgentLlmFacade",
     memory_store: "LongTermMemoryStore",
 ) -> SimpleMemAdapter:
     """获取 SimpleMem 适配器单例"""

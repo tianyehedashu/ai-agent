@@ -8,6 +8,7 @@ from bootstrap.config import settings
 from domains.gateway.application.config_catalog_sync import (
     MANAGED_CONFIG,
     SYSTEM_CREDENTIAL_NAME,
+    _config_managed_credential_extra,
     sync_app_config_gateway_catalog,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -15,6 +16,15 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from libs.crypto import derive_encryption_key, encrypt_value
+
+
+def test_volcengine_managed_extra_seeds_endpoint_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """火山 chat endpoint 写入 system 凭据 extra（非 Agent settings 直读）。"""
+    monkeypatch.setattr(settings, "volcengine_chat_endpoint_id", "ep-volc-test")
+    monkeypatch.setattr(settings, "volcengine_endpoint_id", None)
+    extra = _config_managed_credential_extra("volcengine")
+    assert extra.get("endpoint_id") == "ep-volc-test"
+    assert extra.get("managed_by") == MANAGED_CONFIG
 
 
 @pytest.mark.asyncio

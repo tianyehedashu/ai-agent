@@ -4,35 +4,16 @@
 与业务域解耦：各 ``domains.*`` 与 ``bootstrap`` 统一 ``from libs.exceptions import ...``。
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from libs.exceptions.base import AIAgentError, HttpMappableDomainError
 
-class AIAgentError(Exception):
-    """AI Agent 基础异常
-
-    所有自定义异常的基类。
-
-    Attributes:
-        message: 错误消息
-        code: 错误代码（可选）
-        details: 额外详情（可选）
-    """
-
-    def __init__(
-        self,
-        message: str,
-        code: str | None = None,
-        details: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.message = message
-        self.code = code
-        self.details = details or {}
-
-    def __str__(self) -> str:
-        if self.code:
-            return f"[{self.code}] {self.message}"
-        return self.message
+if TYPE_CHECKING:
+    from domains.tenancy.domain.errors import (
+        PersonalTeamNotInitializedError,
+        TeamNotFoundError,
+        TeamPermissionDeniedError,
+    )
 
 
 class ValidationError(AIAgentError):
@@ -208,22 +189,6 @@ class CheckpointError(AIAgentError):
         super().__init__(message, code, details)
 
 
-# =============================================================================
-# HTTP 可映射领域错误（Gateway / 租户等 Presentation 统一转 HTTPException）
-# =============================================================================
-
-
-class HttpMappableDomainError(AIAgentError):
-    """可由 Presentation 映射为 HTTP 的领域错误基类。"""
-
-
-# 团队错误权威定义在 tenancy 域；此处 re-export 保持 ``from libs.exceptions import ...`` 兼容。
-from domains.tenancy.domain.errors import (  # noqa: E402
-    PersonalTeamNotInitializedError,
-    TeamNotFoundError,
-    TeamPermissionDeniedError,
-)
-
 __all__ = [
     "AIAgentError",
     "AuthenticationError",
@@ -241,3 +206,27 @@ __all__ = [
     "ToolExecutionError",
     "ValidationError",
 ]
+
+_TENANCY_ERROR_NAMES = frozenset(
+    {
+        "PersonalTeamNotInitializedError",
+        "TeamNotFoundError",
+        "TeamPermissionDeniedError",
+    }
+)
+
+
+def __getattr__(name: str) -> type[HttpMappableDomainError]:
+    if name in _TENANCY_ERROR_NAMES:
+        from domains.tenancy.domain.errors import (  # pylint: disable=import-outside-toplevel
+            PersonalTeamNotInitializedError,
+            TeamNotFoundError,
+            TeamPermissionDeniedError,
+        )
+
+        return {
+            "PersonalTeamNotInitializedError": PersonalTeamNotInitializedError,
+            "TeamNotFoundError": TeamNotFoundError,
+            "TeamPermissionDeniedError": TeamPermissionDeniedError,
+        }[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -16,6 +16,7 @@ from domains.gateway.domain.usage_read_model import (
 )
 from domains.gateway.presentation.deps import CurrentTeam
 from domains.gateway.presentation.schemas.common import (
+    DashboardClientTypeBreakdown,
     DashboardSummaryResponse,
     MarginGroupItemResponse,
     MarginSummaryResponse,
@@ -43,6 +44,14 @@ async def dashboard_summary(
     )
     total = summary["total"]
     success = summary["success"]
+    by_client = [
+        DashboardClientTypeBreakdown(
+            client_type=str(row["client_type"]),
+            requests=int(row["requests"]),
+            cost_usd=row["cost_usd"],
+        )
+        for row in summary.get("by_client_type", [])
+    ]
     return DashboardSummaryResponse(
         total_requests=total,
         total_input_tokens=summary["input_tokens"],
@@ -52,6 +61,7 @@ async def dashboard_summary(
         failure_count=summary["failure"],
         avg_latency_ms=summary["avg_latency_ms"],
         success_rate=(success / total) if total else 0.0,
+        by_client_type=by_client,
     )
 
 

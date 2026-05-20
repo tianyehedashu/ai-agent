@@ -9,7 +9,7 @@
 使用方式：
     from libs.config.interfaces import LLMConfigProtocol
 
-    def create_gateway(config: LLMConfigProtocol) -> LLMGateway:
+    def create_gateway(config: LLMConfigProtocol) -> AgentLlmFacade:
         # config 可以是任何符合 LLMConfigProtocol 结构的对象
         ...
 """

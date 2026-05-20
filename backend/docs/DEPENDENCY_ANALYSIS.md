@@ -19,21 +19,21 @@ Infrastructure (db/, models/, utils/)
 #### ✅ 正确的依赖方向
 
 1. **LLM 模块**
-   - `core/llm/gateway.py` → `core/llm/providers.py` ✅
+   - `domains/agent/infrastructure/llm/agent_llm_facade.py` → `core/llm/providers.py` ✅
    - `core/llm/providers.py` → 无依赖 ✅
-   - 其他模块 → `core/llm/gateway.py` ✅
+   - 其他模块 → `domains/agent/infrastructure/llm/agent_llm_facade.py` ✅
 
 2. **Engine 模块**
-   - `core/engine/agent.py` → `core/llm/gateway.py` ✅
+   - `core/engine/agent.py` → `domains/agent/infrastructure/llm/agent_llm_facade.py` ✅
    - `core/engine/agent.py` → `core/context/manager.py` ✅
    - `core/engine/agent.py` → `core/engine/checkpointer.py` ✅
 
 3. **Memory 模块**
-   - `core/memory/manager.py` → `core/llm/gateway.py` ✅
+   - `core/memory/manager.py` → `domains/agent/infrastructure/llm/agent_llm_facade.py` ✅
    - `core/memory/manager.py` → `core/memory/retriever.py` ✅
 
 4. **Quality 模块**
-   - `core/quality/fixer.py` → `core/llm/gateway.py` ✅
+   - `core/quality/fixer.py` → `domains/agent/infrastructure/llm/agent_llm_facade.py` ✅
    - `core/quality/validator.py` → `core/lsp/proxy.py` ✅
 
 ### 1.3 无循环依赖 ✅
@@ -44,12 +44,12 @@ Infrastructure (db/, models/, utils/)
 
 ### 2.1 存在的问题
 
-#### ❌ 问题 1: LLMGateway 未实现 Protocol
+#### ❌ 问题 1: AgentLlmFacade 未实现 Protocol
 
 **现状**：
 - `core/types.py` 定义了 `LLMProviderProtocol`
-- `core/llm/gateway.py` 的 `LLMGateway` 类未实现该 Protocol
-- 其他模块直接依赖具体实现 `LLMGateway`
+- `domains/agent/infrastructure/llm/agent_llm_facade.py` 的 `AgentLlmFacade` 类未实现该 Protocol
+- 其他模块直接依赖具体实现 `AgentLlmFacade`
 
 **影响**：
 - 难以替换 LLM 实现
@@ -58,8 +58,8 @@ Infrastructure (db/, models/, utils/)
 
 **建议**：
 ```python
-# core/llm/gateway.py
-class LLMGateway:
+# domains/agent/infrastructure/llm/agent_llm_facade.py
+class AgentLlmFacade:
     """实现 LLMProviderProtocol"""
     # 应该明确声明实现 Protocol
 ```
@@ -67,7 +67,7 @@ class LLMGateway:
 #### ❌ 问题 2: 直接依赖配置
 
 **现状**：
-- `core/llm/gateway.py` 直接导入 `app.config.settings`
+- `domains/agent/infrastructure/llm/agent_llm_facade.py` 直接导入 `app.config.settings`
 - `core/memory/manager.py` 直接导入 `app.config.settings`
 - `core/quality/fixer.py` 直接导入 `app.config.settings`
 
@@ -110,19 +110,19 @@ class LLMGateway:
 1. **依赖注入配置**
    ```python
    # 改进前
-   class LLMGateway:
+   class AgentLlmFacade:
        def __init__(self):
            # 直接使用 settings
 
    # 改进后
-   class LLMGateway:
+   class AgentLlmFacade:
        def __init__(self, config: LLMConfig):
            self.config = config
    ```
 
 2. **明确实现 Protocol**
    ```python
-   class LLMGateway(LLMProviderProtocol):
+   class AgentLlmFacade(LLMProviderProtocol):
        """实现 LLMProviderProtocol"""
    ```
 

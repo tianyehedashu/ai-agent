@@ -4,11 +4,13 @@
 测试标题生成、更新等功能
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import status
 from httpx import AsyncClient
 import pytest
+
+from domains.session.application.ports import TitleLlmChatResult
 
 
 @pytest.mark.integration
@@ -125,11 +127,11 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "生成的标题"
 
-        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
-            mock_instance = MagicMock()
-            mock_instance.chat = AsyncMock(return_value=mock_title)
-            mock_gateway.return_value = mock_instance
-
+        with patch(
+            "domains.agent.application.title_generation_service.LlmTitleGenerationAdapter.chat",
+            new_callable=AsyncMock,
+            return_value=TitleLlmChatResult(content=mock_title),
+        ):
             # Act - 生成标题
             generate_response = await dev_client.post(
                 f"/api/v1/sessions/{session_id}/generate-title?strategy=summary",
@@ -161,11 +163,11 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "第一条消息标题"
 
-        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
-            mock_instance = MagicMock()
-            mock_instance.chat = AsyncMock(return_value=mock_title)
-            mock_gateway.return_value = mock_instance
-
+        with patch(
+            "domains.agent.application.title_generation_service.LlmTitleGenerationAdapter.chat",
+            new_callable=AsyncMock,
+            return_value=TitleLlmChatResult(content=mock_title),
+        ):
             # Act - 生成标题
             generate_response = await dev_client.post(
                 f"/api/v1/sessions/{session_id}/generate-title?strategy=first_message",
@@ -261,11 +263,11 @@ class TestSessionTitle:
         # Mock LLM 响应
         mock_title = "匿名用户标题"
 
-        with patch("domains.session.application.title_use_case.LLMGateway") as mock_gateway:
-            mock_instance = MagicMock()
-            mock_instance.chat = AsyncMock(return_value=mock_title)
-            mock_gateway.return_value = mock_instance
-
+        with patch(
+            "domains.agent.application.title_generation_service.LlmTitleGenerationAdapter.chat",
+            new_callable=AsyncMock,
+            return_value=TitleLlmChatResult(content=mock_title),
+        ):
             # Act - 生成标题
             generate_response = await dev_client.post(
                 f"/api/v1/sessions/{session_id}/generate-title?strategy=summary",

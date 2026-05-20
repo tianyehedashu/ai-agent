@@ -18,7 +18,7 @@ from domains.agent.application.chat_image_gen import ChatImageGenMixin
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.domain.types import AgentEvent, MessageRole
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 from domains.agent.infrastructure.tools.registry import ToolRegistry
@@ -66,7 +66,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         model_resolution_use_case: ChatModelResolutionUseCase | None = None,
     ) -> None:
         self.db = db
-        self.llm_gateway = LLMGateway(config=settings, model_catalog=model_catalog)
+        self.llm_gateway = AgentLlmFacade(config=settings, model_catalog=model_catalog)
         self._model_catalog = model_catalog
         if model_resolution_use_case is None:
             if model_catalog is None:
@@ -83,7 +83,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
 
         from domains.session.application.title_use_case import TitleUseCase
 
-        self.title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
+        self.title_service = TitleUseCase(db, agent_llm_facade=self.llm_gateway)
 
         self.config_service = get_execution_config_service()
 
@@ -317,7 +317,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             from domains.session.application.title_use_case import TitleUseCase
 
             async with get_session_context() as db:
-                title_service = TitleUseCase(db, llm_gateway=self.llm_gateway)
+                title_service = TitleUseCase(db, agent_llm_facade=self.llm_gateway)
                 success = await title_service.generate_and_update(
                     session_id=session_id,
                     strategy="first_message",

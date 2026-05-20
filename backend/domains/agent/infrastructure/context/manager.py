@@ -23,7 +23,7 @@ from utils.logging import get_logger
 from utils.tokens import count_tokens, truncate_to_token_limit
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.llm.gateway import LLMGateway
+    from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ class ContextManager:
         self,
         config: AgentConfig,
         max_context_tokens: int = 100000,
-        llm_gateway: "LLMGateway | None" = None,
+        llm_gateway: "AgentLlmFacade | None" = None,
         enable_smart_compression: bool = True,
     ) -> None:
         """
@@ -377,7 +377,7 @@ class ContextManager:
         """
         return self._compressor.get_compression_preview(messages, self.history_budget)
 
-    def set_llm_gateway(self, llm_gateway: "LLMGateway") -> None:
+    def set_llm_gateway(self, llm_gateway: "AgentLlmFacade") -> None:
         """
         设置 LLM 网关
 

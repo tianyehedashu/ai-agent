@@ -150,6 +150,33 @@ class BudgetService:
             await client.zadd(key, {f"{estimate_tokens}:{uuid.uuid4()}": now})
             await client.expire(key, 90)
 
+    async def peek_rate_limit_usage(
+        self,
+        *,
+        scope: str,
+        scope_id: str | None,
+    ) -> tuple[int, int]:
+        """读取当前 60s 窗口内 rpm 请求数与 tpm 累计（只读，不写入）。"""
+        client = await get_redis_client()
+        now = datetime.now(UTC).timestamp()
+        window_start = now - 60
+        rpm_key = _rate_key(scope, scope_id, "rpm")
+        tpm_key = _rate_key(scope, scope_id, "tpm")
+        await client.zremrangebyscore(rpm_key, 0, window_start)
+        await client.zremrangebyscore(tpm_key, 0, window_start)
+        rpm_used = int(await client.zcard(rpm_key))
+        tpm_used = 0
+        members = await client.zrange(tpm_key, 0, -1, withscores=True)
+        for member, _score in members:
+            try:
+                payload = member.decode() if isinstance(member, bytes) else str(member)
+                parts = payload.split(":", 1)
+                if len(parts) == 2:
+                    tpm_used += int(parts[0])
+            except (ValueError, AttributeError):
+                continue
+        return rpm_used, tpm_used
+
     # ---------------------------------------------------------------------
     # 预算预扣 / 结算
     # ---------------------------------------------------------------------

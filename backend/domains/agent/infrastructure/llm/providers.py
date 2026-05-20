@@ -302,19 +302,9 @@ def get_all_models() -> dict[str, list[str]]:
     return {provider.name: provider.models for provider in PROVIDERS.values()}
 
 
-def get_configured_models(config: Any) -> dict[str, list[dict[str, str]]]:
-    """根据配置的 API Key 返回已配置的提供商及其模型列表（每项含 id、name）。"""
-    result: dict[str, list[dict[str, str]]] = {}
-    all_models = get_all_models()
-    for provider_name, model_ids in all_models.items():
-        key_attr = f"{provider_name}_api_key"
-        val = getattr(config, key_attr, None)
-        if val is None:
-            continue
-        if hasattr(val, "get_secret_value"):
-            if not val.get_secret_value():
-                continue
-        elif not val:
-            continue
-        result[provider_name] = [{"id": mid, "name": mid} for mid in model_ids]
-    return result
+def get_configured_models(_config: Any) -> dict[str, list[dict[str, str]]]:
+    """返回静态模型目录（上游凭据由 Gateway 管理，不再读取 env API Key）。"""
+    return {
+        provider_name: [{"id": mid, "name": mid} for mid in model_ids]
+        for provider_name, model_ids in get_all_models().items()
+    }

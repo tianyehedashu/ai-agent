@@ -13,11 +13,13 @@ from libs.api.deps import (
     get_chat_service,
     get_checkpoint_service,
     get_db,
+    get_login_services,
     get_memory_service,
     get_session_service,
     get_stats_service,
     get_title_service,
     get_user_service,
+    get_user_use_case,
 )
 from libs.api.errors import (
     ACCESS_DENIED,
@@ -53,9 +55,11 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_login_services",
     "get_memory_service",
     "get_session_service",
     "get_stats_service",
     "get_title_service",
     "get_user_service",
+    "get_user_use_case",
 ]

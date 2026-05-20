@@ -164,7 +164,7 @@ cd backend
 make test
 
 # 3. 如果失败，运行特定测试查看详细错误 例如：
-uv run pytest tests/unit/core/test_llm_gateway.py -v
+uv run pytest tests/unit/agent/test_agent_llm_facade.py -v
 
 # 4. 修复后重新运行
 make test

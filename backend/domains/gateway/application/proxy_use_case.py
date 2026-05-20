@@ -37,6 +37,7 @@ from domains.gateway.application.entitlement_guard import (
 from domains.gateway.application.model_or_route_resolution import (
     resolve_model_or_route,
 )
+from domains.gateway.application.prompt_cache_middleware import get_prompt_cache_middleware
 from domains.gateway.application.proxy_chat_pipeline import (
     invoke_litellm_with_direct_fallback,
     prepare_chat_proxy_request,
@@ -52,6 +53,7 @@ from domains.gateway.application.proxy_response_adapter import (
     schedule_settle_usage,
 )
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
+from domains.gateway.application.upstream_adapter import UpstreamAdapter
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     EntitlementPlanExhaustedError,
@@ -133,6 +135,8 @@ class ProxyContext:
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     entitlement_state: EntitlementReservationState | None = None
+    client_ua: str | None = None
+    client_type: str = "unknown"
 
 
 class ProxyUseCase:
@@ -180,6 +184,8 @@ class ProxyUseCase:
         )
         self._metadata_builder = ProxyMetadataBuilder(session)
         self._litellm = ProxyLiteLLMClient(session)
+        self._upstream_adapter = UpstreamAdapter()
+        self._prompt_cache = get_prompt_cache_middleware()
 
     # ---------------------------------------------------------------------
     # 校验
@@ -391,7 +397,20 @@ class ProxyUseCase:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        return await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
+        prepared = await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
+        resolved = prepared.resolved
+        tags = resolved.record.tags if resolved is not None else None
+        tag_dict = tags if isinstance(tags, dict) else None
+        kwargs = self._upstream_adapter.adapt(
+            prepared.kwargs,
+            client_model=prepared.client_model,
+            resolved=resolved,
+        )
+        return self._prompt_cache.inbound(
+            kwargs,
+            model=prepared.client_model or str(kwargs.get("model", "")),
+            tags=tag_dict,
+        )
 
     async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
         return await self._litellm.should_use_internal_direct_litellm(ctx, model)
@@ -531,6 +550,51 @@ class ProxyUseCase:
             upstream_custom=prepared.upstream_custom,
             downstream_custom=prepared.downstream_custom,
         )
+
+    async def anthropic_count_tokens(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, int]:
+        """``POST /v1/messages/count_tokens``：不计预算/限流，仅校验模型与白名单。"""
+        validate_anthropic_messages_body(body)
+        ctx.capability = GatewayCapability.CHAT
+        model = str(body.get("model", "")).strip()
+        if not model:
+            raise ValueError("model is required")
+        ctx.budget_model = model
+        self._check_model(model, ctx)
+        self._check_capability(ctx)
+        await self._assert_request_capability_matches_model(ctx, model)
+
+        input_tokens = await self._estimate_anthropic_input_tokens(body, model)
+        return {"input_tokens": input_tokens}
+
+    async def _estimate_anthropic_input_tokens(
+        self,
+        body: dict[str, Any],
+        model: str,
+    ) -> int:
+        try:
+            from litellm import token_counter
+        except ImportError:
+            return estimate_anthropic_request_tokens(body)
+
+        messages = body.get("messages")
+        if not isinstance(messages, list):
+            return estimate_anthropic_request_tokens(body)
+        system = body.get("system")
+        try:
+            counted = token_counter(
+                model=model,
+                messages=messages,
+                system=system,
+            )
+            if isinstance(counted, int) and counted > 0:
+                return counted
+        except Exception:
+            pass
+        return estimate_anthropic_request_tokens(body)
 
     async def embedding(
         self,

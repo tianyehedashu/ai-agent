@@ -3,7 +3,6 @@ Embedding Service - 统一的文本向量化服务
 
 支持多种提供商：
 - API 提供商（通过 LiteLLM）：OpenAI, 火山引擎等
-- DashScope 直接调用（LiteLLM 不支持 DashScope embedding）
 - 本地模型（CPU 友好）：FastEmbed (BAAI/bge 系列)
 
 最佳实践：
@@ -14,15 +13,11 @@ Embedding Service - 统一的文本向量化服务
 
 from abc import ABC, abstractmethod
 import asyncio
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
-import httpx
-
-from bootstrap.config import settings as app_settings
 from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
 from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
-from domains.gateway.application.litellm_bridge_payload import split_embedding_for_bridge
 from domains.gateway.application.ports import GatewayCallContext
 from utils.logging import get_logger
 
@@ -30,12 +25,6 @@ if TYPE_CHECKING:
     from domains.gateway.application.ports import GatewayProxyProtocol
 
 logger = get_logger(__name__)
-
-# 可选依赖：litellm 用于 API 调用
-try:
-    from litellm import aembedding
-except ImportError:
-    aembedding = None
 
 # 可选依赖：fastembed 用于本地模型
 try:
@@ -102,103 +91,6 @@ class EmbeddingProvider(ABC):
         ...
 
 
-class DashScopeEmbedding(EmbeddingProvider):
-    """
-    DashScope Embedding（直接调用 API，LiteLLM 不支持）
-
-    支持模型：
-    - text-embedding-v2 (1536维)
-    - text-embedding-v3 (1024维，默认)
-    """
-
-    def __init__(
-        self,
-        model: str = "text-embedding-v3",
-        api_key: str | None = None,
-        api_base: str | None = None,
-        dimension: int = 1024,
-    ):
-        self.model = model
-        self.api_key = api_key
-        self.api_base = api_base
-        # 根据模型确定维度
-        if "v2" in model.lower():
-            self._dimension = 1536
-        elif "v3" in model.lower():
-            self._dimension = 1024
-        else:
-            self._dimension = dimension
-
-    @property
-    def dimension(self) -> int:
-        return self._dimension
-
-    async def embed(self, text: str) -> list[float]:
-        """通过 DashScope API 生成嵌入"""
-        if not self.api_key:
-            raise ValueError("DashScope API key is required")
-
-        # DashScope embedding API URL (OpenAI 兼容模式)
-        # 格式: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
-        api_base = self.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        url = f"{api_base}/embeddings"
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        # OpenAI 兼容格式
-        payload = {
-            "model": self.model,
-            "input": [text],
-        }
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
-
-            # OpenAI 兼容格式返回
-            if "data" in result and len(result["data"]) > 0:
-                return result["data"][0]["embedding"]
-            # DashScope 原生格式返回
-            elif "output" in result and "embeddings" in result["output"]:
-                return result["output"]["embeddings"][0]["embedding"]
-            raise ValueError(f"Unexpected response format: {result}")
-
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """批量通过 DashScope API 生成嵌入"""
-        if not self.api_key:
-            raise ValueError("DashScope API key is required")
-
-        # DashScope embedding API URL (OpenAI 兼容模式)
-        api_base = self.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        url = f"{api_base}/embeddings"
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        # OpenAI 兼容格式
-        payload = {
-            "model": self.model,
-            "input": texts,
-        }
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
-
-            # OpenAI 兼容格式返回
-            if "data" in result and len(result["data"]) > 0:
-                return [item["embedding"] for item in result["data"]]
-            # DashScope 原生格式返回
-            elif "output" in result and "embeddings" in result["output"]:
-                return [item["embedding"] for item in result["output"]["embeddings"]]
-            raise ValueError(f"Unexpected response format: {result}")
-
-
 class APIEmbedding(EmbeddingProvider):
     """
     API 提供商（通过 LiteLLM 统一接口）
@@ -209,14 +101,14 @@ class APIEmbedding(EmbeddingProvider):
     def __init__(
         self,
         model: str = "text-embedding-3-small",
-        api_key: str | None = None,
-        api_base: str | None = None,
         dimension: int = 1536,
         gateway_proxy: "GatewayProxyProtocol | None" = None,
+        *,
+        api_key: str | None = None,
+        api_base: str | None = None,
     ):
+        _ = api_key, api_base  # 已废弃；凭据由 Gateway 解析
         self.model = model
-        self.api_key = api_key
-        self.api_base = api_base
         self._dimension = dimension
         self._gateway_proxy = gateway_proxy
 
@@ -224,74 +116,36 @@ class APIEmbedding(EmbeddingProvider):
     def dimension(self) -> int:
         return self._dimension
 
-    def _litellm_embedding_kwargs(self, texts: list[str]) -> dict[str, Any]:
-        """与直连 ``aembedding`` 一致的参数字典。"""
-        payload: dict[str, Any] = {"model": self.model, "input": texts}
-        if self.api_key:
-            payload["api_key"] = self.api_key
-        if self.api_base:
-            payload["api_base"] = self.api_base
-        return payload
-
-    async def _try_embed_via_gateway(self, texts: list[str]) -> list[list[float]] | None:
-        if not app_settings.gateway_internal_proxy_enabled:
-            return None
-        user_id = resolve_internal_gateway_user_id()
-        if user_id is None:
-            return None
+    async def _embed_via_gateway(self, texts: list[str]) -> list[list[float]]:
+        if resolve_internal_gateway_user_id() is None:
+            raise RuntimeError(
+                "Gateway embedding 需要已登录用户或 gateway_internal_proxy_delegate_user_id"
+            )
         proxy = self._gateway_proxy or get_gateway_proxy()
-        kw = self._litellm_embedding_kwargs(texts)
-        parsed = split_embedding_for_bridge(kw)
-        if parsed is None:
-            raise ValueError("invalid LiteLLM embedding kwargs for Gateway bridge")
         attr = resolve_gateway_bridge_attribution()
         rows = await proxy.embedding(
-            parsed.inputs,
+            texts,
             ctx=GatewayCallContext(
                 user_id=attr.actor_user_id,
                 team_id=attr.billing_team_id,
                 capability="embedding",
             ),
-            model=parsed.model,
-            api_key=parsed.api_key,
-            api_base=parsed.api_base,
-            **parsed.extras,
+            model=self.model,
         )
         if not rows or len(rows) != len(texts) or any(r is None for r in rows):
             raise ValueError("Gateway embedding returned unexpected row count")
         return [list(r) for r in rows if r is not None]
 
     async def embed(self, text: str) -> list[float]:
-        """通过 API 生成嵌入"""
-        bridged = await self._try_embed_via_gateway([text])
-        if bridged is not None and bridged and bridged[0] is not None:
-            return list(bridged[0])
-        if app_settings.gateway_internal_proxy_enabled and resolve_internal_gateway_user_id():
-            raise RuntimeError("Gateway embedding bridge did not return a result")
-
-        if aembedding is None:
-            raise ImportError("LiteLLM not installed. Run: pip install litellm")
-
-        kwargs = self._litellm_embedding_kwargs([text])
-        response = await aembedding(**kwargs)
-        return response.data[0]["embedding"]
+        """通过 AI Gateway 生成嵌入。"""
+        rows = await self._embed_via_gateway([text])
+        return rows[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """批量通过 API 生成嵌入"""
+        """批量通过 AI Gateway 生成嵌入。"""
         if not texts:
             return []
-        bridged = await self._try_embed_via_gateway(texts)
-        if bridged is not None and len(bridged) == len(texts):
-            return bridged
-        if app_settings.gateway_internal_proxy_enabled and resolve_internal_gateway_user_id():
-            raise RuntimeError("Gateway embedding bridge did not return a result")
-
-        if aembedding is None:
-            raise ImportError("LiteLLM not installed. Run: pip install litellm")
-
-        kwargs = self._litellm_embedding_kwargs(texts)
-        response = await aembedding(**kwargs)
-        return [item["embedding"] for item in response.data]
+        return await self._embed_via_gateway(texts)
 
 
 class LocalEmbedding(EmbeddingProvider):
@@ -416,56 +270,19 @@ class EmbeddingService:
                 dimension,
             )
         else:
-            # API 模式
             model = model or "text-embedding-3-small"
             dimension = dimension or 1536
-
-            # 检查是否是 DashScope 模型（LiteLLM 不支持，需要直接调用）
-            # 通过 api_base 判断是否是 DashScope（包含 dashscope 或 embeddings）
-            model_lower = model.lower()
-            is_dashscope = "dashscope" in model_lower or (
-                "text-embedding-v" in model_lower
-                and api_key
-                and api_base
-                and ("dashscope" in api_base.lower() or "embeddings" in api_base.lower())
+            self._provider = APIEmbedding(
+                model=model,
+                dimension=dimension,
+                gateway_proxy=gateway_proxy,
             )
-
-            if is_dashscope:
-                # 提取实际模型名称（去掉 dashscope/ 前缀）
-                if "/" in model:
-                    model = model.split("/", 1)[1]  # 提取 text-embedding-v3
-                # 根据模型确定维度
-                if "v2" in model.lower():
-                    dimension = 1536
-                elif "v3" in model.lower():
-                    dimension = 1024
-                self._provider = DashScopeEmbedding(
-                    model=model,
-                    api_key=api_key,
-                    api_base=api_base,
-                    dimension=dimension,
-                )
-                self._dimension = dimension
-                logger.info(
-                    "EmbeddingService initialized with DashScope model: %s (dim=%d)",
-                    model,
-                    dimension,
-                )
-            else:
-                # 使用 LiteLLM（OpenAI, 火山引擎等）
-                self._provider = APIEmbedding(
-                    model=model,
-                    api_key=api_key,
-                    api_base=api_base,
-                    dimension=dimension,
-                    gateway_proxy=gateway_proxy,
-                )
-                self._dimension = dimension
-                logger.info(
-                    "EmbeddingService initialized with API model: %s (dim=%d)",
-                    model,
-                    dimension,
-                )
+            self._dimension = dimension
+            logger.info(
+                "EmbeddingService initialized with Gateway API model: %s (dim=%d)",
+                model,
+                dimension,
+            )
 
     @property
     def dimension(self) -> int:
@@ -485,7 +302,6 @@ class EmbeddingService:
 __all__ = [
     "LOCAL_MODELS",
     "APIEmbedding",
-    "DashScopeEmbedding",
     "EmbeddingProvider",
     "EmbeddingService",
     "LocalEmbedding",

@@ -19,8 +19,6 @@ import uuid
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
-
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
     """解析 SSE 事件"""
@@ -122,12 +120,6 @@ class TestSimpleMemE2E:
     - 跨会话记忆持久化
     - 长期记忆检索
     """
-
-    @pytest.fixture
-    async def async_http_client(self):
-        """异步 HTTP 客户端（增加超时到 180 秒）"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=180.0) as client:
-            yield client
 
     @pytest.mark.asyncio
     async def test_memory_extraction_during_chat(self, async_http_client: httpx.AsyncClient):
@@ -310,12 +302,6 @@ class TestSimpleMemCrossSession:
     在同一用户的不同会话中，应该能检索到之前的记忆
     """
 
-    @pytest.fixture
-    async def async_http_client(self):
-        """异步 HTTP 客户端（增加超时到 180 秒）"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=180.0) as client:
-            yield client
-
     @pytest.mark.asyncio
     async def test_memory_persistence_hint(self, async_http_client: httpx.AsyncClient):
         """测试: 记忆持久化提示
@@ -355,12 +341,6 @@ class TestSimpleMemCrossSession:
 @pytest.mark.e2e
 class TestSimpleMemPerformanceE2E:
     """SimpleMem 性能端到端测试"""
-
-    @pytest.fixture
-    async def async_http_client(self):
-        """异步 HTTP 客户端"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=180.0) as client:
-            yield client
 
     @pytest.mark.asyncio
     async def test_response_time_with_memory(self, async_http_client: httpx.AsyncClient):
@@ -445,12 +425,6 @@ class TestSimpleMemPerformanceE2E:
 @pytest.mark.e2e
 class TestSimpleMemErrorHandling:
     """SimpleMem 错误处理端到端测试"""
-
-    @pytest.fixture
-    async def async_http_client(self):
-        """异步 HTTP 客户端（增加超时到 180 秒）"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=180.0) as client:
-            yield client
 
     @pytest.mark.asyncio
     async def test_graceful_degradation(self, async_http_client: httpx.AsyncClient):

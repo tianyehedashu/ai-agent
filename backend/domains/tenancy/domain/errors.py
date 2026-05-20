@@ -1,6 +1,6 @@
 """Tenancy domain errors — team access and personal team lifecycle."""
 
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions.base import HttpMappableDomainError
 
 
 class TeamNotFoundError(HttpMappableDomainError):

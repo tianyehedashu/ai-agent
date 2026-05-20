@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,11 @@ from domains.gateway.presentation.deps import (
 )
 from domains.gateway.presentation.gateway_proxy_context import (
     proxy_context_from_gateway_principal,
+)
+from domains.gateway.presentation.proxy_request_context import (
+    prepare_proxy_body,
+    proxy_context_from_request,
+    rate_limit_headers_for_context,
 )
 from domains.gateway.presentation.openai_compat_error_map import (
     openai_http_exception_from_proxy_business_error,
@@ -60,18 +65,21 @@ def _as_proxy_body(body: OpenAiRequestBody) -> dict[str, Any]:
 
 @router.post("/chat/completions")
 async def chat_completions(
+    request: Request,
     body: OpenAiRequestBody,
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     use_case = ProxyUseCase(db)
-    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.CHAT)
-    proxy_body = _as_proxy_body(body)
+    ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
+    proxy_body = prepare_proxy_body(body, request)
     try:
         result = await use_case.chat_completion(ctx, proxy_body)
     except Exception as exc:
         logger.warning("chat_completions failed: %s", exc)
         raise openai_http_exception_from_proxy_business_error(exc) from exc
+
+    rate_headers = await rate_limit_headers_for_context(ctx, flavor="openai", use_case=use_case)
 
     if proxy_body.get("stream"):
         stream = cast("AsyncIterator[dict[str, Any]]", result)
@@ -81,8 +89,16 @@ async def chat_completions(
                 yield b"data: " + orjson.dumps(chunk) + b"\n\n"
             yield b"data: [DONE]\n\n"
 
-        return StreamingResponse(_sse(), media_type="text/event-stream")
-    return Response(content=orjson.dumps(result), media_type="application/json")
+        return StreamingResponse(
+            _sse(),
+            media_type="text/event-stream",
+            headers=rate_headers,
+        )
+    return Response(
+        content=orjson.dumps(result),
+        media_type="application/json",
+        headers=rate_headers,
+    )
 
 
 # =============================================================================

@@ -18,11 +18,11 @@ class LLMConfig(Protocol):
     # ... 其他配置
 ```
 
-### 2.2 修改 LLMGateway (`core/llm/gateway.py`)
+### 2.2 修改 AgentLlmFacade (`domains/agent/infrastructure/llm/agent_llm_facade.py`)
 
 **改动前**：
 ```python
-class LLMGateway:
+class AgentLlmFacade:
     def __init__(self) -> None:
         # 直接使用全局 settings
         if settings.anthropic_api_key:
@@ -31,7 +31,7 @@ class LLMGateway:
 
 **改动后**：
 ```python
-class LLMGateway:
+class AgentLlmFacade:
     def __init__(self, config: LLMConfig) -> None:
         """
         初始化 LLM Gateway
@@ -60,12 +60,12 @@ class LLMGateway:
 
 ### 2.4 更新应用层代码
 
-所有创建 LLMGateway 的地方都改为传递配置：
+所有创建 AgentLlmFacade 的地方都改为传递配置：
 
 ```python
 # 应用层（services, api, workers）
 from app.config import settings
-llm_gateway = LLMGateway(config=settings)
+llm_gateway = AgentLlmFacade(config=settings)
 ```
 
 ## 三、依赖关系改进
@@ -90,7 +90,7 @@ app.config.settings (实现 LLMConfig Protocol)
 
 ### Core 层
 - ✅ `core/config.py` (新建)
-- ✅ `core/llm/gateway.py`
+- ✅ `domains/agent/infrastructure/llm/agent_llm_facade.py`
 - ✅ `core/llm/__init__.py` (添加工厂函数)
 - ✅ `core/engine/agent.py`
 - ✅ `core/memory/manager.py`
@@ -104,7 +104,7 @@ app.config.settings (实现 LLMConfig Protocol)
 
 ### 测试
 - ✅ `tests/integration/test_llm_providers.py`
-- ✅ `tests/unit/core/test_llm_gateway.py`
+- ✅ `tests/unit/agent/test_agent_llm_facade.py`
 
 ## 五、优势
 
@@ -144,10 +144,10 @@ app.config.settings (实现 LLMConfig Protocol)
 
 ```bash
 # 验证导入
-python -c "from core.llm.gateway import LLMGateway; from app.config import settings; gateway = LLMGateway(config=settings); print('OK')"
+python -c "from domains.agent.infrastructure.llm import AgentLlmFacade; from app.config import settings; gateway = AgentLlmFacade(config=settings); print('OK')"
 
 # 运行测试
-pytest tests/unit/core/test_llm_gateway.py -v
+pytest tests/unit/agent/test_agent_llm_facade.py -v
 ```
 
 ## 八、后续优化建议

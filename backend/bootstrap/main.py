@@ -8,7 +8,6 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 import inspect
-import os
 import sys
 import traceback
 from typing import Any
@@ -79,25 +78,6 @@ from utils.logging import get_logger, setup_logging
 logger = get_logger(__name__)
 
 
-def _setup_litellm_env() -> None:
-    """设置 LiteLLM 所需的环境变量"""
-    # LiteLLM 需要环境变量来识别某些提供商
-    # 这些环境变量在应用启动时设置，确保所有实例都能使用
-    if settings.deepseek_api_key and "DEEPSEEK_API_KEY" not in os.environ:
-        os.environ["DEEPSEEK_API_KEY"] = settings.deepseek_api_key.get_secret_value()
-    if settings.volcengine_api_key and "VOLCENGINE_API_KEY" not in os.environ:
-        os.environ["VOLCENGINE_API_KEY"] = settings.volcengine_api_key.get_secret_value()
-    if settings.dashscope_api_key and "DASHSCOPE_API_KEY" not in os.environ:
-        os.environ["DASHSCOPE_API_KEY"] = settings.dashscope_api_key.get_secret_value()
-    if settings.zhipuai_api_key:
-        # LiteLLM 使用 ZAI_API_KEY 环境变量
-        if "ZAI_API_KEY" not in os.environ:
-            os.environ["ZAI_API_KEY"] = settings.zhipuai_api_key.get_secret_value()
-        # 同时设置 ZHIPUAI_API_KEY 以保持兼容性
-        if "ZHIPUAI_API_KEY" not in os.environ:
-            os.environ["ZHIPUAI_API_KEY"] = settings.zhipuai_api_key.get_secret_value()
-
-
 @asynccontextmanager
 async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pylint: disable=too-many-statements
     """应用生命周期管理"""
@@ -131,7 +111,6 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     init_jwt_manager(settings)
 
     # 设置 LiteLLM 环境变量
-    _setup_litellm_env()
 
     # 初始化数据库
     await init_db()

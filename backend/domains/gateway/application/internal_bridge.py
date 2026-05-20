@@ -142,8 +142,6 @@ class GatewayBridge:
         tool_choice: str | dict[str, Any] | None = None,
         stream: bool = False,
         response_format: dict[str, Any] | None = None,
-        api_key: str | None = None,
-        api_base: str | None = None,
         **kwargs: Any,
     ) -> GatewayResponse | AsyncGenerator[GatewayStreamChunk, None]:
         body: dict[str, Any] = {
@@ -160,10 +158,6 @@ class GatewayBridge:
         if response_format:
             body["response_format"] = response_format
         body.update(kwargs)
-        if api_key is not None:
-            body["api_key"] = api_key
-        if api_base is not None:
-            body["api_base"] = api_base
 
         _merge_gateway_ctx_metadata(body, ctx)
 
@@ -221,8 +215,6 @@ class GatewayBridge:
         *,
         ctx: GatewayCallContext,
         model: str | None = None,
-        api_key: str | None = None,
-        api_base: str | None = None,
         **kwargs: Any,
     ) -> list[list[float]]:
         body: dict[str, Any] = {
@@ -230,10 +222,6 @@ class GatewayBridge:
             "input": inputs,
         }
         body.update(kwargs)
-        if api_key is not None:
-            body["api_key"] = api_key
-        if api_base is not None:
-            body["api_base"] = api_base
 
         _merge_gateway_ctx_metadata(body, ctx)
 

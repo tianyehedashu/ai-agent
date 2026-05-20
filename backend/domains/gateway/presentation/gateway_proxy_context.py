@@ -12,6 +12,9 @@ from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 def proxy_context_from_gateway_principal(
     principal: VkeyOrApikeyPrincipal,
     capability: GatewayCapability,
+    *,
+    client_ua: str | None = None,
+    client_type: str = "unknown",
 ) -> ProxyContext:
     """单次对外代理调用的 ``ProxyContext``（虚拟 Key 与业务 API Key 共用）。"""
     vkey = principal.vkey
@@ -38,6 +41,8 @@ def proxy_context_from_gateway_principal(
         ),
         rpm_limit=vkey.rpm_limit if vkey else grant.rpm_limit if grant else None,
         tpm_limit=vkey.tpm_limit if vkey else grant.tpm_limit if grant else None,
+        client_ua=client_ua,
+        client_type=client_type,
     )
 
 

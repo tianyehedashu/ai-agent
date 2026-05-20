@@ -91,8 +91,6 @@ class GatewayProxyProtocol(Protocol):
         tool_choice: str | dict[str, Any] | None = None,
         stream: bool = False,
         response_format: dict[str, Any] | None = None,
-        api_key: str | None = None,
-        api_base: str | None = None,
         **kwargs: Any,
     ) -> GatewayResponse | AsyncGenerator[GatewayStreamChunk, None]:
         """chat 调用入口（对应 OpenAI /v1/chat/completions）"""
@@ -104,8 +102,6 @@ class GatewayProxyProtocol(Protocol):
         *,
         ctx: GatewayCallContext,
         model: str | None = None,
-        api_key: str | None = None,
-        api_base: str | None = None,
         **kwargs: Any,
     ) -> list[list[float]]:
         """embedding 调用入口"""

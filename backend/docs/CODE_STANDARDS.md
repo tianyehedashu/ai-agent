@@ -25,7 +25,7 @@ backend/
 │   ├── orm/                       # DeclarativeBase 等 ORM 基类
 │   ├── storage/                   # 本地文件/图片存储等纯 IO 适配
 │   ├── mcp/                       # MCP 传输层共享工具（若存在）
-│   ├── llm/                       # 仅放「与具体 BC 无关」的极简技术协议占位；跨域端口优先见下方「应用端口」
+│   # 无 libs/llm：LiteLLM/Provider 规则在 gateway/domain；Agent 消息适配在 agent/infrastructure/llm
 │   ├── crypto.py                  # 加解密等扁平技术模块（按需增减）
 │   └── background_tasks.py        # 通用后台任务辅助（若有）
 │
@@ -76,7 +76,7 @@ backend/
 │   │   │   └── repositories/    # 仓储接口（若有）
 │   │   ├── application/         # ChatUseCase、AgentUseCase（依赖 SessionApplicationPort 等）
 │   │   ├── infrastructure/
-│   │   │   ├── llm/               # LLMGateway、embeddings、providers（可依赖 gateway.application.ports）
+│   │   │   ├── llm/               # AgentLlmFacade、embeddings、providers（可依赖 gateway.application.ports）
 │   │   │   ├── memory/
 │   │   │   ├── tools/
 │   │   │   ├── reasoning/
@@ -219,7 +219,7 @@ from domains.gateway.application.ports import (
 from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 
 # ✅ 从 agent 域导入基础设施组件
-from domains.agent.infrastructure.llm import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
 from domains.agent.application import ChatUseCase, AgentUseCase
 

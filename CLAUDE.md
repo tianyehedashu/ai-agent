@@ -63,7 +63,7 @@ from domains.session.infrastructure.repositories import SessionRepository
 from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 
 # Agent 域组件
-from domains.agent.infrastructure.llm import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
 from domains.agent.application import ChatUseCase, AgentUseCase
 

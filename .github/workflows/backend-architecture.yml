@@ -1,0 +1,41 @@
+# Agent–Gateway 架构守门：无 litellm 泄漏、无反向域依赖
+name: Backend Architecture
+
+on:
+  push:
+    branches: [main, develop, master]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-architecture.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-architecture.yml"
+
+jobs:
+  architecture-gate:
+    name: Architecture tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - run: uv python install 3.11
+      - run: uv sync --all-extras
+      - name: Agent–Gateway isolation gate (plan T2–T7)
+        run: |
+          uv run pytest \
+            tests/architecture/ \
+            tests/unit/gateway/test_upstream_adapter.py \
+            tests/unit/gateway/test_upstream_policy.py \
+            tests/unit/gateway/test_prompt_cache_middleware.py \
+            tests/unit/gateway/domain/ \
+            tests/unit/agent/test_message_formatter.py \
+            tests/unit/agent/infrastructure/test_langchain_messages.py \
+            tests/unit/agent/test_agent_llm_facade.py \
+            tests/unit/gateway/test_litellm_payload.py \
+            -q

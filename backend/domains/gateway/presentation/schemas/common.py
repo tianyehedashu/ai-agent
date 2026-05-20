@@ -577,6 +577,12 @@ class RequestLogListResponse(BaseModel):
 # =============================================================================
 
 
+class DashboardClientTypeBreakdown(BaseModel):
+    client_type: str
+    requests: int
+    cost_usd: Decimal
+
+
 class DashboardSummaryResponse(BaseModel):
     total_requests: int
     total_input_tokens: int
@@ -586,6 +592,7 @@ class DashboardSummaryResponse(BaseModel):
     failure_count: int
     avg_latency_ms: float
     success_rate: float
+    by_client_type: list[DashboardClientTypeBreakdown] = Field(default_factory=list)
 
 
 class TimeSeriesPointResponse(BaseModel):

@@ -59,8 +59,6 @@ def test_split_chat_basic_and_extras() -> None:
     assert p.tools is not None and len(p.tools) == 1
     assert p.tool_choice == "auto"
     assert p.response_format == {"type": "json_object"}
-    assert p.api_key == "sk-test"
-    assert p.api_base == "https://example.com/v1"
     assert p.extras == {"extra_headers": {"X-Custom": "1"}, "metadata": {"k": "v"}}
 
 
@@ -82,6 +80,36 @@ def test_split_embedding_missing_model_returns_none() -> None:
     assert split_embedding_for_bridge({"input": ["a"]}) is None
 
 
+def test_split_chat_strips_api_key_from_payload_fields() -> None:
+    p = split_chat_completion_for_bridge(
+        {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "x"}],
+            "api_key": "sk-secret",
+            "api_base": "https://example.com/v1",
+        }
+    )
+    assert p is not None
+    assert not hasattr(p, "api_key")
+    assert not hasattr(p, "api_base")
+    assert "api_key" not in p.extras
+    assert "api_base" not in p.extras
+
+
+def test_split_embedding_strips_api_credentials() -> None:
+    p = split_embedding_for_bridge(
+        {
+            "model": "text-embedding-3-small",
+            "input": ["a"],
+            "api_key": "sk-secret",
+            "api_base": "https://example.com/v1",
+        }
+    )
+    assert p is not None
+    assert "api_key" not in p.extras
+    assert "api_base" not in p.extras
+
+
 def test_split_embedding_basic_and_extras() -> None:
     kw: dict[str, Any] = {
         "model": "text-embedding-3-small",
@@ -94,6 +122,4 @@ def test_split_embedding_basic_and_extras() -> None:
     assert p is not None
     assert p.inputs == ["a", "b"]
     assert p.model == "text-embedding-3-small"
-    assert p.api_key == "k"
-    assert p.api_base == "https://api.openai.com/v1"
     assert p.extras == {"dimensions": 256}

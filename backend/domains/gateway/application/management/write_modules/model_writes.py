@@ -19,6 +19,7 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
 )
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -26,7 +27,6 @@ from domains.gateway.domain.types import (
     PERSONAL_MODEL_TYPES,
 )
 from libs.exceptions import ValidationError
-from libs.llm.litellm_model_id import build_litellm_model_id
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

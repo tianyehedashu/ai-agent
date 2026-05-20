@@ -484,7 +484,7 @@ class ApiKeyUseCase:
             if grant.team_id in seen:
                 raise ValidationError(f"duplicate gateway grant team_id: {grant.team_id}")
             seen.add(grant.team_id)
-            team = await self._teams.get(grant.team_id)
+            team = await self._teams.get_team(grant.team_id)
             if team is None or not team.is_active:
                 raise ValidationError(f"gateway grant team not found: {grant.team_id}")
             role = await self._membership.member_role(

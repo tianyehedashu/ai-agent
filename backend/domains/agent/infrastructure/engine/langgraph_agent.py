@@ -25,8 +25,8 @@ from domains.agent.domain.types import (
     ToolResult,
 )
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
-from domains.agent.infrastructure.llm.gateway import LLMGateway
-from domains.agent.infrastructure.llm.message_formatter import convert_langchain_messages
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
+from domains.agent.infrastructure.llm.langchain_messages import convert_langchain_messages
 from domains.agent.infrastructure.memory.extractor import MemoryExtractor
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.tools.registry import ToolRegistry
@@ -180,7 +180,7 @@ class LangGraphAgentEngine:
     def __init__(
         self,
         config: AgentConfig,
-        llm_gateway: LLMGateway,
+        llm_gateway: AgentLlmFacade,
         memory_store: LongTermMemoryStore,
         tool_registry: ToolRegistry | None = None,
         checkpointer: LangGraphCheckpointer | None = None,
@@ -321,6 +321,9 @@ class LangGraphAgentEngine:
         """
         view = StateView(state)
 
+        if self.memory_store is None:
+            return {"recalled_memories": []}
+
         # 搜索当前会话的相关记忆
         memories = await self.memory_store.search(
             session_id=view.session_id,
@@ -374,8 +377,6 @@ class LangGraphAgentEngine:
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             tools=tools,
-            api_key=self.config.llm_api_key,
-            api_base=self.config.llm_api_base,
         )
         usage = response.usage or {}
         usage_totals = _merge_usage(view.usage_totals, usage)

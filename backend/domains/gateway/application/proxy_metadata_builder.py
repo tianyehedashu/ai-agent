@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
@@ -22,7 +23,17 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
     from domains.gateway.application.proxy_use_case import ProxyContext
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedLitellmKwargs:
+    """单次出站 LiteLLM 调用的 kwargs 与已解析路由（避免重复 resolve）。"""
+
+    kwargs: dict[str, Any]
+    client_model: str
+    resolved: ResolvedModelName | None
 
 
 class ProxyMetadataBuilder:
@@ -91,6 +102,8 @@ class ProxyMetadataBuilder:
                 if verbose_log
                 else settings.gateway_request_log_response_preview_max_chars
             ),
+            "gateway_client_ua": ctx.client_ua,
+            "gateway_client_type": ctx.client_type,
         }
         if user_kwargs:
             await self._merge_user_and_model_metadata(ctx, meta, user_kwargs)
@@ -100,19 +113,23 @@ class ProxyMetadataBuilder:
         self,
         ctx: ProxyContext,
         body: dict[str, Any],
-    ) -> dict[str, Any]:
+    ) -> PreparedLitellmKwargs:
         """拼装 metadata，并把下游单价注入 LiteLLM kwargs。"""
         metadata = await self.build(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
         apply_downstream_custom_pricing_kwargs(kwargs)
         raw_model = kwargs.get("model")
-        if raw_model is not None:
-            client_model = str(raw_model).strip()
-            if client_model:
-                resolved = await resolve_model_or_route(self._session, ctx.team_id, client_model)
-                kwargs["model"] = router_model_name_for_client(ctx.team_id, client_model, resolved)
-        return kwargs
+        client_model = str(raw_model).strip() if raw_model is not None else ""
+        resolved = None
+        if client_model:
+            resolved = await resolve_model_or_route(self._session, ctx.team_id, client_model)
+            kwargs["model"] = router_model_name_for_client(ctx.team_id, client_model, resolved)
+        return PreparedLitellmKwargs(
+            kwargs=kwargs,
+            client_model=client_model,
+            resolved=resolved,
+        )
 
     async def _merge_user_and_model_metadata(
         self,
@@ -150,4 +167,4 @@ class ProxyMetadataBuilder:
         )
 
 
-__all__ = ["ProxyMetadataBuilder"]
+__all__ = ["PreparedLitellmKwargs", "ProxyMetadataBuilder"]

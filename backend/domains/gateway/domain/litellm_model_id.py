@@ -1,12 +1,5 @@
 """
-LiteLLM 模型标识拼装工具
-
-把 ``provider`` + ``model_id`` 拼成 LiteLLM 可识别的模型标识，规则：
-
-- 已含 ``/`` 的 model_id 视为 vendor 前缀齐全，原样返回；
-- ``zhipuai`` → ``zai/<model_id>``；
-- ``dashscope`` / ``deepseek`` / ``volcengine`` → ``<provider>/<model_id>``；
-- 其它（``openai``、``anthropic``、``custom``、未知 provider）→ 原样返回。
+LiteLLM 模型标识拼装（Gateway 出站规则，纯函数无 I/O）。
 
 前缀与 provider 是否匹配的业务校验见 ``domains.gateway.application.litellm_real_model_prefix``。
 """

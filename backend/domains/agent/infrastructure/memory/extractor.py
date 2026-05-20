@@ -7,7 +7,7 @@ Memory Extractor - 记忆提取器
 import json
 from typing import Any
 
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from utils.logging import get_logger
 
@@ -41,7 +41,7 @@ class MemoryExtractor:
     存储由 LongTermMemoryStore 负责
     """
 
-    def __init__(self, llm_gateway: LLMGateway) -> None:
+    def __init__(self, llm_gateway: AgentLlmFacade) -> None:
         """
         初始化记忆提取器
 

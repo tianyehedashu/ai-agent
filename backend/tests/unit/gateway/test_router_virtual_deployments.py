@@ -5,12 +5,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _models_to_deployments,
     _routes_to_virtual_deployments,
 )
-from libs.llm.litellm_model_id import build_litellm_model_id
 
 
 def _stub_build_litellm_params(**kwargs):

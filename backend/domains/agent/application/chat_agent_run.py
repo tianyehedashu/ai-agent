@@ -51,13 +51,7 @@ class ChatAgentRunMixin:
             allowed_text_system_ids=allowed,
         )
         agent_config = await self._get_agent_config(agent_id)
-        agent_config = agent_config.model_copy(
-            update={
-                "model": resolved.model,
-                "llm_api_key": resolved.api_key,
-                "llm_api_base": resolved.api_base,
-            }
-        )
+        agent_config = agent_config.model_copy(update={"model": resolved.model})
 
         execution_config = self.config_service.load_for_agent(agent_id=agent_id or "default")
 

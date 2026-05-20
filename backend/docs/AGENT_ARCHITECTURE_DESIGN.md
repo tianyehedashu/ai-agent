@@ -590,7 +590,7 @@ class AgentEngine:
     def __init__(
         self,
         agent: Agent | AgentInstance,  # 支持两种类型
-        llm_gateway: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
         tool_registry: ToolRegistry,
         # ...
     ):
@@ -609,7 +609,7 @@ class AgentEngine:
         )
 
         # 初始化引擎
-        self.llm = llm_gateway
+        self.llm = agent_llm_facade
         self.tools = tool_registry
         # ...
 
@@ -703,7 +703,7 @@ async def chat_with_instance(
     # 3. 创建引擎
     engine = AgentEngine(
         agent=instance,  # 传入实例
-        llm_gateway=llm_gateway,
+        agent_llm_facade=agent_llm_facade,
         tool_registry=tool_registry,
     )
 

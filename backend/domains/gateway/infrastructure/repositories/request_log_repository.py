@@ -78,6 +78,8 @@ class RequestLogRepository:
         metadata_extra: dict[str, Any] | None,
         entitlement_plan_id: UUID | None = None,
         provider_plan_id: UUID | None = None,
+        client_type: str | None = None,
+        client_ua: str | None = None,
     ) -> GatewayRequestLog:
         log = GatewayRequestLog(
             team_id=team_id,

@@ -86,17 +86,6 @@ class TestChatAPIE2E:
     3. 错误处理
     """
 
-    @pytest.fixture
-    def http_client(self):
-        """同步 HTTP 客户端"""
-        return httpx.Client(base_url=API_BASE_URL, timeout=60.0)
-
-    @pytest.fixture
-    async def async_http_client(self):
-        """异步 HTTP 客户端"""
-        async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=120.0) as client:
-            yield client
-
     @pytest.mark.asyncio
     async def test_chat_single_message(self, async_http_client: httpx.AsyncClient):
         """测试: 发送单条消息并接收 SSE 响应
@@ -390,7 +379,7 @@ class TestAgentAPIE2E:
 
 
 @pytest.mark.e2e
-class TestLLMGatewayE2E:
+class TestAgentLlmFacadeE2E:
     """LLM Gateway 端到端测试（真正调用 LLM API）"""
 
     @pytest.mark.asyncio
@@ -400,9 +389,9 @@ class TestLLMGatewayE2E:
         注意: 此测试需要配置 LLM API Key
         """
         from bootstrap.config import settings
-        from domains.agent.infrastructure.llm.gateway import LLMGateway
+        from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
-        gateway = LLMGateway(config=settings)
+        gateway = AgentLlmFacade(config=settings)
 
         try:
             response = await gateway.chat(

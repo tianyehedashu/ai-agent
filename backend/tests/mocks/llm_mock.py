@@ -1,15 +1,17 @@
 """
 LLM Mock 工具
 
-提供 LLM Gateway 的 Mock 实现，用于测试
+提供 Agent LLM 门面与 Gateway 桥接端口的 Mock，用于测试。
 """
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from unittest.mock import AsyncMock
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 from domains.agent.domain.types import ToolCall
-from domains.agent.infrastructure.llm.gateway import LLMResponse, StreamChunk
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmResponse, AgentStreamChunk
+from domains.gateway.application.ports import GatewayResponse
 
 
 @dataclass
@@ -68,25 +70,25 @@ class LLMMockBuilder:
 
         return mock
 
-    def _build_response(self) -> LLMResponse:
+    def _build_response(self) -> AgentLlmResponse:
         """构建响应对象"""
         if self.responses[0]["type"] == "text":
-            return LLMResponse(
+            return AgentLlmResponse(
                 content=self.responses[0]["content"],
                 tool_calls=None,
             )
         else:
             tool_calls = [r["tool_call"] for r in self.responses if r["type"] == "tool_call"]
-            return LLMResponse(
+            return AgentLlmResponse(
                 content="",
                 tool_calls=tool_calls if tool_calls else None,
             )
 
-    async def _stream_generator(self) -> AsyncIterator[StreamChunk]:
+    async def _stream_generator(self) -> AsyncIterator[AgentStreamChunk]:
         """流式生成器"""
         for chunk in self.stream_chunks:
-            yield StreamChunk(content=chunk)
-        yield StreamChunk(finish_reason="stop")
+            yield AgentStreamChunk(content=chunk)
+        yield AgentStreamChunk(finish_reason="stop")
 
 
 def create_simple_response_mock(content: str) -> AsyncMock:
@@ -97,3 +99,37 @@ def create_simple_response_mock(content: str) -> AsyncMock:
 def create_tool_call_mock(tool_name: str, arguments: dict) -> AsyncMock:
     """创建工具调用 Mock"""
     return LLMMockBuilder().with_tool_call(tool_name, arguments).build()
+
+
+class GatewayProxyMockBuilder:
+    """``GatewayProxyProtocol`` Mock 构建器（Chat / Embedding 经桥接）。"""
+
+    def __init__(self) -> None:
+        self._chat_content: str | None = "mock-reply"
+        self._embedding: list[list[float]] | None = [[0.0, 0.1]]
+
+    def with_chat_content(self, content: str) -> "GatewayProxyMockBuilder":
+        self._chat_content = content
+        return self
+
+    def with_embedding_rows(self, rows: list[list[float]]) -> "GatewayProxyMockBuilder":
+        self._embedding = rows
+        return self
+
+    def build(self) -> MagicMock:
+        proxy = MagicMock()
+        proxy.chat_completion = AsyncMock(
+            return_value=GatewayResponse(content=self._chat_content, model="mock"),
+        )
+        proxy.embedding = AsyncMock(return_value=self._embedding)
+        return proxy
+
+
+def create_gateway_proxy_mock(**kwargs: Any) -> MagicMock:
+    """快捷创建 Gateway 桥接 Mock。"""
+    b = GatewayProxyMockBuilder()
+    if "content" in kwargs:
+        b.with_chat_content(str(kwargs["content"]))
+    if "embedding" in kwargs:
+        b.with_embedding_rows(kwargs["embedding"])
+    return b.build()

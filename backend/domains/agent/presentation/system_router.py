@@ -83,7 +83,7 @@ async def list_available_models(
     """
     获取可用模型列表
 
-    根据配置API Key返回可用的模型列表。支持: Anthropic, OpenAI, 阿里云通义千问, DeepSeek, 火山引擎豆包
+    返回静态模型目录（实际上线模型与凭据以 Gateway 注册为准）。
     """
     # 定义所有支持的模型
     all_models = [
@@ -234,28 +234,7 @@ async def list_available_models(
         ),
     ]
 
-    # 检查API Key是否配置，只返回可用的模型
-    available_models = []
-
-    if settings.anthropic_api_key:
-        available_models.extend([m for m in all_models if m.provider == "anthropic"])
-
-    if settings.openai_api_key:
-        available_models.extend([m for m in all_models if m.provider == "openai"])
-
-    if settings.dashscope_api_key:
-        available_models.extend([m for m in all_models if m.provider == "dashscope"])
-
-    if settings.deepseek_api_key:
-        available_models.extend([m for m in all_models if m.provider == "deepseek"])
-
-    if settings.volcengine_api_key:
-        available_models.extend([m for m in all_models if m.provider == "volcengine"])
-
-    if settings.zhipuai_api_key:
-        available_models.extend([m for m in all_models if m.provider == "zhipuai"])
-
-    return available_models
+    return all_models
 
 
 @router.get("/models/simple", response_model=list[SimpleModelInfo])
@@ -265,7 +244,7 @@ async def list_available_models_simple(
     """
     获取可用模型列表（简单格式）
 
-    返回格式化的模型列表，用于前端下拉选择。根据配置API Key返回可用的模型列表。
+    返回格式化的模型列表，用于前端下拉选择（凭据由 Gateway 管理）。
     """
     # 获取所有支持的模型（按提供商分组）
     all_models_by_provider = get_all_models()
@@ -320,78 +299,17 @@ async def list_available_models_simple(
         "glm-4-flash": "GLM-4 Flash",
     }
 
-    # 检查API Key是否配置，只返回可用的模型
     available_models: list[SimpleModelInfo] = []
-
-    # Anthropic
-    if settings.anthropic_api_key and "anthropic" in all_models_by_provider:
-        for model in all_models_by_provider["anthropic"]:
+    for provider, model_ids in all_models_by_provider.items():
+        for model in model_ids:
             available_models.append(
                 SimpleModelInfo(
                     value=model,
                     label=model_labels.get(model, model),
-                    provider="anthropic",
+                    provider=provider,
                 )
             )
-
-    # OpenAI
-    if settings.openai_api_key and "openai" in all_models_by_provider:
-        for model in all_models_by_provider["openai"]:
-            available_models.append(
-                SimpleModelInfo(
-                    value=model,
-                    label=model_labels.get(model, model),
-                    provider="openai",
-                )
-            )
-
-    # 阿里DashScope
-    if settings.dashscope_api_key and "dashscope" in all_models_by_provider:
-        for model in all_models_by_provider["dashscope"]:
-            available_models.append(
-                SimpleModelInfo(
-                    value=model,
-                    label=model_labels.get(model, model),
-                    provider="dashscope",
-                )
-            )
-
-    # DeepSeek
-    if settings.deepseek_api_key and "deepseek" in all_models_by_provider:
-        for model in all_models_by_provider["deepseek"]:
-            available_models.append(
-                SimpleModelInfo(
-                    value=model,
-                    label=model_labels.get(model, model),
-                    provider="deepseek",
-                )
-            )
-
-    # 火山引擎
-    if settings.volcengine_api_key and "volcengine" in all_models_by_provider:
-        for model in all_models_by_provider["volcengine"]:
-            available_models.append(
-                SimpleModelInfo(
-                    value=model,
-                    label=model_labels.get(model, model),
-                    provider="volcengine",
-                )
-            )
-
-    # 智谱AI
-    if settings.zhipuai_api_key and "zhipuai" in all_models_by_provider:
-        for model in all_models_by_provider["zhipuai"]:
-            available_models.append(
-                SimpleModelInfo(
-                    value=model,
-                    label=model_labels.get(model, model),
-                    provider="zhipuai",
-                )
-            )
-
-    # 按提供商和模型名称排序
     available_models.sort(key=lambda x: (x.provider, x.value))
-
     return available_models
 
 

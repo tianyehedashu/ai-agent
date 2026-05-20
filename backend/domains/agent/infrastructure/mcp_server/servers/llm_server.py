@@ -17,7 +17,7 @@ from mcp.server.fastmcp import FastMCP
 
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.llm import get_configured_models
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_user_id,
     get_mcp_vendor_creator_id,
@@ -55,7 +55,7 @@ async def llm_create(
         LLM 生成的文本内容
     """
     config = get_llm_config()
-    gateway = LLMGateway(config=config)
+    gateway = AgentLlmFacade(config=config)
 
     response = await gateway.chat(
         messages=messages,

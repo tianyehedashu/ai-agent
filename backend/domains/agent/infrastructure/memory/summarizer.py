@@ -22,7 +22,7 @@ from utils.logging import get_logger
 from utils.tokens import count_tokens
 
 if TYPE_CHECKING:
-    from domains.agent.infrastructure.llm.gateway import LLMGateway
+    from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
     from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 
 logger = get_logger(__name__)
@@ -98,7 +98,7 @@ class MemorySummarizer:
 
     def __init__(
         self,
-        llm_gateway: "LLMGateway",
+        llm_gateway: "AgentLlmFacade",
         memory_store: "LongTermMemoryStore | None" = None,
         config: SummarizationConfig | None = None,
     ) -> None:

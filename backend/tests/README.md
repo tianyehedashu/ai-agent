@@ -85,7 +85,7 @@ tests/
 ├── conftest.py              # pytest 配置和 fixtures
 ├── unit/                    # 单元测试
 │   ├── core/
-│   │   ├── test_llm_gateway.py      # LLM Gateway 测试
+│   │   ├── test_agent_llm_facade.py  # Agent LLM 门面测试
 │   │   └── test_llm_providers.py    # LLM Providers 测试（包含GLM）
 │   ├── services/
 │   └── utils/
@@ -120,21 +120,19 @@ pytest tests/unit/core/test_llm_providers.py::TestGetAllModels::test_get_all_mod
 - ✅ 模型名称识别（大小写不敏感）
 - ✅ 所有模型列表包含智谱AI
 
-#### 2. Gateway 测试 (`test_llm_gateway.py`)
+#### 2. Agent LLM 门面 (`test_agent_llm_facade.py`)
 
-测试 LLM Gateway 对 GLM 模型的支持：
+Agent 侧 LLM 仅经 `GatewayProxyProtocol` 桥接（无 LiteLLM 直连、无 `settings.*_api_key`）：
 
 ```bash
-# 运行 GLM 相关测试
-pytest tests/unit/core/test_llm_gateway.py::TestLLMGateway::test_get_api_key_glm
-pytest tests/unit/core/test_llm_gateway.py::TestLLMGateway::test_get_api_key_glm_case_insensitive
-pytest tests/unit/core/test_llm_gateway.py::TestLLMGateway::test_get_api_key_glm_no_key
+pytest tests/unit/agent/test_agent_llm_facade.py -q
+pytest tests/architecture/test_agent_no_litellm_import.py tests/architecture/test_gateway_no_agent_import.py -q
 ```
 
 测试内容：
-- ✅ GLM 模型的 API Key 配置获取
-- ✅ 模型名称大小写不敏感
-- ✅ 未配置 API Key 时的处理
+- ✅ 非流式 / 流式 chat 经 Gateway
+- ✅ ToolCall 解析与流式片段合并
+- ✅ 无 user_id 时桥接失败抛错
 
 ### 集成测试
 

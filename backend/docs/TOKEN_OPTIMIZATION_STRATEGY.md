@@ -456,7 +456,7 @@ def get_prompt_cache_manager() -> PromptCacheManager:
 
 #### 3.1.3 集成到 LLM Gateway
 
-**修改文件**：`core/llm/gateway.py`
+**修改文件**：`domains/agent/infrastructure/llm/agent_llm_facade.py`
 
 在 `chat` 方法中添加缓存处理：
 
@@ -509,7 +509,7 @@ from typing import Any
 from dataclasses import dataclass
 from datetime import datetime, UTC
 
-from core.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from core.memory.langgraph_store import LongTermMemoryStore
 from core.types import Message, MessageRole
 from utils.logging import get_logger
@@ -553,7 +553,7 @@ class MemorySummarizer:
 
     def __init__(
         self,
-        llm_gateway: LLMGateway,
+        agent_llm_facade: AgentLlmFacade,
         memory_store: LongTermMemoryStore | None = None,
         config: SummarizationConfig | None = None,
     ) -> None:
@@ -1021,7 +1021,7 @@ class LangGraphAgentEngine:
 
         # 新增：记忆摘要器
         self.summarizer = MemorySummarizer(
-            llm_gateway=llm_gateway,
+            agent_llm_facade=agent_llm_facade,
             memory_store=memory_store,
             config=SummarizationConfig(
                 token_threshold=8000,
@@ -1100,7 +1100,7 @@ class Settings(BaseSettings):
 ### Phase 1（高优先级）- 预计 2 周
 
 1. ✅ 实现 `PromptCacheManager`
-2. ✅ 集成到 `LLMGateway`
+2. ✅ 集成到 `AgentLlmFacade`
 3. ✅ 添加缓存统计和监控
 
 ### Phase 2（中优先级）- 预计 2 周

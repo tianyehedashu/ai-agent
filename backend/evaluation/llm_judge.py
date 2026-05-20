@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
-from domains.agent.infrastructure.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 
 
 class JudgeScore(BaseModel):
@@ -59,7 +59,7 @@ Return a JSON object:
 
 Evaluate now:"""
 
-    def __init__(self, llm_gateway: LLMGateway, judge_model: str = "gpt-4"):
+    def __init__(self, llm_gateway: AgentLlmFacade, judge_model: str = "gpt-4"):
         self.llm = llm_gateway
         self.judge_model = judge_model
 
@@ -171,7 +171,7 @@ class MultiDimensionJudge:
         "coherence": "Is the response logically coherent and well-structured?",
     }
 
-    def __init__(self, llm_gateway: LLMGateway, judge_model: str = "gpt-4"):
+    def __init__(self, llm_gateway: AgentLlmFacade, judge_model: str = "gpt-4"):
         self.llm = llm_gateway
         self.judge_model = judge_model
 

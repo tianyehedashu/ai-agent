@@ -872,13 +872,13 @@ class TestContextManager:
 ### 6.2 LLM Mock 测试示例
 
 ```python
-# tests/unit/core/test_llm_gateway.py
+# tests/unit/agent/test_agent_llm_facade.py
 
 import pytest
 from unittest.mock import AsyncMock, patch
 import json
 
-from backend.core.llm.gateway import LLMGateway, LLMConfig
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from backend.core.types import Message, MessageRole, ToolCall
 
 
@@ -910,13 +910,13 @@ class MockUsage:
         self.completion_tokens = completion_tokens
 
 
-class TestLLMGateway:
+class TestAgentLlmFacade:
     """LLM Gateway 测试"""
     
     @pytest.fixture
     def gateway(self):
         """创建被测对象"""
-        return LLMGateway(
+        return AgentLlmFacade(
             config=LLMConfig(
                 default_model="gpt-4",
                 api_key="test-key"
@@ -2464,7 +2464,7 @@ Return a JSON object:
 Evaluate now:"""
 
     def __init__(self, llm_gateway, judge_model: str = "gpt-4"):
-        self.llm = llm_gateway
+        self.llm = agent_llm_facade
         self.judge_model = judge_model
     
     async def evaluate(

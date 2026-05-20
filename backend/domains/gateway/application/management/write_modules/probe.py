@@ -14,11 +14,11 @@ from domains.gateway.application.management.model_test_constants import (
 from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
 )
 from libs.crypto import decrypt_value, derive_encryption_key
-from libs.llm.litellm_model_id import build_litellm_model_id
 from libs.model_connectivity import truncate_last_test_reason
 from utils.logging import get_logger
 

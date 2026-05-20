@@ -632,6 +632,10 @@ async def _persist_event(
     route_snapshot = metadata.get("gateway_route_snapshot")
 
     metadata_extra = _metadata_extra_non_gateway(metadata)
+    client_type_raw = metadata.get("gateway_client_type")
+    client_type = str(client_type_raw) if client_type_raw else None
+    client_ua_raw = metadata.get("gateway_client_ua")
+    client_ua = str(client_ua_raw) if client_ua_raw else None
 
     litellm_call = kwargs.get("litellm_call_id")
     litellm_call_str = str(litellm_call) if litellm_call is not None else None
@@ -691,6 +695,8 @@ async def _persist_event(
                     prompt_redacted=prompt_redacted,
                     response_summary=response_summary,
                     metadata_extra=metadata_extra,
+                    client_type=client_type,
+                    client_ua=client_ua,
                 )
         except Exception as exc:  # pragma: no cover
             logger.warning("Failed to persist gateway request log: %s", exc)

@@ -286,13 +286,6 @@ class Settings(BaseSettings):
     # ========================================================================
     # AI Gateway 配置
     # ========================================================================
-    # 总开关：内部模块（chat/agent/...）调用是否走 Gateway 桥接（全量统计）
-    gateway_internal_proxy_enabled: bool = True
-    # 桥接失败是否致命（True=禁止静默回退直连）。
-    # 默认 True：bridge 是 ``gateway_request_logs`` team/user/vkey 归因的唯一
-    # 注入点，一旦静默回退就会让 dashboard / 计费聚合永远为 0，需要让上游
-    # 立即报错暴露问题，而不是用 fallback 掩盖。
-    gateway_internal_proxy_fail_closed: bool = True
     # 启动时是否将 app.toml 中 models.available 幂等同步到 gateway_models（team_id NULL）
     gateway_catalog_sync_on_startup: bool = True
     # 同步时是否用配置覆盖 tags（GitOps：配置声明优先于 UI 对托管行的修改）

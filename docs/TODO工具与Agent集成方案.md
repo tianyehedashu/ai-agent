@@ -684,7 +684,7 @@ class TaskStateManager:
 #### 3.3.3 任务规划器
 
 ```python
-from core.llm.gateway import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 
 TASK_DECOMPOSITION_PROMPT = """分析以下用户请求，将其分解为可执行的子任务。
 
@@ -725,10 +725,10 @@ class TaskPlanner:
 
     def __init__(
         self,
-        llm: LLMGateway | None = None,
+        agent_llm_facade: AgentLlmFacade | None = None,
         task_manager: TaskStateManager | None = None,
     ):
-        self.llm = llm or LLMGateway()
+        self.llm = llm or AgentLlmFacade(config=settings)
         self.task_manager = task_manager or TaskStateManager()
 
     async def plan_tasks(

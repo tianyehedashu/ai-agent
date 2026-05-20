@@ -71,7 +71,7 @@ from domains.tenancy.infrastructure.models.team import Team, TeamMember
 from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
 
 # Agent 域组件
-from domains.agent.infrastructure.llm import LLMGateway
+from domains.agent.infrastructure.llm import AgentLlmFacade
 from domains.agent.infrastructure.tools import ConfiguredToolRegistry
 from domains.agent.application import ChatUseCase, AgentUseCase
 
@@ -88,6 +88,7 @@ from libs.types import Result
 - **分层** - Presentation / Application / Domain / Infrastructure；Gateway **管理面**在 Application 内以 `management/` 分包读写（`GatewayManagementReadService` / `GatewayManagementWriteService`，与 CQRS 读/写侧对应）；**鉴权与团队解析**用单一 `GatewayAccessUseCase`（与上述服务互补，见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md`）
 - **业务/技术分离** - 业务类型在 `domains/`，纯技术基础设施在 `libs/`
 - **前端** - 个人模型与 BYOK 凭据的 UI 在 **`/gateway/*`** 与 `frontend/src/features/gateway-*`；设置页（`pages/settings`）仅保留账户、API Key、MCP 等，**不**再内嵌凭据/模型 Tab（见 `frontend/docs/CODE_STANDARDS.md`）
+- **Agent LLM** - `domains/agent/infrastructure/llm/agent_llm_facade.py`（`AgentLlmFacade`）仅做领域消息与 Gateway 桥接；`message_formatter` / `langchain_messages` 留在 **agent/infrastructure/llm**；provider 适配、凭据、Prompt Cache、模型能力/LiteLLM ID 在 **domains/gateway**（`UpstreamAdapter`、`PromptCacheMiddleware`、`domain/model_capability`、`domain/litellm_model_id` 等）。**勿**在 `libs/llm` 放 BC 相关逻辑；跨域契约用 `domains/gateway/application/ports.py` 与 `model_catalog_port.py`。
 
 ## 详细规范
 

@@ -63,7 +63,7 @@ infrastructure 实现持久化与外部系统，由 application 调用；domain 
 | HTTP 入口与路由注册 | `bootstrap/main.py` |
 | Agent 对话与编排 | `domains/agent/application/`、`domains/agent/presentation/chat_router.py` 等 |
 | Agent 引擎（LangGraph 等） | `domains/agent/infrastructure/engine/` |
-| LLM（Agent 直连 / 内部桥接） | `domains/agent/infrastructure/llm/`（含 `LLMGateway`） |
+| LLM（Agent 经 Gateway 桥接） | `domains/agent/infrastructure/llm/agent_llm_facade.py`（`AgentLlmFacade`） |
 | 工具与 MCP | `domains/agent/infrastructure/tools/`、`presentation/mcp_*.py` |
 | 记忆 | `domains/agent/infrastructure/memory/` |
 | 沙箱 | `domains/agent/infrastructure/sandbox/` |

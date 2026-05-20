@@ -110,10 +110,6 @@ def _build_model_kwargs(model_override: dict[str, Any] | None) -> dict[str, Any]
     kwargs: dict[str, Any] = {}
     if model_override.get("model"):
         kwargs["model"] = model_override["model"]
-    if model_override.get("api_key"):
-        kwargs["api_key"] = model_override["api_key"]
-    if model_override.get("api_base"):
-        kwargs["api_base"] = model_override["api_base"]
     return kwargs
 
 

@@ -161,7 +161,8 @@ class TeamService:
         team = await self._teams.get(team_id)
         return self._to_snapshot(team) if team is not None else None
 
-    async def get_personal_team_snapshot(self, user_id: uuid.UUID) -> TeamSnapshot | None:
+    async def get_personal_team(self, user_id: uuid.UUID) -> TeamSnapshot | None:
+        """``TeamResolutionPort``：用户 personal team 快照。"""
         team = await self._teams.get_personal(user_id)
         return self._to_snapshot(team) if team is not None else None
 

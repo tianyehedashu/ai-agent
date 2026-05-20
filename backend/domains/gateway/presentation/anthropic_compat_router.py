@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,8 +24,10 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.gateway_proxy_business_error_classify import (
     classify_proxy_use_case_business_error,
 )
-from domains.gateway.presentation.gateway_proxy_context import (
-    proxy_context_from_gateway_principal,
+from domains.gateway.presentation.proxy_request_context import (
+    prepare_proxy_body,
+    proxy_context_from_request,
+    rate_limit_headers_for_context,
 )
 from libs.db.database import get_db
 from utils.logging import get_logger
@@ -75,23 +77,29 @@ def _wrap_anthropic_business_errors(exc: Exception) -> HTTPException:
 
 @router.post("/messages")
 async def create_message(
+    request: Request,
     body: dict[str, Any],
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     """Anthropic ``Messages``：LiteLLM ``anthropic_unified`` 原生通道。"""
     use_case = ProxyUseCase(db)
-    ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.CHAT)
+    ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
+    proxy_body = prepare_proxy_body(body, request)
 
     try:
-        result = await use_case.anthropic_messages(ctx, body)
+        result = await use_case.anthropic_messages(ctx, proxy_body)
     except ValueError as exc:
         raise _wrap_anthropic_business_errors(exc) from exc
     except Exception as exc:
         logger.warning("anthropic messages failed: %s", exc)
         raise _wrap_anthropic_business_errors(exc) from exc
 
-    if body.get("stream"):
+    rate_headers = await rate_limit_headers_for_context(
+        ctx, flavor="anthropic", use_case=use_case
+    )
+
+    if proxy_body.get("stream"):
         stream = cast("AsyncIterator[bytes]", result)
 
         async def _sse() -> AsyncIterator[bytes]:
@@ -101,6 +109,7 @@ async def create_message(
         return StreamingResponse(
             _sse(),
             media_type="text/event-stream; charset=utf-8",
+            headers=rate_headers,
         )
 
     if not isinstance(result, dict):
@@ -112,7 +121,29 @@ async def create_message(
     return Response(
         content=orjson.dumps(result),
         media_type="application/json",
+        headers=rate_headers,
     )
+
+
+@router.post("/messages/count_tokens")
+async def count_message_tokens(
+    request: Request,
+    body: dict[str, Any],
+    principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Anthropic ``count_tokens``：不计预算/限流。"""
+    use_case = ProxyUseCase(db)
+    ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
+    proxy_body = prepare_proxy_body(body, request)
+    try:
+        payload = await use_case.anthropic_count_tokens(ctx, proxy_body)
+    except ValueError as exc:
+        raise _wrap_anthropic_business_errors(exc) from exc
+    except Exception as exc:
+        logger.warning("anthropic count_tokens failed: %s", exc)
+        raise _wrap_anthropic_business_errors(exc) from exc
+    return Response(content=orjson.dumps(payload), media_type="application/json")
 
 
 __all__ = ["router"]

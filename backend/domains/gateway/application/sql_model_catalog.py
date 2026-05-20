@@ -12,7 +12,6 @@ from bootstrap.config_loader import app_config
 from domains.gateway.application.config_catalog_sync import (
     gateway_model_to_selector_item,
     model_types_for_gateway_registration,
-    tags_to_capability_snapshot,
 )
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_catalog_port import (
@@ -21,6 +20,8 @@ from domains.gateway.application.model_catalog_port import (
     RegisteredModelResolution,
 )
 from domains.gateway.application.personal_models import gateway_model_to_selector_user_item
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
@@ -28,7 +29,6 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import decrypt_value, derive_encryption_key
-from libs.llm.litellm_model_id import build_litellm_model_id
 
 
 class SqlModelCatalogAdapter:
@@ -122,6 +122,7 @@ class SqlModelCatalogAdapter:
                 return None
 
         return RegisteredModelResolution(
+            virtual_model_name=row.name,
             litellm_model=build_litellm_model_id(row.provider, row.real_model),
             provider=row.provider,
             api_key=api_key,

@@ -152,6 +152,14 @@ class GatewayRequestLog(Base):
     response_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     metadata_extra: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
+    client_type: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        index=True,
+        comment="第三方客户端推断：claude-code / cursor / openai-sdk / anthropic-sdk / unknown",
+    )
+    client_ua: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     __table_args__ = (
         Index("ix_gateway_request_logs_team_time", "team_id", "created_at"),
         Index("ix_gateway_request_logs_user_time", "user_id", "created_at"),
