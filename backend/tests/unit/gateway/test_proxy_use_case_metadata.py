@@ -15,6 +15,62 @@ from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
 
 @pytest.mark.asyncio
+async def test_build_metadata_guardrail_false_when_global_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Any,
+) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
+        False,
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        AsyncMock(return_value=MagicMock(name="t", kind="personal")),
+    )
+
+    tid = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=tid,
+        user_id=uuid.uuid4(),
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=True,
+    )
+    meta = await ProxyMetadataBuilder(db_session).build(ctx)
+    assert meta["guardrail_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_build_metadata_guardrail_true_when_global_and_vkey_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Any,
+) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
+        True,
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        AsyncMock(return_value=MagicMock(name="t", kind="personal")),
+    )
+
+    tid = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=tid,
+        user_id=uuid.uuid4(),
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=True,
+    )
+    meta = await ProxyMetadataBuilder(db_session).build(ctx)
+    assert meta["guardrail_enabled"] is True
+
+
+@pytest.mark.asyncio
 async def test_build_metadata_ignores_user_gateway_prefix_keys(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Any,

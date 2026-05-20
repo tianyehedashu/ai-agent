@@ -281,7 +281,7 @@ class ApiKeyGatewayGrantRequest(BaseModel):
     rpm_limit: int | None = Field(default=None, ge=1)
     tpm_limit: int | None = Field(default=None, ge=1)
     store_full_messages: bool = False
-    guardrail_enabled: bool = True
+    guardrail_enabled: bool = False
 
     @field_validator("allowed_models")
     @classmethod

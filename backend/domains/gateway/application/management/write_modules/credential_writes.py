@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 import uuid
 
+from bootstrap.config import settings
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -14,6 +15,7 @@ from domains.gateway.domain.errors import (
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
+from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
 from domains.gateway.domain.types import (
     VirtualKeyBatchRevokeReason,
     is_config_managed_system_credential,
@@ -30,6 +32,10 @@ class CredentialWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
     async def create_virtual_key(self, *, team_id: uuid.UUID, created_by_user_id: uuid.UUID | None, name: str, description: str | None, key_id_str: str, key_hash: str, encrypted_key: str, allowed_models: list[str], allowed_capabilities: list[str], rpm_limit: int | None, tpm_limit: int | None, store_full_messages: bool, guardrail_enabled: bool, expires_at: datetime | None) -> Any:
+        assert_vkey_guardrail_create_allowed(
+            global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
+            requested_guardrail_enabled=guardrail_enabled,
+        )
         return await self._vkeys.create(team_id=team_id, created_by_user_id=created_by_user_id, name=name, description=description, key_id_str=key_id_str, key_hash=key_hash, encrypted_key=encrypted_key, allowed_models=allowed_models, allowed_capabilities=allowed_capabilities, rpm_limit=rpm_limit, tpm_limit=tpm_limit, store_full_messages=store_full_messages, guardrail_enabled=guardrail_enabled, expires_at=expires_at)
 
     async def revoke_virtual_key(self, key_id: uuid.UUID, *, team_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> None:

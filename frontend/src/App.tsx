@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/auth-provider'
 import Layout from '@/components/layout'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
+import AdminStoragePage from '@/pages/admin/storage'
 import AgentsPage from '@/pages/agents'
 import LoginPage from '@/pages/auth/login'
 import RegisterPage from '@/pages/auth/register'
@@ -62,6 +63,7 @@ function App(): React.JSX.Element {
                   <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/mcp" element={<MCPPage />} />
                   <Route path="/mcp/system" element={<SystemMCPPage />} />
+                  <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />
                   <Route path="/video-tasks/:sessionId" element={<VideoTasksPage />} />

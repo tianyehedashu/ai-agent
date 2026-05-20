@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
+from domains.agent.application.listing_studio_image_service import ListingStudioImageService
 from domains.agent.application.listing_studio_pipeline import run_pipeline_async
 from domains.agent.application.listing_studio_prompt_service import (
     ListingStudioPromptTemplateUseCase,
@@ -34,12 +35,14 @@ from domains.agent.presentation.schemas.listing_studio import (
     RunPipelineResponse,
     RunStepBody,
     UpdateTemplateBody,
+    UploadImageResponse,
     job_list_response,
     job_response,
 )
 from domains.identity.presentation.deps import AuthUser, get_owned_user_ids
 from libs.api.deps import (
     get_chat_model_resolution_service,
+    get_listing_studio_image_service,
     get_listing_studio_prompt_service,
     get_listing_studio_service,
     get_product_image_gen_task_service,
@@ -344,28 +347,20 @@ async def run_pipeline(
 
 
 # =============================================================================
-# 图片上传（占位：返回可访问 URL，后续接入对象存储）
+# 图片上传
 # =============================================================================
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=UploadImageResponse)
 async def upload_image(
     current_user: AuthUser,
     file: UploadFile = File(...),
-) -> dict[str, Any]:
-    """
-    上传图片，返回 URL 供输入区与历史预览使用。
-    当前为占位实现，返回固定前缀 URL；后续可接入对象存储。
-    """
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
-    # 占位：实际应落盘或上传至对象存储后返回真实 URL
-    url = f"https://placeholder/listing-studio/{file.filename or 'image'}"
-    return {
-        "url": url,
-        "content_type": file.content_type,
-        "size_bytes": 0,
-    }
+    image_service: ListingStudioImageService = Depends(get_listing_studio_image_service),
+) -> UploadImageResponse:
+    """上传图片，返回 URL 供输入区与历史预览使用。"""
+    content = await file.read()
+    url, content_type, size_bytes = await image_service.upload_image(content, file.content_type)
+    return UploadImageResponse(url=url, content_type=content_type, size_bytes=size_bytes)
 
 
 # =============================================================================
@@ -466,13 +461,12 @@ async def get_image_gen_task(
 
 
 @router.get("/images/{filename}")
-async def serve_image(filename: str) -> FileResponse:
-    """提供本地存储的生成图片"""
-    from libs.storage.local_image_store import (
-        get_image_path,  # pylint: disable=import-outside-toplevel
-    )
-
-    path = get_image_path(filename)
+async def serve_image(
+    filename: str,
+    image_service: ListingStudioImageService = Depends(get_listing_studio_image_service),
+) -> FileResponse:
+    """提供本地存储的图片（仅 storage_type=local）。"""
+    path = await image_service.resolve_local_image_path(filename)
     if not path:
         raise HTTPException(status_code=404, detail="Image not found")
     media_type = mimetypes.guess_type(str(path))[0] or "image/png"

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bootstrap.config import settings
+from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
 from domains.identity.domain.api_key_types import (
     ApiKeyCreateRequest,
     ApiKeyEntity,
@@ -496,6 +498,10 @@ class ApiKeyUseCase:
                 raise ValidationError(
                     f"gateway grant requires team owner/admin role: {grant.team_id}"
                 )
+            assert_vkey_guardrail_create_allowed(
+                global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
+                requested_guardrail_enabled=grant.guardrail_enabled,
+            )
         return grants
 
     async def assert_gateway_grant_in_team(

@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatGatewayManagementError } from '@/lib/gateway-api-error'
 import { Eye, EyeOff, Loader2 } from '@/lib/lucide-icons'
 
 export const MANUAL_VKEY_SENTINEL = '__manual__'
@@ -168,7 +169,7 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
   if (revealError && selectedKey) {
     return (
       <p id={hintId} className="text-xs text-destructive">
-        {revealError.message}
+        {formatGatewayManagementError(revealError)}
       </p>
     )
   }

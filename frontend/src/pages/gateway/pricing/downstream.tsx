@@ -7,11 +7,11 @@ import { toast } from 'sonner'
 import type { DownstreamPricingRow, DownstreamPricingUpsertBody } from '@/api/gateway'
 import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { DownstreamPricingFormDialog } from '@/features/gateway-pricing/downstream-pricing-form-dialog'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
 import { Pencil, RefreshCw, RotateCcw } from '@/lib/lucide-icons'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 const columns: readonly PricingTableColumn[] = [
   { key: 'model', label: '模型 ID', className: 'px-3 py-2' },
@@ -22,7 +22,7 @@ const columns: readonly PricingTableColumn[] = [
 ]
 
 export default function GatewayPricingDownstreamPage(): React.JSX.Element {
-  const currency = useUserPreferenceStore((s) => s.displayCurrency)
+  const currency = GATEWAY_DISPLAY_CURRENCY
   const qc = useQueryClient()
   const [editingRow, setEditingRow] = useState<DownstreamPricingRow | null>(null)
   const [formOpen, setFormOpen] = useState(false)

@@ -13,6 +13,7 @@ import {
   toggleModelSet,
   toggleOrderedModelList,
 } from '@/features/gateway-models/utils'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
 import { ChevronDown, ChevronUp } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -46,7 +47,7 @@ export const RouteModelPickerRow = memo(function RouteModelPickerRow({
   selectedCount = 0,
   onMove,
   priceRow,
-  currency = 'CNY',
+  currency = GATEWAY_DISPLAY_CURRENCY,
 }: RouteModelPickerRowProps): React.JSX.Element {
   return (
     <li
@@ -130,7 +131,7 @@ export function RouteOrderedModelPicker({
   emptyHint = '暂无已启用的注册模型',
   showOrderControls = true,
   priceByName,
-  currency = 'CNY',
+  currency = GATEWAY_DISPLAY_CURRENCY,
 }: RouteOrderedModelPickerProps): React.JSX.Element {
   const selectedSet = useMemo(() => new Set(selected), [selected])
   const orderByName = useMemo(
@@ -225,7 +226,7 @@ export function RouteFallbackModelPicker({
   description,
   excludeNames = [],
   priceByName,
-  currency = 'CNY',
+  currency = GATEWAY_DISPLAY_CURRENCY,
 }: RouteFallbackModelPickerProps): React.JSX.Element {
   const exclude = useMemo(() => new Set(excludeNames), [excludeNames])
   const candidates = useMemo(() => models.filter((m) => !exclude.has(m.name)), [models, exclude])

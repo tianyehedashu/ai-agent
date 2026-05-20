@@ -10,11 +10,14 @@ import uuid
 
 import pytest
 
+from bootstrap.config import settings
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.identity.domain.api_key_types import (
     ApiKeyCreateRequest,
+    ApiKeyGatewayGrantRequest,
     ApiKeyScope,
 )
+from libs.exceptions import ValidationError
 from domains.identity.domain.services.api_key_service import ApiKeyGenerator
 
 
@@ -287,3 +290,29 @@ class TestApiKeyUseCase:
         # Assert
         repo.record_usage.assert_called_once_with(api_key_id)
         repo.create_usage_log.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_validated_gateway_grants_rejects_guardrail_when_global_disabled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", False)
+        db = AsyncMock()
+        repo = AsyncMock()
+        use_case = ApiKeyUseCase(db, repo=repo, generator=MagicMock())
+        team_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        use_case._teams.get_team = AsyncMock(return_value=MagicMock(is_active=True))
+        use_case._membership.member_role = AsyncMock(return_value="owner")
+
+        with pytest.raises(ValidationError, match="PII"):
+            await use_case._validated_gateway_grants(
+                user_id=user_id,
+                scopes={ApiKeyScope.GATEWAY_PROXY},
+                requested=[
+                    ApiKeyGatewayGrantRequest(
+                        team_id=team_id,
+                        guardrail_enabled=True,
+                    )
+                ],
+            )

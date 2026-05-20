@@ -3,9 +3,9 @@ import type React from 'react'
 import { Link } from 'react-router-dom'
 
 import type { GatewayLogDetail } from '@/api/gateway'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { coalesceMoney, formatMoney } from '@/lib/money'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 import type { DisplayCurrency } from '@/types/money'
 
 interface LogPricingBreakdownProps {
@@ -13,7 +13,7 @@ interface LogPricingBreakdownProps {
 }
 
 export function LogPricingBreakdown({ detail }: LogPricingBreakdownProps): React.JSX.Element {
-  const currency = useUserPreferenceStore((s) => s.displayCurrency)
+  const currency = GATEWAY_DISPLAY_CURRENCY
   const { isAdmin } = useGatewayPermission()
   const snap = detail.pricing_snapshot
   const costUsd = coalesceMoney(detail.cost_usd)

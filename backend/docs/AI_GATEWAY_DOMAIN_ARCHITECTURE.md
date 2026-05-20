@@ -406,6 +406,11 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 - `gateway_internal_proxy_delegate_user_id`：无 `PermissionContext.user_id` 时用于 Gateway 归因的委派 UUID（后台任务、worker 等）。内部 Chat/Embedding **始终**经 `GatewayBridge`（已无 `gateway_internal_proxy_enabled` / `fail_closed` 开关）。
 - `gateway_router_redis_url`：Router 跨进程状态；缺省可复用全局 `redis_url`。
+- `gateway_default_guardrail_enabled`（环境变量 `GATEWAY_DEFAULT_GUARDRAIL_ENABLED`，**默认 `false`**）：是否在 LiteLLM 注册 PII Guardrail 回调（LiteLLM 适配：`infrastructure/guardrails/pii_guardrail.py`；脱敏规则：`domain/pii_redaction_policy.py`）。控制台经 `GET /api/v1/gateway/features` 的 `pii_guardrail_globally_enabled` 与后端对齐。**方案 A（当前）**：
+  - 全局 `false`：不注册回调，所有 vkey 的 `guardrail_enabled` 均不生效；创建 vkey 时若请求 `guardrail_enabled=true` 返回 `ValidationError`。
+  - 全局 `true`：注册回调；单次是否脱敏由 `ProxyContext.guardrail_enabled` → `metadata.guardrail_enabled` 决定（来自 vkey 或 API Key grant）。
+  - 脱敏改写发往上游的 `messages`（非仅日志）；命中类别写入 `metadata.pii_redactions`，原文摘要 hash 为 `pii_prompt_hash`。
+  - **后续（开放功能时）**：`PATCH /keys/{id}` 更新开关、规则下沉 `domain/`、严格阻断模式（`GUARDRAIL_BLOCKED`）— 见 `guardrail_policy.py` 与计划 follow-up。
 
 ### 6.3 前后端契约
 

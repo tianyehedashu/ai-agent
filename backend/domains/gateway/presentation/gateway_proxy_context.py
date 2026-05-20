@@ -33,7 +33,7 @@ def proxy_context_from_gateway_principal(
             vkey.store_full_messages if vkey else grant.store_full_messages if grant else False
         ),
         guardrail_enabled=(
-            vkey.guardrail_enabled if vkey else grant.guardrail_enabled if grant else True
+            vkey.guardrail_enabled if vkey else grant.guardrail_enabled if grant else False
         ),
         allowed_models=(vkey.allowed_models if vkey else grant.allowed_models if grant else ()),
         allowed_capabilities=(

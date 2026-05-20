@@ -1233,3 +1233,58 @@ class TestGatewayManagementApi:
         assert len(partial["failed"]) == 1
         assert partial["failed"][0]["key_id"] == missing_id
         assert partial["failed"][0]["reason"] == "not_found"
+
+
+@pytest.mark.integration
+class TestGatewayFeaturesApi:
+    @pytest.mark.asyncio
+    async def test_features_reflects_global_guardrail_setting(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from bootstrap.config import settings
+
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+
+        monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", False)
+        r_off = await dev_client.get("/api/v1/gateway/features", headers=headers)
+        assert r_off.status_code == 200, r_off.text
+        assert r_off.json()["pii_guardrail_globally_enabled"] is False
+
+        monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", True)
+        r_on = await dev_client.get("/api/v1/gateway/features", headers=headers)
+        assert r_on.status_code == 200, r_on.text
+        assert r_on.json()["pii_guardrail_globally_enabled"] is True
+
+
+@pytest.mark.integration
+class TestGatewayPiiGuardrailCreateKey:
+    @pytest.mark.asyncio
+    async def test_create_key_rejects_guardrail_when_global_disabled(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from bootstrap.config import settings
+
+        monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", False)
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+
+        r = await dev_client.post(
+            "/api/v1/gateway/keys",
+            headers=headers,
+            json={"name": f"pii-off-{uuid.uuid4().hex[:6]}", "guardrail_enabled": True},
+        )
+        assert r.status_code == 400, r.text
+        assert r.json().get("code") == "VALIDATION_ERROR"

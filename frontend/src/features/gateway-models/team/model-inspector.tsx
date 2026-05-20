@@ -31,13 +31,13 @@ import {
   parsePositiveInt,
   routesReferencingModel,
 } from '@/features/gateway-models/utils'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { Copy, ExternalLink, Info, Loader2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
 
@@ -73,8 +73,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   onToggleEnabled,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
   const { canWrite, isAdmin } = useGatewayPermission()
-  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
-  const { byName: priceByName } = useGatewayModelPrices(displayCurrency)
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const myPrice = priceByName.get(model.name)
   const [usageScope, setUsageScope] = useState<'workspace' | 'user'>('workspace')
   const [modelName, setModelName] = useState(model.name)
@@ -243,7 +242,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             定价
           </h3>
-          <PricingBadge row={myPrice} currency={displayCurrency} />
+          <PricingBadge row={myPrice} currency={GATEWAY_DISPLAY_CURRENCY} />
           <div className="flex flex-wrap gap-2 text-xs">
             <Link
               to={`/gateway/pricing/my-prices?model=${encodeURIComponent(model.name)}`}

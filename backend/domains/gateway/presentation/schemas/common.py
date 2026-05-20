@@ -20,6 +20,17 @@ from domains.tenancy.presentation.schemas.teams import (
 )
 
 # =============================================================================
+# Gateway features（运行时能力开关，与部署 env 对齐）
+# =============================================================================
+
+
+class GatewayFeaturesResponse(BaseModel):
+    """控制台与创建 Key 表单读取的全局能力开关。"""
+
+    pii_guardrail_globally_enabled: bool
+
+
+# =============================================================================
 # Virtual Key
 # =============================================================================
 
@@ -32,7 +43,7 @@ class VirtualKeyCreate(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     store_full_messages: bool = False
-    guardrail_enabled: bool = True
+    guardrail_enabled: bool = False
     expires_in_days: int | None = None
 
 
@@ -47,7 +58,7 @@ class VirtualKeyResponse(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     store_full_messages: bool = False
-    guardrail_enabled: bool = True
+    guardrail_enabled: bool = False
     is_system: bool = False
     is_active: bool = True
     expires_at: datetime | None = None

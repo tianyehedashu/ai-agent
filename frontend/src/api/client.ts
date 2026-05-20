@@ -29,6 +29,7 @@
  * ```
  */
 
+import { messageFromApiErrorBody } from '@/lib/gateway-api-error'
 import {
   getAuthToken,
   getRefreshToken,
@@ -247,11 +248,16 @@ class ApiClient {
         }
       }
 
-      const error = (await response.json().catch(() => ({ message: 'Unknown error' }))) as {
-        detail?: string
-        message?: string
-      }
-      throw new ApiError(response.status, error.detail ?? error.message ?? 'Unknown error')
+      const errorBody: unknown = await response.json().catch(() => ({ message: 'Unknown error' }))
+      const fallback =
+        typeof errorBody === 'object' &&
+        errorBody !== null &&
+        'message' in errorBody &&
+        typeof (errorBody as { message: unknown }).message === 'string'
+          ? (errorBody as { message: string }).message
+          : 'Unknown error'
+      const message = messageFromApiErrorBody(errorBody, fallback)
+      throw new ApiError(response.status, message)
     }
 
     return parseResponseBody<T>(response)

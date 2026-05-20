@@ -17,6 +17,7 @@ import {
   Server,
   Video,
   Package,
+  HardDrive,
   Network,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -49,6 +50,8 @@ interface NavItem {
   icon: typeof Bot
   /** 仅登录用户可见 */
   requiresAuth?: boolean
+  /** 仅平台管理员可见 */
+  requiresAdmin?: boolean
 }
 
 const navigation: NavItem[] = [
@@ -58,6 +61,13 @@ const navigation: NavItem[] = [
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '视频', href: '/video-tasks', icon: Video },
   { name: 'Listing 创作', href: '/listing-studio', icon: Package },
+  {
+    name: '对象存储',
+    href: '/admin/storage',
+    icon: HardDrive,
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
   { name: '设置', href: '/settings', icon: Settings },
 ]
 
@@ -69,9 +79,15 @@ export default function Sidebar(): React.JSX.Element {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const { currentUser } = useUserStore()
   const isAnonymous = currentUser?.is_anonymous ?? true
+  const isAdmin = currentUser?.role === 'admin'
   const visibleNavigation = useMemo(
-    () => navigation.filter((item) => !item.requiresAuth || !isAnonymous),
-    [isAnonymous]
+    () =>
+      navigation.filter((item) => {
+        if (item.requiresAdmin && !isAdmin) return false
+        if (item.requiresAuth && isAnonymous) return false
+        return true
+      }),
+    [isAnonymous, isAdmin]
   )
 
   // Fetch sessions

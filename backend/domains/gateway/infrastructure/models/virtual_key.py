@@ -97,8 +97,8 @@ class GatewayVirtualKey(BaseModel):
     )
     guardrail_enabled: Mapped[bool] = mapped_column(
         Boolean,
-        default=True,
-        server_default="true",
+        default=False,
+        server_default="false",
         nullable=False,
         comment="是否启用 PII Guardrail",
     )

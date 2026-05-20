@@ -39,6 +39,7 @@ from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
 from domains.agent.presentation.listing_studio_router import router as listing_studio_router
+from domains.agent.presentation.admin_storage_router import router as admin_storage_router
 from domains.agent.presentation.product_info_router import router as product_info_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
@@ -470,6 +471,13 @@ app.include_router(
     listing_studio_router,
     prefix=f"{api_router_prefix}/listing-studio",
     tags=["Listing Studio"],
+)
+
+# 平台管理 - 对象存储
+app.include_router(
+    admin_storage_router,
+    prefix=f"{api_router_prefix}/admin/storage",
+    tags=["Admin Storage"],
 )
 
 # 兼容旧路径 /product-info（带 Deprecation 响应头）

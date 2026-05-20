@@ -418,3 +418,56 @@ class TestListingStudioLegacyProductInfoApi:
         assert r.headers.get("Deprecation") == "true"
         assert 'rel="successor-version"' in (r.headers.get("Link") or "")
         assert "/api/v1/listing-studio" in (r.headers.get("Link") or "")
+
+
+@pytest.mark.integration
+class TestListingStudioUploadApi:
+    """图片上传 API"""
+
+    @pytest.mark.asyncio
+    async def test_upload_png_succeeds(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
+            b"\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        r = await dev_client.post(
+            "/api/v1/listing-studio/upload",
+            headers=auth_headers,
+            files={"file": ("test.png", png_bytes, "image/png")},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert data["content_type"] == "image/png"
+        assert data["size_bytes"] == len(png_bytes)
+        assert "/listing-studio/images/" in data["url"] or data["url"].startswith("http")
+
+    @pytest.mark.asyncio
+    async def test_upload_then_serve_local_image(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
+            b"\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        upload = await dev_client.post(
+            "/api/v1/listing-studio/upload",
+            headers=auth_headers,
+            files={"file": ("serve-test.png", png_bytes, "image/png")},
+        )
+        assert upload.status_code == status.HTTP_200_OK
+        url = upload.json()["url"]
+        filename = url.rstrip("/").split("/")[-1]
+
+        serve = await dev_client.get(f"/api/v1/listing-studio/images/{filename}")
+        assert serve.status_code == status.HTTP_200_OK
+        assert serve.content == png_bytes

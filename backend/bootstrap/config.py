@@ -190,14 +190,14 @@ class Settings(BaseSettings):
             self.jwt_secret_key = self.jwt_secret.get_secret_value()
 
     # ========================================================================
-    # 存储配置
+    # 存储配置（已废弃：业务真源为 system_storage_config 表 + /admin/storage）
     # ========================================================================
-    storage_type: Literal["local", "s3", "minio"] = "local"
-    storage_path: str = "./data/storage"
-    s3_bucket: str = "ai-agent"
-    s3_region: str = "us-east-1"
-    s3_access_key: str | None = None
-    s3_secret_key: SecretStr | None = None
+    storage_type: Literal["local", "s3", "minio"] = "local"  # deprecated
+    storage_path: str = "./data/storage"  # deprecated
+    s3_bucket: str = "ai-agent"  # deprecated
+    s3_region: str = "us-east-1"  # deprecated
+    s3_access_key: str | None = None  # deprecated
+    s3_secret_key: SecretStr | None = None  # deprecated
 
     # ========================================================================
     # 工具沙箱配置
@@ -296,8 +296,8 @@ class Settings(BaseSettings):
     gateway_proxy_disable_internal_direct_litellm: bool = True
     # 无 PermissionContext.user_id 时用于 Gateway 归因的委派用户（如系统账号 UUID）
     gateway_internal_proxy_delegate_user_id: uuid.UUID | None = None
-    # 默认 PII Guardrail 是否生效（vkey 可单独开关）
-    gateway_default_guardrail_enabled: bool = True
+    # 是否在 LiteLLM 注册 PII Guardrail 回调（False=暂不启用；True 时仍受 vkey.guardrail_enabled 控制）
+    gateway_default_guardrail_enabled: bool = False
     # 默认是否在日志中存完整 prompt/response（vkey 可覆盖）
     gateway_default_store_full_messages: bool = False
     # Router 启用 cooldown 的失败次数阈值（与 LiteLLM 默认一致）

@@ -14,6 +14,7 @@ Gateway Management Router (/api/v1/gateway/*)
 - ``dashboard``     : ``/dashboard/summary``、``/dashboard/margin``
 - ``alerts``        : ``/alerts/rules``、``/alerts/events``
 - ``plans``         : ``ProviderPlan`` + ``EntitlementPlan``
+- ``features``      : ``/features`` 运行时能力开关（与 GATEWAY_* env 对齐）
 
 团队 CRUD 与成员见 ``domains.tenancy.presentation.teams_router``（同前缀挂载）。
 
@@ -33,6 +34,7 @@ from domains.gateway.presentation.routers import (
     budgets,
     credentials,
     dashboard,
+    features,
     logs,
     models,
     my_credentials,
@@ -57,5 +59,6 @@ router.include_router(dashboard.router)
 router.include_router(alerts.router)
 router.include_router(plans.router)
 router.include_router(pricing.router)
+router.include_router(features.router)
 
 __all__ = ["router"]

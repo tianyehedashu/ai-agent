@@ -244,7 +244,7 @@ class ApiKeyGatewayGrant(BaseModel, TimestampMixin):
     )
     guardrail_enabled: Mapped[bool] = mapped_column(
         Boolean,
-        default=True,
+        default=False,
         nullable=False,
         comment="是否启用 Gateway Guardrail",
     )

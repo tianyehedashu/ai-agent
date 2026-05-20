@@ -11,9 +11,9 @@ import {
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
 import { excludeModelsFromList } from '@/features/gateway-models/utils'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { Loader2, Route } from '@/lib/lucide-icons'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 const DEFAULT_STRATEGY: RoutingStrategy = 'simple-shuffle'
 
@@ -32,8 +32,7 @@ export function CreateRoutePanel({
   onCancel,
   isSubmitting = false,
 }: CreateRoutePanelProps): React.JSX.Element {
-  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
-  const { byName: priceByName } = useGatewayModelPrices(displayCurrency)
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const [virtualModel, setVirtualModel] = useState('')
   const [primaryModels, setPrimaryModels] = useState<string[]>([])
   const [fallbacksGeneral, setFallbacksGeneral] = useState<string[]>([])
@@ -108,7 +107,7 @@ export function CreateRoutePanel({
               disabled={isSubmitting}
               label="主模型（按优先级从上到下）"
               priceByName={priceByName}
-              currency={displayCurrency}
+              currency={GATEWAY_DISPLAY_CURRENCY}
             />
 
             <RouteFallbackModelPicker
@@ -120,7 +119,7 @@ export function CreateRoutePanel({
               description="主模型均失败时按顺序尝试"
               excludeNames={primaryModels}
               priceByName={priceByName}
-              currency={displayCurrency}
+              currency={GATEWAY_DISPLAY_CURRENCY}
             />
           </>
         )}

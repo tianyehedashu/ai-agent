@@ -1,9 +1,10 @@
 """
 Local Image Store - 本地图片存储
 
-将 base64 编码的图片保存到本地目录，返回可访问的 URL 路径。
-生产环境应替换为对象存储（S3、OSS）。
+实现 ImageStorePort，将图片保存到本地目录并返回可访问 URL。
 """
+
+from __future__ import annotations
 
 import base64
 from pathlib import Path
@@ -13,44 +14,78 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent / "storage" / "images"
-_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-
-SERVE_PREFIX = "/api/v1/product-info/images"
+DEFAULT_SERVE_PREFIX = "/api/v1/listing-studio/images"
 
 
-def save_base64_image(b64_data: str, ext: str = "png") -> str:
-    """将 base64 图片保存到本地并返回相对 URL。
+class LocalImageStore:
+    """本地文件系统图片存储。"""
 
-    Args:
-        b64_data: base64 编码的图片数据（不含 data:image/... 前缀）
-        ext: 文件扩展名
+    def __init__(
+        self,
+        storage_dir: Path,
+        serve_prefix: str = DEFAULT_SERVE_PREFIX,
+        public_base_url: str | None = None,
+    ) -> None:
+        self._storage_dir = storage_dir
+        self._serve_prefix = serve_prefix.rstrip("/")
+        self._public_base_url = public_base_url.rstrip("/") if public_base_url else None
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
 
-    Returns:
-        可访问的 URL 路径，如 /api/v1/product-info/images/<uuid>.png
-    """
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    filepath = _STORAGE_DIR / filename
-    filepath.write_bytes(base64.b64decode(b64_data))
-    logger.info("Saved image %s (%d bytes)", filename, filepath.stat().st_size)
-    return f"{SERVE_PREFIX}/{filename}"
+    @property
+    def storage_dir(self) -> Path:
+        return self._storage_dir
 
-
-def save_or_passthrough(image_data: str) -> str:
-    """若是 base64 则保存并返回 URL，若已是 URL 则直接返回。"""
-    if image_data.startswith(("http://", "https://", "/")):
-        return image_data
-    return save_base64_image(image_data)
-
-
-def get_image_path(filename: str) -> Path | None:
-    """根据文件名返回本地路径（不存在返回 None）。
-
-    对 filename 做路径穿越校验，确保 resolve 后仍在 _STORAGE_DIR 内。
-    """
-    path = (_STORAGE_DIR / filename).resolve()
-    if not path.is_relative_to(_STORAGE_DIR.resolve()):
-        return None
-    if path.exists() and path.is_file():
+    def _build_url(self, filename: str) -> str:
+        path = f"{self._serve_prefix}/{filename}"
+        if self._public_base_url:
+            return f"{self._public_base_url}{path}"
         return path
-    return None
+
+    async def save_bytes(
+        self,
+        content: bytes,
+        *,
+        ext: str,
+        content_type: str | None = None,
+    ) -> str:
+        filename = f"{uuid.uuid4().hex}.{ext.lstrip('.')}"
+        filepath = self._storage_dir / filename
+        filepath.write_bytes(content)
+        logger.info("Saved local image %s (%d bytes)", filename, len(content))
+        return self._build_url(filename)
+
+    async def persist_image_data(self, image_data: str, *, ext: str = "png") -> str:
+        if image_data.startswith(("http://", "https://", "/")):
+            return image_data
+        return await self.save_bytes(base64.b64decode(image_data), ext=ext)
+
+    def get_local_path(self, filename: str) -> Path | None:
+        path = (self._storage_dir / filename).resolve()
+        if not path.is_relative_to(self._storage_dir.resolve()):
+            return None
+        if path.exists() and path.is_file():
+            return path
+        return None
+
+    async def test_connection(self, *, verify_public: bool = True) -> None:
+        del verify_public
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
+        probe = self._storage_dir / ".write_probe"
+        try:
+            probe.write_text("ok", encoding="utf-8")
+        except OSError as exc:
+            raise OSError(f"本地目录不可写: {self._storage_dir}") from exc
+        probe.unlink(missing_ok=True)
+
+
+def get_image_path(storage_dir: Path, filename: str) -> Path | None:
+    """模块级辅助：路径穿越安全校验。"""
+    store = LocalImageStore(storage_dir)
+    return store.get_local_path(filename)
+
+
+__all__ = [
+    "DEFAULT_SERVE_PREFIX",
+    "LocalImageStore",
+    "get_image_path",
+]

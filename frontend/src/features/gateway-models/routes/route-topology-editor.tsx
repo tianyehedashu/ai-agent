@@ -13,11 +13,11 @@ import {
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
 import { excludeModelsFromList, stringArraysEqual } from '@/features/gateway-models/utils'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { ChevronDown, Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 interface RouteTopologyEditorProps {
   route: GatewayRoute | null
@@ -43,8 +43,7 @@ function RouteTopologyForm({
   onSave,
 }: RouteTopologyFormProps): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
-  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
-  const { byName: priceByName } = useGatewayModelPrices(displayCurrency)
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   const modelsByName = useMemo(() => new Map(models.map((m) => [m.name, m])), [models])
   const registeredNames = useMemo(() => new Set(models.map((m) => m.name)), [models])
@@ -169,7 +168,7 @@ function RouteTopologyForm({
           disabled={!canWrite}
           label="主模型（按优先级从上到下）"
           priceByName={priceByName}
-          currency={displayCurrency}
+          currency={GATEWAY_DISPLAY_CURRENCY}
         />
 
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
@@ -191,7 +190,7 @@ function RouteTopologyForm({
               description="主模型均失败时按顺序尝试"
               excludeNames={primaryModels}
               priceByName={priceByName}
-              currency={displayCurrency}
+              currency={GATEWAY_DISPLAY_CURRENCY}
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <RouteFallbackModelPicker
@@ -202,7 +201,7 @@ function RouteTopologyForm({
                 label="内容策略"
                 excludeNames={primaryModels}
                 priceByName={priceByName}
-                currency={displayCurrency}
+                currency={GATEWAY_DISPLAY_CURRENCY}
               />
               <RouteFallbackModelPicker
                 models={pickerModels}
@@ -212,7 +211,7 @@ function RouteTopologyForm({
                 label="上下文窗口"
                 excludeNames={primaryModels}
                 priceByName={priceByName}
-                currency={displayCurrency}
+                currency={GATEWAY_DISPLAY_CURRENCY}
               />
             </div>
           </CollapsibleContent>

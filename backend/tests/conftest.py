@@ -557,6 +557,18 @@ def isolate_chroma_vector_store(monkeypatch):
     reset_vector_store()
 
 
+@pytest.fixture(autouse=True)
+def clear_storage_config_cache() -> Generator[None, None, None]:
+    """避免 StorageConfigService 类级缓存污染单测/集成测。"""
+    from domains.agent.application.storage_config_service import (  # pylint: disable=import-outside-toplevel
+        StorageConfigService,
+    )
+
+    StorageConfigService.clear_cache()
+    yield
+    StorageConfigService.clear_cache()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_litellm():
     """清理 LiteLLM 资源，避免在程序退出时出现日志错误"""

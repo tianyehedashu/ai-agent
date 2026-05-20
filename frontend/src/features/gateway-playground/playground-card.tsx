@@ -26,10 +26,10 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundKeyField } from './playground-key-field'
@@ -46,7 +46,7 @@ import { PlaygroundStatusBadge } from './playground-status-badge'
 import { usePlaygroundCall } from './use-playground-call'
 import { usePlaygroundImageCall } from './use-playground-image'
 import { usePlaygroundVideoCall } from './use-playground-video'
-import { usePlaygroundVirtualKey } from './use-playground-virtual-key'
+import { usePlaygroundVirtualKey, type PlaygroundVkeyBootstrap } from './use-playground-virtual-key'
 import { useSyncApiKeyFromVkey } from './use-sync-api-key-from-vkey'
 
 import type { PlaygroundApiFlavor } from './types'
@@ -72,9 +72,14 @@ const MODEL_STATUS_RANK: Record<'success' | 'null' | 'failed', number> = {
 interface PlaygroundCardProps {
   baseUrl: string
   onModelChange?: (model: string) => void
+  vkeyBootstrap?: PlaygroundVkeyBootstrap
 }
 
-export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps): React.JSX.Element {
+export function PlaygroundCard({
+  baseUrl,
+  onModelChange,
+  vkeyBootstrap,
+}: PlaygroundCardProps): React.JSX.Element {
   const apiKeyId = useId()
   const modelSelectId = useId()
   const modelCustomId = useId()
@@ -112,7 +117,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
     plain,
     isRevealing,
     revealError,
-  } = usePlaygroundVirtualKey()
+  } = usePlaygroundVirtualKey(vkeyBootstrap)
 
   const activeCall =
     playgroundMode === 'image_gen'
@@ -138,8 +143,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
       },
     ],
   })
-  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
-  const { byName: priceByName } = useGatewayModelPrices(displayCurrency)
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   useSyncApiKeyFromVkey({
     plain,
@@ -409,7 +413,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
               filteredModels={filteredModels}
               selectedCandidate={selectedCandidate}
               priceByName={priceByName}
-              currency={displayCurrency}
+              currency={GATEWAY_DISPLAY_CURRENCY}
               playgroundMode={playgroundMode}
               modelsLoading={teamModelsQuery.isLoading || myModelsQuery.isLoading}
             />
@@ -548,7 +552,7 @@ export function PlaygroundCard({ baseUrl, onModelChange }: PlaygroundCardProps):
               rawResponse={rawResponse}
               lastRequest={lastRequest}
               priceRow={outputPriceRow}
-              currency={displayCurrency}
+              currency={GATEWAY_DISPLAY_CURRENCY}
               flavor={playgroundMode === 'chat' ? apiFlavor : 'openai'}
               stream={showStreamSwitch ? stream : false}
               endpoint={outputEndpoint}

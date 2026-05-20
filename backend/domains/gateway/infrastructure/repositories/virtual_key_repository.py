@@ -109,7 +109,7 @@ class VirtualKeyRepository:
                 allowed_models=[],
                 allowed_capabilities=[],
                 store_full_messages=False,
-                guardrail_enabled=True,
+                guardrail_enabled=False,
                 is_system=True,
                 is_active=True,
             )

@@ -17,6 +17,7 @@ import { alertsApi } from './alerts'
 import { budgetsApi } from './budgets'
 import { credentialsApi } from './credentials'
 import { entitlementsApi } from './entitlements'
+import { featuresApi } from './features'
 import { keysApi } from './keys'
 import { logsApi } from './logs'
 import { modelsApi } from './models'
@@ -32,6 +33,8 @@ export { GATEWAY_API_BASE, GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from './_
 // ---------- 资源类型 re-export ----------
 
 export type { GatewayTeam, TeamMember } from './teams'
+
+export type { GatewayFeatures } from './features'
 
 export type {
   VirtualKey,
@@ -133,6 +136,7 @@ export type {
 
 export {
   teamsApi,
+  featuresApi,
   keysApi,
   credentialsApi,
   modelsApi,
@@ -154,6 +158,7 @@ export {
  */
 export const gatewayApi = {
   ...teamsApi,
+  ...featuresApi,
   ...keysApi,
   ...credentialsApi,
   ...modelsApi,

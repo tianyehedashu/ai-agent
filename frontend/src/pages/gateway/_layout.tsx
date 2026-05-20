@@ -8,7 +8,6 @@ import type React from 'react'
 
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
-import { CurrencyToggle } from '@/components/currency-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import {
   AlertTriangle,
@@ -30,18 +29,11 @@ import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
 
-/** 以下页面不展示币种切换：指南、上游成本（固定 USD） */
-const HIDE_CURRENCY_TOGGLE_PATH_RE = /\/gateway\/(?:guide|pricing\/upstream)(?:\/|$)/
-
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
   const location = useLocation()
   const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
-  const showCurrencyToggle = useMemo(
-    () => !HIDE_CURRENCY_TOGGLE_PATH_RE.test(location.pathname),
-    [location.pathname]
-  )
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
@@ -105,11 +97,6 @@ export default function GatewayLayout(): React.JSX.Element {
           isGuidePage ? 'bg-muted/[0.12] pt-0' : 'pt-6'
         )}
       >
-        {showCurrencyToggle ? (
-          <div className="mb-4 flex justify-end">
-            <CurrencyToggle />
-          </div>
-        ) : null}
         <Outlet />
       </section>
     </div>

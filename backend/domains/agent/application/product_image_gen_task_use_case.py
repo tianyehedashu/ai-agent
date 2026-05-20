@@ -25,7 +25,6 @@ from domains.agent.infrastructure.repositories.product_image_gen_task_repository
 from libs.db.database import get_session_factory
 from libs.db.permission_context import PermissionContext, set_permission_context
 from libs.exceptions import NotFoundError
-from libs.storage.local_image_store import save_or_passthrough
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -64,7 +63,12 @@ async def _generate_images_background(
     )
     session_factory = get_session_factory()
     async with session_factory() as db:
+        from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
+            create_listing_studio_image_service,
+        )
+
         repo = ProductImageGenTaskRepository(db)
+        image_svc = create_listing_studio_image_service(db)
 
         try:
             await repo.update(task_id, status=ProductImageGenTaskStatus.RUNNING)
@@ -99,7 +103,7 @@ async def _generate_images_background(
                         api_base_override=api_base_override,
                     )
                     if result.success and result.images:
-                        url = save_or_passthrough(result.images[0])
+                        url = await image_svc.persist_generated_image(result.images[0])
                         result_images.append({"slot": slot, "url": url})
                     else:
                         err_msg = result.error or "Unknown error"

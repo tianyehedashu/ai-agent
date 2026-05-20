@@ -13,6 +13,7 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
 )
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
+from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -91,7 +92,10 @@ class ProxyMetadataBuilder:
             "gateway_request_id": ctx.request_id,
             "gateway_team_snapshot": ({"name": team.name, "kind": team.kind} if team else None),
             "gateway_vkey_name_snapshot": ctx.vkey.vkey_name if ctx.vkey else None,
-            "guardrail_enabled": ctx.guardrail_enabled,
+            "guardrail_enabled": effective_guardrail_enabled(
+                global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
+                vkey_guardrail_enabled=ctx.guardrail_enabled,
+            ),
             "gateway_entitlement_plan_id": (
                 str(ctx.entitlement_state.plan_id) if ctx.entitlement_state is not None else None
             ),

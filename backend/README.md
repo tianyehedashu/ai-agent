@@ -50,6 +50,31 @@ backend/
 
 无可见模型时 API 返回 `ValidationError`，前端 ModelSelector 显示「暂无可用模型」。旧 API 路径 `/api/v1/product-info` 已弃用，请迁移至 `/api/v1/listing-studio`。
 
+### Listing Studio 对象存储
+
+用户上传与 8 图生成结果统一走 **PostgreSQL `system_storage_config`** 配置，**不依赖** `.env` 中的 `STORAGE_TYPE` / `S3_*`（这些 Settings 字段已废弃）。
+
+1. 以平台管理员登录，打开 **对象存储**（`/admin/storage`）或调用 `GET/PUT /api/v1/admin/storage`
+2. **开发**：默认 `local`，图片落在 `./data/storage/images`，通过 `/api/v1/listing-studio/images/{filename}` 访问
+3. **生产（Cloudflare R2）**：
+   - `storage_type`: `s3`
+   - `s3_endpoint_url`: `https://<account_id>.r2.cloudflarestorage.com`
+   - `s3_region`: `auto`
+   - `s3_public_base_url`: R2.dev 子域或自定义 CDN 前缀（bucket 需开启公开读）
+4. **阿里云 OSS**：同上，endpoint 填 `https://oss-cn-<region>.aliyuncs.com`
+
+保存后点击 **测试连接** 验证；切换 bucket/endpoint 后新上传走新配置，历史 URL 无需立即迁移。
+
+### Gateway PII 守卫（默认关闭）
+
+出站 `/v1/*` 代理可在 LiteLLM `pre_call_hook` 中对消息做手机/邮箱/身份证/银行卡/IPv4 脱敏。**默认不启用**：
+
+1. 部署：`GATEWAY_DEFAULT_GUARDRAIL_ENABLED=false`（见仓库根 `env.example`）
+2. 开放后设为 `true`，并在控制台为虚拟 Key 开启「PII 守卫」（`guardrail_enabled`）
+3. 两层开关：**全局** 控制是否注册回调；**单次请求** 的 `metadata.guardrail_enabled` 来自 vkey/grant，二者同时为真才脱敏
+
+详见 [docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md](docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md) §6.2。
+
 ## 快速开始
 
 ### 环境要求
@@ -96,6 +121,8 @@ make db-migrate msg="initial"
 make db-upgrade
 # 或者: uv run alembic upgrade head
 ```
+
+本地与 CI 使用 `alembic upgrade`（`alembic/versions/*.py`）。**生产**由运维按链手工执行 `alembic/sql/<与 versions 同名>.up.sql`（升级）/ `.down.sql`（回滚），Alembic **不会**加载这些文件；含义与命名见 `alembic/sql/README.md`。可用 `scripts/generate_alembic_sql_files.py` 从 Python 迁移重新导出运维脚本。
 
 ### 运行开发服务器
 

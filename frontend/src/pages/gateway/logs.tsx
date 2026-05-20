@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import {
   credentialDisplayText,
   credentialDisplayTitle,
@@ -26,7 +27,6 @@ import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakd
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { ChevronDown } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 const PAGE_SIZE = 100
 
@@ -37,8 +37,6 @@ export default function GatewayLogsPage(): React.JSX.Element {
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
-  const displayCurrency = useUserPreferenceStore((s) => s.displayCurrency)
-
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
     queryKey: ['gateway', 'logs', usageAggregation],
     initialPageParam: 1,
@@ -194,7 +192,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
                     </div>
                     <div className="tabular-nums">
                       {formatMoney(coalesceMoney(item.revenue_usd ?? item.cost_usd), {
-                        currency: displayCurrency,
+                        currency: GATEWAY_DISPLAY_CURRENCY,
                         precision: 4,
                       })}
                     </div>

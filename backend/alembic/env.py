@@ -5,6 +5,7 @@ Alembic Environment Configuration
 """
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -19,6 +20,13 @@ from bootstrap.config import settings
 # （历史上 gateway.infrastructure.models.__init__ 曾 re-export tenancy.Team —
 #  这条捷径让分层边界变模糊，已删除，env.py 直接显式 import 即可）。
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
+from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob  # noqa: F401
+from domains.agent.infrastructure.models.listing_studio_job_step import (  # noqa: F401
+    ListingStudioJobStep,
+)
+from domains.agent.infrastructure.models.listing_studio_prompt_template import (  # noqa: F401
+    ListingStudioPromptTemplate,
+)
 from domains.agent.infrastructure.models.mcp_dynamic_prompt import MCPDynamicPrompt  # noqa: F401
 from domains.agent.infrastructure.models.mcp_dynamic_tool import MCPDynamicTool  # noqa: F401
 from domains.agent.infrastructure.models.mcp_server import MCPServer  # noqa: F401
@@ -27,12 +35,8 @@ from domains.agent.infrastructure.models.message import Message  # noqa: F401
 from domains.agent.infrastructure.models.product_image_gen_task import (  # noqa: F401
     ProductImageGenTask,
 )
-from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob  # noqa: F401
-from domains.agent.infrastructure.models.listing_studio_job_step import (  # noqa: F401
-    ListingStudioJobStep,
-)
-from domains.agent.infrastructure.models.listing_studio_prompt_template import (  # noqa: F401
-    ListingStudioPromptTemplate,
+from domains.agent.infrastructure.models.system_storage_config import (  # noqa: F401
+    SystemStorageConfig,
 )
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask  # noqa: F401
 from domains.gateway.infrastructure.models.alert import (  # noqa: F401
@@ -110,6 +114,18 @@ def run_migrations_offline() -> None:
         transaction_per_migration=True,
     )
 
+    if os.environ.get("ALEMBIC_SQL_GEN_MOCK") == "1":
+        import importlib.util
+        from pathlib import Path
+
+        _ops_path = Path(__file__).resolve().parent / "ops_sql_export.py"
+        _spec = importlib.util.spec_from_file_location("ops_sql_export", _ops_path)
+        if _spec is None or _spec.loader is None:
+            msg = f"Cannot load ops_sql_export from {_ops_path}"
+            raise RuntimeError(msg)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.install_offline_sql_gen_mock()
     with context.begin_transaction():
         context.run_migrations()
 

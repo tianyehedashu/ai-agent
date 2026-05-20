@@ -43,6 +43,12 @@ const PlaygroundCard = lazy(async () => {
   return { default: mod.PlaygroundCard }
 })
 
+/** 从虚拟 Key 创建页跳转时经 React Router state 带入的明文（仅本次导航） */
+export type GuideVkeyNavState = {
+  vkeyPlain?: string
+  vkeyId?: string
+}
+
 const GuideClientIntegrationsSection = lazy(async () => {
   const mod = await import('@/pages/gateway/guide-client-integrations')
   return { default: mod.GuideClientIntegrationsSection }
@@ -139,8 +145,17 @@ function useActiveGuideAnchor(): string {
 export default function GatewayGuidePage(): React.JSX.Element {
   const [searchParams] = useSearchParams()
   const location = useLocation()
+  const navState = (location.state ?? null) as GuideVkeyNavState | null
   const setLastSelectedVkeyId = usePlaygroundVkeySelectionStore((s) => s.setLastSelectedId)
-  const { plain: revealedKey, isRevealing } = usePlaygroundVirtualKey()
+  const keyIdFromQuery = searchParams.get('key_id')
+  const vkeyBootstrap = useMemo(
+    () => ({
+      plain: navState?.vkeyPlain ?? null,
+      keyId: keyIdFromQuery ?? navState?.vkeyId ?? null,
+    }),
+    [navState?.vkeyPlain, navState?.vkeyId, keyIdFromQuery]
+  )
+  const { plain: revealedKey, isRevealing } = usePlaygroundVirtualKey(vkeyBootstrap)
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
@@ -169,13 +184,12 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [gatewayV1Base, displayKey, activeModel, snippets]
   )
 
-  const keyIdFromQuery = searchParams.get('key_id')
-
   useEffect(() => {
-    if (keyIdFromQuery) {
-      setLastSelectedVkeyId(keyIdFromQuery)
+    const id = keyIdFromQuery ?? navState?.vkeyId ?? null
+    if (id) {
+      setLastSelectedVkeyId(id)
     }
-  }, [keyIdFromQuery, setLastSelectedVkeyId])
+  }, [keyIdFromQuery, navState?.vkeyId, setLastSelectedVkeyId])
 
   useEffect(() => {
     if (location.hash !== '#clients' && !keyIdFromQuery) return
@@ -234,7 +248,11 @@ export default function GatewayGuidePage(): React.JSX.Element {
             在线试调
           </h3>
           <Suspense fallback={<GuideSectionFallback />}>
-            <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+            <PlaygroundCard
+              baseUrl={gatewayV1Base}
+              onModelChange={handlePlaygroundModelChange}
+              vkeyBootstrap={vkeyBootstrap}
+            />
           </Suspense>
         </section>
 

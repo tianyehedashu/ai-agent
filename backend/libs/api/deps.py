@@ -43,6 +43,8 @@ from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
 
 if TYPE_CHECKING:
+    from domains.agent.application.listing_studio_image_service import ListingStudioImageService
+    from domains.agent.application.storage_config_service import StorageConfigService
     from domains.agent.domain.services.sandbox_lifecycle import SandboxLifecycleService
 
 __all__ = [
@@ -54,6 +56,7 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_listing_studio_image_service",
     "get_listing_studio_prompt_service",
     "get_listing_studio_service",
     "get_login_services",
@@ -65,6 +68,7 @@ __all__ = [
     "get_sandbox_service",
     "get_session_service",
     "get_stats_service",
+    "get_storage_config_service",
     "get_title_service",
     "get_user_service",
     "get_user_use_case",
@@ -268,3 +272,23 @@ async def get_listing_studio_prompt_service(db: DbSession) -> ListingStudioPromp
 async def get_chat_model_resolution_service(db: DbSession) -> ChatModelResolutionUseCase:
     """获取聊天模型目录解析服务"""
     return ChatModelResolutionUseCase(db, catalog=get_model_catalog_adapter(db))
+
+
+async def get_storage_config_service(db: DbSession) -> StorageConfigService:
+    """获取平台对象存储配置服务"""
+    from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
+        create_storage_config_service,
+    )
+
+    return create_storage_config_service(db)
+
+
+async def get_listing_studio_image_service(
+    db: DbSession,
+) -> ListingStudioImageService:
+    """获取 Listing Studio 图片存储服务"""
+    from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
+        create_listing_studio_image_service,
+    )
+
+    return create_listing_studio_image_service(db)

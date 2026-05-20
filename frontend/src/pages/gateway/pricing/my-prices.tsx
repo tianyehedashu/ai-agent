@@ -5,10 +5,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
 import { cn } from '@/lib/utils'
-import { useUserPreferenceStore } from '@/stores/user-preference'
 
 const columns: readonly PricingTableColumn[] = [
   { key: 'model', label: '模型', className: 'px-3 py-2' },
@@ -17,7 +17,7 @@ const columns: readonly PricingTableColumn[] = [
 ]
 
 export default function GatewayPricingMyPricesPage(): React.JSX.Element {
-  const currency = useUserPreferenceStore((s) => s.displayCurrency)
+  const currency = GATEWAY_DISPLAY_CURRENCY
   const [searchParams] = useSearchParams()
   const targetModel = searchParams.get('model')?.trim() ?? ''
   const pricesQuery = useQuery({

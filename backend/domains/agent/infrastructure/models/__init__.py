@@ -12,6 +12,7 @@ from domains.agent.infrastructure.models.listing_studio_job_step import (
 from domains.agent.infrastructure.models.listing_studio_prompt_template import (
     ListingStudioPromptTemplate,
 )
+from domains.agent.infrastructure.models.system_storage_config import SystemStorageConfig
 from domains.agent.infrastructure.models.memory import Memory
 from domains.agent.infrastructure.models.message import Message
 from domains.agent.infrastructure.models.product_image_gen_task import (
@@ -27,6 +28,7 @@ __all__ = [
     "ListingStudioJobStep",
     "ListingStudioJobStepStatus",
     "ListingStudioPromptTemplate",
+    "SystemStorageConfig",
     "Memory",
     "Message",
     "ProductImageGenTask",

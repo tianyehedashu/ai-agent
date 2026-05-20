@@ -107,6 +107,12 @@ class OptimizePromptResponse(BaseModel):
     optimized_prompt: str
 
 
+class UploadImageResponse(BaseModel):
+    url: str
+    content_type: str
+    size_bytes: int
+
+
 def job_response(data: dict[str, Any]) -> ListingStudioJobResponse:
     return ListingStudioJobResponse.model_validate(data)
 
