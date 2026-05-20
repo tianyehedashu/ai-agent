@@ -26,7 +26,7 @@ class UpstreamPricingAuditReport:
 
 async def audit_upstream_pricing_keys(session: AsyncSession) -> UpstreamPricingAuditReport:
     """对比 ``gateway_models.real_model`` 与活跃 ``upstream_model_pricing``。"""
-    models = await GatewayModelRepository(session).list_for_team(None, only_enabled=True)
+    models = await GatewayModelRepository(session).list_system(only_enabled=True)
     upstream_rows = await UpstreamPricingRepository(session).list_active()
     upstream_keys = {
         (r.provider, r.upstream_model, r.capability) for r in upstream_rows if r.upstream_model

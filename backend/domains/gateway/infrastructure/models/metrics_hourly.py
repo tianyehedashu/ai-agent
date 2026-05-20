@@ -37,7 +37,7 @@ class GatewayMetricsHourly(BaseModel):
     )
 
     # 维度
-    team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     vkey_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     credential_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
@@ -69,7 +69,7 @@ class GatewayMetricsHourly(BaseModel):
     __table_args__ = (
         UniqueConstraint(
             "bucket_at",
-            "team_id",
+            "tenant_id",
             "user_id",
             "vkey_id",
             "credential_id",
@@ -80,11 +80,11 @@ class GatewayMetricsHourly(BaseModel):
             "capability",
             name="uq_gateway_metrics_hourly_dim",
         ),
-        Index("ix_gateway_metrics_hourly_team_bucket", "team_id", "bucket_at"),
+        Index("ix_gateway_metrics_hourly_tenant_bucket", "tenant_id", "bucket_at"),
     )
 
     def __repr__(self) -> str:
-        return f"<GatewayMetricsHourly {self.bucket_at} team={self.team_id} req={self.requests}>"
+        return f"<GatewayMetricsHourly {self.bucket_at} tenant={self.tenant_id} req={self.requests}>"
 
 
 __all__ = ["GatewayMetricsHourly"]

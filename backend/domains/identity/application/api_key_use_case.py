@@ -515,7 +515,7 @@ class ApiKeyUseCase:
         row = await self.repo.get_gateway_grant_by_id(grant_id)
         if row is None:
             raise NotFoundError("ApiKeyGatewayGrant", str(grant_id))
-        if not is_platform_admin and row.team_id != team_id:
+        if not is_platform_admin and row.tenant_id != team_id:
             raise NotFoundError("ApiKeyGatewayGrant", str(grant_id))
 
     @staticmethod
@@ -537,7 +537,7 @@ class ApiKeyUseCase:
             id=model.id,
             api_key_id=model.api_key_id,
             user_id=model.user_id,
-            team_id=model.team_id,
+            team_id=model.tenant_id,
             allowed_models=tuple(model.allowed_models or ()),
             allowed_capabilities=tuple(model.allowed_capabilities or ()),
             rpm_limit=model.rpm_limit,

@@ -29,7 +29,7 @@ class TestVirtualKeyRepository:
         repo = VirtualKeyRepository(db_session)
         plain, key_id, key_hash = generate_vkey()
         vk = await repo.create(
-            team_id=team.id,
+            tenant_id=team.id,
             created_by_user_id=test_user.id,
             name="test-key",
             description=None,
@@ -59,7 +59,7 @@ class TestVirtualKeyRepository:
         repo = VirtualKeyRepository(db_session)
         _, key_id, key_hash = generate_vkey()
         vk = await repo.create(
-            team_id=team.id,
+            tenant_id=team.id,
             created_by_user_id=test_user.id,
             name="to-revoke",
             description=None,
@@ -124,7 +124,7 @@ class TestVirtualKeyRepository:
             _, key_id_b, hash_b = generate_vkey()
             with pytest.raises(IntegrityError):
                 await repo.create(
-                    team_id=team.id,
+                    tenant_id=team.id,
                     created_by_user_id=None,
                     name="__system_internal_bridge__",
                     description="尝试直接造重复行",
@@ -181,7 +181,7 @@ class TestVirtualKeyRepository:
         assert len(set(ids)) == 1
 
         stmt = select(GatewayVirtualKey).where(
-            GatewayVirtualKey.team_id == team.id,
+            GatewayVirtualKey.tenant_id == team.id,
             GatewayVirtualKey.is_system.is_(True),
             GatewayVirtualKey.is_active.is_(True),
         )
@@ -195,7 +195,7 @@ class TestVirtualKeyRepository:
 
         _, k1, h1 = generate_vkey()
         await repo.create(
-            team_id=team.id,
+            tenant_id=team.id,
             created_by_user_id=test_user.id,
             name="user-key",
             description=None,
@@ -214,10 +214,10 @@ class TestVirtualKeyRepository:
             team.id, encrypted_key="enc-sys", key_hash=h2, key_id_str=k2
         )
 
-        items_no_sys = await repo.list_by_team(team.id)
+        items_no_sys = await repo.list_for_tenant(team.id)
         assert all(not v.is_system for v in items_no_sys)
 
-        items_with_sys = await repo.list_by_team(team.id, include_system=True)
+        items_with_sys = await repo.list_for_tenant(team.id, include_system=True)
         assert any(v.is_system for v in items_with_sys)
 
     @pytest.mark.asyncio
@@ -226,7 +226,7 @@ class TestVirtualKeyRepository:
         repo = VirtualKeyRepository(db_session)
         _, k1, h1 = generate_vkey()
         await repo.create(
-            team_id=team.id,
+            tenant_id=team.id,
             created_by_user_id=test_user.id,
             name="prune-me",
             description=None,

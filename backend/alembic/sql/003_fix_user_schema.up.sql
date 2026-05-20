@@ -10,4 +10,50 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'avatar'
+            ) THEN
+                ALTER TABLE users RENAME COLUMN avatar TO avatar_url;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'avatar_url'
+            ) THEN
+                ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500);
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'settings'
+            ) THEN
+                ALTER TABLE users ADD COLUMN settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'status'
+            ) THEN
+                ALTER TABLE users ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active';
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users'
+                AND column_name = 'name'
+                AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE users ALTER COLUMN name DROP NOT NULL;
+            END IF;
+        END $$;;

@@ -28,7 +28,7 @@ class GatewayMetricsRollupRepository:
         stmt = (
             select(
                 bucket.label("bucket_at"),
-                GatewayRequestLog.team_id,
+                GatewayRequestLog.tenant_id,
                 GatewayRequestLog.user_id,
                 GatewayRequestLog.vkey_id,
                 GatewayRequestLog.credential_id,
@@ -59,7 +59,7 @@ class GatewayMetricsRollupRepository:
             )
             .group_by(
                 bucket,
-                GatewayRequestLog.team_id,
+                GatewayRequestLog.tenant_id,
                 GatewayRequestLog.user_id,
                 GatewayRequestLog.vkey_id,
                 GatewayRequestLog.credential_id,
@@ -76,7 +76,7 @@ class GatewayMetricsRollupRepository:
             values = {
                 "id": uuid.uuid4(),
                 "bucket_at": row.bucket_at,
-                "team_id": row.team_id,
+                "team_id": row.tenant_id,
                 "user_id": row.user_id,
                 "vkey_id": row.vkey_id,
                 "credential_id": row.credential_id,

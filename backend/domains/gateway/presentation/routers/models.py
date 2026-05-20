@@ -34,6 +34,7 @@ from domains.gateway.presentation.schemas.common import (
     MultiCredentialGatewayModelResponse,
     PlatformCredentialStatItem,
 )
+from domains.gateway.presentation.tenant_scoped_response import tenant_scoped_orm_dict
 from domains.identity.presentation.deps import AdminUser
 from libs.db.database import get_db
 from libs.exceptions import HttpMappableDomainError, ValidationError
@@ -54,11 +55,11 @@ async def list_model_presets(
 ) -> list[GatewayModelPresetResponse]:
     """返回已同步到 DB 的配置托管全局模型目录；若无则回退 app.toml（兼容旧环境）。"""
     _ = team
-    models = await reads.list_gateway_models(team.team_id, only_enabled=True)
+    system_models = await reads.list_system_gateway_models(only_enabled=True)
     cfg_rows = [
         m
-        for m in models
-        if m.team_id is None and (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG
+        for m in system_models
+        if (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG
     ]
     presets: list[GatewayModelPresetResponse]
     if cfg_rows:
@@ -139,7 +140,7 @@ async def list_models(
         provider=provider,
         credential_id=credential_id,
     )
-    return [GatewayModelResponse.model_validate(m) for m in models]
+    return [GatewayModelResponse.model_validate(tenant_scoped_orm_dict(m)) for m in models]
 
 
 @router.get("/models/usage-summary", response_model=GatewayModelUsageSummaryResponse)
@@ -177,7 +178,7 @@ async def create_model(
 ) -> GatewayModelResponse:
     try:
         model = await writes.create_gateway_model(
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             name=body.name,
             capability=body.capability,
             real_model=body.real_model,
@@ -194,7 +195,7 @@ async def create_model(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return GatewayModelResponse.model_validate(model)
+    return GatewayModelResponse.model_validate(tenant_scoped_orm_dict(model))
 
 
 @router.post(
@@ -210,7 +211,7 @@ async def create_multi_credential_model(
     """同 ``(provider, real_model)`` 多凭据一键注册 + 自动 ``GatewayRoute``，启用 Router 负载均衡。"""
     try:
         result = await writes.create_multi_credential_gateway_model(
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             name=body.name,
             capability=body.capability,
             real_model=body.real_model,
@@ -249,7 +250,7 @@ async def update_model(
     try:
         updated = await writes.update_gateway_model(
             model_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             fields=body.model_dump(exclude_unset=True, exclude_none=True),
         )
@@ -257,7 +258,7 @@ async def update_model(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return GatewayModelResponse.model_validate(updated)
+    return GatewayModelResponse.model_validate(tenant_scoped_orm_dict(updated))
 
 
 @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -267,7 +268,7 @@ async def delete_model(
     writes: MgmtWrites,
 ) -> None:
     try:
-        await writes.delete_gateway_model(model_id, team_id=team.team_id)
+        await writes.delete_gateway_model(model_id, tenant_id=team.team_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
 
@@ -284,7 +285,7 @@ async def test_model(
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。
     """
     try:
-        result = await writes.test_gateway_model(model_id, team_id=team.team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team.team_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return GatewayModelTestResponse.model_validate(result)

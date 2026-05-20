@@ -63,7 +63,7 @@ async def migrate_user_models_to_personal_gateway(session: AsyncSession) -> dict
         personal_team = await teams.ensure_personal_team(user_id)
         team_id = personal_team.id
 
-        existing = await models.list_team_owned(team_id, only_enabled=False)
+        existing = await models.list_tenant_owned(team_id, only_enabled=False)
         if any(
             str((m.tags or {}).get("display_name") or "") == um["display_name"]
             and m.provider == um["provider"]
@@ -94,7 +94,7 @@ async def migrate_user_models_to_personal_gateway(session: AsyncSession) -> dict
             cap = capability_for_model_type(mtype)
             alias = personal_model_alias(um["display_name"], mtype, suffix=idx if idx else 0)
             suffix = 0
-            while await models.name_exists_on_team(team_id, alias):
+            while await models.name_exists_for_tenant(team_id, alias):
                 suffix += 1
                 alias = personal_model_alias(um["display_name"], mtype, suffix=suffix)
 
@@ -106,7 +106,7 @@ async def migrate_user_models_to_personal_gateway(session: AsyncSession) -> dict
 
             real_model = build_litellm_model_id(um["provider"], um["model_id"])
             row = await models.create(
-                team_id=team_id,
+                tenant_id=team_id,
                 name=alias,
                 capability=cap,
                 real_model=real_model,
@@ -160,21 +160,21 @@ def _ensure_personal_team_sync(session: Session, user_id: uuid.UUID) -> Team:
     )
     session.add(team)
     session.flush()
-    session.add(TeamMember(team_id=team.id, user_id=user_id, role="owner"))
+    session.add(TeamMember(tenant_id=team.id, user_id=user_id, role="owner"))
     session.flush()
     return team
 
 
-def _list_team_owned_sync(session: Session, team_id: uuid.UUID) -> list[GatewayModel]:
-    stmt = select(GatewayModel).where(GatewayModel.team_id == team_id)
+def _list_tenant_owned_sync(session: Session, tenant_id: uuid.UUID) -> list[GatewayModel]:
+    stmt = select(GatewayModel).where(GatewayModel.tenant_id == tenant_id)
     return list(session.execute(stmt).scalars().all())
 
 
-def _name_exists_on_team_sync(session: Session, team_id: uuid.UUID, name: str) -> bool:
+def _name_exists_for_tenant_sync(session: Session, tenant_id: uuid.UUID, name: str) -> bool:
     stmt = (
         select(func.count())
         .select_from(GatewayModel)
-        .where(GatewayModel.team_id == team_id, GatewayModel.name == name)
+        .where(GatewayModel.tenant_id == tenant_id, GatewayModel.name == name)
     )
     return int(session.execute(stmt).scalar_one() or 0) > 0
 
@@ -197,7 +197,7 @@ def migrate_user_models_to_personal_gateway_sync(session: Session) -> dict[str, 
         personal_team = _ensure_personal_team_sync(session, user_id)
         team_id = personal_team.id
 
-        existing = _list_team_owned_sync(session, team_id)
+        existing = _list_tenant_owned_sync(session, team_id)
         if any(
             str((m.tags or {}).get("display_name") or "") == um["display_name"]
             and m.provider == um["provider"]
@@ -230,7 +230,7 @@ def migrate_user_models_to_personal_gateway_sync(session: Session) -> dict[str, 
             cap = capability_for_model_type(mtype)
             alias = personal_model_alias(um["display_name"], mtype, suffix=idx if idx else 0)
             suffix = 0
-            while _name_exists_on_team_sync(session, team_id, alias):
+            while _name_exists_for_tenant_sync(session, team_id, alias):
                 suffix += 1
                 alias = personal_model_alias(um["display_name"], mtype, suffix=suffix)
 
@@ -242,7 +242,7 @@ def migrate_user_models_to_personal_gateway_sync(session: Session) -> dict[str, 
 
             real_model = build_litellm_model_id(um["provider"], um["model_id"])
             row = GatewayModel(
-                team_id=team_id,
+                tenant_id=team_id,
                 name=alias,
                 capability=cap,
                 real_model=real_model,

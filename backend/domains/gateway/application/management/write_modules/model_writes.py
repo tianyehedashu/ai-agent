@@ -55,29 +55,29 @@ class ModelWritesMixin:
             raise CredentialNotFoundError(str(credential_id))
         if cred_row.provider.strip().lower() != provider.strip().lower():
             raise ValidationError(f'凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致')
-        team_id = await self._ensure_personal_team_id(user_id)
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
         real_model = build_litellm_model_id(provider, model_id)
         created: list[Any] = []
         for idx, mtype in enumerate(model_types):
             cap = capability_for_model_type(mtype)
             alias = personal_model_alias(display_name, mtype, suffix=idx if idx else 0)
             suffix = 0
-            while await self._models.name_exists_on_team(team_id, alias):
+            while await self._models.name_exists_for_tenant(tenant_id, alias):
                 suffix += 1
                 alias = personal_model_alias(display_name, mtype, suffix=suffix)
             mtags = tags_for_model_type(mtype)
             mtags['display_name'] = display_name
             if tags:
                 mtags.update({k: v for k, v in tags.items() if v is not None})
-            row = await self._models.create(team_id=team_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
+            row = await self._models.create(tenant_id=tenant_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
             created.append(row)
         if reload_router:
             await self.reload_litellm_router()
         return created
 
     async def update_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID, fields: dict[str, Any]) -> Any:
-        team_id = await self._ensure_personal_team_id(user_id)
-        existing = await self._models.get_on_team(model_id, team_id)
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
+        existing = await self._models.get_for_tenant(model_id, tenant_id)
         if existing is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
         update_fields: dict[str, Any] = {}
@@ -106,8 +106,8 @@ class ModelWritesMixin:
         return updated
 
     async def delete_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> None:
-        team_id = await self._ensure_personal_team_id(user_id)
-        existing = await self._models.get_on_team(model_id, team_id)
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
+        existing = await self._models.get_for_tenant(model_id, tenant_id)
         if existing is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
         model_name = existing.name
@@ -115,11 +115,13 @@ class ModelWritesMixin:
         await prune_gateway_model_name_references(self._session, frozenset({model_name}))
         await self.reload_litellm_router()
 
-    async def create_gateway_model(self, *, team_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
+    async def create_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
         raw_rm = str(real_model).strip()
         if not raw_rm:
             raise ValidationError('上游模型 ID 不能为空')
-        cred = await self._creds.get_bindable_for_team_gateway_model(credential_id, team_id=team_id, is_platform_admin=is_platform_admin)
+        cred = await self._creds.get_bindable_for_team_gateway_model(
+            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+        )
         if cred is None:
             raise CredentialNotFoundError(str(credential_id))
         prov_norm = provider.strip().lower()
@@ -129,12 +131,12 @@ class ModelWritesMixin:
         if prefix_msg:
             raise ValidationError(prefix_msg)
         normalized_rm = build_litellm_model_id(provider, raw_rm)
-        row = await self._models.create(team_id=team_id, name=name, capability=capability, real_model=normalized_rm, credential_id=credential_id, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, enabled=enabled)
+        row = await self._models.create(tenant_id=tenant_id, name=name, capability=capability, real_model=normalized_rm, credential_id=credential_id, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, enabled=enabled)
         if reload_router:
             await self.reload_litellm_router()
         return row
 
-    async def create_multi_credential_gateway_model(self, *, team_id: uuid.UUID, name: str, capability: str, real_model: str, provider: str, credential_ids: list[uuid.UUID], is_platform_admin: bool, strategy: str='simple-shuffle', weight: int=1, rpm_limit: int | None=None, tpm_limit: int | None=None, tags: dict[str, Any] | None=None, enabled: bool=True) -> MultiCredentialGatewayModelResult:
+    async def create_multi_credential_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, provider: str, credential_ids: list[uuid.UUID], is_platform_admin: bool, strategy: str='simple-shuffle', weight: int=1, rpm_limit: int | None=None, tpm_limit: int | None=None, tags: dict[str, Any] | None=None, enabled: bool=True) -> MultiCredentialGatewayModelResult:
         """为同一 ``(provider, real_model)`` 在多个凭据上一键注册并生成 ``GatewayRoute``。
 
             - 每个 ``credential_id`` 都建一行 ``GatewayModel``，别名为 ``<name>--<credentialId 短哈希>``；
@@ -153,9 +155,9 @@ class ModelWritesMixin:
             raise ValidationError('credential_ids 不能包含重复项')
         strategy_norm = validate_routing_strategy(strategy)
         repo = self._models
-        if await repo.name_exists_on_team(team_id, cleaned_name):
+        if await repo.name_exists_for_tenant(tenant_id, cleaned_name):
             raise ValidationError(f'虚拟模型名 {cleaned_name} 与现有 GatewayModel 别名冲突')
-        existing_route = await self._routes.get_by_virtual_model(team_id, cleaned_name)
+        existing_route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
         if existing_route is not None:
             raise ValidationError(f'虚拟模型名 {cleaned_name} 已存在 GatewayRoute')
         from domains.gateway.infrastructure.models.gateway_model import GatewayModel
@@ -167,12 +169,12 @@ class ModelWritesMixin:
                 alias = f'{cleaned_name}--{short}'
                 suffix = 0
                 base_alias = alias
-                while await repo.name_exists_on_team(team_id, alias):
+                while await repo.name_exists_for_tenant(tenant_id, alias):
                     suffix += 1
                     alias = f'{base_alias}-{suffix}'
-                row = await self.create_gateway_model(team_id=team_id, name=alias, capability=capability, real_model=real_model, credential_id=cid, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, is_platform_admin=is_platform_admin, enabled=enabled, reload_router=False)
+                row = await self.create_gateway_model(tenant_id=tenant_id, name=alias, capability=capability, real_model=real_model, credential_id=cid, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, is_platform_admin=is_platform_admin, enabled=enabled, reload_router=False)
                 created_models.append(row)
-            route = await self._routes.create(team_id=team_id, virtual_model=cleaned_name, primary_models=[m.name for m in created_models], strategy=strategy_norm)
+            route = await self._routes.create(tenant_id=tenant_id, virtual_model=cleaned_name, primary_models=[m.name for m in created_models], strategy=strategy_norm)
         except Exception:
             for r in created_models:
                 with suppress(Exception):
@@ -182,16 +184,18 @@ class ModelWritesMixin:
         assert route is not None
         return MultiCredentialGatewayModelResult(route=route, models=created_models)
 
-    async def update_gateway_model(self, model_id: uuid.UUID, *, team_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any]) -> Any:
+    async def update_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any]) -> Any:
         repo = self._models
         existing = await repo.get(model_id)
-        if existing is None or (existing.team_id is not None and existing.team_id != team_id):
+        if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
             raise ManagementEntityNotFoundError('model', str(model_id))
         update_fields = dict(fields)
         if 'credential_id' in update_fields and update_fields['credential_id'] is not None:
             new_cid_raw = update_fields['credential_id']
             new_cid = new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
-            cred = await self._creds.get_bindable_for_team_gateway_model(new_cid, team_id=team_id, is_platform_admin=is_platform_admin)
+            cred = await self._creds.get_bindable_for_team_gateway_model(
+                new_cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+            )
             if cred is None:
                 raise CredentialNotFoundError(str(new_cid))
             if cred.provider.strip().lower() != existing.provider.strip().lower():
@@ -212,22 +216,27 @@ class ModelWritesMixin:
             update_fields['name'] = new_name
             if new_name != existing.name:
                 tags = existing.tags or {}
-                if existing.team_id is None and tags.get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY:
+                if existing.tenant_id is None and tags.get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY:
                     raise ValidationError('配置托管的系统模型不可修改注册别名')
-                owner_team_id = existing.team_id
-                if await repo.name_exists_in_scope(owner_team_id, new_name, exclude_id=model_id):
+                owner_tenant_id = existing.tenant_id
+                if await repo.name_exists_in_scope(owner_tenant_id, new_name, exclude_id=model_id):
                     raise ValidationError(f'注册别名已存在: {new_name}')
-                await rename_gateway_model_name_references(self._session, team_id=owner_team_id, old_name=existing.name, new_name=new_name)
+                await rename_gateway_model_name_references(
+                    self._session,
+                    tenant_id=owner_tenant_id,
+                    old_name=existing.name,
+                    new_name=new_name,
+                )
         updated = await repo.update(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
         await self.reload_litellm_router()
         return updated
 
-    async def delete_gateway_model(self, model_id: uuid.UUID, *, team_id: uuid.UUID) -> None:
+    async def delete_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
         repo = self._models
         existing = await repo.get(model_id)
-        if existing is None or (existing.team_id is not None and existing.team_id != team_id):
+        if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
             raise CredentialNotFoundError(str(model_id))
         model_name = existing.name
         await repo.delete(model_id)

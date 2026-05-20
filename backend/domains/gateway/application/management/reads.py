@@ -7,7 +7,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from domains.gateway.application.management.credential_read_mappers import credential_from_orm
+from domains.gateway.application.management.credential_read_mappers import (
+    credential_from_orm,
+    system_credential_from_orm,
+)
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.application.management.plan_read_mappers import (
     entitlement_plan_from_orm,
@@ -43,11 +46,15 @@ from domains.gateway.infrastructure.models.entitlement_plan import (
     EntitlementPlan,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
+)
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
@@ -97,6 +104,7 @@ class GatewayManagementReadService:
         self._teams = TeamService(session, membership=self._membership)
         self._vkeys = VirtualKeyRepository(session)
         self._creds = ProviderCredentialRepository(session)
+        self._system_creds = SystemProviderCredentialRepository(session)
         self._models = GatewayModelRepository(session)
         self._routes = GatewayRouteRepository(session)
         self._budgets = BudgetRepository(session)
@@ -123,7 +131,7 @@ class GatewayManagementReadService:
         team_role: str = "owner",
         is_platform_admin: bool = False,
     ) -> list[VirtualKeyReadModel]:
-        keys = await self._vkeys.list_by_team(team_id, include_system=False, include_inactive=False)
+        keys = await self._vkeys.list_for_tenant(team_id, include_system=False, include_inactive=False)
         filtered = filter_virtual_keys_visible_to_actor(
             keys,
             actor_user_id=actor_user_id,
@@ -136,7 +144,7 @@ class GatewayManagementReadService:
         self,
         key_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         actor_user_id: UUID | None,
         team_role: str,
         is_platform_admin: bool,
@@ -146,7 +154,7 @@ class GatewayManagementReadService:
         assert_virtual_key_accessible_by_actor(
             record,
             key_id=str(key_id),
-            team_id=team_id,
+            tenant_id=tenant_id,
             actor_user_id=actor_user_id,
             team_role=team_role,
             is_platform_admin=is_platform_admin,
@@ -159,24 +167,34 @@ class GatewayManagementReadService:
     async def list_credentials_for_team(
         self, team_id: UUID, *, include_system: bool
     ) -> list[CredentialReadModel]:
-        rows = await self._creds.list_for_team(team_id, include_system=include_system)
-        return [credential_from_orm(c) for c in rows]
+        rows = await self._creds.list_for_tenant(team_id)
+        out = [credential_from_orm(c) for c in rows]
+        if include_system:
+            system_rows = await self._system_creds.list_all()
+            out.extend(system_credential_from_orm(c) for c in system_rows)
+        return out
 
     async def get_managed_credential_for_team(
         self,
         credential_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         is_platform_admin: bool,
     ) -> CredentialReadModel:
         """与 ``list_credentials_for_team`` 可见集合一致：团队凭据 +（仅平台管理员）系统凭据。"""
         row = await self._creds.get_bindable_for_team_gateway_model(
             credential_id,
-            team_id=team_id,
+            tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
+        from domains.gateway.infrastructure.models.system_gateway import (
+            SystemProviderCredential,
+        )
+
+        if isinstance(row, SystemProviderCredential):
+            return system_credential_from_orm(row)
         return credential_from_orm(row)
 
     async def get_user_credential_for_owner(
@@ -201,7 +219,7 @@ class GatewayManagementReadService:
         provider: str | None = None,
     ) -> list[GatewayModel]:
         personal_team = await self._teams.ensure_personal_team(user_id)
-        return await self._models.list_team_owned(
+        return await self._models.list_tenant_owned(
             personal_team.id,
             only_enabled=False,
             provider=provider,
@@ -209,29 +227,40 @@ class GatewayManagementReadService:
 
     async def list_gateway_models(
         self,
-        team_id: UUID,
+        tenant_id: UUID,
         *,
         only_enabled: bool,
         provider: str | None = None,
         credential_id: UUID | None = None,
     ) -> list[GatewayModel]:
-        return await self._models.list_for_team(
-            team_id,
+        return await self._models.list_for_tenant(
+            tenant_id,
             only_enabled=only_enabled,
             provider=provider,
             credential_id=credential_id,
         )
 
-    async def list_gateway_routes(self, team_id: UUID, *, only_enabled: bool) -> list[Any]:
-        return await self._routes.list_for_team(team_id, only_enabled=only_enabled)
+    async def list_system_gateway_models(
+        self,
+        *,
+        only_enabled: bool = True,
+        provider: str | None = None,
+    ) -> list[SystemGatewayModel]:
+        return await self._models.list_system(
+            only_enabled=only_enabled,
+            provider=provider,
+        )
 
-    async def list_budgets_for_team_and_user(
-        self, team_id: UUID, user_id: UUID | None
+    async def list_gateway_routes(self, tenant_id: UUID, *, only_enabled: bool) -> list[Any]:
+        return await self._routes.list_for_tenant(tenant_id, only_enabled=only_enabled)
+
+    async def list_budgets_for_tenant_and_user(
+        self, tenant_id: UUID, user_id: UUID | None
     ) -> list[Any]:
         budgets: list[Any] = []
-        budgets.extend(await self._budgets.list_for_scope("team", team_id))
+        budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
         if user_id is not None:
-            budgets.extend(await self._budgets.list_for_scope("user", user_id))
+            budgets.extend(await self._budgets.list_for_target("user", user_id))
         return budgets
 
     @staticmethod
@@ -330,23 +359,25 @@ class GatewayManagementReadService:
         return summary
 
     async def list_alert_rules(self, team_id: UUID) -> list[GatewayAlertRule]:
-        return await self._alerts.list_rules_by_team(team_id)
+        return await self._alerts.list_rules_for_tenant(team_id)
 
     async def list_alert_events_as_dicts(
         self, team_id: UUID, *, limit: int
     ) -> list[dict[str, Any]]:
-        rows = await self._alerts.list_events_by_team(team_id, limit=limit)
+        rows = await self._alerts.list_events_for_tenant(team_id, limit=limit)
         return [
             {
-                "id": str(r.id),
-                "rule_id": str(r.rule_id),
+                "id": r.id,
+                "rule_id": r.rule_id,
+                "tenant_id": r.tenant_id,
+                "team_id": r.tenant_id,
                 "metric_value": float(r.metric_value),
                 "threshold": float(r.threshold),
                 "severity": r.severity,
                 "payload": r.payload,
                 "notified": r.notified,
                 "acknowledged": r.acknowledged,
-                "created_at": r.created_at.isoformat(),
+                "created_at": r.created_at,
             }
             for r in rows
         ]
@@ -364,7 +395,7 @@ class GatewayManagementReadService:
         """
         end = datetime.now(UTC)
         start = end - timedelta(days=days)
-        models = await self._models.list_for_team(
+        models = await self._models.list_for_tenant(
             ctx.team_id, only_enabled=False, provider=provider
         )
         if not models:
@@ -425,12 +456,12 @@ class GatewayManagementReadService:
         self,
         credential_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         is_platform_admin: bool,
     ) -> ProviderCredential:
         row = await self._creds.get_bindable_for_team_gateway_model(
             credential_id,
-            team_id=team_id,
+            tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
         if row is None:
@@ -441,20 +472,20 @@ class GatewayManagementReadService:
         self,
         vkey_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         is_platform_admin: bool,
     ) -> None:
         record = await self._vkeys.get(vkey_id)
         if record is None:
             raise VirtualKeyNotFoundError(str(vkey_id))
-        if not is_platform_admin and record.team_id != team_id:
+        if not is_platform_admin and record.tenant_id != tenant_id:
             raise VirtualKeyNotFoundError(str(vkey_id))
 
     async def assert_apikey_grant_in_team(
         self,
         grant_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         is_platform_admin: bool,
     ) -> None:
         from libs.exceptions import NotFoundError
@@ -462,7 +493,7 @@ class GatewayManagementReadService:
         try:
             await self._api_key_grants.assert_gateway_grant_in_team(
                 grant_id,
-                team_id=team_id,
+                team_id=tenant_id,
                 is_platform_admin=is_platform_admin,
             )
         except NotFoundError as exc:
@@ -472,19 +503,19 @@ class GatewayManagementReadService:
         self,
         plan_id: UUID,
         *,
-        team_id: UUID,
+        tenant_id: UUID,
         is_platform_admin: bool,
     ) -> EntitlementPlan:
         plan = await self._entitlement_plans.get(plan_id)
         if plan is None:
             raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
-        if plan.scope == "vkey":
+        if plan.target_kind == "vkey":
             await self.assert_vkey_in_team(
-                plan.scope_id, team_id=team_id, is_platform_admin=is_platform_admin
+                plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
             )
-        elif plan.scope == "apikey_grant":
+        elif plan.target_kind == "apikey_grant":
             await self.assert_apikey_grant_in_team(
-                plan.scope_id, team_id=team_id, is_platform_admin=is_platform_admin
+                plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
             )
         else:
             raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
@@ -571,6 +602,7 @@ class GatewayManagementReadService:
                     "credential_id": cid,
                     "provider": c.provider if c else "",
                     "name": c.name if c else "(已删除)",
+                    "tenant_id": c.tenant_id if c else None,
                     "scope": c.scope if c else "",
                     "scope_id": c.scope_id if c else None,
                     "is_active": bool(c.is_active) if c else False,

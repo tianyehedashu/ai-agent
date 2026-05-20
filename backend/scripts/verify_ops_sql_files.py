@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.generate_alembic_sql_files import (
     _SQL,
     _VERSIONS,
-    _clean_alembic_sql_output,
     _downgrade_range,
     _parse_meta,
     _upgrade_range,
@@ -56,15 +55,19 @@ def main() -> int:
                 expected_down = _normalize(_downgrade_range(revision, down_revision))
             except RuntimeError as exc:
                 if "NotImplementedError" in str(exc):
-                    expected_down = _normalize("-- 不可回滚：Python downgrade 为 NotImplementedError")
+                    expected_down = _normalize(
+                        "-- 不可回滚：Python downgrade 为 NotImplementedError"
+                    )
                 else:
                     raise
             file_down = _normalize(_strip_ops_header(down_path.read_text(encoding="utf-8")))
             if expected_down != file_down:
                 mismatches.append(f"{stem}.down.sql")
-            if stem not in {m.split(".")[0] for m in mismatches} or not mismatches:
-                if f"{stem}.up.sql" not in mismatches and f"{stem}.down.sql" not in mismatches:
-                    ok += 1
+            stem_ok = (
+                stem not in {m.split(".")[0] for m in mismatches} or not mismatches
+            ) and f"{stem}.up.sql" not in mismatches and f"{stem}.down.sql" not in mismatches
+            if stem_ok:
+                ok += 1
         except (ValueError, RuntimeError) as exc:
             mismatches.append(f"{stem}: {exc}")
 

@@ -75,10 +75,10 @@ class ProbeWritesMixin:
     """模型连通性探活。"""
 
     async def test_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> dict[str, Any]:
-        team_id = await self._ensure_personal_team_id(user_id)
-        return await self.test_gateway_model(model_id, team_id=team_id)
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
+        return await self.test_gateway_model(model_id, tenant_id=tenant_id)
 
-    async def test_gateway_model(self, model_id: uuid.UUID, *, team_id: uuid.UUID) -> dict[str, Any]:
+    async def test_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID) -> dict[str, Any]:
         """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图）。
 
             - 仅支持 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 中的 capability；
@@ -90,7 +90,7 @@ class ProbeWritesMixin:
             ``last_test_reason`` 写回 ``gateway_models``，列表页可直接展示连通状态。
             """
         existing = await self._models.get(model_id)
-        if existing is None or (existing.team_id is not None and existing.team_id != team_id):
+        if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
             raise ManagementEntityNotFoundError('model', str(model_id))
         capability = existing.capability
         litellm_model = build_litellm_model_id(existing.provider, existing.real_model)

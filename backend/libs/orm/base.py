@@ -3,7 +3,8 @@ Base Model - 模型基类
 
 包含:
 - TimestampMixin: 时间戳混入类
-- OwnedMixin: 所有权混入类
+- TenantScopedMixin / AuditableMixin / PolicyTargetMixin: 多租户与审计
+- OwnedMixin: 用户归属（grace 期与 TenantScoped 并存）
 - BaseModel: 模型基类
 """
 
@@ -24,7 +25,50 @@ def generate_uuid() -> uuid.UUID:
 
 
 # =============================================================================
-# 所有权协议和混入类
+# 多租户 / 审计 / 策略挂载（协议）
+# =============================================================================
+
+
+@runtime_checkable
+class TenantScopedProtocol(Protocol):
+    """多租户协议：业务表通过 tenant_id 归属团队（personal / shared）。"""
+
+    tenant_id: uuid.UUID
+
+
+class TenantScopedMixin:
+    """多租户混入类
+
+    子类须定义 ``tenant_id`` 列，或 ``mapped_column("team_id", ...)`` 别名。
+    系统级配置请使用 ``system_*`` 表，勿在本表留 NULL tenant。
+    """
+
+    tenant_id: "Mapped[uuid.UUID]"
+
+
+class AuditableMixin:
+    """审计字段（不参与行级授权）。"""
+
+    created_by: "Mapped[uuid.UUID | None]"
+    updated_by: "Mapped[uuid.UUID | None]"
+
+
+class PolicyTargetProtocol(Protocol):
+    """策略挂载协议（与 tenant 正交）。"""
+
+    target_kind: str | None
+    target_id: uuid.UUID | None
+
+
+class PolicyTargetMixin:
+    """策略挂载混入类（EntitlementPlan、按 vkey 的 Budget 等）。"""
+
+    target_kind: "Mapped[str | None]"
+    target_id: "Mapped[uuid.UUID | None]"
+
+
+# =============================================================================
+# 所有权协议和混入类（grace：user_id 资源逐步迁到 personal team tenant_id）
 # =============================================================================
 
 

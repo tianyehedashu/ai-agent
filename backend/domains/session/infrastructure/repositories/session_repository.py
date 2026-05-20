@@ -10,20 +10,18 @@ import uuid
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
 from domains.session.domain.interfaces.session_repository import (
     SessionRepository as SessionRepositoryInterface,
 )
 from domains.session.infrastructure.models.session import Session
-from libs.db.base_repository import OwnedRepositoryBase
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
+from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.permission_context import get_permission_context
 
 
-class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface):
-    """会话仓储实现
-
-    继承 OwnedRepositoryBase 提供自动权限过滤功能。
-    支持注册用户和匿名用户。
-    """
+class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryInterface):
+    """会话仓储实现（行级过滤走 ``tenant_id`` + ``PermissionContext.team_ids``）。"""
 
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
@@ -31,13 +29,24 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
 
     @property
     def model_class(self) -> type[Session]:
-        """返回模型类"""
         return Session
 
-    @property
-    def anonymous_user_id_column(self) -> str:
-        """匿名用户 ID 字段名"""
-        return "anonymous_user_id"
+    async def _resolve_tenant_id(
+        self,
+        *,
+        user_id: uuid.UUID | None,
+        anonymous_user_id: str | None,
+    ) -> uuid.UUID:
+        teams = PersonalTeamProvisioner(self.db)
+        if user_id is not None:
+            return await teams.ensure_personal_team(user_id)
+        if anonymous_user_id:
+            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
+                anonymous_user_id
+            )
+            return await teams.ensure_personal_team(shadow_id)
+        msg = "Either user_id or anonymous_user_id is required to resolve tenant_id"
+        raise ValueError(msg)
 
     async def create(
         self,
@@ -45,11 +54,14 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         anonymous_user_id: str | None = None,
         agent_id: uuid.UUID | None = None,
         title: str | None = None,
+        tenant_id: uuid.UUID | None = None,
     ) -> Session:
-        """创建会话"""
-        session = Session(
+        resolved_tenant = tenant_id or await self._resolve_tenant_id(
             user_id=user_id,
             anonymous_user_id=anonymous_user_id,
+        )
+        session = Session(
+            tenant_id=resolved_tenant,
             agent_id=agent_id,
             title=title,
         )
@@ -59,8 +71,7 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         return session
 
     async def get_by_id(self, session_id: uuid.UUID) -> Session | None:
-        """通过 ID 获取会话（自动检查所有权）"""
-        return await self.get_owned(session_id)
+        return await self.get_in_tenants(session_id)
 
     async def find_by_user(
         self,
@@ -70,40 +81,21 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         skip: int = 0,
         limit: int = 20,
     ) -> list[Session]:
-        """查询用户的会话列表（自动过滤当前用户的数据）
-
-        Args:
-            user_id: 注册用户 ID（如果提供，必须与 PermissionContext 一致）
-            anonymous_user_id: 匿名用户 ID（如果提供，必须与 PermissionContext 一致）
-            agent_id: 筛选指定 Agent
-            skip: 跳过记录数
-            limit: 返回记录数
-
-        Returns:
-            会话实体列表
-
-        Raises:
-            ValueError: 如果传递的 user_id 或 anonymous_user_id 与 PermissionContext 不一致
-        """
-        # 验证传递的参数与 PermissionContext 一致（防止授权漏洞）
-        # 管理员可以查询任何用户的数据，所以跳过验证
         ctx = get_permission_context()
         if ctx and not ctx.is_admin:
-            # 如果传递了 user_id，必须与上下文一致
             if user_id is not None and ctx.user_id != user_id:
                 raise ValueError(
                     f"user_id parameter ({user_id}) does not match PermissionContext ({ctx.user_id}). "
                     "This may indicate an authorization bug."
                 )
-            # 如果传递了 anonymous_user_id，必须与上下文一致
             if anonymous_user_id is not None and ctx.anonymous_user_id != anonymous_user_id:
                 raise ValueError(
-                    f"anonymous_user_id parameter ({anonymous_user_id}) does not match PermissionContext ({ctx.anonymous_user_id}). "
+                    f"anonymous_user_id parameter ({anonymous_user_id}) does not match "
+                    f"PermissionContext ({ctx.anonymous_user_id}). "
                     "This may indicate an authorization bug."
                 )
 
-        # 使用 find_owned 自动应用权限过滤
-        return await self.find_owned(
+        return await self.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="updated_at",
@@ -117,12 +109,6 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         title: str | None = ...,
         status: str | None = ...,
     ) -> Session | None:
-        """更新会话
-
-        Args:
-            title: 如果为 ...，则不更新；如果为 None，则清除标题；如果为字符串，则设置标题
-            status: 如果为 ...，则不更新；如果为 None，则清除状态；如果为字符串，则设置状态
-        """
         session = await self.get_by_id(session_id)
         if not session:
             return None
@@ -139,16 +125,6 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
     async def update_config(
         self, session_id: uuid.UUID, config_updates: dict, *, flush: bool = True
     ) -> Session | None:
-        """合并更新会话 config（浅合并，用于 mcp_config 等）
-
-        Args:
-            session_id: 会话 ID
-            config_updates: 要合并的 config 片段，如 {"mcp_config": {"enabled_servers": [...]}}
-            flush: 为 False 时仅改内存中的 ORM 状态，由调用方统一 flush（避免嵌套 flush）
-
-        Returns:
-            更新后的会话实体，不存在则返回 None
-        """
         session = await self.get_by_id(session_id)
         if not session:
             return None
@@ -163,7 +139,6 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         return session
 
     async def delete(self, session_id: uuid.UUID) -> bool:
-        """删除会话"""
         session = await self.get_by_id(session_id)
         if not session:
             return False
@@ -177,7 +152,6 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         message_count: int = 1,
         token_count: int = 0,
     ) -> None:
-        """增加消息计数"""
         session = await self.get_by_id(session_id)
         if session:
             session.message_count += message_count
@@ -190,42 +164,44 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         session_id: uuid.UUID,
         count: int = 1,
     ) -> None:
-        """增加视频任务计数"""
         session = await self.get_by_id(session_id)
         if session:
             session.video_task_count += count
             await self.db.flush()
 
     async def count_total(self) -> int:
-        """统计会话总数"""
         result = await self.db.execute(select(func.count(Session.id)))
         return result.scalar() or 0
 
     async def count_active_today(self) -> int:
-        """统计今日活跃会话数"""
         today = datetime.now(UTC).date()
         result = await self.db.execute(
             select(func.count(Session.id)).where(func.date(Session.updated_at) == today)
         )
         return result.scalar() or 0
 
+    async def _personal_tenant_id(self, user_id: uuid.UUID) -> uuid.UUID:
+        return await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
+
     async def count_by_user(self, user_id: uuid.UUID) -> int:
-        """统计指定用户的会话数"""
+        tenant_id = await self._personal_tenant_id(user_id)
         result = await self.db.execute(
-            select(func.count(Session.id)).where(Session.user_id == user_id)
+            select(func.count(Session.id)).where(Session.tenant_id == tenant_id)
         )
         return result.scalar() or 0
 
     async def sum_tokens_by_user(self, user_id: uuid.UUID) -> int:
-        """统计指定用户所有会话 token 总量"""
+        tenant_id = await self._personal_tenant_id(user_id)
         result = await self.db.execute(
-            select(func.sum(Session.token_count)).where(Session.user_id == user_id)
+            select(func.sum(Session.token_count)).where(Session.tenant_id == tenant_id)
         )
         return result.scalar() or 0
 
     async def list_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
-        """列出指定用户的会话 ID"""
-        result = await self.db.execute(select(Session.id).where(Session.user_id == user_id))
+        tenant_id = await self._personal_tenant_id(user_id)
+        result = await self.db.execute(
+            select(Session.id).where(Session.tenant_id == tenant_id)
+        )
         return list(result.scalars().all())
 
     async def reassign_anonymous_to_user(
@@ -234,13 +210,17 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         user_id: uuid.UUID,
         anonymous_user_id: str,
     ) -> int:
-        """把匿名会话归并到正式用户"""
+        """把匿名 shadow team 下的会话迁到正式用户的 personal team。"""
+        shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
+            anonymous_user_id
+        )
+        anon_tenant = await self._personal_tenant_id(shadow_id)
+        user_tenant = await self._personal_tenant_id(user_id)
+        if anon_tenant == user_tenant:
+            return 0
         result = await self.db.execute(
             update(Session)
-            .where(
-                Session.anonymous_user_id == anonymous_user_id,
-                Session.user_id.is_(None),
-            )
-            .values(user_id=user_id, anonymous_user_id=None)
+            .where(Session.tenant_id == anon_tenant)
+            .values(tenant_id=user_tenant)
         )
         return result.rowcount or 0

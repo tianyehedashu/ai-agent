@@ -21,10 +21,17 @@ from domains.identity.application import (
     get_principal,
     get_principal_optional,
 )
+from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
+from domains.tenancy.application.team_membership_queries import list_team_ids_for_user
 from libs.db.database import get_db
-from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.db.data_scope import DataAction, DataResource, enforce_data_scope
+from libs.db.permission_context import (
+    PermissionContext,
+    get_permission_context,
+    set_permission_context,
+)
 from libs.exceptions import PermissionDeniedError
 
 __all__ = [
@@ -39,6 +46,8 @@ __all__ = [
     "check_ownership",
     "check_ownership_or_public",
     "check_session_ownership",
+    "check_tenant_access",
+    "check_tenant_access_or_public",
     "get_current_user",
     "get_current_user_optional",
     "get_owned_user_ids",
@@ -58,8 +67,7 @@ security = HTTPBearer(auto_error=False)
 class SessionLike(Protocol):
     """会话协议（用于 check_session_ownership 的 duck typing）"""
 
-    user_id: "uuid.UUID | None"
-    anonymous_user_id: str | None
+    tenant_id: uuid.UUID
 
 
 # =============================================================================
@@ -94,10 +102,18 @@ async def get_current_user(
         with suppress(ValueError, AttributeError):
             user_id = uuid.UUID(principal.id)
 
+    team_ids: frozenset[uuid.UUID] = frozenset()
+    if user_id is not None:
+        team_ids = await list_team_ids_for_user(db, user_id)
+    elif principal.is_anonymous and anonymous_id:
+        shadow_id = await AnonymousUserProvisioner(db).ensure_shadow_user(anonymous_id)
+        team_ids = await list_team_ids_for_user(db, shadow_id)
+
     ctx = PermissionContext(
         user_id=user_id,
         anonymous_user_id=anonymous_id,
         role=principal.role,
+        team_ids=team_ids,
     )
     set_permission_context(ctx)
 
@@ -160,10 +176,18 @@ async def get_current_user_optional_with_anonymous(
         with suppress(ValueError, AttributeError):
             user_id = uuid.UUID(principal.id)
 
+    team_ids: frozenset[uuid.UUID] = frozenset()
+    if user_id is not None:
+        team_ids = await list_team_ids_for_user(db, user_id)
+    elif principal.is_anonymous and anonymous_id:
+        shadow_id = await AnonymousUserProvisioner(db).ensure_shadow_user(anonymous_id)
+        team_ids = await list_team_ids_for_user(db, shadow_id)
+
     ctx = PermissionContext(
         user_id=user_id,
         anonymous_user_id=anonymous_id,
         role=principal.role,
+        team_ids=team_ids,
     )
     set_permission_context(ctx)
 
@@ -284,13 +308,55 @@ def check_ownership(
         )
 
 
+def check_tenant_access(
+    resource_tenant_id: uuid.UUID,
+    current_user: CurrentUser,
+    resource_name: str = "Resource",
+) -> None:
+    """HTTP 薄适配：委托 ``enforce_data_scope`` 判定 tenant 可见性。"""
+    if current_user.role == ADMIN_ROLE:
+        return
+
+    ctx = get_permission_context()
+    if ctx is None:
+        raise PermissionDeniedError(
+            message=f"You don't have permission to access this {resource_name.lower()}",
+            resource=resource_name,
+        )
+
+    allowed = enforce_data_scope(
+        ctx,
+        DataResource(kind=resource_name, tenant_id=resource_tenant_id),
+        DataAction.READ,
+    )
+    if not allowed:
+        raise PermissionDeniedError(
+            message=f"You don't have permission to access this {resource_name.lower()}",
+            resource=resource_name,
+        )
+
+
+def check_tenant_access_or_public(
+    resource_tenant_id: uuid.UUID,
+    current_user: CurrentUser,
+    is_public: bool,
+    resource_name: str = "Resource",
+) -> None:
+    """租户作用域访问，或资源标记为公开。"""
+    if is_public:
+        return
+    check_tenant_access(resource_tenant_id, current_user, resource_name)
+
+
 def check_ownership_or_public(
     resource_user_id: str,
     current_user: CurrentUser,
     is_public: bool,
     resource_name: str = "Resource",
 ) -> None:
-    """检查资源所有权或是否公开（管理员可访问所有资源）
+    """Deprecated: 无生产调用；新代码用 ``check_tenant_access_or_public`` + ``tenant_id``。
+
+    检查资源所有权或是否公开（管理员可访问所有资源）
 
     Args:
         resource_user_id: 资源所有者 ID
@@ -323,32 +389,5 @@ def check_session_ownership(
     session: "SessionLike",
     current_user: CurrentUser,
 ) -> None:
-    """检查会话所有权（支持注册用户和匿名用户，管理员可访问所有会话）
-
-    Args:
-        session: 会话对象
-        current_user: 当前用户
-
-    Raises:
-        PermissionDeniedError: 如果无权访问
-    """
-    # 管理员可以访问所有会话
-    if current_user.role == ADMIN_ROLE:
-        return
-
-    if current_user.is_anonymous:
-        if session.anonymous_user_id is None or not Principal.resource_owner_matches_principal(
-            resource_owner_id=session.anonymous_user_id,
-            principal_id=current_user.id,
-            principal_is_anonymous=True,
-        ):
-            raise PermissionDeniedError(
-                message="You don't have permission to access this session",
-                resource="Session",
-            )
-    else:
-        if str(session.user_id) != current_user.id:
-            raise PermissionDeniedError(
-                message="You don't have permission to access this session",
-                resource="Session",
-            )
+    """检查会话 tenant 是否在 ``PermissionContext.team_ids`` 内。"""
+    check_tenant_access(session.tenant_id, current_user, "Session")

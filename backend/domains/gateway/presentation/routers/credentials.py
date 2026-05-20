@@ -62,7 +62,7 @@ async def get_credential(
     try:
         row = await reads.get_managed_credential_for_team(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
     except HttpMappableDomainError as exc:
@@ -80,7 +80,7 @@ async def reveal_managed_credential(
     try:
         row = await reads.get_managed_credential_for_team(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
         plain = decrypt_credential_api_key_for_reveal(
@@ -112,7 +112,7 @@ async def create_credential(
             )
         else:
             cred = await writes.create_team_credential(
-                team_id=team.team_id,
+                tenant_id=team.team_id,
                 provider=provider,
                 name=body.name,
                 api_key_encrypted=encrypted,
@@ -135,7 +135,7 @@ async def update_credential(
         encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
         updated = await writes.update_managed_credential(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             api_key_encrypted=encrypted,
             api_base=body.api_base,
@@ -157,7 +157,7 @@ async def delete_credential(
     try:
         await writes.delete_managed_credential(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
     except HttpMappableDomainError as exc:
@@ -173,7 +173,7 @@ async def probe_managed_credential_endpoint(
     """POST 触发上游 OpenAI 兼容 ``/v1/models`` 列举（同路径重复调用即刷新）。"""
     try:
         result = await catalog.probe_managed_credential(
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             credential_id=credential_id,
         )
@@ -196,7 +196,7 @@ async def batch_import_team_models_endpoint(
     try:
         tuples = [(it.upstream_model_id, it.name) for it in body.items]
         created_raw, failed_raw = await catalog.batch_import_team_models(
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             credential_id=credential_id,
             provider=body.provider.strip().lower(),
@@ -240,7 +240,7 @@ async def import_user_credential(
     try:
         new_cred = await writes.import_user_credential_to_team(
             user_credential_id=user_credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             actor_user_id=team.user_id,
             is_platform_admin=team.is_platform_admin,
         )
@@ -259,7 +259,7 @@ async def import_all_user_credentials(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User context required")
     created = await writes.import_all_user_credentials_to_team(
         actor_user_id=team.user_id,
-        team_id=team.team_id,
+        tenant_id=team.team_id,
     )
     return {"created": created}
 

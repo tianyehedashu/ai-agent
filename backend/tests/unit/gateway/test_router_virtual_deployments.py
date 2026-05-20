@@ -23,13 +23,13 @@ def _mk_model(
     real_model: str,
     provider: str,
     cred_id: uuid.UUID,
-    team_id: uuid.UUID | None = None,
+    tenant_id: uuid.UUID | None = None,
     capability: str = "chat",
     weight: int = 1,
 ) -> MagicMock:
     m = MagicMock()
     m.id = uuid.uuid4()
-    m.team_id = team_id
+    m.tenant_id = tenant_id
     m.name = name
     m.capability = capability
     m.weight = weight
@@ -43,11 +43,12 @@ def _mk_model(
     return m
 
 
-def _mk_cred(*, id_: uuid.UUID, name: str = "cred", scope: str = "team") -> MagicMock:
+def _mk_cred(*, id_: uuid.UUID, name: str = "cred", tenant_id: uuid.UUID | None = None) -> MagicMock:
     cred = MagicMock()
     cred.id = id_
     cred.name = name
-    cred.scope = scope
+    cred.tenant_id = tenant_id
+    cred.scope = None
     cred.api_key_encrypted = "encrypted-fake"
     cred.api_base = None
     cred.extra = None
@@ -58,11 +59,11 @@ def _mk_route(
     *,
     virtual_model: str,
     primary_models: list[str],
-    team_id: uuid.UUID | None = None,
+    tenant_id: uuid.UUID | None = None,
 ) -> MagicMock:
     r = MagicMock()
     r.id = uuid.uuid4()
-    r.team_id = team_id
+    r.tenant_id = tenant_id
     r.virtual_model = virtual_model
     r.primary_models = primary_models
     r.fallbacks_general = []
@@ -80,13 +81,13 @@ def test_virtual_route_creates_one_deployment_per_primary(monkeypatch) -> None:
     team = uuid.uuid4()
     cred_a, cred_b = uuid.uuid4(), uuid.uuid4()
     m_a = _mk_model(
-        name="gpt-4o-a", real_model="gpt-4o", provider="openai", cred_id=cred_a, team_id=team
+        name="gpt-4o-a", real_model="gpt-4o", provider="openai", cred_id=cred_a, tenant_id=team
     )
     m_b = _mk_model(
-        name="gpt-4o-b", real_model="gpt-4o", provider="openai", cred_id=cred_b, team_id=team
+        name="gpt-4o-b", real_model="gpt-4o", provider="openai", cred_id=cred_b, tenant_id=team
     )
     creds = {cred_a: _mk_cred(id_=cred_a, name="ka"), cred_b: _mk_cred(id_=cred_b, name="kb")}
-    route = _mk_route(virtual_model="smart-4o", primary_models=["gpt-4o-a", "gpt-4o-b"], team_id=team)
+    route = _mk_route(virtual_model="smart-4o", primary_models=["gpt-4o-a", "gpt-4o-b"], tenant_id=team)
 
     base = _models_to_deployments([m_a, m_b], creds)
     reserved = frozenset(m.name for m in (m_a, m_b))
@@ -114,10 +115,10 @@ def test_virtual_route_skipped_when_shadowed_by_model_name(monkeypatch) -> None:
     team = uuid.uuid4()
     cred = uuid.uuid4()
     primary = _mk_model(
-        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred, team_id=team
+        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred, tenant_id=team
     )
     creds = {cred: _mk_cred(id_=cred)}
-    route = _mk_route(virtual_model="gpt-4o", primary_models=["gpt-4o"], team_id=team)
+    route = _mk_route(virtual_model="gpt-4o", primary_models=["gpt-4o"], tenant_id=team)
     virtuals = _routes_to_virtual_deployments(
         [route],
         [primary],
@@ -139,14 +140,14 @@ def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
         real_model="deepseek/deepseek-chat",
         provider="deepseek",
         cred_id=cred_dpsk,
-        team_id=team,
+        tenant_id=team,
     )
     m_vol = _mk_model(
         name="deepseek-volc",
         real_model="volcengine/ep-deepseek-v3",
         provider="volcengine",
         cred_id=cred_vol,
-        team_id=team,
+        tenant_id=team,
     )
     creds = {
         cred_dpsk: _mk_cred(id_=cred_dpsk, name="dpsk"),
@@ -155,7 +156,7 @@ def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
     route = _mk_route(
         virtual_model="deepseek-any",
         primary_models=["deepseek-dpsk", "deepseek-volc"],
-        team_id=team,
+        tenant_id=team,
     )
     virtuals = _routes_to_virtual_deployments(
         [route],
@@ -176,10 +177,10 @@ def test_virtual_route_skips_missing_primary(monkeypatch) -> None:
     team = uuid.uuid4()
     cred = uuid.uuid4()
     primary = _mk_model(
-        name="real", real_model="gpt-4o", provider="openai", cred_id=cred, team_id=team
+        name="real", real_model="gpt-4o", provider="openai", cred_id=cred, tenant_id=team
     )
     creds = {cred: _mk_cred(id_=cred)}
-    route = _mk_route(virtual_model="v", primary_models=["real", "ghost"], team_id=team)
+    route = _mk_route(virtual_model="v", primary_models=["real", "ghost"], tenant_id=team)
     virtuals = _routes_to_virtual_deployments(
         [route], [primary], creds, reserved_model_names=frozenset({"real"})
     )
@@ -196,14 +197,14 @@ def test_system_and_team_same_client_name_both_deployed(monkeypatch) -> None:
     team = uuid.uuid4()
     cred_sys, cred_team = uuid.uuid4(), uuid.uuid4()
     m_sys = _mk_model(
-        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred_sys, team_id=None
+        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred_sys, tenant_id=None
     )
     m_team = _mk_model(
-        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred_team, team_id=team
+        name="gpt-4o", real_model="gpt-4o", provider="openai", cred_id=cred_team, tenant_id=team
     )
     creds = {
-        cred_sys: _mk_cred(id_=cred_sys, name="sys", scope="system"),
-        cred_team: _mk_cred(id_=cred_team, name="team", scope="team"),
+        cred_sys: _mk_cred(id_=cred_sys, name="sys", tenant_id=None),
+        cred_team: _mk_cred(id_=cred_team, name="team", tenant_id=uuid.uuid4()),
     }
     base = _models_to_deployments([m_sys, m_team], creds)
     assert len(base) == 2
@@ -222,11 +223,11 @@ def test_virtual_route_falls_back_to_global_gateway_model(monkeypatch) -> None:
     team = uuid.uuid4()
     cred = uuid.uuid4()
     global_model = _mk_model(
-        name="global-gpt", real_model="gpt-4o", provider="openai", cred_id=cred, team_id=None
+        name="global-gpt", real_model="gpt-4o", provider="openai", cred_id=cred, tenant_id=None
     )
     creds = {cred: _mk_cred(id_=cred)}
     route = _mk_route(
-        virtual_model="team-virtual", primary_models=["global-gpt"], team_id=team
+        virtual_model="team-virtual", primary_models=["global-gpt"], tenant_id=team
     )
     virtuals = _routes_to_virtual_deployments(
         [route], [global_model], creds, reserved_model_names=frozenset({"global-gpt"})

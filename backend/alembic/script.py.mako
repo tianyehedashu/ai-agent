@@ -4,6 +4,11 @@ Revision ID: ${up_revision}
 Revises: ${down_revision | comma,n}
 Create Date: ${create_date}
 
+新表约定（多租户业务表）:
+  id UUID PK, created_at/updated_at TIMESTAMPTZ NOT NULL,
+  tenant_id UUID NOT NULL（系统级配置用 system_* 表，勿 tenant_id NULL）
+策略挂载表可另加 target_kind/target_id；禁止新增 user_id/team_id/scope/scope_id 列名。
+
 """
 from typing import Sequence, Union
 

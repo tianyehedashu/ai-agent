@@ -1,0 +1,36 @@
+"""Gateway 模型/路由：system 与 tenant 行合并规则（纯函数）。"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Protocol, TypeVar
+
+
+class _NamedModel(Protocol):
+    name: str
+    enabled: bool
+
+
+_T = TypeVar("_T", bound=_NamedModel)
+
+
+def merge_named_rows_tenant_overrides_system(
+    tenant_rows: Sequence[_T],
+    system_rows: Sequence[_T],
+    *,
+    only_enabled: bool = True,
+) -> list[_T]:
+    """同名时保留 tenant 行，system 行仅补 tenant 未覆盖的名称。"""
+    by_name: dict[str, T] = {}
+    for row in tenant_rows:
+        if only_enabled and not row.enabled:
+            continue
+        by_name[row.name] = row
+    for row in system_rows:
+        if only_enabled and not row.enabled:
+            continue
+        by_name.setdefault(row.name, row)
+    return sorted(by_name.values(), key=lambda r: r.name)
+
+
+__all__ = ["merge_named_rows_tenant_overrides_system"]

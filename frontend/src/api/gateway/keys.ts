@@ -12,6 +12,7 @@ import { GATEWAY_API_BASE } from './_base'
 /** 虚拟 Key 列表元数据（不含明文） */
 export interface VirtualKey {
   id: string
+  tenant_id?: string
   team_id: string
   name: string
   description?: string | null

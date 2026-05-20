@@ -194,13 +194,13 @@ class CredentialUpstreamCatalogService:
     async def probe_managed_credential(
         self,
         *,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         is_platform_admin: bool,
         credential_id: uuid.UUID,
     ) -> CredentialProbeResult:
         row = await self._reads.get_managed_credential_for_team(
             credential_id,
-            team_id=team_id,
+            tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
         if not row.is_active:
@@ -334,7 +334,7 @@ class CredentialUpstreamCatalogService:
     async def batch_import_team_models(
         self,
         *,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         is_platform_admin: bool,
         credential_id: uuid.UUID,
         provider: str,
@@ -348,7 +348,7 @@ class CredentialUpstreamCatalogService:
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         await self._reads.get_managed_credential_for_team(
             credential_id,
-            team_id=team_id,
+            tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
         provider_norm = provider.strip().lower()
@@ -372,9 +372,9 @@ class CredentialUpstreamCatalogService:
                 continue
             base_name = (name_override or "").strip() or _slugify_alias(mid)
             try:
-                unique_name = await self._unique_team_model_name(team_id, base_name)
+                unique_name = await self._unique_team_model_name(tenant_id, base_name)
                 m = await self._writes.create_gateway_model(
-                    team_id=team_id,
+                    tenant_id=tenant_id,
                     name=unique_name,
                     capability=capability,
                     real_model=mid,
@@ -420,12 +420,12 @@ class CredentialUpstreamCatalogService:
 
         repo = GatewayModelRepository(self._session)
         name = base[:200]
-        if not await repo.name_exists_on_team(team_id, name):
+        if not await repo.name_exists_for_tenant(team_id, name):
             return name
         for i in range(2, 10_000):
             suffix = f"-{i}"
             candidate = (base[: 200 - len(suffix)] + suffix).strip("-") or f"model-{i}"
-            if not await repo.name_exists_on_team(team_id, candidate):
+            if not await repo.name_exists_for_tenant(team_id, candidate):
                 return candidate
         raise ValidationError("无法生成唯一注册别名")
 

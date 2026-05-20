@@ -47,7 +47,7 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
         return [log_own_vkey, log_platform_own], 2
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
-    svc._vkeys.list_by_team = AsyncMock(side_effect=AssertionError("member list must not list vkeys"))
+    svc._vkeys.list_for_tenant = AsyncMock(side_effect=AssertionError("member list must not list vkeys"))
 
     items, total = await svc.list_request_logs(
         ctx,
@@ -89,7 +89,7 @@ async def test_list_request_logs_admin_no_extra_filter() -> None:
         return rows, 1
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
-    svc._vkeys.list_by_team = AsyncMock(side_effect=AssertionError("admin path must not list vkeys"))
+    svc._vkeys.list_for_tenant = AsyncMock(side_effect=AssertionError("admin path must not list vkeys"))
 
     items, total = await svc.list_request_logs(
         ctx,

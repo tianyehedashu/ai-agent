@@ -11,7 +11,8 @@ from uuid import UUID
 @dataclass(frozen=True)
 class CredentialReadModel:
     id: UUID
-    scope: str
+    tenant_id: UUID | None
+    scope: str | None
     scope_id: UUID | None
     provider: str
     name: str

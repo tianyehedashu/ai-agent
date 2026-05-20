@@ -64,7 +64,11 @@ class _SqlGenBindProxy:
     def execute(self, statement, *multiparams, **params):
         sql_text = str(getattr(statement, "text", statement))
         normalized = sql_text.strip().upper()
-        if "INFORMATION_SCHEMA" in normalized or normalized.startswith("SELECT"):
+        if normalized.startswith("DO "):
+            if self._inner is None:
+                return _OfflineSqlGenMockResult()
+            return self._inner.execute(statement, *multiparams, **params)
+        if normalized.startswith("SELECT") and "INFORMATION_SCHEMA" in normalized:
             return _OfflineSqlGenMockResult()
         if self._inner is None:
             return _OfflineSqlGenMockResult()
@@ -93,7 +97,9 @@ def install_offline_sql_gen_mock() -> None:
     def impl_execute(self, sql, *multiparams, **params):
         sql_text = str(sql)
         normalized = sql_text.strip().upper()
-        if "INFORMATION_SCHEMA" in normalized or normalized.startswith("SELECT"):
+        if normalized.startswith("DO "):
+            return original_impl_execute(self, sql, *multiparams, **params)
+        if normalized.startswith("SELECT") and "INFORMATION_SCHEMA" in normalized:
             return _OfflineSqlGenMockResult()
         return original_impl_execute(self, sql, *multiparams, **params)
 
@@ -105,7 +111,9 @@ def install_offline_sql_gen_mock() -> None:
     def conn_execute(self, statement, *multiparams, **params):
         sql_text = str(getattr(statement, "text", statement))
         normalized = sql_text.strip().upper()
-        if "INFORMATION_SCHEMA" in normalized or normalized.startswith("SELECT"):
+        if normalized.startswith("DO "):
+            return original_conn_execute(self, statement, *multiparams, **params)
+        if normalized.startswith("SELECT") and "INFORMATION_SCHEMA" in normalized:
             return _OfflineSqlGenMockResult()
         return original_conn_execute(self, statement, *multiparams, **params)
 

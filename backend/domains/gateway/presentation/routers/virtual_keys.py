@@ -7,6 +7,9 @@ import uuid
 
 from fastapi import APIRouter, status
 
+from domains.gateway.application.management.virtual_key_read_mappers import (
+    virtual_key_from_orm,
+)
 from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.presentation.deps import (
     CurrentTeam,
@@ -62,7 +65,7 @@ async def create_key(
         datetime.now(UTC) + timedelta(days=body.expires_in_days) if body.expires_in_days else None
     )
     record = await writes.create_virtual_key(
-        team_id=team.team_id,
+        tenant_id=team.team_id,
         created_by_user_id=team.user_id,
         name=body.name,
         description=body.description,
@@ -77,7 +80,7 @@ async def create_key(
         guardrail_enabled=body.guardrail_enabled,
         expires_at=expires_at,
     )
-    base = vkey_to_response(record).model_dump()
+    base = vkey_to_response(virtual_key_from_orm(record)).model_dump()
     return VirtualKeyCreateResponse(**base, plain_key=plain)
 
 
@@ -91,7 +94,7 @@ async def reveal_key(
     try:
         record = await reads.get_virtual_key_for_team_member(
             key_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             actor_user_id=team.user_id,
             team_role=team.team_role,
             is_platform_admin=team.is_platform_admin,
@@ -110,7 +113,7 @@ async def revoke_keys_batch(
 ) -> VirtualKeyBatchRevokeResponse:
     revoked, failed = await writes.revoke_virtual_keys_batch(
         body.key_ids,
-        team_id=team.team_id,
+        tenant_id=team.team_id,
         actor_user_id=team.user_id,
         team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
@@ -133,7 +136,7 @@ async def revoke_key(
     try:
         await writes.revoke_virtual_key(
             key_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             actor_user_id=team.user_id,
             team_role=team.team_role,
             is_platform_admin=team.is_platform_admin,

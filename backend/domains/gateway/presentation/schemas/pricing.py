@@ -69,7 +69,7 @@ class UpstreamPricingResponse(BaseModel):
 class DownstreamPricingUpsert(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
-    scope: Literal["global", "team", "entitlement_plan"]
+    scope: Literal["global", "tenant", "entitlement_plan"]
     scope_id: uuid.UUID | None = None
     gateway_model_id: uuid.UUID | None = None
     inheritance_strategy: Literal["mirror", "manual"] = "manual"

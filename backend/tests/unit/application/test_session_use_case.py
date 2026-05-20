@@ -10,6 +10,7 @@ from domains.agent.application.message_use_case import MessageUseCase
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from domains.session.domain.entities import SessionOwner
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -34,6 +35,14 @@ class TestSessionUseCase:
         await db_session.refresh(user)
         return user
 
+    async def _permission_ctx_for_user(self, db_session, user: User) -> PermissionContext:
+        tenant_id = await PersonalTeamProvisioner(db_session).ensure_personal_team(user.id)
+        return PermissionContext(
+            user_id=user.id,
+            role="user",
+            team_ids=frozenset({tenant_id}),
+        )
+
     @pytest.mark.asyncio
     async def test_create_session(self, db_session):
         """Test: Create session."""
@@ -47,9 +56,11 @@ class TestSessionUseCase:
             title="Test Session",
         )
 
-        # Assert
+        expected_tenant = await PersonalTeamProvisioner(db_session).ensure_personal_team(
+            user.id
+        )
         assert session.id is not None
-        assert session.user_id == user.id
+        assert session.tenant_id == expected_tenant
         assert session.title == "Test Session"
 
     @pytest.mark.asyncio
@@ -57,30 +68,20 @@ class TestSessionUseCase:
         """Test: Create anonymous session."""
         # Arrange
         anonymous_id = f"anon_{uuid.uuid4()}"
-        ctx = PermissionContext(anonymous_user_id=anonymous_id, role="user")
-        set_permission_context(ctx)
-        try:
-            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
-
-            # Act
-            session = await use_case.create_session(
-                anonymous_user_id=anonymous_id,
-                title="Anonymous Session",
-            )
-
-            # Assert
-            assert session.id is not None
-            assert session.anonymous_user_id == anonymous_id
-            assert session.user_id is None
-        finally:
-            clear_permission_context()
+        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
+        session = await use_case.create_session(
+            anonymous_user_id=anonymous_id,
+            title="Anonymous Session",
+        )
+        assert session.id is not None
+        assert session.tenant_id is not None
 
     @pytest.mark.asyncio
     async def test_get_session(self, db_session):
         """Test: Get session by ID."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -115,7 +116,7 @@ class TestSessionUseCase:
         """Test: List user's sessions."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -143,7 +144,7 @@ class TestSessionUseCase:
         """Test: Update session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -168,7 +169,7 @@ class TestSessionUseCase:
         """Test: Delete session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -201,7 +202,7 @@ class TestSessionUseCase:
         """Test: Add message to session."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -229,7 +230,7 @@ class TestSessionUseCase:
         """Test: Get session messages."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
@@ -262,7 +263,7 @@ class TestSessionUseCase:
         """Test: Session ownership validation."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        ctx = await self._permission_ctx_for_user(db_session, user)
         set_permission_context(ctx)
         try:
             use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))

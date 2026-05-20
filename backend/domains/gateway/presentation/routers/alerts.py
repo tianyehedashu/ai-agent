@@ -18,6 +18,10 @@ from domains.gateway.presentation.schemas.common import (
     AlertRuleResponse,
     AlertRuleUpdate,
 )
+from domains.gateway.presentation.tenant_scoped_response import (
+    apply_tenant_team_mirror,
+    tenant_scoped_orm_dict,
+)
 from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
@@ -34,7 +38,7 @@ async def list_alert_rules(
     reads: MgmtReads,
 ) -> list[AlertRuleResponse]:
     rows = await reads.list_alert_rules(team.team_id)
-    return [AlertRuleResponse.model_validate(r) for r in rows]
+    return [AlertRuleResponse.model_validate(tenant_scoped_orm_dict(r)) for r in rows]
 
 
 @router.post("/alerts/rules", response_model=AlertRuleResponse, status_code=status.HTTP_201_CREATED)
@@ -44,7 +48,7 @@ async def create_alert_rule(
     writes: MgmtWrites,
 ) -> AlertRuleResponse:
     rule = await writes.create_alert_rule(
-        team_id=team.team_id,
+        tenant_id=team.team_id,
         name=body.name,
         description=body.description,
         metric=body.metric,
@@ -53,7 +57,7 @@ async def create_alert_rule(
         channels=body.channels,
         enabled=body.enabled,
     )
-    return AlertRuleResponse.model_validate(rule)
+    return AlertRuleResponse.model_validate(tenant_scoped_orm_dict(rule))
 
 
 @router.patch("/alerts/rules/{rule_id}", response_model=AlertRuleResponse)
@@ -66,12 +70,12 @@ async def update_alert_rule(
     try:
         rule = await writes.update_alert_rule(
             rule_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             fields=body.model_dump(exclude_unset=True, exclude_none=True),
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return AlertRuleResponse.model_validate(rule)
+    return AlertRuleResponse.model_validate(tenant_scoped_orm_dict(rule))
 
 
 @router.delete("/alerts/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -81,7 +85,7 @@ async def delete_alert_rule(
     writes: MgmtWrites,
 ) -> None:
     try:
-        await writes.delete_alert_rule(rule_id, team_id=team.team_id)
+        await writes.delete_alert_rule(rule_id, tenant_id=team.team_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
 
@@ -93,7 +97,7 @@ async def list_alert_events(
     limit: int = Query(100, ge=1, le=500),
 ) -> list[AlertEventResponse]:
     rows = await reads.list_alert_events_as_dicts(team.team_id, limit=limit)
-    return [AlertEventResponse(**row) for row in rows]
+    return [AlertEventResponse.model_validate(apply_tenant_team_mirror(dict(row))) for row in rows]
 
 
 __all__ = ["router"]

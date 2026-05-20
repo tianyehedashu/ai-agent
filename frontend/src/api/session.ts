@@ -9,8 +9,7 @@ import { apiClient } from './client'
 // 后端返回的Session格式（snake_case）
 interface BackendSession {
   id: string
-  user_id: string | null // 注册用户 ID（匿名用户为 null）
-  anonymous_user_id: string | null // 匿名用户 ID（注册用户为 null）
+  tenant_id: string
   agent_id: string | null
   title: string | null
   status: string

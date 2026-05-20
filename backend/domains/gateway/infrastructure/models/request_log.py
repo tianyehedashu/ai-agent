@@ -54,7 +54,7 @@ class GatewayRequestLog(Base):
     )
 
     # 归属（删除原实体时置 NULL，保留快照）
-    team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     vkey_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
@@ -160,7 +160,7 @@ class GatewayRequestLog(Base):
     client_ua: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     __table_args__ = (
-        Index("ix_gateway_request_logs_team_time", "team_id", "created_at"),
+        Index("ix_gateway_request_logs_tenant_time", "tenant_id", "created_at"),
         Index("ix_gateway_request_logs_user_time", "user_id", "created_at"),
         Index("ix_gateway_request_logs_vkey_time", "vkey_id", "created_at"),
         Index("ix_gateway_request_logs_credential_time", "credential_id", "created_at"),
@@ -177,7 +177,7 @@ class GatewayRequestLog(Base):
         Index("ix_gateway_request_logs_status_time", "status", "created_at"),
         Index(
             "ix_gateway_request_logs_deploy_team_time",
-            "team_id",
+            "tenant_id",
             "deployment_gateway_model_id",
             "created_at",
         ),

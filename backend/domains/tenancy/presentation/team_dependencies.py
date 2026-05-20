@@ -20,7 +20,7 @@ from domains.tenancy.application.management_team_resolve_use_case import (
 )
 from domains.tenancy.domain.management_context import ManagementTeamContext
 from libs.db.database import get_db
-from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.db.permission_context import merge_team_into_permission_context
 from libs.exceptions import (
     PersonalTeamNotInitializedError,
     TeamNotFoundError,
@@ -81,14 +81,9 @@ async def resolve_current_team(
             ) from exc
         raise http_exc from exc
 
-    set_permission_context(
-        PermissionContext(
-            user_id=user_id,
-            anonymous_user_id=None,
-            role=current_user.role,
-            team_id=resolved.team_id,
-            team_role=resolved.team_role,
-        )
+    merge_team_into_permission_context(
+        team_id=resolved.team_id,
+        team_role=resolved.team_role,
     )
 
     return resolved
@@ -134,14 +129,9 @@ async def attach_optional_team_from_header(
             ) from exc
         raise http_exc from exc
 
-    set_permission_context(
-        PermissionContext(
-            user_id=user_id,
-            anonymous_user_id=None,
-            role=current_user.role,
-            team_id=resolved.team_id,
-            team_role=resolved.team_role,
-        )
+    merge_team_into_permission_context(
+        team_id=resolved.team_id,
+        team_role=resolved.team_role,
     )
 
 

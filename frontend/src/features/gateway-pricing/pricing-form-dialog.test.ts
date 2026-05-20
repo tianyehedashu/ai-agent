@@ -46,7 +46,7 @@ describe('pricing form payload builders', () => {
         'USD'
       )
     ).toEqual({
-      scope: 'team',
+      scope: 'tenant',
       gateway_model_id: 'model-id',
       inheritance_strategy: 'mirror',
       currency: 'USD',
@@ -69,7 +69,7 @@ describe('pricing form payload builders', () => {
         'CNY'
       )
     ).toEqual({
-      scope: 'team',
+      scope: 'tenant',
       gateway_model_id: 'model-id',
       inheritance_strategy: 'manual',
       currency: 'CNY',

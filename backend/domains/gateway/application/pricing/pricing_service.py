@@ -84,7 +84,7 @@ class PricingService:
     async def resolve_downstream_rate(
         self,
         *,
-        team_id: uuid.UUID | None,
+        tenant_id: uuid.UUID | None,
         entitlement_plan_id: uuid.UUID | None,
         gateway_model_id: uuid.UUID | None,
         provider: str,
@@ -101,7 +101,7 @@ class PricingService:
             )
 
             key = pricing_resolution_cache_key(
-                team_id=team_id,
+                tenant_id=tenant_id,
                 gateway_model_id=gateway_model_id,
                 entitlement_plan_id=entitlement_plan_id,
                 capability=capability,
@@ -110,7 +110,7 @@ class PricingService:
             if cached is not None:
                 return cached
         resolved = await self._resolve_downstream_rate_uncached(
-            team_id=team_id,
+            tenant_id=tenant_id,
             entitlement_plan_id=entitlement_plan_id,
             gateway_model_id=gateway_model_id,
             provider=provider,
@@ -126,7 +126,7 @@ class PricingService:
 
             await set_cached_resolution_async(
                 pricing_resolution_cache_key(
-                    team_id=team_id,
+                    tenant_id=tenant_id,
                     gateway_model_id=gateway_model_id,
                     entitlement_plan_id=entitlement_plan_id,
                     capability=capability,
@@ -138,7 +138,7 @@ class PricingService:
     async def _resolve_downstream_rate_uncached(
         self,
         *,
-        team_id: uuid.UUID | None,
+        tenant_id: uuid.UUID | None,
         entitlement_plan_id: uuid.UUID | None,
         gateway_model_id: uuid.UUID | None,
         provider: str,
@@ -166,22 +166,22 @@ class PricingService:
             if row is not None:
                 hit_chain.append("entitlement_plan")
 
-        if row is None and team_id is not None:
+        if row is None and tenant_id is not None:
             row = await self._downstream.get_active_for_scope(
-                scope="team",
-                scope_id=team_id,
+                scope="tenant",
+                scope_id=tenant_id,
                 gateway_model_id=gateway_model_id,
                 at=at,
             )
             if row is None and gateway_model_id is not None:
                 row = await self._downstream.get_active_for_scope(
-                    scope="team",
-                    scope_id=team_id,
+                    scope="tenant",
+                    scope_id=tenant_id,
                     gateway_model_id=None,
                     at=at,
                 )
             if row is not None:
-                hit_chain.append("team")
+                hit_chain.append("tenant")
 
         if row is None:
             row = await self._downstream.get_active_for_scope(

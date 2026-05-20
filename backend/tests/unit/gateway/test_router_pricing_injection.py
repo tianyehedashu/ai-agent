@@ -45,11 +45,12 @@ def _mk_model(*, name, real, prov, cred_id, team=None, cap="chat") -> MagicMock:
     return m
 
 
-def _mk_cred(*, id_, name="cred", scope="team"):
+def _mk_cred(*, id_, name="cred", tenant_id=None):
     cred = MagicMock()
     cred.id = id_
     cred.name = name
-    cred.scope = scope
+    cred.tenant_id = tenant_id
+    cred.scope = None
     cred.api_key_encrypted = "enc"
     cred.api_base = None
     cred.extra = None

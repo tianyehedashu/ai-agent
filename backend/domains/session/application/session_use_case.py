@@ -11,8 +11,10 @@ import uuid
 
 from domains.agent.domain.types import MessageRole
 from domains.identity.domain.types import Principal
+from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.infrastructure.repositories import SessionRepository
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.exceptions import NotFoundError, PermissionDeniedError
 from utils.logging import get_logger
 
@@ -70,6 +72,16 @@ class SessionUseCase:
         self.domain_service = SessionDomainService()
         # 可选的沙箱服务，用于生命周期联动
         self.sandbox_service = sandbox_service
+
+    async def _tenant_id_for_owner(self, owner: SessionOwner) -> uuid.UUID:
+        if owner.user_id is not None:
+            return await PersonalTeamProvisioner(self.db).ensure_personal_team(owner.user_id)
+        if owner.anonymous_user_id:
+            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
+                owner.anonymous_user_id
+            )
+            return await PersonalTeamProvisioner(self.db).ensure_personal_team(shadow_id)
+        raise ValueError("SessionOwner must have user_id or anonymous_user_id")
 
     # =========================================================================
     # Session CRUD
@@ -270,7 +282,8 @@ class SessionUseCase:
         """
         session = await self.get_session_or_raise(session_id)
 
-        if not self.domain_service.check_ownership(session, owner):
+        expected_tenant = await self._tenant_id_for_owner(owner)
+        if not self.domain_service.check_tenant_ownership(session, expected_tenant):
             raise PermissionDeniedError(
                 message="You don't have permission to access this session",
                 resource="Session",

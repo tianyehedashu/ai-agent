@@ -27,8 +27,8 @@ CREATE TABLE mcp_servers (
     PRIMARY KEY (id), 
     UNIQUE (name)
 );
-CREATE INDEX ix_mcp_servers_user_id ON mcp_servers (user_id);
 CREATE INDEX ix_mcp_servers_name ON mcp_servers (name);
+CREATE INDEX ix_mcp_servers_user_id ON mcp_servers (user_id);
 COMMENT ON COLUMN mcp_servers.user_id IS '�������û�ID��NULL��ʾϵͳ��������';
 INSERT INTO mcp_servers (name, display_name, url, scope, env_type, env_config, enabled, description, category)
             VALUES

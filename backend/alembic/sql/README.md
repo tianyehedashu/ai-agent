@@ -42,3 +42,9 @@ uv run python scripts/generate_alembic_sql_files.py --force
 ```
 
 导出仅供初稿；条件分支类迁移请人工核对后再发给运维。
+
+## 新表 DDL 约定（20260521 起）
+
+- 多租户业务表：`tenant_id UUID NOT NULL`（勿再新增物理列名 `user_id` / `team_id` / `scope` / `scope_id`）。
+- 平台级配置：写入 `system_*` 表（无 `tenant_id`）。
+- 策略挂载：另加 `target_kind` / `target_id`（与 tenant 正交）。

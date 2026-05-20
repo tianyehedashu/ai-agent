@@ -10,4 +10,49 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'token_count'
+            ) THEN
+                ALTER TABLE sessions DROP COLUMN token_count;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'message_count'
+            ) THEN
+                ALTER TABLE sessions DROP COLUMN message_count;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'context'
+            ) THEN
+                ALTER TABLE sessions DROP COLUMN context;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'is_active'
+            ) THEN
+                ALTER TABLE sessions ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
+                UPDATE sessions SET is_active = (status = 'active');
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'status'
+            ) THEN
+                ALTER TABLE sessions DROP COLUMN status;
+            END IF;
+        END $$;;

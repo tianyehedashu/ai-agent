@@ -207,8 +207,7 @@ class TestSessionCreate:
         assert create_response.status_code == status.HTTP_201_CREATED
         data = create_response.json()
         assert data["title"] == "Anonymous Session Title"
-        assert data["user_id"] is None
-        assert data["anonymous_user_id"] is not None
+        assert data["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_create_session_empty_title(self, dev_client: AsyncClient, auth_headers: dict):

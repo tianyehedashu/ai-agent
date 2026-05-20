@@ -23,12 +23,11 @@ from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_vendor_creator_id,
 )
 from libs.config import get_llm_config
-from libs.db.database import get_session_context
-from libs.db.permission_context import (
-    PermissionContext,
-    clear_permission_context,
-    set_permission_context,
+from domains.identity.application.permission_context_factory import (
+    build_permission_context_with_team_ids,
 )
+from libs.db.database import get_session_context
+from libs.db.permission_context import clear_permission_context, set_permission_context
 
 # 创建 LLM Server 实例
 llm_server = FastMCP(
@@ -110,9 +109,14 @@ async def video_create_task(
             ensure_ascii=False,
         )
 
-    set_permission_context(PermissionContext(user_id=user_id, anonymous_user_id=None))
     try:
         async with get_session_context() as db:
+            ctx = await build_permission_context_with_team_ids(
+                db,
+                user_id=user_id,
+                anonymous_user_id=None,
+            )
+            set_permission_context(ctx)
             vendor_creator_id = get_mcp_vendor_creator_id()
             from libs.api.deps import build_session_use_case
 
@@ -176,9 +180,14 @@ async def video_poll_task(task_id: str) -> str:
             ensure_ascii=False,
         )
 
-    set_permission_context(PermissionContext(user_id=user_id, anonymous_user_id=None))
     try:
         async with get_session_context() as db:
+            ctx = await build_permission_context_with_team_ids(
+                db,
+                user_id=user_id,
+                anonymous_user_id=None,
+            )
+            set_permission_context(ctx)
             from libs.api.deps import build_session_use_case
 
             use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))

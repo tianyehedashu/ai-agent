@@ -69,7 +69,7 @@ export interface DownstreamPricingRow {
 }
 
 export interface DownstreamPricingUpsertBody {
-  scope: 'global' | 'team' | 'entitlement_plan'
+  scope: 'global' | 'tenant' | 'entitlement_plan'
   scope_id?: string | null
   gateway_model_id?: string | null
   /** mirror：继承上游；manual：使用本行 amount_per_million */
@@ -176,7 +176,7 @@ export const pricingApi = {
   // --- 下游计价 ---
   /** 列出下游计价（按 scope / scope_id / currency 过滤） */
   listDownstreamPricing: (params?: {
-    scope?: 'global' | 'team' | 'entitlement_plan'
+    scope?: 'global' | 'tenant' | 'entitlement_plan'
     scope_id?: string
     currency?: DisplayCurrency
   }) => apiClient.get<DownstreamPricingRow[]>(`${GATEWAY_API_BASE}/pricing/downstream`, params),
@@ -188,7 +188,10 @@ export const pricingApi = {
    * - scope/scope_id 缺省时仅同步 global
    * - 返回新建条数与因冲突跳过的条数
    */
-  syncDownstreamPricing: (params?: { scope?: 'team' | 'entitlement_plan'; scope_id?: string }) => {
+  syncDownstreamPricing: (params?: {
+    scope?: 'tenant' | 'entitlement_plan'
+    scope_id?: string
+  }) => {
     const qs = new URLSearchParams()
     if (params?.scope) qs.set('scope', params.scope)
     if (params?.scope_id) qs.set('scope_id', params.scope_id)

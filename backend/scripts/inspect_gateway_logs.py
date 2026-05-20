@@ -47,7 +47,7 @@ async def run(args: argparse.Namespace) -> None:
         if args.user:
             stmt = stmt.where(GatewayRequestLog.user_id == uuid.UUID(args.user))
         if args.team:
-            stmt = stmt.where(GatewayRequestLog.team_id == uuid.UUID(args.team))
+            stmt = stmt.where(GatewayRequestLog.tenant_id == uuid.UUID(args.team))
 
         rows = (await session.execute(stmt)).scalars().all()
 

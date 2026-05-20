@@ -6,29 +6,17 @@ import uuid
 
 import pytest
 
-from bootstrap.config import settings
 from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
-)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
 from domains.tenancy.application.team_service import TeamService
-from libs.crypto import derive_encryption_key, encrypt_value
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 
 
 async def _seed_cred(db_session, team_id, name):
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    return await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team_id,
-        provider="openai",
-        name=name,
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    return await create_tenant_test_credential(db_session, team_id, name=name)
 
 
 @pytest.mark.asyncio
@@ -37,7 +25,7 @@ async def test_resolve_returns_gateway_model_when_name_matches(db_session, test_
     cred = await _seed_cred(db_session, team.id, f"resolve-direct-{uuid.uuid4().hex[:6]}")
     name = f"vm-direct-{uuid.uuid4().hex[:6]}"
     model = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=name,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -60,7 +48,7 @@ async def test_resolve_returns_route_with_primary_model(db_session, test_user) -
     primary_name = f"vm-primary-{uuid.uuid4().hex[:6]}"
     virtual = f"vroute-{uuid.uuid4().hex[:6]}"
     primary = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=primary_name,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -68,7 +56,7 @@ async def test_resolve_returns_route_with_primary_model(db_session, test_user) -
         provider="openai",
     )
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model=virtual,
         primary_models=[primary_name],
     )
@@ -86,7 +74,7 @@ async def test_resolve_returns_none_when_route_primary_missing(db_session, test_
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     virtual = f"empty-route-{uuid.uuid4().hex[:6]}"
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model=virtual,
         primary_models=[f"ghost-{uuid.uuid4().hex[:6]}"],
     )

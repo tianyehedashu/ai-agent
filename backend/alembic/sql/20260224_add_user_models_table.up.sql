@@ -27,5 +27,5 @@ CREATE TABLE user_models (
     PRIMARY KEY (id), 
     FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
 );
-CREATE INDEX ix_user_models_user_id ON user_models (user_id);
 CREATE INDEX ix_user_models_anonymous_user_id ON user_models (anonymous_user_id);
+CREATE INDEX ix_user_models_user_id ON user_models (user_id);

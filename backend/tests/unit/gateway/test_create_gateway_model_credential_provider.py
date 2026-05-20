@@ -24,9 +24,8 @@ async def test_create_gateway_model_rejects_cred_provider_mismatch(
 ) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
+    cred = await ProviderCredentialRepository(db_session).create_for_tenant(
+        tenant_id=team.id,
         provider="openai",
         name="mismatch-cred",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -37,7 +36,7 @@ async def test_create_gateway_model_rejects_cred_provider_mismatch(
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ValidationError, match="凭据提供商"):
         await writes.create_gateway_model(
-            team_id=team.id,
+            tenant_id=team.id,
             name=f"m-{uuid.uuid4().hex[:6]}",
             capability="chat",
             real_model="gpt-4o-mini",

@@ -45,7 +45,7 @@ async def list_provider_plans(
     try:
         await reads.assert_credential_in_team(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
         rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
@@ -69,7 +69,7 @@ async def create_provider_plan(
     try:
         plan = await writes.create_provider_plan(
             credential_id=credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             real_model=body.real_model,
             label=body.label,
@@ -114,7 +114,7 @@ async def update_provider_plan(
         await writes.update_provider_plan(
             plan_id,
             credential_id=credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             fields=fields,
             quotas=quotas_input,
@@ -141,7 +141,7 @@ async def delete_provider_plan(
         await writes.delete_provider_plan(
             plan_id,
             credential_id=credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
     except HttpMappableDomainError as exc:
@@ -161,7 +161,7 @@ async def list_provider_plan_usage(
     try:
         await reads.assert_credential_in_team(
             credential_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
         rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
@@ -198,7 +198,7 @@ async def list_vkey_entitlements(
     try:
         await reads.assert_vkey_in_team(
             vkey_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
         rows = await reads.list_entitlement_plans_with_quotas_for_scope("vkey", vkey_id)
@@ -223,7 +223,7 @@ async def create_vkey_entitlement(
         plan = await writes.create_entitlement_plan(
             scope="vkey",
             scope_id=vkey_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             label=body.label,
             valid_from=body.valid_from,
@@ -265,7 +265,7 @@ async def update_entitlement_plan(
         )
         await writes.update_entitlement_plan(
             plan_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             fields=fields,
             quotas=quotas_input,
@@ -290,7 +290,7 @@ async def delete_entitlement_plan(
     try:
         await writes.delete_entitlement_plan(
             plan_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
     except HttpMappableDomainError as exc:
@@ -310,7 +310,7 @@ async def get_entitlement_plan_usage(
     try:
         await reads.assert_entitlement_plan_in_team(
             plan_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
     except HttpMappableDomainError as exc:
@@ -342,7 +342,7 @@ async def list_apikey_grant_entitlements(
     try:
         await reads.assert_apikey_grant_in_team(
             grant_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
         rows = await reads.list_entitlement_plans_with_quotas_for_scope("apikey_grant", grant_id)
@@ -367,7 +367,7 @@ async def create_apikey_grant_entitlement(
         plan = await writes.create_entitlement_plan(
             scope="apikey_grant",
             scope_id=grant_id,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
             label=body.label,
             valid_from=body.valid_from,

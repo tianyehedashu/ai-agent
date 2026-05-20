@@ -3,6 +3,8 @@
 
 测试匿名用户从创建会话到删除会话的完整流"""
 
+from uuid import UUID
+
 from fastapi import status
 from httpx import AsyncClient
 import pytest
@@ -25,11 +27,11 @@ class TestAnonymousSessionLifecycle:
         assert create_response.status_code == status.HTTP_201_CREATED
         session_data = create_response.json()
         session_id = session_data["id"]
-        anonymous_user_id = session_data["anonymous_user_id"]
+        tenant_id = session_data["tenant_id"]
 
         # 验证响应格式
-        assert session_data["user_id"] is None
-        assert anonymous_user_id is not None
+        assert tenant_id
+        UUID(tenant_id)
         assert session_data["title"] == "My Anonymous Session"
         assert session_data["status"] == "active"
         assert session_data["message_count"] == 0
@@ -40,7 +42,7 @@ class TestAnonymousSessionLifecycle:
         assert get_response.status_code == status.HTTP_200_OK
         get_data = get_response.json()
         assert get_data["id"] == session_id
-        assert get_data["anonymous_user_id"] == anonymous_user_id
+        assert get_data["tenant_id"] == tenant_id
 
         # 3. 更新会话
         update_response = await dev_client.patch(
@@ -77,16 +79,22 @@ class TestAnonymousSessionLifecycle:
     async def test_anonymous_user_multiple_sessions(self, dev_client: AsyncClient):
         """测试: 匿名用户可以创建多个会话"""
         # Arrange & Act - 创建多个会话
-        session_ids = []
+        session_ids: list[str] = []
+        first_tenant: str | None = None
         for i in range(3):
             create_response = await dev_client.post(
                 "/api/v1/sessions/",
                 json={"title": f"Session {i + 1}"},
             )
             assert create_response.status_code == status.HTTP_201_CREATED
-            session_ids.append(create_response.json()["id"])
+            data = create_response.json()
+            session_ids.append(data["id"])
+            if first_tenant is None:
+                first_tenant = data["tenant_id"]
+            else:
+                assert data["tenant_id"] == first_tenant
 
-        # Assert - 所有会话都属于同一个匿名用户
+        # Assert - 所有会话都属于同一个 tenant
         list_response = await dev_client.get("/api/v1/sessions/")
         assert list_response.status_code == status.HTTP_200_OK
         sessions = list_response.json()
@@ -94,29 +102,24 @@ class TestAnonymousSessionLifecycle:
 
         for session_id in session_ids:
             assert session_id in session_ids_in_list
-            # 验证所有会话的 anonymous_user_id 相同
             session_data = next(s for s in sessions if s["id"] == session_id)
-            assert session_data["anonymous_user_id"] is not None
-            assert session_data["user_id"] is None
+            assert session_data["tenant_id"] == first_tenant
 
     @pytest.mark.asyncio
     async def test_anonymous_user_session_persistence(self, dev_client: AsyncClient):
         """测试: 匿名用户会话在多次请求间保持"""
-        # Arrange - 创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Persistent Session"},
         )
         session_id = create_response.json()["id"]
-        anonymous_user_id = create_response.json()["anonymous_user_id"]
+        tenant_id = create_response.json()["tenant_id"]
 
-        # Act - 多次请求获取会话
         for _ in range(3):
             get_response = await dev_client.get(f"/api/v1/sessions/{session_id}")
             assert get_response.status_code == status.HTTP_200_OK
-            assert get_response.json()["anonymous_user_id"] == anonymous_user_id
+            assert get_response.json()["tenant_id"] == tenant_id
 
-        # Assert - 会话仍然存在
         list_response = await dev_client.get("/api/v1/sessions/")
         sessions = list_response.json()
         assert any(s["id"] == session_id for s in sessions)
@@ -124,11 +127,6 @@ class TestAnonymousSessionLifecycle:
     @pytest.mark.asyncio
     async def test_anonymous_user_session_with_agent(self, dev_client: AsyncClient):
         """测试: 匿名用户可以创建 Agent 的会话"""
-        # 注意：这个测试需要先创建一个 Agent
-        # 但在开发模式下，Agent 可能需要注册用户
-        # 这里先测试基本流程，如果 Agent 创建失败则跳过
-        # Arrange - 尝试创建 Agent（可能需要认证）
-        # 如果失败，则跳过此测试
         try:
             agent_response = await dev_client.post(
                 "/api/v1/agents/",
@@ -140,41 +138,34 @@ class TestAnonymousSessionLifecycle:
         except Exception:
             pytest.skip("Cannot create agent without authentication")
 
-        # Act - 创建 Agent 的会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"agent_id": agent_id, "title": "Session with Agent"},
         )
 
-        # Assert
         if create_response.status_code == status.HTTP_201_CREATED:
             session_data = create_response.json()
             assert session_data["agent_id"] == agent_id
-            assert session_data["anonymous_user_id"] is not None
+            assert session_data["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_anonymous_user_cookie_persistence_across_sessions(self, dev_client: AsyncClient):
         """测试: 匿名用户 Cookie 在会话间保持"""
-        # Arrange - 首次请求获取 Cookie
         first_response = await dev_client.get("/api/v1/sessions/")
         assert first_response.status_code == status.HTTP_200_OK
         first_cookie = dev_client.cookies.get(ANONYMOUS_USER_COOKIE)
         assert first_cookie is not None
 
-        # Act - 创建会话
         create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Test Session"},
         )
         assert create_response.status_code == status.HTTP_201_CREATED
-        session_anonymous_id = create_response.json()["anonymous_user_id"]
+        session_tenant_id = create_response.json()["tenant_id"]
 
-        # Act - 再次请求（应该使用相同的 Cookie）
         second_response = await dev_client.get("/api/v1/sessions/")
         second_cookie = dev_client.cookies.get(ANONYMOUS_USER_COOKIE)
 
-        # Assert - Cookie 应该保持一致
         assert first_cookie == second_cookie
-        # 会话应该属于同一个匿名用户
         sessions = second_response.json()
-        assert any(s["anonymous_user_id"] == session_anonymous_id for s in sessions)
+        assert any(s["tenant_id"] == session_tenant_id for s in sessions)

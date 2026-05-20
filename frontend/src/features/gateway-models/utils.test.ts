@@ -25,7 +25,8 @@ function model(
 ): GatewayModel {
   return {
     id: '1',
-    team_id: 't',
+    tenant_id: partial.tenant_id ?? partial.team_id ?? 't',
+    team_id: partial.team_id ?? 't',
     name: 'p/m',
     capability: 'chat',
     real_model: 'm',
@@ -105,6 +106,7 @@ describe('routesReferencingModel', () => {
   const routes: GatewayRoute[] = [
     {
       id: 'r1',
+      tenant_id: 't',
       team_id: 't',
       virtual_model: 'v1',
       primary_models: ['a/b'],

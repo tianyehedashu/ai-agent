@@ -200,7 +200,7 @@ def _registered_user_context(
 async def _read_logs(db_session: AsyncSession, team_id: uuid.UUID) -> list[GatewayRequestLog]:
     stmt = (
         select(GatewayRequestLog)
-        .where(GatewayRequestLog.team_id == team_id)
+        .where(GatewayRequestLog.tenant_id == team_id)
         .order_by(GatewayRequestLog.created_at.asc())
     )
     return list((await db_session.execute(stmt)).scalars().all())
@@ -237,7 +237,7 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
     rows = await _read_logs(db_session, team.id)
     assert len(rows) == 1, f"expected one request log row, got {len(rows)}"
     row = rows[0]
-    assert row.team_id == team.id
+    assert row.tenant_id == team.id
     assert row.user_id == test_user.id
     assert row.vkey_id is not None, "system vkey id must be persisted as attribution"
     assert row.input_tokens == 11
@@ -249,7 +249,7 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
         (
             await db_session.execute(
                 select(GatewayVirtualKey).where(
-                    GatewayVirtualKey.team_id == team.id,
+                    GatewayVirtualKey.tenant_id == team.id,
                     GatewayVirtualKey.is_system.is_(True),
                     GatewayVirtualKey.is_active.is_(True),
                 )
@@ -301,7 +301,7 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
     rows = await _read_logs(db_session, team.id)
     assert len(rows) == 4
     for row in rows:
-        assert row.team_id == team.id
+        assert row.tenant_id == team.id
         assert row.user_id == test_user.id
         assert row.vkey_id is not None
 
@@ -312,7 +312,7 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
         (
             await db_session.execute(
                 select(GatewayVirtualKey).where(
-                    GatewayVirtualKey.team_id == team.id,
+                    GatewayVirtualKey.tenant_id == team.id,
                     GatewayVirtualKey.is_system.is_(True),
                     GatewayVirtualKey.is_active.is_(True),
                 )

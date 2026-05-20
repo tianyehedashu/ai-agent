@@ -5,6 +5,7 @@ Title Use Case - 标题生成用例
 """
 
 from typing import Literal
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,7 @@ from domains.identity.domain.types import Principal
 from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
+from domains.session.infrastructure.models.session import Session
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +55,10 @@ class TitleUseCase:
         """从用户 ID 创建 SessionOwner"""
         is_anonymous = Principal.is_anonymous_id(user_id)
         return SessionOwner.from_principal_id(user_id, is_anonymous)
+
+    async def _session_belongs_to_owner(self, session: Session, owner: SessionOwner) -> bool:
+        expected = await self.session_use_case._tenant_id_for_owner(owner)
+        return self.domain_service.check_tenant_ownership(session, expected)
 
     @staticmethod
     def _format_title(content: str | None) -> str | None:
@@ -136,7 +142,7 @@ class TitleUseCase:
                 return False
 
             owner = self._create_owner_from_user_id(user_id)
-            if not self.domain_service.check_ownership(session, owner):
+            if not await self._session_belongs_to_owner(session, owner):
                 logger.warning(
                     "User %s attempted to update session %s (not authorized)",
                     user_id[:20] if len(user_id) > 20 else user_id,
@@ -192,7 +198,7 @@ class TitleUseCase:
 
         if user_id:
             owner = self._create_owner_from_user_id(user_id)
-            if not self.domain_service.check_ownership(session, owner):
+            if not await self._session_belongs_to_owner(session, owner):
                 return False
 
         if is_default_title(session.title):

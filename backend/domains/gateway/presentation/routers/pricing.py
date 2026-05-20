@@ -26,6 +26,7 @@ from domains.gateway.application.pricing.upstream_pricing_audit import (
 )
 from domains.gateway.application.pricing.upstream_sync_service import UpstreamSyncService
 from domains.gateway.domain.money import DisplayCurrency
+from domains.gateway.domain.types import normalize_downstream_pricing_scope
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.pricing_repository import (
@@ -128,7 +129,7 @@ async def estimate_pricing(
     try:
         payload = await estimate_usage_cost(
             db,
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             gateway_model_id=body.gateway_model_id,
             input_tokens=body.input_tokens,
             output_tokens=body.output_tokens,
@@ -150,7 +151,7 @@ async def pricing_reconciliation(
     month: int = Query(..., ge=1, le=12),
 ) -> PricingReconciliationResponse:
     _ = admin
-    payload = await team_month_reconciliation(db, team_id=team.team_id, year=year, month=month)
+    payload = await team_month_reconciliation(db, tenant_id=team.team_id, year=year, month=month)
     return PricingReconciliationResponse.model_validate(payload)
 
 
@@ -220,17 +221,20 @@ async def list_downstream_pricing(
     team: CurrentTeam,
     _member: RequiredTeamMember,
     db: Annotated[AsyncSession, Depends(get_db)],
-    scope: Literal["global", "team", "entitlement_plan"] = Query("team"),
+    scope: Literal["global", "team", "tenant", "entitlement_plan"] = Query("tenant"),
     scope_id: uuid.UUID | None = Query(None),
     currency: str | None = Query("CNY"),
 ) -> list[DownstreamPricingResponse]:
     cur = _parse_currency(currency)
-    if scope == "global" and not team.is_platform_admin:
+    scope_norm = normalize_downstream_pricing_scope(scope)
+    if scope_norm == "global" and not team.is_platform_admin:
         raise HTTPException(status_code=403, detail="global scope requires platform admin")
-    sid = scope_id if scope != "global" else None
-    if scope == "team" and sid is None:
+    sid = scope_id if scope_norm != "global" else None
+    if scope_norm == "tenant" and sid is None:
         sid = team.team_id
-    rows = await _catalog_reads(db).list_downstream(scope=scope, scope_id=sid, currency=cur)
+    rows = await _catalog_reads(db).list_downstream(
+        scope=scope_norm, scope_id=sid, currency=cur
+    )
     return [DownstreamPricingResponse.model_validate(r) for r in rows]
 
 
@@ -245,14 +249,15 @@ async def create_downstream_pricing(
     writes: MgmtWrites,
 ) -> DownstreamPricingResponse:
     _ = admin
-    if body.scope == "global" and not team.is_platform_admin:
+    scope_norm = normalize_downstream_pricing_scope(body.scope)
+    if scope_norm == "global" and not team.is_platform_admin:
         raise HTTPException(status_code=403, detail="global scope requires platform admin")
     sid = body.scope_id
-    if body.scope == "team" and sid is None:
+    if scope_norm == "tenant" and sid is None:
         sid = team.team_id
     try:
         row = await writes.upsert_downstream_pricing(
-            scope=body.scope,
+            scope=scope_norm,
             scope_id=sid,
             gateway_model_id=body.gateway_model_id,
             inheritance_strategy=body.inheritance_strategy,
@@ -287,15 +292,16 @@ async def sync_downstream_from_upstream(
     team: CurrentTeam,
     _admin: RequiredTeamAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
-    scope: Literal["team", "entitlement_plan"] = Query("team"),
+    scope: Literal["team", "tenant", "entitlement_plan"] = Query("tenant"),
     scope_id: uuid.UUID | None = Query(None),
 ) -> SyncReportResponse:
+    scope_norm = normalize_downstream_pricing_scope(scope)
     sid = scope_id or team.team_id
     svc = _sync_service(db)
     report = await svc.bulk_mirror_from_upstream(
-        scope=scope,
+        scope=scope_norm,
         scope_id=sid,
-        team_id=team.team_id,
+        tenant_id=team.team_id,
     )
     await db.commit()
     return SyncReportResponse(created=report.created, skipped=report.skipped)
@@ -310,7 +316,7 @@ async def list_my_prices(
 ) -> list[PricingRateMemberView]:
     _ = user
     cur = _parse_currency(currency)
-    rows = await _catalog_reads(db).list_my_prices(team_id=team.team_id, currency=cur)
+    rows = await _catalog_reads(db).list_my_prices(tenant_id=team.team_id, currency=cur)
     return [PricingRateMemberView.model_validate(r) for r in rows]
 
 

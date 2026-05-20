@@ -27,7 +27,7 @@ async def estimate_usage_cost(
         raise LookupError("gateway model not found")
     svc = build_pricing_service(session)
     resolved = await svc.resolve_downstream_rate(
-        team_id=team_id,
+        tenant_id=team_id,
         entitlement_plan_id=None,
         gateway_model_id=gateway_model_id,
         provider=model.provider,

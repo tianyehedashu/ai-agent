@@ -89,7 +89,7 @@ async def _ensure_system_vkey(
     return VirtualKeyPrincipal(
         vkey_id=record.id,
         vkey_name=record.name,
-        team_id=record.team_id,
+        team_id=record.tenant_id,
         user_id=record.created_by_user_id,
         allowed_models=tuple(record.allowed_models or ()),
         allowed_capabilities=caps,

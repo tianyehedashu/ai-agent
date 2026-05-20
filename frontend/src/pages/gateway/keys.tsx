@@ -42,7 +42,7 @@ import { BookOpen, Copy, Plus, Trash2 } from '@/lib/lucide-icons'
 export default function GatewayKeysPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const { canWrite } = useGatewayPermission()
+  const { isMember } = useGatewayPermission()
   const [open, setOpen] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [createdKeyId, setCreatedKeyId] = useState<string | null>(null)
@@ -162,7 +162,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
             Key；共享团队调用仍建议使用此处的 <span className="font-mono">sk-gw-*</span>。
           </p>
         </div>
-        {canWrite && (
+        {isMember && (
           <Button
             size="sm"
             onClick={() => {
@@ -175,7 +175,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
         )}
       </div>
 
-      {canWrite && selectedIds.size > 0 ? (
+      {isMember && selectedIds.size > 0 ? (
         <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-2">
           <span className="text-sm text-muted-foreground">已选 {selectedIds.size} 项</span>
           <Button
@@ -196,7 +196,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
               <tr>
-                {canWrite ? (
+                {isMember ? (
                   <th className="w-10 px-4 py-2 text-left font-medium">
                     <Checkbox
                       checked={
@@ -228,7 +228,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {isLoading && (
                 <tr>
                   <td
-                    colSpan={canWrite ? 9 : 8}
+                    colSpan={isMember ? 9 : 8}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     加载中...
@@ -238,7 +238,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {!isLoading && visibleKeys.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canWrite ? 9 : 8}
+                    colSpan={isMember ? 9 : 8}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     暂无虚拟 Key
@@ -247,7 +247,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               )}
               {visibleKeys.map((k: VirtualKey) => (
                 <tr key={k.id} className="border-b last:border-0 hover:bg-muted/20">
-                  {canWrite ? (
+                  {isMember ? (
                     <td className="px-4 py-2">
                       {k.is_active ? (
                         <Checkbox
@@ -290,7 +290,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                           </Link>
                         </Button>
                       ) : null}
-                      {canWrite && k.is_active ? (
+                      {isMember && k.is_active ? (
                         <Button
                           variant="ghost"
                           size="icon"

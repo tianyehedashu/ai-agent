@@ -164,43 +164,34 @@ class TestSessionPermissions:
 
     @pytest.mark.asyncio
     async def test_anonymous_user_session_response_format(self, dev_client: AsyncClient):
-        """测试: 匿名用户会话的响应格式包含 anonymous_user_id"""
-        # Arrange & Act
+        """测试: 匿名用户会话响应含 tenant_id"""
         create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Anonymous Session"},
         )
 
-        # Assert
         assert create_response.status_code == status.HTTP_201_CREATED
         data = create_response.json()
         assert "id" in data
-        assert "user_id" in data
-        assert "anonymous_user_id" in data
-        assert data["user_id"] is None
-        assert data["anonymous_user_id"] is not None
-        assert isinstance(data["anonymous_user_id"], str)
+        assert "tenant_id" in data
+        assert data["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_registered_user_session_response_format(
         self, dev_client: AsyncClient, auth_headers: dict
     ):
-        """测试: 注册用户会话的响应格式包含 user_id"""
-        # Arrange & Act
+        """测试: 注册用户会话响应含 tenant_id"""
         create_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Registered Session"},
             headers=auth_headers,
         )
 
-        # Assert
         assert create_response.status_code == status.HTTP_201_CREATED
         data = create_response.json()
         assert "id" in data
-        assert "user_id" in data
-        assert "anonymous_user_id" in data
-        assert data["user_id"] is not None
-        assert data["anonymous_user_id"] is None
+        assert "tenant_id" in data
+        assert data["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_anonymous_user_can_access_own_session_messages(self, dev_client: AsyncClient):

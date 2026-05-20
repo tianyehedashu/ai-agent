@@ -9,35 +9,23 @@ from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel, OwnedMixin
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.agent import Agent
     from domains.agent.infrastructure.models.message import Message
     from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
-    from domains.identity.infrastructure.models.user import User
 
 
-class Session(BaseModel, OwnedMixin):
-    """会话模型
-
-    继承 OwnedMixin 提供所有权相关的类型协议和方法。
-    支持注册用户（user_id）和匿名用户（anonymous_user_id）。
-    """
+class Session(BaseModel, TenantScopedMixin):
+    """会话模型（归属 ``tenant_id``：注册用户 personal team 或匿名 shadow user team）。"""
 
     __tablename__ = "sessions"
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
-    )
-    anonymous_user_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="匿名用户ID，用于未登录用户的会话",
     )
     agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -76,12 +64,6 @@ class Session(BaseModel, OwnedMixin):
         comment="视频任务数量",
     )
 
-    # 关系
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="sessions",
-        foreign_keys=[user_id],
-    )
     agent: Mapped["Agent"] = relationship(
         "Agent",
         back_populates="sessions",

@@ -271,7 +271,7 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
         """获取某把 API Key 对某团队的 Gateway 授权（认证路径使用）。"""
         stmt = select(ApiKeyGatewayGrant).where(
             ApiKeyGatewayGrant.api_key_id == api_key_id,
-            ApiKeyGatewayGrant.team_id == team_id,
+            ApiKeyGatewayGrant.tenant_id == team_id,
             ApiKeyGatewayGrant.is_active.is_(True),
         )
         result = await self.db.execute(stmt)
@@ -297,7 +297,7 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
             row = ApiKeyGatewayGrant(
                 api_key_id=api_key_id,
                 user_id=user_id,
-                team_id=grant.team_id,
+                tenant_id=grant.team_id,
                 allowed_models=grant.allowed_models,
                 allowed_capabilities=grant.allowed_capabilities,
                 rpm_limit=grant.rpm_limit,

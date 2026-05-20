@@ -116,8 +116,8 @@ async def _evaluate_rule(
         GatewayRequestLog.created_at >= window_start,
         GatewayRequestLog.created_at <= now,
     )
-    if rule.team_id is not None:
-        base_q = base_q.where(GatewayRequestLog.team_id == rule.team_id)
+    if rule.tenant_id is not None:
+        base_q = base_q.where(GatewayRequestLog.tenant_id == rule.tenant_id)
 
     metric = rule.metric
     if metric == "error_rate":
@@ -193,7 +193,7 @@ async def gateway_alert_loop() -> None:
                         continue
                     event = GatewayAlertEvent(
                         rule_id=rule.id,
-                        team_id=rule.team_id,
+                        tenant_id=rule.tenant_id,
                         metric_value=Decimal(str(value)),
                         threshold=rule.threshold,
                         severity="warning",
@@ -208,7 +208,7 @@ async def gateway_alert_loop() -> None:
                         "metric": rule.metric,
                         "value": value,
                         "threshold": float(rule.threshold),
-                        "team_id": str(rule.team_id) if rule.team_id else None,
+                        "team_id": str(rule.tenant_id) if rule.tenant_id else None,
                         "at": now.isoformat(),
                     }
                     channels = rule.channels or {}

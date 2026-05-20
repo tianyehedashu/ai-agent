@@ -40,24 +40,24 @@ class RecordingBudgetService(BudgetService):
     async def reserve(
         self,
         *,
-        scope: str,
-        scope_id: str | None,
+        target_kind: str,
+        target_id: str | None,
         period: str,
         limit_requests: int | None,
         budget_model_name: str | None = None,
     ) -> None:
         _ = limit_requests
-        self.reserved.append((scope, scope_id, period, budget_model_name))
+        self.reserved.append((target_kind, target_id, period, budget_model_name))
 
     async def release(
         self,
         *,
-        scope: str,
-        scope_id: str | None,
+        target_kind: str,
+        target_id: str | None,
         period: str,
         budget_model_name: str | None = None,
     ) -> None:
-        self.released.append((scope, scope_id, period, budget_model_name))
+        self.released.append((target_kind, target_id, period, budget_model_name))
 
     async def commit(self, **_kwargs: object) -> None:
         return None
@@ -85,14 +85,16 @@ class CommitRecordingBudgetService(BudgetService):
     async def commit(
         self,
         *,
-        scope: str,
-        scope_id: str | None,
+        target_kind: str,
+        target_id: str | None,
         period: str,
         delta_cost: Decimal,
         delta_tokens: int,
         budget_model_name: str | None = None,
     ) -> None:
-        self.commits.append((scope, scope_id, period, budget_model_name, delta_tokens, delta_cost))
+        self.commits.append(
+            (target_kind, target_id, period, budget_model_name, delta_tokens, delta_cost)
+        )
 
 
 class FakeBudgetRepository:
@@ -101,15 +103,15 @@ class FakeBudgetRepository:
 
     async def get_for(
         self,
-        scope: str,
-        scope_id: uuid.UUID | None,
+        target_kind: str,
+        target_id: uuid.UUID | None,
         period: str,
         *,
         model_name: str | None = None,
     ) -> FakeBudget | None:
         if (
-            scope in {"team", "user"}
-            and scope_id is not None
+            target_kind in {"tenant", "user"}
+            and target_id is not None
             and period
             in {
                 "daily",
@@ -176,10 +178,10 @@ async def test_chat_failure_releases_all_request_reservations(
 
     periods = ("daily", "monthly", "total")
     expected: list[tuple[str, str | None, str, str | None]] = []
-    for scope, sid in (("team", str(team_id)), ("user", str(user_id))):
+    for kind, sid in (("tenant", str(team_id)), ("user", str(user_id))):
         for period in periods:
-            expected.append((scope, sid, period, None))
-            expected.append((scope, sid, period, "gpt-4o-mini"))
+            expected.append((kind, sid, period, None))
+            expected.append((kind, sid, period, "gpt-4o-mini"))
     assert budget.reserved == expected
     assert budget.released == expected
 
@@ -221,13 +223,13 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
 
         async def get_for(
             self,
-            scope: str,
-            scope_uuid: uuid.UUID,
+            target_kind: str,
+            target_uuid: uuid.UUID,
             period: str,
             *,
             model_name: str | None = None,
         ) -> _Row | None:
-            if scope != "team" or scope_uuid != team_id:
+            if target_kind != "tenant" or target_uuid != team_id:
                 return None
             if period not in {"daily", "monthly", "total"}:
                 return None
@@ -262,8 +264,8 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
     want: list[tuple[str, str | None, str, str | None, int, Decimal]] = []
     sid = str(team_id)
     for period in periods:
-        want.append(("team", sid, period, None, 7, Decimal("0.02")))
-        want.append(("team", sid, period, "gpt-4o-mini", 7, Decimal("0.02")))
+        want.append(("tenant", sid, period, None, 7, Decimal("0.02")))
+        want.append(("tenant", sid, period, "gpt-4o-mini", 7, Decimal("0.02")))
     for row in want:
         assert row in budget.commits
     assert len(budget.commits) == len(want)

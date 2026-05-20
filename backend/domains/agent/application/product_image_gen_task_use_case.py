@@ -22,8 +22,11 @@ from domains.agent.infrastructure.models.product_image_gen_task import (
 from domains.agent.infrastructure.repositories.product_image_gen_task_repository import (
     ProductImageGenTaskRepository,
 )
+from domains.identity.application.permission_context_factory import (
+    build_permission_context_with_team_ids,
+)
 from libs.db.database import get_session_factory
-from libs.db.permission_context import PermissionContext, set_permission_context
+from libs.db.permission_context import set_permission_context
 from libs.exceptions import NotFoundError
 from utils.logging import get_logger
 
@@ -55,14 +58,14 @@ async def _generate_images_background(
     api_base_override: str | None = None,
 ) -> None:
     """后台异步生成 8 张图片，逐条调用 ImageGenerator 并更新数据库。"""
-    set_permission_context(
-        PermissionContext(
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        ctx = await build_permission_context_with_team_ids(
+            db,
             user_id=user_id,
             anonymous_user_id=anonymous_user_id,
         )
-    )
-    session_factory = get_session_factory()
-    async with session_factory() as db:
+        set_permission_context(ctx)
         from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
             create_listing_studio_image_service,
         )

@@ -30,6 +30,11 @@ jobs:
         run: |
           uv run pytest \
             tests/architecture/ \
+            tests/unit/libs/db/test_data_scope.py \
+            tests/unit/libs/orm/test_mixins.py \
+            tests/unit/tenancy/test_personal_team_provisioner.py \
+            tests/unit/identity/test_anonymous_user_provisioner.py \
+            tests/unit/gateway/domain/test_model_selection.py \
             tests/unit/gateway/test_upstream_adapter.py \
             tests/unit/gateway/test_upstream_policy.py \
             tests/unit/gateway/test_prompt_cache_middleware.py \

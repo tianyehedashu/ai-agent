@@ -139,8 +139,7 @@ class TestSessionList:
             session = sessions[0]
             required_fields = [
                 "id",
-                "user_id",
-                "anonymous_user_id",
+                "tenant_id",
                 "agent_id",
                 "title",
                 "status",
@@ -174,8 +173,7 @@ class TestSessionList:
         assert anon_session_id in session_ids
         # 验证所有会话都属于匿名用户
         for session in sessions:
-            assert session["user_id"] is None
-            assert session["anonymous_user_id"] is not None
+            assert session["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_list_sessions_only_returns_own_sessions(

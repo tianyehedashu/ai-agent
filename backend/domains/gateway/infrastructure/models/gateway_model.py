@@ -14,27 +14,18 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
-class GatewayModel(BaseModel):
-    """模型注册表
-
-    业务规则：
-    - 同一 team 下 name 唯一
-    - team_id NULL 表示系统级模型（所有团队都可用）
-    - capability：该注册行的 **OpenAI 兼容主调用面**（与 ``GatewayCapability`` 对齐），
-      决定默认 HTTP 入口族（chat / images / videos / …）；**不是**「模型全部产品能力」。
-      视觉 / 工具 / 生图标记等多特性在 ``tags``，并由管理 API 派生 ``model_types`` /
-      ``selector_capabilities`` 供前端展示。
-    """
+class GatewayModel(BaseModel, TenantScopedMixin):
+    """模型注册表（仅租户行；系统级见 ``system_gateway_models``）。"""
 
     __tablename__ = "gateway_models"
 
-    team_id: Mapped[uuid.UUID | None] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     name: Mapped[str] = mapped_column(
@@ -100,8 +91,8 @@ class GatewayModel(BaseModel):
         comment="上次连通性测试说明（失败原因等）；成功时为 NULL",
     )
     __table_args__ = (
-        UniqueConstraint("team_id", "name", name="uq_gateway_models_team_name"),
-        Index("ix_gateway_models_lookup", "team_id", "capability", "enabled"),
+        UniqueConstraint("tenant_id", "name", name="uq_gateway_models_tenant_name"),
+        Index("ix_gateway_models_lookup", "tenant_id", "capability", "enabled"),
     )
 
     def __repr__(self) -> str:

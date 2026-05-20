@@ -82,7 +82,7 @@ class RequestLogRepository:
         client_ua: str | None = None,
     ) -> GatewayRequestLog:
         log = GatewayRequestLog(
-            team_id=team_id,
+            tenant_id=team_id,
             user_id=user_id,
             vkey_id=vkey_id,
             team_snapshot=team_snapshot,

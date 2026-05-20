@@ -17,6 +17,11 @@ from domains.identity.presentation.deps import (
 )
 from domains.identity.presentation.schemas import CurrentUser
 from domains.session.infrastructure.models import Session
+from libs.db.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 from libs.exceptions import PermissionDeniedError
 
 
@@ -235,14 +240,10 @@ class TestCheckOwnershipOrPublic:
 class TestCheckSessionOwnership:
     """check_session_ownership 测试"""
 
-    def _create_session(
-        self, user_id: uuid.UUID | None = None, anonymous_user_id: str | None = None
-    ) -> Session:
-        """创建测试会话"""
+    def _create_session(self, tenant_id: uuid.UUID) -> Session:
         return Session(
             id=uuid.uuid4(),
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+            tenant_id=tenant_id,
             status="active",
             message_count=0,
             token_count=0,
@@ -275,54 +276,75 @@ class TestCheckSessionOwnership:
         )
 
     def test_registered_user_owns_session(self):
-        """测试: 注册用户拥有自己的会话"""
         user_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
         user = self._create_registered_user(str(user_id))
-        session = self._create_session(user_id=user_id)
-
-        check_session_ownership(session, user)
+        session = self._create_session(tenant_id)
+        set_permission_context(
+            PermissionContext(
+                user_id=user_id,
+                role="user",
+                team_ids=frozenset({tenant_id}),
+            )
+        )
+        try:
+            check_session_ownership(session, user)
+        finally:
+            clear_permission_context()
 
     def test_registered_user_cannot_access_other_session(self):
-        """测试: 注册用户不能访问其他用户的会话"""
         user1_id = uuid.uuid4()
-        user2_id = uuid.uuid4()
         user = self._create_registered_user(str(user1_id))
-        session = self._create_session(user_id=user2_id)
-
-        with pytest.raises(PermissionDeniedError):
-            check_session_ownership(session, user)
+        session = self._create_session(uuid.uuid4())
+        set_permission_context(
+            PermissionContext(
+                user_id=user1_id,
+                role="user",
+                team_ids=frozenset({uuid.uuid4()}),
+            )
+        )
+        try:
+            with pytest.raises(PermissionDeniedError):
+                check_session_ownership(session, user)
+        finally:
+            clear_permission_context()
 
     def test_anonymous_user_owns_session(self):
-        """测试: 匿名用户拥有自己的会话"""
         anonymous_id = "test-anonymous-id"
+        tenant_id = uuid.uuid4()
         user = self._create_anonymous_user(anonymous_id)
-        session = self._create_session(anonymous_user_id=anonymous_id)
-
-        check_session_ownership(session, user)
-
-    def test_anonymous_user_owns_session_prefixed_column_value(self):
-        """会话表若误存带前缀 ID，仍能与 Principal 匹配"""
-        anonymous_id = str(uuid.uuid4())
-        user = self._create_anonymous_user(anonymous_id)
-        session = self._create_session(
-            anonymous_user_id=Principal.make_anonymous_id(anonymous_id),
+        session = self._create_session(tenant_id)
+        set_permission_context(
+            PermissionContext(
+                anonymous_user_id=anonymous_id,
+                role="user",
+                team_ids=frozenset({tenant_id}),
+            )
         )
-        check_session_ownership(session, user)
+        try:
+            check_session_ownership(session, user)
+        finally:
+            clear_permission_context()
 
     def test_anonymous_user_cannot_access_other_session(self):
-        """测试: 匿名用户不能访问其他匿名用户的会话"""
         anonymous_id1 = "anon-1"
-        anonymous_id2 = "anon-2"
         user = self._create_anonymous_user(anonymous_id1)
-        session = self._create_session(anonymous_user_id=anonymous_id2)
-
-        with pytest.raises(PermissionDeniedError):
-            check_session_ownership(session, user)
+        session = self._create_session(uuid.uuid4())
+        set_permission_context(
+            PermissionContext(
+                anonymous_user_id=anonymous_id1,
+                role="user",
+                team_ids=frozenset({uuid.uuid4()}),
+            )
+        )
+        try:
+            with pytest.raises(PermissionDeniedError):
+                check_session_ownership(session, user)
+        finally:
+            clear_permission_context()
 
     def test_admin_can_access_all_sessions(self):
-        """测试: 管理员可以访问所有会话"""
         admin_id = uuid.uuid4()
-        other_user_id = uuid.uuid4()
         admin = CurrentUser(
             id=str(admin_id),
             email="admin@example.com",
@@ -330,23 +352,5 @@ class TestCheckSessionOwnership:
             is_anonymous=False,
             role=ADMIN_ROLE,
         )
-        session = self._create_session(user_id=other_user_id)
-
-        # 管理员应该可以访问，不抛出异常
-        check_session_ownership(session, admin)
-
-    def test_admin_can_access_anonymous_session(self):
-        """测试: 管理员可以访问匿名用户的会话"""
-        admin_id = uuid.uuid4()
-        anonymous_id = "test-anonymous-id"
-        admin = CurrentUser(
-            id=str(admin_id),
-            email="admin@example.com",
-            name="Admin",
-            is_anonymous=False,
-            role=ADMIN_ROLE,
-        )
-        session = self._create_session(anonymous_user_id=anonymous_id)
-
-        # 管理员应该可以访问，不抛出异常
+        session = self._create_session(uuid.uuid4())
         check_session_ownership(session, admin)

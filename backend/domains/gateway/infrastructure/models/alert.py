@@ -21,18 +21,18 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
-class GatewayAlertRule(BaseModel):
-    """告警规则"""
+class GatewayAlertRule(BaseModel, TenantScopedMixin):
+    """告警规则（仅租户行；系统级见 ``system_gateway_alert_rules``）。"""
 
     __tablename__ = "gateway_alert_rules"
 
-    team_id: Mapped[uuid.UUID | None] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -59,7 +59,7 @@ class GatewayAlertRule(BaseModel):
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (Index("ix_gateway_alert_rules_lookup", "team_id", "enabled"),)
+    __table_args__ = (Index("ix_gateway_alert_rules_lookup", "tenant_id", "enabled"),)
 
     def __repr__(self) -> str:
         return f"<GatewayAlertRule {self.name} {self.metric}>"
@@ -76,7 +76,9 @@ class GatewayAlertEvent(BaseModel):
         nullable=False,
         index=True,
     )
-    team_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     metric_value: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     threshold: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, server_default="warning")

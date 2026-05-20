@@ -17,6 +17,9 @@ import { GATEWAY_API_BASE } from './_base'
 /** Gateway 团队模型（注册行） */
 export interface GatewayModel {
   id: string
+  /** 数据归属租户（工作区团队 UUID） */
+  tenant_id?: string | null
+  /** 与 tenant_id 同值，兼容旧字段 */
   team_id: string | null
   name: string
   capability: string

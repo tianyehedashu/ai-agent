@@ -10,6 +10,7 @@ from uuid import UUID
 @dataclass(frozen=True)
 class VirtualKeyReadModel:
     id: UUID
+    tenant_id: UUID
     team_id: UUID
     name: str
     description: str | None

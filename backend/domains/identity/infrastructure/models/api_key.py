@@ -216,11 +216,11 @@ class ApiKeyGatewayGrant(BaseModel, TimestampMixin):
         index=True,
         comment="API Key 所属用户 ID，用于授权校验和审计",
     )
-    team_id: Mapped[uuid.UUID] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         nullable=False,
         index=True,
-        comment="允许代理调用归属的 Gateway Team ID",
+        comment="允许代理调用归属的 Gateway Team（tenant）ID",
     )
     allowed_models: Mapped[list[str]] = mapped_column(
         ARRAY(String(200)),
@@ -257,9 +257,11 @@ class ApiKeyGatewayGrant(BaseModel, TimestampMixin):
     )
 
     __table_args__ = (
-        UniqueConstraint("api_key_id", "team_id", name="uq_api_key_gateway_grants_key_team"),
-        Index("ix_api_key_gateway_grants_user_team", "user_id", "team_id"),
+        UniqueConstraint(
+            "api_key_id", "tenant_id", name="uq_api_key_gateway_grants_key_tenant"
+        ),
+        Index("ix_api_key_gateway_grants_user_tenant", "user_id", "tenant_id"),
     )
 
     def __repr__(self) -> str:
-        return f"<ApiKeyGatewayGrant api_key={self.api_key_id} team={self.team_id}>"
+        return f"<ApiKeyGatewayGrant api_key={self.api_key_id} tenant={self.tenant_id}>"

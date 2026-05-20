@@ -6,33 +6,23 @@ import uuid
 
 import pytest
 
-from bootstrap.config import settings
 from domains.gateway.application.route_audit import audit_gateway_routes
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
-)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
 from domains.tenancy.application.team_service import TeamService
-from libs.crypto import derive_encryption_key, encrypt_value
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 
 
 @pytest.mark.asyncio
 async def test_audit_clean_when_all_references_exist(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name=f"audit-clean-{uuid.uuid4().hex[:6]}",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
+    cred = await create_tenant_test_credential(
+        db_session, team.id, name=f"audit-clean-{uuid.uuid4().hex[:6]}"
     )
     model_a = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"vm-a-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="gpt-4o-mini",
@@ -40,7 +30,7 @@ async def test_audit_clean_when_all_references_exist(db_session, test_user) -> N
         provider="openai",
     )
     model_b = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"vm-b-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="gpt-4o-mini",
@@ -48,7 +38,7 @@ async def test_audit_clean_when_all_references_exist(db_session, test_user) -> N
         provider="openai",
     )
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model=f"vroute-{uuid.uuid4().hex[:6]}",
         primary_models=[model_a.name, model_b.name],
         fallbacks_general=[model_b.name],
@@ -65,17 +55,11 @@ async def test_audit_clean_when_all_references_exist(db_session, test_user) -> N
 @pytest.mark.asyncio
 async def test_audit_reports_missing_primary_and_fallback_names(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name=f"audit-bad-{uuid.uuid4().hex[:6]}",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
+    cred = await create_tenant_test_credential(
+        db_session, team.id, name=f"audit-bad-{uuid.uuid4().hex[:6]}"
     )
     real = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"vm-real-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="gpt-4o-mini",
@@ -85,7 +69,7 @@ async def test_audit_reports_missing_primary_and_fallback_names(db_session, test
     virtual = f"vroute-{uuid.uuid4().hex[:6]}"
     missing = f"vm-missing-{uuid.uuid4().hex[:6]}"
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model=virtual,
         primary_models=[real.name, missing],
         fallbacks_general=[missing],
@@ -103,18 +87,12 @@ async def test_audit_reports_missing_primary_and_fallback_names(db_session, test
 @pytest.mark.asyncio
 async def test_audit_flags_virtual_model_shadowed_by_gateway_model(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name=f"audit-shadow-{uuid.uuid4().hex[:6]}",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
+    cred = await create_tenant_test_credential(
+        db_session, team.id, name=f"audit-shadow-{uuid.uuid4().hex[:6]}"
     )
     same = f"shared-{uuid.uuid4().hex[:6]}"
     real = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=same,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -122,7 +100,7 @@ async def test_audit_flags_virtual_model_shadowed_by_gateway_model(db_session, t
         provider="openai",
     )
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model=same,
         primary_models=[real.name],
     )

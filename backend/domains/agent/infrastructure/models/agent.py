@@ -5,29 +5,23 @@ Agent Model - Agent 模型
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel, OwnedMixin
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
-    from domains.identity.infrastructure.models.user import User
     from domains.session.infrastructure.models.session import Session
 
 
-class Agent(BaseModel, OwnedMixin):
-    """Agent 模型
-
-    继承 OwnedMixin 提供所有权相关的类型协议和方法。
-    Agent 只支持注册用户（user_id 必填）。
-    """
+class Agent(BaseModel, TenantScopedMixin):
+    """Agent 模型（归属 personal / shared team 的 ``tenant_id``）。"""
 
     __tablename__ = "agents"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -79,11 +73,6 @@ class Agent(BaseModel, OwnedMixin):
         nullable=False,
     )
 
-    # 关系
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="agents",
-    )
     sessions: Mapped[list["Session"]] = relationship(
         "Session",
         back_populates="agent",

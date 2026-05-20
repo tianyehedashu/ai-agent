@@ -1,4 +1,4 @@
-"""GatewayAlertRule / GatewayAlertEvent 仓储"""
+"""GatewayAlertRule / GatewayAlertEvent 仓储（多租户 + system 表）。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from domains.gateway.infrastructure.models.alert import GatewayAlertEvent, GatewayAlertRule
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayAlertRule
+from libs.db.base_repository import TenantScopedRepositoryBase
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -15,21 +17,45 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class GatewayAlertRepository:
+class GatewayAlertRepository(TenantScopedRepositoryBase[GatewayAlertRule]):
+    """租户告警规则；系统级规则见 ``list_system``。"""
+
     def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
         self._session = session
 
-    async def list_rules_by_team(self, team_id: uuid.UUID) -> list[GatewayAlertRule]:
-        stmt = select(GatewayAlertRule).where(GatewayAlertRule.team_id == team_id)
+    @property
+    def model_class(self) -> type[GatewayAlertRule]:
+        return GatewayAlertRule
+
+    async def list_for_tenant(self, tenant_id: uuid.UUID) -> list[GatewayAlertRule]:
+        stmt = (
+            select(GatewayAlertRule)
+            .where(GatewayAlertRule.tenant_id == tenant_id)
+            .order_by(GatewayAlertRule.name)
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_events_by_team(
-        self, team_id: uuid.UUID, *, limit: int
+    async def list_rules_for_tenant(self, tenant_id: uuid.UUID) -> list[GatewayAlertRule]:
+        return await self.list_for_tenant(tenant_id)
+
+    async def list_system(self, *, only_enabled: bool = False) -> list[SystemGatewayAlertRule]:
+        clauses: list[object] = []
+        if only_enabled:
+            clauses.append(SystemGatewayAlertRule.enabled.is_(True))
+        stmt = select(SystemGatewayAlertRule).where(*clauses).order_by(
+            SystemGatewayAlertRule.name
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_events_for_tenant(
+        self, tenant_id: uuid.UUID, *, limit: int
     ) -> list[GatewayAlertEvent]:
         stmt = (
             select(GatewayAlertEvent)
-            .where(GatewayAlertEvent.team_id == team_id)
+            .where(GatewayAlertEvent.tenant_id == tenant_id)
             .order_by(GatewayAlertEvent.created_at.desc())
             .limit(limit)
         )
@@ -42,7 +68,7 @@ class GatewayAlertRepository:
     async def create_rule(
         self,
         *,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         name: str,
         description: str | None,
         metric: str,
@@ -52,7 +78,7 @@ class GatewayAlertRepository:
         enabled: bool,
     ) -> GatewayAlertRule:
         rule = GatewayAlertRule(
-            team_id=team_id,
+            tenant_id=tenant_id,
             name=name,
             description=description,
             metric=metric,

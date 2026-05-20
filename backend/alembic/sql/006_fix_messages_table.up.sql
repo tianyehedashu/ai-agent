@@ -10,4 +10,62 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'updated_at'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN updated_at
+                        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                END IF;
+            END $$;;
+DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'agents' AND column_name = 'updated_at'
+                ) THEN
+                    ALTER TABLE agents ADD COLUMN updated_at
+                        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                END IF;
+            END $$;;
+DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'sessions' AND column_name = 'updated_at'
+                ) THEN
+                    ALTER TABLE sessions ADD COLUMN updated_at
+                        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                END IF;
+            END $$;;
+DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'messages' AND column_name = 'updated_at'
+                ) THEN
+                    ALTER TABLE messages ADD COLUMN updated_at
+                        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                END IF;
+            END $$;;
+DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'memories' AND column_name = 'updated_at'
+                ) THEN
+                    ALTER TABLE memories ADD COLUMN updated_at
+                        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                END IF;
+            END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'messages' AND column_name = 'token_count'
+            ) THEN
+                ALTER TABLE messages ADD COLUMN token_count INTEGER;
+            END IF;
+        END $$;;

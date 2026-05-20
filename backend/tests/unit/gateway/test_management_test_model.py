@@ -10,14 +10,9 @@ import pytest
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
-)
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
-from libs.crypto import derive_encryption_key, encrypt_value
-
-
 async def _seed_team_credential_and_model(
     db_session,
     test_user,
@@ -28,17 +23,11 @@ async def _seed_team_credential_and_model(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """建一条团队凭据 + 一条团队模型，返回 (team_id, model_id)。"""
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider=provider,
-        name=f"{provider}-test",
-        api_key_encrypted=encrypt_value("sk-fake-test-key", encryption_key),
-        api_base=None,
+    cred = await create_tenant_test_credential(
+        db_session, team.id, provider=provider, name=f"{provider}-test"
     )
     model = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"vmodel-{uuid.uuid4().hex[:6]}",
         capability=capability,
         real_model=real_model,
@@ -69,7 +58,7 @@ async def test_chat_capability_success_persists(db_session, test_user) -> None:
 
     # acompletion 在 test_gateway_model 内部延迟导入，patch litellm 模块入口即可。
     with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
-        result = await writes.test_gateway_model(model_id, team_id=team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -93,7 +82,7 @@ async def test_chat_capability_failure_persists(db_session, test_user) -> None:
         "litellm.acompletion",
         new=AsyncMock(side_effect=RuntimeError("401 Unauthorized")),
     ):
-        result = await writes.test_gateway_model(model_id, team_id=team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -119,7 +108,7 @@ async def test_embedding_capability_uses_aembedding(db_session, test_user) -> No
     writes = GatewayManagementWriteService(db_session)
 
     with patch("litellm.aembedding", new=AsyncMock(return_value={"data": []})) as mock_embed:
-        result = await writes.test_gateway_model(model_id, team_id=team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -151,7 +140,7 @@ async def test_image_capability_uses_aimage_generation(db_session, test_user) ->
     )()
 
     with patch("litellm.aimage_generation", new=AsyncMock(return_value=fake_img)) as mock_img:
-        result = await writes.test_gateway_model(model_id, team_id=team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -184,7 +173,7 @@ async def test_image_capability_failure_persists(db_session, test_user) -> None:
         "litellm.aimage_generation",
         new=AsyncMock(side_effect=RuntimeError("502 Bad Gateway")),
     ):
-        result = await writes.test_gateway_model(model_id, team_id=team_id)
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -209,7 +198,7 @@ async def test_unsupported_capability_returns_failed(db_session, test_user) -> N
     )
     writes = GatewayManagementWriteService(db_session)
 
-    result = await writes.test_gateway_model(model_id, team_id=team_id)
+    result = await writes.test_gateway_model(model_id, tenant_id=team_id)
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -226,4 +215,4 @@ async def test_unknown_model_raises(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ManagementEntityNotFoundError):
-        await writes.test_gateway_model(uuid.uuid4(), team_id=team.id)
+        await writes.test_gateway_model(uuid.uuid4(), tenant_id=team.id)

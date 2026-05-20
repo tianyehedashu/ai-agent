@@ -108,7 +108,7 @@ class GatewayUsageReadService:
         scope_filter = (
             or_(
                 GatewayRequestLog.user_id == user_id,
-                GatewayRequestLog.team_id.in_(team_ids),
+                GatewayRequestLog.tenant_id.in_(team_ids),
             )
             if team_ids
             else GatewayRequestLog.user_id == user_id
@@ -329,7 +329,7 @@ class GatewayPlanUsageReadService:
         group_col = {
             "credential": GatewayRequestLog.credential_id,
             "model": GatewayRequestLog.real_model,
-            "team": GatewayRequestLog.team_id,
+            "team": GatewayRequestLog.tenant_id,
         }[group_by]
 
         if group_by == "credential":
@@ -343,7 +343,7 @@ class GatewayPlanUsageReadService:
                 )
                 .where(
                     and_(
-                        GatewayRequestLog.team_id == team_id,
+                        GatewayRequestLog.tenant_id == team_id,
                         GatewayRequestLog.created_at >= start,
                         GatewayRequestLog.created_at <= end,
                     )
@@ -358,7 +358,7 @@ class GatewayPlanUsageReadService:
                 )
                 .where(
                     and_(
-                        GatewayRequestLog.team_id == team_id,
+                        GatewayRequestLog.tenant_id == team_id,
                         GatewayRequestLog.created_at >= start,
                         GatewayRequestLog.created_at <= end,
                     )

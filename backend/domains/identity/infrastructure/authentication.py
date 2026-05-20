@@ -26,7 +26,6 @@ from domains.identity.application.session_migration_service import (
     AnonymousDataReassignmentService,
 )
 from domains.identity.infrastructure.models.user import User
-from domains.identity.infrastructure.user_manager import UserManager
 from libs.db.database import get_db
 from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
@@ -83,8 +82,10 @@ async def get_user_manager(
     anonymous_reassignment_service: AnonymousDataReassignmentService = Depends(
         get_anonymous_reassignment_service
     ),
-) -> AsyncGenerator[UserManager, None]:
+) -> AsyncGenerator["UserManager", None]:
     """获取用户管理器"""
+    from domains.identity.infrastructure.user_manager import UserManager
+
     yield UserManager(
         user_db,
         tenant_provisioner=tenant_provisioner,

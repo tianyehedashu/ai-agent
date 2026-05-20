@@ -13,9 +13,54 @@ import { apiClient } from '@/api/client'
 
 import { GATEWAY_API_BASE } from './_base'
 
+/** 后端 wire 形态（租户行 scope 可为 null，以 tenant_id 标识归属） */
+interface ProviderCredentialWire {
+  id: string
+  tenant_id?: string | null
+  scope: 'system' | 'team' | 'user' | null
+  scope_id: string | null
+  provider: string
+  name: string
+  api_base: string | null
+  is_active: boolean
+  is_config_managed?: boolean
+  extra: Record<string, unknown> | null
+  created_at: string
+  api_key_masked: string
+}
+
+function normalizeCredentialScope(
+  scope: ProviderCredentialWire['scope'],
+  tenantId: string | null | undefined
+): ProviderCredential['scope'] {
+  if (scope === 'system' || scope === 'user') return scope
+  if (scope === 'team' || (tenantId !== null && tenantId !== undefined)) return 'team'
+  return 'user'
+}
+
+function normalizeCredential(raw: ProviderCredentialWire): ProviderCredential {
+  const tenant_id = raw.tenant_id ?? null
+  return {
+    id: raw.id,
+    tenant_id,
+    scope: normalizeCredentialScope(raw.scope, tenant_id),
+    scope_id: raw.scope_id,
+    provider: raw.provider,
+    name: raw.name,
+    api_base: raw.api_base,
+    is_active: raw.is_active,
+    is_config_managed: raw.is_config_managed,
+    extra: raw.extra,
+    created_at: raw.created_at,
+    api_key_masked: raw.api_key_masked,
+  }
+}
+
 /** 上游凭据列表项（不含明文） */
 export interface ProviderCredential {
   id: string
+  /** 租户（团队）凭据归属；与 scope=user 互斥 */
+  tenant_id: string | null
   scope: 'system' | 'team' | 'user'
   scope_id: string | null
   provider: string
@@ -145,36 +190,63 @@ export interface TeamGatewayModelBatchImportResponse {
 export const credentialsApi = {
   // --- 团队 / 系统凭据 ---
   /** 列出团队/系统可见凭据 */
-  listCredentials: () => apiClient.get<ProviderCredential[]>(`${GATEWAY_API_BASE}/credentials`),
+  listCredentials: async () => {
+    const rows = await apiClient.get<ProviderCredentialWire[]>(`${GATEWAY_API_BASE}/credentials`)
+    return rows.map(normalizeCredential)
+  },
   /** 获取单条团队/系统凭据详情 */
-  getCredential: (id: string) =>
-    apiClient.get<ProviderCredential>(`${GATEWAY_API_BASE}/credentials/${id}`),
+  getCredential: async (id: string) => {
+    const row = await apiClient.get<ProviderCredentialWire>(`${GATEWAY_API_BASE}/credentials/${id}`)
+    return normalizeCredential(row)
+  },
   /** 揭示团队/系统凭据明文（要求 owner / admin） */
   revealCredential: (id: string) =>
     apiClient.get<{ api_key: string }>(`${GATEWAY_API_BASE}/credentials/${id}/reveal`),
   /** 创建团队/系统凭据；scope 默认 team，system 仅平台管理员 */
-  createCredential: (body: ProviderCredentialCreateBody) =>
-    apiClient.post<ProviderCredential>(`${GATEWAY_API_BASE}/credentials`, body),
+  createCredential: async (body: ProviderCredentialCreateBody) => {
+    const row = await apiClient.post<ProviderCredentialWire>(
+      `${GATEWAY_API_BASE}/credentials`,
+      body
+    )
+    return normalizeCredential(row)
+  },
   /** 更新团队/系统凭据；is_config_managed 凭据可能被服务端拒绝写入 */
-  updateCredential: (id: string, body: GatewayCredentialUpdateBody) =>
-    apiClient.patch<ProviderCredential>(`${GATEWAY_API_BASE}/credentials/${id}`, body),
+  updateCredential: async (id: string, body: GatewayCredentialUpdateBody) => {
+    const row = await apiClient.patch<ProviderCredentialWire>(
+      `${GATEWAY_API_BASE}/credentials/${id}`,
+      body
+    )
+    return normalizeCredential(row)
+  },
   /** 删除团队/系统凭据（不可恢复） */
   deleteCredential: (id: string) =>
     apiClient.delete<unknown>(`${GATEWAY_API_BASE}/credentials/${id}`),
 
   // --- 我的（BYOK 个人）凭据 ---
   /** 列出我的个人凭据 */
-  listMyCredentials: () =>
-    apiClient.get<ProviderCredential[]>(`${GATEWAY_API_BASE}/my-credentials`),
+  listMyCredentials: async () => {
+    const rows = await apiClient.get<ProviderCredentialWire[]>(`${GATEWAY_API_BASE}/my-credentials`)
+    return rows.map(normalizeCredential)
+  },
   /** 揭示我的凭据明文 */
   revealMyCredential: (id: string) =>
     apiClient.get<{ api_key: string }>(`${GATEWAY_API_BASE}/my-credentials/${id}/reveal`),
   /** 创建个人凭据 */
-  createMyCredential: (body: MyCredentialCreateBody) =>
-    apiClient.post<ProviderCredential>(`${GATEWAY_API_BASE}/my-credentials`, body),
+  createMyCredential: async (body: MyCredentialCreateBody) => {
+    const row = await apiClient.post<ProviderCredentialWire>(
+      `${GATEWAY_API_BASE}/my-credentials`,
+      body
+    )
+    return normalizeCredential(row)
+  },
   /** 更新个人凭据 */
-  updateMyCredential: (id: string, body: GatewayCredentialUpdateBody) =>
-    apiClient.patch<ProviderCredential>(`${GATEWAY_API_BASE}/my-credentials/${id}`, body),
+  updateMyCredential: async (id: string, body: GatewayCredentialUpdateBody) => {
+    const row = await apiClient.patch<ProviderCredentialWire>(
+      `${GATEWAY_API_BASE}/my-credentials/${id}`,
+      body
+    )
+    return normalizeCredential(row)
+  },
   /** 删除个人凭据 */
   deleteMyCredential: (id: string) =>
     apiClient.delete<unknown>(`${GATEWAY_API_BASE}/my-credentials/${id}`),

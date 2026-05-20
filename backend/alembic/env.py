@@ -5,8 +5,8 @@ Alembic Environment Configuration
 """
 
 import asyncio
-import os
 from logging.config import fileConfig
+import os
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -67,6 +67,12 @@ from domains.gateway.infrastructure.models.provider_plan import (  # noqa: F401
     ProviderPlanQuota,
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog  # noqa: F401
+from domains.gateway.infrastructure.models.system_gateway import (  # noqa: F401
+    SystemGatewayAlertRule,
+    SystemGatewayModel,
+    SystemGatewayRoute,
+    SystemProviderCredential,
+)
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey  # noqa: F401
 from domains.identity.infrastructure.models.api_key import (  # noqa: F401
     ApiKey,

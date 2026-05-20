@@ -23,17 +23,22 @@ class BudgetRepository:
     async def get(self, budget_id: uuid.UUID) -> GatewayBudget | None:
         return await self._session.get(GatewayBudget, budget_id)
 
-    async def list_for_scope(self, scope: str, scope_id: uuid.UUID | None) -> list[GatewayBudget]:
+    async def list_for_target(
+        self, target_kind: str, target_id: uuid.UUID | None
+    ) -> list[GatewayBudget]:
         stmt = select(GatewayBudget).where(
-            and_(GatewayBudget.scope == scope, GatewayBudget.scope_id == scope_id)
+            and_(
+                GatewayBudget.target_kind == target_kind,
+                GatewayBudget.target_id == target_id,
+            )
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_for(
         self,
-        scope: str,
-        scope_id: uuid.UUID | None,
+        target_kind: str,
+        target_id: uuid.UUID | None,
         period: str,
         *,
         model_name: str | None = None,
@@ -44,8 +49,8 @@ class BudgetRepository:
             model_clause = GatewayBudget.model_name == model_name
         stmt = select(GatewayBudget).where(
             and_(
-                GatewayBudget.scope == scope,
-                GatewayBudget.scope_id == scope_id,
+                GatewayBudget.target_kind == target_kind,
+                GatewayBudget.target_id == target_id,
                 GatewayBudget.period == period,
                 model_clause,
             )
@@ -56,8 +61,8 @@ class BudgetRepository:
     async def upsert(
         self,
         *,
-        scope: str,
-        scope_id: uuid.UUID | None,
+        target_kind: str,
+        target_id: uuid.UUID | None,
         period: str,
         model_name: str | None = None,
         limit_usd: Decimal | None = None,
@@ -66,11 +71,13 @@ class BudgetRepository:
         limit_requests: int | None = None,
         reset_at: datetime | None = None,
     ) -> GatewayBudget:
-        existing = await self.get_for(scope, scope_id, period, model_name=model_name)
+        existing = await self.get_for(
+            target_kind, target_id, period, model_name=model_name
+        )
         if existing is None:
             budget = GatewayBudget(
-                scope=scope,
-                scope_id=scope_id,
+                target_kind=target_kind,
+                target_id=target_id,
                 period=period,
                 model_name=model_name,
                 limit_usd=limit_usd,

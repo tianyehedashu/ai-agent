@@ -90,14 +90,14 @@ class UsageAxis:
         if self.kind == "workspace":
             if self.team_id is None:
                 raise ValueError("UsageAxis.workspace requires team_id")
-            clauses: list[ColumnElement[bool]] = [GatewayRequestLog.team_id == self.team_id]
+            clauses: list[ColumnElement[bool]] = [GatewayRequestLog.tenant_id == self.team_id]
             if self.member_user_id is not None:
                 member_own_vkey = exists(
                     select(1)
                     .select_from(GatewayVirtualKey)
                     .where(
                         GatewayVirtualKey.id == GatewayRequestLog.vkey_id,
-                        GatewayVirtualKey.team_id == self.team_id,
+                        GatewayVirtualKey.tenant_id == self.team_id,
                         GatewayVirtualKey.created_by_user_id == self.member_user_id,
                         GatewayVirtualKey.is_system.is_(False),
                     )

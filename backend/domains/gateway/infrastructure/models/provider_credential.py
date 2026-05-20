@@ -11,7 +11,8 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
-from sqlalchemy import Boolean, Index, String, Text, UniqueConstraint
+import sqlalchemy as sa
+from sqlalchemy import Boolean, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,28 +23,34 @@ class ProviderCredential(BaseModel):
     """LLM 提供商凭据
 
     作用域：
-    - system：全局共享凭据，仅平台 admin 管理（scope_id 为 NULL）
-    - team：团队凭据，团队成员共享（scope_id = team_id）
-    - user：用户私有凭据，由 Settings 页面管理（scope_id = user_id）
+    - 租户凭据：``tenant_id`` 非空（团队/workspace）；系统级见 ``system_provider_credentials``（禁止再写 ``scope=system``）
+    - 用户 BYOK：``scope='user'`` + ``scope_id=user_id``；``tenant_id`` 与 ``scope`` 互斥
+    - 用户 BYOK：``scope='user'`` + ``scope_id=user_id``（``tenant_id`` 为空）
 
     业务规则：
-    - 同 scope + scope_id + provider + name 唯一
+    - 租户行：``tenant_id + provider + name`` 唯一；用户行：``scope + scope_id + provider + name`` 唯一
     - api_key_encrypted 使用 libs.crypto Fernet 加密
     """
 
     __tablename__ = "provider_credentials"
 
-    scope: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
         index=True,
-        comment="作用域: system / team / user",
+        comment="租户（团队）凭据归属；与 scope=user 互斥",
+    )
+    scope: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,
+        comment="仅 user BYOK 时为 'user'",
     )
     scope_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
         index=True,
-        comment="作用域内对应实体 ID（system 为 NULL）",
+        comment="BYOK 用户 ID（scope=user）",
     )
     provider: Mapped[str] = mapped_column(
         String(50),
@@ -79,13 +86,29 @@ class ProviderCredential(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "scope", "scope_id", "provider", "name", name="uq_provider_credentials_scope_name"
+        Index(
+            "uq_provider_credentials_tenant_provider_name",
+            "tenant_id",
+            "provider",
+            "name",
+            unique=True,
+            postgresql_where=sa.text("tenant_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_provider_credentials_user_scope_name",
+            "scope",
+            "scope_id",
+            "provider",
+            "name",
+            unique=True,
+            postgresql_where=sa.text("scope = 'user'"),
         ),
         Index("ix_provider_credentials_scope_lookup", "scope", "scope_id", "provider"),
     )
 
     def __repr__(self) -> str:
+        if self.tenant_id is not None:
+            return f"<ProviderCredential tenant:{self.tenant_id} {self.provider}:{self.name}>"
         return f"<ProviderCredential {self.scope}:{self.scope_id} {self.provider}:{self.name}>"
 
 

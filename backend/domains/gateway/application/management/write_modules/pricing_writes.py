@@ -69,7 +69,7 @@ class PricingWritesMixin:
             allowed_providers = {s.provider for s in summaries}
         else:
             allowed_providers = {p for p in providers if p}
-        models = await GatewayModelRepository(self._session).list_for_team(None, only_enabled=False)
+        models = await GatewayModelRepository(self._session).list_system(only_enabled=False)
         gateway_models = [(m.provider, m.real_model, str(m.capability or 'chat')) for m in models if m.real_model]
         report = await LitellmUpstreamPriceSyncService(upstream_repo).sync_from_litellm_model_cost(gateway_models=gateway_models, allowed_providers=allowed_providers)
         pricing_svc = PricingService(upstream_repo, DownstreamPricingRepository(self._session))
@@ -78,9 +78,11 @@ class PricingWritesMixin:
         return report
 
     async def upsert_downstream_pricing(self, *, scope: str, scope_id: uuid.UUID | None, gateway_model_id: uuid.UUID | None, inheritance_strategy: str, currency: str='CNY', amount_per_million: dict[str, Any] | None=None):
+        from domains.gateway.domain.types import normalize_downstream_pricing_scope
         from domains.gateway.infrastructure.repositories.pricing_repository import (
             DownstreamPricingRepository,
         )
+        scope = normalize_downstream_pricing_scope(scope)
         repo = DownstreamPricingRepository(self._session)
         now = datetime.now(UTC)
         existing = await repo.get_active_for_scope(scope=scope, scope_id=scope_id, gateway_model_id=gateway_model_id, at=now)
@@ -93,7 +95,10 @@ class PricingWritesMixin:
             from domains.gateway.application.pricing.pricing_resolution_cache import (
                 invalidate_pricing_resolution_cache,
             )
-            await invalidate_pricing_resolution_cache(team_id=scope_id if scope == 'team' else None, gateway_model_id=gateway_model_id)
+            await invalidate_pricing_resolution_cache(
+                tenant_id=scope_id if scope == "tenant" else None,
+                gateway_model_id=gateway_model_id,
+            )
             return row
         if amount_per_million is None:
             raise ValidationError('manual downstream pricing requires amount_per_million')
@@ -112,5 +117,8 @@ class PricingWritesMixin:
         from domains.gateway.application.pricing.pricing_resolution_cache import (
             invalidate_pricing_resolution_cache,
         )
-        await invalidate_pricing_resolution_cache(team_id=scope_id if scope == 'team' else None, gateway_model_id=gateway_model_id)
+        await invalidate_pricing_resolution_cache(
+            tenant_id=scope_id if scope == "tenant" else None,
+            gateway_model_id=gateway_model_id,
+        )
         return row

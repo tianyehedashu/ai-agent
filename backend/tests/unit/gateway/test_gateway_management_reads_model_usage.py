@@ -28,7 +28,7 @@ async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -
     )
     m1 = SimpleNamespace(id=uuid.uuid4(), name="alpha-model")
     m2 = SimpleNamespace(id=uuid.uuid4(), name="beta-model")
-    svc._models.list_for_team = AsyncMock(return_value=[m1, m2])
+    svc._models.list_for_tenant = AsyncMock(return_value=[m1, m2])
 
     route_ws = {
         "alpha-model": {
@@ -114,7 +114,7 @@ async def test_aggregate_gateway_model_route_usage_no_models_returns_empty_items
         user_id=uuid.uuid4(),
         is_platform_admin=False,
     )
-    svc._models.list_for_team = AsyncMock(return_value=[])
+    svc._models.list_for_tenant = AsyncMock(return_value=[])
     svc._logs.aggregate_by_route_names_by_axis = AsyncMock()
     svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock()
 
@@ -148,16 +148,18 @@ async def test_list_platform_credential_stats_unions_usage_only_and_count_only_c
         id=usage_only,
         provider="openai",
         name="live",
-        scope="team",
-        scope_id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        scope=None,
+        scope_id=None,
         is_active=True,
     )
     cred_count = SimpleNamespace(
         id=count_only,
         provider="anthropic",
         name="orphan",
-        scope="team",
-        scope_id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        scope=None,
+        scope_id=None,
         is_active=True,
     )
     svc._creds.list_by_ids = AsyncMock(return_value=[cred_usage, cred_count])
@@ -194,8 +196,9 @@ async def test_list_platform_credential_stats_merges_usage_and_counts() -> None:
         id=cid,
         provider="openai",
         name="k1",
-        scope="team",
-        scope_id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        scope=None,
+        scope_id=None,
         is_active=True,
     )
     svc._creds.list_by_ids = AsyncMock(return_value=[cred])

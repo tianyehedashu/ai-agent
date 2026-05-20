@@ -31,19 +31,19 @@ logger = get_logger(__name__)
 class CredentialWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
-    async def create_virtual_key(self, *, team_id: uuid.UUID, created_by_user_id: uuid.UUID | None, name: str, description: str | None, key_id_str: str, key_hash: str, encrypted_key: str, allowed_models: list[str], allowed_capabilities: list[str], rpm_limit: int | None, tpm_limit: int | None, store_full_messages: bool, guardrail_enabled: bool, expires_at: datetime | None) -> Any:
+    async def create_virtual_key(self, *, tenant_id: uuid.UUID, created_by_user_id: uuid.UUID | None, name: str, description: str | None, key_id_str: str, key_hash: str, encrypted_key: str, allowed_models: list[str], allowed_capabilities: list[str], rpm_limit: int | None, tpm_limit: int | None, store_full_messages: bool, guardrail_enabled: bool, expires_at: datetime | None) -> Any:
         assert_vkey_guardrail_create_allowed(
             global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
             requested_guardrail_enabled=guardrail_enabled,
         )
-        return await self._vkeys.create(team_id=team_id, created_by_user_id=created_by_user_id, name=name, description=description, key_id_str=key_id_str, key_hash=key_hash, encrypted_key=encrypted_key, allowed_models=allowed_models, allowed_capabilities=allowed_capabilities, rpm_limit=rpm_limit, tpm_limit=tpm_limit, store_full_messages=store_full_messages, guardrail_enabled=guardrail_enabled, expires_at=expires_at)
+        return await self._vkeys.create(tenant_id=tenant_id, created_by_user_id=created_by_user_id, name=name, description=description, key_id_str=key_id_str, key_hash=key_hash, encrypted_key=encrypted_key, allowed_models=allowed_models, allowed_capabilities=allowed_capabilities, rpm_limit=rpm_limit, tpm_limit=tpm_limit, store_full_messages=store_full_messages, guardrail_enabled=guardrail_enabled, expires_at=expires_at)
 
-    async def revoke_virtual_key(self, key_id: uuid.UUID, *, team_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> None:
+    async def revoke_virtual_key(self, key_id: uuid.UUID, *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> None:
         record = await self._vkeys.get(key_id)
-        assert_virtual_key_accessible_by_actor(record, key_id=str(key_id), team_id=team_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin, require_active=False)
+        assert_virtual_key_accessible_by_actor(record, key_id=str(key_id), tenant_id=tenant_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin, require_active=False)
         await self._vkeys.revoke(key_id)
 
-    async def revoke_virtual_keys_batch(self, key_ids: list[uuid.UUID], *, team_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
+    async def revoke_virtual_keys_batch(self, key_ids: list[uuid.UUID], *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
         revoked: list[uuid.UUID] = []
         failed: list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]] = []
         seen: set[uuid.UUID] = set()
@@ -52,7 +52,7 @@ class CredentialWritesMixin:
                 continue
             seen.add(key_id)
             try:
-                await self.revoke_virtual_key(key_id, team_id=team_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin)
+                await self.revoke_virtual_key(key_id, tenant_id=tenant_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin)
             except VirtualKeyNotFoundError:
                 failed.append((key_id, 'not_found'))
             except SystemVirtualKeyRevokeForbiddenError:
@@ -63,71 +63,105 @@ class CredentialWritesMixin:
                 revoked.append(key_id)
         return (revoked, failed)
 
-    async def create_team_credential(self, *, team_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
-        row = await self._creds.create(scope='team', scope_id=team_id, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=api_base, extra=extra)
+    async def create_team_credential(self, *, tenant_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
+        row = await self._creds.create_for_tenant(
+            tenant_id=tenant_id,
+            provider=provider,
+            name=name,
+            api_key_encrypted=api_key_encrypted,
+            api_base=api_base,
+            extra=extra,
+        )
         await self.reload_litellm_router()
         return row
 
     async def create_system_credential(self, *, is_platform_admin: bool, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
         if not is_platform_admin:
             raise SystemCredentialAdminRequiredError()
-        row = await self._creds.create(scope='system', scope_id=None, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=api_base, extra=extra)
+        row = await self._system_creds.create(
+            provider=provider,
+            name=name,
+            api_key_encrypted=api_key_encrypted,
+            api_base=api_base,
+            extra=extra,
+        )
         await self.reload_litellm_router()
         return row
 
-    async def update_managed_credential(self, credential_id: uuid.UUID, *, team_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> Any:
-        existing = await self._creds.get(credential_id)
-        if existing is None:
-            raise CredentialNotFoundError(str(credential_id))
-        if existing.scope == 'system':
+    async def update_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> Any:
+        system_existing = await self._system_creds.get(credential_id)
+        if system_existing is not None:
             if not is_platform_admin:
                 raise SystemCredentialAdminRequiredError()
-        elif existing.scope == 'team':
-            if existing.scope_id != team_id:
+            if name is not None and name != system_existing.name and is_config_managed_system_credential(
+                scope="system", name=system_existing.name, extra=system_existing.extra
+            ):
+                raise ValidationError(
+                    "配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥"
+                )
+            updated = await self._system_creds.update(
+                credential_id,
+                api_key_encrypted=api_key_encrypted,
+                api_base=api_base,
+                extra=extra,
+                is_active=is_active,
+                name=name,
+            )
+            if updated is None:
                 raise CredentialNotFoundError(str(credential_id))
-        else:
+            await self.reload_litellm_router()
+            return updated
+
+        existing = await self._creds.get(credential_id)
+        if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
-        if name is not None and name != existing.name and is_config_managed_system_credential(scope=existing.scope, name=existing.name, extra=existing.extra):
-            raise ValidationError('配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥')
-        updated = await self._creds.update(credential_id, api_key_encrypted=api_key_encrypted, api_base=api_base, extra=extra, is_active=is_active, name=name)
+        updated = await self._creds.update(
+            credential_id,
+            api_key_encrypted=api_key_encrypted,
+            api_base=api_base,
+            extra=extra,
+            is_active=is_active,
+            name=name,
+        )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
         await self.reload_litellm_router()
         return updated
 
-    async def delete_managed_credential(self, credential_id: uuid.UUID, *, team_id: uuid.UUID, is_platform_admin: bool) -> None:
-        existing = await self._creds.get(credential_id)
-        if existing is None:
-            raise CredentialNotFoundError(str(credential_id))
-        if existing.scope == 'system':
+    async def delete_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
+        system_existing = await self._system_creds.get(credential_id)
+        if system_existing is not None:
             if not is_platform_admin:
                 raise SystemCredentialAdminRequiredError()
-        elif existing.scope == 'team':
-            if existing.scope_id != team_id:
-                raise CredentialNotFoundError(str(credential_id))
-        else:
+            await self._cascade_delete_models_for_credential(credential_id)
+            await self._system_creds.delete(credential_id)
+            await self.reload_litellm_router()
+            return
+
+        existing = await self._creds.get(credential_id)
+        if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
         await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)
         await self.reload_litellm_router()
 
-    async def import_user_credential_to_team(self, *, user_credential_id: uuid.UUID, team_id: uuid.UUID, actor_user_id: uuid.UUID, is_platform_admin: bool) -> Any:
+    async def import_user_credential_to_team(self, *, user_credential_id: uuid.UUID, tenant_id: uuid.UUID, actor_user_id: uuid.UUID, is_platform_admin: bool) -> Any:
         src = await self._creds.get(user_credential_id)
         if src is None or src.scope != 'user':
             raise CredentialNotFoundError(str(user_credential_id))
         if src.scope_id != actor_user_id and (not is_platform_admin):
-            raise TeamPermissionDeniedError(str(team_id))
-        new_cred = await self._creds.copy_to_team(user_credential_id, team_id)
+            raise TeamPermissionDeniedError(str(tenant_id))
+        new_cred = await self._creds.copy_to_team(user_credential_id, tenant_id)
         if new_cred is None:
             raise CredentialNotFoundError(str(user_credential_id))
         await self.reload_litellm_router()
         return new_cred
 
-    async def import_all_user_credentials_to_team(self, *, actor_user_id: uuid.UUID, team_id: uuid.UUID) -> int:
+    async def import_all_user_credentials_to_team(self, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID) -> int:
         user_creds = await self._creds.list_for_user(actor_user_id)
         created = 0
         for cred in user_creds:
-            copied = await self._creds.copy_to_team(cred.id, team_id)
+            copied = await self._creds.copy_to_team(cred.id, tenant_id)
             if copied is not None:
                 created += 1
         if created > 0:

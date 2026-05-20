@@ -32,7 +32,7 @@ from domains.gateway.application.proxy_deferred_tasks import register_proxy_defe
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
 )
-from domains.gateway.domain.proxy_policy import budget_model_keys, budget_scope_targets
+from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
 
@@ -210,24 +210,24 @@ async def settle_usage(
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
 ) -> None:
-    scope_items = budget_scope_targets(
-        team_id=ctx.team_id,
+    scope_items = budget_targets(
+        tenant_id=ctx.team_id,
         user_id=ctx.user_id,
         vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
     )
     periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
     model_keys = budget_model_keys(ctx.budget_model)
 
-    for scope, scope_id in scope_items:
-        if scope_id is None:
+    for target_kind, target_id in scope_items:
+        if target_id is None:
             continue
-        scope_id_str = str(scope_id)
+        target_id_str = str(target_id)
         for period in periods:
             for model_key in model_keys:
                 with suppress(Exception):
                     await budget.commit(
-                        scope=scope,
-                        scope_id=scope_id_str,
+                        target_kind=target_kind,
+                        target_id=target_id_str,
                         period=period,
                         delta_cost=cost,
                         delta_tokens=tokens,
@@ -255,12 +255,14 @@ async def settle_usage(
     with suppress(Exception):
         async with get_session_context() as session:
             repo = BudgetRepository(session)
-            for scope, scope_id in scope_items:
-                if scope_id is None:
+            for target_kind, target_id in scope_items:
+                if target_id is None:
                     continue
                 for period in periods:
                     for model_key in model_keys:
-                        record = await repo.get_for(scope, scope_id, period, model_name=model_key)
+                        record = await repo.get_for(
+                            target_kind, target_id, period, model_name=model_key
+                        )
                         if record is None:
                             continue
                         await repo.settle_usage(

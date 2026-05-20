@@ -31,7 +31,7 @@ async def test_get_route_snapshot_metadata_second_call_hits_cache(
     route_mock.strategy = "fallback"
 
     repo_instance = MagicMock()
-    repo_instance.get_by_virtual_model = AsyncMock(return_value=route_mock)
+    repo_instance.resolve_by_virtual_model = AsyncMock(return_value=route_mock)
     monkeypatch.setattr(
         route_snapshot_cache_mod,
         "GatewayRouteRepository",
@@ -54,7 +54,7 @@ async def test_get_route_snapshot_metadata_second_call_hits_cache(
         "primary_models": ["m1"],
         "strategy": "fallback",
     }
-    assert repo_instance.get_by_virtual_model.await_count == 1
+    assert repo_instance.resolve_by_virtual_model.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_get_route_snapshot_metadata_refetches_after_ttl(
     route_mock.strategy = "single"
 
     repo_instance = MagicMock()
-    repo_instance.get_by_virtual_model = AsyncMock(return_value=route_mock)
+    repo_instance.resolve_by_virtual_model = AsyncMock(return_value=route_mock)
     monkeypatch.setattr(
         route_snapshot_cache_mod,
         "GatewayRouteRepository",
@@ -86,7 +86,7 @@ async def test_get_route_snapshot_metadata_refetches_after_ttl(
     await get_route_snapshot_metadata(session, team_id, "vm1")
     await get_route_snapshot_metadata(session, team_id, "vm1")
 
-    assert repo_instance.get_by_virtual_model.await_count == 2
+    assert repo_instance.resolve_by_virtual_model.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_clear_route_snapshot_cache_for_tests_clears_negative_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo_instance = MagicMock()
-    repo_instance.get_by_virtual_model = AsyncMock(return_value=None)
+    repo_instance.resolve_by_virtual_model = AsyncMock(return_value=None)
     monkeypatch.setattr(
         route_snapshot_cache_mod,
         "GatewayRouteRepository",
@@ -109,4 +109,4 @@ async def test_clear_route_snapshot_cache_for_tests_clears_negative_cache(
     clear_route_snapshot_cache_for_tests()
     await get_route_snapshot_metadata(session, team_id, "miss")
 
-    assert repo_instance.get_by_virtual_model.await_count == 2
+    assert repo_instance.resolve_by_virtual_model.await_count == 2

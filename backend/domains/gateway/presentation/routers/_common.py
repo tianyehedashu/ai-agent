@@ -168,6 +168,7 @@ def decrypt_vkey_for_reveal(record: VirtualKeyReadModel, *, encryption_key: str)
 def vkey_to_response(record: VirtualKeyReadModel) -> VirtualKeyResponse:
     return VirtualKeyResponse(
         id=record.id,
+        tenant_id=record.tenant_id,
         team_id=record.team_id,
         name=record.name,
         description=record.description,

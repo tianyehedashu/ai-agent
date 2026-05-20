@@ -34,14 +34,13 @@ async def prune_gateway_model_name_references(
 async def rename_gateway_model_name_references(
     session: AsyncSession,
     *,
-    team_id: uuid.UUID | None,
+    tenant_id: uuid.UUID | None,
     old_name: str,
     new_name: str,
 ) -> tuple[int, int]:
-    """按团队作用域将 vkey 白名单与路由中的虚拟模型名 old_name 替换为 new_name。
+    """按租户作用域将 vkey 白名单与路由中的虚拟模型名 old_name 替换为 new_name。
 
-    ``team_id`` 为 ``None`` 时仅更新系统级路由（``gateway_routes.team_id IS NULL``），
-    不修改各团队 vkey，避免跨团队同名误伤。
+    ``tenant_id`` 为 ``None`` 时仅更新系统级路由，不修改各租户 vkey。
 
     Returns:
         (vkeys_updated, routes_updated)
@@ -50,14 +49,16 @@ async def rename_gateway_model_name_references(
         return 0, 0
     vkeys = VirtualKeyRepository(session)
     routes = GatewayRouteRepository(session)
-    if team_id is None:
+    if tenant_id is None:
         vkeys_updated = 0
         routes_updated = await routes.rename_model_name_in_global_routes(old_name, new_name)
     else:
-        vkeys_updated = await vkeys.rename_model_name_in_team_allowed_lists(
-            team_id, old_name, new_name
+        vkeys_updated = await vkeys.rename_model_name_in_tenant_allowed_lists(
+            tenant_id, old_name, new_name
         )
-        routes_updated = await routes.rename_model_name_in_team_routes(team_id, old_name, new_name)
+        routes_updated = await routes.rename_model_name_in_tenant_routes(
+            tenant_id, old_name, new_name
+        )
     return vkeys_updated, routes_updated
 
 

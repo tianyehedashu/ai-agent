@@ -10,4 +10,41 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users'
+                AND column_name = 'name'
+                AND is_nullable = 'YES'
+            ) THEN
+                ALTER TABLE users ALTER COLUMN name SET NOT NULL;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'status'
+            ) THEN
+                ALTER TABLE users DROP COLUMN status;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'settings'
+            ) THEN
+                ALTER TABLE users DROP COLUMN settings;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'avatar_url'
+            ) THEN
+                ALTER TABLE users RENAME COLUMN avatar_url TO avatar;
+            END IF;
+        END $$;;

@@ -10,6 +10,7 @@ import { GATEWAY_API_BASE } from './_base'
 
 export interface AlertRule {
   id: string
+  tenant_id?: string | null
   team_id: string | null
   name: string
   description: string | null

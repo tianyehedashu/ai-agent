@@ -39,7 +39,8 @@ const STORAGE_KEY_V2 = LEGACY_STORAGE_KEYS[1]
 function makeVKey(id: string, name = 'k', overrides: Partial<VirtualKey> = {}): VirtualKey {
   return {
     id,
-    team_id: 't',
+    tenant_id: overrides.tenant_id ?? overrides.team_id ?? 't',
+    team_id: overrides.team_id ?? 't',
     name,
     masked_key: `sk-gw-***${id.slice(-4)}`,
     allowed_models: [],

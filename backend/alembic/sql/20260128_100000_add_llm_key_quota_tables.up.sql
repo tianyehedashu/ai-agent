@@ -22,9 +22,9 @@ CREATE TABLE user_provider_configs (
     PRIMARY KEY (id), 
     CONSTRAINT uq_user_provider_config UNIQUE (user_id, provider)
 );
-CREATE INDEX ix_user_provider_configs_user_id ON user_provider_configs (user_id);
 CREATE INDEX ix_user_provider_configs_is_active ON user_provider_configs (is_active);
 CREATE INDEX ix_user_provider_configs_provider ON user_provider_configs (provider);
+CREATE INDEX ix_user_provider_configs_user_id ON user_provider_configs (user_id);
 COMMENT ON COLUMN user_provider_configs.user_id IS '�����û� ID';
 COMMENT ON COLUMN user_provider_configs.provider IS '�ṩ�̱�ʶ: openai, anthropic, dashscope, zhipuai, deepseek, volcengine';
 COMMENT ON COLUMN user_provider_configs.api_key IS '���ܴ洢�� API Key';
@@ -73,10 +73,10 @@ CREATE TABLE quota_usage_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
     PRIMARY KEY (id)
 );
-CREATE INDEX ix_quota_usage_logs_provider ON quota_usage_logs (provider);
 CREATE INDEX ix_quota_usage_logs_user_id ON quota_usage_logs (user_id);
 CREATE INDEX ix_quota_usage_logs_key_source ON quota_usage_logs (key_source);
 CREATE INDEX ix_quota_usage_logs_capability ON quota_usage_logs (capability);
+CREATE INDEX ix_quota_usage_logs_provider ON quota_usage_logs (provider);
 COMMENT ON COLUMN quota_usage_logs.user_id IS '�û� ID';
 COMMENT ON COLUMN quota_usage_logs.capability IS '��������: text, image, embedding';
 COMMENT ON COLUMN quota_usage_logs.provider IS '�ṩ��: openai, anthropic, dashscope, etc.';

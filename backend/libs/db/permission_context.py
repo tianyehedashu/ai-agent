@@ -20,11 +20,9 @@ class PermissionContext:
         user_id: 注册用户 ID（如果是注册用户）
         anonymous_user_id: 匿名用户 ID（如果是匿名用户）
         role: 用户角色（admin, user, viewer）
-        team_id: 当前 **团队租户**（Tenancy ``Team.id``），通常由 ``X-Team-Id`` 与
-            ``TenancyManagementTeamResolveUseCase`` 写入；可为 **personal**（``kind=personal``）
-            或 **shared** 团队。内部 Gateway 桥接的计费 ``team_id`` 可与本字段对齐
-            （见 ``domains.gateway.application.bridge_attribution``）。**非**管理面 ``usage_aggregation`` 枚举。
+        team_id: 当前 **活动团队租户**（X-Team-Id 解析结果）
         team_role: 当前团队角色（owner/admin/member），仅 team_id 非空时有意义
+        team_ids: 用户可访问的全部 tenant_id（经 team_members）；admin 时为空集表示不过滤
     """
 
     user_id: uuid.UUID | None = None
@@ -32,6 +30,7 @@ class PermissionContext:
     role: str = "user"
     team_id: uuid.UUID | None = None
     team_role: str | None = None
+    team_ids: frozenset[uuid.UUID] = frozenset()
 
     @property
     def is_admin(self) -> bool:
@@ -75,6 +74,18 @@ class PermissionContext:
             role=self.role,
             team_id=team_id,
             team_role=team_role,
+            team_ids=self.team_ids,
+        )
+
+    def with_team_ids(self, team_ids: frozenset[uuid.UUID]) -> "PermissionContext":
+        """返回附加了可访问租户集合的新实例。"""
+        return PermissionContext(
+            user_id=self.user_id,
+            anonymous_user_id=self.anonymous_user_id,
+            role=self.role,
+            team_id=self.team_id,
+            team_role=self.team_role,
+            team_ids=team_ids,
         )
 
 
@@ -99,9 +110,34 @@ def clear_permission_context() -> None:
     _permission_context.set(None)
 
 
+def merge_team_into_permission_context(
+    *,
+    team_id: uuid.UUID,
+    team_role: str,
+) -> None:
+    """在已有 PermissionContext 上附加活动团队，保留 ``team_ids``。"""
+    existing = get_permission_context()
+    if existing is None:
+        msg = "PermissionContext must be set before merge_team_into_permission_context"
+        raise RuntimeError(msg)
+    set_permission_context(existing.with_team(team_id, team_role))
+
+
+def ensure_tenant_in_team_ids(
+    team_ids: frozenset[uuid.UUID],
+    tenant_id: uuid.UUID,
+) -> frozenset[uuid.UUID]:
+    """确保活动租户在可访问集合内（Gateway /v1 等无 JWT 入口兜底）。"""
+    if tenant_id in team_ids:
+        return team_ids
+    return team_ids | frozenset({tenant_id})
+
+
 __all__ = [
     "PermissionContext",
     "clear_permission_context",
+    "ensure_tenant_in_team_ids",
     "get_permission_context",
+    "merge_team_into_permission_context",
     "set_permission_context",
 ]

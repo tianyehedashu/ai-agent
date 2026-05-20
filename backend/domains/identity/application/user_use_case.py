@@ -18,7 +18,6 @@ from domains.identity.infrastructure.default_tenant_lifecycle import (
 )
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
-from domains.identity.infrastructure.user_manager import UserManager
 from libs.exceptions import AuthenticationError, NotFoundError
 from libs.iam.tenancy import DefaultTenantProvisionerPort
 
@@ -194,6 +193,8 @@ class UserUseCase:
         """从 Token 获取用户"""
         strategy = get_jwt_strategy()
         user_db = SQLAlchemyUserDatabase(self.db, User)
+        from domains.identity.infrastructure.user_manager import UserManager
+
         user_manager = UserManager(user_db)
 
         user = await strategy.read_token(token, user_manager)

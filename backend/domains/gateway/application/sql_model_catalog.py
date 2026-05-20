@@ -47,7 +47,7 @@ class SqlModelCatalogAdapter:
         billing_team_id: uuid.UUID | None,
         model_type: str | None,
     ) -> list[dict[str, Any]]:
-        rows = await self._models.list_for_team(billing_team_id, only_enabled=True)
+        rows = await self._models.list_for_tenant(billing_team_id, only_enabled=True)
         # 仓储已按「团队行先于全局行」排序；同名只保留第一条（团队覆盖全局）
         by_name: dict[str, GatewayModel] = {}
         for row in rows:
@@ -72,7 +72,7 @@ class SqlModelCatalogAdapter:
         provider: str | None,
     ) -> list[dict[str, Any]]:
         personal_team = await self._teams.ensure_personal_team(user_id)
-        rows = await self._models.list_team_owned(
+        rows = await self._models.list_tenant_owned(
             personal_team.id,
             only_enabled=True,
             provider=provider,
@@ -94,9 +94,9 @@ class SqlModelCatalogAdapter:
         required_model_type: str | None,
     ) -> RegisteredModelResolution | None:
         personal_team = await self._teams.ensure_personal_team(user_id)
-        team_id = personal_team.id
+        tenant_id = personal_team.id
 
-        direct = await self._models.get_on_team(model_ref, team_id)
+        direct = await self._models.get_for_tenant(model_ref, tenant_id)
         if direct is not None:
             return await self._resolution_from_row(direct, required_model_type)
         return None
@@ -135,7 +135,7 @@ class SqlModelCatalogAdapter:
 
     async def resolve_capabilities(self, model_id: str) -> ModelCapabilitySnapshot | None:
         team_id = resolve_internal_gateway_team_id()
-        row = await self._models.get_by_name(team_id, model_id)
+        row = await self._models.resolve_by_name(team_id, model_id)
         if row is None or not row.enabled:
             return None
         return tags_to_capability_snapshot(row.tags or {})

@@ -13,8 +13,12 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     SystemCredentialAdminRequiredError,
 )
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
+)
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
@@ -41,9 +45,7 @@ async def test_create_system_credential_requires_platform_admin(db_session) -> N
 @pytest.mark.asyncio
 async def test_update_system_credential_requires_platform_admin(db_session, test_user) -> None:
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="system",
-        scope_id=None,
+    cred = await SystemProviderCredentialRepository(db_session).create(
         provider="openai",
         name="sys-cred-test",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -55,7 +57,7 @@ async def test_update_system_credential_requires_platform_admin(db_session, test
     with pytest.raises(SystemCredentialAdminRequiredError):
         await writes.update_managed_credential(
             cred.id,
-            team_id=team.id,
+            tenant_id=team.id,
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
@@ -73,9 +75,8 @@ async def test_delete_managed_credential_cascades_linked_models(
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = ProviderCredentialRepository(db_session)
     model_repo = GatewayModelRepository(db_session)
-    cred = await cred_repo.create(
-        scope="team",
-        scope_id=team.id,
+    cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
         provider="deepseek",
         name="del-cascade",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -83,7 +84,7 @@ async def test_delete_managed_credential_cascades_linked_models(
     )
     model_name = f"vm-{uuid.uuid4().hex[:6]}"
     model = await model_repo.create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=model_name,
         capability="chat",
         real_model="deepseek/deepseek-chat",
@@ -94,7 +95,7 @@ async def test_delete_managed_credential_cascades_linked_models(
     writes = GatewayManagementWriteService(db_session)
     await writes.delete_managed_credential(
         cred.id,
-        team_id=team.id,
+        tenant_id=team.id,
         is_platform_admin=False,
     )
     await db_session.flush()
@@ -117,7 +118,7 @@ async def test_delete_user_credential_cascades_personal_models(db_session, test_
         api_base=None,
     )
     model = await model_repo.create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"pm-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="deepseek/deepseek-chat",
@@ -136,21 +137,14 @@ async def test_delete_user_credential_cascades_personal_models(db_session, test_
 async def test_update_managed_wrong_team_returns_not_found(db_session, test_user) -> None:
     team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team_a.id,
-        provider="openai",
-        name="other-team-cred",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    cred = await create_tenant_test_credential(db_session, team_a.id, name="other-team-cred")
     await db_session.flush()
     fake_team = uuid.uuid4()
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(CredentialNotFoundError):
         await writes.update_managed_credential(
             cred.id,
-            team_id=fake_team,
+            tenant_id=fake_team,
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
@@ -171,9 +165,7 @@ async def test_update_config_managed_system_credential_rejects_rename(
     db_session, test_user
 ) -> None:
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="system",
-        scope_id=None,
+    cred = await SystemProviderCredentialRepository(db_session).create(
         provider="openai",
         name="app-config-default",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -186,7 +178,7 @@ async def test_update_config_managed_system_credential_rejects_rename(
     with pytest.raises(ValidationError, match="不可重命名"):
         await writes.update_managed_credential(
             cred.id,
-            team_id=team.id,
+            tenant_id=team.id,
             is_platform_admin=True,
             api_key_encrypted=None,
             api_base=None,

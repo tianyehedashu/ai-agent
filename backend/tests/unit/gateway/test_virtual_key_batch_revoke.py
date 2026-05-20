@@ -25,7 +25,7 @@ async def _create_vkey(
     repo = VirtualKeyRepository(db_session)
     _, key_id_str, key_hash = generate_vkey()
     row = await repo.create(
-        team_id=team_id,
+        tenant_id=team_id,
         created_by_user_id=user_id,
         name=name,
         description=None,
@@ -57,7 +57,7 @@ async def test_revoke_virtual_keys_batch_revokes_multiple(db_session, test_user)
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [key_a, key_b],
-        team_id=team.id,
+        tenant_id=team.id,
         actor_user_id=test_user.id,
         team_role="owner",
         is_platform_admin=False,
@@ -81,7 +81,7 @@ async def test_revoke_virtual_keys_batch_reports_not_found(db_session, test_user
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [missing],
-        team_id=team.id,
+        tenant_id=team.id,
         actor_user_id=test_user.id,
         team_role="owner",
         is_platform_admin=False,
@@ -105,14 +105,14 @@ async def test_revoke_virtual_keys_batch_reports_permission_denied(
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [key_id],
-        team_id=team.id,
+        tenant_id=team.id,
         actor_user_id=other_member,
         team_role="member",
         is_platform_admin=False,
     )
 
     assert revoked == []
-    assert failed == [(key_id, "permission_denied")]
+    assert failed == [(key_id, "not_found")]
 
 
 @pytest.mark.unit
@@ -131,7 +131,7 @@ async def test_revoke_virtual_keys_batch_rejects_system_key(db_session, test_use
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [system_key.id],
-        team_id=team.id,
+        tenant_id=team.id,
         actor_user_id=test_user.id,
         team_role="owner",
         is_platform_admin=False,
@@ -155,7 +155,7 @@ async def test_revoke_virtual_keys_batch_deduplicates_ids(db_session, test_user)
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [key_id, key_id],
-        team_id=team.id,
+        tenant_id=team.id,
         actor_user_id=test_user.id,
         team_role="owner",
         is_platform_admin=False,

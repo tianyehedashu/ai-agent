@@ -12,7 +12,8 @@ import {
 
 const baseModel = (overrides: Partial<GatewayModel>): GatewayModel => ({
   id: 'm1',
-  team_id: 't1',
+  tenant_id: overrides.tenant_id ?? overrides.team_id ?? 't1',
+  team_id: overrides.team_id ?? 't1',
   name: 'gpt-mini',
   capability: 'chat',
   real_model: 'gpt-4o-mini',

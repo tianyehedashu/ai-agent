@@ -17,7 +17,7 @@ def test_models_to_deployments_includes_credential_model_info() -> None:
     cred.scope = "user"
     m = MagicMock()
     m.id = model_id
-    m.team_id = team_id
+    m.tenant_id = team_id
     m.name = "my-virtual"
     m.capability = "chat"
     m.weight = 2

@@ -1,7 +1,7 @@
 """
 GatewayBudget - 预算配置与当前用量
 
-取代旧的 UserQuota，支持四级 scope（system / team / key / user）和三种 period。
+取代旧的 UserQuota，支持四级 target_kind（system / tenant / key / user）和三种 period。
 """
 
 from __future__ import annotations
@@ -28,16 +28,16 @@ class GatewayBudget(BaseModel):
     """预算配置
 
     业务规则：
-    - scope: system / team / key / user
+    - target_kind: system / tenant / key / user
     - period: daily / monthly / total
-    - 同 scope + scope_id + period + model_name 语义唯一（汇总行 model_name IS NULL）
+    - 同 target_kind + target_id + period + model_name 语义唯一（汇总行 model_name IS NULL）
     - limit_* NULL 表示该维度无限制
     """
 
     __tablename__ = "gateway_budgets"
 
-    scope: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    scope_id: Mapped[uuid.UUID | None] = mapped_column(
+    target_kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    target_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
         index=True,
@@ -84,28 +84,28 @@ class GatewayBudget(BaseModel):
 
     __table_args__ = (
         Index(
-            "uq_gateway_budgets_scope_period_agg",
-            "scope",
-            "scope_id",
+            "uq_gateway_budgets_target_period_agg",
+            "target_kind",
+            "target_id",
             "period",
             unique=True,
             postgresql_where=text("model_name IS NULL"),
         ),
         Index(
-            "uq_gateway_budgets_scope_period_model",
-            "scope",
-            "scope_id",
+            "uq_gateway_budgets_target_period_model",
+            "target_kind",
+            "target_id",
             "period",
             "model_name",
             unique=True,
             postgresql_where=text("model_name IS NOT NULL"),
         ),
-        Index("ix_gateway_budgets_lookup", "scope", "scope_id"),
+        Index("ix_gateway_budgets_target_lookup", "target_kind", "target_id"),
     )
 
     def __repr__(self) -> str:
         m = self.model_name or "*"
-        return f"<GatewayBudget {self.scope}:{self.scope_id} {self.period} model={m!r}>"
+        return f"<GatewayBudget {self.target_kind}:{self.target_id} {self.period} model={m!r}>"
 
 
 __all__ = ["GatewayBudget"]

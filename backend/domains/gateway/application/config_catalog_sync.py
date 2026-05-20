@@ -18,8 +18,8 @@ from domains.gateway.domain.types import (
     CONFIG_MANAGED_CREDENTIAL_NAME,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from libs.crypto import derive_encryption_key, encrypt_value
@@ -82,12 +82,12 @@ async def _ensure_system_credential(
     encryption_key: str,
 ) -> uuid.UUID | None:
     """每个 provider 一条 system 默认凭据；无 API Key 时返回 None。"""
-    repo = ProviderCredentialRepository(session)
+    repo = SystemProviderCredentialRepository(session)
     plain_key, api_base = _provider_api_key_and_base(provider)
     if not plain_key:
         return None
 
-    existing = await repo.find_system_config_managed(provider)
+    existing = await repo.find_config_managed(provider)
     encrypted = encrypt_value(plain_key, encryption_key)
     extra = _config_managed_credential_extra(provider)
     if existing is not None:
@@ -101,8 +101,6 @@ async def _ensure_system_credential(
         return existing.id
 
     created = await repo.create(
-        scope="system",
-        scope_id=None,
         provider=provider,
         name=SYSTEM_CREDENTIAL_NAME,
         api_key_encrypted=encrypted,
@@ -266,10 +264,9 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
         real_model = model.litellm_model or model.id
         capability = infer_catalog_capability(model)
         tags = _build_tags_from_model_info(model)
-        existing = await models_repo.get_by_name(None, model.id)
+        existing = await models_repo.get_system_by_name(model.id)
         if existing is None:
-            await models_repo.create(
-                team_id=None,
+            await models_repo.create_system(
                 name=model.id,
                 capability=capability,
                 real_model=real_model,
@@ -295,7 +292,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
             merged_tags = {**(existing.tags or {}), **tags}
             merged_tags[MANAGED_BY_KEY] = MANAGED_CONFIG
 
-        await models_repo.update(
+        await models_repo.update_system(
             existing.id,
             capability=capability,
             real_model=real_model,
@@ -311,7 +308,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
 
     disabled = 0
     newly_disabled_names: list[str] = []
-    global_rows = await models_repo.list_for_team(None, only_enabled=False)
+    global_rows = await models_repo.list_system(only_enabled=False)
     for row in global_rows:
         row_tags = row.tags or {}
         if row_tags.get(MANAGED_BY_KEY) != MANAGED_CONFIG:
@@ -319,7 +316,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
         if row.name in desired_ids:
             continue
         if row.enabled:
-            await models_repo.update(row.id, enabled=False)
+            await models_repo.update_system(row.id, enabled=False)
             disabled += 1
             newly_disabled_names.append(row.name)
 

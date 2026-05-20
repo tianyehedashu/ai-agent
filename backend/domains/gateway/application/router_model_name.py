@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 
 def router_model_name_for_gateway_model(model: GatewayModel) -> str:
-    return encode_router_model_name(model.team_id, model.name)
+    return encode_router_model_name(getattr(model, "tenant_id", None), model.name)
 
 
 def router_model_name_for_route(route: GatewayRoute) -> str:
-    return encode_router_model_name(route.team_id, route.virtual_model)
+    return encode_router_model_name(route.tenant_id, route.virtual_model)
 
 
 def router_model_name_for_client(
@@ -34,7 +34,8 @@ def router_model_name_for_client(
         return cleaned
     if resolved.route is not None:
         return encode_router_model_name(team_id, cleaned)
-    return encode_router_model_name(resolved.record.team_id, cleaned)
+    record_team_id = getattr(resolved.record, "tenant_id", None)
+    return encode_router_model_name(record_team_id or team_id, cleaned)
 
 
 __all__ = [

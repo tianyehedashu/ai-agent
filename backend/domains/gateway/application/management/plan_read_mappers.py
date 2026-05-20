@@ -72,8 +72,8 @@ def entitlement_plan_from_orm(
 ) -> EntitlementPlanReadModel:
     return EntitlementPlanReadModel(
         id=plan.id,
-        scope=plan.scope,
-        scope_id=plan.scope_id,
+        scope=plan.target_kind,
+        scope_id=plan.target_id,
         label=plan.label,
         valid_from=plan.valid_from,
         valid_until=plan.valid_until,

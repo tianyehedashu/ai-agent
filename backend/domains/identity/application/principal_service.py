@@ -14,9 +14,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
 from domains.identity.domain.types import Principal
-from domains.identity.infrastructure.authentication import get_jwt_strategy
 from domains.identity.infrastructure.models.user import User
-from domains.identity.infrastructure.user_manager import UserManager
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -35,19 +33,23 @@ async def _get_or_create_anonymous_principal(
     db: AsyncSession,
     anonymous_id: str,
 ) -> Principal | None:
-    """获取或创建匿名主体（开发环境专用）
+    """获取或创建匿名主体（开发环境）：shadow User + personal team。"""
+    from domains.identity.application.anonymous_user_provisioner import (
+        AnonymousUserProvisioner,
+    )
 
-    注意：匿名用户不再创建 User 记录，只返回 Principal 对象。
-    匿名用户的会话和消息通过 anonymous_user_id 字段关联。
-    """
-    # 直接返回 Principal，不创建 User 记录
-    # 匿名用户的会话通过 Session.anonymous_user_id 字段关联
+    provisioner = AnonymousUserProvisioner(db)
+    user_id = await provisioner.ensure_shadow_user(anonymous_id)
+    user = await db.get(User, user_id)
+    if user is None:
+        return None
+    cookie_id = AnonymousUserProvisioner._normalize_cookie_id(anonymous_id)
     return Principal(
-        id=Principal.make_anonymous_id(anonymous_id),
-        email=Principal.make_anonymous_email(anonymous_id),
-        name=f"Anonymous User ({anonymous_id[:8]})",
+        id=Principal.make_anonymous_id(cookie_id),
+        email=user.email,
+        name=user.name or f"Anonymous ({cookie_id[:8]})",
         is_anonymous=True,
-        role="user",  # 匿名用户默认为普通用户
+        role="anonymous",
     )
 
 
@@ -113,6 +115,9 @@ async def get_principal(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    from domains.identity.infrastructure.authentication import get_jwt_strategy
+    from domains.identity.infrastructure.user_manager import UserManager
+
     token = credentials.credentials
     strategy = get_jwt_strategy()
     user_db = SQLAlchemyUserDatabase(db, User)
@@ -143,6 +148,9 @@ async def get_principal_optional(
     """获取当前主体（可选）"""
     if not credentials:
         return None
+
+    from domains.identity.infrastructure.authentication import get_jwt_strategy
+    from domains.identity.infrastructure.user_manager import UserManager
 
     token = credentials.credentials
     strategy = get_jwt_strategy()

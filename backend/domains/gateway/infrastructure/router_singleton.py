@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from bootstrap.config import settings
 from domains.gateway.domain.litellm_credential_extra_keys import (
@@ -22,6 +23,7 @@ from domains.gateway.domain.litellm_credential_extra_keys import (
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.domain.types import credential_api_scope
 from libs.crypto import decrypt_value, derive_encryption_key
 from utils.logging import get_logger
 
@@ -32,6 +34,10 @@ if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+    from domains.gateway.infrastructure.models.system_gateway import (
+        SystemGatewayModel,
+        SystemGatewayRoute,
+    )
 
 logger = get_logger(__name__)
 
@@ -155,8 +161,14 @@ def filter_litellm_params_for_direct_anthropic(dep: dict[str, Any]) -> dict[str,
 PricingLookup = dict[tuple[str, str, str], dict[str, float]]
 
 
+def _deployment_scope_id(row: object) -> uuid.UUID | None:
+    """租户行返回 ``tenant_id``；``system_*`` 行无该列则视为系统级（``None``）。"""
+    tid = getattr(row, "tenant_id", None)
+    return tid if isinstance(tid, uuid.UUID) else None
+
+
 def _pricing_for_model(
-    src: GatewayModel,
+    src: GatewayModel | SystemGatewayModel,
     pricing_lookup: PricingLookup | None,
 ) -> dict[str, float] | None:
     if not pricing_lookup:
@@ -168,7 +180,7 @@ def _pricing_for_model(
 def _build_deployment(
     *,
     model_name: str,
-    src: GatewayModel,
+    src: GatewayModel | SystemGatewayModel,
     cred: ProviderCredential,
     via_route: str | None = None,
     pricing_lookup: PricingLookup | None = None,
@@ -188,26 +200,29 @@ def _build_deployment(
         ),
         "model_info": {
             "id": str(src.id),
-            "team_id": str(src.team_id) if src.team_id else None,
+            "team_id": str(tid) if (tid := getattr(src, "tenant_id", None)) else None,
             "capability": src.capability,
             "weight": src.weight,
             "gateway_model_name": src.name,
             "gateway_credential_id": str(cred.id),
             "gateway_credential_name": cred.name,
-            "gateway_credential_scope": cred.scope,
+            "gateway_credential_scope": credential_api_scope(
+                scope=getattr(cred, "scope", None),
+                tenant_id=getattr(cred, "tenant_id", None),
+            ),
             "gateway_via_route": via_route,
         },
     }
 
 
 def _models_to_deployments(
-    models: list[GatewayModel],
+    models: list[GatewayModel | SystemGatewayModel],
     credentials: dict[Any, ProviderCredential],
     pricing_lookup: PricingLookup | None = None,
 ) -> list[dict[str, Any]]:
-    """把 GatewayModel 列表转成 LiteLLM Router 的 model_list（每行单 deployment）。
+    """把 GatewayModel / SystemGatewayModel 列表转成 LiteLLM Router 的 model_list。
 
-    ``model_name`` 使用 ``gw/t/{team_id}/`` 或 ``gw/s/`` 前缀，避免跨团队同名冲突。
+    ``model_name`` 使用 ``gw/t/{tenant_id}/`` 或 ``gw/s/`` 前缀，避免跨租户同名冲突。
     """
     deployments: list[dict[str, Any]] = []
     for m in models:
@@ -217,7 +232,7 @@ def _models_to_deployments(
             continue
         deployments.append(
             _build_deployment(
-                model_name=encode_router_model_name(m.team_id, m.name),
+                model_name=encode_router_model_name(_deployment_scope_id(m), m.name),
                 src=m,
                 cred=cred,
                 pricing_lookup=pricing_lookup,
@@ -227,8 +242,8 @@ def _models_to_deployments(
 
 
 def _routes_to_virtual_deployments(
-    routes: list[GatewayRoute],
-    models: list[GatewayModel],
+    routes: list[GatewayRoute | SystemGatewayRoute],
+    models: list[GatewayModel | SystemGatewayModel],
     credentials: dict[Any, ProviderCredential],
     reserved_model_names: frozenset[str],
     pricing_lookup: PricingLookup | None = None,
@@ -242,14 +257,14 @@ def _routes_to_virtual_deployments(
     """
     if not routes:
         return []
-    by_team_name: dict[tuple[str | None, str], GatewayModel] = {}
+    by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel] = {}
     for m in models:
-        team_key = str(m.team_id) if m.team_id else None
-        by_team_name[(team_key, m.name)] = m
+        scope_key = str(_deployment_scope_id(m)) if _deployment_scope_id(m) else None
+        by_team_name[(scope_key, m.name)] = m
 
-    def _resolve(team_id: Any, name: str) -> GatewayModel | None:
-        team_key = str(team_id) if team_id else None
-        return by_team_name.get((team_key, name)) or by_team_name.get((None, name))
+    def _resolve(scope_id: Any, name: str) -> GatewayModel | SystemGatewayModel | None:
+        scope_key = str(scope_id) if scope_id else None
+        return by_team_name.get((scope_key, name)) or by_team_name.get((None, name))
 
     deployments: list[dict[str, Any]] = []
     for r in routes:
@@ -257,7 +272,7 @@ def _routes_to_virtual_deployments(
             # 同名 GatewayModel 优先；路由仅作为 fallback 关系图
             continue
         for primary_name in r.primary_models or ():
-            src = _resolve(r.team_id, primary_name)
+            src = _resolve(_deployment_scope_id(r), primary_name)
             if src is None:
                 logger.warning(
                     "GatewayRoute %s primary %s has no matching GatewayModel, skip",
@@ -276,7 +291,7 @@ def _routes_to_virtual_deployments(
                 continue
             deployments.append(
                 _build_deployment(
-                    model_name=encode_router_model_name(r.team_id, r.virtual_model),
+                    model_name=encode_router_model_name(_deployment_scope_id(r), r.virtual_model),
                     src=src,
                     cred=cred,
                     via_route=r.virtual_model,
@@ -287,34 +302,34 @@ def _routes_to_virtual_deployments(
 
 
 def _encode_fallback_model_name(
-    route: GatewayRoute,
+    route: GatewayRoute | SystemGatewayRoute,
     gateway_model_name: str,
-    by_team_name: dict[tuple[str | None, str], GatewayModel],
+    by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel],
 ) -> str:
-    team_key = str(route.team_id) if route.team_id else None
+    team_key = str(route.tenant_id) if route.tenant_id else None
     src = by_team_name.get((team_key, gateway_model_name)) or by_team_name.get(
         (None, gateway_model_name)
     )
     if src is not None:
-        return encode_router_model_name(src.team_id, src.name)
+        return encode_router_model_name(src.tenant_id, src.name)
     return gateway_model_name
 
 
 def _routes_to_fallbacks(
-    routes: list[GatewayRoute],
-    models: list[GatewayModel],
+    routes: list[GatewayRoute | SystemGatewayRoute],
+    models: list[GatewayModel | SystemGatewayModel],
 ) -> tuple[list[dict[str, list[str]]], list[dict[str, list[str]]], list[dict[str, list[str]]]]:
     """从 routes 解出三类 fallback 列表（键与目标均为 Router 编码后的 ``model_name``）。"""
-    by_team_name: dict[tuple[str | None, str], GatewayModel] = {}
+    by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel] = {}
     for m in models:
-        team_key = str(m.team_id) if m.team_id else None
-        by_team_name[(team_key, m.name)] = m
+        scope_key = str(_deployment_scope_id(m)) if _deployment_scope_id(m) else None
+        by_team_name[(scope_key, m.name)] = m
 
     general: list[dict[str, list[str]]] = []
     cp: list[dict[str, list[str]]] = []
     cw: list[dict[str, list[str]]] = []
     for r in routes:
-        route_key = encode_router_model_name(r.team_id, r.virtual_model)
+        route_key = encode_router_model_name(_deployment_scope_id(r), r.virtual_model)
         if r.fallbacks_general:
             general.append(
                 {
@@ -397,17 +412,31 @@ async def _build_router_kwargs(
         GatewayModelRepository,
         GatewayRouteRepository,
     )
+    from domains.gateway.infrastructure.repositories.system_credential_repository import (
+        SystemProviderCredentialRepository,
+    )
 
-    models = await GatewayModelRepository(db).list_all_active()
+    model_repo = GatewayModelRepository(db)
+    route_repo = GatewayRouteRepository(db)
+    models = [
+        *await model_repo.list_all_active(),
+        *await model_repo.list_system(only_enabled=True),
+    ]
     credentials_repo = ProviderCredentialRepository(db)
+    system_credentials_repo = SystemProviderCredentialRepository(db)
     cred_ids = {m.credential_id for m in models}
     credentials: dict[Any, ProviderCredential] = {}
     for cid in cred_ids:
         cred = await credentials_repo.get(cid)
+        if cred is None:
+            cred = await system_credentials_repo.get(cid)  # type: ignore[assignment]
         if cred is not None and cred.is_active:
-            credentials[cid] = cred
+            credentials[cid] = cred  # type: ignore[assignment]
 
-    routes = await GatewayRouteRepository(db).list_all_active()
+    routes = [
+        *await route_repo.list_all_active(),
+        *await route_repo.list_system(only_enabled=True),
+    ]
     pricing_lookup = await _load_upstream_pricing_lookup(db)
     deployments = _models_to_deployments(models, credentials, pricing_lookup)
     reserved_names = frozenset(m.name for m in models if m.enabled)

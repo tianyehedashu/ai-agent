@@ -38,41 +38,53 @@ class TeamRole(str, Enum):
 
 
 class CredentialScope(str, Enum):
-    """凭据归属作用域（写入维度）。
+    """凭据归属作用域（API / 日志展示与部分写入别名）。
 
-    描述 ``provider_credentials.scope`` 列：一条上游凭据记录归属于哪一层。
-    与 ``BudgetScope`` 同形（都包含 ``system|team|user``）但**语义独立**，禁止互相替代：
-    BudgetScope 多 ``key``（虚拟 Key 级预算），CredentialScope 不具备。
+    存储形态（``provider_credentials``）：
+    - 系统：``system_provider_credentials`` 表；API 展示 ``system``
+    - 租户：``tenant_id`` 非空且 ``scope IS NULL``；API 展示 ``team``（POST body 仍可用 ``scope=team``）
+    - BYOK：``scope=user`` + ``scope_id``；``tenant_id`` 为空
 
-    与 ``domains.gateway.domain.usage_read_model.UsageAggregation`` **正交**：
-    CredentialScope 是"凭据条目属于谁"（写入字段），UsageAggregation 是
-    "查询用量时按哪一列切片"（HTTP 查询参数）。
+    与 ``BudgetScope`` 语义独立，禁止合并字面量。
     """
 
-    SYSTEM = "system"  # 全局系统凭据
-    TEAM = "team"  # 团队凭据
-    USER = "user"  # 用户个人凭据
+    SYSTEM = "system"
+    TEAM = "team"  # 租户（团队/workspace）凭据的 API 别名
+    USER = "user"
 
 
 class BudgetScope(str, Enum):
     """预算归属作用域（写入维度）。
 
-    描述 ``gateway_budgets.scope`` 列：一条预算记录绑定在哪一层。
-    与 ``CredentialScope`` 同形（``system|team|user``）但 BudgetScope 多 ``key``（单个虚拟 Key）；
+    描述 ``gateway_budgets.target_kind`` 列：一条预算记录绑定在哪一层。
+    与 ``CredentialScope`` 同形（``system|tenant|user``）但 BudgetScope 多 ``key``（单个虚拟 Key）；
     两者各自独立演进，禁止合并字面量。
 
     与 ``domains.gateway.domain.usage_read_model.UsageAggregation`` **正交**：
     BudgetScope 是"预算条目属于谁"（写入字段），UsageAggregation 是
-    "查询用量时按哪一列切片"（HTTP 查询参数）。``BudgetScope.team`` 与
-    ``UsageAggregation`` 之所以保持不同字面量（前者用 ``team``、后者用 ``workspace``），
-    是为了在 URL/JSON 上下文可独立解析，避免 ``team=team-A&usage_aggregation=team`` 这类
-    组合造成的语义模糊。
+    "查询用量时按哪一列切片"（HTTP 查询参数）。``BudgetScope.tenant`` 与
+    ``UsageAggregation.workspace`` 保持不同字面量，避免 URL/JSON 语义模糊。
     """
 
     SYSTEM = "system"
-    TEAM = "team"
+    TENANT = "tenant"
     KEY = "key"  # 单个虚拟 Key
     USER = "user"
+
+
+class DownstreamPricingScope(str, Enum):
+    """``downstream_model_pricing.scope`` 字面量。"""
+
+    GLOBAL = "global"
+    TENANT = "tenant"
+    ENTITLEMENT_PLAN = "entitlement_plan"
+
+
+def normalize_downstream_pricing_scope(scope: str) -> str:
+    """API/历史 ``team`` 写入统一为 ``tenant``。"""
+    if scope == "team":
+        return DownstreamPricingScope.TENANT.value
+    return scope
 
 
 class BudgetPeriod(str, Enum):
@@ -284,14 +296,32 @@ CONFIG_MANAGED_BY = "config"
 GATEWAY_MODEL_MANAGED_BY_TAG = "managed_by"
 
 
+def credential_api_scope(
+    *,
+    scope: str | None,
+    tenant_id: uuid.UUID | None,
+) -> str:
+    """将 ORM/读模型坐标映射为稳定的 API / metadata scope 字面量。"""
+    if scope == CredentialScope.SYSTEM.value:
+        return CredentialScope.SYSTEM.value
+    if scope == CredentialScope.USER.value:
+        return CredentialScope.USER.value
+    if scope == CredentialScope.TEAM.value or tenant_id is not None:
+        return CredentialScope.TEAM.value
+    if scope is None and tenant_id is None:
+        return CredentialScope.SYSTEM.value
+    return CredentialScope.USER.value
+
+
 def is_config_managed_system_credential(
     *,
-    scope: str,
+    scope: str | None,
     name: str,
     extra: dict[str, Any] | None,
+    tenant_id: uuid.UUID | None = None,
 ) -> bool:
     """是否为配置同步托管的 system 凭据（不可重命名，同步按 provider 幂等更新）。"""
-    if scope != CredentialScope.SYSTEM.value:
+    if credential_api_scope(scope=scope, tenant_id=tenant_id) != CredentialScope.SYSTEM.value:
         return False
     if (extra or {}).get("managed_by") == CONFIG_MANAGED_BY:
         return True
@@ -373,5 +403,8 @@ __all__ = [
     "VirtualKeyBatchRevokeReason",
     "VirtualKeyPrincipal",
     "allowed_capabilities_from_storage",
+    "DownstreamPricingScope",
+    "credential_api_scope",
+    "normalize_downstream_pricing_scope",
     "is_config_managed_system_credential",
 ]

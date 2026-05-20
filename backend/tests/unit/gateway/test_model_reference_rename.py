@@ -10,9 +10,7 @@ from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.application.model_reference_prune import rename_gateway_model_name_references
 from domains.gateway.domain.virtual_key_service import generate_vkey
-from domains.gateway.infrastructure.repositories.credential_repository import (
-    ProviderCredentialRepository,
-)
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -28,18 +26,11 @@ from libs.exceptions import ValidationError
 async def test_rename_references_updates_team_vkey_and_route(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name="rename-test-cred",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="rename-test-cred")
     old_name = f"rename-old-{uuid.uuid4().hex[:6]}"
     new_name = f"rename-new-{uuid.uuid4().hex[:6]}"
     model = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=old_name,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -48,7 +39,7 @@ async def test_rename_references_updates_team_vkey_and_route(db_session, test_us
     )
     route_repo = GatewayRouteRepository(db_session)
     route = await route_repo.create(
-        team_id=team.id,
+        tenant_id=team.id,
         virtual_model="rename-router",
         primary_models=[old_name, "other-stay"],
         fallbacks_general=[old_name],
@@ -56,7 +47,7 @@ async def test_rename_references_updates_team_vkey_and_route(db_session, test_us
     vkey_repo = VirtualKeyRepository(db_session)
     _, key_id, key_hash = generate_vkey()
     await vkey_repo.create(
-        team_id=team.id,
+        tenant_id=team.id,
         created_by_user_id=test_user.id,
         name=f"vkey-{uuid.uuid4().hex[:6]}",
         description=None,
@@ -74,14 +65,14 @@ async def test_rename_references_updates_team_vkey_and_route(db_session, test_us
 
     vkeys_updated, routes_updated = await rename_gateway_model_name_references(
         db_session,
-        team_id=team.id,
+        tenant_id=team.id,
         old_name=old_name,
         new_name=new_name,
     )
     assert vkeys_updated >= 1
     assert routes_updated >= 1
 
-    keys = await vkey_repo.list_by_team(team.id, include_inactive=True)
+    keys = await vkey_repo.list_for_tenant(team.id, include_inactive=True)
     allowed = list(keys[0].allowed_models or [])
     assert old_name not in allowed
     assert new_name in allowed
@@ -110,7 +101,7 @@ async def test_rename_references_does_not_touch_other_team(db_session, test_user
     vkey_repo = VirtualKeyRepository(db_session)
     _, key_id_b, key_hash_b = generate_vkey()
     await vkey_repo.create(
-        team_id=team_b.id,
+        tenant_id=team_b.id,
         created_by_user_id=other_user.id,
         name=f"vkey-b-{uuid.uuid4().hex[:6]}",
         description=None,
@@ -129,13 +120,13 @@ async def test_rename_references_does_not_touch_other_team(db_session, test_user
     new_name = f"renamed-{uuid.uuid4().hex[:6]}"
     await rename_gateway_model_name_references(
         db_session,
-        team_id=team_a.id,
+        tenant_id=team_a.id,
         old_name=shared_name,
         new_name=new_name,
     )
     await db_session.flush()
 
-    keys_b = await vkey_repo.list_by_team(team_b.id, include_inactive=True)
+    keys_b = await vkey_repo.list_for_tenant(team_b.id, include_inactive=True)
     assert shared_name in (keys_b[0].allowed_models or [])
     assert new_name not in (keys_b[0].allowed_models or [])
 
@@ -144,18 +135,11 @@ async def test_rename_references_does_not_touch_other_team(db_session, test_user
 async def test_update_gateway_model_renames_with_cascade(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name="update-rename-cred",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="update-rename-cred")
     old_name = f"upd-old-{uuid.uuid4().hex[:6]}"
     new_name = f"upd-new-{uuid.uuid4().hex[:6]}"
     model = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=old_name,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -165,7 +149,7 @@ async def test_update_gateway_model_renames_with_cascade(db_session, test_user) 
     vkey_repo = VirtualKeyRepository(db_session)
     _, key_id, key_hash = generate_vkey()
     await vkey_repo.create(
-        team_id=team.id,
+        tenant_id=team.id,
         created_by_user_id=test_user.id,
         name=f"vkey-{uuid.uuid4().hex[:6]}",
         description=None,
@@ -184,13 +168,13 @@ async def test_update_gateway_model_renames_with_cascade(db_session, test_user) 
     writes = GatewayManagementWriteService(db_session)
     updated = await writes.update_gateway_model(
         model.id,
-        team_id=team.id,
+        tenant_id=team.id,
         is_platform_admin=False,
         fields={"name": new_name},
     )
     assert updated.name == new_name
 
-    keys = await vkey_repo.list_by_team(team.id, include_inactive=True)
+    keys = await vkey_repo.list_for_tenant(team.id, include_inactive=True)
     assert new_name in (keys[0].allowed_models or [])
     assert old_name not in (keys[0].allowed_models or [])
 
@@ -199,17 +183,10 @@ async def test_update_gateway_model_renames_with_cascade(db_session, test_user) 
 async def test_update_gateway_model_name_conflict(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name="conflict-cred",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="conflict-cred")
     taken_name = f"taken-{uuid.uuid4().hex[:6]}"
     await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=taken_name,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -217,7 +194,7 @@ async def test_update_gateway_model_name_conflict(db_session, test_user) -> None
         provider="openai",
     )
     model = await GatewayModelRepository(db_session).create(
-        team_id=team.id,
+        tenant_id=team.id,
         name=f"other-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="gpt-4o-mini",
@@ -230,35 +207,36 @@ async def test_update_gateway_model_name_conflict(db_session, test_user) -> None
     with pytest.raises(ValidationError, match="注册别名已存在"):
         await writes.update_gateway_model(
             model.id,
-            team_id=team.id,
+            tenant_id=team.id,
             is_platform_admin=False,
             fields={"name": taken_name},
         )
 
 
 @pytest.mark.asyncio
-async def test_update_global_gateway_model_name_conflict(db_session, test_user) -> None:
-    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+async def test_update_global_gateway_model_name_conflict(db_session) -> None:
+    from bootstrap.config import settings
+    from domains.gateway.infrastructure.repositories.system_credential_repository import (
+        SystemProviderCredentialRepository,
+    )
+    from libs.crypto import derive_encryption_key, encrypt_value
+
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
+    cred = await SystemProviderCredentialRepository(db_session).create(
         provider="openai",
-        name="global-conflict-cred",
+        name=f"sys-conflict-{uuid.uuid4().hex[:6]}",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
     )
     taken_name = f"global-taken-{uuid.uuid4().hex[:6]}"
-    await GatewayModelRepository(db_session).create(
-        team_id=None,
+    model_repo = GatewayModelRepository(db_session)
+    await model_repo.create_system(
         name=taken_name,
         capability="chat",
         real_model="gpt-4o-mini",
         credential_id=cred.id,
         provider="openai",
     )
-    model = await GatewayModelRepository(db_session).create(
-        team_id=None,
+    model = await model_repo.create_system(
         name=f"global-other-{uuid.uuid4().hex[:6]}",
         capability="chat",
         real_model="gpt-4o-mini",
@@ -267,11 +245,4 @@ async def test_update_global_gateway_model_name_conflict(db_session, test_user) 
     )
     await db_session.flush()
 
-    writes = GatewayManagementWriteService(db_session)
-    with pytest.raises(ValidationError, match="注册别名已存在"):
-        await writes.update_gateway_model(
-            model.id,
-            team_id=team.id,
-            is_platform_admin=False,
-            fields={"name": taken_name},
-        )
+    assert await model_repo.name_exists_in_scope(None, taken_name, exclude_id=model.id)

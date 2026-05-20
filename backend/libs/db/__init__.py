@@ -7,7 +7,8 @@ Database Module
 - base_repository: 带所有权过滤的 Repository 基类
 """
 
-from libs.db.base_repository import OwnedRepositoryBase
+from libs.db.base_repository import OwnedRepositoryBase, TenantScopedRepositoryBase
+from libs.db.data_scope import DataAction, DataResource, DataScopeEnforcer, enforce_data_scope
 from libs.db.permission_context import (
     PermissionContext,
     clear_permission_context,
@@ -16,9 +17,14 @@ from libs.db.permission_context import (
 )
 
 __all__ = [
+    "DataAction",
+    "DataResource",
+    "DataScopeEnforcer",
     "OwnedRepositoryBase",
     "PermissionContext",
+    "TenantScopedRepositoryBase",
     "clear_permission_context",
+    "enforce_data_scope",
     "get_permission_context",
     "set_permission_context",
 ]

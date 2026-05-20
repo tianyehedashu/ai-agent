@@ -145,7 +145,7 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
                       : 'bg-emerald-500'
                 return (
                   <tr key={b.id} className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
-                    <td className="px-4 py-2 text-xs">{b.scope}</td>
+                    <td className="px-4 py-2 text-xs">{b.target_kind}</td>
                     <td
                       className="max-w-[140px] truncate px-4 py-2 text-xs"
                       title={b.model_name ?? ''}
@@ -229,7 +229,7 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
 }
 
 interface CreateValues {
-  scope: 'team' | 'user' | 'key' | 'system'
+  target_kind: 'tenant' | 'user' | 'key' | 'system'
   period: 'daily' | 'monthly' | 'total'
   model_name: string
   limit_usd: string
@@ -249,7 +249,7 @@ function CreateBudgetDialog({
 }>): React.JSX.Element {
   const { toast } = useToast()
   const [v, setV] = useState<CreateValues>({
-    scope: 'team',
+    target_kind: 'tenant',
     period: 'monthly',
     model_name: '',
     limit_usd: '100',
@@ -267,16 +267,16 @@ function CreateBudgetDialog({
           <div>
             <Label>作用域</Label>
             <Select
-              value={v.scope}
+              value={v.target_kind}
               onValueChange={(val: string) => {
-                setV({ ...v, scope: val as CreateValues['scope'] })
+                setV({ ...v, target_kind: val as CreateValues['target_kind'] })
               }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="team">团队</SelectItem>
+                <SelectItem value="tenant">租户</SelectItem>
                 <SelectItem value="user">用户</SelectItem>
                 <SelectItem value="key">虚拟 Key</SelectItem>
                 <SelectItem value="system">系统</SelectItem>
@@ -373,7 +373,7 @@ function CreateBudgetDialog({
             onClick={() => {
               const modelTrim = v.model_name.trim()
               const body: BudgetUpsertBody = {
-                scope: v.scope,
+                target_kind: v.target_kind,
                 period: v.period,
               }
               if (modelTrim !== '') {

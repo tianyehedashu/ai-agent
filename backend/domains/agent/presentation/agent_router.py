@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from domains.agent.application import AgentUseCase
 from domains.identity.presentation.deps import (
     RequiredAuthUser,
-    check_ownership,
-    check_ownership_or_public,
+    check_tenant_access,
+    check_tenant_access_or_public,
 )
 from libs.api.deps import get_agent_service
 
@@ -127,8 +127,8 @@ async def get_agent(
     """获取 Agent 详情"""
     agent = await agent_service.get_agent_or_raise(agent_id)
 
-    check_ownership_or_public(
-        str(agent.user_id),
+    check_tenant_access_or_public(
+        agent.tenant_id,
         current_user,
         agent.is_public,
         "Agent",
@@ -146,7 +146,7 @@ async def update_agent(
 ) -> AgentResponse:
     """更新 Agent"""
     agent = await agent_service.get_agent_or_raise(agent_id)
-    check_ownership(str(agent.user_id), current_user, "Agent")
+    check_tenant_access(agent.tenant_id, current_user, "Agent")
 
     updated_agent = await agent_service.update_agent(
         agent_id=agent_id,
@@ -171,5 +171,5 @@ async def delete_agent(
 ) -> None:
     """删除 Agent"""
     agent = await agent_service.get_agent_or_raise(agent_id)
-    check_ownership(str(agent.user_id), current_user, "Agent")
+    check_tenant_access(agent.tenant_id, current_user, "Agent")
     await agent_service.delete_agent(agent_id)

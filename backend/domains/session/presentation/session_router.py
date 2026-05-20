@@ -81,8 +81,7 @@ class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    user_id: str | None  # 注册用户 ID（匿名用户为 None）
-    anonymous_user_id: str | None  # 匿名用户 ID（注册用户为 None）
+    tenant_id: str
     agent_id: str | None
     title: str | None
     status: str
@@ -97,7 +96,7 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_validator("id", "user_id", "agent_id", mode="before")
+    @field_validator("id", "tenant_id", "agent_id", mode="before")
     @classmethod
     def convert_uuid_to_str(cls, v: uuid.UUID | str | None) -> str | None:
         """将 UUID 转换为字符串"""
@@ -162,7 +161,7 @@ class MessageResponse(BaseModel):
 
 
 def _session_to_response(session: Session) -> SessionResponse:
-    """将 Session 模型转换为响应"""
+    """将 Session 模型转换为响应。"""
     cfg = session.config if isinstance(session.config, dict) else {}
     verbose = bool(cfg.get("gateway_verbose_request_log"))
     raw_ref = cfg.get("chat_model_ref")
@@ -179,8 +178,7 @@ def _session_to_response(session: Session) -> SessionResponse:
     video_model_ref = raw_vm if isinstance(raw_vm, str) and raw_vm.strip() else None
     return SessionResponse(
         id=str(session.id),
-        user_id=str(session.user_id) if session.user_id else None,
-        anonymous_user_id=session.anonymous_user_id,
+        tenant_id=str(session.tenant_id),
         agent_id=str(session.agent_id) if session.agent_id else None,
         title=session.title,
         status=session.status,

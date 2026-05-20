@@ -14,6 +14,7 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
 from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
+from domains.gateway.domain.types import credential_api_scope
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -64,7 +65,10 @@ class ProxyMetadataBuilder:
         return {
             "gateway_credential_id": str(cred.id),
             "gateway_credential_name_snapshot": cred.name,
-            "gateway_credential_scope": cred.scope,
+            "gateway_credential_scope": credential_api_scope(
+                scope=cred.scope,
+                tenant_id=cred.tenant_id,
+            ),
             "gateway_provider": record.provider,
         }
 

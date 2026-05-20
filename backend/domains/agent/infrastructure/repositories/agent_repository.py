@@ -13,16 +13,13 @@ from domains.agent.domain.interfaces.agent_repository import (
     AgentRepository as AgentRepositoryInterface,
 )
 from domains.agent.infrastructure.models.agent import Agent
-from libs.db.base_repository import OwnedRepositoryBase
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
+from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.permission_context import get_permission_context
 
 
-class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
-    """Agent 仓储实现
-
-    继承 OwnedRepositoryBase 提供自动权限过滤功能。
-    仅支持注册用户（不支持匿名用户）。
-    """
+class AgentRepository(TenantScopedRepositoryBase[Agent], AgentRepositoryInterface):
+    """Agent 仓储实现（``tenant_id`` + ``PermissionContext.team_ids`` 行级过滤）。"""
 
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
@@ -48,8 +45,9 @@ class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
         max_iterations: int = 20,
     ) -> Agent:
         """创建 Agent"""
+        tenant_id = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
         agent = Agent(
-            user_id=user_id,
+            tenant_id=tenant_id,
             name=name,
             description=description,
             system_prompt=system_prompt,
@@ -66,7 +64,7 @@ class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
 
     async def get_by_id(self, agent_id: uuid.UUID) -> Agent | None:
         """通过 ID 获取 Agent（自动检查所有权）"""
-        return await self.get_owned(agent_id)
+        return await self.get_in_tenants(agent_id)
 
     async def find_by_user(
         self,
@@ -96,8 +94,7 @@ class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
                 "This may indicate an authorization bug."
             )
 
-        # 使用 find_owned 自动应用权限过滤
-        return await self.find_owned(
+        return await self.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="created_at",
@@ -157,6 +154,9 @@ class AgentRepository(OwnedRepositoryBase[Agent], AgentRepositoryInterface):
         return result.scalar() or 0
 
     async def count_by_user(self, user_id: uuid.UUID) -> int:
-        """统计指定用户的 Agent 数"""
-        result = await self.db.execute(select(func.count(Agent.id)).where(Agent.user_id == user_id))
+        """统计 personal team 下 Agent 数（与 ``find_by_user`` 可见范围一致）。"""
+        tenant_id = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
+        result = await self.db.execute(
+            select(func.count(Agent.id)).where(Agent.tenant_id == tenant_id)
+        )
         return result.scalar() or 0

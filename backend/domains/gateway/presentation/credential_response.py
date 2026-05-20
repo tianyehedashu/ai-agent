@@ -8,7 +8,10 @@ from cryptography.fernet import InvalidToken
 
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
-from domains.gateway.domain.types import is_config_managed_system_credential
+from domains.gateway.domain.types import (
+    credential_api_scope,
+    is_config_managed_system_credential,
+)
 from domains.gateway.presentation.schemas.common import CredentialResponse
 from libs.crypto import decrypt_value
 from utils.logging import get_logger
@@ -58,9 +61,11 @@ def build_credential_response(
             type(exc).__name__,
         )
         api_key_masked = "（无法展示）"
+    api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     return CredentialResponse(
         id=cred.id,
-        scope=cred.scope,
+        tenant_id=cred.tenant_id,
+        scope=api_scope,
         scope_id=cred.scope_id,
         provider=cred.provider,
         name=cred.name,
@@ -69,6 +74,7 @@ def build_credential_response(
         is_active=cred.is_active,
         is_config_managed=is_config_managed_system_credential(
             scope=cred.scope,
+            tenant_id=cred.tenant_id,
             name=cred.name,
             extra=cred.extra,
         ),

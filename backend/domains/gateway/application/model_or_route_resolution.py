@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+    from domains.gateway.infrastructure.models.system_gateway import (
+        SystemGatewayModel,
+        SystemGatewayRoute,
+    )
 
 
 @dataclass(frozen=True)
@@ -37,8 +41,8 @@ class ResolvedModelName:
         via_route: 与 ``route`` 同步；为前端/日志快照预留。
     """
 
-    record: GatewayModel
-    route: GatewayRoute | None
+    record: GatewayModel | SystemGatewayModel
+    route: GatewayRoute | SystemGatewayRoute | None
     via_route: str | None
 
 
@@ -56,14 +60,14 @@ async def resolve_model_or_route(
     if not cleaned:
         return None
     model_repo = GatewayModelRepository(session)
-    record = await model_repo.get_by_name(team_id, cleaned)
+    record = await model_repo.resolve_by_name(team_id, cleaned)
     if record is not None:
         return ResolvedModelName(record=record, route=None, via_route=None)
-    route = await GatewayRouteRepository(session).get_by_virtual_model(team_id, cleaned)
+    route = await GatewayRouteRepository(session).resolve_by_virtual_model(team_id, cleaned)
     if route is None:
         return None
     for primary in route.primary_models or ():
-        primary_record = await model_repo.get_by_name(team_id, primary)
+        primary_record = await model_repo.resolve_by_name(team_id, primary)
         if primary_record is not None:
             return ResolvedModelName(
                 record=primary_record,

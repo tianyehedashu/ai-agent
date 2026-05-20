@@ -45,7 +45,7 @@ class VirtualKeyRepository:
             select(GatewayVirtualKey.id)
             .where(
                 GatewayVirtualKey.id == vkey_id,
-                GatewayVirtualKey.team_id == team_id,
+                GatewayVirtualKey.tenant_id == team_id,
                 GatewayVirtualKey.created_by_user_id == user_id,
                 GatewayVirtualKey.is_system.is_(False),
             )
@@ -53,14 +53,14 @@ class VirtualKeyRepository:
         )
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
 
-    async def list_by_team(
+    async def list_for_tenant(
         self,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         *,
         include_system: bool = False,
         include_inactive: bool = True,
     ) -> list[GatewayVirtualKey]:
-        clauses = [GatewayVirtualKey.team_id == team_id]
+        clauses = [GatewayVirtualKey.tenant_id == tenant_id]
         if not include_system:
             clauses.append(GatewayVirtualKey.is_system.is_(False))
         if not include_inactive:
@@ -99,7 +99,7 @@ class VirtualKeyRepository:
         insert_stmt = (
             pg_insert(GatewayVirtualKey.__table__)
             .values(
-                team_id=team_id,
+                tenant_id=team_id,
                 created_by_user_id=None,
                 name="__system_internal_bridge__",
                 description="自动创建：内部模块调用桥接",
@@ -114,7 +114,7 @@ class VirtualKeyRepository:
                 is_active=True,
             )
             .on_conflict_do_nothing(
-                index_elements=[GatewayVirtualKey.__table__.c.team_id],
+                index_elements=[GatewayVirtualKey.__table__.c.tenant_id],
                 index_where=text("is_system = TRUE AND is_active = TRUE"),
             )
             .returning(GatewayVirtualKey.__table__.c.id)
@@ -126,7 +126,7 @@ class VirtualKeyRepository:
             return await self._session.get(GatewayVirtualKey, inserted_id)  # type: ignore[return-value]
 
         select_stmt = select(GatewayVirtualKey).where(
-            GatewayVirtualKey.team_id == team_id,
+            GatewayVirtualKey.tenant_id == team_id,
             GatewayVirtualKey.is_system.is_(True),
             GatewayVirtualKey.is_active.is_(True),
         )
@@ -136,7 +136,7 @@ class VirtualKeyRepository:
     async def create(
         self,
         *,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         created_by_user_id: uuid.UUID | None,
         name: str,
         description: str | None,
@@ -153,7 +153,7 @@ class VirtualKeyRepository:
         expires_at: datetime | None = None,
     ) -> GatewayVirtualKey:
         new_key = GatewayVirtualKey(
-            team_id=team_id,
+            tenant_id=tenant_id,
             created_by_user_id=created_by_user_id,
             name=name,
             description=description,
@@ -211,16 +211,16 @@ class VirtualKeyRepository:
             await self._session.flush()
         return changed
 
-    async def rename_model_name_in_team_allowed_lists(
+    async def rename_model_name_in_tenant_allowed_lists(
         self,
-        team_id: uuid.UUID,
+        tenant_id: uuid.UUID,
         old_name: str,
         new_name: str,
     ) -> int:
-        """将指定团队 vkey 白名单中的虚拟模型名 old_name 替换为 new_name。"""
+        """将指定租户 vkey 白名单中的虚拟模型名 old_name 替换为 new_name。"""
         if old_name == new_name:
             return 0
-        keys = await self.list_by_team(team_id, include_system=True, include_inactive=True)
+        keys = await self.list_for_tenant(tenant_id, include_system=True, include_inactive=True)
         changed = 0
         for key in keys:
             allowed = list(key.allowed_models or ())

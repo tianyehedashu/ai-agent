@@ -29,11 +29,11 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
 
   const downstreamQuery = useQuery({
     queryKey: ['gateway-pricing-downstream', currency],
-    queryFn: () => gatewayApi.listDownstreamPricing({ scope: 'team', currency }),
+    queryFn: () => gatewayApi.listDownstreamPricing({ scope: 'tenant', currency }),
   })
 
   const syncMut = useMutation({
-    mutationFn: () => gatewayApi.syncDownstreamPricing({ scope: 'team' }),
+    mutationFn: () => gatewayApi.syncDownstreamPricing({ scope: 'tenant' }),
     onSuccess: (report) => {
       toast.success(`已同步：新增 ${String(report.created)}，跳过 ${String(report.skipped)}`)
       void qc.invalidateQueries({ queryKey: ['gateway-pricing-downstream'] })
@@ -61,7 +61,7 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
   const restoreMirror = (row: DownstreamPricingRow): void => {
     if (!row.gateway_model_id) return
     upsertMut.mutate({
-      scope: 'team',
+      scope: 'tenant',
       gateway_model_id: row.gateway_model_id,
       inheritance_strategy: 'mirror',
       currency,

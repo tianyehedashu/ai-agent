@@ -13,7 +13,7 @@ def _fake_log() -> GatewayRequestLog:
     return GatewayRequestLog(
         id=uuid.uuid4(),
         created_at=datetime.now(UTC),
-        team_id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
         capability="chat",
         status="success",
         input_tokens=1,

@@ -13,25 +13,18 @@ from sqlalchemy import ARRAY, Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
-class GatewayRoute(BaseModel):
-    """路由配置
-
-    业务规则：
-    - virtual_model 是客户端使用的模型别名
-    - team_id NULL 表示系统级路由（所有团队继承）
-    - primary_models / fallbacks_* 存的是 GatewayModel.name 列表
-    - strategy 对齐 LiteLLM Router 的 routing_strategy
-    """
+class GatewayRoute(BaseModel, TenantScopedMixin):
+    """路由配置（仅租户行；系统级见 ``system_gateway_routes``）。"""
 
     __tablename__ = "gateway_routes"
 
-    team_id: Mapped[uuid.UUID | None] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     virtual_model: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
@@ -62,11 +55,13 @@ class GatewayRoute(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint("team_id", "virtual_model", name="uq_gateway_routes_team_virtual_model"),
+        UniqueConstraint(
+            "tenant_id", "virtual_model", name="uq_gateway_routes_tenant_virtual_model"
+        ),
     )
 
     def __repr__(self) -> str:
-        return f"<GatewayRoute {self.virtual_model} team={self.team_id}>"
+        return f"<GatewayRoute {self.virtual_model} tenant={self.tenant_id}>"
 
 
 __all__ = ["GatewayRoute"]

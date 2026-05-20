@@ -38,9 +38,9 @@ class UpstreamSyncService:
         created = 0
         skipped = 0
         if team_id is not None:
-            models = await self._models.list_for_team(team_id, only_enabled=False)
+            models = await self._models.list_for_tenant(team_id, only_enabled=False)
         else:
-            models = await self._models.list_for_team(None, only_enabled=False)
+            models = await self._models.list_system(only_enabled=False)
         if model_ids:
             id_set = set(model_ids)
             models = [m for m in models if m.id in id_set]

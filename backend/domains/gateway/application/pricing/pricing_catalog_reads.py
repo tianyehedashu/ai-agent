@@ -215,14 +215,17 @@ class PricingCatalogReadService:
     async def list_downstream(
         self,
         *,
-        scope: Literal["global", "team", "entitlement_plan"],
+        scope: Literal["global", "tenant", "entitlement_plan"],
         scope_id: uuid.UUID | None,
         currency: DisplayCurrency,
     ) -> list[dict[str, Any]]:
+        from domains.gateway.domain.types import normalize_downstream_pricing_scope
+
+        scope_key = normalize_downstream_pricing_scope(scope)
         fx = build_static_fx_adapter()
         projector = build_money_projector(fx)
         repo = DownstreamPricingRepository(self.session)
-        rows = await repo.list_for_scope(scope=scope, scope_id=scope_id)
+        rows = await repo.list_for_scope(scope=scope_key, scope_id=scope_id)
         out: list[dict[str, Any]] = []
         for row in rows:
             try:
@@ -244,14 +247,14 @@ class PricingCatalogReadService:
         fx = build_static_fx_adapter()
         projector = build_money_projector(fx)
         svc = self._svc()
-        models = await GatewayModelRepository(self.session).list_for_team(
+        models = await GatewayModelRepository(self.session).list_for_tenant(
             team_id, only_enabled=True
         )
         out: list[dict[str, Any]] = []
         for model in models:
             try:
                 resolved = await svc.resolve_downstream_rate(
-                    team_id=team_id,
+                    tenant_id=team_id,
                     entitlement_plan_id=None,
                     gateway_model_id=model.id,
                     provider=model.provider,
@@ -288,7 +291,7 @@ class PricingCatalogReadService:
         if model is None:
             raise LookupError("model not found")
         resolved = await self._svc().resolve_downstream_rate(
-            team_id=team.team_id,
+            tenant_id=team.team_id,
             entitlement_plan_id=None,
             gateway_model_id=gateway_model_id,
             provider=model.provider,

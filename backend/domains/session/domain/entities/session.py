@@ -12,8 +12,7 @@ import uuid
 class SessionLike(Protocol):
     """会话协议（用于类型检查）"""
 
-    user_id: uuid.UUID | None
-    anonymous_user_id: str | None
+    tenant_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -76,23 +75,9 @@ class SessionDomainService:
     """
 
     @staticmethod
-    def check_ownership(session: SessionLike, owner: SessionOwner) -> bool:
-        """检查会话所有权
-
-        业务规则：
-        - 匿名用户：session.anonymous_user_id 必须匹配
-        - 注册用户：session.user_id 必须匹配
-
-        Args:
-            session: 会话实体
-            owner: 预期的所有者
-
-        Returns:
-            是否拥有所有权
-        """
-        if owner.is_anonymous:
-            return session.anonymous_user_id == owner.anonymous_user_id
-        return session.user_id == owner.user_id
+    def check_tenant_ownership(session: SessionLike, expected_tenant_id: uuid.UUID) -> bool:
+        """检查会话是否落在预期 tenant（personal / shared team）。"""
+        return session.tenant_id == expected_tenant_id
 
     @staticmethod
     def validate_session_creation(

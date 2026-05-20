@@ -11,6 +11,7 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -30,9 +31,8 @@ async def _seed_team_creds(db_session, n: int = 2):
     team_marker = uuid.uuid4().hex[:6]
     for i in range(n):
         creds.append(
-            await cred_repo.create(
-                scope="team",
-                scope_id=None,
+            await cred_repo.create_for_tenant(
+                tenant_id=uuid.uuid4(),
                 provider="openai",
                 name=f"multi-cred-{team_marker}-{i}",
                 api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -47,17 +47,15 @@ async def test_multi_credential_creates_models_and_route(db_session, test_user) 
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = ProviderCredentialRepository(db_session)
-    cred_a = await cred_repo.create(
-        scope="team",
-        scope_id=team.id,
+    cred_a = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
         provider="openai",
         name=f"multi-a-{uuid.uuid4().hex[:6]}",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
     )
-    cred_b = await cred_repo.create(
-        scope="team",
-        scope_id=team.id,
+    cred_b = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
         provider="openai",
         name=f"multi-b-{uuid.uuid4().hex[:6]}",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -66,7 +64,7 @@ async def test_multi_credential_creates_models_and_route(db_session, test_user) 
     writes = GatewayManagementWriteService(db_session)
     virtual = f"multi-virtual-{uuid.uuid4().hex[:6]}"
     result = await writes.create_multi_credential_gateway_model(
-        team_id=team.id,
+        tenant_id=team.id,
         name=virtual,
         capability="chat",
         real_model="gpt-4o-mini",
@@ -98,7 +96,7 @@ async def test_multi_credential_rejects_duplicate_credentials(db_session, test_u
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ValidationError):
         await writes.create_multi_credential_gateway_model(
-            team_id=team.id,
+            tenant_id=team.id,
             name=f"dup-{uuid.uuid4().hex[:6]}",
             capability="chat",
             real_model="gpt-4o-mini",
@@ -113,24 +111,17 @@ async def test_multi_credential_conflict_with_existing_route(db_session, test_us
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     virtual = f"route-conflict-{uuid.uuid4().hex[:6]}"
     await GatewayRouteRepository(db_session).create(
-        team_id=team.id, virtual_model=virtual, primary_models=[]
+        tenant_id=team.id, virtual_model=virtual, primary_models=[]
     )
     await db_session.flush()
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await ProviderCredentialRepository(db_session).create(
-        scope="team",
-        scope_id=team.id,
-        provider="openai",
-        name=f"conflict-{uuid.uuid4().hex[:6]}",
-        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
-        api_base=None,
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name=f"conflict-{uuid.uuid4().hex[:6]}")
     await db_session.flush()
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ValidationError):
         await writes.create_multi_credential_gateway_model(
-            team_id=team.id,
+            tenant_id=team.id,
             name=virtual,
             capability="chat",
             real_model="gpt-4o-mini",

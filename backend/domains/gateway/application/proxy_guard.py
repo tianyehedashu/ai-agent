@@ -38,7 +38,7 @@ from domains.gateway.domain.proxy_policy import (
     assert_capability_allowed,
     assert_model_allowed,
     assert_registered_model_capability,
-    budget_scope_targets,
+    budget_targets,
     build_budget_check_plan,
     first_present_limit,
     rate_limit_target,
@@ -116,16 +116,16 @@ class ProxyGuard:
                 return
             rate_scope, rate_scope_id = target
             await self._budget.check_rate_limit(
-                scope=rate_scope,
-                scope_id=rate_scope_id,
+                target_kind=rate_scope,
+                target_id=rate_scope_id,
                 rpm_limit=ctx.rpm_limit,
                 tpm_limit=ctx.tpm_limit,
                 estimate_tokens=estimate_tokens,
             )
         elif ctx.vkey is not None:
             await self._budget.check_rate_limit(
-                scope="vkey",
-                scope_id=str(ctx.vkey.vkey_id),
+                target_kind="vkey",
+                target_id=str(ctx.vkey.vkey_id),
                 rpm_limit=ctx.vkey.rpm_limit,
                 tpm_limit=ctx.vkey.tpm_limit,
                 estimate_tokens=estimate_tokens,
@@ -136,15 +136,15 @@ class ProxyGuard:
     # ---------------------------------------------------------------------
 
     async def check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
-        """按 ``BudgetCheckPlan`` 顺序扫描 team/user/key 维度预算。
+        """按 ``BudgetCheckPlan`` 顺序扫描 tenant/user/key 维度预算。
 
-        预算扫描坐标的纯逻辑（哪些 scope×period×model_key 该查）由
+        预算扫描坐标的纯逻辑（哪些 target_kind×period×model_key 该查）由
         ``domains.gateway.domain.proxy_policy.build_budget_check_plan`` 决定，
         本方法只负责按计划查仓储、调用 ``BudgetService``、抛错与累积请求级预扣。
         """
         repo = BudgetRepository(self._session)
-        targets = budget_scope_targets(
-            team_id=ctx.team_id,
+        targets = budget_targets(
+            tenant_id=ctx.team_id,
             user_id=ctx.user_id,
             vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
         )
@@ -157,14 +157,17 @@ class ProxyGuard:
         reservations: list[BudgetReservation] = []
         for query in plan:
             budget = await repo.get_for(
-                query.scope, query.scope_id, query.period, model_name=query.model_name
+                query.target_kind,
+                query.target_id,
+                query.period,
+                model_name=query.model_name,
             )
             if budget is None:
                 continue
-            scope_id_str = str(query.scope_id)
+            target_id_str = str(query.target_id)
             check = await self._budget.check_budget(
-                scope=query.scope,
-                scope_id=scope_id_str,
+                target_kind=query.target_kind,
+                target_id=target_id_str,
                 period=query.period,
                 limit_usd=budget.limit_usd,
                 limit_tokens=budget.limit_tokens,
@@ -174,7 +177,7 @@ class ProxyGuard:
             if not check.allowed:
                 await self.release_budget_reservations(reservations)
                 raise BudgetExceededError(
-                    scope=query.scope,
+                    scope=query.target_kind,
                     period=query.period,
                     limit=float(
                         first_present_limit(
@@ -196,8 +199,8 @@ class ProxyGuard:
             if budget.limit_requests:
                 try:
                     await self._budget.reserve(
-                        scope=query.scope,
-                        scope_id=scope_id_str,
+                        target_kind=query.target_kind,
+                        target_id=target_id_str,
                         period=query.period,
                         limit_requests=budget.limit_requests,
                         budget_model_name=budget.model_name,
@@ -205,17 +208,19 @@ class ProxyGuard:
                 except Exception:
                     await self.release_budget_reservations(reservations)
                     raise
-                reservations.append((query.scope, scope_id_str, query.period, budget.model_name))
+                reservations.append(
+                    (query.target_kind, target_id_str, query.period, budget.model_name)
+                )
         return reservations
 
     async def release_budget_reservations(
         self, reservations: list[BudgetReservation]
     ) -> None:
-        for scope, scope_id, period, budget_model_name in reservations:
+        for target_kind, target_id, period, budget_model_name in reservations:
             with suppress(Exception):
                 await self._budget.release(
-                    scope=scope,
-                    scope_id=scope_id,
+                    target_kind=target_kind,
+                    target_id=target_id,
                     period=period,
                     budget_model_name=budget_model_name,
                 )

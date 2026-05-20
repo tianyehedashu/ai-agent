@@ -53,7 +53,7 @@ export function buildDownstreamPricingPayload(
   const gatewayModelId = values.gateway_model_id.trim() || null
   if (values.inheritance_strategy === 'mirror') {
     return {
-      scope: 'team',
+      scope: 'tenant',
       gateway_model_id: gatewayModelId,
       inheritance_strategy: 'mirror',
       currency,
@@ -61,7 +61,7 @@ export function buildDownstreamPricingPayload(
     }
   }
   return {
-    scope: 'team',
+    scope: 'tenant',
     gateway_model_id: gatewayModelId,
     inheritance_strategy: 'manual',
     currency,

@@ -38,7 +38,7 @@ class TestSessionAPI:
         # 验证返回的会话格式
         if data:
             assert all("id" in item for item in data)
-            assert all("user_id" in item for item in data)
+            assert all("tenant_id" in item for item in data)
 
     @pytest.mark.asyncio
     async def test_create_session_without_params(self, client: AsyncClient, auth_headers: dict):
@@ -55,7 +55,7 @@ class TestSessionAPI:
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
         assert "id" in data
-        assert "user_id" in data
+        assert "tenant_id" in data
         assert data["agent_id"] is None
         assert data["title"] is None
         assert data["status"] == "active"
@@ -84,7 +84,7 @@ class TestSessionAPI:
             # 开发模式：匿名用户成功创建会话
             data = response.json()
             assert "id" in data
-            assert "user_id" in data
+            assert "tenant_id" in data
             assert data["title"] == "Anonymous Session"
             assert data["status"] == "active"
         elif response.status_code == status.HTTP_401_UNAUTHORIZED:

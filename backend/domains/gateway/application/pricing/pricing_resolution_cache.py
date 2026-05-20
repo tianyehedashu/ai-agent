@@ -25,12 +25,12 @@ _local: dict[str, tuple[ResolvedPricing, datetime]] = {}
 
 def pricing_resolution_cache_key(
     *,
-    team_id: uuid.UUID | None,
+    tenant_id: uuid.UUID | None,
     gateway_model_id: uuid.UUID | None,
     entitlement_plan_id: uuid.UUID | None,
     capability: str,
 ) -> str:
-    return f"{team_id}:{gateway_model_id}:{entitlement_plan_id}:{capability}"
+    return f"{tenant_id}:{gateway_model_id}:{entitlement_plan_id}:{capability}"
 
 
 @dataclass(frozen=True)
@@ -174,18 +174,28 @@ def set_cached_resolution(key: str, resolved: ResolvedPricing) -> None:
 
 async def invalidate_pricing_resolution_cache(
     *,
-    team_id: uuid.UUID | None = None,
+    tenant_id: uuid.UUID | None = None,
     gateway_model_id: uuid.UUID | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> int:
+    tid = tenant_id if tenant_id is not None else team_id
+    if team_id is not None and tenant_id is None:
+        import warnings
+
+        warnings.warn(
+            "invalidate_pricing_resolution_cache(team_id=) is deprecated; use tenant_id=",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     removed = 0
     with _lock:
-        if team_id is None and gateway_model_id is None:
+        if tid is None and gateway_model_id is None:
             removed = len(_local)
             _local.clear()
         else:
             keys = list(_local.keys())
             for key in keys:
-                if team_id is not None and not key.startswith(f"{team_id}:"):
+                if tid is not None and not key.startswith(f"{tid}:"):
                     continue
                 if gateway_model_id is not None and f":{gateway_model_id}:" not in f":{key}:":
                     continue
@@ -202,13 +212,13 @@ async def invalidate_pricing_resolution_cache(
                 out.append(k)
             return out
 
-        if team_id is None and gateway_model_id is None:
+        if tid is None and gateway_model_id is None:
             keys = await _collect(f"{_REDIS_PREFIX}*")
             if keys:
                 await client.delete(*keys)
                 removed += len(keys)
-        elif team_id is not None:
-            keys = await _collect(f"{_REDIS_PREFIX}{team_id}:*")
+        elif tid is not None:
+            keys = await _collect(f"{_REDIS_PREFIX}{tid}:*")
             if keys:
                 await client.delete(*keys)
                 removed += len(keys)

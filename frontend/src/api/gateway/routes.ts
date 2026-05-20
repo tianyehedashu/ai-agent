@@ -11,6 +11,7 @@ import { GATEWAY_API_BASE } from './_base'
 
 export interface GatewayRoute {
   id: string
+  tenant_id?: string | null
   team_id: string | null
   /** 调用方传入的 `model` 字段值 */
   virtual_model: string

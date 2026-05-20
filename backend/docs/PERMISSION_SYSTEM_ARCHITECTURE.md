@@ -16,6 +16,47 @@
 
 本系统实现了基于角色的访问控制（RBAC）和数据权限的统一管理，支持注册用户和匿名用户，并提供管理员权限绕过机制。
 
+## 多租户数据归属（tenant_id 模型）
+
+自 2026-05 起，业务数据以 **`tenant_id`（团队 / 工作区）** 为唯一归属维度，授权链为：
+
+`User → team_members → tenant_id → 业务行`
+
+| 概念 | 实现 |
+|------|------|
+| 个人用户 | `TeamService.ensure_personal_team` / `PersonalTeamProvisioner` |
+| 匿名用户 | Cookie → `AnonymousUserProvisioner.ensure_shadow_user`（`role=anonymous`）→ personal team |
+| 系统级配置 | 独立 `system_*` 表（无 `tenant_id`）；查询用 `list_system()` + `list_for_tenant()` 在应用层合并 |
+| 策略挂载（vkey 等） | `target_kind` + `target_id`（如 `EntitlementPlan`），与 tenant 正交 |
+| Repository 过滤 | `TenantScopedRepositoryBase` + `DataScopeEnforcer`（`PermissionContext.team_ids`） |
+
+```mermaid
+flowchart LR
+  U[User] --> TM[team_members]
+  TM --> T[Team]
+  T --> R[tenant-scoped rows]
+  SYS[system_* tables] -.merge in app.-> R
+```
+
+详见 `backend/docs/CODE_STANDARDS.md`「ORM 与多租户数据归属」。
+
+**Phase 3（20260522）**：Gateway 业务表物理列 `team_id` → `tenant_id`；`entitlement_plans.scope/scope_id` → `target_kind/target_id`；移除 `TenantIdFromTeamIdMixin` grace 层。`provider_credentials` / `gateway_budgets` 的 `scope` 仍为凭据/预算维度（非策略挂载），未在本轮重命名。
+
+**Phase 3b（20260523）**：`sessions` / `agents` 增加 `tenant_id` 并按 personal team 回填；创建会话/Agent 时自动 `ensure_personal_team`。`user_id` / `anonymous_user_id` 已 DROP（见 `20260524` / `20260525` 迁移）。
+
+**Phase 3c（20260528–29）**：系统凭据迁入 `system_provider_credentials`；`gateway_budgets.scope/scope_id` → `target_kind/target_id`（值 `team` → `tenant`）。租户凭据 API 的 `scope` 固定展示为 `team`（`credential_api_scope`），ORM 仍为 `scope NULL` + `tenant_id`。
+
+### 命名兼容与 sunset
+
+| 区域 | 现状 | 目标 |
+|------|------|------|
+| DB 列 | 业务表 `tenant_id` | 已完成 |
+| 仓储/应用参数 | `list_for_tenant` / `tenant_id` 为主；`list_for_team` 等别名带 `DeprecationWarning` | HTTP 日志等仍可有 `team_id` 展示字段 |
+| 下游定价 scope | DB/API 已统一 `tenant`（迁移 `20260530`）；Query 仍接受 `team` 并归一化 | — |
+| HTTP JSON | 日志/Key 等仍暴露 `team_id`（计费团队） | 与 `tenant_id` 并存；文档化，不混为数据归属列 |
+| `OwnedRepositoryBase` | 仅遗留 `user_id` 模型（MCP、Listing Studio 等） | Session/Agent 已迁 `TenantScopedRepositoryBase` |
+| `libs.db.team_ids_resolver` | 已删除 | 权威：`domains.tenancy.application.team_membership_queries` |
+
 ## 实现状态
 
 ### ✅ 已实现
@@ -24,7 +65,7 @@
    - ✅ `OwnedMixin` 和 `OwnedProtocol` - 模型所有权协议
    - ✅ `PermissionContext` - 权限上下文
    - ✅ `OwnedRepositoryBase` - Repository 基类
-   - ✅ `PermissionContextMiddleware` - 权限上下文中间件
+   - ✅ `PermissionContextASGIMiddleware` - 权限 ContextVar 生命周期（预清/清理，不填充 ctx）
    - ✅ `Principal` 和 `CurrentUser` 的 `role` 字段
    - ✅ 权限检查函数（`check_ownership`、`check_ownership_or_public`、`check_session_ownership`）
    - ✅ 角色依赖（`require_role`、`AdminUser`）
@@ -39,8 +80,8 @@
 ### ✅ 已完成迁移
 
 1. **Repository 层迁移**
-   - ✅ 会话仓储已继承 `OwnedRepositoryBase`，支持自动权限过滤
-   - ✅ Agent 仓储已继承 `OwnedRepositoryBase`，支持自动权限过滤
+   - ✅ 会话仓储已继承 `TenantScopedRepositoryBase`（`tenant_id` + `team_ids`）
+   - ✅ Agent 仓储已继承 `TenantScopedRepositoryBase`
    - ✅ `find_by_user` 和 `get_by_id` 方法已迁移使用 `find_owned` 和 `get_owned`
 
 2. **权限上下文设置**
@@ -98,9 +139,9 @@
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  中间件层                                     │
-│         PermissionContextMiddleware                          │
-│              PermissionContext                               │
-│         (user_id, anonymous_user_id, role)                   │
+│         PermissionContextASGIMiddleware（仅 clear）              │
+│              PermissionContext（由认证依赖填充）                 │
+│    (user_id, anonymous_user_id, role, team_ids, team_id…)    │
 └──────────────────────┬──────────────────────────────────────┘
                        │
                        ▼
@@ -287,33 +328,18 @@ class SessionRepository(OwnedRepositoryBase[Session], SessionRepositoryInterface
         return await self.find_owned(skip=skip, limit=limit, agent_id=agent_id)
 ```
 
-### 4. PermissionContextMiddleware
+### 4. PermissionContextASGIMiddleware
 
 **位置**：`backend/libs/middleware/permission.py`
 
-在请求开始时从认证信息创建 `PermissionContext`，供 Repository 层使用。
+中间件**仅**管理 ContextVar 生命周期：HTTP 请求入口 `set_permission_context(None)`，出口 `clear_permission_context()`，**不**从 `request.state` 填充 ctx。
 
-```python
-class PermissionContextMiddleware(BaseHTTPMiddleware):
-    """权限上下文中间件"""
-    
-    async def dispatch(self, request: Request, call_next) -> Response:
-        try:
-            ctx = None
-            if hasattr(request.state, "current_user"):
-                user = request.state.current_user
-                # 解析用户身份
-                ctx = PermissionContext(
-                    user_id=...,
-                    anonymous_user_id=...,
-                    role=user.role,
-                )
-            set_permission_context(ctx)
-            response = await call_next(request)
-            return response
-        finally:
-            clear_permission_context()
-```
+`PermissionContext` 由认证依赖显式设置：
+
+- `get_current_user` / `get_current_user_optional_with_anonymous`（含 `team_ids`）
+- `resolve_current_team` / `attach_optional_team_from_header`（`merge_team_into_permission_context`，保留 `team_ids`）
+- Gateway `/v1/*`：`bearer_vkey_auth` / `bearer_vkey_or_apikey_auth`（`build_permission_context_with_team_ids`）
+- 后台任务：`build_permission_context_with_team_ids`（Listing Studio、MCP 视频工具等）
 
 ### 5. Principal 和 CurrentUser
 
@@ -427,8 +453,8 @@ async def get_agent(
     if not agent:
         raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND)
 
-    # 显式检查所有权（管理员可访问所有）
-    check_ownership(str(agent.user_id), current_user, "Agent")
+    # 显式检查 tenant 作用域（管理员可访问所有）
+    check_tenant_access(agent.tenant_id, current_user, "Agent")
 
     return {...}
 ```
@@ -469,15 +495,15 @@ async def get_agent(
 
 路径 B：`GET /gateway/models/available` 的 `personal_models` 段以 `gateway_models.id`（UUID）为选择器 value；经内部桥接仍写 `gateway_request_logs` 与预算，**不经 HTTP `/v1`**。
 
-**模型（GatewayModel，团队/系统）**
+**模型（GatewayModel，租户/系统）**
 
-- **数据库**（权威）：表 `gateway_models`，`GatewayModelRepository.list_for_team` 合并 `team_id IS NULL`（系统/全局）与当前团队行；团队行排序优先。
-- **配置同步**：`domains/gateway/application/config_catalog_sync.py` 将 `app.toml` 的 `models.available` 幂等写入 `team_id` 为 NULL 的全局行；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
-- **团队自建**：`POST /api/v1/gateway/models` 在当前团队下创建行。
+- **数据库**（权威）：租户行在 `gateway_models.tenant_id`；系统行在 `system_gateway_models`（无 `tenant_id`）。`GatewayModelRepository.list_for_tenant` 合并租户行与 system 行（同名时租户行优先）。
+- **配置同步**：`config_catalog_sync` 将 `app.toml` 的 `models.available` 幂等写入 `system_gateway_models`；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
+- **团队自建**：`POST /api/v1/gateway/models` 在当前工作区（`tenant_id` = 团队 UUID）下创建租户行。
 
 **路由（GatewayRoute）**
 
-- **仅数据库**：`gateway_routes`，`GatewayRouteRepository.list_for_team` 同样合并系统级与团队级；无 app.toml 自动同步；写操作后 `reload_litellm_router`。
+- **仅数据库**：租户路由 `gateway_routes.tenant_id`；系统路由 `system_gateway_routes`。`GatewayRouteRepository.list_for_tenant` 返回租户路由；解析时与 system 回退合并。写操作后 `reload_litellm_router`。
 
 **与聊天选模型的关系**：聊天侧「可用模型」来自系统目录（`ModelCatalogPort.list_visible_models`）+ personal team `gateway_models`（`list_personal_models_for_selector`）；统一经 `GET /api/v1/gateway/models/available`。团队控制台列表为 `GET /gateway/models`（`CurrentTeam`）。
 
@@ -486,13 +512,13 @@ flowchart LR
   subgraph sources [模型来源]
     appToml[app.toml models.available]
     sync[config_catalog_sync]
-    dbGlobal[(gateway_models team_id NULL)]
-    dbTeam[(gateway_models team_id set)]
+    dbGlobal[(system_gateway_models)]
+    dbTeam[(gateway_models tenant_id)]
     appToml --> sync --> dbGlobal
   end
   subgraph routes_src [路由来源]
-    dbRouteGlobal[(gateway_routes team_id NULL)]
-    dbRouteTeam[(gateway_routes team_id set)]
+    dbRouteGlobal[(system_gateway_routes)]
+    dbRouteTeam[(gateway_routes tenant_id)]
   end
   dbGlobal --> proxy[Proxy / LiteLLM]
   dbTeam --> proxy
@@ -547,15 +573,16 @@ get_principal() → Principal(id, email, name, is_anonymous, role)
     ↓
 get_current_user() → CurrentUser(id, email, name, is_anonymous, role)
     ↓
-PermissionContextMiddleware → PermissionContext(user_id, anonymous_user_id, role)
+get_current_user / resolve_current_team / Gateway 认证 → PermissionContext（含 team_ids）
     ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ Repository 层自动过滤                                        │
 │                                                             │
 │ OwnedRepositoryBase._apply_ownership_filter(query)          │
-│   ├─ ctx.is_admin → 不过滤，返回所有数据                      │
-│   ├─ ctx.is_anonymous → WHERE anonymous_user_id = ?         │
-│   └─ ctx.user_id → WHERE user_id = ?                        │
+│   ├─ 模型有 tenant_id → DataScopeEnforcer（tenant_id IN team_ids）│
+│   ├─ ctx.is_admin → 不过滤（平台 admin，见 Open Question）     │
+│   ├─ grace 无 tenant_id → anonymous_user_id / user_id 过滤   │
+│   └─ 无有效身份 → 空结果                                      │
 └─────────────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -734,17 +761,14 @@ async def delete_resource(
 
 **实现方式**：
 
-1. **依赖注入中设置**（主要方式）：`get_current_user` 会自动设置权限上下文
-2. **中间件设置**（备用方式）：`PermissionContextMiddleware` 已注册到 FastAPI 应用
+1. **依赖注入中设置**（唯一填充方式）：`get_current_user` 等会自动设置权限上下文
+2. **中间件**（仅生命周期）：`PermissionContextASGIMiddleware` 预清/清理 ContextVar，不填充 ctx
 
 ```python
 # backend/bootstrap/main.py
-from libs.middleware.permission import PermissionContextMiddleware
+from libs.middleware.permission import PermissionContextASGIMiddleware
 
-app = FastAPI(...)
-
-# 权限上下文中间件（已注册）
-app.add_middleware(PermissionContextMiddleware)
+app.add_middleware(PermissionContextASGIMiddleware)
 ```
 
 **工作原理**：
@@ -881,7 +905,7 @@ except PermissionDeniedError as e:
 
 ### Q7: 权限上下文什么时候被设置？
 
-**A**: `PermissionContextMiddleware` 在请求开始时设置权限上下文，在请求结束时清除。上下文在整个请求生命周期内可用。
+**A**: `PermissionContextASGIMiddleware` 在请求边界预清并在结束时清除 ContextVar；`PermissionContext` 由 `get_current_user` 等认证依赖填充，在请求生命周期内可用。
 
 ### Q8: 如果忘记继承 `OwnedMixin` 会怎样？
 
@@ -889,6 +913,7 @@ except PermissionDeniedError as e:
 
 ## 相关文档
 
+- [项目权限规则（速查）](项目权限规则.md)
 - [代码规范](CODE_STANDARDS.md)
 - [架构设计](ARCHITECTURE.md)
 - [身份认证域设计](../domains/identity/README.md)

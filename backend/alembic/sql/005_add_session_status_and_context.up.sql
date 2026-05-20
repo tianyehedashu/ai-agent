@@ -10,4 +10,72 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'status'
+            ) THEN
+                ALTER TABLE sessions ADD COLUMN status VARCHAR(20);
+                UPDATE sessions SET status = CASE
+                    WHEN is_active = true THEN 'active'
+                    ELSE 'archived'
+                END;
+                ALTER TABLE sessions ALTER COLUMN status SET DEFAULT 'active';
+                ALTER TABLE sessions ALTER COLUMN status SET NOT NULL;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'metadata'
+            ) THEN
+                DROP INDEX IF EXISTS idx_sessions_metadata_gin;
+                ALTER TABLE sessions RENAME COLUMN metadata TO context;
+                ALTER TABLE sessions ALTER COLUMN context SET DEFAULT '{}'::jsonb;
+                CREATE INDEX IF NOT EXISTS idx_sessions_context_gin ON sessions USING GIN (context);
+            ELSIF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'context'
+            ) THEN
+                ALTER TABLE sessions ADD COLUMN context JSONB NOT NULL DEFAULT '{}'::jsonb;
+                CREATE INDEX IF NOT EXISTS idx_sessions_context_gin ON sessions USING GIN (context);
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'message_count'
+            ) THEN
+                ALTER TABLE sessions ADD COLUMN message_count INTEGER;
+                UPDATE sessions SET message_count = (
+                    SELECT COUNT(*) FROM messages WHERE messages.session_id = sessions.id
+                );
+                ALTER TABLE sessions ALTER COLUMN message_count SET DEFAULT 0;
+                ALTER TABLE sessions ALTER COLUMN message_count SET NOT NULL;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'token_count'
+            ) THEN
+                ALTER TABLE sessions ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'is_active'
+            ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'status'
+            ) THEN
+                DROP INDEX IF EXISTS idx_sessions_active;
+                ALTER TABLE sessions DROP COLUMN is_active;
+            END IF;
+        END $$;;

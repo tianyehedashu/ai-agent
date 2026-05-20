@@ -248,7 +248,7 @@ class TestSessionTitle:
         assert update_response.status_code == status.HTTP_200_OK
         data = update_response.json()
         assert data["title"] == "Updated by Anonymous"
-        assert data["anonymous_user_id"] is not None
+        assert data["tenant_id"]
 
     @pytest.mark.asyncio
     async def test_generate_title_for_anonymous_user(self, dev_client: AsyncClient):

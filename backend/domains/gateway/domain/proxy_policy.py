@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from domains.gateway.domain.types import GatewayCapability
 
 
-BudgetScopeTarget = tuple[str, uuid.UUID | None]
+BudgetTarget = tuple[str, uuid.UUID | None]
 BudgetReservation = tuple[str, str | None, str, str | None]
 
 
@@ -29,42 +29,42 @@ class BudgetCheckQuery:
     """单次预算扫描所需的查询坐标。
 
     Attributes:
-        scope: ``team`` / ``user`` / ``key`` 之一（与 ``BudgetScope`` 写入维度对齐，
+        target_kind: ``tenant`` / ``user`` / ``key`` 之一（与 ``BudgetScope`` 写入维度对齐，
             排除了 ``system``，因为系统级预算不绑定具体调用上下文）。
-        scope_id: 对应 scope 的主键；保证非空，由 ``build_budget_check_plan`` 过滤。
+        target_id: 对应 target 的主键；保证非空，由 ``build_budget_check_plan`` 过滤。
         period: ``daily`` / ``monthly`` / ``total``。
         model_name: ``None`` = 全模型汇总行（``gateway_budgets.model_name IS NULL``），
             其它值表示模型级专属预算行。
     """
 
-    scope: str
-    scope_id: uuid.UUID
+    target_kind: str
+    target_id: uuid.UUID
     period: str
     model_name: str | None
 
 
 def build_budget_check_plan(
     *,
-    targets: tuple[BudgetScopeTarget, ...],
+    targets: tuple[BudgetTarget, ...],
     periods: tuple[str, ...],
     request_model: str | None,
 ) -> tuple[BudgetCheckQuery, ...]:
     """生成单次代理调用应扫描的全部预算查询坐标（纯函数）。
 
-    每个非空 scope target × period × ``budget_model_keys(request_model)``。
+    每个非空 target × period × ``budget_model_keys(request_model)``。
     顺序保证「先汇总行（``None``），再模型专属行」，与历史 ``_check_budget``
     行为一致；调用方按此顺序遇到耗尽即抛错。
     """
     queries: list[BudgetCheckQuery] = []
-    for scope, scope_id in targets:
-        if scope_id is None:
+    for target_kind, target_id in targets:
+        if target_id is None:
             continue
         for period in periods:
             for model_key in budget_model_keys(request_model):
                 queries.append(
                     BudgetCheckQuery(
-                        scope=scope,
-                        scope_id=scope_id,
+                        target_kind=target_kind,
+                        target_id=target_id,
                         period=period,
                         model_name=model_key,
                     )
@@ -108,19 +108,19 @@ def assert_registered_model_capability(
     )
 
 
-def budget_scope_targets(
+def budget_targets(
     *,
-    team_id: uuid.UUID,
+    tenant_id: uuid.UUID,
     user_id: uuid.UUID | None,
     vkey_id: uuid.UUID | None,
-) -> tuple[BudgetScopeTarget, ...]:
+) -> tuple[BudgetTarget, ...]:
     """一次代理调用需要检查/结算的预算归属层级。"""
-    scopes: list[BudgetScopeTarget] = [("team", team_id)]
+    targets: list[BudgetTarget] = [("tenant", tenant_id)]
     if user_id is not None:
-        scopes.append(("user", user_id))
+        targets.append(("user", user_id))
     if vkey_id is not None:
-        scopes.append(("key", vkey_id))
-    return tuple(scopes)
+        targets.append(("key", vkey_id))
+    return tuple(targets)
 
 
 def budget_model_keys(model_name: str | None) -> tuple[str | None, ...]:
@@ -156,12 +156,12 @@ def first_present_limit(values: Iterable[object | None]) -> object:
 __all__ = [
     "BudgetCheckQuery",
     "BudgetReservation",
-    "BudgetScopeTarget",
+    "BudgetTarget",
     "assert_capability_allowed",
     "assert_model_allowed",
     "assert_registered_model_capability",
     "budget_model_keys",
-    "budget_scope_targets",
+    "budget_targets",
     "build_budget_check_plan",
     "first_present_limit",
     "rate_limit_target",

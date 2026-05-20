@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 def virtual_key_from_orm(record: GatewayVirtualKey) -> VirtualKeyReadModel:
     return VirtualKeyReadModel(
         id=record.id,
-        team_id=record.team_id,
+        tenant_id=record.tenant_id,
+        team_id=record.tenant_id,
         name=record.name,
         description=record.description,
         masked_key_display=record.masked_key_display,

@@ -102,7 +102,7 @@ async def attach_downstream_pricing_metadata(
     svc = build_pricing_service(session)
     try:
         resolved = await svc.resolve_downstream_rate(
-            team_id=team_id,
+            tenant_id=team_id,
             entitlement_plan_id=entitlement_plan_id,
             gateway_model_id=record.id,
             provider=record.provider,

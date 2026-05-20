@@ -41,6 +41,8 @@ def _orm_row_to_dict(record: object) -> dict[str, Any]:
 def request_log_to_dict(record: object, team: ManagementTeamContext) -> dict[str, Any]:
     """ORM → dict，成员侧隐藏 ``cost_usd`` 与上游定价快照。"""
     data = _orm_row_to_dict(record)
+    if "tenant_id" in data and "team_id" not in data:
+        data["team_id"] = data["tenant_id"]
     if is_pricing_admin(team):
         return data
     data["cost_usd"] = Decimal("0")

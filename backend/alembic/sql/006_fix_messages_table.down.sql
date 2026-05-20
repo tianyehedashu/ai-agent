@@ -10,4 +10,21 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'messages' AND column_name = 'token_count'
+            ) THEN
+                ALTER TABLE messages DROP COLUMN token_count;
+            END IF;
+        END $$;;
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'messages' AND column_name = 'updated_at'
+            ) THEN
+                ALTER TABLE messages DROP COLUMN updated_at;
+            END IF;
+        END $$;;

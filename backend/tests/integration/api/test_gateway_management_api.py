@@ -55,7 +55,7 @@ class TestGatewayManagementApi:
         row = GatewayRequestLog(
             id=log_id,
             created_at=now,
-            team_id=team.id,
+            tenant_id=team.id,
             user_id=test_user.id,
             vkey_id=None,
             credential_id=cred_id,
@@ -118,7 +118,7 @@ class TestGatewayManagementApi:
                 GatewayRequestLog(
                     id=personal_log_id,
                     created_at=now,
-                    team_id=personal.id,
+                    tenant_id=personal.id,
                     user_id=test_user.id,
                     vkey_id=None,
                     capability="chat",
@@ -138,7 +138,7 @@ class TestGatewayManagementApi:
                 GatewayRequestLog(
                     id=shared_log_id,
                     created_at=now,
-                    team_id=shared.id,
+                    tenant_id=shared.id,
                     user_id=test_user.id,
                     vkey_id=None,
                     capability="chat",
@@ -158,7 +158,7 @@ class TestGatewayManagementApi:
                 GatewayRequestLog(
                     id=other_log_id,
                     created_at=now,
-                    team_id=shared.id,
+                    tenant_id=shared.id,
                     user_id=uuid.uuid4(),
                     vkey_id=None,
                     capability="chat",
@@ -231,7 +231,7 @@ class TestGatewayManagementApi:
 
         vkeys = VirtualKeyRepository(db_session)
         owner_key = await vkeys.create(
-            team_id=shared.id,
+            tenant_id=shared.id,
             created_by_user_id=owner.id,
             name="owner-vk",
             description=None,
@@ -247,7 +247,7 @@ class TestGatewayManagementApi:
             is_system=False,
         )
         member_key = await vkeys.create(
-            team_id=shared.id,
+            tenant_id=shared.id,
             created_by_user_id=member.id,
             name="member-vk",
             description=None,
@@ -276,7 +276,7 @@ class TestGatewayManagementApi:
             return GatewayRequestLog(
                 id=log_id,
                 created_at=now,
-                team_id=shared.id,
+                tenant_id=shared.id,
                 user_id=user_id,
                 vkey_id=vkey_id,
                 capability="chat",
@@ -453,7 +453,10 @@ class TestGatewayManagementApi:
             },
         )
         assert r_model.status_code == 201, r_model.text
-        mid = r_model.json()["id"]
+        model_body = r_model.json()
+        mid = model_body["id"]
+        assert model_body["tenant_id"] == str(team.id)
+        assert model_body["team_id"] == str(team.id)
 
         r_del = await dev_client.delete(f"/api/v1/gateway/credentials/{cid}", headers=headers)
         assert r_del.status_code == 204, r_del.text
@@ -570,7 +573,7 @@ class TestGatewayManagementApi:
         db_session,
         test_user: User,
     ) -> None:
-        """Azure 凭据可携带 api_version 等 extra 字段；scope=team 落库正确。"""
+        """Azure 凭据可携带 api_version 等 extra 字段；tenant_id 落库正确。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
         headers = {**auth_headers, "X-Team-Id": str(team.id)}
@@ -590,6 +593,7 @@ class TestGatewayManagementApi:
         assert r.status_code == 201, r.text
         body = r.json()
         assert body["provider"] == "azure"
+        assert body["tenant_id"] == str(team.id)
         assert body["scope"] == "team"
         assert body["api_base"] == "https://my-azure.openai.azure.com"
         assert body["extra"] == {"api_version": "2024-08-01-preview"}
@@ -1170,18 +1174,24 @@ class TestGatewayManagementApi:
         r_owner_list = await dev_client.get("/api/v1/gateway/keys", headers=owner_headers)
         assert r_owner_list.status_code == 200, r_owner_list.text
         owner_ids = {item["id"] for item in r_owner_list.json()}
-        assert owner_ids == {owner_key_id, member_key_id}
+        assert owner_ids == {owner_key_id}
 
         r_member_list = await dev_client.get("/api/v1/gateway/keys", headers=member_headers)
         assert r_member_list.status_code == 200, r_member_list.text
         member_ids = {item["id"] for item in r_member_list.json()}
         assert member_ids == {member_key_id}
 
-        r_reveal_other = await dev_client.get(
+        r_member_reveal_owner = await dev_client.get(
             f"/api/v1/gateway/keys/{owner_key_id}/reveal",
             headers=member_headers,
         )
-        assert r_reveal_other.status_code == 403, r_reveal_other.text
+        assert r_member_reveal_owner.status_code == 404, r_member_reveal_owner.text
+
+        r_owner_reveal_member = await dev_client.get(
+            f"/api/v1/gateway/keys/{member_key_id}/reveal",
+            headers=owner_headers,
+        )
+        assert r_owner_reveal_member.status_code == 404, r_owner_reveal_member.text
 
     @pytest.mark.asyncio
     async def test_batch_revoke_virtual_keys(

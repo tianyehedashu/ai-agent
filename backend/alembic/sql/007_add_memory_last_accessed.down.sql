@@ -10,4 +10,12 @@
 -- 执行后请手工维护 alembic_version.version_num
 -- =============================================================================
 
--- 本 revision 无 DDL（no-op）
+DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'memories' AND column_name = 'last_accessed'
+            ) THEN
+                ALTER TABLE memories DROP COLUMN last_accessed;
+            END IF;
+        END $$;;

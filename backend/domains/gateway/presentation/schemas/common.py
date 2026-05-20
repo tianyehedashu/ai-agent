@@ -49,6 +49,7 @@ class VirtualKeyCreate(BaseModel):
 
 class VirtualKeyResponse(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID
     team_id: uuid.UUID
     name: str
     description: str | None = None
@@ -107,7 +108,11 @@ class UserCredentialCreate(BaseModel):
 
 
 class ManagedCredentialCreate(BaseModel):
-    """POST /api/v1/gateway/credentials：团队或系统级凭据（平台管理员可 scope=system）"""
+    """POST /api/v1/gateway/credentials：租户或系统级凭据。
+
+    ``scope=team`` 表示写入当前 X-Team-Id 租户（落库 ``tenant_id`` + ``scope NULL``）；
+    ``scope=system`` 仅平台管理员，写入 ``system_provider_credentials``。
+    """
 
     provider: str
     name: str
@@ -127,7 +132,8 @@ class CredentialUpdate(BaseModel):
 
 class CredentialResponse(BaseModel):
     id: uuid.UUID
-    scope: str
+    tenant_id: uuid.UUID | None = None
+    scope: str | None = None
     scope_id: uuid.UUID | None = None
     provider: str
     name: str
@@ -228,6 +234,7 @@ class GatewayModelUpdate(BaseModel):
 
 class GatewayModelResponse(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     name: str
     capability: str = Field(
@@ -472,6 +479,7 @@ class RouteUpdate(BaseModel):
 
 class RouteResponse(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     virtual_model: str
     primary_models: list[str]
@@ -491,8 +499,8 @@ class RouteResponse(BaseModel):
 
 
 class BudgetUpsert(BaseModel):
-    scope: str = Field(pattern="^(system|team|key|user)$")
-    scope_id: uuid.UUID | None = None
+    target_kind: str = Field(pattern="^(system|tenant|key|user)$")
+    target_id: uuid.UUID | None = None
     period: str = Field(pattern="^(daily|monthly|total)$")
     model_name: str | None = Field(
         default=None,
@@ -507,8 +515,8 @@ class BudgetUpsert(BaseModel):
 
 class BudgetResponse(BaseModel):
     id: uuid.UUID
-    scope: str
-    scope_id: uuid.UUID | None = None
+    target_kind: str
+    target_id: uuid.UUID | None = None
     period: str
     model_name: str | None = None
     limit_usd: Decimal | None = None
@@ -640,6 +648,7 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertRuleResponse(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     name: str
     description: str | None = None
@@ -657,6 +666,7 @@ class AlertRuleResponse(BaseModel):
 class AlertEventResponse(BaseModel):
     id: uuid.UUID
     rule_id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     metric_value: float
     threshold: float

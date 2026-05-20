@@ -37,8 +37,8 @@ class EntitlementPlanRepository:
         stmt = (
             select(EntitlementPlan)
             .where(
-                EntitlementPlan.scope == scope,
-                EntitlementPlan.scope_id == scope_id,
+                EntitlementPlan.target_kind == scope,
+                EntitlementPlan.target_id == scope_id,
             )
             .order_by(EntitlementPlan.valid_from.desc())
         )
@@ -57,8 +57,8 @@ class EntitlementPlanRepository:
         """返回当前活跃且匹配 model/capability 白名单的套餐；多条取 valid_from 最新。"""
         when = now or datetime.now(UTC)
         clauses = [
-            EntitlementPlan.scope == scope,
-            EntitlementPlan.scope_id == scope_id,
+            EntitlementPlan.target_kind == scope,
+            EntitlementPlan.target_id == scope_id,
             EntitlementPlan.is_active.is_(True),
             EntitlementPlan.valid_from <= when,
             EntitlementPlan.valid_until > when,
@@ -131,8 +131,8 @@ class EntitlementPlanRepository:
         extra: dict[str, Any] | None = None,
     ) -> EntitlementPlan:
         plan = EntitlementPlan(
-            scope=scope,
-            scope_id=scope_id,
+            target_kind=scope,
+            target_id=scope_id,
             label=label,
             included_models=list(included_models or []),
             included_capabilities=list(included_capabilities or []),

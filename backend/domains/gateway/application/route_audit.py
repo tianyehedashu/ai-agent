@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+import uuid
 
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
@@ -95,8 +96,13 @@ _ROUTE_NAME_FIELDS: tuple[str, ...] = (
 )
 
 
-def _team_id_key(team_id: uuid.UUID | None) -> str | None:
-    return str(team_id) if team_id is not None else None
+def _scope_id_key(scope_id: uuid.UUID | None) -> str | None:
+    return str(scope_id) if scope_id is not None else None
+
+
+def _row_scope_id(row: object) -> uuid.UUID | None:
+    tid = getattr(row, "tenant_id", None)
+    return tid if isinstance(tid, uuid.UUID) else None
 
 
 def _detect_cross_team_virtual_collisions(
@@ -105,7 +111,7 @@ def _detect_cross_team_virtual_collisions(
     by_vm: dict[str, set[str | None]] = {}
     for r in routes:
         vm = r.virtual_model
-        by_vm.setdefault(vm, set()).add(_team_id_key(r.team_id))
+        by_vm.setdefault(vm, set()).add(_scope_id_key(_row_scope_id(r)))
     return [
         CrossTeamVirtualModelCollision(virtual_model=vm, team_ids=tuple(sorted(ids, key=str)))
         for vm, ids in sorted(by_vm.items())
@@ -116,34 +122,43 @@ def _detect_cross_team_virtual_collisions(
 async def audit_gateway_routes(session: AsyncSession) -> RouteAuditReport:
     """扫描所有 enabled 路由，报告 primary/fallback 中引用了不存在或已禁用的模型名。
 
-    判定规则：``GatewayRoute(team_id=T)`` 引用一个名字 ``N`` 时，``N`` 应当存在一行 enabled
-    ``GatewayModel(team_id=T or NULL, name=N)``；同一 ``virtual_model`` 若同时被一行
+    判定规则：``GatewayRoute(tenant_id=T)`` 引用一个名字 ``N`` 时，``N`` 应当存在一行 enabled
+    ``GatewayModel(tenant_id=T or NULL, name=N)``；同一 ``virtual_model`` 若同时被一行
     ``GatewayModel.name`` 覆盖，记录为 ``virtual_model_shadowed_by_model``（语义提示，非错误）。
     """
-    routes = await GatewayRouteRepository(session).list_all_active()
-    models = await GatewayModelRepository(session).list_all_active()
+    route_repo = GatewayRouteRepository(session)
+    model_repo = GatewayModelRepository(session)
+    routes = [
+        *await route_repo.list_all_active(),
+        *await route_repo.list_system(only_enabled=True),
+    ]
+    models = [
+        *await model_repo.list_all_active(),
+        *await model_repo.list_system(only_enabled=True),
+    ]
 
     by_team_name: dict[tuple[str | None, str], None] = {}
     for m in models:
-        by_team_name[(_team_id_key(m.team_id), m.name)] = None
+        by_team_name[(_scope_id_key(_row_scope_id(m)), m.name)] = None
 
-    def _name_exists(team_id: uuid.UUID | None, name: str) -> bool:
-        if (_team_id_key(team_id), name) in by_team_name:
+    def _name_exists(scope_id: uuid.UUID | None, name: str) -> bool:
+        if (_scope_id_key(scope_id), name) in by_team_name:
             return True
         return (None, name) in by_team_name
 
     issues: list[RouteReferenceIssue] = []
     shadowed: list[tuple[str | None, str]] = []
     for r in routes:
-        if _name_exists(r.team_id, r.virtual_model):
-            shadowed.append((_team_id_key(r.team_id), r.virtual_model))
+        route_scope = _row_scope_id(r)
+        if _name_exists(route_scope, r.virtual_model):
+            shadowed.append((_scope_id_key(route_scope), r.virtual_model))
         for field_name in _ROUTE_NAME_FIELDS:
             values = list(getattr(r, field_name) or ())
-            missing = tuple(n for n in values if not _name_exists(r.team_id, n))
+            missing = tuple(n for n in values if not _name_exists(route_scope, n))
             if missing:
                 issues.append(
                     RouteReferenceIssue(
-                        team_id=_team_id_key(r.team_id),
+                        team_id=_scope_id_key(route_scope),
                         virtual_model=r.virtual_model,
                         field=field_name,
                         missing_names=missing,

@@ -1,12 +1,4 @@
-"""EntitlementPlan / EntitlementPlanQuota - 下游套餐（卖给客户的额度）
-
-业务语义：
-- 客户调用本网关的入站凭证（vkey / api_key_gateway_grant）所享的"购买额度"；
-- 含可选 ``included_models`` / ``included_capabilities`` 白名单（空 = 全部）；
-- 含 1~N 条 ``entitlement_plan_quotas`` 滚动桶，任一耗尽 → ProxyUseCase 直接抛
-  ``EntitlementPlanExhaustedError``（429），**不**触发 fallback（不能突破购买额度）。
-- 与上游 ProviderPlan 严格分离：客户消费 vs 上游成本 = 毛利两侧。
-"""
+"""EntitlementPlan / EntitlementPlanQuota - 下游套餐（卖给客户的额度）"""
 
 from __future__ import annotations
 
@@ -30,20 +22,22 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, PolicyTargetMixin
 
 
-class EntitlementPlan(BaseModel):
-    """下游套餐头：scope ∈ {vkey, apikey_grant}，绑入站调用凭证。"""
+class EntitlementPlan(BaseModel, PolicyTargetMixin):
+    """下游套餐头：target_kind ∈ {vkey, apikey_grant}，绑入站调用凭证。"""
 
     __tablename__ = "entitlement_plans"
 
-    scope: Mapped[str] = mapped_column(
+    target_kind: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        comment="作用域：vkey 绑 gateway_virtual_keys.id；apikey_grant 绑 api_key_gateway_grants.id",
+        comment="挂载类型：vkey / apikey_grant",
     )
-    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    target_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
     label: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -81,8 +75,8 @@ class EntitlementPlan(BaseModel):
     __table_args__ = (
         Index(
             "ix_entitlement_plans_active",
-            "scope",
-            "scope_id",
+            "target_kind",
+            "target_id",
             "is_active",
             "valid_from",
             "valid_until",
@@ -90,7 +84,7 @@ class EntitlementPlan(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return f"<EntitlementPlan {self.label} {self.scope}:{self.scope_id}>"
+        return f"<EntitlementPlan {self.label} {self.target_kind}:{self.target_id}>"
 
 
 class EntitlementPlanQuota(BaseModel):

@@ -37,7 +37,7 @@ class GatewayVirtualKey(BaseModel):
 
     __tablename__ = "gateway_virtual_keys"
 
-    team_id: Mapped[uuid.UUID] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gateway_teams.id", ondelete="CASCADE"),
         nullable=False,
@@ -146,7 +146,7 @@ class GatewayVirtualKey(BaseModel):
         return self.is_active and not self.is_expired
 
     def __repr__(self) -> str:
-        return f"<GatewayVirtualKey {self.masked_key_display} team={self.team_id}>"
+        return f"<GatewayVirtualKey {self.masked_key_display} tenant={self.tenant_id}>"
 
 
 __all__ = ["GatewayVirtualKey"]
