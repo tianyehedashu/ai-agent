@@ -24,21 +24,21 @@ export interface GuideSnippets {
   anthropic: FlavorSnippets
 }
 
-export type ClientRecipeId = 'claude-code' | 'cursor' | 'openai-sdk' | 'anthropic-sdk'
+export type ClientIntegrationId = 'claude-code' | 'cursor' | 'openai-sdk' | 'anthropic-sdk'
 
-export interface ClientRecipe {
-  id: ClientRecipeId
+export interface ClientIntegration {
+  id: ClientIntegrationId
   title: string
   summary: string
   blocks: { label: string; code: string }[]
 }
 
-export function buildClientRecipes(
+export function buildClientIntegrations(
   baseUrl: string,
   key: string,
   model: string,
   snippets: GuideSnippets
-): ClientRecipe[] {
+): ClientIntegration[] {
   const anthropicBase = snippets.anthropicBaseUrl
   return [
     {

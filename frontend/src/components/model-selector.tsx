@@ -100,7 +100,11 @@ export function ModelSelector({
       : modelType === 'image'
         ? data?.default_for_vision?.display_name
         : data?.default_for_text?.display_name
-  const defaultLabel = defaultDisplayName ? `默认（${defaultDisplayName}）` : placeholder
+  const defaultLabel = defaultDisplayName
+    ? `默认（${defaultDisplayName}）`
+    : hasModels
+      ? placeholder
+      : '暂无可用模型'
 
   const handleChange = (v: string): void => {
     onChange(v === '__default__' ? null : v)

@@ -549,7 +549,7 @@ async def permission_context(test_user: User):
 def isolate_chroma_vector_store(monkeypatch):
     """pytest 使用 Chroma 内存客户端，避免 Windows 持久化目录 WinError 32。"""
     # pylint: disable=import-outside-toplevel
-    from libs.db.vector import reset_vector_store
+    from domains.agent.infrastructure.memory.vector_store_factory import reset_vector_store
 
     reset_vector_store()
     monkeypatch.setenv("PYTEST_CHROMA_EPHEMERAL", "1")

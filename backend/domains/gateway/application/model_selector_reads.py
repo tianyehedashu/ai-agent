@@ -8,6 +8,7 @@ import uuid
 from bootstrap.config import settings
 from domains.gateway.application.entitlement_model_status import annotate_items_entitlement_status
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.domain.model_selection_policy import pick_configured_or_first_visible
 
 if TYPE_CHECKING:
     from domains.gateway.application.entitlement_guard import EntitlementGuard
@@ -63,38 +64,44 @@ async def list_personal_models_for_selector(
     )
 
 
+def _default_entry(items: list[dict[str, Any]], picked_id: str | None) -> dict[str, str] | None:
+    if not picked_id:
+        return None
+    for m in items:
+        if m.get("id") == picked_id:
+            return {"id": picked_id, "display_name": str(m["display_name"])}
+    return {"id": picked_id, "display_name": picked_id}
+
+
 async def get_default_for_model_type(
     catalog: ModelCatalogPort,
     model_type: str,
 ) -> dict[str, str] | None:
     team_id = resolve_internal_gateway_team_id()
     if model_type == "image":
-        model_id = settings.vision_model
         items = await catalog.list_visible_models(
             billing_team_id=team_id,
             model_type="image",
         )
-        for m in items:
-            if m["id"] == model_id:
-                return {"id": model_id, "display_name": str(m["display_name"])}
-        return {"id": model_id, "display_name": model_id}
+        visible = frozenset(str(m["id"]) for m in items if m.get("id") is not None)
+        picked = pick_configured_or_first_visible(settings.vision_model, visible)
+        return _default_entry(items, picked)
     if model_type == "image_gen":
         available = await catalog.list_visible_models(
             billing_team_id=team_id,
             model_type="image_gen",
         )
-        if available:
-            return {"id": available[0]["id"], "display_name": available[0]["display_name"]}
-        return None
-    model_id = settings.default_model
+        if not available:
+            return None
+        first = available[0]
+        return {"id": str(first["id"]), "display_name": str(first["display_name"])}
     items = await catalog.list_visible_models(
         billing_team_id=team_id,
         model_type="text",
     )
-    for m in items:
-        if m["id"] == model_id:
-            return {"id": model_id, "display_name": str(m["display_name"])}
-    return {"id": model_id, "display_name": model_id}
+    visible = frozenset(str(m["id"]) for m in items if m.get("id") is not None)
+    picked = pick_configured_or_first_visible(settings.default_model, visible)
+    return _default_entry(items, picked)
 
 
 async def list_available_models(

@@ -72,6 +72,7 @@ infrastructure 实现持久化与外部系统，由 application 调用；domain 
 | 会话域 | `domains/session/` |
 | 身份域 | `domains/identity/` |
 | 评估 | `domains/evaluation/` |
+| Listing Studio（Listing 创作垂直任务） | `domains/agent/application/listing_studio_*`、`presentation/listing_studio_router.py` |
 | 全局配置 | `bootstrap/config.py`（及环境变量） |
 
 领域类型（如 `Message`、`AgentEvent`）位于各域 `domain/types.py` 或 `domain/entities/`，**不要**与旧文档中的 `core/types.py` 混淆。
@@ -85,7 +86,7 @@ infrastructure 实现持久化与外部系统，由 application 调用；domain 
 | Web | FastAPI、Uvicorn、SSE |
 | 数据 | PostgreSQL、SQLAlchemy 2.0 异步、Alembic |
 | 缓存 / 队列 | Redis |
-| 向量 | Qdrant（按配置） |
+| 向量 | Qdrant / Chroma（`VECTOR_DB_TYPE`）；`libs/db/vector.py` 纯向量 IO → `VectorIndexPort`；编排 `MemoryIndexingService`；策略 `domain/memory_index_policy.py` |
 | LLM 统一 | LiteLLM（Agent 与 Gateway 场景） |
 | 类型与质量 | Pyright、Ruff |
 
@@ -122,6 +123,48 @@ Gateway 外部调用：`Client → /v1/* 或管理 API → Gateway 应用层与 
 - **水平扩展**：无状态 API 多实例 + 共享 Redis/DB；注意 Gateway LiteLLM Router 单例与 Redis 计数的一致性。
 - **异步**：路由与 UseCase 以 `async` 为主；阻塞调用应隔离或线程池。
 - **数据库**：合理索引、分页、避免 N+1（`selectinload` 等）。
+
+---
+
+## Listing Studio 限界上下文（BC）
+
+**决策（2026-05）**：Listing Studio（原 product-info）继续作为 **Agent 域内的垂直任务子模块**，与 `video-tasks` 并列；API 主路径 `/api/v1/listing-studio`，旧 `/api/v1/product-info` 短期 alias（`Deprecation` / `Link` 响应头）。
+
+| 层级 | 职责 |
+|------|------|
+| `domains/agent/domain/listing_studio/` | 能力常量、`job_status_policy`、`pipeline_policy`、状态类型 |
+| `domains/agent/application/listing_studio_*` | Job/Step CRUD、流水线编排、Capability Runner |
+| `domains/gateway/domain/model_selection_policy` | 默认模型选取（配置 ID ∈ 可见集，否则首个可见） |
+| Gateway `ModelCatalogPort` | 运行时模型真源（`list_visible_models`），禁止 app.toml 假默认 |
+
+**模型解析**：Chat / Listing Studio 文本与视觉步骤经 `ChatModelResolutionUseCase`；8 图生图经 `resolve_image_gen_model_for_chat`。无可见模型时返回明确 `ValidationError`，引导配置 Gateway 凭据并同步目录。
+
+**独立拆域触发条件**（暂不执行）：
+
+1. 垂直电商场景 ≥3 且共享编排逻辑 <30%
+2. 出现平台 Listing API、合规、SKU 等独立变更轴
+3. 需独立产品线发布/计费
+
+**演进路径**：
+
+- **路径 A（电商为主）**：新建 `domains/commerce/` 收拢 Listing Studio 及后续电商工作流；Agent 保留执行引擎
+- **路径 B（通用平台 + 垂直）**：维持现状，场景增多后再迁出
+
+无论 A/B，Agent 域保留 Chat/LangGraph/工具/记忆，跨域依赖仍经 Gateway 端口与 Identity/Session。
+
+---
+
+## Agent 记忆向量索引（P3）
+
+| 层级 | 模块 | 职责 |
+|------|------|------|
+| Domain | `domain/memory_index_policy.py` | collection 名、session 过滤、LangGraph namespace |
+| Application | `MemoryIndexingService` | 嵌入 + 向量索引编排 |
+| Application Ports | `TextEmbeddingPort`、`VectorIndexPort` | 依赖倒置 |
+| Infrastructure | `vector_store_factory`、`vector_index_bridge` | Qdrant/Chroma 选择与 libs 桥接 |
+| libs | `libs/db/vector.py` | 纯向量 IO（无 domains 依赖） |
+
+`LongTermMemoryStore` 仅负责 LangGraph 元数据与调用 `MemoryIndexingService`；RAG 知识库后续复用 `VectorIndexPort` + `purpose="knowledge"` policy。
 
 ---
 

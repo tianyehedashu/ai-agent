@@ -44,20 +44,20 @@ async def llm_gateway():
 
 
 @pytest.fixture
-async def vector_store(tmp_path):
-    """创建向量存储实例。集成测试使用独立目录，避免并行或跨测试污染。"""
-    from libs.db.vector import EphemeralChromaStore
+async def memory_indexing():
+    """记忆向量索引服务（内存 Chroma + 与全局 fixture 一致的嵌入端口）。"""
+    from domains.agent.infrastructure.memory.vector_store_factory import (
+        build_memory_indexing_service,
+        create_text_embedding_port,
+    )
 
-    return EphemeralChromaStore()
+    return build_memory_indexing_service(embedding=create_text_embedding_port())
 
 
 @pytest.fixture
-async def memory_store(llm_gateway, vector_store):
+async def memory_store(memory_indexing):
     """创建长期记忆存储实例"""
-    store = LongTermMemoryStore(
-        llm_gateway=llm_gateway,
-        vector_store=vector_store,
-    )
+    store = LongTermMemoryStore(memory_indexing=memory_indexing)
     await store.setup()
     return store
 

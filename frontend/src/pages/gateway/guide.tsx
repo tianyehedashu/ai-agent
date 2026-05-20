@@ -8,7 +8,7 @@
  * - 典型返回：4 个 Tab 横向对比（OpenAI/Anthropic × 非流式/流式），用 Badge 突出 content-type
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type React from 'react'
 
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
@@ -20,7 +20,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PlaygroundCard } from '@/features/gateway-playground/playground-card'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
@@ -31,16 +30,27 @@ import {
   type CapabilityGuideModule,
   type FlavorCodeTriple,
 } from '@/pages/gateway/guide-capability-snippets'
+import type { GuideClientIntegrationsKeyHint } from '@/pages/gateway/guide-client-integrations'
 import {
-  GuideClientRecipesSection,
-  type GuideClientRecipesKeyHint,
-} from '@/pages/gateway/guide-client-recipes'
-import {
-  buildClientRecipes,
+  buildClientIntegrations,
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
 import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-selection'
+
+const PlaygroundCard = lazy(async () => {
+  const mod = await import('@/features/gateway-playground/playground-card')
+  return { default: mod.PlaygroundCard }
+})
+
+const GuideClientIntegrationsSection = lazy(async () => {
+  const mod = await import('@/pages/gateway/guide-client-integrations')
+  return { default: mod.GuideClientIntegrationsSection }
+})
+
+function GuideSectionFallback(): React.JSX.Element {
+  return <div className="h-48 animate-pulse rounded-xl border border-border/60 bg-muted/30" />
+}
 
 const PLACEHOLDER_KEY = 'sk-gw-your-virtual-key'
 const PLACEHOLDER_MODEL = 'claude-opus-4-7'
@@ -64,7 +74,7 @@ const TROUBLESHOOTING = [
 const GUIDE_NAV_ITEMS = [
   ['#playground', '在线试调'],
   ['#config', '接入配置'],
-  ['#clients', '客户端配方'],
+  ['#clients', '客户端集成'],
   ['#examples', '代码示例'],
   ['#reference', '能力参考'],
   ['#troubleshooting', '异常排查'],
@@ -138,7 +148,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
 
   const displayKey = revealedKey ?? PLACEHOLDER_KEY
-  const clientRecipesKeyHint: GuideClientRecipesKeyHint = revealedKey
+  const clientIntegrationsKeyHint: GuideClientIntegrationsKeyHint = revealedKey
     ? 'revealed'
     : isRevealing
       ? 'revealing'
@@ -148,8 +158,14 @@ export default function GatewayGuidePage(): React.JSX.Element {
     () => buildGuideSnippets(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
     [gatewayV1Base, displayKey, activeModel]
   )
-  const clientRecipes = useMemo(
-    () => buildClientRecipes(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL, snippets),
+  const clientIntegrations = useMemo(
+    () =>
+      buildClientIntegrations(
+        gatewayV1Base,
+        displayKey,
+        activeModel || PLACEHOLDER_MODEL,
+        snippets
+      ),
     [gatewayV1Base, displayKey, activeModel, snippets]
   )
 
@@ -217,19 +233,23 @@ export default function GatewayGuidePage(): React.JSX.Element {
           <h3 id="playground-heading" className="sr-only">
             在线试调
           </h3>
-          <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+          <Suspense fallback={<GuideSectionFallback />}>
+            <PlaygroundCard baseUrl={gatewayV1Base} onModelChange={handlePlaygroundModelChange} />
+          </Suspense>
         </section>
 
         <section id="clients" aria-labelledby="clients-heading" className="scroll-mt-20">
           <h3 id="clients-heading" className="sr-only">
-            客户端配方
+            第三方客户端集成
           </h3>
-          <GuideClientRecipesSection
-            recipes={clientRecipes}
-            copiedKey={copiedKey}
-            onCopy={handleCopy}
-            keyHint={clientRecipesKeyHint}
-          />
+          <Suspense fallback={<GuideSectionFallback />}>
+            <GuideClientIntegrationsSection
+              clients={clientIntegrations}
+              copiedKey={copiedKey}
+              onCopy={handleCopy}
+              keyHint={clientIntegrationsKeyHint}
+            />
+          </Suspense>
         </section>
 
         <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">

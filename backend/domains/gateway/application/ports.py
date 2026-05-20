@@ -75,7 +75,7 @@ class GatewayStreamChunk:
 class GatewayProxyProtocol(Protocol):
     """Gateway 代理协议
 
-    跨域调用入口。所有内部模块（chat/agent/product-info/video 等）应通过
+    跨域调用入口。所有内部模块（chat/agent/listing-studio/video 等）应通过
     依赖注入获取此协议实现，而不是直接 import ``GatewayBridge`` 实现类。
     """
 

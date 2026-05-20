@@ -57,7 +57,7 @@ const navigation: NavItem[] = [
   { name: 'MCP 服务器', href: '/mcp', icon: Zap },
   { name: '系统 MCP', href: '/mcp/system', icon: Server },
   { name: '视频', href: '/video-tasks', icon: Video },
-  { name: '产品信息', href: '/product-info', icon: Package },
+  { name: 'Listing 创作', href: '/listing-studio', icon: Package },
   { name: '设置', href: '/settings', icon: Settings },
 ]
 

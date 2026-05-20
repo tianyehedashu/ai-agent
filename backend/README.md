@@ -40,6 +40,16 @@ backend/
 
 **规范与域文档**：仓库根 [AGENTS.md](../AGENTS.md)；后端分层见 [docs/CODE_STANDARDS.md](./docs/CODE_STANDARDS.md)；Gateway 见 [docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)。`docs/DIRECTORY_STRUCTURE_ANALYSIS.md` 为旧版目录归档说明，勿作现行树来源。
 
+### Listing Studio / Chat 默认模型
+
+对话与 **Listing Studio**（`/api/v1/listing-studio`）步骤执行依赖 **Gateway 可见模型目录**，而非 `app.toml` 中的静态默认 ID：
+
+1. 在 Gateway 配置 Provider **凭据**（`/gateway/credentials`）
+2. 同步目录：`POST /api/v1/gateway/catalog/reload-from-config`（或管理面等价操作）
+3. 确认目标模型在 `list_visible_models` 中且类型匹配（text / image / image_gen）
+
+无可见模型时 API 返回 `ValidationError`，前端 ModelSelector 显示「暂无可用模型」。旧 API 路径 `/api/v1/product-info` 已弃用，请迁移至 `/api/v1/listing-studio`。
+
 ## 快速开始
 
 ### 环境要求

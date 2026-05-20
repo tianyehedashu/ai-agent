@@ -27,12 +27,12 @@ from domains.agent.infrastructure.models.message import Message  # noqa: F401
 from domains.agent.infrastructure.models.product_image_gen_task import (  # noqa: F401
     ProductImageGenTask,
 )
-from domains.agent.infrastructure.models.product_info_job import ProductInfoJob  # noqa: F401
-from domains.agent.infrastructure.models.product_info_job_step import (  # noqa: F401
-    ProductInfoJobStep,
+from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob  # noqa: F401
+from domains.agent.infrastructure.models.listing_studio_job_step import (  # noqa: F401
+    ListingStudioJobStep,
 )
-from domains.agent.infrastructure.models.product_info_prompt_template import (  # noqa: F401
-    ProductInfoPromptTemplate,
+from domains.agent.infrastructure.models.listing_studio_prompt_template import (  # noqa: F401
+    ListingStudioPromptTemplate,
 )
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask  # noqa: F401
 from domains.gateway.infrastructure.models.alert import (  # noqa: F401

@@ -160,6 +160,31 @@ class ProductImageGenTaskUseCase:
         self.repo = ProductImageGenTaskRepository(db)
         self.image_generator = image_generator
 
+    @staticmethod
+    def list_image_gen_providers() -> dict[str, Any]:
+        """返回图像生成可用的 provider 列表及尺寸选项。"""
+        from domains.agent.infrastructure.llm.image_generator import (
+            PROVIDER_DEFAULTS,
+            PROVIDER_SIZE_OPTIONS,
+            SUPPORTED_PROVIDERS,
+        )
+
+        providers: list[dict[str, Any]] = []
+        for pid in SUPPORTED_PROVIDERS:
+            defaults = PROVIDER_DEFAULTS.get(pid, {})
+            providers.append(
+                {
+                    "id": pid,
+                    "name": {"volcengine": "火山引擎 Seedream", "openai": "OpenAI DALL-E 3"}.get(
+                        pid, pid
+                    ),
+                    "default_size": defaults.get("size", "1024x1024"),
+                    "sizes": PROVIDER_SIZE_OPTIONS.get(pid, []),
+                    "supports_reference_image": True,
+                }
+            )
+        return {"providers": providers}
+
     async def create(
         self,
         user_id: uuid.UUID | None,
@@ -172,7 +197,7 @@ class ProductImageGenTaskUseCase:
         """创建 8 图任务并异步启动图片生成。
 
         api_key_override / api_base_override 由 Router 通过
-        ChatModelResolutionUseCase.resolve_image_gen_model 解析后传入。
+        ChatModelResolutionUseCase.resolve_image_gen_model_for_chat 解析后传入。
         """
         task = await self.repo.create(
             user_id=user_id,

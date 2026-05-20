@@ -38,6 +38,7 @@ from domains.agent.presentation.execution_router import router as execution_rout
 from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
+from domains.agent.presentation.listing_studio_router import router as listing_studio_router
 from domains.agent.presentation.product_info_router import router as product_info_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
@@ -464,11 +465,18 @@ app.include_router(
     tags=["Video Tasks"],
 )
 
-# 产品信息工作流
+# Listing Studio 工作流（原 product-info）
+app.include_router(
+    listing_studio_router,
+    prefix=f"{api_router_prefix}/listing-studio",
+    tags=["Listing Studio"],
+)
+
+# 兼容旧路径 /product-info（带 Deprecation 响应头）
 app.include_router(
     product_info_router,
     prefix=f"{api_router_prefix}/product-info",
-    tags=["Product Info"],
+    tags=["Product Info (deprecated)"],
 )
 
 # AI Gateway 团队 API（/api/v1/gateway/teams*，由 tenancy 域实现）

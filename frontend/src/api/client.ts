@@ -22,6 +22,7 @@
  *     '/api': {
  *       target: 'http://localhost:8000',
  *       changeOrigin: true,
+ *       // 开发环境不透传 Cookie（鉴权走 Header），避免 localhost Cookie 膨胀导致 Vite 431
  *     },
  *   },
  * }

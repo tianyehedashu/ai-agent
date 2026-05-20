@@ -18,15 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.agent.application import AgentUseCase, ChatUseCase
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.application.listing_studio_prompt_service import (
+    ListingStudioPromptTemplateUseCase,
+)
+from domains.agent.application.listing_studio_use_case import ListingStudioUseCase
 from domains.agent.application.memory_service import MemoryService
 from domains.agent.application.message_use_case import MessageUseCase
 from domains.agent.application.product_image_gen_task_use_case import (
     ProductImageGenTaskUseCase,
 )
-from domains.agent.application.product_info_prompt_service import (
-    ProductInfoPromptTemplateUseCase,
-)
-from domains.agent.application.product_info_use_case import ProductInfoUseCase
 from domains.agent.application.stats_service import StatsService
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.repositories.agent_repository import AgentRepository
@@ -54,6 +54,8 @@ __all__ = [
     "get_chat_service",
     "get_checkpoint_service",
     "get_db",
+    "get_listing_studio_prompt_service",
+    "get_listing_studio_service",
     "get_login_services",
     "get_mcp_dynamic_prompt_service",
     "get_mcp_dynamic_tool_service",
@@ -153,6 +155,10 @@ async def get_chat_service(
     session_service: SessionUseCase = Depends(get_session_service),
 ) -> ChatUseCase:
     """获取对话服务"""
+    from domains.agent.infrastructure.memory.vector_store_factory import (
+        build_memory_indexing_service,
+    )
+
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
     model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
@@ -163,6 +169,7 @@ async def get_chat_service(
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,
+        memory_indexing=build_memory_indexing_service(),
     )
 
 
@@ -238,10 +245,15 @@ async def get_login_services(
     return build_login_services(db)
 
 
-async def get_product_info_service(db: DbSession) -> ProductInfoUseCase:
-    """获取产品信息工作流服务"""
+async def get_listing_studio_service(db: DbSession) -> ListingStudioUseCase:
+    """获取 Listing Studio 工作流服务"""
     catalog = get_model_catalog_adapter(db)
-    return ProductInfoUseCase(db, catalog=catalog)
+    return ListingStudioUseCase(db, catalog=catalog)
+
+
+async def get_product_info_service(db: DbSession) -> ListingStudioUseCase:
+    """[已弃用] 请使用 get_listing_studio_service"""
+    return await get_listing_studio_service(db)
 
 
 async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTaskUseCase:
@@ -255,9 +267,14 @@ async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTa
     return ProductImageGenTaskUseCase(db, image_generator=image_generator)
 
 
-async def get_product_info_prompt_service(db: DbSession) -> ProductInfoPromptTemplateUseCase:
-    """获取产品信息提示词模板服务"""
-    return ProductInfoPromptTemplateUseCase(db)
+async def get_listing_studio_prompt_service(db: DbSession) -> ListingStudioPromptTemplateUseCase:
+    """获取 Listing Studio 提示词模板服务"""
+    return ListingStudioPromptTemplateUseCase(db)
+
+
+async def get_product_info_prompt_service(db: DbSession) -> ListingStudioPromptTemplateUseCase:
+    """[已弃用] 请使用 get_listing_studio_prompt_service"""
+    return await get_listing_studio_prompt_service(db)
 
 
 async def get_chat_model_resolution_service(db: DbSession) -> ChatModelResolutionUseCase:

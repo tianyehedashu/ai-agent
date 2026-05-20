@@ -1,16 +1,11 @@
 """
-Vector Store - 向量数据库封装
+向量索引适配器（Qdrant / Chroma）— 纯向量 IO，不含嵌入。
 
-支持:
-- Qdrant (生产环境)
-- Chroma (开发环境)
-
-Embedding 使用统一的 EmbeddingService，支持：
-- API 模式: OpenAI, 火山引擎, 阿里云等（通过 LiteLLM）
-- 本地模式: FastEmbed (BAAI/bge 系列，CPU 友好，无需 GPU)
+组合根：`domains.agent.infrastructure.memory.vector_store_factory`。
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import os
 from typing import Any
 
@@ -26,346 +21,197 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from bootstrap.config import settings
-from domains.agent.infrastructure.llm import (
-    EmbeddingService,
-    create_embedding_service_from_settings,
-)
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class VectorStore(ABC):
-    """向量存储抽象基类"""
+@dataclass(frozen=True)
+class VectorHitRecord:
+    """向量检索命中（libs 层 DTO，由 factory 桥接为应用层 VectorHit）。"""
+
+    id: str
+    score: float
+    text: str
+    payload: dict[str, Any]
+
+
+class VectorIndexAdapter(ABC):
+    """libs 层向量索引实现基类。"""
 
     @abstractmethod
-    async def create_collection(
-        self,
-        name: str,
-        dimension: int = 1536,
-    ) -> None:
-        """创建集合"""
+    async def ensure_collection(self, name: str, *, dimension: int) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def delete_collection(self, name: str) -> None:
-        """删除集合"""
         raise NotImplementedError
 
     @abstractmethod
-    async def upsert(
+    async def upsert_vectors(
         self,
         collection: str,
+        *,
         point_id: str,
-        text: str,
-        metadata: dict[str, Any] | None = None,
-        vector: list[float] | None = None,
+        vector: list[float],
+        payload: dict[str, Any],
     ) -> None:
-        """插入或更新向量"""
         raise NotImplementedError
 
     @abstractmethod
-    async def search(
+    async def search_vectors(
         self,
         collection: str,
-        query: str,
+        *,
+        vector: list[float],
         limit: int = 10,
         query_filter: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """搜索相似向量"""
+    ) -> list[VectorHitRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def delete(
-        self,
-        collection: str,
-        point_ids: list[str],
-    ) -> None:
-        """删除向量"""
+    async def delete_vectors(self, collection: str, *, point_ids: list[str]) -> None:
         raise NotImplementedError
 
 
-class QdrantStore(VectorStore):
-    """Qdrant 向量存储"""
+class QdrantVectorIndex(VectorIndexAdapter):
+    def __init__(self, *, url: str, api_key: str | None = None) -> None:
+        self.url = url
+        self.api_key = api_key
+        self._client: AsyncQdrantClient | None = None
 
-    def __init__(
-        self,
-        url: str | None = None,
-        api_key: str | None = None,
-    ) -> None:
-        self.url = url or settings.qdrant_url
-        self.api_key = api_key or settings.qdrant_api_key
-        self._client = None
-        self._embedding_service: EmbeddingService | None = None
-
-    async def _get_client(self):
-        """获取 Qdrant 客户端"""
+    async def _get_client(self) -> AsyncQdrantClient:
         if self._client is None:
-            self._client = AsyncQdrantClient(
-                url=self.url,
-                api_key=self.api_key,
-            )
+            self._client = AsyncQdrantClient(url=self.url, api_key=self.api_key)
         return self._client
 
-    async def create_collection(
-        self,
-        name: str,
-        dimension: int = 1536,
-    ) -> None:
-        """创建集合"""
+    async def ensure_collection(self, name: str, *, dimension: int) -> None:
         client = await self._get_client()
-
-        # 检查集合是否存在
         collections = await client.get_collections()
         if name in [c.name for c in collections.collections]:
             return
-
         await client.create_collection(
             collection_name=name,
-            vectors_config=VectorParams(
-                size=dimension,
-                distance=Distance.COSINE,
-            ),
+            vectors_config=VectorParams(size=dimension, distance=Distance.COSINE),
         )
         logger.info("Created collection: %s", name)
 
     async def delete_collection(self, name: str) -> None:
-        """删除集合"""
         client = await self._get_client()
         await client.delete_collection(collection_name=name)
-        logger.info("Deleted collection: %s", name)
 
-    async def upsert(
+    async def upsert_vectors(
         self,
         collection: str,
+        *,
         point_id: str,
-        text: str,
-        metadata: dict[str, Any] | None = None,
-        vector: list[float] | None = None,
+        vector: list[float],
+        payload: dict[str, Any],
     ) -> None:
-        """插入或更新向量"""
         client = await self._get_client()
-
-        # 生成向量
-        if vector is None:
-            vector = await self._get_embedding(text)
-
-        # 准备 payload
-        payload = {"text": text, **(metadata or {})}
-
         await client.upsert(
             collection_name=collection,
-            points=[
-                PointStruct(
-                    id=point_id,
-                    vector=vector,
-                    payload=payload,
-                )
-            ],
+            points=[PointStruct(id=point_id, vector=vector, payload=payload)],
         )
 
-    async def search(
+    async def search_vectors(
         self,
         collection: str,
-        query: str,
+        *,
+        vector: list[float],
         limit: int = 10,
         query_filter: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """搜索相似向量"""
+    ) -> list[VectorHitRecord]:
         client = await self._get_client()
-
-        # 生成查询向量
-        query_vector = await self._get_embedding(query)
-
-        # 构建过滤条件
         qdrant_filter = None
         if query_filter:
             conditions = [
                 FieldCondition(key=k, match=MatchValue(value=v)) for k, v in query_filter.items()
             ]
             qdrant_filter = Filter(must=conditions)
-
-        # 搜索
         results = await client.search(
             collection_name=collection,
-            query_vector=query_vector,
+            query_vector=vector,
             limit=limit,
             query_filter=qdrant_filter,
         )
-
         return [
-            {
-                "id": str(r.id),
-                "score": r.score,
-                "text": r.payload.get("text", ""),
-                **{k: v for k, v in r.payload.items() if k != "text"},
-            }
+            VectorHitRecord(
+                id=str(r.id),
+                score=float(r.score or 0.0),
+                text=str(r.payload.get("text", "")),
+                payload=dict(r.payload or {}),
+            )
             for r in results
         ]
 
-    async def delete(
-        self,
-        collection: str,
-        point_ids: list[str],
-    ) -> None:
-        """删除向量"""
+    async def delete_vectors(self, collection: str, *, point_ids: list[str]) -> None:
         client = await self._get_client()
         await client.delete(
             collection_name=collection,
             points_selector=PointIdsList(points=point_ids),
         )
 
-    def _get_embedding_service(self) -> EmbeddingService:
-        """
-        懒加载 EmbeddingService
 
-        支持 API 和本地模型两种模式：
-        - API 模式: OpenAI, 火山引擎等（通过 LiteLLM）
-        - 本地模式: FastEmbed (BAAI/bge 系列，CPU 友好)
-        """
-        if self._embedding_service is None:
-            self._embedding_service = create_embedding_service_from_settings()
-        return self._embedding_service
-
-    async def _get_embedding(self, text: str) -> list[float]:
-        """
-        获取文本嵌入
-
-        使用统一的 EmbeddingService，支持 API 和本地模型
-        """
-        service = self._get_embedding_service()
-        return await service.embed(text)
-
-
-class ChromaStore(VectorStore):
-    """Chroma 向量存储 (开发环境)"""
-
-    def __init__(self, persist_directory: str | None = None) -> None:
+class ChromaVectorIndex(VectorIndexAdapter):
+    def __init__(self, *, persist_directory: str | None = None) -> None:
         self.persist_directory = persist_directory or os.environ.get(
             "CHROMA_PATH", "./chroma_data"
         )
         self._client = None
         self._collections: dict[str, Any] = {}
-        self._embedding_service: EmbeddingService | None = None
 
     def close(self) -> None:
-        """释放客户端引用，便于测试 teardown 与 Windows 文件锁回收。"""
         self._collections.clear()
         self._client = None
-        self._embedding_service = None
 
     def _get_client(self):
-        """获取 Chroma 客户端"""
         if self._client is None:
             self._client = chromadb.PersistentClient(path=self.persist_directory)
         return self._client
 
-
-class EphemeralChromaStore(ChromaStore):
-    """Chroma 内存客户端（pytest 使用，避免 Windows 持久化目录文件锁）。"""
-
-    def __init__(self) -> None:
-        self.persist_directory = ""
-        self._client = None
-        self._collections: dict[str, Any] = {}
-        self._embedding_service: EmbeddingService | None = None
-
-    def _get_client(self):
-        if self._client is None:
-            self._client = chromadb.EphemeralClient()
-        return self._client
-
-    def _get_embedding_service(self) -> EmbeddingService:
-        """
-        懒加载 EmbeddingService
-
-        支持 API 和本地模型两种模式：
-        - API 模式: OpenAI, 火山引擎等（通过 LiteLLM）
-        - 本地模式: FastEmbed (BAAI/bge 系列，CPU 友好)
-        """
-        if self._embedding_service is None:
-            self._embedding_service = create_embedding_service_from_settings()
-        return self._embedding_service
-
-    async def _get_embedding(self, text: str) -> list[float]:
-        """
-        获取文本嵌入
-
-        使用统一的 EmbeddingService，支持 API 和本地模型
-        """
-        service = self._get_embedding_service()
-        return await service.embed(text)
-
-    async def create_collection(
-        self,
-        name: str,
-        dimension: int = 1536,
-    ) -> None:
-        """创建集合
-
-        注意：Chroma 的维度由 embedding 函数决定，不需要手动指定。
-        使用 get_or_create_collection 确保多进程安全。
-        """
+    async def ensure_collection(self, name: str, *, dimension: int) -> None:
         client = self._get_client()
-        # 使用 get_or_create_collection 确保多进程环境安全
-        # 不删除已存在的集合，避免并行测试时的竞争条件
         self._collections[name] = client.get_or_create_collection(name=name)
         logger.debug("Ensured collection exists: %s (dimension: %d)", name, dimension)
 
     async def delete_collection(self, name: str) -> None:
-        """删除集合"""
         client = self._get_client()
         client.delete_collection(name=name)
-        if name in self._collections:
-            del self._collections[name]
-        logger.info("Deleted collection: %s", name)
+        self._collections.pop(name, None)
 
-    async def upsert(
+    async def upsert_vectors(
         self,
         collection: str,
+        *,
         point_id: str,
-        text: str,
-        metadata: dict[str, Any] | None = None,
-        vector: list[float] | None = None,
+        vector: list[float],
+        payload: dict[str, Any],
     ) -> None:
-        """插入或更新向量"""
-        # 使用 get_or_create_collection 确保多进程环境安全
-        # 即使集合被其他进程删除，也会自动重建
         client = self._get_client()
         coll = client.get_or_create_collection(name=collection)
         self._collections[collection] = coll
-
-        # 生成向量（使用配置的 EmbeddingService，而不是 Chroma 默认的）
-        if vector is None:
-            vector = await self._get_embedding(text)
-
-        # 使用自定义 embedding，而不是让 Chroma 自动生成
+        text = str(payload.get("text", ""))
+        meta = {k: v for k, v in payload.items() if k != "text"} or None
         coll.upsert(
             ids=[point_id],
             documents=[text],
-            metadatas=[metadata] if metadata else None,
+            metadatas=[meta],
             embeddings=[vector],
         )
 
-    async def search(
+    async def search_vectors(
         self,
         collection: str,
-        query: str,
+        *,
+        vector: list[float],
         limit: int = 10,
         query_filter: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """搜索相似向量"""
-        # 使用 get_or_create_collection 确保多进程环境安全
-        # 即使集合被其他进程删除，也会自动重建
+    ) -> list[VectorHitRecord]:
         client = self._get_client()
         coll = client.get_or_create_collection(name=collection)
         self._collections[collection] = coll
 
-        # 生成查询向量（使用配置的 EmbeddingService，而不是 Chroma 默认的）
-        query_vector = await self._get_embedding(query)
-
-        # Chroma 的 where 需为操作符形式，标量值转为 $eq 以保证兼容性
         chroma_where = None
         if query_filter:
 
@@ -376,66 +222,42 @@ class EphemeralChromaStore(ChromaStore):
 
             chroma_where = {k: _to_chroma_value(v) for k, v in query_filter.items()}
 
-        # 使用自定义 embedding 进行搜索
         results = coll.query(
-            query_embeddings=[query_vector],
+            query_embeddings=[vector],
             n_results=limit,
             where=chroma_where,
         )
-
-        items = []
+        hits: list[VectorHitRecord] = []
         if results["ids"] and results["ids"][0]:
-            for i, point_id in enumerate(results["ids"][0]):
-                items.append(
-                    {
-                        "id": point_id,
-                        "score": 1 - results["distances"][0][i] if results["distances"] else 0,
-                        "text": results["documents"][0][i] if results["documents"] else "",
-                        **(results["metadatas"][0][i] if results["metadatas"] else {}),
-                    }
+            for i, pid in enumerate(results["ids"][0]):
+                meta = dict(results["metadatas"][0][i] if results["metadatas"] else {})
+                text = results["documents"][0][i] if results["documents"] else ""
+                score = 1 - results["distances"][0][i] if results["distances"] else 0.0
+                payload = {"text": text, **meta}
+                hits.append(
+                    VectorHitRecord(
+                        id=pid,
+                        score=float(score),
+                        text=str(text or ""),
+                        payload=payload,
+                    )
                 )
+        return hits
 
-        return items
-
-    async def delete(
-        self,
-        collection: str,
-        point_ids: list[str],
-    ) -> None:
-        """删除向量"""
-        # 使用 get_or_create_collection 确保多进程环境安全
+    async def delete_vectors(self, collection: str, *, point_ids: list[str]) -> None:
         client = self._get_client()
         try:
             coll = client.get_or_create_collection(name=collection)
             coll.delete(ids=point_ids)
         except Exception:
-            # 删除失败，忽略错误
             pass
 
 
-_chroma_singleton: ChromaStore | None = None
+class EphemeralChromaVectorIndex(ChromaVectorIndex):
+    def __init__(self) -> None:
+        super().__init__(persist_directory="")
 
-
-def get_vector_store() -> VectorStore:
-    """获取向量存储实例（debug 下为进程内单例 Chroma，避免多实例争用同一路径）。"""
-    global _chroma_singleton
-    if settings.debug:
-        if _chroma_singleton is None:
-            if os.environ.get("PYTEST_CHROMA_EPHEMERAL") == "1":
-                _chroma_singleton = EphemeralChromaStore()
-            else:
-                _chroma_singleton = ChromaStore()
-        return _chroma_singleton
-    return QdrantStore()
-
-
-def reset_vector_store() -> None:
-    """关闭并清空 debug 模式下的 Chroma 单例（测试 teardown 使用）。"""
-    global _chroma_singleton
-    if _chroma_singleton is not None:
-        _chroma_singleton.close()
-        _chroma_singleton = None
-
-
-# 别名，用于兼容性
-get_vector_client = get_vector_store
+    def _get_client(self):
+        if self._client is None:
+            self._client = chromadb.EphemeralClient()
+        return self._client

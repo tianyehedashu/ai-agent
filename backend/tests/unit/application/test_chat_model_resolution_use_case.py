@@ -211,12 +211,32 @@ class TestResolveTextChatModel:
         assert r.model == "deepseek/deepseek-chat"
 
     @pytest.mark.asyncio
-    async def test_none_uses_app_default(self, db_session):
+    async def test_none_raises_when_no_visible_models(self, db_session):
+        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        with pytest.raises(ValidationError, match="无可用文本模型"):
+            await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
+
+    @pytest.mark.asyncio
+    async def test_none_picks_first_visible(self, db_session):
         from bootstrap.config import settings
 
         uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
-        r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
-        assert r.model == settings.default_model
+        allowed = frozenset(["deepseek/deepseek-chat"])
+        r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed)
+        assert r.model == "deepseek/deepseek-chat"
+
+        allowed_with_default = frozenset([settings.default_model, "other/model"])
+        r2 = await uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed_with_default)
+        assert r2.model == settings.default_model
+
+    @pytest.mark.asyncio
+    async def test_image_gen_empty_allowed_raises(self, db_session):
+        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        with pytest.raises(ValidationError, match="无可用图像生成模型"):
+            await uc.resolve_image_gen_model_for_chat(
+                None,
+                allowed_image_gen_system_ids=frozenset(),
+            )
 
     @pytest.mark.asyncio
     async def test_unknown_uuid_raises(self, db_session):

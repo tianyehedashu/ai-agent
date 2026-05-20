@@ -198,11 +198,11 @@ curl -s "https://your-gateway.example.com/v1/messages/count_tokens" \
 
 | 路径 | 内容 |
 |------|------|
-| `/gateway/guide` | 通用接入说明 + **#clients**「客户端配方」（Claude Code / Cursor / SDK） |
+| `/gateway/guide` | 通用接入说明 + **#clients**「第三方客户端集成」（Claude Code / Cursor / SDK） |
 | `/gateway/guide?key_id=<uuid>#clients` | 从虚拟 Key 页跳转并预选 Key |
 | `/gateway/keys` | 创建 Key 对话框与列表行提供「打开指南」链接 |
 
-实现：`frontend/src/pages/gateway/guide-client-recipes.tsx`、`guide-snippets.ts`（`buildClientRecipes`）。
+实现：`frontend/src/pages/gateway/guide-client-integrations.tsx`、`guide-snippets.ts`（`buildClientIntegrations`）。
 
 ---
 
@@ -264,7 +264,7 @@ domains/gateway/
 
 frontend/src/pages/gateway/
 ├── guide.tsx
-├── guide-client-recipes.tsx
+├── guide-client-integrations.tsx
 ├── guide-snippets.ts
 └── keys.tsx
 

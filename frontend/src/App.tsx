@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 
 import { AuthProvider } from '@/components/auth-provider'
 import Layout from '@/components/layout'
@@ -26,15 +26,21 @@ import GatewayPricingMyPricesPage from '@/pages/gateway/pricing/my-prices'
 import GatewayPricingUpstreamPage from '@/pages/gateway/pricing/upstream'
 import GatewayRoutesPage from '@/pages/gateway/routes'
 import GatewayTeamsPage from '@/pages/gateway/teams'
+import ListingStudioPage from '@/pages/listing-studio'
+import ListingStudioHistoryPage from '@/pages/listing-studio/history'
+import ListingStudioHistoryDetailPage from '@/pages/listing-studio/history-detail'
 import MCPPage from '@/pages/mcp'
 import SystemMCPPage from '@/pages/mcp/system'
 import NotFoundPage from '@/pages/not-found'
-import ProductInfoPage from '@/pages/product-info'
-import ProductInfoHistoryPage from '@/pages/product-info/history'
-import ProductInfoHistoryDetailPage from '@/pages/product-info/history-detail'
 import SettingsPage from '@/pages/settings'
 import VideoTasksPage from '@/pages/video-tasks'
 import VideoTasksHistoryPage from '@/pages/video-tasks/history'
+
+function LegacyProductInfoRedirect(): React.JSX.Element {
+  const { pathname } = useLocation()
+  const target = pathname.replace(/^\/product-info/, '/listing-studio') || '/listing-studio'
+  return <Navigate to={target} replace />
+}
 
 function App(): React.JSX.Element {
   return (
@@ -59,12 +65,14 @@ function App(): React.JSX.Element {
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />
                   <Route path="/video-tasks/:sessionId" element={<VideoTasksPage />} />
-                  <Route path="/product-info/:jobId?" element={<ProductInfoPage />} />
-                  <Route path="/product-info/history" element={<ProductInfoHistoryPage />} />
+                  <Route path="/listing-studio/history" element={<ListingStudioHistoryPage />} />
                   <Route
-                    path="/product-info/history/:id"
-                    element={<ProductInfoHistoryDetailPage />}
+                    path="/listing-studio/history/:id"
+                    element={<ListingStudioHistoryDetailPage />}
                   />
+                  {/* 静态段须在 :jobId? 之前，避免 history 被当作 jobId */}
+                  <Route path="/listing-studio/:jobId?" element={<ListingStudioPage />} />
+                  <Route path="/product-info/*" element={<LegacyProductInfoRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/gateway/*" element={<GatewayLayout />}>
                     <Route index element={<GatewayOverviewPage />} />
