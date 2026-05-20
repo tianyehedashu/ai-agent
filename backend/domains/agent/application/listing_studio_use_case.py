@@ -20,6 +20,10 @@ from domains.agent.application.listing_studio_capability_runners import (
 )
 from domains.agent.application.listing_studio_job_mapper import job_to_dict, job_to_dict_with_steps
 from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
+from domains.agent.domain.listing_studio.capability_policy import (
+    merge_model_feature_sources,
+    missing_capability_features,
+)
 from domains.agent.domain.listing_studio.constants import (
     CAPABILITIES,
     CAPABILITY_ORDER,
@@ -165,18 +169,19 @@ class ListingStudioUseCase:
         model_override: dict[str, Any] = {"model": resolved.model}
 
         if cap_config and cap_config.required_features:
-            features = await self._catalog.model_features(resolved.model)
-            if features is None:
+            catalog_features = await self._catalog.model_features(resolved.model)
+            static_features: frozenset[str] | None = None
+            if catalog_features is None:
                 model_info = get_app_config().models.get_model(resolved.model)
-                if model_info is not None:
-                    features = model_info.features
-            if features is not None:
-                missing = cap_config.required_features - features
-                if missing:
-                    raise ValidationError(
-                        f"模型 {resolved.model} 缺少能力「{cap_config.name}」所需的特性: {sorted(missing)}。"
-                        f"请选择支持视觉的模型（如 qwen-vl-max）。"
-                    )
+                if model_info is not None and model_info.features is not None:
+                    static_features = model_info.features
+            available = merge_model_feature_sources(catalog_features, static_features)
+            missing = missing_capability_features(cap_config.required_features, available)
+            if missing:
+                raise ValidationError(
+                    f"模型 {resolved.model} 缺少能力「{cap_config.name}」所需的特性: {sorted(missing)}。"
+                    f"请选择支持视觉的模型（如 qwen-vl-max）。"
+                )
         return model_override
 
     # ─── 提示词优化（可选，独立接口） ──────────────────────────────────

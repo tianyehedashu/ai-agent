@@ -8,10 +8,11 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from bootstrap.config import settings
 from domains.agent.application.memory_indexing_service import MemoryIndexingService
+from domains.agent.domain.vector_backend_policy import effective_vector_db_type
 from domains.agent.infrastructure.llm import (
     EmbeddingService,
     create_embedding_service_from_settings,
@@ -42,15 +43,12 @@ def create_text_embedding_port() -> TextEmbeddingPort:
     return _EmbeddingServiceAdapter(create_embedding_service_from_settings())
 
 
-def _effective_vector_db_type() -> Literal["qdrant", "chroma"]:
-    if os.environ.get("PYTEST_CHROMA_EPHEMERAL") == "1":
-        return "chroma"
-    return settings.vector_db_type
-
-
 def get_vector_index() -> VectorIndexPort:
     """按配置返回向量索引适配器。"""
-    db_type = _effective_vector_db_type()
+    db_type = effective_vector_db_type(
+        settings.vector_db_type,
+        pytest_chroma_ephemeral=os.environ.get("PYTEST_CHROMA_EPHEMERAL") == "1",
+    )
 
     if db_type == "chroma":
         global _chroma_singleton

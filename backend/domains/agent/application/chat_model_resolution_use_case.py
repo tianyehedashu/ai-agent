@@ -23,14 +23,11 @@ from domains.gateway.domain.model_selection_policy import pick_configured_or_fir
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 from libs.db.permission_context import get_permission_context
 from libs.exceptions import ValidationError
-from utils.logging import get_logger
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
-
-logger = get_logger(__name__)
 
 _NO_VISIBLE_TEXT_MODELS_MSG = (
     "无可用文本模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
@@ -201,21 +198,6 @@ class ChatModelResolutionUseCase:
             is_system=False,
         )
 
-    async def resolve_model(self, model_ref: str | None) -> ResolvedModel:
-        """[遗留] 解析模型引用；新代码请用 ``resolve_text_chat_model`` + 可见集。"""
-        if not model_ref:
-            return ResolvedModel(model=settings.default_model)
-
-        try:
-            personal_id = uuid.UUID(model_ref)
-        except ValueError:
-            return ResolvedModel(model=model_ref)
-
-        resolved = await self._resolve_personal_text(personal_id)
-        if resolved is not None:
-            return resolved
-        raise ValidationError("Gateway 个人模型不存在或无权使用")
-
     async def visible_text_system_model_ids(self) -> frozenset[str]:
         team_id = resolve_internal_gateway_team_id()
         items = await self._catalog.list_visible_models(
@@ -303,50 +285,22 @@ class ChatModelResolutionUseCase:
     async def get_default_for_type_async(self, model_type: str) -> dict[str, str] | None:
         return await get_default_for_model_type(self._catalog, model_type)
 
-    async def resolve_image_gen_model(self, model_ref: str | None) -> ResolvedImageGenModel:
-        """[遗留] 解析 image_gen 模型；新代码请用 ``resolve_image_gen_model_for_chat`` + 可见集。"""
-        if not model_ref:
-            return ResolvedImageGenModel(provider="volcengine")
-
+    async def _resolve_visible_system_image_gen(self, model_id: str) -> ResolvedImageGenModel:
         team_id = resolve_internal_gateway_team_id()
         catalog_items = await self._catalog.list_visible_models(
             billing_team_id=team_id,
             model_type="image_gen",
         )
         for item in catalog_items:
-            if str(item.get("id")) == model_ref:
-                info = app_config.models.get_model(model_ref)
-                litellm = (info.litellm_model or info.id) if info else model_ref
+            if str(item.get("id")) == model_id:
+                info = app_config.models.get_model(model_id)
+                litellm = (info.litellm_model or info.id) if info else model_id
                 return ResolvedImageGenModel(
                     provider=str(item.get("provider") or "volcengine"),
                     model=litellm,
                     is_system=True,
                 )
-
-        system_image_models = {
-            m.id: m.provider
-            for m in app_config.models.available
-            if getattr(m, "supports_image_gen", False)
-        }
-        if model_ref in system_image_models:
-            info = app_config.models.get_model(model_ref)
-            litellm = (info.litellm_model or info.id) if info else model_ref
-            return ResolvedImageGenModel(
-                provider=system_image_models[model_ref],
-                model=litellm,
-                is_system=True,
-            )
-
-        try:
-            personal_id = uuid.UUID(model_ref)
-        except ValueError:
-            logger.warning("Unknown image_gen model_ref %s, using default", model_ref)
-            return ResolvedImageGenModel(provider="volcengine")
-
-        resolved = await self._resolve_personal_image_gen(personal_id)
-        if resolved is not None:
-            return resolved
-        raise ValidationError("Gateway 个人模型不存在或无权使用")
+        raise ValidationError(f"图像生成模型不在可用列表中: {model_id}")
 
     async def visible_image_gen_system_model_ids(self) -> frozenset[str]:
         team_id = resolve_internal_gateway_team_id()
@@ -366,7 +320,7 @@ class ChatModelResolutionUseCase:
             if not allowed_image_gen_system_ids:
                 raise ValidationError(_NO_VISIBLE_IMAGE_GEN_MODELS_MSG)
             first = sorted(allowed_image_gen_system_ids)[0]
-            return await self.resolve_image_gen_model(first)
+            return await self._resolve_visible_system_image_gen(first)
 
         ref = str(model_ref).strip()
         try:
@@ -374,7 +328,7 @@ class ChatModelResolutionUseCase:
         except ValueError:
             if ref not in allowed_image_gen_system_ids:
                 raise ValidationError(f"图像生成模型不在可用列表中: {ref}") from None
-            return await self.resolve_image_gen_model(ref)
+            return await self._resolve_visible_system_image_gen(ref)
 
         resolved = await self._resolve_personal_image_gen(personal_id)
         if resolved is not None:

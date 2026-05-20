@@ -21,7 +21,6 @@ from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraph
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
-from domains.agent.infrastructure.memory.vector_store_factory import build_memory_indexing_service
 from domains.agent.infrastructure.tools.registry import ToolRegistry
 from domains.gateway.application.gateway_internal_log_context import (
     reset_internal_store_full_override,
@@ -39,8 +38,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
     from domains.agent.application.memory_indexing_service import MemoryIndexingService
+    from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
     from domains.session.application.ports import SessionApplicationPort
 
 logger = get_logger(__name__)
@@ -62,10 +61,10 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         db: AsyncSession,
         session_use_case: SessionApplicationPort,
         session_use_case_factory: Callable[[AsyncSession], SessionApplicationPort],
+        memory_indexing: MemoryIndexingService,
         checkpointer: LangGraphCheckpointer | None = None,
         model_catalog: ModelCatalogPort | None = None,
         model_resolution_use_case: ChatModelResolutionUseCase | None = None,
-        memory_indexing: MemoryIndexingService | None = None,
     ) -> None:
         self.db = db
         self.llm_gateway = AgentLlmFacade(config=settings, model_catalog=model_catalog)
@@ -89,7 +88,6 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
 
         self.config_service = get_execution_config_service()
         self._memory_indexing = memory_indexing
-
         self._init_memory_store()
 
         self._background_tasks: set[asyncio.Task[object]] = set()
@@ -98,8 +96,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
     def _init_memory_store(self) -> None:
         """初始化记忆存储"""
         try:
-            indexing = self._memory_indexing or build_memory_indexing_service()
-            self.memory_store = LongTermMemoryStore(memory_indexing=indexing)
+            self.memory_store = LongTermMemoryStore(memory_indexing=self._memory_indexing)
             self.simplemem = (
                 SimpleMemAdapter(
                     llm_gateway=self.llm_gateway,

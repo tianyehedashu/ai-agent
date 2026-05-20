@@ -3,9 +3,9 @@
 import pytest
 
 from bootstrap.config import settings
+from domains.agent.domain.vector_backend_policy import effective_vector_db_type
 from domains.agent.infrastructure.memory.vector_index_bridge import VectorIndexBridge
 from domains.agent.infrastructure.memory.vector_store_factory import (
-    _effective_vector_db_type,
     build_memory_indexing_service,
     get_vector_index,
     reset_vector_index,
@@ -27,17 +27,13 @@ def _reset_chroma_singleton():
 
 def test_effective_type_respects_vector_db_type(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PYTEST_CHROMA_EPHEMERAL", raising=False)
-    monkeypatch.setattr(settings, "vector_db_type", "qdrant")
-    assert _effective_vector_db_type() == "qdrant"
-
-    monkeypatch.setattr(settings, "vector_db_type", "chroma")
-    assert _effective_vector_db_type() == "chroma"
+    assert effective_vector_db_type("qdrant", pytest_chroma_ephemeral=False) == "qdrant"
+    assert effective_vector_db_type("chroma", pytest_chroma_ephemeral=False) == "chroma"
 
 
 def test_pytest_env_forces_chroma(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PYTEST_CHROMA_EPHEMERAL", "1")
-    monkeypatch.setattr(settings, "vector_db_type", "qdrant")
-    assert _effective_vector_db_type() == "chroma"
+    assert effective_vector_db_type("qdrant", pytest_chroma_ephemeral=True) == "chroma"
 
 
 def test_get_vector_index_qdrant(monkeypatch: pytest.MonkeyPatch) -> None:

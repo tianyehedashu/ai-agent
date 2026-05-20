@@ -1,11 +1,13 @@
 """将 libs 向量适配器桥接为应用层 VectorIndexPort。"""
 
+# ruff: noqa: TC001 — libs VectorIndexAdapter 仅作构造注入，运行时不需 TYPE_CHECKING 分裂
+
 from __future__ import annotations
 
 from typing import Any
 
 from domains.agent.application.ports.vector_index_port import VectorHit, VectorIndexPort
-from libs.db.vector import VectorHitRecord, VectorIndexAdapter  # noqa: TC001
+from libs.db.vector import VectorHitRecord, VectorIndexAdapter
 
 
 class VectorIndexBridge(VectorIndexPort):

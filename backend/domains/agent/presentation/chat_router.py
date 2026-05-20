@@ -39,6 +39,10 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
     """为 SSE 生成器创建独立 ChatUseCase，避免复用 FastAPI 依赖 session。"""
+    from domains.agent.infrastructure.memory.vector_store_factory import (
+        build_memory_indexing_service,
+    )
+
     sandbox_service = get_sandbox_service(request)
     session_service = build_session_use_case(db, sandbox_service=sandbox_service)
     checkpointer = getattr(request.app.state, "checkpointer", None)
@@ -48,6 +52,7 @@ def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCas
         db,
         session_use_case=session_service,
         session_use_case_factory=build_session_use_case,
+        memory_indexing=build_memory_indexing_service(),
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,

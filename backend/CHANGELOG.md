@@ -13,6 +13,5 @@
 
 - API `/api/v1/product-info/*`：响应带 `Deprecation: true` 与 `Link: </api/v1/listing-studio>; rel="successor-version"`。
 - 前端 `/product-info/*` 重定向至 `/listing-studio/*`。
-- `get_product_info_service` / `get_product_info_prompt_service` deps 别名。
 
-**Alias 移除条件**：2 个 minor 版本或 2026-08-18（90 天）后删除 `/product-info` 路由与上述 deps 别名。
+**Alias 移除条件**：2 个 minor 版本或 2026-08-18（90 天）后删除 `/product-info` 路由。

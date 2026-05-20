@@ -74,7 +74,9 @@ class _FakeResolution:
 
 
 @pytest.mark.unit
-class TestResolveModel:
+class TestResolveTextChatModelLegacyPaths:
+    """原 resolve_model 行为由 resolve_text_chat_model + 可见集承接。"""
+
     @pytest.fixture(autouse=True)
     async def _setup(self, db_session):
         user = User(
@@ -90,19 +92,24 @@ class TestResolveModel:
         set_permission_context(ctx)
         self.catalog = AsyncMock()
         self.uc = ChatModelResolutionUseCase(db_session, catalog=self.catalog)
+        self.allowed = frozenset(["deepseek/deepseek-chat"])
         yield
         clear_permission_context()
 
     @pytest.mark.asyncio
-    async def test_none_returns_default(self):
+    async def test_none_picks_default_from_allowed(self):
         from bootstrap.config import settings
 
-        resolved = await self.uc.resolve_model(None)
+        allowed = frozenset([settings.default_model, "deepseek/deepseek-chat"])
+        resolved = await self.uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed)
         assert resolved.model == settings.default_model
 
     @pytest.mark.asyncio
-    async def test_system_model_id(self):
-        resolved = await self.uc.resolve_model("deepseek/deepseek-chat")
+    async def test_system_model_id_in_allowed(self):
+        resolved = await self.uc.resolve_text_chat_model(
+            "deepseek/deepseek-chat",
+            allowed_text_system_ids=self.allowed,
+        )
         assert resolved.model == "deepseek/deepseek-chat"
 
     @pytest.mark.asyncio
@@ -121,19 +128,28 @@ class TestResolveModel:
                 gateway_model_id=model_id,
             )
         )
-        resolved = await self.uc.resolve_model(str(model_id))
+        resolved = await self.uc.resolve_text_chat_model(
+            str(model_id),
+            allowed_text_system_ids=self.allowed,
+        )
         assert resolved.model == "my-personal-model"
 
     @pytest.mark.asyncio
     async def test_unknown_uuid_raises(self):
         self.catalog.resolve_registered_model = AsyncMock(return_value=None)
         with pytest.raises(ValidationError, match="Gateway 个人模型不存在"):
-            await self.uc.resolve_model(str(uuid.uuid4()))
+            await self.uc.resolve_text_chat_model(
+                str(uuid.uuid4()),
+                allowed_text_system_ids=self.allowed,
+            )
 
     @pytest.mark.asyncio
-    async def test_non_uuid_string_treated_as_virtual_name(self):
-        resolved = await self.uc.resolve_model("not-a-uuid-but-not-system-either")
-        assert resolved.model == "not-a-uuid-but-not-system-either"
+    async def test_system_not_in_allowed_raises(self):
+        with pytest.raises(ValidationError, match="模型不在可用列表中"):
+            await self.uc.resolve_text_chat_model(
+                "not-a-uuid-but-not-system-either",
+                allowed_text_system_ids=self.allowed,
+            )
 
 
 @pytest.mark.unit

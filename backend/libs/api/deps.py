@@ -62,8 +62,6 @@ __all__ = [
     "get_mcp_service",
     "get_memory_service",
     "get_product_image_gen_task_service",
-    "get_product_info_prompt_service",
-    "get_product_info_service",
     "get_sandbox_service",
     "get_session_service",
     "get_stats_service",
@@ -166,10 +164,10 @@ async def get_chat_service(
         db,
         session_use_case=session_service,
         session_use_case_factory=build_session_use_case,
+        memory_indexing=build_memory_indexing_service(),
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,
-        memory_indexing=build_memory_indexing_service(),
     )
 
 
@@ -251,11 +249,6 @@ async def get_listing_studio_service(db: DbSession) -> ListingStudioUseCase:
     return ListingStudioUseCase(db, catalog=catalog)
 
 
-async def get_product_info_service(db: DbSession) -> ListingStudioUseCase:
-    """[已弃用] 请使用 get_listing_studio_service"""
-    return await get_listing_studio_service(db)
-
-
 async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTaskUseCase:
     """获取 8 图生成任务服务（注入 ImageGenerator）"""
     from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
@@ -270,11 +263,6 @@ async def get_product_image_gen_task_service(db: DbSession) -> ProductImageGenTa
 async def get_listing_studio_prompt_service(db: DbSession) -> ListingStudioPromptTemplateUseCase:
     """获取 Listing Studio 提示词模板服务"""
     return ListingStudioPromptTemplateUseCase(db)
-
-
-async def get_product_info_prompt_service(db: DbSession) -> ListingStudioPromptTemplateUseCase:
-    """[已弃用] 请使用 get_listing_studio_prompt_service"""
-    return await get_listing_studio_prompt_service(db)
 
 
 async def get_chat_model_resolution_service(db: DbSession) -> ChatModelResolutionUseCase:

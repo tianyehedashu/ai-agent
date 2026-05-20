@@ -34,11 +34,22 @@ class TestChatUseCase:
         catalog.list_visible_models = AsyncMock(
             return_value=[{"id": "deepseek/deepseek-chat", "display_name": "DeepSeek"}]
         )
+        from domains.agent.infrastructure.memory.vector_store_factory import (
+            build_memory_indexing_service,
+        )
+
         model_resolution = ChatModelResolutionUseCase(db_session, catalog=catalog)
+
+        class _FakeEmbedding:
+            async def embed(self, text: str) -> list[float]:
+                return [0.0] * 4
+
+        memory_indexing = build_memory_indexing_service(embedding=_FakeEmbedding())
         return ChatUseCase(
             db_session,
             session_use_case=session_use_case,
             session_use_case_factory=build_session_use_case,
+            memory_indexing=memory_indexing,
             model_catalog=catalog,
             model_resolution_use_case=model_resolution,
         )
