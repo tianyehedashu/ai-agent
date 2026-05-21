@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend-base:latest
+ARG BASE_IMAGE=giimall-acr-registry.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend-base:latest
 FROM ${BASE_IMAGE} AS dependencies
 WORKDIR /app
 ARG UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/
