@@ -3,7 +3,8 @@
 # 构建: docker build -f backend/Dockerfile.base -t ai-agent-backend-base:latest ./backend
 # 更新时机: Python 版本升级、uv 版本升级、系统依赖变更时重新构建
 
-FROM giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/common/python-kubectl:3.11-slim
+ARG REGISTRY_PREFIX=""
+FROM ${REGISTRY_PREFIX}python:3.11-slim
 
 ARG APT_MIRROR=""
 RUN if [ -n "$APT_MIRROR" ]; then \
@@ -14,12 +15,13 @@ RUN if [ -n "$APT_MIRROR" ]; then \
     && rm -rf /var/lib/apt/lists/*
 
 ARG UV_VERSION=0.6.6
-ARG UV_INSTALL_METHOD=pip
-ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-RUN set -eux; \
-    pip install --no-cache-dir "uv==${UV_VERSION}" -i "${PIP_INDEX_URL}"; \
-    uv --version
-
+RUN curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
+    && tar -xzf /tmp/uv.tar.gz -C /tmp \
+    && mv /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv \
+    && mv /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/uvx \
+    && chmod +x /usr/local/bin/uv /usr/local/bin/uvx \
+    && rm -rf /tmp/uv* \
+    && uv --version
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
