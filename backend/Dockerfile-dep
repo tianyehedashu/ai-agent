@@ -1,0 +1,10 @@
+ARG BASE_IMAGE=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend-base:latest
+FROM ${BASE_IMAGE} AS dependencies
+WORKDIR /app
+ARG UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/
+ARG UV_HTTP_TIMEOUT=1800
+ENV UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX} \
+    UV_HTTP_TIMEOUT=${UV_HTTP_TIMEOUT} \
+    UV_CONCURRENT_DOWNLOADS=2
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev
