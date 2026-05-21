@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -139,6 +140,7 @@ class ChatAgentRunMixin:
                 engine_done = True
                 await event_queue.put(None)
 
+        engine_task_obj: asyncio.Task[None] | None = None
         try:
             engine_task_obj = asyncio.create_task(engine_task())
 
@@ -148,7 +150,8 @@ class ChatAgentRunMixin:
                     break
                 yield event
 
-            await engine_task_obj
+            if engine_task_obj is not None:
+                await engine_task_obj
 
             if final_content:
                 await self._save_assistant_message_and_memory(
@@ -164,6 +167,11 @@ class ChatAgentRunMixin:
         except Exception as e:
             logger.error("Chat error for session %s: %s", session_id, e, exc_info=True)
             yield AgentEvent.error(error=str(e), session_id=session_id)
+        finally:
+            if engine_task_obj is not None and not engine_task_obj.done():
+                engine_task_obj.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await engine_task_obj
 
     async def _execute_agent_and_save(
         self: ChatUseCase,

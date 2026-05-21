@@ -249,6 +249,12 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             if log_token is not None:
                 reset_internal_store_full_override(log_token)
             self._event_queues.pop(session_id, None)
+            pending_bg = [t for t in self._background_tasks if not t.done()]
+            for task in pending_bg:
+                task.cancel()
+            if pending_bg:
+                await asyncio.gather(*pending_bg, return_exceptions=True)
+            self._background_tasks.clear()
 
     async def resume(
         self,

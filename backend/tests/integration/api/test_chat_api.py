@@ -9,12 +9,21 @@ Chat API 集成测试
 """
 
 import json
+from collections.abc import AsyncGenerator
 
 from fastapi import status
 from httpx import AsyncClient
 import pytest
 
+from domains.agent.application.chat_use_case import ChatUseCase
+from domains.agent.domain.types import AgentEvent
+
 # Fixtures 从 conftest.py 自动导入
+
+
+async def _noop_after_session_created(*_args: object, **_kwargs: object) -> AsyncGenerator[AgentEvent, None]:
+    if False:
+        yield  # pragma: no cover - empty async generator
 
 
 class TestChatAPI:
@@ -57,9 +66,18 @@ class TestChatAPI:
 
     @pytest.mark.asyncio
     async def test_chat_creates_session_if_not_exists(
-        self, client: AsyncClient, auth_headers: dict
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """测试: 不存在会话时创建会话"""
+        # 本用例只断言 session_created；跳过 title/Agent 以免 orphan LLM 任务拖住 pytest 进程。
+        monkeypatch.setattr(ChatUseCase, "_handle_title_generation", lambda *_a, **_k: None)
+        monkeypatch.setattr(
+            ChatUseCase, "_execute_agent_with_event_queue", _noop_after_session_created
+        )
+
         # Act
         async with client.stream(
             "POST",

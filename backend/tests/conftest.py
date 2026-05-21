@@ -47,27 +47,6 @@ if "PYTHONWARNINGS" not in os.environ:
 _CLIENT_TEARDOWN_SLEEP = float(os.environ.get("PYTEST_CLIENT_TEARDOWN_SLEEP", "0.15"))
 
 
-def _agent_debug_log(location: str, message: str, data: dict[str, object] | None = None) -> None:
-    """#region agent log"""
-    import json
-    import time
-
-    payload = {
-        "sessionId": "a5e33b",
-        "timestamp": int(time.time() * 1000),
-        "location": location,
-        "message": message,
-        "data": data or {},
-    }
-    try:
-        log_path = Path(__file__).resolve().parent.parent.parent / "debug-a5e33b.log"
-        with log_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
-    """#endregion"""
-
-
 # 使用 pytest 的配置钩子进一步抑制警告
 def pytest_configure(config):
     """配置 pytest，抑制第三方库警告；每会话使用独立 basetemp 目录。"""
@@ -443,22 +422,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         await shutdown_app_background_tasks(app)
         app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
-        # #region agent log
-        import threading
-
-        pending = [t.get_name() for t in asyncio.all_tasks() if not t.done()]
-        _agent_debug_log(
-            "conftest.py:client_teardown",
-            "client fixture teardown done",
-            {
-                "hypothesisId": "H1-engine-task-orphan",
-                "pending_asyncio_tasks": pending,
-                "pending_count": len(pending),
-                "active_threads": threading.active_count(),
-            },
-        )
-        # #endregion
-
 
 @pytest_asyncio.fixture(scope="function")
 async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
@@ -613,16 +576,6 @@ def cleanup_litellm():
     """清理 LiteLLM 资源，避免在程序退出时出现日志错误"""
     yield
 
-    # #region agent log
-    import threading
-
-    _agent_debug_log(
-        "conftest.py:cleanup_litellm",
-        "cleanup_litellm start",
-        {"hypothesisId": "H2-litellm-thread", "active_threads": threading.active_count()},
-    )
-    # #endregion
-
     # 在测试会话结束时清理 LiteLLM 的日志工作线程
     try:
         import litellm  # pylint: disable=import-outside-toplevel
@@ -643,16 +596,6 @@ def cleanup_litellm():
         litellm.failure_callback = []
     except Exception:
         pass  # 如果清理失败，忽略（不影响测试结果）
-
-    # #region agent log
-    import threading
-
-    _agent_debug_log(
-        "conftest.py:cleanup_litellm",
-        "cleanup_litellm done",
-        {"hypothesisId": "H2-litellm-thread", "active_threads": threading.active_count()},
-    )
-    # #endregion
 
 
 def _suppress_litellm_atexit_errors():
@@ -715,21 +658,6 @@ import atexit  # pylint: disable=wrong-import-position,wrong-import-order
 atexit.register(_suppress_litellm_atexit_errors)
 
 
-def _agent_debug_atexit() -> None:
-    """#region agent log"""
-    import threading
-
-    _agent_debug_log(
-        "conftest.py:atexit",
-        "interpreter atexit hook",
-        {"hypothesisId": "H4-interpreter-shutdown", "active_threads": threading.active_count()},
-    )
-    """#endregion"""
-
-
-atexit.register(_agent_debug_atexit)
-
-
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_docker_containers():
     """
@@ -750,16 +678,6 @@ def cleanup_docker_containers():
     这个 fixture 只是作为最后的保障，清理可能泄漏的容器。
     """
     yield
-
-    # #region agent log
-    import threading
-
-    _agent_debug_log(
-        "conftest.py:cleanup_docker_containers",
-        "cleanup_docker_containers start",
-        {"hypothesisId": "H3-docker-cleanup", "active_threads": threading.active_count()},
-    )
-    # #endregion
 
     # 在测试会话结束时清理孤儿容器（已停止的或超时的）
     try:
@@ -790,13 +708,3 @@ def cleanup_docker_containers():
         # 如果清理失败，记录但不影响测试结果
         logger = logging.getLogger(__name__)
         logger.warning("Failed to cleanup Docker containers: %s", e)
-
-    # #region agent log
-    import threading
-
-    _agent_debug_log(
-        "conftest.py:cleanup_docker_containers",
-        "cleanup_docker_containers done",
-        {"hypothesisId": "H3-docker-cleanup", "active_threads": threading.active_count()},
-    )
-    # #endregion
