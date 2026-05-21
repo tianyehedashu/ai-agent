@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 
 import { AuthProvider } from '@/components/auth-provider'
 import Layout from '@/components/layout'
+import { RequirePlatformAdmin } from '@/components/require-platform-admin'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import AdminStoragePage from '@/pages/admin/storage'
@@ -61,9 +62,23 @@ function App(): React.JSX.Element {
                 <Routes>
                   <Route path="/" element={<ChatPage />} />
                   <Route path="/chat/:sessionId?" element={<ChatPage />} />
-                  <Route path="/agents" element={<AgentsPage />} />
+                  <Route
+                    path="/agents"
+                    element={
+                      <RequirePlatformAdmin>
+                        <AgentsPage />
+                      </RequirePlatformAdmin>
+                    }
+                  />
                   <Route path="/mcp" element={<MCPPage />} />
-                  <Route path="/mcp/system" element={<SystemMCPPage />} />
+                  <Route
+                    path="/mcp/system"
+                    element={
+                      <RequirePlatformAdmin>
+                        <SystemMCPPage />
+                      </RequirePlatformAdmin>
+                    }
+                  />
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />

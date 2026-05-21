@@ -52,13 +52,27 @@ interface NavItem {
   requiresAuth?: boolean
   /** 仅平台管理员可见 */
   requiresAdmin?: boolean
+  /** 平台管理员侧栏展示文案（可选） */
+  adminLabel?: string
 }
 
 const navigation: NavItem[] = [
-  { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'AI 网关', href: '/gateway', icon: Network, requiresAuth: true },
+  { name: 'Agents', href: '/agents', icon: Bot, requiresAuth: true, requiresAdmin: true },
+  {
+    name: 'AI 网关',
+    href: '/gateway',
+    icon: Network,
+    requiresAuth: true,
+    adminLabel: 'AI 网关（管理）',
+  },
   { name: 'MCP 服务器', href: '/mcp', icon: Zap },
-  { name: '系统 MCP', href: '/mcp/system', icon: Server },
+  {
+    name: '系统 MCP',
+    href: '/mcp/system',
+    icon: Server,
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
   { name: '视频', href: '/video-tasks', icon: Video },
   { name: 'Listing 创作', href: '/listing-studio', icon: Package },
   {
@@ -250,6 +264,10 @@ export default function Sidebar(): React.JSX.Element {
           {/* Other Navigation */}
           <nav className="space-y-1">
             {visibleNavigation.map((item) => {
+              const label =
+                isAdmin && item.adminLabel !== undefined && item.adminLabel !== ''
+                  ? item.adminLabel
+                  : item.name
               const isActive =
                 location.pathname === item.href ||
                 (item.href !== '/' && location.pathname.startsWith(item.href))
@@ -269,12 +287,13 @@ export default function Sidebar(): React.JSX.Element {
                       <item.icon className="h-4 w-4" />
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right">{item.name}</TooltipContent>
+                  <TooltipContent side="right">{label}</TooltipContent>
                 </Tooltip>
               ) : (
                 <Link
                   key={item.name}
                   to={item.href}
+                  title={label}
                   className={cn(
                     'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
                     isActive
@@ -283,7 +302,7 @@ export default function Sidebar(): React.JSX.Element {
                   )}
                 >
                   <item.icon className="h-4 w-4 flex-shrink-0" />
-                  <span>{item.name}</span>
+                  <span>{label}</span>
                 </Link>
               )
             })}
