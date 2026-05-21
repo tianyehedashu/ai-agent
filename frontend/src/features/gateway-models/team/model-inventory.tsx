@@ -16,6 +16,7 @@ import { Info, Loader2, Plus, Search } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
 import { cn } from '@/lib/utils'
 
+import { ConnectivityHealthStrip } from '../connectivity-health-strip'
 import {
   FILTER_ALL,
   type HealthFilter,
@@ -23,7 +24,6 @@ import {
   type UsagePeriodDays,
 } from '../constants'
 import { channelLabel } from '../utils'
-import { ModelHealthStrip } from './model-health-strip'
 import { ModelInventoryRow } from './model-inventory-row'
 
 interface ModelInventoryProps {
@@ -140,7 +140,7 @@ export const ModelInventory = memo(function ModelInventory({
 
         {showToolbar ? (
           <div className="flex flex-wrap items-center gap-2">
-            <ModelHealthStrip
+            <ConnectivityHealthStrip
               models={allModels}
               healthFilter={healthFilter}
               onHealthFilterChange={onHealthFilterChange}

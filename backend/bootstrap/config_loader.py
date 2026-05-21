@@ -114,6 +114,7 @@ class ModelInfo:
     supports_vision: bool = False
     supports_tools: bool = True
     supports_reasoning: bool = False  # 是否支持推理/思维链
+    thinking_param: str = ""  # 可选：dashscope_enable_thinking / builtin_reasoning / anthropic_extended
     supports_json_mode: bool = True  # 是否支持 response_format=json_object
     supports_image_gen: bool = False  # 是否为图像生成模型
     supports_txt2img: bool = True  # 文生图（与 supports_image_gen 同时为 True 时写入 tags）

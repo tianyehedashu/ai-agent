@@ -35,6 +35,29 @@ describe('buildPlaygroundRequestBody', () => {
     expect(body.max_tokens).toBe(512)
     expect(body.messages).toEqual([{ role: 'user', content: 'hi' }])
   })
+
+  test('OpenAI 思考模式注入 extra_body.enable_thinking', () => {
+    const body = buildPlaygroundRequestBody({
+      model: 'qwen3-max',
+      prompt: 'hi',
+      stream: true,
+      flavor: 'openai',
+      enableThinking: true,
+    })
+    expect(body.extra_body).toEqual({ enable_thinking: true })
+  })
+
+  test('Anthropic 思考模式注入 thinking 块', () => {
+    const body = buildPlaygroundRequestBody({
+      model: 'claude-opus-4',
+      prompt: 'hi',
+      stream: true,
+      flavor: 'anthropic',
+      enableThinking: true,
+      anthropicThinkingBudgetTokens: 4096,
+    })
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 })
+  })
 })
 
 describe('buildVisionRequestBody', () => {

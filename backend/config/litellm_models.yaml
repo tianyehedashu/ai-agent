@@ -557,6 +557,7 @@ dashscope:
       supports_vision: false
       supports_tools: true
       supports_streaming: true
+      supports_reasoning_content: true
 
     - id: qwen3-32b
       name: Qwen3 32B
@@ -570,6 +571,7 @@ dashscope:
       supports_vision: false
       supports_tools: true
       supports_streaming: true
+      supports_reasoning_content: true
 
     - id: qwen3-30b-a3b
       name: Qwen3 30B-A3B (MoE)
@@ -585,6 +587,7 @@ dashscope:
       supports_vision: false
       supports_tools: true
       supports_streaming: true
+      supports_reasoning_content: true
 
     # ========== Qwen 视觉模型 ==========
     - id: qwen-vl-plus

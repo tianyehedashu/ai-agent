@@ -10,6 +10,10 @@ export interface BuildPlaygroundRequestBodyParams {
   stream: boolean
   flavor: PlaygroundApiFlavor
   maxTokens?: number
+  /** DashScope Qwen3：extra_body.enable_thinking；开启时建议 stream */
+  enableThinking?: boolean
+  /** Anthropic Extended Thinking */
+  anthropicThinkingBudgetTokens?: number
 }
 
 const DEFAULT_ANTHROPIC_MAX_TOKENS = 1024
@@ -18,18 +22,29 @@ export function buildPlaygroundRequestBody(
   params: BuildPlaygroundRequestBodyParams
 ): Record<string, unknown> {
   if (params.flavor === 'anthropic') {
-    return {
+    const body: Record<string, unknown> = {
       model: params.model,
       max_tokens: params.maxTokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
       stream: params.stream,
       messages: [{ role: 'user', content: params.prompt }],
     }
+    if (params.enableThinking) {
+      body.thinking = {
+        type: 'enabled',
+        budget_tokens: params.anthropicThinkingBudgetTokens ?? 8000,
+      }
+    }
+    return body
   }
-  return {
+  const body: Record<string, unknown> = {
     model: params.model,
     stream: params.stream,
     messages: [{ role: 'user', content: params.prompt }],
   }
+  if (params.enableThinking) {
+    body.extra_body = { enable_thinking: true }
+  }
+  return body
 }
 
 export interface BuildVisionRequestBodyParams {

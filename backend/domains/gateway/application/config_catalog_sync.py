@@ -14,15 +14,20 @@ from domains.gateway.application.catalog_capability import infer_catalog_capabil
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_NONE,
+    effective_supports_reasoning,
+    infer_thinking_param,
+)
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     CONFIG_MANAGED_CREDENTIAL_NAME,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from libs.crypto import derive_encryption_key, encrypt_value
 
 logger = logging.getLogger(__name__)
@@ -113,13 +118,22 @@ async def _ensure_system_credential(
 
 
 def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
+    real_model = (model.litellm_model or model.id).strip()
+    explicit_tp = getattr(model, "thinking_param", None)
+    thinking_param = infer_thinking_param(
+        provider=model.provider,
+        real_model=real_model,
+        supports_reasoning=model.supports_reasoning,
+        explicit=explicit_tp if isinstance(explicit_tp, str) else None,
+    )
     tags: dict[str, Any] = {
         MANAGED_BY_KEY: MANAGED_CONFIG,
         "display_name": model.name,
         "context_window": model.context_window,
         "supports_vision": model.supports_vision,
         "supports_tools": model.supports_tools,
-        "supports_reasoning": model.supports_reasoning,
+        "supports_reasoning": model.supports_reasoning or thinking_param != THINKING_PARAM_NONE,
+        "thinking_param": thinking_param,
         "supports_json_mode": model.supports_json_mode,
         "supports_image_gen": model.supports_image_gen,
         # 旧字段：单位混乱（¥/千tokens 或 $/1M tokens），保留只供前端展示用。
@@ -137,6 +151,8 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
         tags["supports_image_to_video"] = True
     if int(model.max_reference_images or 0) > 0:
         tags["max_reference_images"] = int(model.max_reference_images)
+
+    tags["supports_reasoning"] = effective_supports_reasoning(tags, thinking_param)
 
     # 计费用单价写入 upstream_model_pricing（见 _upsert_upstream_pricing_from_model），不再写入 tags。
     return tags
@@ -214,18 +230,29 @@ def model_types_for_gateway_registration(tags: dict[str, Any], capability: str) 
     return _infer_model_types_from_tags(tags, capability)
 
 
-def selector_capabilities_from_tags(tags: dict[str, Any]) -> dict[str, Any]:
+def selector_capabilities_from_tags(
+    tags: dict[str, Any],
+    *,
+    provider: str = "",
+    real_model: str = "",
+) -> dict[str, Any]:
     """扁平特性字典，与选择器 ``capabilities`` 字段对齐。"""
-    return _selector_capabilities_payload(tags)
+    return _selector_capabilities_payload(tags, provider=provider, real_model=real_model)
 
 
-def _selector_capabilities_payload(tags: dict[str, Any]) -> dict[str, Any]:
+def _selector_capabilities_payload(
+    tags: dict[str, Any],
+    *,
+    provider: str = "",
+    real_model: str = "",
+) -> dict[str, Any]:
     """供前端展示与校验的扁平能力（与 ``ModelCapabilitySnapshot`` 对齐）。"""
-    snap = tags_to_capability_snapshot(tags)
+    snap = tags_to_capability_snapshot(tags, provider=provider, real_model=real_model)
     return {
         "supports_vision": snap.supports_vision,
         "supports_tools": snap.supports_tools,
         "supports_reasoning": snap.supports_reasoning,
+        "thinking_param": snap.thinking_param,
         "supports_json_mode": snap.supports_json_mode,
         "supports_image_gen": snap.supports_image_gen,
         "supports_txt2img": snap.supports_txt2img,
@@ -362,7 +389,9 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
         "provider": row.provider,
         "model_id": row.name,
         "model_types": _infer_model_types_from_tags(tags, row.capability),
-        "capabilities": _selector_capabilities_payload(tags),
+        "capabilities": _selector_capabilities_payload(
+            tags, provider=row.provider, real_model=row.real_model
+        ),
         "video_vendor_model_id": video_vendor_model_id,
         "video_durations": video_durations if isinstance(video_durations, list) else None,
         "is_system": True,

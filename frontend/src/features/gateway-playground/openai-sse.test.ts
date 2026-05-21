@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   extractOpenAiCompatError,
+  extractOpenAiStreamTextParts,
   extractResponseCostUsd,
   parseOpenAiSseBuffer,
 } from './openai-sse'
@@ -44,6 +45,22 @@ describe('extractResponseCostUsd', () => {
     expect(extractResponseCostUsd({ response_cost: 0.0012 })).toBe(0.0012)
     expect(extractResponseCostUsd({ response_cost: -1 })).toBeUndefined()
     expect(extractResponseCostUsd(null)).toBeUndefined()
+  })
+})
+
+describe('extractOpenAiStreamTextParts', () => {
+  it('分别提取 content 与 reasoning_content', () => {
+    const parts = extractOpenAiStreamTextParts({
+      choices: [{ delta: { content: '答', reasoning_content: '思' } }],
+    })
+    expect(parts).toEqual({ content: '答', reasoning: '思' })
+  })
+
+  it('缺失字段时返回空串', () => {
+    expect(extractOpenAiStreamTextParts({ choices: [{}] })).toEqual({
+      content: '',
+      reasoning: '',
+    })
   })
 })
 

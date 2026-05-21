@@ -11,6 +11,8 @@ import type { PlaygroundError } from './types'
 export interface AnthropicContentBlock {
   type: string
   text?: string
+  /** Extended Thinking 非流式 content block（type=thinking） */
+  thinking?: string
 }
 
 export interface AnthropicMessage {
@@ -38,7 +40,7 @@ export type AnthropicSseEvent =
   | {
       type: 'content_block_delta'
       index?: number
-      delta?: { type?: string; text?: string }
+      delta?: { type?: string; text?: string; thinking?: string }
     }
   | { type: 'content_block_stop'; index?: number }
   | {
@@ -104,13 +106,40 @@ export function extractAnthropicError(
   }
 }
 
-/** 从 Anthropic 非流式响应中拼合首段 text 内容（不含 tool_use 等其它 block）。 */
+/** 从 content_block_delta 提取文本或思考增量。 */
+export function extractAnthropicDeltaText(evt: AnthropicSseEvent): {
+  text: string
+  thinking: string
+} {
+  if (evt.type !== 'content_block_delta' || !('delta' in evt)) {
+    return { text: '', thinking: '' }
+  }
+  const delta = evt.delta
+  const text = delta?.type === 'text_delta' && typeof delta.text === 'string' ? delta.text : ''
+  const thinking =
+    delta?.type === 'thinking_delta' && typeof delta.thinking === 'string' ? delta.thinking : ''
+  return { text, thinking }
+}
+
+/** 从 Anthropic 非流式响应中拼合 text 内容（不含 tool_use / thinking 等其它 block）。 */
 export function pickAnthropicText(message: AnthropicMessage | null): string {
   if (message?.content === undefined) return ''
   const out: string[] = []
   for (const block of message.content) {
     if (block.type === 'text' && typeof block.text === 'string') {
       out.push(block.text)
+    }
+  }
+  return out.join('')
+}
+
+/** 从 Anthropic 非流式响应中拼合 Extended Thinking 内容（type=thinking）。 */
+export function pickAnthropicThinking(message: AnthropicMessage | null): string {
+  if (message?.content === undefined) return ''
+  const out: string[] = []
+  for (const block of message.content) {
+    if (block.type === 'thinking' && typeof block.thinking === 'string') {
+      out.push(block.thinking)
     }
   }
   return out.join('')

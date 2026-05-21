@@ -63,6 +63,14 @@ export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
   GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES
 )
 
+/**
+ * 批量「测试全部」产品范围（前端并发编排，无后端 batch API）：
+ * - 团队：`GET /gateway/models` 注册行（需 Gateway 写权限）
+ * - 个人：`GET /gateway/my-models` BYOK 行（登录用户本人）
+ * - 不含：`GET /models/available` 系统目录（无注册行 id，探活策略未定义）
+ */
+export const BATCH_TEST_CONCURRENCY = 3
+
 /** 与 backend domains.gateway.domain.types.RoutingStrategy 对齐 */
 export const ROUTING_STRATEGIES = [
   'simple-shuffle',

@@ -3,13 +3,27 @@ import { formatMoney } from '@/lib/money'
 import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
-import type { HealthFilter } from './constants'
+import { BATCH_TEST_CONCURRENCY, TESTABLE_CAPABILITIES, type HealthFilter } from './constants'
+
 import type { QueryClient } from '@tanstack/react-query'
+
+/** 连通性健康统计 / 批量探活所需的最小字段 */
+export interface ModelWithConnectivityStatus {
+  id: string
+  capability: string
+  last_test_status: ModelTestStatus
+}
 
 /** 接入通道 id → 展示名（模块级 Map，避免列表内反复线性查找） */
 const MODEL_PROVIDER_NAME_BY_ID: ReadonlyMap<string, string> = new Map(
   MODEL_PROVIDERS.map((p) => [p.id, p.name])
 )
+
+/** 无筛选的全量注册模型列表（Guide、Playground、路由页等共享，避免同页重复请求） */
+export const GATEWAY_MODELS_ALL_QUERY_KEY = ['gateway', 'models'] as const
+
+/** 无 channel 筛选的个人模型列表 */
+export const GATEWAY_MY_MODELS_ALL_QUERY_KEY = ['gateway', 'my-models'] as const
 
 /** 与 TeamModelsWorkspace listModels 查询键一致 */
 export function gatewayModelsListQueryKey(
@@ -101,7 +115,8 @@ export function toggleModelSet(prev: readonly string[], name: string, checked: b
 }
 
 export function buildPresetTags(preset: GatewayModelPreset): Record<string, unknown> {
-  return {
+  const thinkingParam = preset.selector_capabilities?.thinking_param
+  const tags: Record<string, unknown> = {
     display_name: preset.name,
     description: preset.description,
     context_window: preset.context_window,
@@ -112,6 +127,10 @@ export function buildPresetTags(preset: GatewayModelPreset): Record<string, unkn
     supports_reasoning: preset.supports_reasoning,
     recommended_for: preset.recommended_for,
   }
+  if (typeof thinkingParam === 'string') {
+    tags.thinking_param = thinkingParam
+  }
+  return tags
 }
 
 export function healthKey(status: ModelTestStatus): 'success' | 'failed' | 'unknown' {
@@ -120,9 +139,28 @@ export function healthKey(status: ModelTestStatus): 'success' | 'failed' | 'unkn
   return 'unknown'
 }
 
-export function matchesHealthFilter(model: GatewayModel, filter: HealthFilter): boolean {
+export function matchesHealthFilter(
+  model: ModelWithConnectivityStatus,
+  filter: HealthFilter
+): boolean {
   if (filter === 'all') return true
   return healthKey(model.last_test_status) === filter
+}
+
+export function filterTestableConnectivityModels<T extends ModelWithConnectivityStatus>(
+  items: readonly T[]
+): T[] {
+  return items.filter((m) => TESTABLE_CAPABILITIES.has(m.capability))
+}
+
+/** 对可探活注册行并发调用单条 test API（团队 / 个人管理面共用） */
+export async function runBatchConnectivityTests(
+  items: readonly ModelWithConnectivityStatus[],
+  testById: (id: string) => Promise<unknown>
+): Promise<void> {
+  const testable = filterTestableConnectivityModels(items)
+  if (testable.length === 0) return
+  await runWithConcurrency(testable, BATCH_TEST_CONCURRENCY, (m) => testById(m.id))
 }
 
 /** 将长错误归类为清单行短标签 */
@@ -217,7 +255,7 @@ export function pickInspectorModelId(
   return ordered[0]?.id ?? null
 }
 
-export function summarizeHealth(models: GatewayModel[]): {
+export function summarizeHealth(models: readonly ModelWithConnectivityStatus[]): {
   total: number
   success: number
   failed: number

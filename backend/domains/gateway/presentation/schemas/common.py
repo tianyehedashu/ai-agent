@@ -274,7 +274,9 @@ class GatewayModelResponse(BaseModel):
         return self.model_copy(
             update={
                 "model_types": model_types_for_gateway_registration(tags, self.capability),
-                "selector_capabilities": selector_capabilities_from_tags(tags),
+                "selector_capabilities": selector_capabilities_from_tags(
+                    tags, provider=self.provider, real_model=self.real_model
+                ),
             }
         )
 

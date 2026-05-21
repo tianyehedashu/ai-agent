@@ -11,8 +11,10 @@
 import { memo, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type React from 'react'
 
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
+import { gatewayApi } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,7 +22,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { GATEWAY_MODELS_ALL_QUERY_KEY } from '@/features/gateway-models/utils'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
+import { thinkingHintForModel } from '@/features/gateway-shared/thinking-param'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
@@ -94,6 +98,8 @@ const ANTHROPIC_NATIVE_FIELDS = [
   'image',
   'top_k',
 ] as const
+
+const THINKING_OPENAI_FIELDS = ['enable_thinking', 'reasoning_content', 'extra_body'] as const
 
 type QuickStep = (typeof QUICK_STEPS)[number]
 type TroubleshootingItem = (typeof TROUBLESHOOTING)[number]
@@ -198,6 +204,24 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const capabilityModules = useMemo(
     () => buildCapabilityModules(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
     [gatewayV1Base, displayKey, activeModel]
+  )
+
+  const { data: gatewayModels } = useQuery({
+    queryKey: GATEWAY_MODELS_ALL_QUERY_KEY,
+    queryFn: () => gatewayApi.listModels(),
+    staleTime: 60_000,
+  })
+
+  const activeModelCapabilities = useMemo(() => {
+    const name = activeModel || PLACEHOLDER_MODEL
+    const row = gatewayModels?.find((m) => m.name === name)
+    return row?.selector_capabilities
+  }, [gatewayModels, activeModel])
+
+  const thinkingModelHint = useMemo(
+    () =>
+      thinkingHintForModel(activeModel || PLACEHOLDER_MODEL, apiFlavor, activeModelCapabilities),
+    [activeModel, apiFlavor, activeModelCapabilities]
   )
   const [copy, copiedKey] = useCopyToClipboardKeyed<string>()
   const handleCopy = useCallback(
@@ -323,12 +347,25 @@ export default function GatewayGuidePage(): React.JSX.Element {
                       onCopy={handleCopy}
                     />
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {ANTHROPIC_NATIVE_FIELDS.map((name) => (
-                      <Badge key={name} variant="outline" className="font-mono text-xs">
-                        {name}
-                      </Badge>
-                    ))}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Anthropic 原生字段</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ANTHROPIC_NATIVE_FIELDS.map((name) => (
+                        <Badge key={name} variant="outline" className="font-mono text-xs">
+                          {name}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      OpenAI 兼容 · 思考相关
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {THINKING_OPENAI_FIELDS.map((name) => (
+                        <Badge key={name} variant="outline" className="font-mono text-xs">
+                          {name}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </CollapsibleContent>
               </Collapsible>
@@ -439,6 +476,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
                       key={mod.id}
                       module={mod}
                       apiFlavor={apiFlavor}
+                      modelHint={mod.id === 'thinking' ? thinkingModelHint : null}
                       copiedKey={copiedKey}
                       onCopy={handleCopy}
                     />
@@ -708,11 +746,13 @@ function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>):
 function CapabilityGuideCard({
   module,
   apiFlavor,
+  modelHint,
   copiedKey,
   onCopy,
 }: Readonly<{
   module: CapabilityGuideModule
   apiFlavor: ApiFlavor
+  modelHint?: string | null
   copiedKey: string | null
   onCopy: (key: string, text: string) => void
 }>): React.JSX.Element {
@@ -728,7 +768,12 @@ function CapabilityGuideCard({
           aria-hidden="true"
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-t p-3">
+      <CollapsibleContent className="space-y-3 border-t p-3">
+        {modelHint ? (
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {modelHint}
+          </p>
+        ) : null}
         <FlavorExamples
           curl={snippets.curl}
           ts={snippets.ts}

@@ -9,7 +9,6 @@ import {
   type HealthFilter,
   type ModelsPageView,
   type UsagePeriodDays,
-  TESTABLE_CAPABILITIES,
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
@@ -21,8 +20,9 @@ import {
 import {
   gatewayModelsListQueryKey,
   invalidateGatewayModelCaches,
+  filterTestableConnectivityModels,
   matchesHealthFilter,
-  runWithConcurrency,
+  runBatchConnectivityTests,
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
@@ -53,8 +53,6 @@ const registerFormSuspenseFallback = (
     加载注册表单…
   </div>
 )
-
-const BATCH_TEST_CONCURRENCY = 3
 
 interface TeamModelsWorkspaceProps {
   hideRegisterAction?: boolean
@@ -225,28 +223,27 @@ export function TeamModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const handleTestAll = useCallback(async (): Promise<void> => {
-    const testable = (items ?? []).filter((m) => TESTABLE_CAPABILITIES.has(m.capability))
-    if (testable.length === 0) return
-    setTestingAll(true)
-    try {
-      await runWithConcurrency(testable, BATCH_TEST_CONCURRENCY, (m) => gatewayApi.testModel(m.id))
-      invalidateGatewayModelCaches(queryClient, {
-        credentialId: credentialFilter || undefined,
-        usageSummary: true,
-      })
-      toast({ title: '批量测试完成' })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      toast({ variant: 'destructive', title: '批量测试中断', description: msg })
-    } finally {
-      setTestingAll(false)
-    }
-  }, [items, queryClient, toast, credentialFilter])
+  const testableItems = useMemo(() => filterTestableConnectivityModels(items ?? []), [items])
 
-  const handleTestAllClick = useCallback((): void => {
-    void handleTestAll()
-  }, [handleTestAll])
+  const handleTestAll = useCallback((): void => {
+    if (testableItems.length === 0) return
+    void (async (): Promise<void> => {
+      setTestingAll(true)
+      try {
+        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testModel(id))
+        invalidateGatewayModelCaches(queryClient, {
+          credentialId: credentialFilter || undefined,
+          usageSummary: true,
+        })
+        toast({ title: '批量测试完成' })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        toast({ variant: 'destructive', title: '批量测试中断', description: msg })
+      } finally {
+        setTestingAll(false)
+      }
+    })()
+  }, [testableItems, queryClient, toast, credentialFilter])
 
   const handleCreateSubmit = useCallback(
     (body: Parameters<typeof gatewayApi.createModel>[0]) => {
@@ -372,7 +369,7 @@ export function TeamModelsWorkspace({
             healthFilter={healthFilter}
             onHealthFilterChange={setHealthFilter}
             canWrite={canWrite}
-            onTestAll={handleTestAllClick}
+            onTestAll={canWrite && testableItems.length > 0 ? handleTestAll : undefined}
             testingAll={testingAll}
             onRegister={!hideRegisterAction && canWrite ? goToRegister : undefined}
             onPreloadRegister={preloadRegisterModelForm}

@@ -17,6 +17,8 @@ export interface PlaygroundMetadata {
   requestId?: string
   /** LiteLLM / 网关注入的下游费用（USD） */
   responseCostUsd?: number
+  /** 响应含可分离思考内容（reasoning_content / Anthropic thinking） */
+  hasReasoning?: boolean
 }
 
 export interface PlaygroundError {

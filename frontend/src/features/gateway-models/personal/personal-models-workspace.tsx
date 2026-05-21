@@ -1,6 +1,6 @@
 ﻿import { Suspense, useCallback, useMemo, useState } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
@@ -15,13 +15,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { FILTER_ALL, parseModelsPageView } from '@/features/gateway-models/constants'
-import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
+import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
+import {
+  FILTER_ALL,
+  type HealthFilter,
+  parseModelsPageView,
+} from '@/features/gateway-models/constants'
+import {
+  invalidatePersonalModelCaches,
+  usePersonalModelMutations,
+} from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import {
   personalModelDetailHref,
   personalModelsRegisterHref,
 } from '@/features/gateway-models/paths'
-import { channelLabel } from '@/features/gateway-models/utils'
+import {
+  channelLabel,
+  filterTestableConnectivityModels,
+  matchesHealthFilter,
+  runBatchConnectivityTests,
+} from '@/features/gateway-models/utils'
+import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import { useAuthStore } from '@/stores/auth'
@@ -54,6 +68,10 @@ export function PersonalModelsWorkspace({
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
   const isRegisterView = pageView === 'register'
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
+  const [testingAll, setTestingAll] = useState(false)
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
 
   const { data: credentials = [] } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
@@ -120,6 +138,31 @@ export function PersonalModelsWorkspace({
     [createMutation]
   )
 
+  const filteredItems = useMemo(
+    () => items.filter((m) => matchesHealthFilter(m, healthFilter)),
+    [items, healthFilter]
+  )
+
+  const testableItems = useMemo(() => filterTestableConnectivityModels(items), [items])
+  const hasTestableModels = testableItems.length > 0
+
+  const handleTestAll = useCallback((): void => {
+    if (!hasTestableModels) return
+    void (async (): Promise<void> => {
+      setTestingAll(true)
+      try {
+        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testMyModel(id))
+        invalidatePersonalModelCaches(queryClient)
+        toast({ title: '批量测试完成' })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        toast({ variant: 'destructive', title: '批量测试中断', description: msg })
+      } finally {
+        setTestingAll(false)
+      }
+    })()
+  }, [hasTestableModels, testableItems, queryClient, toast])
+
   if (!hasAuthSession) {
     return <p className="py-8 text-center text-sm text-muted-foreground">请先登录以管理个人模型</p>
   }
@@ -176,16 +219,29 @@ export function PersonalModelsWorkspace({
           </Select>
           <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
         </div>
-        <Button
-          size="sm"
-          onClick={goToRegister}
-          disabled={activeCredentials.length === 0}
-          onMouseEnter={preloadPersonalModelForm}
-          onFocus={preloadPersonalModelForm}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          添加模型
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {items.length > 0 ? (
+            <ConnectivityHealthStrip
+              models={items}
+              healthFilter={healthFilter}
+              onHealthFilterChange={setHealthFilter}
+              canWrite={hasTestableModels}
+              onTestAll={hasTestableModels ? handleTestAll : undefined}
+              testingAll={testingAll}
+            />
+          ) : null}
+          <Button
+            size="sm"
+            className={items.length > 0 ? 'ml-auto' : undefined}
+            onClick={goToRegister}
+            disabled={activeCredentials.length === 0}
+            onMouseEnter={preloadPersonalModelForm}
+            onFocus={preloadPersonalModelForm}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            添加模型
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -230,9 +286,13 @@ export function PersonalModelsWorkspace({
             添加第一个模型
           </Button>
         </div>
+      ) : filteredItems.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          当前筛选下没有模型，请切换健康状态筛选或添加模型。
+        </p>
       ) : (
         <ul className="divide-y rounded-lg border">
-          {items.map((m) => (
+          {filteredItems.map((m) => (
             <li key={m.id}>
               <Link
                 to={personalModelDetailHref(m.id)}

@@ -211,9 +211,13 @@ for chunk in stream:
   ],
   "usage": { "prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10 }
 }`,
-      responseSse: `data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{"role":"assistant","content":"AI Gateway"},"finish_reason":null}]}
+      responseSse: `# 普通模型：仅 content
+data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{"role":"assistant","content":"AI Gateway"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{"content":" 可以统一鉴权、路由和计费。"},"finish_reason":null}]}
+
+# 推理模型（DeepSeek Reasoner / Qwen3+enable_thinking）可能先输出 reasoning_content：
+# data: {"choices":[{"index":0,"delta":{"reasoning_content":"先分析依赖与风险..."}}]}
 
 data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":8,"completion_tokens":2,"total_tokens":10}}
 
@@ -312,6 +316,10 @@ with client.messages.stream(
 }`,
       responseSse: `event: message_start
 data: {"type":"message_start","message":{"id":"msg_...","role":"assistant","model":"${model}","content":[]}}
+
+# Extended Thinking 时可能出现 thinking 块，再跟 text 块：
+# event: content_block_delta
+# data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"..."}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}

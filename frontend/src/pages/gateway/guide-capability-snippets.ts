@@ -302,29 +302,57 @@ await fetch("${baseUrl}/chat/completions", {
     },
     {
       id: 'thinking',
-      title: 'Extended Thinking',
-      description: '适合多步骤规划、约束推理和需要更长推理预算的任务。',
+      title: 'Extended Thinking / 深度思考',
+      description:
+        '仅部分模型支持可分离的思考输出。DashScope Qwen3：extra_body.enable_thinking + 建议 stream；' +
+        'DeepSeek Reasoner / QwQ：无需开关，读 reasoning_content；普通对话模型勿传 enable_thinking。',
       openai: {
-        curl: `# 仅部分推理模型支持（如 o-series）；字段因模型而异
-curl "${baseUrl}/chat/completions" \\
+        curl: `# --- DashScope Qwen3（须 stream + enable_thinking）---
+curl -N "${baseUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "${authOpenai}" \\
   -d '{
     "model": "${model}",
+    "stream": true,
     "messages": [{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}],
-    "max_completion_tokens": 2048
-  }'`,
-        ts: `// 推理模型示例（字段以模型文档为准）
-await client.chat.completions.create({
+    "enable_thinking": true
+  }'
+
+# 非流式 DashScope 须显式关闭： "enable_thinking": false
+
+# --- DeepSeek Reasoner（内置推理，无需 extra_body）---
+# 流式响应 delta 可能含 reasoning_content 与 content`,
+        ts: `// DashScope Qwen3：enable_thinking + stream
+const stream = await client.chat.completions.create({
   model: "${model}",
+  stream: true,
   messages: [{ role: "user", content: "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。" }],
-  max_completion_tokens: 2048,
-});`,
-        py: `client.chat.completions.create(
+  // @ts-expect-error OpenAI SDK 透传
+  extra_body: { enable_thinking: true },
+});
+for await (const chunk of stream) {
+  const delta = chunk.choices[0]?.delta;
+  if (delta?.reasoning_content) process.stdout.write(delta.reasoning_content);
+  if (delta?.content) process.stdout.write(delta.content);
+}
+
+// DeepSeek Reasoner：无需 enable_thinking，同样读取 delta.reasoning_content`,
+        py: `# DashScope Qwen3（深度思考，须已注册对应别名）
+messages = [{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}]
+stream = client.chat.completions.create(
     model="${model}",
-    messages=[{"role": "user", "content": "为一个月内上线企业 AI 网关制定迁移计划，列出依赖、风险和里程碑。"}],
-    max_completion_tokens=2048,
-)`,
+    messages=messages,
+    extra_body={"enable_thinking": True},
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta
+    if getattr(delta, "reasoning_content", None):
+        print(delta.reasoning_content, end="", flush=True)
+    if delta.content:
+        print(delta.content, end="", flush=True)
+
+# 非流式：extra_body={"enable_thinking": False}  # DashScope 要求显式关闭`,
       },
       anthropic: {
         curl: `curl "${baseUrl}/messages" \\

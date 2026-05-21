@@ -26,8 +26,17 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  GATEWAY_MODELS_ALL_QUERY_KEY,
+  GATEWAY_MY_MODELS_ALL_QUERY_KEY,
+} from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
+import {
+  builtinReasoningPlaygroundHint,
+  resolveThinkingParamForModel,
+  type ThinkingParam,
+} from '@/features/gateway-shared/thinking-param'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -86,6 +95,7 @@ export function PlaygroundCard({
   const modelCustomId = useId()
   const promptId = useId()
   const streamId = useId()
+  const thinkingId = useId()
   const visionImageUrlId = useId()
   const videoImageUrlId = useId()
   const imageSizeId = useId()
@@ -97,6 +107,7 @@ export function PlaygroundCard({
   const [customModel, setCustomModel] = useState(false)
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
   const [stream, setStream] = useState(true)
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [apiFlavor, setApiFlavor] = useState<PlaygroundApiFlavor>('openai')
   const [showKey, setShowKey] = useState(false)
   const [visionImageUrl, setVisionImageUrl] = useState('')
@@ -133,12 +144,12 @@ export function PlaygroundCard({
   const [teamModelsQuery, myModelsQuery] = useQueries({
     queries: [
       {
-        queryKey: ['gateway', 'models', 'playground'],
+        queryKey: GATEWAY_MODELS_ALL_QUERY_KEY,
         queryFn: () => gatewayApi.listModels(),
         staleTime: 60_000,
       },
       {
-        queryKey: ['gateway', 'my-models', 'playground'],
+        queryKey: GATEWAY_MY_MODELS_ALL_QUERY_KEY,
         queryFn: () => gatewayApi.listMyModels(),
         staleTime: 60_000,
       },
@@ -251,11 +262,42 @@ export function PlaygroundCard({
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
 
+  const thinkingParam = useMemo<ThinkingParam>(
+    () => resolveThinkingParamForModel(trimmedModel, selectedCandidate?.selector_capabilities),
+    [trimmedModel, selectedCandidate?.selector_capabilities]
+  )
+
+  const showThinkingSwitch =
+    playgroundMode === 'chat' &&
+    ((thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
+      (thinkingParam === 'anthropic_extended' && apiFlavor === 'anthropic'))
+
+  const builtinThinkingHint = useMemo(
+    () => (playgroundMode === 'chat' ? builtinReasoningPlaygroundHint(thinkingParam) : null),
+    [playgroundMode, thinkingParam]
+  )
+
+  const handleThinkingCheckedChange = useCallback(
+    (checked: boolean) => {
+      setThinkingEnabled(checked)
+      if (checked && thinkingParam === 'dashscope_enable_thinking') {
+        setStream(true)
+      }
+    },
+    [thinkingParam]
+  )
+
+  useEffect(() => {
+    setThinkingEnabled(false)
+  }, [model, apiFlavor, playgroundMode])
+
   const canSubmit =
     Boolean(trimmedKey && trimmedModel && trimmedPrompt) &&
     (playgroundMode !== 'vision' || Boolean(trimmedVisionUrl))
 
-  const showOutputPanel = status !== 'idle' || Boolean(content || error)
+  const thinkingContent = 'thinkingContent' in activeCall ? activeCall.thinkingContent : ''
+
+  const showOutputPanel = status !== 'idle' || Boolean(content || thinkingContent || error)
 
   const keyManualMode =
     virtualKeys.length === 0 ||
@@ -321,8 +363,9 @@ export function PlaygroundCard({
     }
     void chatCall.send({
       ...params,
-      stream,
+      stream: thinkingEnabled && thinkingParam === 'dashscope_enable_thinking' ? true : stream,
       flavor: apiFlavor,
+      enableThinking: showThinkingSwitch ? thinkingEnabled : false,
     })
   }
 
@@ -493,6 +536,12 @@ export function PlaygroundCard({
             </div>
           ) : null}
 
+          {builtinThinkingHint ? (
+            <p className="rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-xs text-muted-foreground">
+              {builtinThinkingHint}
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-2">
             {showStreamSwitch ? (
               <div className="flex items-center gap-2">
@@ -500,10 +549,25 @@ export function PlaygroundCard({
                   id={streamId}
                   checked={stream}
                   onCheckedChange={setStream}
-                  disabled={isRunning}
+                  disabled={
+                    isRunning || (thinkingEnabled && thinkingParam === 'dashscope_enable_thinking')
+                  }
                 />
                 <Label htmlFor={streamId} className="cursor-pointer text-sm">
                   SSE
+                </Label>
+              </div>
+            ) : null}
+            {showThinkingSwitch ? (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={thinkingId}
+                  checked={thinkingEnabled}
+                  onCheckedChange={handleThinkingCheckedChange}
+                  disabled={isRunning}
+                />
+                <Label htmlFor={thinkingId} className="cursor-pointer text-sm">
+                  思考模式
                 </Label>
               </div>
             ) : null}
@@ -548,6 +612,7 @@ export function PlaygroundCard({
             <PlaygroundOutputPanel
               status={status}
               content={content}
+              thinkingContent={thinkingContent}
               metadata={metadata}
               error={error}
               rawResponse={rawResponse}

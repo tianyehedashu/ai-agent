@@ -27,6 +27,7 @@ import type {
 export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
   status,
   content,
+  thinkingContent,
   metadata,
   error,
   rawResponse,
@@ -40,6 +41,7 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
 }: Readonly<{
   status: PlaygroundStatus
   content: string
+  thinkingContent?: string
   metadata: PlaygroundMetadata | null
   error: PlaygroundError | null
   rawResponse: PlaygroundRawResponse
@@ -53,7 +55,9 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
 }>): React.JSX.Element | null {
   const responseJson = useMemo(() => (rawResponse ? safeStringify(rawResponse) : ''), [rawResponse])
   const requestJson = useMemo(() => (lastRequest ? safeStringify(lastRequest) : ''), [lastRequest])
-  const hasResponseBody = content.length > 0 || rawResponse !== null || lastRequest !== null
+  const thinking = thinkingContent ?? ''
+  const hasResponseBody =
+    content.length > 0 || thinking.length > 0 || rawResponse !== null || lastRequest !== null
 
   if (status === 'idle' && !content && !error) {
     return null
@@ -96,22 +100,38 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
           <TabsContent value="text" className="space-y-3">
             {isImageGenRaw(rawResponse) ? <ImageGenOutput items={rawResponse.items} /> : null}
             {isVideoGenRaw(rawResponse) ? <VideoOutput url={rawResponse.url} /> : null}
-            <pre
-              className={cn(
-                'max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-4 text-sm leading-relaxed',
-                !content && 'text-muted-foreground'
-              )}
-            >
-              <code>
-                {content || '（无文本，仅工具调用或空响应）'}
-                {showStreamCursor ? (
-                  <span
-                    className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-amber-500 align-middle"
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </code>
-            </pre>
+            {thinking.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">思考过程</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-purple-500/20 bg-purple-500/5 p-3 text-sm leading-relaxed">
+                  <code>{thinking}</code>
+                </pre>
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              {thinking.length > 0 ? (
+                <p className="text-xs font-medium text-muted-foreground">回复</p>
+              ) : null}
+              <pre
+                className={cn(
+                  'max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-4 text-sm leading-relaxed',
+                  !content && 'text-muted-foreground'
+                )}
+              >
+                <code>
+                  {content ||
+                    (thinking.length > 0
+                      ? '（暂无正文，仅返回思考内容）'
+                      : '（无文本，仅工具调用或空响应）')}
+                  {showStreamCursor ? (
+                    <span
+                      className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-amber-500 align-middle"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </code>
+              </pre>
+            </div>
           </TabsContent>
           {lastRequest ? (
             <TabsContent value="request">

@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_NONE,
+    resolve_thinking_param_from_tags,
+)
+
 
 @dataclass(frozen=True)
 class ModelCapabilitySnapshot:
@@ -12,6 +17,7 @@ class ModelCapabilitySnapshot:
 
     supports_tools: bool = True
     supports_reasoning: bool = False
+    thinking_param: str = THINKING_PARAM_NONE
     supports_json_mode: bool = True
     supports_vision: bool = False
     supports_image_gen: bool = False
@@ -45,14 +51,28 @@ class ModelCapabilitySnapshot:
         return frozenset(result)
 
 
-def tags_to_capability_snapshot(tags: dict[str, Any]) -> ModelCapabilitySnapshot:
+def tags_to_capability_snapshot(
+    tags: dict[str, Any],
+    *,
+    provider: str = "",
+    real_model: str = "",
+) -> ModelCapabilitySnapshot:
     """从 ``GatewayModel.tags`` 构建能力快照。"""
     supports_image_gen = bool(tags.get("supports_image_gen", False))
     default_txt2 = supports_image_gen
     default_img2 = supports_image_gen
+    thinking_param = resolve_thinking_param_from_tags(
+        tags, provider=provider, real_model=real_model
+    )
+    supports_reasoning = bool(tags.get("supports_reasoning", False)) or bool(
+        tags.get("supports_reasoning_content", False)
+    )
+    if thinking_param != THINKING_PARAM_NONE:
+        supports_reasoning = True
     return ModelCapabilitySnapshot(
         supports_tools=bool(tags.get("supports_tools", True)),
-        supports_reasoning=bool(tags.get("supports_reasoning", False)),
+        supports_reasoning=supports_reasoning,
+        thinking_param=thinking_param,
         supports_json_mode=bool(tags.get("supports_json_mode", True)),
         supports_vision=bool(tags.get("supports_vision", False)),
         supports_image_gen=supports_image_gen,

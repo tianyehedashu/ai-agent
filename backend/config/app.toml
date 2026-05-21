@@ -212,6 +212,7 @@ output_price = 16.0
 supports_vision = false
 supports_tools = false  # R1 暂不支持 tool calling
 supports_reasoning = true
+thinking_param = "builtin_reasoning"
 supports_json_mode = false  # 推理模型不支持 response_format
 recommended_for = ["reasoning", "math", "logic"]
 description = "复杂推理，输出思维链"
@@ -282,9 +283,25 @@ output_price = 0.006
 supports_vision = false
 supports_tools = false
 supports_reasoning = true
+thinking_param = "builtin_reasoning"
 supports_json_mode = false  # 推理模型不支持 response_format
 recommended_for = ["reasoning"]
 description = "推理增强，类似 o1/R1"
+
+[[models.available]]
+id = "dashscope/qwen3-32b"
+name = "Qwen3 32B (深度思考)"
+provider = "dashscope"
+litellm_model = "dashscope/qwen3-32b"
+context_window = 131072
+input_price = 0.002
+output_price = 0.006
+supports_vision = false
+supports_tools = true
+supports_reasoning = true
+thinking_param = "dashscope_enable_thinking"
+recommended_for = ["reasoning"]
+description = "Qwen3 深度思考；流式 + enable_thinking，响应含 reasoning_content"
 
 [[models.available]]
 id = "dashscope/qwen-vl-max"

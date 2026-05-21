@@ -4,7 +4,13 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { extractAnthropicError, parseAnthropicSseBuffer, pickAnthropicText } from './anthropic-sse'
+import {
+  extractAnthropicDeltaText,
+  extractAnthropicError,
+  parseAnthropicSseBuffer,
+  pickAnthropicText,
+  pickAnthropicThinking,
+} from './anthropic-sse'
 
 describe('parseAnthropicSseBuffer', () => {
   it('解析多个事件并识别 message_stop 作为结束信号', () => {
@@ -50,6 +56,23 @@ describe('parseAnthropicSseBuffer', () => {
   })
 })
 
+describe('extractAnthropicDeltaText', () => {
+  it('解析 text_delta 与 thinking_delta', () => {
+    expect(
+      extractAnthropicDeltaText({
+        type: 'content_block_delta',
+        delta: { type: 'text_delta', text: 'Hi' },
+      })
+    ).toEqual({ text: 'Hi', thinking: '' })
+    expect(
+      extractAnthropicDeltaText({
+        type: 'content_block_delta',
+        delta: { type: 'thinking_delta', thinking: 'plan...' },
+      })
+    ).toEqual({ text: '', thinking: 'plan...' })
+  })
+})
+
 describe('pickAnthropicText', () => {
   it('拼合所有 type=text 的 content block', () => {
     expect(
@@ -67,6 +90,25 @@ describe('pickAnthropicText', () => {
     expect(pickAnthropicText(null)).toBe('')
     expect(pickAnthropicText({})).toBe('')
     expect(pickAnthropicText({ content: [] })).toBe('')
+  })
+})
+
+describe('pickAnthropicThinking', () => {
+  it('拼合所有 type=thinking 的 content block', () => {
+    expect(
+      pickAnthropicThinking({
+        content: [
+          { type: 'thinking', thinking: 'step 1' },
+          { type: 'text', text: 'answer' },
+          { type: 'thinking', thinking: ' step 2' },
+        ],
+      })
+    ).toBe('step 1 step 2')
+  })
+
+  it('null / 空 content 返回空串', () => {
+    expect(pickAnthropicThinking(null)).toBe('')
+    expect(pickAnthropicThinking({ content: [] })).toBe('')
   })
 })
 

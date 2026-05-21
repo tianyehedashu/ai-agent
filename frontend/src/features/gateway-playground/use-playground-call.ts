@@ -10,15 +10,18 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 
 import {
+  extractAnthropicDeltaText,
   extractAnthropicError,
   parseAnthropicSseBuffer,
   pickAnthropicText,
+  pickAnthropicThinking,
   type AnthropicErrorEnvelope,
   type AnthropicMessage,
   type AnthropicSseEvent,
 } from './anthropic-sse'
 import {
   extractOpenAiCompatError,
+  extractOpenAiStreamTextParts,
   extractResponseCostUsd,
   parseOpenAiSseBuffer,
   type OpenAiCompatChunk,
@@ -62,11 +65,13 @@ interface CallParams {
   maxTokens?: number
   /** 视觉理解：OpenAI 多模态 content */
   imageUrl?: string
+  enableThinking?: boolean
 }
 
 interface UsePlaygroundCallReturn {
   status: PlaygroundStatus
   content: string
+  thinkingContent: string
   metadata: PlaygroundMetadata | null
   error: PlaygroundError | null
   rawResponse: PlaygroundRawResponse
@@ -80,6 +85,7 @@ interface UsePlaygroundCallReturn {
 export function usePlaygroundCall(): UsePlaygroundCallReturn {
   const [status, setStatus] = useState<PlaygroundStatus>('idle')
   const [content, setContent] = useState('')
+  const [thinkingContent, setThinkingContent] = useState('')
   const [metadata, setMetadata] = useState<PlaygroundMetadata | null>(null)
   const [error, setError] = useState<PlaygroundError | null>(null)
   const [rawResponse, setRawResponse] = useState<PlaygroundRawResponse>(null)
@@ -97,6 +103,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     abortRef.current = null
     setStatus('idle')
     setContent('')
+    setThinkingContent('')
     setMetadata(null)
     setError(null)
     setRawResponse(null)
@@ -113,6 +120,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
     abortRef.current = controller
     setStatus('pending')
     setContent('')
+    setThinkingContent('')
     setMetadata(null)
     setError(null)
     setRawResponse(null)
@@ -137,6 +145,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
           stream: params.stream,
           flavor: params.flavor,
           maxTokens: params.maxTokens,
+          enableThinking: params.enableThinking,
         })
     const body = JSON.stringify(bodyObject)
     const headers: Record<string, string> = {
@@ -205,6 +214,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
         await handleAnthropicJson(response, startedAt, requestId, {
           setStatus,
           setContent,
+          setThinkingContent,
           setMetadata,
           setError,
           setRawResponse,
@@ -213,6 +223,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
         await handleOpenAiJson(response, startedAt, requestId, {
           setStatus,
           setContent,
+          setThinkingContent,
           setMetadata,
           setError,
           setRawResponse,
@@ -233,6 +244,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
       await streamAnthropic(reader, controller, response.status, startedAt, requestId, {
         setStatus,
         setContent,
+        setThinkingContent,
         setMetadata,
         setError,
         setRawResponse,
@@ -241,6 +253,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
       await streamOpenAi(reader, controller, response.status, startedAt, requestId, {
         setStatus,
         setContent,
+        setThinkingContent,
         setMetadata,
         setError,
         setRawResponse,
@@ -251,6 +264,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
   return {
     status,
     content,
+    thinkingContent,
     metadata,
     error,
     rawResponse,
@@ -265,6 +279,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
 interface Setters {
   setStatus: (s: PlaygroundStatus) => void
   setContent: (s: string) => void
+  setThinkingContent: (s: string) => void
   setMetadata: (m: PlaygroundMetadata | null) => void
   setError: (e: PlaygroundError | null) => void
   setRawResponse: (r: PlaygroundRawResponse) => void
@@ -287,7 +302,10 @@ async function handleOpenAiJson(
     })
     return
   }
-  const text = json.choices?.[0]?.message?.content ?? ''
+  const message = json.choices?.[0]?.message
+  const text = message?.content ?? ''
+  const reasoning = typeof message?.reasoning_content === 'string' ? message.reasoning_content : ''
+  setters.setThinkingContent(reasoning)
   setters.setContent(text)
   setters.setMetadata({
     httpStatus: response.status,
@@ -298,6 +316,7 @@ async function handleOpenAiJson(
     finishReason: json.choices?.[0]?.finish_reason ?? undefined,
     requestId: json.id ?? requestId,
     responseCostUsd: extractResponseCostUsd(json),
+    hasReasoning: reasoning.length > 0,
   })
   setters.setRawResponse(json)
   setters.setStatus('done')
@@ -320,6 +339,8 @@ async function handleAnthropicJson(
     })
     return
   }
+  const thinking = pickAnthropicThinking(json)
+  setters.setThinkingContent(thinking)
   setters.setContent(pickAnthropicText(json))
   setters.setMetadata({
     httpStatus: response.status,
@@ -332,6 +353,7 @@ async function handleAnthropicJson(
         : undefined,
     finishReason: json.stop_reason ?? undefined,
     requestId: json.id ?? requestId,
+    hasReasoning: thinking.length > 0,
   })
   setters.setRawResponse(json)
   setters.setStatus('done')
@@ -347,7 +369,8 @@ async function streamOpenAi(
 ): Promise<void> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
-  let acc = ''
+  let answerAcc = ''
+  let thinkingAcc = ''
   let lastJson: OpenAiCompatChunk | null = null
   try {
     let finished = false
@@ -357,7 +380,8 @@ async function streamOpenAi(
       buffer += decoder.decode(value, { stream: true })
       const parsed = parseOpenAiSseBuffer(buffer)
       buffer = parsed.rest
-      let deltaBatch = ''
+      let contentBatch = ''
+      let reasoningBatch = ''
       for (const chunk of parsed.chunks) {
         if (chunk.error) {
           setters.setStatus('error')
@@ -367,16 +391,18 @@ async function streamOpenAi(
           return
         }
         lastJson = chunk
-        const delta = chunk.choices?.[0]?.delta?.content
-        if (typeof delta === 'string' && delta.length > 0) {
-          deltaBatch += delta
-        }
+        const parts = extractOpenAiStreamTextParts(chunk)
+        if (parts.content.length > 0) contentBatch += parts.content
+        if (parts.reasoning.length > 0) reasoningBatch += parts.reasoning
       }
-      if (deltaBatch.length > 0) {
-        acc += deltaBatch
-        const snapshot = acc
+      if (contentBatch.length > 0 || reasoningBatch.length > 0) {
+        answerAcc += contentBatch
+        thinkingAcc += reasoningBatch
+        const answerSnap = answerAcc
+        const thinkingSnap = thinkingAcc
         startTransition(() => {
-          setters.setContent(snapshot)
+          setters.setContent(answerSnap)
+          setters.setThinkingContent(thinkingSnap)
         })
       }
       if (parsed.done) finished = true
@@ -403,10 +429,12 @@ async function streamOpenAi(
     totalTokens: lastJson?.usage?.total_tokens,
     requestId: lastJson?.id ?? requestId,
     responseCostUsd: extractResponseCostUsd(lastJson),
+    hasReasoning: thinkingAcc.length > 0,
   })
   setters.setRawResponse({
     type: 'openai.stream.summary',
-    text: acc,
+    text: answerAcc,
+    thinkingText: thinkingAcc,
     lastChunk: lastJson,
   })
   setters.setStatus('done')
@@ -422,7 +450,8 @@ async function streamAnthropic(
 ): Promise<void> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
-  let acc = ''
+  let answerAcc = ''
+  let thinkingAcc = ''
   let messageId: string | undefined
   let model: string | undefined
   let stopReason: string | undefined
@@ -437,7 +466,8 @@ async function streamAnthropic(
       buffer += decoder.decode(value, { stream: true })
       const parsed = parseAnthropicSseBuffer(buffer)
       buffer = parsed.rest
-      let deltaBatch = ''
+      let textBatch = ''
+      let thinkingBatch = ''
       for (const evt of parsed.events) {
         lastEvent = evt
         if (evt.type === 'error' && 'error' in evt) {
@@ -455,11 +485,10 @@ async function streamAnthropic(
           messageId = evt.message.id ?? messageId
           model = evt.message.model ?? model
           inputTokens = evt.message.usage?.input_tokens ?? inputTokens
-        } else if (evt.type === 'content_block_delta' && 'delta' in evt) {
-          const text = evt.delta?.text
-          if (typeof text === 'string' && text.length > 0) {
-            deltaBatch += text
-          }
+        } else if (evt.type === 'content_block_delta') {
+          const parts = extractAnthropicDeltaText(evt)
+          if (parts.text.length > 0) textBatch += parts.text
+          if (parts.thinking.length > 0) thinkingBatch += parts.thinking
         } else if (evt.type === 'message_delta' && 'delta' in evt) {
           stopReason = evt.delta?.stop_reason ?? stopReason
           if ('usage' in evt && typeof evt.usage?.output_tokens === 'number') {
@@ -467,11 +496,14 @@ async function streamAnthropic(
           }
         }
       }
-      if (deltaBatch.length > 0) {
-        acc += deltaBatch
-        const snapshot = acc
+      if (textBatch.length > 0 || thinkingBatch.length > 0) {
+        answerAcc += textBatch
+        thinkingAcc += thinkingBatch
+        const answerSnap = answerAcc
+        const thinkingSnap = thinkingAcc
         startTransition(() => {
-          setters.setContent(snapshot)
+          setters.setContent(answerSnap)
+          setters.setThinkingContent(thinkingSnap)
         })
       }
       if (parsed.done) finished = true
@@ -501,6 +533,7 @@ async function streamAnthropic(
     completionTokens: outputTokens,
     totalTokens,
     requestId: messageId ?? requestId,
+    hasReasoning: thinkingAcc.length > 0,
   })
   // raw 取最后一个事件 + 累计的关键元数据（流式没有单一 JSON 终响应）
   setters.setRawResponse({
@@ -509,6 +542,8 @@ async function streamAnthropic(
     model,
     stopReason,
     usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+    text: answerAcc,
+    thinkingText: thinkingAcc,
     lastEvent,
   })
   setters.setStatus('done')

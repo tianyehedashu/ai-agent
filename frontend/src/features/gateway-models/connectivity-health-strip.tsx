@@ -1,16 +1,15 @@
-﻿import { memo, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 
-import type { GatewayModel } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
-import { summarizeHealth } from '../utils'
+import { summarizeHealth, type ModelWithConnectivityStatus } from './utils'
 
-import type { HealthFilter } from '../constants'
+import type { HealthFilter } from './constants'
 
-interface ModelHealthStripProps {
-  models: GatewayModel[]
+interface ConnectivityHealthStripProps {
+  models: readonly ModelWithConnectivityStatus[]
   healthFilter: HealthFilter
   onHealthFilterChange: (f: HealthFilter) => void
   canWrite: boolean
@@ -60,24 +59,28 @@ function FilterChip({
   )
 }
 
-export const ModelHealthStrip = memo(function ModelHealthStrip({
+/** 团队 / 个人模型清单共用的连通性健康筛选与「测试全部」入口 */
+export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
   models,
   healthFilter,
   onHealthFilterChange,
   canWrite,
   onTestAll,
   testingAll,
-}: ModelHealthStripProps): React.JSX.Element {
+}: ConnectivityHealthStripProps): React.JSX.Element {
   const counts = useMemo(() => summarizeHealth(models), [models])
 
-  if (counts.total === 0) return <></>
+  const countByFilter = useMemo(
+    (): Record<HealthFilter, number> => ({
+      all: counts.total,
+      success: counts.success,
+      failed: counts.failed,
+      unknown: counts.unknown,
+    }),
+    [counts]
+  )
 
-  const countByFilter: Record<HealthFilter, number> = {
-    all: counts.total,
-    success: counts.success,
-    failed: counts.failed,
-    unknown: counts.unknown,
-  }
+  if (counts.total === 0) return <></>
 
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
@@ -111,3 +114,6 @@ export const ModelHealthStrip = memo(function ModelHealthStrip({
     </div>
   )
 })
+
+/** @deprecated 使用 `ConnectivityHealthStrip` */
+export const ModelHealthStrip = ConnectivityHealthStrip

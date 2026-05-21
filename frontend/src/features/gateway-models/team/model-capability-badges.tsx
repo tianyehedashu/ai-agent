@@ -1,6 +1,10 @@
 ﻿import type { GatewayModel } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  resolveThinkingParamForModel,
+  thinkingParamLabel,
+} from '@/features/gateway-shared/thinking-param'
 import { Info } from '@/lib/lucide-icons'
 
 import { MODEL_TYPE_LABELS, capabilityLabel } from '../constants'
@@ -14,8 +18,14 @@ export function ModelCapabilityBadges({
 }): React.JSX.Element {
   const types = model.model_types ?? []
   const sc = model.selector_capabilities
+  const thinkingParam = resolveThinkingParamForModel(model.name, sc)
+  const thinkingLabel = thinkingParamLabel(thinkingParam)
   const extraTags: string[] = []
-  if (sc?.supports_reasoning === true) extraTags.push('reasoning')
+  if (thinkingLabel) {
+    extraTags.push(thinkingLabel)
+  } else if (sc?.supports_reasoning === true) {
+    extraTags.push('reasoning')
+  }
   if (sc?.supports_json_mode === false) extraTags.push('无 JSON 模式')
 
   return (

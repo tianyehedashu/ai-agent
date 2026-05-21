@@ -79,7 +79,9 @@ async def list_model_presets(
                 recommended_for=list((m.tags or {}).get("recommended_for") or []),
                 description=str((m.tags or {}).get("description") or ""),
                 model_types=model_types_for_gateway_registration(m.tags or {}, m.capability),
-                selector_capabilities=selector_capabilities_from_tags(m.tags or {}),
+                selector_capabilities=selector_capabilities_from_tags(
+                    m.tags or {}, provider=m.provider, real_model=m.real_model
+                ),
             )
             for m in cfg_rows
         ]

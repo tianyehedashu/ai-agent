@@ -6,12 +6,13 @@ import type { PlaygroundError } from './types'
 
 interface ChatChunkDelta {
   content?: string | null
+  reasoning_content?: string | null
   finish_reason?: string | null
 }
 
 interface ChatChoice {
   delta?: ChatChunkDelta
-  message?: { content?: string | null }
+  message?: { content?: string | null; reasoning_content?: string | null }
   finish_reason?: string | null
 }
 
@@ -71,7 +72,17 @@ export function parseOpenAiSseBuffer(buffer: string): ParseSseResult {
   return { chunks, rest, done }
 }
 
-/** 从 OpenAI 形错误 JSON 提取 Playground 错误信息。 */
+/** 从单帧 OpenAI 兼容 chunk 提取正文与思考增量。 */
+export function extractOpenAiStreamTextParts(chunk: OpenAiCompatChunk): {
+  content: string
+  reasoning: string
+} {
+  const delta = chunk.choices?.[0]?.delta
+  const content = typeof delta?.content === 'string' ? delta.content : ''
+  const reasoning = typeof delta?.reasoning_content === 'string' ? delta.reasoning_content : ''
+  return { content, reasoning }
+}
+
 export function extractOpenAiCompatError(
   json: OpenAiCompatChunk | null,
   httpStatus: number,

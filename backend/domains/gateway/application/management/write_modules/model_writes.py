@@ -20,6 +20,7 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.thinking_param import enrich_gateway_model_tags
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -69,6 +70,7 @@ class ModelWritesMixin:
             mtags['display_name'] = display_name
             if tags:
                 mtags.update({k: v for k, v in tags.items() if v is not None})
+            mtags = enrich_gateway_model_tags(mtags, provider=provider, real_model=real_model)
             row = await self._models.create(tenant_id=tenant_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
             created.append(row)
         if reload_router:
@@ -131,7 +133,20 @@ class ModelWritesMixin:
         if prefix_msg:
             raise ValidationError(prefix_msg)
         normalized_rm = build_litellm_model_id(provider, raw_rm)
-        row = await self._models.create(tenant_id=tenant_id, name=name, capability=capability, real_model=normalized_rm, credential_id=credential_id, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, enabled=enabled)
+        enriched_tags = enrich_gateway_model_tags(tags, provider=provider, real_model=normalized_rm)
+        row = await self._models.create(
+            tenant_id=tenant_id,
+            name=name,
+            capability=capability,
+            real_model=normalized_rm,
+            credential_id=credential_id,
+            provider=provider,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=enriched_tags,
+            enabled=enabled,
+        )
         if reload_router:
             await self.reload_litellm_router()
         return row
@@ -208,6 +223,18 @@ class ModelWritesMixin:
             if prefix_msg:
                 raise ValidationError(prefix_msg)
             update_fields['real_model'] = build_litellm_model_id(existing.provider, raw_rm)
+        if 'real_model' in update_fields or 'tags' in update_fields:
+            merged_tags = dict(existing.tags or {})
+            if isinstance(update_fields.get('tags'), dict):
+                merged_tags.update(update_fields['tags'])
+            real_for_tags = str(
+                update_fields.get('real_model') or existing.real_model
+            ).strip()
+            update_fields['tags'] = enrich_gateway_model_tags(
+                merged_tags,
+                provider=existing.provider,
+                real_model=real_for_tags,
+            )
         new_name_raw = update_fields.get('name')
         if new_name_raw is not None:
             new_name = str(new_name_raw).strip()

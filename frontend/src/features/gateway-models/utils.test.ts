@@ -11,6 +11,8 @@ import {
   moveOrderedModelList,
   pickInspectorModelId,
   routesReferencingModel,
+  filterTestableConnectivityModels,
+  runBatchConnectivityTests,
   runWithConcurrency,
   stringArraysEqual,
   summarizeHealth,
@@ -179,6 +181,33 @@ describe('stringArraysEqual', () => {
   it('compares order-sensitive', () => {
     expect(stringArraysEqual(['a', 'b'], ['a', 'b'])).toBe(true)
     expect(stringArraysEqual(['a', 'b'], ['b', 'a'])).toBe(false)
+  })
+})
+
+describe('filterTestableConnectivityModels', () => {
+  it('keeps only chat embedding image capabilities', () => {
+    const items = [
+      { id: '1', capability: 'chat', last_test_status: null },
+      { id: '2', capability: 'video_generation', last_test_status: null },
+      { id: '3', capability: 'embedding', last_test_status: null },
+    ]
+    expect(filterTestableConnectivityModels(items).map((m) => m.id)).toEqual(['1', '3'])
+  })
+})
+
+describe('runBatchConnectivityTests', () => {
+  it('invokes testById only for testable models', async () => {
+    const tested: string[] = []
+    await runBatchConnectivityTests(
+      [
+        { id: 'a', capability: 'chat', last_test_status: null },
+        { id: 'b', capability: 'video_generation', last_test_status: null },
+      ],
+      (id) => {
+        tested.push(id)
+      }
+    )
+    expect(tested.sort()).toEqual(['a'])
   })
 })
 

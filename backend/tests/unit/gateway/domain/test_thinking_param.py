@@ -1,0 +1,91 @@
+"""thinking_param 推断单元测试。"""
+
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_ANTHROPIC,
+    THINKING_PARAM_BUILTIN,
+    THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_NONE,
+    enrich_gateway_model_tags,
+    infer_thinking_param,
+    resolve_thinking_param_from_tags,
+)
+
+
+def test_infer_qwen3_dashscope() -> None:
+    assert (
+        infer_thinking_param(provider="dashscope", real_model="dashscope/qwen3-32b")
+        == THINKING_PARAM_DASHSCOPE
+    )
+
+
+def test_infer_qwq_builtin() -> None:
+    assert (
+        infer_thinking_param(provider="dashscope", real_model="qwq-32b-preview")
+        == THINKING_PARAM_BUILTIN
+    )
+
+
+def test_infer_deepseek_reasoner() -> None:
+    assert (
+        infer_thinking_param(provider="deepseek", real_model="deepseek/deepseek-reasoner")
+        == THINKING_PARAM_BUILTIN
+    )
+
+
+def test_infer_anthropic_extended() -> None:
+    assert (
+        infer_thinking_param(
+            provider="anthropic",
+            real_model="claude-opus-4",
+            supports_reasoning=True,
+        )
+        == THINKING_PARAM_ANTHROPIC
+    )
+
+
+def test_infer_none_for_qwen_turbo() -> None:
+    assert (
+        infer_thinking_param(provider="dashscope", real_model="qwen-turbo")
+        == THINKING_PARAM_NONE
+    )
+
+
+def test_resolve_explicit_tag() -> None:
+    assert (
+        resolve_thinking_param_from_tags(
+            {"thinking_param": "builtin_reasoning"},
+            provider="openai",
+            real_model="gpt-4",
+        )
+        == THINKING_PARAM_BUILTIN
+    )
+
+
+def test_resolve_reasoning_content_flag() -> None:
+    assert (
+        resolve_thinking_param_from_tags(
+            {"supports_reasoning_content": True},
+            provider="dashscope",
+            real_model="qwen3-32b",
+        )
+        == THINKING_PARAM_DASHSCOPE
+    )
+
+
+def test_enrich_gateway_model_tags_persists_qwen3() -> None:
+    out = enrich_gateway_model_tags(
+        {},
+        provider="dashscope",
+        real_model="dashscope/qwen3-32b",
+    )
+    assert out["thinking_param"] == THINKING_PARAM_DASHSCOPE
+    assert out["supports_reasoning"] is True
+
+
+def test_enrich_gateway_model_tags_respects_explicit() -> None:
+    out = enrich_gateway_model_tags(
+        {"thinking_param": "builtin_reasoning"},
+        provider="dashscope",
+        real_model="qwen3-32b",
+    )
+    assert out["thinking_param"] == THINKING_PARAM_BUILTIN
