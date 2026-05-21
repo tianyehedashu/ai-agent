@@ -37,7 +37,7 @@ CMD ["uvicorn", "bootstrap.main:app", "--host", "0.0.0.0", "--port", "8000", "--
 # Stage 3: Production — 最小运行时镜像
 # 从 dependencies 拷贝已安装的 .venv，不携带构建工具
 # ============================================
-FROM giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/common/python:3.11-slim AS production
+FROM giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/common/python-kubectl:3.11-slim AS production
 
 ARG APT_MIRROR=mirrors.aliyun.com
 
