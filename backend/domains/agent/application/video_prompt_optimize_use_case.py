@@ -8,8 +8,12 @@ from typing import Any
 
 import httpx
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from bootstrap.config import settings
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
+from domains.gateway.application.model_catalog_port import ModelCatalogPort
+from domains.gateway.application.scenario_defaults import require_scenario_default
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -57,8 +61,24 @@ async def _check_image_accessible(url: str, timeout: float = 5.0) -> bool:
 class VideoPromptOptimizeUseCase:
     """视频提示词优化用例"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        model_catalog: ModelCatalogPort,
+        db: AsyncSession | None = None,
+    ) -> None:
+        self._db = db
+        self._model_catalog = model_catalog
         self.gateway = AgentLlmFacade(settings)
+
+    async def _resolve_chat_model(self, *, has_images: bool) -> str:
+        scenario = "vision" if has_images else "default"
+        env_override = settings.vision_model if has_images else settings.default_model
+        return await require_scenario_default(
+            self._model_catalog,
+            scenario=scenario,
+            env_override=env_override,
+        )
 
     async def optimize(
         self,
@@ -116,7 +136,7 @@ class VideoPromptOptimizeUseCase:
             return ""
 
         has_images = bool(accessible_urls)
-        model = settings.vision_model if has_images else settings.default_model
+        model = await self._resolve_chat_model(has_images=has_images)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": effective_system},

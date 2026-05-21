@@ -7,6 +7,8 @@ MCP Server Integration Tests - MCP 服务器集成测试
 from httpx import AsyncClient
 import pytest
 
+from libs.api.paths import api_v1_path
+
 
 @pytest.mark.asyncio
 class TestMCPServerAPI:
@@ -83,6 +85,7 @@ class TestMCPServerAPI:
         assert entry.get("type") == "streamableHttp"
         assert "url" in entry
         assert "llm-server" in entry["url"]
+        assert api_v1_path("mcp", "llm-server") in entry["url"]
         assert "headers" in entry
         assert "Authorization" in entry["headers"]
         assert "<YOUR_API_KEY>" in entry["headers"]["Authorization"]

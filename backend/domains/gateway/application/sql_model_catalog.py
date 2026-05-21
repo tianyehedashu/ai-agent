@@ -8,7 +8,6 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from bootstrap.config_loader import app_config
 from domains.gateway.application.config_catalog_sync import (
     gateway_model_to_selector_item,
     model_types_for_gateway_registration,
@@ -143,10 +142,7 @@ class SqlModelCatalogAdapter:
     async def model_features(self, model_id: str) -> frozenset[str] | None:
         snap = await self.resolve_capabilities(model_id)
         if snap is None:
-            info = app_config.models.get_model(model_id)
-            if info is None:
-                return None
-            return info.features
+            return None
         return snap.features
 
 

@@ -4,6 +4,8 @@
  * 获取系统注册的内置工具列表（read_file, run_shell 等），供 Agent 配置选择使用。
  */
 
+import { apiV1Path } from '@/api/paths'
+
 import { apiClient } from './client'
 
 export interface ToolDefinition {
@@ -20,13 +22,16 @@ export const toolsApi = {
    * @param category 可选，按类别筛选（如 code, file, search, external）
    */
   list(category?: string): Promise<ToolDefinition[]> {
-    return apiClient.get<ToolDefinition[]>('/api/v1/tools/', category ? { category } : undefined)
+    return apiClient.get<ToolDefinition[]>(
+      apiV1Path('/tools/'),
+      category ? { category } : undefined
+    )
   },
 
   /**
    * 获取单个工具详情
    */
   get(name: string): Promise<ToolDefinition> {
-    return apiClient.get<ToolDefinition>(`/api/v1/tools/${encodeURIComponent(name)}`)
+    return apiClient.get<ToolDefinition>(apiV1Path(`/tools/${encodeURIComponent(name)}`))
   },
 }

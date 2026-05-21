@@ -21,6 +21,7 @@ from domains.identity.application import UserUseCase
 from libs.crypto import derive_encryption_key, encrypt_value
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
+from libs.api.paths import openai_compat_base
 
 
 @pytest.mark.integration
@@ -758,7 +759,7 @@ class TestGatewayManagementApi:
         plain_key = ck.json()["plain_key"]
 
         r_models = await dev_client.get(
-            "/v1/models",
+            f"{openai_compat_base()}/models",
             headers={"Authorization": f"Bearer {plain_key}"},
         )
         assert r_models.status_code == 200, r_models.text
@@ -900,7 +901,7 @@ class TestGatewayManagementApi:
         assert any(p["id"] == entitlement_id for p in r_ent_list.json())
 
         r_ent_patch = await dev_client.patch(
-            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            f"/api/v1/gateway/teams/{team.id}/entitlements/{entitlement_id}",
             headers=headers,
             json={"label": "Customer monthly pack", "included_models": ["gpt-4o-mini", "gpt-4o"]},
         )
@@ -909,7 +910,7 @@ class TestGatewayManagementApi:
         assert r_ent_patch.json()["included_models"] == ["gpt-4o-mini", "gpt-4o"]
 
         r_ent_usage = await dev_client.get(
-            f"/api/v1/gateway/entitlements/{entitlement_id}/usage?days=7",
+            f"/api/v1/gateway/teams/{team.id}/entitlements/{entitlement_id}/usage?days=7",
             headers=headers,
         )
         assert r_ent_usage.status_code == 200, r_ent_usage.text
@@ -1019,32 +1020,32 @@ class TestGatewayManagementApi:
         }
 
         r1 = await dev_client.get(
-            f"/api/v1/gateway/teams/{team_a.id}/credentials/{credential_id}/provider-plans",
+            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans",
             headers=headers_b,
         )
         assert r1.status_code == 404, r1.text
 
         r2 = await dev_client.patch(
-            f"/api/v1/gateway/teams/{team_a.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
             headers=headers_b,
             json={"label": "hijacked"},
         )
         assert r2.status_code == 404, r2.text
 
         r3 = await dev_client.delete(
-            f"/api/v1/gateway/teams/{team_a.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
             headers=headers_b,
         )
         assert r3.status_code == 404, r3.text
 
         r4 = await dev_client.get(
-            f"/api/v1/gateway/teams/{team_a.id}/keys/{vkey_id}/entitlements",
+            f"/api/v1/gateway/teams/{team_b.id}/keys/{vkey_id}/entitlements",
             headers=headers_b,
         )
         assert r4.status_code == 404, r4.text
 
         r5 = await dev_client.post(
-            f"/api/v1/gateway/teams/{team_a.id}/keys/{vkey_id}/entitlements",
+            f"/api/v1/gateway/teams/{team_b.id}/keys/{vkey_id}/entitlements",
             headers=headers_b,
             json={
                 "label": "hijack",
@@ -1058,26 +1059,26 @@ class TestGatewayManagementApi:
         assert r5.status_code == 404, r5.text
 
         r6 = await dev_client.patch(
-            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            f"/api/v1/gateway/teams/{team_b.id}/entitlements/{entitlement_id}",
             headers=headers_b,
             json={"label": "hijacked"},
         )
         assert r6.status_code == 404, r6.text
 
         r7 = await dev_client.delete(
-            f"/api/v1/gateway/entitlements/{entitlement_id}",
+            f"/api/v1/gateway/teams/{team_b.id}/entitlements/{entitlement_id}",
             headers=headers_b,
         )
         assert r7.status_code == 404, r7.text
 
         r8 = await dev_client.get(
-            f"/api/v1/gateway/entitlements/{entitlement_id}/usage?days=7",
+            f"/api/v1/gateway/teams/{team_b.id}/entitlements/{entitlement_id}/usage?days=7",
             headers=headers_b,
         )
         assert r8.status_code == 404, r8.text
 
         r9 = await dev_client.get(
-            f"/api/v1/gateway/api-key-grants/{uuid.uuid4()}/entitlements",
+            f"/api/v1/gateway/teams/{team_b.id}/api-key-grants/{uuid.uuid4()}/entitlements",
             headers=headers_b,
         )
         assert r9.status_code == 404, r9.text

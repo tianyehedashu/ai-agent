@@ -11,7 +11,6 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from bootstrap.config_loader import get_app_config
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.listing_studio_capability_runners import (
     RUNNERS,
@@ -21,7 +20,6 @@ from domains.agent.application.listing_studio_capability_runners import (
 from domains.agent.application.listing_studio_job_mapper import job_to_dict, job_to_dict_with_steps
 from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 from domains.agent.domain.listing_studio.capability_policy import (
-    merge_model_feature_sources,
     missing_capability_features,
 )
 from domains.agent.domain.listing_studio.constants import (
@@ -167,13 +165,12 @@ class ListingStudioUseCase:
 
         if cap_config and cap_config.required_features:
             catalog_features = await self._catalog.model_features(resolved.model)
-            static_features: frozenset[str] | None = None
             if catalog_features is None:
-                model_info = get_app_config().models.get_model(resolved.model)
-                if model_info is not None and model_info.features is not None:
-                    static_features = model_info.features
-            available = merge_model_feature_sources(catalog_features, static_features)
-            missing = missing_capability_features(cap_config.required_features, available)
+                raise ValidationError(
+                    f"模型 {resolved.model} 未在 Gateway 目录注册或缺少能力元数据；"
+                    f"请选择已在 Gateway 注册且支持所需能力的模型。"
+                )
+            missing = missing_capability_features(cap_config.required_features, catalog_features)
             if missing:
                 raise ValidationError(
                     f"模型 {resolved.model} 缺少能力「{cap_config.name}」所需的特性: {sorted(missing)}。"

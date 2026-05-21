@@ -1,7 +1,7 @@
 """
-Anthropic Messages API 兼容入口（挂载在根路径 /v1）
+Anthropic Messages API 兼容入口（挂载于 ``{ROOT}/api/v1/anthropic``，router 前缀 ``/v1``）
 
-提供 ``POST /v1/messages``（含 SSE），鉴权与 OpenAI 兼容面一致：
+提供 ``POST /api/v1/anthropic/v1/messages``（含 SSE），鉴权与 OpenAI 兼容面一致：
 ``Authorization: Bearer`` 或 ``x-api-key``（虚拟 Key / gateway:proxy 的 sk-）。
 """
 

@@ -4,8 +4,10 @@ Listing Studio API deprecation helpers for legacy /product-info routes.
 
 from fastapi import Response
 
-LISTING_STUDIO_API_PREFIX = "/api/v1/listing-studio"
-LEGACY_PRODUCT_INFO_API_PREFIX = "/api/v1/product-info"
+from libs.api.paths import api_v1_path
+
+LISTING_STUDIO_API_PREFIX = api_v1_path("listing-studio")
+LEGACY_PRODUCT_INFO_API_PREFIX = api_v1_path("product-info")
 
 
 def apply_listing_studio_deprecation_headers(response: Response) -> None:

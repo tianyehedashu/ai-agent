@@ -1,6 +1,7 @@
 import { apiClient } from '@/api/client'
+import { apiV1Path } from '@/api/paths'
 
-const PREFIX = '/api/v1/admin/storage'
+const PREFIX = apiV1Path('/admin/storage')
 
 export interface StorageConfigAdmin {
   storage_type: string

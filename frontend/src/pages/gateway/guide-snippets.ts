@@ -109,7 +109,7 @@ export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4-5"`,
 
 export function buildGuideSnippets(baseUrl: string, key: string, model: string): GuideSnippets {
   const authHeader = `Authorization: Bearer ${key}`
-  const anthropicBase = baseUrl.replace(/\/v1\/?$/, '')
+  const anthropicBase = baseUrl.replace(/\/openai\/v1\/?$/, '/anthropic')
   return {
     baseUrl,
     anthropicBaseUrl: anthropicBase,

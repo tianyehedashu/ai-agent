@@ -31,6 +31,7 @@ function getLastFetchUrl(): string {
 }
 
 import { gatewayApi } from './gateway'
+import { GATEWAY_API_BASE } from './paths'
 
 const TEAM_ID = 'team-test'
 
@@ -42,14 +43,14 @@ describe('gatewayApi.listAvailableModels', () => {
   it('请求 /api/v1/gateway/models/available', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ system_models: [], user_models: [] }))
     await gatewayApi.listAvailableModels('text')
-    expect(getLastFetchUrl()).toContain('/api/v1/gateway/models/available')
+    expect(getLastFetchUrl()).toContain(`${GATEWAY_API_BASE}/models/available`)
     expect(getLastFetchUrl()).toContain('type=text')
   })
 
   it('不传 type 时无 type query', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ system_models: [], user_models: [] }))
     await gatewayApi.listAvailableModels()
-    expect(getLastFetchUrl()).toContain('/api/v1/gateway/models/available')
+    expect(getLastFetchUrl()).toContain(`${GATEWAY_API_BASE}/models/available`)
     expect(getLastFetchUrl()).not.toContain('type=')
   })
 
@@ -71,7 +72,7 @@ describe('gatewayApi.revealKey', () => {
   it('请求 GET /api/v1/gateway/teams/{teamId}/keys/{id}/reveal', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ plain_key: 'sk-gw-test' }))
     const data = await gatewayApi.revealKey(TEAM_ID, 'key-abc')
-    expect(getLastFetchUrl()).toContain(`/api/v1/gateway/teams/${TEAM_ID}/keys/key-abc/reveal`)
+    expect(getLastFetchUrl()).toContain(`${GATEWAY_API_BASE}/teams/${TEAM_ID}/keys/key-abc/reveal`)
     expect(data.plain_key).toBe('sk-gw-test')
   })
 })
@@ -84,6 +85,8 @@ describe('gatewayApi.listVkeyEntitlements', () => {
   it('请求 GET /api/v1/gateway/teams/{teamId}/keys/{id}/entitlements', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse([]))
     await gatewayApi.listVkeyEntitlements(TEAM_ID, 'vkey-1')
-    expect(getLastFetchUrl()).toContain(`/api/v1/gateway/teams/${TEAM_ID}/keys/vkey-1/entitlements`)
+    expect(getLastFetchUrl()).toContain(
+      `${GATEWAY_API_BASE}/teams/${TEAM_ID}/keys/vkey-1/entitlements`
+    )
   })
 })

@@ -84,7 +84,11 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
 
         from domains.session.application.title_use_case import TitleUseCase
 
-        self.title_service = TitleUseCase(db, agent_llm_facade=self.llm_gateway)
+        self.title_service = TitleUseCase(
+            db,
+            agent_llm_facade=self.llm_gateway,
+            model_catalog=model_catalog,
+        )
 
         self.config_service = get_execution_config_service()
         self._memory_indexing = memory_indexing
@@ -318,7 +322,13 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             from domains.session.application.title_use_case import TitleUseCase
 
             async with get_session_context() as db:
-                title_service = TitleUseCase(db, agent_llm_facade=self.llm_gateway)
+                from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+                title_service = TitleUseCase(
+                    db,
+                    agent_llm_facade=self.llm_gateway,
+                    model_catalog=get_model_catalog_adapter(db),
+                )
                 success = await title_service.generate_and_update(
                     session_id=session_id,
                     strategy="first_message",

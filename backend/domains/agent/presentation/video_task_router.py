@@ -16,6 +16,7 @@ from domains.agent.application.video_prompt_optimize_use_case import (
     VideoPromptOptimizeUseCase,
 )
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
+from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.presentation.deps import AuthUser
 from libs.api.deps import get_video_task_service
 from libs.api.params import parse_optional_uuid
@@ -176,15 +177,18 @@ async def get_prompt_template(
 async def optimize_prompt(
     data: VideoPromptOptimizeRequest,
     current_user: AuthUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> VideoPromptOptimizeResponse:
     """利用 LLM 分析用户输入和图片，生成优化的视频提示词"""
+    _ = current_user
     if not data.user_text and not data.image_urls:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="至少需要提供文字描述或图片",
         )
 
-    use_case = VideoPromptOptimizeUseCase()
+    catalog = get_model_catalog_adapter(db)
+    use_case = VideoPromptOptimizeUseCase(model_catalog=catalog, db=db)
     result = await use_case.optimize(
         user_text=data.user_text,
         image_urls=data.image_urls,

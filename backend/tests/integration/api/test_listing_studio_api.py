@@ -8,6 +8,10 @@ from fastapi import status
 from httpx import AsyncClient
 import pytest
 
+from libs.api.paths import api_v1_path
+
+from libs.api.paths import api_v1_path
+
 
 @pytest.mark.integration
 class TestListingStudioJobApi:
@@ -356,6 +360,8 @@ class TestListingStudioRunPipelineApi:
         assert "job_id" in data
         assert data["status"] == "running"
         assert "poll_url" in data
+        job_id = data["job_id"]
+        assert data["poll_url"] == api_v1_path("listing-studio", "jobs", job_id)
 
 
 @pytest.mark.integration

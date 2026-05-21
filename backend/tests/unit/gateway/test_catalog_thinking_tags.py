@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from bootstrap.config_loader import ModelInfo
-from domains.gateway.application.config_catalog_sync import _build_tags_from_model_info
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
+from domains.gateway.application.config_catalog_sync import _build_tags_from_seed_model
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
@@ -12,13 +12,13 @@ from domains.gateway.domain.thinking_param import (
 )
 
 
-def _tags(model: ModelInfo) -> dict:
-    return _build_tags_from_model_info(model)
+def _tags(model: CatalogSeedModel) -> dict:
+    return _build_tags_from_seed_model(model)
 
 
 def test_deepseek_reasoner_builtin_reasoning() -> None:
     tags = _tags(
-        ModelInfo(
+        CatalogSeedModel(
             id="deepseek/deepseek-reasoner",
             name="DeepSeek Reasoner (R1)",
             provider="deepseek",
@@ -33,7 +33,7 @@ def test_deepseek_reasoner_builtin_reasoning() -> None:
 
 def test_qwen3_dashscope_enable_thinking() -> None:
     tags = _tags(
-        ModelInfo(
+        CatalogSeedModel(
             id="dashscope/qwen3-32b",
             name="Qwen3 32B",
             provider="dashscope",
@@ -48,7 +48,7 @@ def test_qwen3_dashscope_enable_thinking() -> None:
 
 def test_qwq_builtin_reasoning() -> None:
     tags = _tags(
-        ModelInfo(
+        CatalogSeedModel(
             id="dashscope/qwq-32b-preview",
             name="QwQ 32B",
             provider="dashscope",
@@ -62,7 +62,7 @@ def test_qwq_builtin_reasoning() -> None:
 
 def test_claude_35_sonnet_no_extended_thinking() -> None:
     tags = _tags(
-        ModelInfo(
+        CatalogSeedModel(
             id="claude-3-5-sonnet",
             name="Claude 3.5 Sonnet",
             provider="anthropic",
@@ -75,7 +75,7 @@ def test_claude_35_sonnet_no_extended_thinking() -> None:
 
 def test_claude_opus_47_anthropic_extended() -> None:
     tags = _tags(
-        ModelInfo(
+        CatalogSeedModel(
             id="claude-opus-4-7",
             name="Claude Opus 4.7",
             provider="anthropic",

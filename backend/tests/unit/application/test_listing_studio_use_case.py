@@ -234,8 +234,6 @@ class TestListingStudioUseCase:
         """测试: image_analysis 需要视觉模型，传入纯文本模型时抛出 ValidationError"""
         from unittest.mock import AsyncMock, patch
 
-        from bootstrap.config_loader import ModelInfo, ModelsConfig
-
         user = await self._create_test_user(db_session)
         from tests.helpers.permission_context import permission_context_for_user
 
@@ -249,24 +247,6 @@ class TestListingStudioUseCase:
             )
             job_id = uuid.UUID(job["id"])
 
-            # 纯文本模型（无 vision）
-            text_only_model = ModelInfo(
-                id="deepseek-chat",
-                name="DeepSeek Chat",
-                provider="deepseek",
-                supports_vision=False,
-                supports_json_mode=True,
-            )
-            mock_models = ModelsConfig(available=[text_only_model])
-
-            def get_model(mid: str) -> ModelInfo | None:
-                if mid == "deepseek-chat" or "deepseek" in (mid or ""):
-                    return text_only_model
-                return None
-
-            mock_models.get_model = get_model
-            mock_config = type("AppConfig", (), {"models": mock_models})()
-
             with (
                 patch.object(
                     use_case._model_resolution,
@@ -279,9 +259,11 @@ class TestListingStudioUseCase:
                     "resolve_vision_chat_model",
                     new_callable=AsyncMock,
                 ) as mock_resolve_vision,
-                patch(
-                    "domains.agent.application.listing_studio_use_case.get_app_config",
-                    return_value=mock_config,
+                patch.object(
+                    use_case._catalog,
+                    "model_features",
+                    new_callable=AsyncMock,
+                    return_value=frozenset({"tools", "json_mode"}),
                 ),
                 patch.dict(
                     "domains.agent.application.listing_studio_use_case.RUNNERS",

@@ -17,6 +17,7 @@ from domains.agent.infrastructure.repositories.system_storage_config_repository 
     SystemStorageConfigRepository,
 )
 from domains.agent.infrastructure.storage.build_image_store import build_image_store
+from libs.api.paths import effective_listing_studio_serve_prefix
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
 
@@ -173,7 +174,7 @@ class StorageConfigService:
         return StorageConfigSnapshot(
             storage_type=row.storage_type,
             local_storage_path=row.local_storage_path,
-            local_serve_prefix=row.local_serve_prefix,
+            local_serve_prefix=effective_listing_studio_serve_prefix(row.local_serve_prefix),
             s3_bucket=row.s3_bucket,
             s3_region=row.s3_region,
             s3_endpoint_url=row.s3_endpoint_url,

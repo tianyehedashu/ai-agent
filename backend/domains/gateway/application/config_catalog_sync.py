@@ -1,17 +1,19 @@
-"""将 app.toml ``models.available`` 幂等同步到 ``GatewayModel``（team_id NULL）与 system 凭据。"""
+"""将 Gateway 目录种子（JSON）幂等同步到 ``GatewayModel``（team_id NULL）与 system 凭据。"""
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from bootstrap.config_loader import ModelInfo, app_config
 from domains.gateway.application.catalog_capability import infer_catalog_capability
+from domains.gateway.application.gateway_catalog_seed import resolve_catalog_seed_models
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.catalog_provider_availability import (
@@ -129,7 +131,7 @@ async def _ensure_system_credential(
     return created.id
 
 
-def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
+def _build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
     real_model = (model.litellm_model or model.id).strip()
     explicit_tp = getattr(model, "thinking_param", None)
     thinking_param = infer_thinking_param(
@@ -173,7 +175,7 @@ def _build_tags_from_model_info(model: ModelInfo) -> dict[str, Any]:
 async def _upsert_upstream_pricing_from_model(
     session: AsyncSession,
     *,
-    model: ModelInfo,
+    model: CatalogSeedModel,
     real_model: str,
     capability: str,
 ) -> None:
@@ -201,7 +203,7 @@ async def _upsert_upstream_pricing_from_model(
         capability=capability,
         input_cost_per_token=Decimal(str(input_cpt)),
         output_cost_per_token=Decimal(str(output_cpt)),
-        source="toml",
+        source="seed",
     )
 
 
@@ -275,8 +277,27 @@ def _selector_capabilities_payload(
     }
 
 
+async def sync_gateway_catalog_from_seed(
+    session: AsyncSession,
+    *,
+    seed_path: Path | None = None,
+) -> dict[str, int]:
+    """将 ``gateway-catalog.seed.json`` 同步到全局 ``GatewayModel``。"""
+    models = resolve_catalog_seed_models(seed_path)
+    return await _sync_catalog_models(session, models)
+
+
 async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, int]:
-    """将 ``app_config.models.available`` 同步到全局 ``GatewayModel``。
+    """将 ``gateway-catalog.seed.json`` 同步到全局 ``GatewayModel``（兼容旧名）。"""
+    models = resolve_catalog_seed_models()
+    return await _sync_catalog_models(session, models)
+
+
+async def _sync_catalog_models(
+    session: AsyncSession,
+    models: list[CatalogSeedModel],
+) -> dict[str, int]:
+    """将模型列表幂等写入 system gateway_models。
 
     Returns:
         统计字段：upserted, disabled, skipped_no_credential, vkeys_pruned
@@ -284,12 +305,12 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     models_repo = GatewayModelRepository(session)
     creds_repo = SystemProviderCredentialRepository(session)
-    desired_ids = {m.id for m in app_config.models.available if m.litellm_model or m.id}
+    desired_ids = {m.id for m in models if m.litellm_model or m.id}
     upserted = 0
     skipped = 0
     providers_without_key: set[str] = set()
 
-    for model in app_config.models.available:
+    for model in models:
         if not (model.litellm_model or model.id):
             continue
         cred_id = await _ensure_system_credential(
@@ -307,7 +328,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
         raw_model = model.litellm_model or model.id
         real_model = build_litellm_model_id(model.provider, raw_model)
         capability = infer_catalog_capability(model)
-        tags = _build_tags_from_model_info(model)
+        tags = _build_tags_from_seed_model(model)
         existing = await models_repo.get_system_by_name(model.id)
         if existing is None:
             await models_repo.create_system(
@@ -426,6 +447,7 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
         "id": row.name,
         "display_name": display_name,
         "provider": row.provider,
+        "real_model": row.real_model,
         "model_id": row.name,
         "model_types": _infer_model_types_from_tags(tags, row.capability),
         "capabilities": _selector_capabilities_payload(
@@ -453,4 +475,5 @@ __all__ = [
     "model_types_for_gateway_registration",
     "selector_capabilities_from_tags",
     "sync_app_config_gateway_catalog",
+    "sync_gateway_catalog_from_seed",
 ]

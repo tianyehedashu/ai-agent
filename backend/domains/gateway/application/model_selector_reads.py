@@ -5,10 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from bootstrap.config import settings
 from domains.gateway.application.entitlement_model_status import annotate_items_entitlement_status
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
-from domains.gateway.domain.model_selection_policy import pick_configured_or_first_visible
+from domains.gateway.application.scenario_defaults import resolve_scenario_default
 
 if TYPE_CHECKING:
     from domains.gateway.application.entitlement_guard import EntitlementGuard
@@ -83,8 +82,7 @@ async def get_default_for_model_type(
             billing_team_id=team_id,
             model_type="image",
         )
-        visible = frozenset(str(m["id"]) for m in items if m.get("id") is not None)
-        picked = pick_configured_or_first_visible(settings.vision_model, visible)
+        picked = await resolve_scenario_default(catalog, scenario="vision")
         return _default_entry(items, picked)
     if model_type == "image_gen":
         available = await catalog.list_visible_models(
@@ -99,8 +97,7 @@ async def get_default_for_model_type(
         billing_team_id=team_id,
         model_type="text",
     )
-    visible = frozenset(str(m["id"]) for m in items if m.get("id") is not None)
-    picked = pick_configured_or_first_visible(settings.default_model, visible)
+    picked = await resolve_scenario_default(catalog, scenario="default")
     return _default_entry(items, picked)
 
 

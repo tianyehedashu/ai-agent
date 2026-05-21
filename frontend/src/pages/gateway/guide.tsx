@@ -3,7 +3,7 @@
  *
  * - 在线试调（PlaygroundCard）
  * - 调用配置：Base URL / 鉴权 / model / 流式字段
- * - 示例代码：OpenAI 兼容（/v1/chat/completions） + Anthropic 兼容（/v1/messages）
+ * - 示例代码：OpenAI 兼容（/api/v1/openai/v1/*） + Anthropic 兼容（/api/v1/anthropic/v1/*）
  *   每个风格内支持 curl / TS / Python，流式 toggle 同步切换示例代码与典型返回默认 Tab
  * - 典型返回：4 个 Tab 横向对比（OpenAI/Anthropic × 非流式/流式），用 Badge 突出 content-type
  */

@@ -23,6 +23,7 @@ if sys.platform == "win32":
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.responses import RedirectResponse
 
 from bootstrap.config import settings
 from domains.agent.application.startup import (
@@ -30,16 +31,16 @@ from domains.agent.application.startup import (
     run_agent_shutdown,
     run_agent_startup,
 )
+from domains.agent.presentation.admin_storage_router import router as admin_storage_router
 
 # 从各领域的 presentation 层导入路由
 from domains.agent.presentation.agent_router import router as agent_router
 from domains.agent.presentation.chat_router import router as chat_router
 from domains.agent.presentation.execution_router import router as execution_router
+from domains.agent.presentation.listing_studio_router import router as listing_studio_router
 from domains.agent.presentation.mcp_router import router as mcp_router
 from domains.agent.presentation.mcp_server_router import router as mcp_server_router
 from domains.agent.presentation.memory_router import router as memory_router
-from domains.agent.presentation.listing_studio_router import router as listing_studio_router
-from domains.agent.presentation.admin_storage_router import router as admin_storage_router
 from domains.agent.presentation.product_info_router import router as product_info_router
 from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
@@ -56,6 +57,7 @@ from domains.identity.presentation.router import router as identity_router
 from domains.identity.presentation.usage_router import router as usage_router
 from domains.session.presentation import session_router
 from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
+from libs.api.paths import anthropic_compat_base, api_v1_path, openai_compat_base, service_path
 from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
 from libs.db.database import init_db
 from libs.db.redis import close_redis, init_redis
@@ -123,7 +125,7 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     # 初始化 Redis（开发机未起 redis 时仅告警，不阻断启动）
     try:
         await init_redis()
-    except Exception as e:  # noqa: BLE001 — redis/asyncio 可能抛多种连接异常
+    except Exception as e:
         logger.warning("Redis not available: %s", e)
 
     await run_agent_startup(_fastapi_app)
@@ -413,8 +415,7 @@ async def general_exception_handler(
 # API 路由
 # =============================================================================
 
-# 注册各领域的 API 路由
-api_router_prefix = "/api/v1"
+api_router_prefix = api_v1_path()
 
 # 认证相关路由
 app.include_router(identity_router, prefix=f"{api_router_prefix}/auth", tags=["Authentication"])
@@ -450,8 +451,6 @@ app.include_router(execution_router, prefix=api_router_prefix, tags=["Execution"
 app.include_router(mcp_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Management"])
 # MCP Streamable HTTP（llm-server 等：/, /{server_name}, /{server_name}/info）
 app.include_router(mcp_server_router, prefix=f"{api_router_prefix}/mcp", tags=["MCP Server"])
-# 同时挂载 /mcp，便于 Cursor 等客户端使用 http://localhost:8000/mcp/llm-server
-app.include_router(mcp_server_router, prefix="/mcp", tags=["MCP Server"])
 
 # 用量与配额
 app.include_router(
@@ -502,16 +501,28 @@ app.include_router(
     tags=["Tenancy / Teams"],
 )
 
-# AI Gateway 管理 API：/api/v1/gateway/*
-app.include_router(gateway_mgmt_router, tags=["AI Gateway"])
+# AI Gateway 管理 API：{ROOT}/api/v1/gateway/*
+app.include_router(
+    gateway_mgmt_router,
+    prefix=f"{api_router_prefix}/gateway",
+    tags=["AI Gateway"],
+)
 
-# AI Gateway OpenAI 兼容入口：根路径下的 /v1/*（与 OpenAI 客户端默认 base_url 一致）
-app.include_router(openai_compat_router, tags=["OpenAI Compat"])
-# Anthropic Messages API：/v1/messages（与 Anthropic SDK base_url 对齐）
-app.include_router(anthropic_compat_router, tags=["Anthropic Compat"])
+# AI Gateway OpenAI 兼容入口：{ROOT}/api/v1/openai/v1/*
+app.include_router(
+    openai_compat_router,
+    prefix=api_v1_path("openai"),
+    tags=["OpenAI Compat"],
+)
+# Anthropic Messages API：{ROOT}/api/v1/anthropic/v1/messages
+app.include_router(
+    anthropic_compat_router,
+    prefix=api_v1_path("anthropic"),
+    tags=["Anthropic Compat"],
+)
 
 
-@app.get("/")
+@app.get(service_path())
 async def root() -> dict[str, str]:
     """根端点"""
     return {
@@ -521,7 +532,33 @@ async def root() -> dict[str, str]:
     }
 
 
-@app.get("/health")
+@app.get(service_path("health"))
 async def health() -> dict[str, str]:
     """健康检查"""
     return {"status": "healthy"}
+
+
+# Docker 本地探针：ROOT_PATH 非空时保留根级 /health
+if settings.root_path.strip("/"):
+    @app.get("/health")
+    async def health_root_alias() -> dict[str, str]:
+        """健康检查（无服务前缀别名，便于容器内 curl localhost:8000/health）"""
+        return {"status": "healthy"}
+
+
+# 开发/无 ROOT_PATH：根级 /v1/* 301 重定向至新兼容面（一个版本周期过渡）
+if not settings.root_path.strip("/"):
+
+    @app.api_route(
+        "/v1/{path:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+        include_in_schema=False,
+    )
+    async def legacy_v1_redirect(path: str, request: Request) -> RedirectResponse:
+        if path == "messages" or path.startswith("messages/"):
+            target = f"{anthropic_compat_base()}/v1/{path}"
+        else:
+            target = f"{openai_compat_base()}/{path}"
+        if request.url.query:
+            target = f"{target}?{request.url.query}"
+        return RedirectResponse(url=target, status_code=301)

@@ -1,6 +1,6 @@
 # AI Gateway 领域架构与工程实践
 
-> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、**OpenAI 兼容与 Anthropic Messages（`/v1/*`）** 对外入口、管理 API、内部 LLM 桥接及相关前端。  
+> **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、**OpenAI 兼容（`/api/v1/openai/v1/*`）与 Anthropic Messages（`/api/v1/anthropic/v1/*`）** 对外入口、管理 API、内部 LLM 桥接及相关前端。可选 **`ROOT_PATH`**（如 `/ai-agent`）作为服务级前缀。  
 > **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)；Claude Code / Cursor 适配见 [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md)。
 
 ---
@@ -10,7 +10,7 @@
 | 维度 | 说明 |
 |------|------|
 | **业务目标** | 统一多模型调用入口（LiteLLM Router）、团队/虚拟 Key、凭据池、预算与限流、可观测（日志/告警/rollup）。 |
-| **边界** | **Inbound**：根路径 **`/v1/*`** —— **OpenAI 兼容**（如 `POST /v1/chat/completions`）与 **Anthropic Messages**（`POST /v1/messages`）；鉴权为 **`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先），令牌为 **`sk-gw-*` 虚拟 Key** 或带 **`gateway:proxy`** scope 且命中 **Gateway grant** 的 **`sk-*`**（后者的 **`X-Team-Id`** 只用于选择已授权团队）。**管理面**：`/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
+| **边界** | **Inbound**：**OpenAI 兼容** `{ROOT}/api/v1/openai/v1/*`（如 `POST .../chat/completions`）与 **Anthropic Messages** `{ROOT}/api/v1/anthropic/v1/messages`；鉴权为 **`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先），令牌为 **`sk-gw-*` 虚拟 Key** 或带 **`gateway:proxy`** scope 且命中 **Gateway grant** 的 **`sk-*`**（后者的 **`X-Team-Id`** 只用于选择已授权团队）。**管理面**：`{ROOT}/api/v1/gateway/*`（JWT + 团队上下文）。**Outbound**：各 Provider HTTP API（由 LiteLLM 发起）。 |
 | **与 Agent 域关系** | Agent 通过 `AgentLlmFacade` + `GatewayProxyProtocol`（`domains/gateway/application/ports.py`）可走内部桥接，归因到 personal team 与系统 vkey 池。 |
 
 ---
@@ -262,7 +262,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 | 端点 | 消费方 | 列表范围 | 扩展字段 | 过滤策略 |
 |------|--------|----------|----------|----------|
-| ``GET /v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
+| ``GET /api/v1/openai/v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
 | ``GET /api/v1/gateway/teams/{team_id}/models`` | 管理 UI（JWT + 团队路径） | 含 disabled；可按 provider / credential 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
 | ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
 

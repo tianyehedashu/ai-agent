@@ -2,6 +2,7 @@
  * Listing Studio API - Listing 创作工作流 API
  */
 
+import { apiV1Path } from '@/api/paths'
 import type {
   ListingStudioJob,
   ListingStudioJobListResponse,
@@ -19,7 +20,7 @@ import type {
 
 import { apiClient } from './client'
 
-const PREFIX = '/api/v1/listing-studio'
+const PREFIX = apiV1Path('/listing-studio')
 
 export const listingStudioApi = {
   async createJob(params?: { title?: string; session_id?: string }): Promise<ListingStudioJob> {

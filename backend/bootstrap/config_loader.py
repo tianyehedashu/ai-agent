@@ -13,9 +13,7 @@ TOML 配置加载器
     if app_config.simplemem.enabled:
         model = app_config.simplemem.extraction_model
 
-    # 访问模型列表
-    for model in app_config.models.available:
-        print(f"{model.name}: ${model.input_price}/1M tokens")
+    # 模型目录由 Gateway DB + gateway-catalog.seed.json 管理
 
 环境变量插值语法：
     ${VAR}           - 引用环境变量，不存在则为空
@@ -89,113 +87,7 @@ class SimpleMemConfig:
 
 
 # =============================================================================
-# 模型配置
-# =============================================================================
-
-
-@dataclass
-class ModelInfo:
-    """单个模型信息"""
-
-    id: str
-    name: str
-    provider: str
-    context_window: int = 128000
-    input_price: float = 0.0  # $/1M tokens 或 ¥/千tokens（根据提供商，仅供前端展示）
-    output_price: float = 0.0
-    # 与 LiteLLM 对齐的「每 token 美元价」，单位严格为 USD/token。
-    # 若该模型在 LiteLLM 内置 model_cost_map 中无价（如 zai/glm-4-flash），
-    # 在 app.toml 显式填这两项后，``config_catalog_sync`` 会把它透传到
-    # ``GatewayModel.tags``，进而由 ``router_singleton._build_litellm_params``
-    # 注入到 deployment 的 ``input_cost_per_token`` / ``output_cost_per_token``，
-    # 让 LiteLLM 的 cost_calculator 不再 fallback 到 0。
-    input_cost_per_token: float = 0.0
-    output_cost_per_token: float = 0.0
-    supports_vision: bool = False
-    supports_tools: bool = True
-    supports_reasoning: bool = False  # 是否支持推理/思维链
-    thinking_param: str = ""  # 可选：dashscope_enable_thinking / builtin_reasoning / anthropic_extended
-    supports_json_mode: bool = True  # 是否支持 response_format=json_object
-    supports_image_gen: bool = False  # 是否为图像生成模型
-    supports_txt2img: bool = True  # 文生图（与 supports_image_gen 同时为 True 时写入 tags）
-    supports_img2img: bool = True  # 图生图 / 参考图
-    supports_video_gen: bool = False  # 视频生成（产品级能力，写入 tags）
-    supports_image_to_video: bool = False  # 图生视频
-    max_reference_images: int = 0  # 0 表示由运行时默认（如 8）
-    litellm_model: str = ""  # LiteLLM 调用格式 (如 deepseek/deepseek-chat)
-    recommended_for: list[str] = field(default_factory=list)  # 推荐使用场景
-    description: str = ""  # 模型描述
-
-    @property
-    def features(self) -> frozenset[str]:
-        """返回该模型支持的特性名集合，用于能力-模型匹配。"""
-        result: set[str] = set()
-        if self.supports_vision:
-            result.add("vision")
-        if self.supports_tools:
-            result.add("tools")
-        if self.supports_reasoning:
-            result.add("reasoning")
-        if self.supports_json_mode:
-            result.add("json_mode")
-        if self.supports_image_gen:
-            result.add("image_gen")
-        if self.supports_txt2img and self.supports_image_gen:
-            result.add("txt2img")
-        if self.supports_img2img and self.supports_image_gen:
-            result.add("img2img")
-        if self.supports_video_gen:
-            result.add("video_gen")
-        if self.supports_image_to_video:
-            result.add("image_to_video")
-        return frozenset(result)
-
-
-@dataclass
-class ModelsConfig:
-    """模型配置"""
-
-    default: str = "deepseek/deepseek-chat"
-    embedding: str = "text-embedding-3-small"
-    available: list[ModelInfo] = field(default_factory=list)
-
-    def get_model(self, model_id: str) -> ModelInfo | None:
-        """根据 ID 获取模型信息"""
-        for model in self.available:
-            if model.id == model_id:
-                return model
-        return None
-
-    def get_models_by_provider(self, provider: str) -> list[ModelInfo]:
-        """获取指定提供商的所有模型"""
-        return [m for m in self.available if m.provider == provider]
-
-    def get_vision_models(self) -> list[ModelInfo]:
-        """获取支持视觉的模型"""
-        return [m for m in self.available if m.supports_vision]
-
-    def get_tool_models(self) -> list[ModelInfo]:
-        """获取支持工具调用的模型"""
-        return [m for m in self.available if m.supports_tools]
-
-    def get_reasoning_models(self) -> list[ModelInfo]:
-        """获取支持推理的模型"""
-        return [m for m in self.available if m.supports_reasoning]
-
-    def get_models_for_scene(self, scene: str) -> list[ModelInfo]:
-        """获取推荐用于特定场景的模型
-
-        Args:
-            scene: 场景名称，如 'code', 'reasoning', 'fast', 'vision', 'general' 等
-
-        Returns:
-            推荐的模型列表
-        """
-        return [m for m in self.available if scene in m.recommended_for]
-
-
-# =============================================================================
-# Agent 配置
+# LLM 提供商凭据（模型目录见 gateway-catalog.seed.json）
 # =============================================================================
 
 
@@ -338,37 +230,8 @@ class LocalLLMConfig:
 
 @dataclass
 class LLMConfig:
-    """LLM 配置"""
+    """LLM 提供商凭据配置（场景模型偏好见环境变量 + Gateway 目录）。"""
 
-    # ==========================================================================
-    # 场景化模型配置
-    # ==========================================================================
-    # 默认对话模型
-    default_model: str = "deepseek/deepseek-chat"
-    # 快速响应模型（用于简单任务、工具调用前的意图识别等）
-    fast_model: str = "dashscope/qwen-turbo"
-    # 复杂推理模型（数学、逻辑、代码分析等）
-    reasoning_model: str = "deepseek/deepseek-reasoner"
-    # 代码生成模型
-    code_model: str = "dashscope/qwen2.5-coder-32b-instruct"
-    # 长文档处理模型（超过 100K token 的文档）
-    long_context_model: str = "zai/glm-4-long"
-    # 视觉理解模型
-    vision_model: str = "dashscope/qwen-vl-max"
-
-    # ==========================================================================
-    # Embedding 配置
-    # ==========================================================================
-    embedding_provider: str = "api"  # "api" 或 "local"
-    embedding_model: str = "text-embedding-3-small"
-    # Embedding 向量维度（不同模型维度不同）
-    # text-embedding-3-small: 1536, text-embedding-3-large: 3072
-    # bge-small-zh: 512, bge-base-zh: 768, bge-m3: 1024
-    embedding_dimension: int = 1536
-
-    # ==========================================================================
-    # LLM 提供商配置
-    # ==========================================================================
     openai: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     deepseek: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     anthropic: LLMProviderConfig = field(default_factory=LLMProviderConfig)
@@ -393,7 +256,6 @@ class AppConfig:
 
     # 应用逻辑配置
     simplemem: SimpleMemConfig = field(default_factory=SimpleMemConfig)
-    models: ModelsConfig = field(default_factory=ModelsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
     token_optimization: TokenOptimizationConfig = field(default_factory=TokenOptimizationConfig)

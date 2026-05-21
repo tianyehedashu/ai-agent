@@ -213,7 +213,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  TOML[app.toml models.available] --> SYNC[config_catalog_sync]
+  SEED[gateway-catalog.seed.json] --> SYNC[config_catalog_sync]
   SYNC --> UP[(upstream_model_pricing<br/>source=toml)]
   BOOT[bootstrap/main.py 启动] --> REG[sync_to_litellm_registry]
   UP --> REG
@@ -222,7 +222,7 @@ flowchart TD
   REG --> RELOAD[reload_router]
 ```
 
-1. **`config_catalog_sync`**：从 `app.toml` 的 `models.available` 同步 `GatewayModel`，并对带单价的模型调用 `_upsert_upstream_pricing_from_model()` 写入 `upstream_model_pricing`（`source=toml`）。单价 **不再** 写入 model `tags`。
+1. **`config_catalog_sync`**：从 `gateway-catalog.seed.json` 同步 `GatewayModel`，并对带单价的模型调用 `_upsert_upstream_pricing_from_model()` 写入 `upstream_model_pricing`（`source=seed`）。单价 **不再** 写入 model `tags`。
 2. **应用启动**（`bootstrap/main.py`）：`build_pricing_service(session).sync_to_litellm_registry()`：
    - `litellm.register_model(dict(litellm.model_cost))` 保留内置价
    - 将所有 **活跃** 上游行的 `upstream_model` 键注册进 LiteLLM

@@ -31,6 +31,9 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 # ============================================
 FROM dependencies AS build
 
+ARG VITE_APP_ROOT=
+ENV VITE_APP_ROOT=${VITE_APP_ROOT}
+
 COPY . .
 RUN npm run build
 

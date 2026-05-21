@@ -217,7 +217,10 @@ async def bearer_vkey_or_apikey_auth(
 
     if is_vkey_format(plain):
         gp = await _gateway_principal_from_vkey_plain(plain, db)
-        assert_vkey_team_header_compatible(gp.team_id, x_team_id)
+        try:
+            assert_vkey_team_header_compatible(gp.team_id, x_team_id)
+        except HttpMappableDomainError as exc:
+            raise http_exception_from_gateway_domain(exc) from exc
         return VkeyOrApikeyPrincipal(
             via="vkey",
             user_id=gp.user_id,

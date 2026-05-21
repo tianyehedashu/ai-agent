@@ -15,7 +15,7 @@ from functools import lru_cache
 from typing import Literal
 import uuid
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bootstrap.config_loader import app_config
@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     debug: bool = True
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"))
     api_prefix: str = "/api/v1"
+    root_path: str = ""  # 服务级前缀，如 /ai-agent（环境变量 ROOT_PATH）
     cookie_secure: bool | None = None  # None = 自动（生产 HTTPS 时 True）；内网 HTTP 部署设为 False
 
     # ========================================================================
@@ -118,42 +119,48 @@ class Settings(BaseSettings):
     giikin_creator_id: int | None = None  # 操作用户 ID，用于厂商追踪
 
     # ==========================================================================
-    # 场景化模型配置（从 config/app.toml 加载）
+    # 场景化模型配置（环境变量；空值时由 Gateway 可见目录兜底）
     # ==========================================================================
-    # 模型名称格式: provider/model_name (如 deepseek/deepseek-chat)
-
-    # 默认对话模型
-    default_model: str = Field(default_factory=lambda: app_config.llm.default_model)
-
-    # 快速响应模型（用于简单任务、工具调用前的意图识别等）
-    fast_model: str = Field(default_factory=lambda: app_config.llm.fast_model)
-
-    # 复杂推理模型（数学、逻辑、代码分析等）
-    reasoning_model: str = Field(default_factory=lambda: app_config.llm.reasoning_model)
-
-    # 代码生成模型
-    code_model: str = Field(default_factory=lambda: app_config.llm.code_model)
-
-    # 长文档处理模型
-    long_context_model: str = Field(default_factory=lambda: app_config.llm.long_context_model)
-
-    # 视觉理解模型
-    vision_model: str = Field(default_factory=lambda: app_config.llm.vision_model)
-
-    # ==========================================================================
-    # Embedding 配置（从 config/app.toml 加载）
-    # ==========================================================================
-    # provider: "api"（云端 API）或 "local"（本地模型，CPU 友好）
-    embedding_provider: Literal["api", "local"] = Field(
-        default_factory=lambda: app_config.llm.embedding_provider  # type: ignore
+    default_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("DEFAULT_MODEL"),
     )
-    # API 模式模型: text-embedding-3-small, doubao-embedding-* 等
-    # 本地模式模型: bge-small-zh, bge-base-en 或完整名称如 BAAI/bge-small-zh-v1.5
-    embedding_model: str = Field(default_factory=lambda: app_config.llm.embedding_model)
-    # 向量维度（不同模型维度不同）
-    # API: text-embedding-3-small=1536, text-embedding-3-large=3072
-    # 本地: bge-small-zh=512, bge-base-zh=768, bge-m3=1024
-    embedding_dimension: int = Field(default_factory=lambda: app_config.llm.embedding_dimension)
+    fast_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("FAST_MODEL"),
+    )
+    reasoning_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("REASONING_MODEL"),
+    )
+    code_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("CODE_MODEL"),
+    )
+    long_context_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("LONG_CONTEXT_MODEL"),
+    )
+    vision_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("VISION_MODEL"),
+    )
+
+    # ==========================================================================
+    # Embedding 配置（环境变量）
+    # ==========================================================================
+    embedding_provider: Literal["api", "local"] = Field(
+        default="api",
+        validation_alias=AliasChoices("EMBEDDING_PROVIDER"),
+    )
+    embedding_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("EMBEDDING_MODEL"),
+    )
+    embedding_dimension: int = Field(
+        default=1024,
+        validation_alias=AliasChoices("EMBEDDING_DIMENSION"),
+    )
 
     # ========================================================================
     # 安全配置
@@ -286,8 +293,8 @@ class Settings(BaseSettings):
     # ========================================================================
     # AI Gateway 配置
     # ========================================================================
-    # 启动时是否将 app.toml 中 models.available 幂等同步到 gateway_models（team_id NULL）
-    gateway_catalog_sync_on_startup: bool = True
+    # 启动时是否将 gateway-catalog.seed.json 幂等同步到 gateway_models（生产建议 false，用 make seed-gateway）
+    gateway_catalog_sync_on_startup: bool = False
     # 同步时是否用配置覆盖 tags（GitOps：配置声明优先于 UI 对托管行的修改）
     gateway_catalog_config_overwrites_managed: bool = True
     # 配置移除某托管模型后是否从各 vkey 的 allowed_models 中剔除该虚拟名（False=不修改白名单）

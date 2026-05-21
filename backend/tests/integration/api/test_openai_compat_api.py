@@ -1,5 +1,5 @@
 """
-OpenAI 兼容入口 /v1/* 集成测试（虚拟 Key + dev_client）。
+OpenAI 兼容入口 /api/v1/openai/v1/* 集成测试（虚拟 Key + dev_client）。
 """
 
 from __future__ import annotations
@@ -10,14 +10,17 @@ import pytest
 from domains.identity.domain.api_key_types import ApiKeyScope
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
+from libs.api.paths import openai_compat_base
 from libs.iam.permission_context import clear_permission_context
+
+_OPENAI_MODELS = f"{openai_compat_base()}/models"
 
 
 @pytest.mark.integration
 class TestOpenAiCompatApi:
     @pytest.mark.asyncio
     async def test_v1_models_requires_bearer(self, dev_client: AsyncClient) -> None:
-        r = await dev_client.get("/v1/models")
+        r = await dev_client.get(_OPENAI_MODELS)
         assert r.status_code == 401
 
     @pytest.mark.asyncio
@@ -42,7 +45,7 @@ class TestOpenAiCompatApi:
             plain_key = ck.json()["plain_key"]
 
             r = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={"Authorization": f"Bearer {plain_key}"},
             )
             assert r.status_code == 200, r.text
@@ -95,13 +98,13 @@ class TestOpenAiCompatApi:
             assert [g["team_id"] for g in grants] == [str(personal.id)]
 
             personal_models = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={"Authorization": f"Bearer {plain_key}"},
             )
             assert personal_models.status_code == 200, personal_models.text
 
             shared_denied = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={
                     "Authorization": f"Bearer {plain_key}",
                     "X-Team-Id": str(shared.id),
@@ -110,7 +113,7 @@ class TestOpenAiCompatApi:
             assert shared_denied.status_code == 403, shared_denied.text
 
             bad_team_header = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={
                     "Authorization": f"Bearer {plain_key}",
                     "X-Team-Id": "not-a-uuid",
@@ -158,7 +161,7 @@ class TestOpenAiCompatApi:
             plain_key = body["plain_key"]
 
             selected = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={
                     "Authorization": f"Bearer {plain_key}",
                     "X-Team-Id": str(shared.id),
@@ -194,13 +197,13 @@ class TestOpenAiCompatApi:
             plain_key = ck.json()["plain_key"]
 
             ok = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={"Authorization": f"Bearer {plain_key}"},
             )
             assert ok.status_code == 200, ok.text
 
             bad = await dev_client.get(
-                "/v1/models",
+                _OPENAI_MODELS,
                 headers={
                     "Authorization": f"Bearer {plain_key}",
                     "X-Team-Id": str(other.id),

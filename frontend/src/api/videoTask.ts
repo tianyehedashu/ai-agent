@@ -2,6 +2,7 @@
  * Video Task API - 视频生成任务 API
  */
 
+import { apiV1Path } from '@/api/paths'
 import type {
   VideoGenTask,
   VideoTaskCreateInput,
@@ -122,7 +123,7 @@ export const videoTaskApi = {
         supports_image_to_video: boolean
         source?: string
       }>
-    >('/api/v1/video-tasks/models')
+    >(apiV1Path('/video-tasks/models'))
     return raw.map((x) => ({
       value: x.value,
       label: x.label,
@@ -151,7 +152,7 @@ export const videoTaskApi = {
     if (options?.promptSource) params.prompt_source = options.promptSource
 
     const backend = await apiClient.get<BackendVideoTaskListResponse>(
-      '/api/v1/video-tasks/',
+      apiV1Path('/video-tasks/'),
       params
     )
 
@@ -167,7 +168,7 @@ export const videoTaskApi = {
    * 获取单个视频任务
    */
   async get(id: string): Promise<VideoGenTask> {
-    const backend = await apiClient.get<BackendVideoTask>(`/api/v1/video-tasks/${id}`)
+    const backend = await apiClient.get<BackendVideoTask>(apiV1Path(`/video-tasks/${id}`))
     return toFrontendVideoTask(backend)
   },
 
@@ -176,7 +177,7 @@ export const videoTaskApi = {
    */
   async create(data: VideoTaskCreateInput): Promise<VideoGenTask> {
     const backend = await apiClient.post<BackendVideoTask>(
-      '/api/v1/video-tasks/',
+      apiV1Path('/video-tasks/'),
       toBackendCreateRequest(data)
     )
     return toFrontendVideoTask(backend)
@@ -187,7 +188,7 @@ export const videoTaskApi = {
    */
   async update(id: string, data: VideoTaskUpdateInput): Promise<VideoGenTask> {
     const backend = await apiClient.patch<BackendVideoTask>(
-      `/api/v1/video-tasks/${id}`,
+      apiV1Path(`/video-tasks/${id}`),
       toBackendUpdateRequest(data)
     )
     return toFrontendVideoTask(backend)
@@ -197,7 +198,7 @@ export const videoTaskApi = {
    * 提交视频任务到厂商
    */
   async submit(id: string): Promise<VideoGenTask> {
-    const backend = await apiClient.post<BackendVideoTask>(`/api/v1/video-tasks/${id}/submit`)
+    const backend = await apiClient.post<BackendVideoTask>(apiV1Path(`/video-tasks/${id}/submit`))
     return toFrontendVideoTask(backend)
   },
 
@@ -207,7 +208,7 @@ export const videoTaskApi = {
   async poll(id: string, once = true): Promise<VideoGenTask> {
     const queryParam = once ? '?once=true' : ''
     const backend = await apiClient.post<BackendVideoTask>(
-      `/api/v1/video-tasks/${id}/poll${queryParam}`
+      apiV1Path(`/video-tasks/${id}/poll${queryParam}`)
     )
     return toFrontendVideoTask(backend)
   },
@@ -216,7 +217,7 @@ export const videoTaskApi = {
    * 取消视频任务
    */
   async cancel(id: string): Promise<VideoGenTask> {
-    const backend = await apiClient.post<BackendVideoTask>(`/api/v1/video-tasks/${id}/cancel`)
+    const backend = await apiClient.post<BackendVideoTask>(apiV1Path(`/video-tasks/${id}/cancel`))
     return toFrontendVideoTask(backend)
   },
 
@@ -227,7 +228,7 @@ export const videoTaskApi = {
    * 仅支持 failed 或 cancelled 状态的任务。
    */
   async retry(id: string): Promise<VideoGenTask> {
-    const backend = await apiClient.post<BackendVideoTask>(`/api/v1/video-tasks/${id}/retry`)
+    const backend = await apiClient.post<BackendVideoTask>(apiV1Path(`/video-tasks/${id}/retry`))
     return toFrontendVideoTask(backend)
   },
 
@@ -235,7 +236,7 @@ export const videoTaskApi = {
    * 删除视频任务
    */
   async delete(id: string): Promise<void> {
-    await apiClient.delete<Record<string, never>>(`/api/v1/video-tasks/${id}`)
+    await apiClient.delete<Record<string, never>>(apiV1Path(`/video-tasks/${id}`))
   },
 
   /**
@@ -243,7 +244,7 @@ export const videoTaskApi = {
    */
   async getPromptTemplate(): Promise<VideoPromptTemplate> {
     const resp = await apiClient.get<{ system_prompt: string }>(
-      '/api/v1/video-tasks/prompt-template'
+      apiV1Path('/video-tasks/prompt-template')
     )
     return { systemPrompt: resp.system_prompt }
   },
@@ -253,7 +254,7 @@ export const videoTaskApi = {
    */
   async optimizePrompt(data: VideoPromptOptimizeInput): Promise<VideoPromptOptimizeResult> {
     const resp = await apiClient.post<{ optimized_prompt: string }>(
-      '/api/v1/video-tasks/optimize-prompt',
+      apiV1Path('/video-tasks/optimize-prompt'),
       {
         user_text: data.userText,
         image_urls: data.imageUrls ?? [],

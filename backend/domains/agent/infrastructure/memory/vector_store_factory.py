@@ -15,6 +15,7 @@ from domains.agent.application.memory_indexing_service import MemoryIndexingServ
 from domains.agent.domain.vector_backend_policy import effective_vector_db_type
 from domains.agent.infrastructure.llm import (
     EmbeddingService,
+    create_embedding_service_from_catalog,
     create_embedding_service_from_settings,
 )
 from domains.agent.infrastructure.memory.vector_index_bridge import VectorIndexBridge
@@ -23,6 +24,7 @@ from libs.db.vector import ChromaVectorIndex, EphemeralChromaVectorIndex, Qdrant
 if TYPE_CHECKING:
     from domains.agent.application.ports.text_embedding_port import TextEmbeddingPort
     from domains.agent.application.ports.vector_index_port import VectorIndexPort
+    from domains.gateway.application.model_catalog_port import ModelCatalogPort
 
 from utils.logging import get_logger
 
@@ -41,6 +43,12 @@ class _EmbeddingServiceAdapter:
 
 def create_text_embedding_port() -> TextEmbeddingPort:
     return _EmbeddingServiceAdapter(create_embedding_service_from_settings())
+
+
+async def create_text_embedding_port_async(
+    model_catalog: "ModelCatalogPort",
+) -> TextEmbeddingPort:
+    return _EmbeddingServiceAdapter(await create_embedding_service_from_catalog(model_catalog))
 
 
 def get_vector_index() -> VectorIndexPort:

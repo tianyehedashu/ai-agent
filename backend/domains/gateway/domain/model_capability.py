@@ -13,7 +13,7 @@ from domains.gateway.domain.thinking_param import (
 
 @dataclass(frozen=True)
 class ModelCapabilitySnapshot:
-    """与 LLM 参数适配相关的模型能力（与 config_loader.ModelInfo 字段对齐子集）。"""
+    """与 LLM 参数适配相关的模型能力（与 CatalogSeedModel / Gateway tags 字段对齐子集）。"""
 
     supports_tools: bool = True
     supports_reasoning: bool = False

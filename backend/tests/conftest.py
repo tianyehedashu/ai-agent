@@ -24,8 +24,6 @@ import pytest_asyncio
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# 配置警告过滤器，抑制第三方库的警告
-# 在 pytest 配置之前设置警告过滤器
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="litellm")
 warnings.filterwarnings(
     "ignore", message=".*coroutine.*was never awaited.*", category=RuntimeWarning
@@ -40,6 +38,23 @@ warnings.filterwarnings(
 # 这些警告在 Python 解释器关闭时产生，pytest 的过滤器无法捕获
 if "PYTHONWARNINGS" not in os.environ:
     os.environ["PYTHONWARNINGS"] = "ignore::RuntimeWarning,ignore::UserWarning"
+
+# 场景模型 / Embedding 测试默认值（解耦 toml 后 Settings 默认为空）
+os.environ.setdefault("DEFAULT_MODEL", "deepseek/deepseek-chat")
+os.environ.setdefault("FAST_MODEL", "dashscope/qwen-turbo")
+os.environ.setdefault("VISION_MODEL", "dashscope/qwen-vl-max")
+os.environ.setdefault("EMBEDDING_MODEL", "dashscope/text-embedding-v3")
+os.environ.setdefault("EMBEDDING_DIMENSION", "1024")
+
+
+def api_v1_url(path: str = "") -> str:
+    """测试用：拼接与运行时一致的 /api/v1 路径（尊重 ROOT_PATH）。"""
+    from libs.api.paths import api_v1_path
+
+    if not path:
+        return api_v1_path()
+    normalized = path if path.startswith("/") else f"/{path}"
+    return api_v1_path(normalized.lstrip("/"))
 
 
 # LiteLLM / Gateway 异步回调与 db_session 竞态：原为固定 0.35s；流式用例需要短 grace。
@@ -95,7 +110,6 @@ from domains.identity.infrastructure.models.user import User
 from domains.session.infrastructure.models.session import Session as SessionORM  # noqa: F401
 from libs.db.database import Base
 from libs.iam.permission_context import (
-    PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
@@ -386,11 +400,11 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         _apply_db_overrides(app, db_session)
 
         from domains.gateway.application.config_catalog_sync import (
-            sync_app_config_gateway_catalog,
+            sync_gateway_catalog_from_seed,
         )
         from domains.gateway.infrastructure.router_singleton import reload_router
 
-        await sync_app_config_gateway_catalog(db_session)
+        await sync_gateway_catalog_from_seed(db_session)
         await db_session.flush()
         with contextlib.suppress(Exception):
             await reload_router(db_session)
@@ -450,11 +464,11 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         _apply_db_overrides(app, db_session)
 
         from domains.gateway.application.config_catalog_sync import (
-            sync_app_config_gateway_catalog,
+            sync_gateway_catalog_from_seed,
         )
         from domains.gateway.infrastructure.router_singleton import reload_router
 
-        await sync_app_config_gateway_catalog(db_session)
+        await sync_gateway_catalog_from_seed(db_session)
         await db_session.flush()
         with contextlib.suppress(Exception):
             await reload_router(db_session)

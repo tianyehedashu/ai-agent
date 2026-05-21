@@ -2,6 +2,7 @@
  * Session API
  */
 
+import { apiV1Path } from '@/api/paths'
 import type { Session, Message, PaginatedResponse, ToolCall, MessageRole } from '@/types'
 
 import { apiClient } from './client'
@@ -133,7 +134,7 @@ export const sessionApi = {
    * 获取会话列表
    */
   async list(page = 1, pageSize = 20): Promise<PaginatedResponse<Session>> {
-    const backendList = await apiClient.get<BackendSession[]>('/api/v1/sessions/', {
+    const backendList = await apiClient.get<BackendSession[]>(apiV1Path('/sessions/'), {
       skip: (page - 1) * pageSize,
       limit: pageSize,
     })
@@ -152,7 +153,7 @@ export const sessionApi = {
    * 获取单个会话
    */
   async get(id: string): Promise<Session> {
-    const backend = await apiClient.get<BackendSession>(`/api/v1/sessions/${id}`)
+    const backend = await apiClient.get<BackendSession>(apiV1Path(`/sessions/${id}`))
     return toFrontendSession(backend)
   },
 
@@ -161,7 +162,7 @@ export const sessionApi = {
    */
   async create(options?: { agentId?: string; title?: string }): Promise<Session> {
     const backend = await apiClient.post<BackendSession>(
-      '/api/v1/sessions/',
+      apiV1Path('/sessions/'),
       toBackendCreateRequest(options ?? {})
     )
     return toFrontendSession(backend)
@@ -179,7 +180,7 @@ export const sessionApi = {
     if (data.imageGenModelRef !== undefined) backendData.image_gen_model_ref = data.imageGenModelRef
     if (data.videoModelRef !== undefined) backendData.video_model_ref = data.videoModelRef
 
-    const backend = await apiClient.patch<BackendSession>(`/api/v1/sessions/${id}`, backendData)
+    const backend = await apiClient.patch<BackendSession>(apiV1Path(`/sessions/${id}`), backendData)
     return toFrontendSession(backend)
   },
 
@@ -187,7 +188,7 @@ export const sessionApi = {
    * 删除会话
    */
   async delete(id: string): Promise<void> {
-    await apiClient.delete<Record<string, never>>(`/api/v1/sessions/${id}`)
+    await apiClient.delete<Record<string, never>>(apiV1Path(`/sessions/${id}`))
   },
 
   /**
@@ -195,7 +196,7 @@ export const sessionApi = {
    */
   async getMessages(sessionId: string, page = 1, pageSize = 50): Promise<Message[]> {
     const backendList = await apiClient.get<BackendMessage[]>(
-      `/api/v1/sessions/${sessionId}/messages`,
+      apiV1Path(`/sessions/${sessionId}/messages`),
       {
         skip: (page - 1) * pageSize,
         limit: pageSize,
@@ -214,7 +215,7 @@ export const sessionApi = {
     strategy: 'first_message' | 'summary' = 'summary'
   ): Promise<Session> {
     const backend = await apiClient.post<BackendSession>(
-      `/api/v1/sessions/${sessionId}/generate-title?strategy=${strategy}`
+      apiV1Path(`/sessions/${sessionId}/generate-title?strategy=${strategy}`)
     )
     return toFrontendSession(backend)
   },

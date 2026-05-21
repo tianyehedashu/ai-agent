@@ -1,0 +1,400 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "deepseek/deepseek-chat",
+      "name": "DeepSeek Chat (V3)",
+      "provider": "deepseek",
+      "litellm_model": "deepseek/deepseek-chat",
+      "context_window": 65536,
+      "input_price": 1.0,
+      "output_price": 2.0,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "default",
+        "general"
+      ],
+      "description": "通用对话，性价比极高"
+    },
+    {
+      "id": "deepseek/deepseek-coder",
+      "name": "DeepSeek Coder",
+      "provider": "deepseek",
+      "litellm_model": "deepseek/deepseek-coder",
+      "context_window": 16384,
+      "input_price": 1.0,
+      "output_price": 2.0,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "code"
+      ],
+      "description": "代码生成专用"
+    },
+    {
+      "id": "deepseek/deepseek-reasoner",
+      "name": "DeepSeek Reasoner (R1)",
+      "provider": "deepseek",
+      "litellm_model": "deepseek/deepseek-reasoner",
+      "context_window": 65536,
+      "input_price": 4.0,
+      "output_price": 16.0,
+      "supports_vision": false,
+      "supports_tools": false,
+      "supports_reasoning": true,
+      "thinking_param": "builtin_reasoning",
+      "supports_json_mode": false,
+      "recommended_for": [
+        "reasoning",
+        "math",
+        "logic"
+      ],
+      "description": "复杂推理，输出思维链"
+    },
+    {
+      "id": "dashscope/qwen-turbo",
+      "name": "通义千问 Turbo",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen-turbo",
+      "context_window": 131072,
+      "input_price": 0.002,
+      "output_price": 0.006,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "fast",
+        "extraction"
+      ],
+      "description": "响应最快 (407ms)，适合简单任务"
+    },
+    {
+      "id": "dashscope/qwen-plus",
+      "name": "通义千问 Plus",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen-plus",
+      "context_window": 131072,
+      "input_price": 0.004,
+      "output_price": 0.012,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "general"
+      ],
+      "description": "平衡版，性能与成本兼顾"
+    },
+    {
+      "id": "dashscope/qwen-max",
+      "name": "通义千问 Max",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen-max",
+      "context_window": 32768,
+      "input_price": 0.02,
+      "output_price": 0.06,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "complex"
+      ],
+      "description": "能力最强"
+    },
+    {
+      "id": "dashscope/qwen2.5-coder-32b-instruct",
+      "name": "Qwen 2.5 Coder 32B",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen2.5-coder-32b-instruct",
+      "context_window": 131072,
+      "input_price": 0.002,
+      "output_price": 0.006,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "code"
+      ],
+      "description": "代码最强，响应快 (446ms)"
+    },
+    {
+      "id": "dashscope/qwq-32b-preview",
+      "name": "QwQ 32B (推理)",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwq-32b-preview",
+      "context_window": 32768,
+      "input_price": 0.002,
+      "output_price": 0.006,
+      "supports_vision": false,
+      "supports_tools": false,
+      "supports_reasoning": true,
+      "thinking_param": "builtin_reasoning",
+      "supports_json_mode": false,
+      "recommended_for": [
+        "reasoning"
+      ],
+      "description": "推理增强，类似 o1/R1"
+    },
+    {
+      "id": "dashscope/qwen3-32b",
+      "name": "Qwen3 32B (深度思考)",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen3-32b",
+      "context_window": 131072,
+      "input_price": 0.002,
+      "output_price": 0.006,
+      "supports_vision": false,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "dashscope_enable_thinking",
+      "recommended_for": [
+        "reasoning"
+      ],
+      "description": "Qwen3 深度思考；流式 + enable_thinking，响应含 reasoning_content"
+    },
+    {
+      "id": "dashscope/qwen-vl-max",
+      "name": "通义千问 VL Max",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/qwen-vl-max",
+      "context_window": 32768,
+      "input_price": 0.02,
+      "output_price": 0.02,
+      "supports_vision": true,
+      "supports_tools": true,
+      "recommended_for": [
+        "vision"
+      ],
+      "description": "视觉理解增强版"
+    },
+    {
+      "id": "zai/glm-4-flash",
+      "name": "GLM-4 Flash",
+      "provider": "zhipuai",
+      "litellm_model": "zai/glm-4-flash",
+      "context_window": 131072,
+      "input_price": 0.0001,
+      "output_price": 0.0001,
+      "input_cost_per_token": 1.43e-08,
+      "output_cost_per_token": 1.43e-08,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "fast",
+        "free"
+      ],
+      "description": "免费/极低价，极速响应"
+    },
+    {
+      "id": "zai/glm-4-plus",
+      "name": "GLM-4 Plus",
+      "provider": "zhipuai",
+      "litellm_model": "zai/glm-4-plus",
+      "context_window": 131072,
+      "input_price": 0.05,
+      "output_price": 0.05,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "general"
+      ],
+      "description": "增强版，指令遵循能力强"
+    },
+    {
+      "id": "zai/glm-4-long",
+      "name": "GLM-4 Long",
+      "provider": "zhipuai",
+      "litellm_model": "zai/glm-4-long",
+      "context_window": 1000000,
+      "input_price": 0.001,
+      "output_price": 0.001,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "long_context"
+      ],
+      "description": "超长上下文 (100万tokens)"
+    },
+    {
+      "id": "zai/glm-4.6",
+      "name": "GLM-4.6",
+      "provider": "zhipuai",
+      "litellm_model": "zai/glm-4.6",
+      "context_window": 204800,
+      "input_price": 0.05,
+      "output_price": 0.05,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "general"
+      ],
+      "description": "最新稳定版"
+    },
+    {
+      "id": "zai/codegeex-4",
+      "name": "CodeGeeX-4",
+      "provider": "zhipuai",
+      "litellm_model": "zai/codegeex-4",
+      "context_window": 131072,
+      "input_price": 0.0001,
+      "output_price": 0.0001,
+      "supports_vision": false,
+      "supports_tools": true,
+      "recommended_for": [
+        "code",
+        "free"
+      ],
+      "description": "代码专用，基本免费"
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "provider": "openai",
+      "litellm_model": "gpt-4o",
+      "context_window": 128000,
+      "input_price": 2.5,
+      "output_price": 10.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "recommended_for": [
+        "quality",
+        "vision"
+      ],
+      "description": "OpenAI 旗舰，效果最佳"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o Mini",
+      "provider": "openai",
+      "litellm_model": "gpt-4o-mini",
+      "context_window": 128000,
+      "input_price": 0.15,
+      "output_price": 0.6,
+      "supports_vision": true,
+      "supports_tools": true,
+      "recommended_for": [
+        "general"
+      ],
+      "description": "小型高效版"
+    },
+    {
+      "id": "claude-3-5-sonnet",
+      "name": "Claude 3.5 Sonnet",
+      "provider": "anthropic",
+      "litellm_model": "claude-3-5-sonnet-20241022",
+      "context_window": 200000,
+      "input_price": 3.0,
+      "output_price": 15.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "recommended_for": [
+        "code",
+        "quality"
+      ],
+      "description": "代码能力强，长上下文"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7",
+      "provider": "anthropic",
+      "litellm_model": "claude-opus-4-7",
+      "context_window": 200000,
+      "input_price": 15.0,
+      "output_price": 75.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "anthropic_extended",
+      "recommended_for": [
+        "reasoning",
+        "code",
+        "quality"
+      ],
+      "description": "Claude Code 默认 opus；Extended Thinking（Anthropic 原生 thinking 块）"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6",
+      "provider": "anthropic",
+      "litellm_model": "claude-sonnet-4-6",
+      "context_window": 200000,
+      "input_price": 3.0,
+      "output_price": 15.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "anthropic_extended",
+      "recommended_for": [
+        "reasoning",
+        "code",
+        "general"
+      ],
+      "description": "平衡型 Sonnet 4.6；Extended Thinking"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "name": "Claude Opus 4.6",
+      "provider": "anthropic",
+      "litellm_model": "claude-opus-4-6",
+      "context_window": 200000,
+      "input_price": 15.0,
+      "output_price": 75.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "anthropic_extended",
+      "recommended_for": [
+        "reasoning",
+        "code"
+      ],
+      "description": "Opus 4.6；Extended Thinking"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5",
+      "provider": "anthropic",
+      "litellm_model": "claude-sonnet-4-5",
+      "context_window": 200000,
+      "input_price": 3.0,
+      "output_price": 15.0,
+      "supports_vision": true,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "anthropic_extended",
+      "recommended_for": [
+        "reasoning",
+        "code",
+        "general"
+      ],
+      "description": "Sonnet 4.5；Extended Thinking"
+    },
+    {
+      "id": "volcengine/seedream",
+      "name": "Seedream 3.0",
+      "provider": "volcengine",
+      "litellm_model": "",
+      "context_window": 0,
+      "input_price": 0.04,
+      "output_price": 0.0,
+      "supports_vision": false,
+      "supports_tools": false,
+      "supports_image_gen": true,
+      "recommended_for": [
+        "image_gen"
+      ],
+      "description": "火山引擎图像生成（1920×1920）"
+    },
+    {
+      "id": "openai/dall-e-3",
+      "name": "DALL-E 3",
+      "provider": "openai",
+      "litellm_model": "",
+      "context_window": 0,
+      "input_price": 0.04,
+      "output_price": 0.0,
+      "supports_vision": false,
+      "supports_tools": false,
+      "supports_image_gen": true,
+      "recommended_for": [
+        "image_gen"
+      ],
+      "description": "OpenAI 图像生成（1024×1024）"
+    }
+  ]
+}

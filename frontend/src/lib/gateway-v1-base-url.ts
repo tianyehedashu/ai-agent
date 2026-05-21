@@ -1,8 +1,10 @@
 /**
- * OpenAI 兼容网关根路径（/v1/*）
+ * OpenAI 兼容网关根路径（/api/v1/openai/v1/*）
  *
- * 与管理 API（/api/v1/gateway/*）不同；开发环境 Vite 仅代理 /api，直连后端需用 8000。
+ * 与管理 API（/api/v1/gateway/*）不同；开发环境 Vite 代理 /api 或 APP_ROOT。
  */
+
+import { APP_ROOT, GATEWAY_OPENAI_V1_BASE } from '@/api/paths'
 
 /** 解析当前环境下的 Gateway OpenAI 兼容 Base URL（含 /v1 后缀）。 */
 export function resolveGatewayV1BaseUrl(): string {
@@ -10,16 +12,23 @@ export function resolveGatewayV1BaseUrl(): string {
   if (configured) {
     try {
       const origin = new URL(configured).origin
-      return `${origin}/v1`
+      return `${origin}${GATEWAY_OPENAI_V1_BASE}`
     } catch {
-      return `${configured.replace(/\/$/, '')}/v1`
+      const base = configured.replace(/\/$/, '')
+      return base.endsWith(GATEWAY_OPENAI_V1_BASE) ? base : `${base}${GATEWAY_OPENAI_V1_BASE}`
     }
   }
   if (import.meta.env.DEV) {
-    return 'http://localhost:8000/v1'
+    return `http://localhost:8000${GATEWAY_OPENAI_V1_BASE}`
   }
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/v1`
+    return `${window.location.origin}${GATEWAY_OPENAI_V1_BASE}`
   }
-  return 'https://your-api-host/v1'
+  return `https://your-api-host${APP_ROOT}/api/v1/openai/v1`
+}
+
+/** Anthropic SDK base_url（无 /v1 尾段） */
+export function resolveGatewayAnthropicBaseUrl(): string {
+  const openaiBase = resolveGatewayV1BaseUrl()
+  return openaiBase.replace(/\/openai\/v1\/?$/, '/anthropic')
 }

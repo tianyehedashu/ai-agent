@@ -148,7 +148,8 @@ async def get_session_service(
 
 async def get_title_service(db: DbSession) -> TitleUseCase:
     """获取标题服务"""
-    return TitleUseCase(db=db)
+    catalog = get_model_catalog_adapter(db)
+    return TitleUseCase(db=db, model_catalog=catalog)
 
 
 async def get_chat_service(
@@ -159,16 +160,18 @@ async def get_chat_service(
     """获取对话服务"""
     from domains.agent.infrastructure.memory.vector_store_factory import (
         build_memory_indexing_service,
+        create_text_embedding_port_async,
     )
 
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
     model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
+    embedding_port = await create_text_embedding_port_async(catalog)
     return ChatUseCase(
         db,
         session_use_case=session_service,
         session_use_case_factory=build_session_use_case,
-        memory_indexing=build_memory_indexing_service(),
+        memory_indexing=build_memory_indexing_service(embedding=embedding_port),
         checkpointer=checkpointer,
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,

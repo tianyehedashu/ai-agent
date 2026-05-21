@@ -101,7 +101,7 @@ lock: ## 生成/更新 uv.lock 文件
 # 开发服务器
 # ==============================================================================
 
-dev: ## 启动开发服务器 (带热重载)
+dev: seed-gateway ## 启动开发服务器 (带热重载)
 	$(UV) run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-debug: ## 启动开发服务器 (调试模式)
@@ -273,6 +273,10 @@ db-upgrade-test: ## 对测试数据库执行迁移（开发环境，与 conftest
 db-reset-test: ## 清空测试库后执行迁移（解决 relation already exists 等冲突）
 	@echo 清空测试库并执行迁移...
 	$(UV) run python scripts/migrate_test_db.py --reset
+
+seed-gateway: ## 幂等同步 gateway-catalog.seed.json 到 system_gateway_models
+	@echo 同步 Gateway 模型目录种子...
+	$(UV) run python scripts/seed_gateway_models.py
 
 # ==============================================================================
 # 文档

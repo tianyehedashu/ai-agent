@@ -2,9 +2,9 @@
 """
 AI Gateway 入站代理联调脚本（OpenAI 兼容 + Anthropic Messages）
 
-网关根路径挂载与官方 SDK 一致：
-  - OpenAI：  {base}/v1/chat/completions、/v1/images/generations、/v1/models
-  - Anthropic：{base}/v1/messages
+网关服务根 URL（GATEWAY_BASE_URL，如 http://127.0.0.1:8000）下兼容面路径：
+  - OpenAI：  {ROOT}/api/v1/openai/v1/chat/completions、/models 等
+  - Anthropic：{ROOT}/api/v1/anthropic/v1/messages
 
 鉴权（二选一，同时存在时优先 Bearer）：
   - Authorization: Bearer <sk-gw-...>  或  <sk-...>（需 gateway:proxy scope + grant）
@@ -241,11 +241,11 @@ def _pick_model(
 
 def test_list_models(
     client: httpx.Client,
-    base_url: str,
+    openai_base: str,
     headers: dict[str, str],
 ) -> list[dict[str, Any]]:
-    _print_section("1. GET /v1/models")
-    r = client.get(f"{base_url}/v1/models", headers=headers)
+    _print_section("1. GET OpenAI /models")
+    r = client.get(f"{openai_base}/models", headers=headers)
     body = _print_http_response(r)
     if r.status_code != 200:
         r.raise_for_status()
@@ -264,11 +264,11 @@ def test_list_models(
 
 def test_openai_chat(
     client: httpx.Client,
-    base_url: str,
+    openai_base: str,
     headers: dict[str, str],
     model: str,
 ) -> None:
-    _print_section(f"2. OpenAI POST /v1/chat/completions  model={model}")
+    _print_section(f"2. OpenAI POST /chat/completions  model={model}")
     payload = {
         "model": model,
         "messages": [
@@ -279,7 +279,7 @@ def test_openai_chat(
     }
     _print_json("request body", payload)
     r = client.post(
-        f"{base_url}/v1/chat/completions",
+        f"{openai_base}/chat/completions",
         headers=headers,
         json=payload,
     )
@@ -290,11 +290,11 @@ def test_openai_chat(
 
 def test_openai_image(
     client: httpx.Client,
-    base_url: str,
+    openai_base: str,
     headers: dict[str, str],
     model: str,
 ) -> None:
-    _print_section(f"3. OpenAI POST /v1/images/generations  model={model}")
+    _print_section(f"3. OpenAI POST /images/generations  model={model}")
     payload = {
         "model": model,
         "prompt": "A minimal flat icon of a robot, blue background, test only.",
@@ -303,7 +303,7 @@ def test_openai_image(
     }
     _print_json("request body", payload)
     r = client.post(
-        f"{base_url}/v1/images/generations",
+        f"{openai_base}/images/generations",
         headers=headers,
         json=payload,
         timeout=DEFAULT_TIMEOUT,
@@ -315,7 +315,7 @@ def test_openai_image(
 
 def test_anthropic_messages(
     client: httpx.Client,
-    base_url: str,
+    anthropic_base: str,
     headers: dict[str, str],
     model: str,
 ) -> None:
@@ -332,7 +332,7 @@ def test_anthropic_messages(
     }
     _print_json("request body", payload)
     r = client.post(
-        f"{base_url}/v1/messages",
+        f"{anthropic_base}/v1/messages",
         headers=headers,
         json=payload,
     )
@@ -353,14 +353,14 @@ def test_anthropic_messages(
 
 def test_anthropic_messages_x_api_key(
     client: httpx.Client,
-    base_url: str,
+    anthropic_base: str,
     token: str,
     team_id: str | None,
     model: str,
 ) -> None:
     _print_section("5. Anthropic POST /v1/messages  (x-api-key 鉴权)")
     headers = _merge_headers(token, team_id, use_x_api_key=True)
-    test_anthropic_messages(client, base_url, headers, model)
+    test_anthropic_messages(client, anthropic_base, headers, model)
 
 
 def parse_args() -> argparse.Namespace:
@@ -419,7 +419,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    base_url = str(args.base_url).rstrip("/")
+    server_root = str(args.base_url).rstrip("/")
+
+    from libs.api.paths import anthropic_compat_base, openai_compat_base
+
+    openai_base = f"{server_root}{openai_compat_base()}"
+    anthropic_base = f"{server_root}{anthropic_compat_base()}"
 
     token = (args.token or "").strip()
     if not token:
@@ -444,7 +449,9 @@ def main() -> int:
         print("loaded .env:")
         for p in _LOADED_ENV_FILES:
             print(f"  - {p}")
-    print(f"base_url={base_url}")
+    print(f"server_root={server_root}")
+    print(f"openai_base={openai_base}")
+    print(f"anthropic_base={anthropic_base}")
     print(f"token_prefix={token[:12]}...")
     if team_id:
         print(f"X-Team-Id={team_id}")
@@ -452,7 +459,7 @@ def main() -> int:
     failed = 0
     with httpx.Client(timeout=args.timeout) as client:
         try:
-            models = test_list_models(client, base_url, headers)
+            models = test_list_models(client, openai_base, headers)
         except Exception as exc:
             print(f"FAIL list models: {exc}")
             return 1
@@ -463,7 +470,7 @@ def main() -> int:
             failed += 1
         else:
             try:
-                test_openai_chat(client, base_url, headers, chat_model)
+                test_openai_chat(client, openai_base, headers, chat_model)
             except Exception as exc:
                 print(f"FAIL openai chat: {exc}")
                 failed += 1
@@ -474,14 +481,14 @@ def main() -> int:
                 print("\n跳过生图：未找到 image 能力模型（可用 --image-model 指定）")
             else:
                 try:
-                    test_openai_image(client, base_url, headers, image_model)
+                    test_openai_image(client, openai_base, headers, image_model)
                 except Exception as exc:
                     print(f"FAIL openai image: {exc}")
                     failed += 1
 
         if chat_model:
             try:
-                test_anthropic_messages(client, base_url, headers, chat_model)
+                test_anthropic_messages(client, anthropic_base, headers, chat_model)
             except Exception as exc:
                 print(f"FAIL anthropic messages: {exc}")
                 failed += 1
@@ -489,7 +496,7 @@ def main() -> int:
             if args.anthropic_x_api_key:
                 try:
                     test_anthropic_messages_x_api_key(
-                        client, base_url, token, team_id, chat_model
+                        client, anthropic_base, token, team_id, chat_model
                     )
                 except Exception as exc:
                     print(f"FAIL anthropic x-api-key: {exc}")

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+from libs.api.paths import listing_studio_images_serve_prefix
 
 
 @dataclass(frozen=True)
@@ -17,7 +19,7 @@ class StorageConfigSnapshot:
     is_active: bool = True
     # local
     local_storage_path: str | None = None
-    local_serve_prefix: str | None = "/api/v1/listing-studio/images"
+    local_serve_prefix: str | None = field(default_factory=listing_studio_images_serve_prefix)
     # s3
     s3_bucket: str | None = None
     s3_region: str | None = None

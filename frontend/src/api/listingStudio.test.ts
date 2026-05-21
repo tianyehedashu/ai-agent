@@ -30,6 +30,7 @@ function getLastFetchUrl(): string {
 }
 
 import { listingStudioApi } from './listingStudio'
+import { apiV1Path } from './paths'
 
 describe('listingStudioApi', () => {
   beforeEach(() => {
@@ -40,7 +41,7 @@ describe('listingStudioApi', () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ items: [], total: 0, skip: 0, limit: 20 }))
     await listingStudioApi.listJobs({ skip: 0, limit: 20, status: 'draft' })
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/listing-studio/jobs'),
+      expect.stringContaining(apiV1Path('/listing-studio/jobs')),
       expect.any(Object)
     )
     expect(getLastFetchUrl()).toMatch(/skip=0&limit=20&status=draft/)
@@ -52,7 +53,9 @@ describe('listingStudioApi', () => {
     )
     await listingStudioApi.getJob('job-1')
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/v1\/listing-studio\/jobs\/job-1$/),
+      expect.stringMatching(
+        new RegExp(`${apiV1Path('/listing-studio/jobs').replace(/\//g, '\\/')}/job-1$`)
+      ),
       expect.any(Object)
     )
   })
@@ -66,7 +69,7 @@ describe('listingStudioApi', () => {
       user_input: { product_link: 'https://a.com' },
     })
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/listing-studio/jobs/job-1/steps'),
+      expect.stringContaining(`${apiV1Path('/listing-studio/jobs')}/job-1/steps`),
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
@@ -83,7 +86,7 @@ describe('listingStudioApi', () => {
     )
     await listingStudioApi.run({ inputs: { product_name: '商品' } })
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/listing-studio/run'),
+      expect.stringContaining(apiV1Path('/listing-studio/run')),
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ inputs: { product_name: '商品' } }),

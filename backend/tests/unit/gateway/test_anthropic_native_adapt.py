@@ -120,6 +120,7 @@ async def test_iter_sse_from_dict_chunks() -> None:
 
 def test_messages_route_on_app() -> None:
     from bootstrap.main import app
+    from libs.api.paths import api_v1_path
 
     paths = {getattr(r, "path", "") for r in app.routes}
-    assert "/v1/messages" in paths
+    assert api_v1_path("anthropic", "v1", "messages") in paths

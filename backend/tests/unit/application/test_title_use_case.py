@@ -21,6 +21,16 @@ from libs.iam.permission_context import (
 class TestTitleUseCase:
     """Title Use Case tests."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_fast_model(self):
+        with patch.object(
+            TitleUseCase,
+            "_resolve_fast_model",
+            new_callable=AsyncMock,
+            return_value="dashscope/qwen-turbo",
+        ):
+            yield
+
     async def _create_test_user(self, db_session) -> User:
         """Helper function to create test user."""
         user = User(

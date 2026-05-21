@@ -49,6 +49,7 @@ from libs.api.deps import (
     get_product_image_gen_task_service,
 )
 from libs.api.params import parse_optional_uuid
+from libs.api.paths import api_v1_path
 from libs.background_tasks import register_app_background_task
 from libs.exceptions import NotFoundError, ValidationError
 
@@ -338,7 +339,7 @@ async def run_pipeline(
         job_id=job_id,
         status="running",
         message="任务已提交，请使用 job_id 在后台查看进度与结果。",
-        poll_url=f"/api/v1/listing-studio/jobs/{job_id}",
+        poll_url=api_v1_path("listing-studio", "jobs", job_id),
     )
 
 

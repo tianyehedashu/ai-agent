@@ -2,6 +2,7 @@
  * User API
  */
 
+import { apiV1Path } from '@/api/paths'
 import { setRefreshToken } from '@/stores/auth'
 
 import { apiClient } from './client'
@@ -47,7 +48,7 @@ export const userApi = {
    */
   async register(params: RegisterParams): Promise<CurrentUser> {
     // 1. 注册
-    await apiClient.post<CurrentUser>('/api/v1/auth/register', {
+    await apiClient.post<CurrentUser>(apiV1Path('/auth/register'), {
       email: params.email,
       password: params.password,
       name: params.name,
@@ -66,7 +67,7 @@ export const userApi = {
    */
   async login(params: LoginParams): Promise<CurrentUser> {
     // 1. 获取 Token Pair
-    const response = await apiClient.post<TokenPairResponse>('/api/v1/auth/token', {
+    const response = await apiClient.post<TokenPairResponse>(apiV1Path('/auth/token'), {
       email: params.email,
       password: params.password,
     })
@@ -83,14 +84,14 @@ export const userApi = {
    * 获取当前用户信息
    */
   async getCurrentUser(): Promise<CurrentUser> {
-    return await apiClient.get<CurrentUser>('/api/v1/auth/me')
+    return await apiClient.get<CurrentUser>(apiV1Path('/auth/me'))
   },
 
   /**
    * 更新当前用户信息
    */
   async updateUser(params: UpdateUserParams): Promise<CurrentUser> {
-    return await apiClient.put<CurrentUser>('/api/v1/auth/me', params)
+    return await apiClient.put<CurrentUser>(apiV1Path('/auth/me'), params)
   },
 
   /**
@@ -100,7 +101,7 @@ export const userApi = {
   async logout(): Promise<void> {
     try {
       // 调用后端退出登录接口，清除 cookie
-      await apiClient.post('/api/v1/auth/logout')
+      await apiClient.post(apiV1Path('/auth/logout'))
     } catch (error) {
       // 即使后端调用失败，也清除本地认证信息
       console.warn('Logout API call failed:', error)

@@ -155,14 +155,14 @@ make test-cov  # 带覆盖率
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-### AI Gateway 对外协议（根路径 `/v1`）
+### AI Gateway 对外协议（`/api/v1/openai|anthropic`）
 
-同一服务、同一 `base_url`（例如 `http://localhost:8000`）下提供两套 HTTP 面，虚拟 Key（`sk-gw-...`）与带 `gateway:proxy` 且命中 Gateway grant 的 API Key 均可使用；鉴权支持 **`Authorization: Bearer <token>`** 或 **`x-api-key: <token>`**（同时存在时优先 Bearer）。`X-Team-Id` 在使用业务 `sk-` 时只用于选择该 Key 已授权的团队。
+同一服务下提供两套 HTTP 面（可选服务级前缀 `ROOT_PATH`，如 `/ai-agent`）。虚拟 Key（`sk-gw-...`）与带 `gateway:proxy` 且命中 Gateway grant 的 API Key 均可使用；鉴权支持 **`Authorization: Bearer <token>`** 或 **`x-api-key: <token>`**（同时存在时优先 Bearer）。`X-Team-Id` 在使用业务 `sk-` 时只用于选择该 Key 已授权的团队。
 
-| 协议 | 示例端点 | 说明 |
-|------|-----------|------|
-| OpenAI 兼容 | `POST /v1/chat/completions`、`GET /v1/models` 等 | 与 OpenAI SDK 默认路径一致 |
-| Anthropic Messages | `POST /v1/messages` | 与 Anthropic SDK 的 Messages API 路径一致；内部经 LiteLLM 走与 Chat 相同的预算与日志管线 |
+| 协议 | SDK base_url | 示例端点 |
+|------|--------------|----------|
+| OpenAI 兼容 | `{ROOT}/api/v1/openai/v1` | `POST .../chat/completions`、`GET .../models` |
+| Anthropic Messages | `{ROOT}/api/v1/anthropic` | `POST .../v1/messages` |
 
 Anthropic 请求体中的 `model` 须与网关注册 / 路由中的模型名一致（可与 OpenAI 面共用白名单与预算维度）。
 

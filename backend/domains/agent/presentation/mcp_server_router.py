@@ -70,6 +70,7 @@ from libs.api.deps import (
     get_mcp_dynamic_tool_service,
     get_user_service,
 )
+from libs.api.paths import public_api_url
 from libs.db.database import get_db
 from utils.logging import get_logger
 
@@ -279,16 +280,13 @@ def _scope_to_cursor_name(scope: str) -> str:
 @router.get("/client-config", include_in_schema=False)
 async def mcp_client_config(request: Request):
     """返回 Cursor mcp.json 同构的客户端直连配置（占位 API Key，便于前端复制/下载）"""
-    base_url = str(request.base_url).rstrip("/")
-    # 使用 /api/v1/mcp 前缀与 main 中挂载一致
-    if "/api/v1" not in base_url:
-        base_url = f"{base_url}/api/v1"
+    origin = str(request.base_url).rstrip("/")
     mcp_servers: dict = {}
     for server_name in SERVER_MAP:
         try:
             scope = MCPServerScope.from_name(server_name)
             cursor_name = _scope_to_cursor_name(server_name)
-            url = f"{base_url}/mcp/{server_name}"
+            url = public_api_url(origin, "mcp", server_name)
             mcp_servers[cursor_name] = {
                 "type": "streamableHttp",
                 "url": url,

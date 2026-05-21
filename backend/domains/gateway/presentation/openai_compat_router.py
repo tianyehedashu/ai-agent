@@ -1,16 +1,16 @@
 """
-OpenAI 兼容入口（挂载在根路径 /）
+OpenAI 兼容入口（挂载于 ``{ROOT}/api/v1/openai``，router 前缀 ``/v1``）
 
 提供：
-- POST /v1/chat/completions（含 SSE）
-- POST /v1/embeddings
-- POST /v1/images/generations
-- POST /v1/videos
-- POST /v1/moderations
-- POST /v1/audio/transcriptions
-- POST /v1/audio/speech
-- POST /v1/rerank
-- GET  /v1/models
+- POST /api/v1/openai/v1/chat/completions（含 SSE）
+- POST /api/v1/openai/v1/embeddings
+- POST /api/v1/openai/v1/images/generations
+- POST /api/v1/openai/v1/videos
+- POST /api/v1/openai/v1/moderations
+- POST /api/v1/openai/v1/audio/transcriptions
+- POST /api/v1/openai/v1/audio/speech
+- POST /api/v1/openai/v1/rerank
+- GET  /api/v1/openai/v1/models
 """
 
 from __future__ import annotations

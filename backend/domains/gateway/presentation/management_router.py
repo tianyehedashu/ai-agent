@@ -26,7 +26,7 @@ from domains.gateway.presentation.routers import (
     team_scoped,
 )
 
-router = APIRouter(prefix="/api/v1/gateway", tags=["AI Gateway"])
+router = APIRouter(tags=["AI Gateway"])
 
 router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)

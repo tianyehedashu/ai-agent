@@ -17,13 +17,15 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 def _e2e_backend_reachable() -> bool:
     try:
+        from tests.e2e.config import E2E_API_BASE_URL, e2e_service_health_path
+
         with httpx.Client(base_url=E2E_API_BASE_URL, timeout=3.0) as client:
-            return client.get("/health").status_code == 200
+            return client.get(e2e_service_health_path()).status_code == 200
     except Exception:
         return False
 
 
-def pytest_collection_modifyitems(_config, items) -> None:
+def pytest_collection_modifyitems(config, items) -> None:
     """未启动后端时跳过 E2E，避免 ``pytest tests/`` 误报失败。"""
     if os.environ.get("RUN_E2E", "").strip() == "1":
         return

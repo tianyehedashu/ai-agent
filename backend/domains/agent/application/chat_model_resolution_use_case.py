@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
-from bootstrap.config_loader import app_config
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_selector_reads import (
     get_default_for_model_type,
@@ -19,7 +18,7 @@ from domains.gateway.application.model_selector_reads import (
 from domains.gateway.application.model_selector_reads import (
     list_available_system_models as list_system_models_for_selector,
 )
-from domains.gateway.domain.model_selection_policy import pick_configured_or_first_visible
+from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 from libs.iam.permission_context import get_permission_context
 from libs.exceptions import ValidationError
@@ -215,13 +214,19 @@ class ChatModelResolutionUseCase:
         return frozenset(str(m["id"]) for m in items if m.get("id") is not None)
 
     def _resolve_default_text_model(self, allowed_text_system_ids: frozenset[str]) -> ResolvedModel:
-        picked = pick_configured_or_first_visible(settings.default_model, allowed_text_system_ids)
+        picked = pick_scenario_from_visible(
+            env_override=settings.default_model,
+            visible_ids=allowed_text_system_ids,
+        )
         if picked is None:
             raise ValidationError(_NO_VISIBLE_TEXT_MODELS_MSG)
         return ResolvedModel(model=picked)
 
     def _resolve_default_vision_model(self, allowed_image_system_ids: frozenset[str]) -> ResolvedModel:
-        picked = pick_configured_or_first_visible(settings.vision_model, allowed_image_system_ids)
+        picked = pick_scenario_from_visible(
+            env_override=settings.vision_model,
+            visible_ids=allowed_image_system_ids,
+        )
         if picked is None:
             raise ValidationError(_NO_VISIBLE_VISION_MODELS_MSG)
         return ResolvedModel(model=picked)
@@ -293,8 +298,8 @@ class ChatModelResolutionUseCase:
         )
         for item in catalog_items:
             if str(item.get("id")) == model_id:
-                info = app_config.models.get_model(model_id)
-                litellm = (info.litellm_model or info.id) if info else model_id
+                real_model = str(item.get("real_model") or "").strip()
+                litellm = real_model or model_id
                 return ResolvedImageGenModel(
                     provider=str(item.get("provider") or "volcengine"),
                     model=litellm,

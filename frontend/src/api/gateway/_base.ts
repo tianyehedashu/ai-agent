@@ -5,8 +5,9 @@
  * - 用户域：`/my-credentials`、`/my-models`、`/models/available` 无 team 路径
  */
 
-/** Gateway 管理端点公共前缀 */
-export const GATEWAY_API_BASE = '/api/v1/gateway'
+import { GATEWAY_API_BASE } from '@/api/paths'
+
+export { GATEWAY_API_BASE }
 
 /** 团队 scoped 管理路径 */
 export function teamGatewayPath(teamId: string, suffix: string): string {

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from domains.agent.application.ports.image_store_port import ImageStorePort, StorageConfigSnapshot
+from libs.api.paths import effective_listing_studio_serve_prefix
 from libs.storage.local_image_store import LocalImageStore
 from libs.storage.s3_image_store import S3ImageStore
 
@@ -17,7 +18,7 @@ def build_image_store(snapshot: StorageConfigSnapshot) -> ImageStorePort:
         storage_dir = Path(snapshot.local_storage_path or "./data/storage/images")
         return LocalImageStore(
             storage_dir=storage_dir,
-            serve_prefix=snapshot.local_serve_prefix or "/api/v1/listing-studio/images",
+            serve_prefix=effective_listing_studio_serve_prefix(snapshot.local_serve_prefix),
             public_base_url=snapshot.s3_public_base_url if snapshot.public_access else None,
         )
 

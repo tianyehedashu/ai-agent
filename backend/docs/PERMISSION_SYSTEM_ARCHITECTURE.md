@@ -395,7 +395,7 @@ async def get_agent(
 **模型（GatewayModel，租户/系统）**
 
 - **数据库**（权威）：租户行在 `gateway_models.tenant_id`；系统行在 `system_gateway_models`（无 `tenant_id`）。`GatewayModelRepository.list_for_tenant` 合并租户行与 system 行（同名时租户行优先）。
-- **配置同步**：`config_catalog_sync` 将 `app.toml` 的 `models.available` 幂等写入 `system_gateway_models`；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
+- **配置同步**：`config_catalog_sync` 将 `gateway-catalog.seed.json` 幂等写入 `system_gateway_models`；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
 - **团队自建**：`POST /api/v1/gateway/teams/{team_id}/models` 在当前工作区（`tenant_id` = 团队 UUID）下创建租户行。
 
 **路由（GatewayRoute）**
@@ -407,7 +407,7 @@ async def get_agent(
 ```mermaid
 flowchart LR
   subgraph sources [模型来源]
-    appToml[app.toml models.available]
+    seedJson[gateway-catalog.seed.json]
     sync[config_catalog_sync]
     dbGlobal[(system_gateway_models)]
     dbTeam[(gateway_models tenant_id)]
@@ -427,7 +427,7 @@ flowchart LR
 
 **模型列表**：区分 `team_id` 是否为空（系统全局 vs 当前团队）；`name`、`real_model`、`provider`、`capability`、`enabled`；`weight`、RPM/TPM 限制（若有）；`tags.managed_by == config` 时标明「配置托管」；若产品需要可展示连通性字段（如 `last_test_status` / `last_test_reason` / `last_tested_at`）。
 
-**预设目录**：`GET /api/v1/gateway/teams/{team_id}/models/presets` 优先已同步 DB 的配置托管行，否则回退 `get_app_config().models.available`；用于「从目录点选创建团队模型」类 UI。
+**预设目录**：`GET /api/v1/gateway/teams/{team_id}/models/presets` 返回 DB 中配置托管行；用于「从目录点选创建团队模型」类 UI。
 
 **路由列表**：`virtual_model`、`primary_models`、三类 `fallbacks_*`、`strategy`、`retry_policy`、`enabled`；同样区分系统路由与团队路由（`team_id`）。
 

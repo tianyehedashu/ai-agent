@@ -1,11 +1,11 @@
-"""从 app 配置中的 ModelInfo 推断 Gateway 注册行的主调用面 ``capability``。"""
+"""从目录种子模型推断 Gateway 注册行的主调用面 ``capability``。"""
 
 from __future__ import annotations
 
-from bootstrap.config_loader import ModelInfo
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 
 
-def infer_catalog_capability(model: ModelInfo) -> str:
+def infer_catalog_capability(model: CatalogSeedModel) -> str:
     """推断 ``GatewayModel.capability``（OpenAI 兼容主调用面）。
 
     规则要点：

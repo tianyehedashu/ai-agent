@@ -2,6 +2,7 @@
  * MCP 管理 API 客户端
  */
 
+import { apiV1Path } from '@/api/paths'
 import type {
   ClientDirectMCPServersResponse,
   ClientMCPConfigResponse,
@@ -29,49 +30,49 @@ export const mcpApi = {
    * 列出客户端直连的 MCP 服务器（Streamable HTTP，供 Cursor 等连接）
    */
   async listClientDirectServers(): Promise<ClientDirectMCPServersResponse> {
-    return apiClient.get<ClientDirectMCPServersResponse>('/api/v1/mcp/')
+    return apiClient.get<ClientDirectMCPServersResponse>(apiV1Path('/mcp/'))
   },
 
   /**
    * 获取 Cursor mcp.json 同构的客户端直连配置（含占位 API Key）
    */
   async getClientConfig(): Promise<ClientMCPConfigResponse> {
-    return apiClient.get<ClientMCPConfigResponse>('/api/v1/mcp/client-config')
+    return apiClient.get<ClientMCPConfigResponse>(apiV1Path('/mcp/client-config'))
   },
 
   /**
    * 列出所有可用的 MCP 服务器模板
    */
   async listTemplates(): Promise<MCPTemplate[]> {
-    return apiClient.get<MCPTemplate[]>('/api/v1/mcp/templates')
+    return apiClient.get<MCPTemplate[]>(apiV1Path('/mcp/templates'))
   },
 
   /**
    * 列出所有可用的 MCP 服务器
    */
   async listServers(): Promise<MCPServersListResponse> {
-    return apiClient.get<MCPServersListResponse>('/api/v1/mcp/servers')
+    return apiClient.get<MCPServersListResponse>(apiV1Path('/mcp/servers'))
   },
 
   /**
    * 添加新的 MCP 服务器
    */
   async addServer(data: MCPServerCreateRequest): Promise<MCPServerConfig> {
-    return apiClient.post<MCPServerConfig>('/api/v1/mcp/servers', data)
+    return apiClient.post<MCPServerConfig>(apiV1Path('/mcp/servers'), data)
   },
 
   /**
    * 更新 MCP 服务器
    */
   async updateServer(id: string, data: MCPServerUpdateRequest): Promise<MCPServerConfig> {
-    return apiClient.put<MCPServerConfig>(`/api/v1/mcp/servers/${id}`, data)
+    return apiClient.put<MCPServerConfig>(apiV1Path(`/mcp/servers/${id}`), data)
   },
 
   /**
    * 删除 MCP 服务器
    */
   async deleteServer(id: string): Promise<{ message: string }> {
-    return apiClient.delete<{ message: string }>(`/api/v1/mcp/servers/${id}`)
+    return apiClient.delete<{ message: string }>(apiV1Path(`/mcp/servers/${id}`))
   },
 
   /**
@@ -79,7 +80,7 @@ export const mcpApi = {
    */
   async toggleServer(id: string, enabled: boolean): Promise<MCPServerConfig> {
     return apiClient.patch<MCPServerConfig>(
-      `/api/v1/mcp/servers/${id}/toggle?enabled=${enabled ? 'true' : 'false'}`
+      apiV1Path(`/mcp/servers/${id}/toggle?enabled=${enabled ? 'true' : 'false'}`)
     )
   },
 
@@ -87,14 +88,14 @@ export const mcpApi = {
    * 测试 MCP 服务器连接
    */
   async testConnection(id: string): Promise<MCPTestResult> {
-    return apiClient.post<MCPTestResult>(`/api/v1/mcp/servers/${id}/test`)
+    return apiClient.post<MCPTestResult>(apiV1Path(`/mcp/servers/${id}/test`))
   },
 
   /**
    * 获取 Session 的 MCP 配置（当前对话启用的 MCP 服务器 ID 列表）
    */
   async getSessionMCPConfig(sessionId: string): Promise<SessionMCPConfig> {
-    return apiClient.get<SessionMCPConfig>(`/api/v1/sessions/${sessionId}/mcp-config`)
+    return apiClient.get<SessionMCPConfig>(apiV1Path(`/sessions/${sessionId}/mcp-config`))
   },
 
   /**
@@ -104,14 +105,14 @@ export const mcpApi = {
     sessionId: string,
     config: SessionMCPConfig
   ): Promise<SessionMCPConfig> {
-    return apiClient.put<SessionMCPConfig>(`/api/v1/sessions/${sessionId}/mcp-config`, config)
+    return apiClient.put<SessionMCPConfig>(apiV1Path(`/sessions/${sessionId}/mcp-config`), config)
   },
 
   /**
    * 获取服务器的工具列表
    */
   async getServerTools(id: string): Promise<MCPToolsListResponse> {
-    return apiClient.get<MCPToolsListResponse>(`/api/v1/mcp/servers/${id}/tools`)
+    return apiClient.get<MCPToolsListResponse>(apiV1Path(`/mcp/servers/${id}/tools`))
   },
 
   /**
@@ -123,7 +124,7 @@ export const mcpApi = {
     enabled: boolean
   ): Promise<MCPToolInfo> {
     return apiClient.put<MCPToolInfo>(
-      `/api/v1/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}/enabled`,
+      apiV1Path(`/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}/enabled`),
       { enabled }
     )
   },
@@ -133,7 +134,7 @@ export const mcpApi = {
    */
   async listDynamicTools(serverName: string): Promise<DynamicToolItem[]> {
     return apiClient.get<DynamicToolItem[]>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`
+      apiV1Path(`/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`)
     )
   },
 
@@ -142,7 +143,7 @@ export const mcpApi = {
    */
   async addDynamicTool(serverName: string, body: DynamicToolAddRequest): Promise<DynamicToolItem> {
     return apiClient.post<DynamicToolItem>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`,
+      apiV1Path(`/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools`),
       body
     )
   },
@@ -156,7 +157,9 @@ export const mcpApi = {
     body: DynamicToolUpdateRequest
   ): Promise<DynamicToolItem> {
     return apiClient.put<DynamicToolItem>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`,
+      apiV1Path(
+        `/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`
+      ),
       body
     )
   },
@@ -166,7 +169,9 @@ export const mcpApi = {
    */
   async deleteDynamicTool(serverName: string, toolKey: string): Promise<void> {
     return apiClient.delete(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`
+      apiV1Path(
+        `/mcp/servers/${encodeURIComponent(serverName)}/dynamic-tools/${encodeURIComponent(toolKey)}`
+      )
     )
   },
 
@@ -175,7 +180,7 @@ export const mcpApi = {
    */
   async listDynamicPrompts(serverName: string): Promise<DynamicPromptItem[]> {
     return apiClient.get<DynamicPromptItem[]>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`
+      apiV1Path(`/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`)
     )
   },
 
@@ -187,7 +192,7 @@ export const mcpApi = {
     body: DynamicPromptAddRequest
   ): Promise<DynamicPromptItem> {
     return apiClient.post<DynamicPromptItem>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`,
+      apiV1Path(`/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts`),
       body
     )
   },
@@ -201,7 +206,9 @@ export const mcpApi = {
     body: DynamicPromptUpdateRequest
   ): Promise<DynamicPromptItem> {
     return apiClient.put<DynamicPromptItem>(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`,
+      apiV1Path(
+        `/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`
+      ),
       body
     )
   },
@@ -211,7 +218,9 @@ export const mcpApi = {
    */
   async deleteDynamicPrompt(serverName: string, promptKey: string): Promise<void> {
     return apiClient.delete(
-      `/api/v1/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`
+      apiV1Path(
+        `/mcp/servers/${encodeURIComponent(serverName)}/dynamic-prompts/${encodeURIComponent(promptKey)}`
+      )
     )
   },
 }

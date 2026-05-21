@@ -8,15 +8,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bootstrap.config_loader import get_app_config
-from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.config_catalog_sync import (
     MANAGED_BY_KEY,
     MANAGED_CONFIG,
-    _build_tags_from_model_info,
     model_types_for_gateway_registration,
     selector_capabilities_from_tags,
-    sync_app_config_gateway_catalog,
+    sync_gateway_catalog_from_seed,
 )
 from domains.gateway.presentation.deps import (
     CurrentTeam,
@@ -53,7 +50,7 @@ async def list_model_presets(
     reads: MgmtReads,
     provider: str | None = Query(None, min_length=1, max_length=50),
 ) -> list[GatewayModelPresetResponse]:
-    """返回已同步到 DB 的配置托管全局模型目录；若无则回退 app.toml（兼容旧环境）。"""
+    """返回已同步到 DB 的配置托管全局模型目录。"""
     _ = team
     system_models = await reads.list_system_gateway_models(only_enabled=True)
     cfg_rows = [
@@ -61,56 +58,28 @@ async def list_model_presets(
         for m in system_models
         if (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG
     ]
-    presets: list[GatewayModelPresetResponse]
-    if cfg_rows:
-        presets = [
-            GatewayModelPresetResponse(
-                id=m.name,
-                name=str((m.tags or {}).get("display_name") or m.name),
-                provider=m.provider,
-                real_model=m.real_model,
-                capability=m.capability,
-                context_window=int((m.tags or {}).get("context_window") or 0),
-                input_price=float((m.tags or {}).get("input_price") or 0.0),
-                output_price=float((m.tags or {}).get("output_price") or 0.0),
-                supports_vision=bool((m.tags or {}).get("supports_vision", False)),
-                supports_tools=bool((m.tags or {}).get("supports_tools", True)),
-                supports_reasoning=bool((m.tags or {}).get("supports_reasoning", False)),
-                recommended_for=list((m.tags or {}).get("recommended_for") or []),
-                description=str((m.tags or {}).get("description") or ""),
-                model_types=model_types_for_gateway_registration(m.tags or {}, m.capability),
-                selector_capabilities=selector_capabilities_from_tags(
-                    m.tags or {}, provider=m.provider, real_model=m.real_model
-                ),
-            )
-            for m in cfg_rows
-        ]
-    else:
-        presets = []
-        for model in get_app_config().models.available:
-            if not (model.litellm_model or model.id):
-                continue
-            tags = _build_tags_from_model_info(model)
-            cap = infer_catalog_capability(model)
-            presets.append(
-                GatewayModelPresetResponse(
-                    id=model.id,
-                    name=model.name,
-                    provider=model.provider,
-                    real_model=model.litellm_model or model.id,
-                    capability=cap,
-                    context_window=model.context_window,
-                    input_price=model.input_price,
-                    output_price=model.output_price,
-                    supports_vision=model.supports_vision,
-                    supports_tools=model.supports_tools,
-                    supports_reasoning=model.supports_reasoning,
-                    recommended_for=list(model.recommended_for),
-                    description=model.description,
-                    model_types=model_types_for_gateway_registration(tags, cap),
-                    selector_capabilities=selector_capabilities_from_tags(tags),
-                )
-            )
+    presets: list[GatewayModelPresetResponse] = [
+        GatewayModelPresetResponse(
+            id=m.name,
+            name=str((m.tags or {}).get("display_name") or m.name),
+            provider=m.provider,
+            real_model=m.real_model,
+            capability=m.capability,
+            context_window=int((m.tags or {}).get("context_window") or 0),
+            input_price=float((m.tags or {}).get("input_price") or 0.0),
+            output_price=float((m.tags or {}).get("output_price") or 0.0),
+            supports_vision=bool((m.tags or {}).get("supports_vision", False)),
+            supports_tools=bool((m.tags or {}).get("supports_tools", True)),
+            supports_reasoning=bool((m.tags or {}).get("supports_reasoning", False)),
+            recommended_for=list((m.tags or {}).get("recommended_for") or []),
+            description=str((m.tags or {}).get("description") or ""),
+            model_types=model_types_for_gateway_registration(m.tags or {}, m.capability),
+            selector_capabilities=selector_capabilities_from_tags(
+                m.tags or {}, provider=m.provider, real_model=m.real_model
+            ),
+        )
+        for m in cfg_rows
+    ]
     if provider is not None:
         presets = [p for p in presets if p.provider == provider]
     return presets
@@ -122,8 +91,8 @@ async def reload_gateway_catalog_from_config(
     db: Annotated[AsyncSession, Depends(get_db)],
     writes: MgmtWrites,
 ) -> dict[str, Any]:
-    """平台管理员：从 app.toml 重新同步全局模型目录并重载 LiteLLM Router。"""
-    stats = await sync_app_config_gateway_catalog(db)
+    """平台管理员：从 gateway-catalog.seed.json 重新同步全局模型目录并重载 LiteLLM Router。"""
+    stats = await sync_gateway_catalog_from_seed(db)
     await db.commit()
     await writes.reload_litellm_router()
     return {"ok": True, **stats}

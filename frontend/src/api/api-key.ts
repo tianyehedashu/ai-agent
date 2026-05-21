@@ -4,6 +4,7 @@
  * API Key 管理相关的 API 客户端
  */
 
+import { apiV1Path } from '@/api/paths'
 import type {
   ApiKey,
   ApiKeyCreateRequest,
@@ -27,7 +28,7 @@ export const apiKeyApi = {
     skip?: number
     limit?: number
   }): Promise<ApiKey[]> {
-    return apiClient.get<ApiKey[]>('/api/v1/api-keys/', options)
+    return apiClient.get<ApiKey[]>(apiV1Path('/api-keys/'), options)
   },
 
   /**
@@ -37,14 +38,14 @@ export const apiKeyApi = {
    * @returns 包含完整 Key 的响应（仅此机会）
    */
   async create(data: ApiKeyCreateRequest): Promise<ApiKeyCreatedResponse> {
-    return apiClient.post<ApiKeyCreatedResponse>('/api/v1/api-keys/', data)
+    return apiClient.post<ApiKeyCreatedResponse>(apiV1Path('/api-keys/'), data)
   },
 
   /**
    * 获取单个 API Key 详情
    */
   async get(id: string): Promise<ApiKey> {
-    return apiClient.get<ApiKey>(`/api/v1/api-keys/${id}`)
+    return apiClient.get<ApiKey>(apiV1Path(`/api-keys/${id}`))
   },
 
   /**
@@ -54,28 +55,28 @@ export const apiKeyApi = {
    * @returns 包含完整 API Key 的响应
    */
   async reveal(id: string): Promise<{ api_key: string }> {
-    return apiClient.get<{ api_key: string }>(`/api/v1/api-keys/${id}/reveal`)
+    return apiClient.get<{ api_key: string }>(apiV1Path(`/api-keys/${id}/reveal`))
   },
 
   /**
    * 更新 API Key
    */
   async update(id: string, data: ApiKeyUpdateRequest): Promise<ApiKey> {
-    return apiClient.put<ApiKey>(`/api/v1/api-keys/${id}`, data)
+    return apiClient.put<ApiKey>(apiV1Path(`/api-keys/${id}`), data)
   },
 
   /**
    * 撤销 API Key
    */
   async revoke(id: string): Promise<void> {
-    return apiClient.post<undefined>(`/api/v1/api-keys/${id}/revoke`) as Promise<void>
+    return apiClient.post<undefined>(apiV1Path(`/api-keys/${id}/revoke`)) as Promise<void>
   },
 
   /**
    * 删除 API Key
    */
   async delete(id: string): Promise<void> {
-    return apiClient.delete<undefined>(`/api/v1/api-keys/${id}`) as Promise<void>
+    return apiClient.delete<undefined>(apiV1Path(`/api-keys/${id}`)) as Promise<void>
   },
 
   /**
@@ -85,21 +86,21 @@ export const apiKeyApi = {
     id: string,
     options?: { skip?: number; limit?: number }
   ): Promise<ApiKeyUsageLog[]> {
-    return apiClient.get<ApiKeyUsageLog[]>(`/api/v1/api-keys/${id}/logs`, options)
+    return apiClient.get<ApiKeyUsageLog[]>(apiV1Path(`/api-keys/${id}/logs`), options)
   },
 
   /**
    * 获取可用的作用域列表
    */
   async getScopes(): Promise<string[]> {
-    return apiClient.get<string[]>('/api/v1/api-keys/scopes/list')
+    return apiClient.get<string[]>(apiV1Path('/api-keys/scopes/list'))
   },
 
   /**
    * 获取预设的作用域分组
    */
   async getScopeGroups(): Promise<Record<string, string[]>> {
-    return apiClient.get<Record<string, string[]>>('/api/v1/api-keys/scopes/groups')
+    return apiClient.get<Record<string, string[]>>(apiV1Path('/api-keys/scopes/groups'))
   },
 }
 

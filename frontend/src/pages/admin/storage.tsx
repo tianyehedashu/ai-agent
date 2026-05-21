@@ -15,6 +15,7 @@ import {
   type StorageConfigAdmin,
   type UpdateStorageConfigPayload,
 } from '@/api/adminStorage'
+import { apiV1Path } from '@/api/paths'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -196,7 +197,7 @@ export default function AdminStoragePage(): React.JSX.Element {
                   onChange={(e) => {
                     setForm({ ...form, local_serve_prefix: e.target.value })
                   }}
-                  placeholder="/api/v1/listing-studio/images"
+                  placeholder={apiV1Path('/listing-studio/images')}
                 />
               </div>
             </>

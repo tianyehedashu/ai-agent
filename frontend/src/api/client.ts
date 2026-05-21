@@ -30,6 +30,7 @@
  */
 
 import { ApiError } from '@/api/errors'
+import { API_V1 } from '@/api/paths'
 import { messageFromApiErrorBody } from '@/lib/fastapi-error-detail'
 import {
   getAuthToken,
@@ -86,7 +87,7 @@ class ApiClient {
 
     this.refreshPromise = (async () => {
       try {
-        const url = this.buildUrl('/api/v1/auth/token/refresh')
+        const url = this.buildUrl(`${API_V1}/auth/token/refresh`)
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

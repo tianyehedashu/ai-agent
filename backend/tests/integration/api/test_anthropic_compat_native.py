@@ -1,4 +1,4 @@
-"""Anthropic ``POST /v1/messages`` 原生通道 HTTP 集成测试。"""
+"""Anthropic ``POST /api/v1/anthropic/v1/messages`` 原生通道 HTTP 集成测试。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
     bearer_vkey_or_apikey_auth,
 )
+from libs.api.paths import api_v1_path
+
+_ANTHROPIC_MESSAGES = api_v1_path("anthropic", "v1", "messages")
 
 
 def _principal() -> VkeyOrApikeyPrincipal:
@@ -76,7 +79,7 @@ async def test_post_messages_returns_native_shape(
     app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
     try:
         r = await dev_client.post(
-            "/v1/messages",
+            _ANTHROPIC_MESSAGES,
             headers={"Authorization": "Bearer sk-gw-test"},
             json={
                 "model": "claude-test",
@@ -117,7 +120,7 @@ async def test_post_messages_stream_sse(
     app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
     try:
         r = await dev_client.post(
-            "/v1/messages",
+            _ANTHROPIC_MESSAGES,
             headers={"Authorization": "Bearer sk-gw-test"},
             json={
                 "model": "claude-test",
@@ -152,7 +155,7 @@ async def test_post_messages_rate_limit_returns_anthropic_shape(
     app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
     try:
         r = await dev_client.post(
-            "/v1/messages",
+            _ANTHROPIC_MESSAGES,
             headers={"Authorization": "Bearer sk-gw-test"},
             json={
                 "model": "claude-test",
@@ -187,7 +190,7 @@ async def test_post_messages_budget_exceeded_returns_anthropic_api_error(
     app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
     try:
         r = await dev_client.post(
-            "/v1/messages",
+            _ANTHROPIC_MESSAGES,
             headers={"Authorization": "Bearer sk-gw-test"},
             json={
                 "model": "claude-test",
@@ -221,7 +224,7 @@ async def test_post_messages_count_tokens_returns_input_tokens(
     app.dependency_overrides[bearer_vkey_or_apikey_auth] = _principal
     try:
         r = await dev_client.post(
-            "/v1/messages/count_tokens",
+            f"{_ANTHROPIC_MESSAGES}/count_tokens",
             headers={"Authorization": "Bearer sk-gw-test"},
             json={
                 "model": "claude-test",

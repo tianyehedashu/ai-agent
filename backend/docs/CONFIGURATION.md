@@ -170,11 +170,12 @@ from app.config import settings
 if settings.simplemem_enabled:
     model = settings.simplemem_extraction_model
 
-# 方式 2：直接读取 TOML（获取完整结构）
-from app.config_loader import app_config
+# 方式 2：场景模型偏好（环境变量 + Gateway DB 目录兜底）
+from bootstrap.config import settings
 
-for model in app_config.models.available:
-    print(f"{model.name}: ${model.input_price}/1M tokens")
+default_chat = settings.default_model  # 或 ScenarioDefaultsService + ModelCatalogPort
+
+# 系统模型目录种子：config/gateway-catalog.seed.json → make seed-gateway
 ```
 
 ### 环境变量覆盖

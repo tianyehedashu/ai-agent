@@ -1,6 +1,7 @@
 import { apiClient } from '@/api/client'
+import { apiV1Path } from '@/api/paths'
 
-const PREFIX = '/api/v1/admin/users'
+const PREFIX = apiV1Path('/admin/users')
 
 export type PlatformRole = 'admin' | 'user' | 'viewer'
 

@@ -2,6 +2,7 @@
  * Chat API
  */
 
+import { apiV1Path } from '@/api/paths'
 import { getCurrentTeamId } from '@/stores/gateway-team'
 import type { ChatEvent, Checkpoint, CheckpointDiff } from '@/types'
 
@@ -76,7 +77,7 @@ export const chatApi = {
     signal?: AbortSignal
   ): Promise<void> {
     return apiClient.stream(
-      '/api/v1/chat',
+      apiV1Path('/chat'),
       toBackendRequest(request),
       (event) => {
         onEvent(event as unknown as ChatEvent)
@@ -99,7 +100,7 @@ export const chatApi = {
     signal?: AbortSignal
   ): Promise<void> {
     return apiClient.stream(
-      '/api/v1/chat/resume',
+      apiV1Path('/chat/resume'),
       toBackendResumeBody(sessionId, request),
       (event) => {
         onEvent(event as unknown as ChatEvent)
@@ -114,21 +115,23 @@ export const chatApi = {
    * 获取检查点列表
    */
   getCheckpoints(sessionId: string): Promise<Checkpoint[]> {
-    return apiClient.get<Checkpoint[]>(`/api/v1/chat/checkpoints/${sessionId}`)
+    return apiClient.get<Checkpoint[]>(apiV1Path(`/chat/checkpoints/${sessionId}`))
   },
 
   /**
    * 获取检查点状态
    */
   getCheckpointState(checkpointId: string): Promise<Record<string, unknown>> {
-    return apiClient.get<Record<string, unknown>>(`/api/v1/chat/checkpoints/${checkpointId}/state`)
+    return apiClient.get<Record<string, unknown>>(
+      apiV1Path(`/chat/checkpoints/${checkpointId}/state`)
+    )
   },
 
   /**
    * 对比检查点
    */
   diffCheckpoints(checkpointId1: string, checkpointId2: string): Promise<CheckpointDiff> {
-    return apiClient.post<CheckpointDiff>('/api/v1/chat/checkpoints/diff', {
+    return apiClient.post<CheckpointDiff>(apiV1Path('/chat/checkpoints/diff'), {
       checkpointId1,
       checkpointId2,
     })

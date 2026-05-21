@@ -17,7 +17,7 @@ import uuid
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
+from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL, e2e_service_health_path
 
 
 def _require_e2e_credentials() -> tuple[str, str]:
@@ -37,7 +37,7 @@ class TestGatewayCredentialProbeE2E:
         return httpx.Client(base_url=API_BASE_URL, timeout=45.0)
 
     def test_health_reachable(self, http: httpx.Client) -> None:
-        r = http.get("/health")
+        r = http.get(e2e_service_health_path())
         assert r.status_code == 200
         assert r.json().get("status") == "healthy"
 

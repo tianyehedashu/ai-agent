@@ -10,11 +10,10 @@ import base64
 from pathlib import Path
 import uuid
 
+from libs.api.paths import listing_studio_images_serve_prefix
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-DEFAULT_SERVE_PREFIX = "/api/v1/listing-studio/images"
 
 
 class LocalImageStore:
@@ -23,11 +22,11 @@ class LocalImageStore:
     def __init__(
         self,
         storage_dir: Path,
-        serve_prefix: str = DEFAULT_SERVE_PREFIX,
+        serve_prefix: str | None = None,
         public_base_url: str | None = None,
     ) -> None:
         self._storage_dir = storage_dir
-        self._serve_prefix = serve_prefix.rstrip("/")
+        self._serve_prefix = (serve_prefix or listing_studio_images_serve_prefix()).rstrip("/")
         self._public_base_url = public_base_url.rstrip("/") if public_base_url else None
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -85,7 +84,6 @@ def get_image_path(storage_dir: Path, filename: str) -> Path | None:
 
 
 __all__ = [
-    "DEFAULT_SERVE_PREFIX",
     "LocalImageStore",
     "get_image_path",
 ]

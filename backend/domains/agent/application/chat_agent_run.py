@@ -258,8 +258,19 @@ class ChatAgentRunMixin:
             if agent:
                 return self._build_config_from_agent(agent)
 
+        default_model = settings.default_model
+        catalog = getattr(self, "_model_catalog", None)
+        if catalog is not None:
+            from domains.gateway.application.scenario_defaults import require_scenario_default
+
+            default_model = await require_scenario_default(
+                catalog,
+                scenario="default",
+                env_override=settings.default_model,
+            )
+
         return AgentConfig.create_default(
-            model=settings.default_model,
+            model=default_model,
             checkpoint_enabled=settings.checkpoint_enabled,
             hitl_enabled=settings.hitl_enabled,
         )

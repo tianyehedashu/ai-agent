@@ -6,13 +6,13 @@ from dataclasses import replace
 
 import pytest
 
-from bootstrap.config_loader import ModelInfo
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.config_catalog_sync import model_types_for_gateway_registration
 
 
-def _base(**kwargs: object) -> ModelInfo:
-    m = ModelInfo(id="m-id", name="M", provider="openai")
+def _base(**kwargs: object) -> CatalogSeedModel:
+    m = CatalogSeedModel(id="m-id", name="M", provider="openai")
     return replace(m, **kwargs)
 
 

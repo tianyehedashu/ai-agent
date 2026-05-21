@@ -540,7 +540,7 @@ export function CredentialUpstreamModelsPanel({
           <div>
             <p className="text-sm font-medium">上游模型</p>
             <p className="text-xs text-muted-foreground">
-              通过 OpenAI 兼容 <span className="font-mono">/v1/models</span> 列举
+              通过 OpenAI 兼容 <span className="font-mono">/api/v1/openai/v1/models</span> 列举
             </p>
           </div>
           {toolbar}
@@ -561,7 +561,7 @@ export function CredentialUpstreamModelsPanel({
           <div>
             <CardTitle className="text-base">上游模型探测</CardTitle>
             <CardDescription>
-              通过 OpenAI 兼容 <span className="font-mono">/v1/models</span>{' '}
+              通过 OpenAI 兼容 <span className="font-mono">/api/v1/openai/v1/models</span>{' '}
               列举可用模型；刷新即重新探测。
             </CardDescription>
           </div>

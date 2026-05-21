@@ -4,19 +4,25 @@ Title Use Case - 标题生成用例
 编排标题生成相关的操作。
 """
 
-from typing import Literal
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
+from domains.gateway.application.scenario_defaults import require_scenario_default
 from domains.identity.domain.types import Principal
 from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.infrastructure.models.session import Session
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from domains.gateway.application.model_catalog_port import ModelCatalogPort
 
 logger = get_logger(__name__)
 
@@ -32,10 +38,12 @@ class TitleUseCase:
         db: AsyncSession,
         agent_llm_facade: AgentLlmFacade | None = None,
         title_llm: TitleLlmPort | None = None,
+        model_catalog: ModelCatalogPort | None = None,
     ):
         from domains.agent.application.message_use_case import MessageUseCase
 
         self.db = db
+        self._model_catalog = model_catalog
         self.session_use_case = SessionUseCase(
             db,
             message_service=MessageUseCase(db),
@@ -49,6 +57,16 @@ class TitleUseCase:
             title_llm = LlmTitleGenerationAdapter(facade)
         self._title_llm: TitleLlmPort = title_llm
         self.domain_service = SessionDomainService()
+
+    async def _resolve_fast_model(self) -> str:
+        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+
+        catalog = self._model_catalog or get_model_catalog_adapter(self.db)
+        return await require_scenario_default(
+            catalog,
+            scenario="fast",
+            env_override=settings.fast_model,
+        )
 
     def _create_owner_from_user_id(self, user_id: str) -> SessionOwner:
         """从用户 ID 创建 SessionOwner"""
@@ -82,7 +100,7 @@ class TitleUseCase:
 
             response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=settings.fast_model,
+                model=await self._resolve_fast_model(),
                 max_tokens=20,
                 temperature=0.7,
             )
@@ -121,7 +139,7 @@ class TitleUseCase:
 
             response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=settings.fast_model,
+                model=await self._resolve_fast_model(),
                 max_tokens=20,
                 temperature=0.7,
             )

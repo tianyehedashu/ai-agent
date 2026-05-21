@@ -61,6 +61,7 @@ __all__ = [
     "VolcEngineProvider",
     "ZhipuAIProvider",
     "create_agent_llm_facade",
+    "create_embedding_service_from_catalog",
     "create_embedding_service_from_settings",
     "create_image_generator",
     "get_all_models",
@@ -89,25 +90,45 @@ def create_image_generator(config: "ImageGeneratorConfigProtocol") -> ImageGener
 
 
 def create_embedding_service_from_settings() -> EmbeddingService:
-    """从应用配置创建 EmbeddingService 实例。"""
+    """从环境变量创建 EmbeddingService（无 DB 时的同步回退）。"""
     from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
 
-    provider = getattr(settings, "embedding_provider", "api")
-    model = getattr(settings, "embedding_model", "text-embedding-3-small")
-    dimension = getattr(settings, "embedding_dimension", 1536)
-
-    if not isinstance(model, str):
-        model = str(model)
+    model = (settings.embedding_model or "").strip()
+    if not model:
+        raise ValueError(
+            "EMBEDDING_MODEL 未配置；请设置环境变量或在有 DB 时使用 create_embedding_service_from_catalog"
+        )
 
     from domains.gateway.application.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
         get_gateway_proxy,
     )
 
-    gateway_proxy = get_gateway_proxy()
-
     return EmbeddingService(
-        provider=provider,
+        provider=settings.embedding_provider,
         model=model,
-        dimension=dimension,
-        gateway_proxy=gateway_proxy,
+        dimension=settings.embedding_dimension,
+        gateway_proxy=get_gateway_proxy(),
+    )
+
+
+async def create_embedding_service_from_catalog(
+    model_catalog: "ModelCatalogPort",
+) -> EmbeddingService:
+    """从 Gateway 目录 + 环境变量解析 Embedding 模型。"""
+    from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
+    from domains.gateway.application.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
+        get_gateway_proxy,
+    )
+    from domains.gateway.application.scenario_defaults import require_scenario_default
+
+    model = await require_scenario_default(
+        model_catalog,
+        scenario="embedding",
+        env_override=settings.embedding_model,
+    )
+    return EmbeddingService(
+        provider=settings.embedding_provider,
+        model=model,
+        dimension=settings.embedding_dimension,
+        gateway_proxy=get_gateway_proxy(),
     )
