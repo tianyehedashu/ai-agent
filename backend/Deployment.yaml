@@ -53,11 +53,11 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: backend-data
+            claimName: backend-data-pvc
 
         - name: workspace
           persistentVolumeClaim:
-            claimName: backend-workspace
+            claimName: backend-workspace-pvc
 
 ---
 apiVersion: v1
