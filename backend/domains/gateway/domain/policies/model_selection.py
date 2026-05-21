@@ -11,7 +11,13 @@ class _NamedModel(Protocol):
     enabled: bool
 
 
+class _VirtualModelRoute(Protocol):
+    virtual_model: str
+    enabled: bool
+
+
 _T = TypeVar("_T", bound=_NamedModel)
+_R = TypeVar("_R", bound=_VirtualModelRoute)
 
 
 def merge_named_rows_tenant_overrides_system(
@@ -33,4 +39,26 @@ def merge_named_rows_tenant_overrides_system(
     return sorted(by_name.values(), key=lambda r: r.name)
 
 
-__all__ = ["merge_named_rows_tenant_overrides_system"]
+def merge_virtual_model_rows_tenant_overrides_system(
+    tenant_rows: Sequence[_R],
+    system_rows: Sequence[_R],
+    *,
+    only_enabled: bool = True,
+) -> list[_R]:
+    """``virtual_model`` 同名时保留 tenant 行，system 行仅补 tenant 未覆盖的名称。"""
+    by_name: dict[str, _R] = {}
+    for row in tenant_rows:
+        if only_enabled and not row.enabled:
+            continue
+        by_name[row.virtual_model] = row
+    for row in system_rows:
+        if only_enabled and not row.enabled:
+            continue
+        by_name.setdefault(row.virtual_model, row)
+    return sorted(by_name.values(), key=lambda r: r.virtual_model)
+
+
+__all__ = [
+    "merge_named_rows_tenant_overrides_system",
+    "merge_virtual_model_rows_tenant_overrides_system",
+]

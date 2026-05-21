@@ -27,10 +27,11 @@ export const GATEWAY_MY_MODELS_ALL_QUERY_KEY = ['gateway', 'my-models'] as const
 
 /** 与 TeamModelsWorkspace listModels 查询键一致 */
 export function gatewayModelsListQueryKey(
+  teamId: string,
   providerFilter = '',
   credentialFilter = ''
-): readonly ['gateway', 'models', string, string] {
-  return ['gateway', 'models', providerFilter, credentialFilter]
+): readonly ['gateway', 'models', string, string, string] {
+  return ['gateway', 'models', teamId, providerFilter, credentialFilter]
 }
 
 export function channelLabel(id: string): string {

@@ -1,17 +1,17 @@
 /**
- * AI Gateway · 运行时能力开关（与后端 GATEWAY_* env 对齐）
+ * Gateway 运行时能力开关（与部署 env 对齐，供控制台读取）
  */
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 export interface GatewayFeatures {
   pii_guardrail_globally_enabled: boolean
 }
 
 export const featuresApi = {
-  getFeatures(): Promise<GatewayFeatures> {
-    return apiClient.get<GatewayFeatures>(`${GATEWAY_API_BASE}/features`)
+  getFeatures(teamId: string): Promise<GatewayFeatures> {
+    return apiClient.get<GatewayFeatures>(teamGatewayPath(teamId, '/features'))
   },
 }

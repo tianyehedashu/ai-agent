@@ -205,6 +205,7 @@ describe('runBatchConnectivityTests', () => {
       ],
       (id) => {
         tested.push(id)
+        return Promise.resolve()
       }
     )
     expect(tested.sort()).toEqual(['a'])

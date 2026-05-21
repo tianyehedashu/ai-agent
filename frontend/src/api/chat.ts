@@ -2,6 +2,7 @@
  * Chat API
  */
 
+import { getCurrentTeamId } from '@/stores/gateway-team'
 import type { ChatEvent, Checkpoint, CheckpointDiff } from '@/types'
 
 import { apiClient } from './client'
@@ -24,6 +25,7 @@ export interface ChatRequest {
 
 // 转换为后端期望的格式（snake_case）
 function toBackendRequest(request: ChatRequest): Record<string, unknown> {
+  const gatewayTeamId = getCurrentTeamId()
   return {
     message: request.message,
     session_id: request.sessionId,
@@ -32,6 +34,7 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
       ? { enabled_servers: request.mcpConfig.enabledServers }
       : undefined,
     model_ref: request.modelRef === undefined ? undefined : request.modelRef,
+    gateway_team_id: gatewayTeamId ?? undefined,
     gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
     creative_mode: request.creativeMode ?? undefined,
     reference_image_urls: request.referenceImageUrls?.length

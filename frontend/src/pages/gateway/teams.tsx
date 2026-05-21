@@ -26,24 +26,23 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 export default function GatewayTeamsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const currentTeamId = useGatewayTeamStore((s) => s.currentTeamId)
 
   const { data: teams } = useQuery({
     queryKey: ['gateway', 'teams'],
     queryFn: () => gatewayApi.listTeams(),
   })
   const { data: members } = useQuery({
-    queryKey: ['gateway', 'team-members', currentTeamId],
-    queryFn: () => (currentTeamId ? gatewayApi.listMembers(currentTeamId) : Promise.resolve([])),
-    enabled: !!currentTeamId,
+    queryKey: ['gateway', 'team-members', teamId],
+    queryFn: () => gatewayApi.listMembers(teamId),
   })
 
   const [openTeam, setOpenTeam] = useState(false)
@@ -144,7 +143,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           <CardContent className="p-0">
             <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-xs uppercase text-muted-foreground">
               <span>当前团队成员</span>
-              {canWrite && currentTeamId && (
+              {canWrite && teamId && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -167,14 +166,14 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                       <div className="text-xs text-muted-foreground">{m.role}</div>
                     </td>
                     <td className="px-4 py-2 text-right">
-                      {canWrite && m.role !== 'owner' && currentTeamId && (
+                      {canWrite && m.role !== 'owner' && teamId && (
                         <Button
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7"
                           onClick={() => {
                             removeMemberMutation.mutate({
-                              teamId: currentTeamId,
+                              teamId: teamId,
                               userId: m.user_id,
                             })
                           }}
@@ -218,8 +217,8 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           </DialogHeader>
           <AddMemberForm
             onSubmit={(v) => {
-              if (currentTeamId) {
-                addMemberMutation.mutate({ teamId: currentTeamId, ...v })
+              if (teamId) {
+                addMemberMutation.mutate({ teamId: teamId, ...v })
               }
             }}
           />

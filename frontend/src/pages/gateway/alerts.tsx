@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
 
@@ -39,16 +40,17 @@ function formatChannels(ch: Record<string, unknown>): string {
 }
 
 export default function GatewayAlertsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { canWrite } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const { data: items, isLoading } = useQuery({
-    queryKey: ['gateway', 'alerts'],
-    queryFn: () => gatewayApi.listAlerts(),
+    queryKey: ['gateway', 'alerts', teamId],
+    queryFn: () => gatewayApi.listAlerts(teamId),
   })
   const createMutation = useMutation({
-    mutationFn: gatewayApi.createAlert,
+    mutationFn: (body: AlertRuleCreateBody) => gatewayApi.createAlert(teamId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'alerts'] })
       setOpen(false)
@@ -59,7 +61,7 @@ export default function GatewayAlertsPage(): React.JSX.Element {
     },
   })
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.deleteAlert(id),
+    mutationFn: (id: string) => gatewayApi.deleteAlert(teamId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'alerts'] })
     },

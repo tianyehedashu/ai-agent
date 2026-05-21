@@ -149,10 +149,10 @@ class TestCredentialUpstreamProbeApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         name = f"team-probe-{uuid.uuid4().hex[:8]}"
         r_cred = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "openai",
@@ -171,7 +171,7 @@ class TestCredentialUpstreamProbeApi:
             new=AsyncMock(return_value=_mock_models_list()),
         ):
             pr = await dev_client.post(
-                f"/api/v1/gateway/credentials/{cid}/probe",
+                ff"/api/v1/gateway/teams{team.id}/credentials/{cid}/probe",
                 headers=headers,
                 json={},
             )
@@ -185,7 +185,7 @@ class TestCredentialUpstreamProbeApi:
             new=AsyncMock(return_value=_mock_models_list()),
         ):
             br = await dev_client.post(
-                f"/api/v1/gateway/credentials/{cid}/batch-import-models",
+                ff"/api/v1/gateway/teams{team.id}/credentials/{cid}/batch-import-models",
                 headers=headers,
                 json={
                     "provider": "openai",
@@ -201,5 +201,5 @@ class TestCredentialUpstreamProbeApi:
         assert batch["failed"] == []
         gid = batch["created"][0]["gateway_model_id"]
 
-        await dev_client.delete(f"/api/v1/gateway/models/{gid}", headers=headers)
-        await dev_client.delete(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        await dev_client.delete(ff"/api/v1/gateway/teams{team.id}/models/{gid}", headers=headers)
+        await dev_client.delete(ff"/api/v1/gateway/teams{team.id}/credentials/{cid}", headers=headers)

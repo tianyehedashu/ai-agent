@@ -6,7 +6,7 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 export interface AlertRule {
   id: string
@@ -39,10 +39,12 @@ export interface AlertRuleCreateBody {
 /** Alerts 资源 API */
 export const alertsApi = {
   /** 列出当前 scope 的告警规则 */
-  listAlerts: () => apiClient.get<AlertRule[]>(`${GATEWAY_API_BASE}/alerts/rules`),
+  listAlerts: (teamId: string) =>
+    apiClient.get<AlertRule[]>(teamGatewayPath(teamId, '/alerts/rules')),
   /** 创建告警规则 */
-  createAlert: (body: AlertRuleCreateBody) =>
-    apiClient.post<AlertRule>(`${GATEWAY_API_BASE}/alerts/rules`, body),
+  createAlert: (teamId: string, body: AlertRuleCreateBody) =>
+    apiClient.post<AlertRule>(teamGatewayPath(teamId, '/alerts/rules'), body),
   /** 删除告警规则 */
-  deleteAlert: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/alerts/rules/${id}`),
+  deleteAlert: (teamId: string, id: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/alerts/rules/${id}`)),
 } as const

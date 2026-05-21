@@ -40,6 +40,7 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
+import { getCurrentTeamId } from '@/stores/gateway-team'
 
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
@@ -69,7 +70,7 @@ type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-
 
 const QUICK_STEPS = [
   { step: 1, title: '创建虚拟 Key', href: '/gateway/keys' },
-  { step: 2, title: '选择模型或路由', href: '/gateway/models' },
+  { step: 2, title: '选择模型或路由', href: '/gateway/routes' },
   { step: 3, title: '复制示例并调用', href: '#examples' },
 ] as const
 
@@ -207,8 +208,13 @@ export default function GatewayGuidePage(): React.JSX.Element {
   )
 
   const { data: gatewayModels } = useQuery({
-    queryKey: GATEWAY_MODELS_ALL_QUERY_KEY,
-    queryFn: () => gatewayApi.listModels(),
+    queryKey: [...GATEWAY_MODELS_ALL_QUERY_KEY, getCurrentTeamId()],
+    queryFn: () => {
+      const teamId = getCurrentTeamId()
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.listModels(teamId)
+    },
+    enabled: Boolean(getCurrentTeamId()),
     staleTime: 60_000,
   })
 
@@ -319,6 +325,17 @@ export default function GatewayGuidePage(): React.JSX.Element {
                 />
                 <ConfigRow label="model" value={activeModel} mono />
               </div>
+              <p className="text-sm text-muted-foreground">
+                使用虚拟 Key（
+                <code className="rounded bg-muted px-1 font-mono text-xs">sk-gw-*</code>
+                ）调用 OpenAI / Anthropic 兼容入口时，只需在 Header 携带{' '}
+                <code className="rounded bg-muted px-1 font-mono text-xs">
+                  Authorization: Bearer …
+                </code>
+                ，无需额外传{' '}
+                <code className="rounded bg-muted px-1 font-mono text-xs">X-Team-Id</code>
+                ——团队已在 Key 创建时绑定。
+              </p>
               <Collapsible>
                 <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
                   更多配置

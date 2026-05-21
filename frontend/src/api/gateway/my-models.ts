@@ -28,6 +28,7 @@ export interface PersonalGatewayModel {
   is_system: boolean
   capability: string
   name: string
+  selector_capabilities?: Record<string, unknown>
   last_test_status: ModelTestStatus
   last_tested_at: string | null
   last_test_reason: string | null

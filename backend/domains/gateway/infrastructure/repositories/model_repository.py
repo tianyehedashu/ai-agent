@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from domains.gateway.domain.policies.model_selection import merge_named_rows_tenant_overrides_system
+from domains.gateway.domain.policies.model_selection import (
+    merge_named_rows_tenant_overrides_system,
+    merge_virtual_model_rows_tenant_overrides_system,
+)
 from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
@@ -187,6 +190,9 @@ class GatewayModelRepository:
         stmt = select(SystemGatewayModel).where(SystemGatewayModel.name == name).limit(1)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_system(self, model_id: uuid.UUID) -> SystemGatewayModel | None:
+        return await self._session.get(SystemGatewayModel, model_id)
 
     async def get_by_name(self, tenant_id: uuid.UUID | None, name: str) -> GatewayModel | None:
         if tenant_id is None:
@@ -377,13 +383,20 @@ class GatewayRouteRepository:
         tenant_id: uuid.UUID,
         *,
         only_enabled: bool = True,
-    ) -> list[GatewayRoute]:
+    ) -> list[GatewayRoute | SystemGatewayRoute]:
+        """租户路由 + system 路由合并（tenant 同名 ``virtual_model`` 优先）。"""
         clauses = [GatewayRoute.tenant_id == tenant_id]
         if only_enabled:
             clauses.append(GatewayRoute.enabled.is_(True))
         stmt = select(GatewayRoute).where(*clauses).order_by(GatewayRoute.virtual_model)
         result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+        tenant_rows = list(result.scalars().all())
+        system_rows = await self.list_system(only_enabled=only_enabled)
+        return merge_virtual_model_rows_tenant_overrides_system(
+            tenant_rows,
+            system_rows,
+            only_enabled=only_enabled,
+        )
 
     async def list_all_active(self) -> list[GatewayRoute]:
         stmt = select(GatewayRoute).where(GatewayRoute.enabled.is_(True))

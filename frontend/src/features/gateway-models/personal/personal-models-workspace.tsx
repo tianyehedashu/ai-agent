@@ -35,6 +35,7 @@ import {
   matchesHealthFilter,
   runBatchConnectivityTests,
 } from '@/features/gateway-models/utils'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
@@ -61,6 +62,7 @@ interface PersonalModelsWorkspaceProps {
 export function PersonalModelsWorkspace({
   pageView: pageViewProp,
 }: PersonalModelsWorkspaceProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const token = useAuthStore((s) => s.token)
   const hasAuthSession = Boolean(token)
   const navigate = useNavigate()
@@ -93,7 +95,7 @@ export function PersonalModelsWorkspace({
   const { createMutation } = usePersonalModelMutations({
     onCreateSuccess: (created) => {
       if (created.length > 0) {
-        navigate(personalModelDetailHref(created[0].id))
+        navigate(personalModelDetailHref(teamId, created[0].id))
         return
       }
       setSearchParams(
@@ -109,8 +111,8 @@ export function PersonalModelsWorkspace({
 
   const goToRegister = useCallback((): void => {
     preloadPersonalModelForm()
-    navigate(personalModelsRegisterHref())
-  }, [navigate])
+    navigate(personalModelsRegisterHref(teamId))
+  }, [navigate, teamId])
 
   const goToList = useCallback((): void => {
     setSearchParams(
@@ -271,7 +273,7 @@ export function PersonalModelsWorkspace({
               >
                 虚拟路由
               </Link>{' '}
-              编排对外虚拟名（可选）
+              编排对外虚拟名（可选；请先在 Header 切换到个人工作区）
             </li>
           </ol>
           <Button
@@ -295,7 +297,7 @@ export function PersonalModelsWorkspace({
           {filteredItems.map((m) => (
             <li key={m.id}>
               <Link
-                to={personalModelDetailHref(m.id)}
+                to={personalModelDetailHref(teamId, m.id)}
                 className="block px-4 py-3 transition-colors hover:bg-muted/40"
                 onMouseEnter={preloadPersonalModelDetailPane}
                 onFocus={preloadPersonalModelDetailPane}

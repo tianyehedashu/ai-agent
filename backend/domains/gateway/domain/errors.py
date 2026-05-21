@@ -38,6 +38,16 @@ class GatewayTeamHeaderRequiredError(GatewayError):
         super().__init__("X-Team-Id is required for this API key")
 
 
+class GatewayVkeyTeamHeaderMismatchError(GatewayError):
+    """sk-gw-* 请求携带的 X-Team-Id 与虚拟 Key 绑定团队不一致。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "X-Team-Id must not be sent with sk-gw-* virtual keys, "
+            "or must match the key's bound team"
+        )
+
+
 class ApiKeyGatewayGrantRequiredError(GatewayError):
     """平台 API Key 缺少 Gateway 团队授权。"""
 
@@ -249,6 +259,7 @@ __all__ = [
     "GatewayError",
     "GatewayTeamHeaderInvalidError",
     "GatewayTeamHeaderRequiredError",
+    "GatewayVkeyTeamHeaderMismatchError",
     "GuardrailBlockedError",
     "HttpMappableDomainError",
     "ManagementEntityNotFoundError",

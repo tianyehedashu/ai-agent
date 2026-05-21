@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -17,14 +17,19 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
+import { PlatformAdminPanel } from './components/platform-admin-panel'
 
-const SETTINGS_TABS = ['general', 'api', 'mcp', 'account'] as const
-type SettingsTab = (typeof SETTINGS_TABS)[number]
+const BASE_SETTINGS_TABS = ['general', 'api', 'mcp', 'account'] as const
+const PLATFORM_SETTINGS_TAB = 'platform' as const
+
+type BaseSettingsTab = (typeof BASE_SETTINGS_TABS)[number]
+type SettingsTab = BaseSettingsTab | typeof PLATFORM_SETTINGS_TAB
 
 export default function SettingsPage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -32,6 +37,14 @@ export default function SettingsPage(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
   const { currentUser, setCurrentUser } = useUserStore()
   const { toast } = useToast()
+  const { isPlatformAdmin } = useGatewayPermission()
+
+  const settingsTabs = useMemo((): readonly SettingsTab[] => {
+    if (isPlatformAdmin) {
+      return [...BASE_SETTINGS_TABS, PLATFORM_SETTINGS_TAB]
+    }
+    return BASE_SETTINGS_TABS
+  }, [isPlatformAdmin])
 
   const [userName, setUserName] = useState('')
   const [vendorCreatorId, setVendorCreatorId] = useState<string>('')
@@ -50,7 +63,7 @@ export default function SettingsPage(): React.JSX.Element {
     }
   }, [tabParam, viewParam, navigate])
 
-  const activeTab: SettingsTab = SETTINGS_TABS.includes(tabParam as SettingsTab)
+  const activeTab: SettingsTab = settingsTabs.includes(tabParam as SettingsTab)
     ? (tabParam as SettingsTab)
     : 'general'
 
@@ -66,7 +79,7 @@ export default function SettingsPage(): React.JSX.Element {
   }
 
   useEffect(() => {
-    if (tabParam !== null && tabParam !== '' && !SETTINGS_TABS.includes(tabParam as SettingsTab)) {
+    if (tabParam !== null && tabParam !== '' && !settingsTabs.includes(tabParam as SettingsTab)) {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -77,7 +90,7 @@ export default function SettingsPage(): React.JSX.Element {
         { replace: true }
       )
     }
-  }, [tabParam, setSearchParams])
+  }, [tabParam, setSearchParams, settingsTabs])
 
   useEffect(() => {
     if (currentUser) {
@@ -153,6 +166,7 @@ export default function SettingsPage(): React.JSX.Element {
           <TabsTrigger value="api">API 密钥</TabsTrigger>
           <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
           <TabsTrigger value="account">账户</TabsTrigger>
+          {isPlatformAdmin && <TabsTrigger value="platform">平台管理</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general">
@@ -268,6 +282,12 @@ export default function SettingsPage(): React.JSX.Element {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isPlatformAdmin && (
+          <TabsContent value="platform">
+            <PlatformAdminPanel />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

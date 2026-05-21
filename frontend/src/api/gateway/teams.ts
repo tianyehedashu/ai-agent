@@ -1,13 +1,13 @@
 /**
  * AI Gateway · 团队（Team）资源
  *
- * 团队是 Gateway 多租户与权限的最小边界；当前用户经 X-Team-Id 绑定到具体团队上下文。
+ * 团队是 Gateway 多租户与权限的最小边界；团队资源经 URL 路径 `/teams/{teamId}/*` 显式选团队。
  * 团队详情包含 personal / shared 两类；personal 即「我的工作区」。
  */
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 
 /**
  * Gateway 团队元数据（与后端 schemas/common.py `GatewayTeam` 对齐）。
@@ -47,12 +47,11 @@ export const teamsApi = {
   /** 删除团队（仅 owner） */
   deleteTeam: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/teams/${id}`),
   /** 列出指定团队成员 */
-  listMembers: (teamId: string) =>
-    apiClient.get<TeamMember[]>(`${GATEWAY_API_BASE}/teams/${teamId}/members`),
+  listMembers: (teamId: string) => apiClient.get<TeamMember[]>(teamGatewayPath(teamId, '/members')),
   /** 添加成员（仅 owner / admin） */
   addMember: (teamId: string, body: { user_id: string; role: string }) =>
-    apiClient.post<TeamMember>(`${GATEWAY_API_BASE}/teams/${teamId}/members`, body),
+    apiClient.post<TeamMember>(teamGatewayPath(teamId, '/members'), body),
   /** 移除成员（仅 owner / admin；不可移除自己） */
   removeMember: (teamId: string, userId: string) =>
-    apiClient.delete<unknown>(`${GATEWAY_API_BASE}/teams/${teamId}/members/${userId}`),
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/members/${userId}`)),
 } as const

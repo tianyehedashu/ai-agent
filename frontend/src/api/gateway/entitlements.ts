@@ -10,7 +10,7 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 // ---------- 配额公共类型 ----------
 
@@ -188,53 +188,65 @@ export interface MarginSummary {
 export const entitlementsApi = {
   // --- Provider Plan ---
   /** 列出某条凭据下的上游供应商套餐 */
-  listProviderPlans: (credentialId: string) =>
-    apiClient.get<ProviderPlan[]>(`${GATEWAY_API_BASE}/credentials/${credentialId}/provider-plans`),
-  createProviderPlan: (credentialId: string, body: ProviderPlanCreateBody) =>
+  listProviderPlans: (teamId: string, credentialId: string) =>
+    apiClient.get<ProviderPlan[]>(
+      teamGatewayPath(teamId, `/credentials/${credentialId}/provider-plans`)
+    ),
+  createProviderPlan: (teamId: string, credentialId: string, body: ProviderPlanCreateBody) =>
     apiClient.post<ProviderPlan>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/provider-plans`,
+      teamGatewayPath(teamId, `/credentials/${credentialId}/provider-plans`),
       body
     ),
-  updateProviderPlan: (credentialId: string, planId: string, body: ProviderPlanUpdateBody) =>
+  updateProviderPlan: (
+    teamId: string,
+    credentialId: string,
+    planId: string,
+    body: ProviderPlanUpdateBody
+  ) =>
     apiClient.patch<ProviderPlan>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/provider-plans/${planId}`,
+      teamGatewayPath(teamId, `/credentials/${credentialId}/provider-plans/${planId}`),
       body
     ),
-  deleteProviderPlan: (credentialId: string, planId: string) =>
+  deleteProviderPlan: (teamId: string, credentialId: string, planId: string) =>
     apiClient.delete<unknown>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/provider-plans/${planId}`
+      teamGatewayPath(teamId, `/credentials/${credentialId}/provider-plans/${planId}`)
     ),
   /** 上游套餐用量（成本聚合） */
-  listProviderPlanUsage: (credentialId: string, params?: { days?: number }) =>
+  listProviderPlanUsage: (teamId: string, credentialId: string, params?: { days?: number }) =>
     apiClient.get<ProviderPlanCost[]>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/provider-plan-usage`,
+      teamGatewayPath(teamId, `/credentials/${credentialId}/provider-plan-usage`),
       params
     ),
 
   // --- Entitlement Plan ---
   /** 列出虚拟 Key 绑定的下游客户套餐 */
-  listVkeyEntitlements: (vkeyId: string) =>
-    apiClient.get<EntitlementPlan[]>(`${GATEWAY_API_BASE}/keys/${vkeyId}/entitlements`),
-  createVkeyEntitlement: (vkeyId: string, body: EntitlementPlanCreateBody) =>
-    apiClient.post<EntitlementPlan>(`${GATEWAY_API_BASE}/keys/${vkeyId}/entitlements`, body),
+  listVkeyEntitlements: (teamId: string, vkeyId: string) =>
+    apiClient.get<EntitlementPlan[]>(teamGatewayPath(teamId, `/keys/${vkeyId}/entitlements`)),
+  createVkeyEntitlement: (teamId: string, vkeyId: string, body: EntitlementPlanCreateBody) =>
+    apiClient.post<EntitlementPlan>(teamGatewayPath(teamId, `/keys/${vkeyId}/entitlements`), body),
   /** 列出 API Key 授权链绑定的下游客户套餐 */
-  listGrantEntitlements: (grantId: string) =>
-    apiClient.get<EntitlementPlan[]>(`${GATEWAY_API_BASE}/api-key-grants/${grantId}/entitlements`),
-  createGrantEntitlement: (grantId: string, body: EntitlementPlanCreateBody) =>
+  listGrantEntitlements: (teamId: string, grantId: string) =>
+    apiClient.get<EntitlementPlan[]>(
+      teamGatewayPath(teamId, `/api-key-grants/${grantId}/entitlements`)
+    ),
+  createGrantEntitlement: (teamId: string, grantId: string, body: EntitlementPlanCreateBody) =>
     apiClient.post<EntitlementPlan>(
-      `${GATEWAY_API_BASE}/api-key-grants/${grantId}/entitlements`,
+      teamGatewayPath(teamId, `/api-key-grants/${grantId}/entitlements`),
       body
     ),
-  updateEntitlementPlan: (planId: string, body: EntitlementPlanUpdateBody) =>
-    apiClient.patch<EntitlementPlan>(`${GATEWAY_API_BASE}/entitlements/${planId}`, body),
-  deleteEntitlementPlan: (planId: string) =>
-    apiClient.delete<unknown>(`${GATEWAY_API_BASE}/entitlements/${planId}`),
+  updateEntitlementPlan: (teamId: string, planId: string, body: EntitlementPlanUpdateBody) =>
+    apiClient.patch<EntitlementPlan>(teamGatewayPath(teamId, `/entitlements/${planId}`), body),
+  deleteEntitlementPlan: (teamId: string, planId: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/entitlements/${planId}`)),
   /** 下游客户套餐用量（结算口径） */
-  getEntitlementUsage: (planId: string, params?: { days?: number }) =>
-    apiClient.get<EntitlementUsage>(`${GATEWAY_API_BASE}/entitlements/${planId}/usage`, params),
+  getEntitlementUsage: (teamId: string, planId: string, params?: { days?: number }) =>
+    apiClient.get<EntitlementUsage>(
+      teamGatewayPath(teamId, `/entitlements/${planId}/usage`),
+      params
+    ),
 
   // --- Margin（利润大盘） ---
   /** 利润聚合（按 credential / model / team 分组） */
-  dashboardMargin: (params?: { days?: number; group_by?: MarginGroupBy }) =>
-    apiClient.get<MarginSummary>(`${GATEWAY_API_BASE}/dashboard/margin`, params),
+  dashboardMargin: (teamId: string, params?: { days?: number; group_by?: MarginGroupBy }) =>
+    apiClient.get<MarginSummary>(teamGatewayPath(teamId, '/dashboard/margin'), params),
 } as const

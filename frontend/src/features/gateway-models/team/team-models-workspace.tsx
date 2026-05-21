@@ -6,6 +6,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import {
+  canLinkToCredentialDetail,
+  credentialSummaryLabel,
+} from '@/features/gateway-credentials/credential-summary-display'
+import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
+import {
   type HealthFilter,
   type ModelsPageView,
   type UsagePeriodDays,
@@ -25,6 +30,7 @@ import {
   runBatchConnectivityTests,
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { MODEL_PROVIDERS } from '@/types/user-model'
@@ -64,7 +70,9 @@ export function TeamModelsWorkspace({
   hideRegisterAction = false,
   pageView: pageViewProp,
 }: TeamModelsWorkspaceProps): React.JSX.Element {
-  const { canWrite } = useGatewayPermission()
+  const teamId = useGatewayTeamId()
+  const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -105,51 +113,50 @@ export function TeamModelsWorkspace({
   }, [setSearchParams])
 
   const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(providerFilter, credentialFilter),
+    queryKey: gatewayModelsListQueryKey(teamId, providerFilter, credentialFilter),
     queryFn: () =>
-      gatewayApi.listModels({
+      gatewayApi.listModels(teamId, {
         ...(providerFilter ? { provider: providerFilter } : {}),
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       }),
   })
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
-    queryKey: ['gateway', 'models', 'usage-summary', providerFilter, usageDays],
+    queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
     queryFn: () =>
-      gatewayApi.modelsUsageSummary({
+      gatewayApi.modelsUsageSummary(teamId, {
         days: usageDays,
         ...(providerFilter ? { provider: providerFilter } : {}),
       }),
     enabled: !isRegisterView,
   })
 
-  const needsCredentials = isRegisterView || credentialFilter !== ''
-
   const { data: credentials } = useQuery({
-    queryKey: ['gateway', 'credentials'],
-    queryFn: () => gatewayApi.listCredentials(),
-    enabled: needsCredentials,
+    queryKey: ['gateway', 'credentials', teamId],
+    queryFn: () => gatewayApi.listCredentials(teamId),
+    enabled: isRegisterView && canWrite,
   })
 
-  const credentialsById = useMemo(() => {
-    const m = new Map<string, NonNullable<typeof credentials>[number]>()
-    for (const c of credentials ?? []) {
-      m.set(c.id, c)
-    }
-    return m
-  }, [credentials])
-
-  const filterCredential = credentialFilter ? credentialsById.get(credentialFilter) : undefined
+  const filterCredentialSummary = credentialFilter
+    ? credentialSummariesById.get(credentialFilter)
+    : undefined
+  const filterCredentialLink = canLinkToCredentialDetail(
+    filterCredentialSummary,
+    isAdmin,
+    isPlatformAdmin
+  )
   const registerCredentialLocked = isRegisterView && credentialFilter !== ''
   const presetProvider =
-    registerCredentialLocked && filterCredential ? filterCredential.provider : providerFilter
+    registerCredentialLocked && filterCredentialSummary
+      ? filterCredentialSummary.provider
+      : providerFilter
 
   const { data: presets } = useQuery({
-    queryKey: ['gateway', 'models', 'presets', presetProvider],
+    queryKey: ['gateway', 'models', 'presets', teamId, presetProvider],
     queryFn: () =>
       presetProvider
-        ? gatewayApi.listModelPresets({ provider: presetProvider })
-        : gatewayApi.listModelPresets(),
+        ? gatewayApi.listModelPresets(teamId, { provider: presetProvider })
+        : gatewayApi.listModelPresets(teamId),
     enabled: isRegisterView,
   })
 
@@ -196,7 +203,7 @@ export function TeamModelsWorkspace({
     credentialId: credentialFilter || undefined,
     onCreateSuccess: (created) => {
       navigate(
-        teamModelDetailHref(created.id, {
+        teamModelDetailHref(teamId, created.id, {
           credentialId: credentialFilter !== '' ? credentialFilter : undefined,
         })
       )
@@ -205,10 +212,10 @@ export function TeamModelsWorkspace({
 
   const getModelHref = useCallback(
     (modelId: string) =>
-      teamModelDetailHref(modelId, {
+      teamModelDetailHref(teamId, modelId, {
         credentialId: credentialFilter !== '' ? credentialFilter : undefined,
       }),
-    [credentialFilter]
+    [teamId, credentialFilter]
   )
 
   const clearCredentialFilter = useCallback((): void => {
@@ -230,7 +237,7 @@ export function TeamModelsWorkspace({
     void (async (): Promise<void> => {
       setTestingAll(true)
       try {
-        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testModel(id))
+        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testModel(teamId, id))
         invalidateGatewayModelCaches(queryClient, {
           credentialId: credentialFilter || undefined,
           usageSummary: true,
@@ -243,10 +250,10 @@ export function TeamModelsWorkspace({
         setTestingAll(false)
       }
     })()
-  }, [testableItems, queryClient, toast, credentialFilter])
+  }, [testableItems, queryClient, toast, credentialFilter, teamId])
 
   const handleCreateSubmit = useCallback(
-    (body: Parameters<typeof gatewayApi.createModel>[0]) => {
+    (body: Parameters<typeof gatewayApi.createModel>[1]) => {
       createMutation.mutate(body)
     },
     [createMutation]
@@ -259,23 +266,25 @@ export function TeamModelsWorkspace({
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
       <span className="text-muted-foreground">
         按凭据筛选：
-        {!filterCredential ? (
-          <span className="ml-1 font-mono text-xs">{credentialFilter.slice(0, 8)}…</span>
-        ) : canWrite ? (
+        {filterCredentialLink ? (
           <Link
-            to={credentialDetailHref(credentialFilter)}
+            to={credentialDetailHref(teamId, credentialFilter)}
             className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
           >
-            {filterCredential.name}
+            {credentialSummaryLabel(filterCredentialSummary, credentialFilter)}
           </Link>
         ) : (
-          <span className="ml-1 font-medium">{filterCredential.name}</span>
+          <span className="ml-1 font-medium">
+            {credentialSummaryLabel(filterCredentialSummary, credentialFilter)}
+          </span>
         )}
       </span>
       <div className="flex flex-wrap items-center gap-1">
-        {canWrite && filterCredential ? (
+        {canWrite &&
+        filterCredentialSummary &&
+        (filterCredentialSummary.scope !== 'system' || isPlatformAdmin) ? (
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
-            <Link to={credentialDetailAddModelsHref(credentialFilter)}>添加模型</Link>
+            <Link to={credentialDetailAddModelsHref(teamId, credentialFilter)}>添加模型</Link>
           </Button>
         ) : null}
         <Button
@@ -300,8 +309,8 @@ export function TeamModelsWorkspace({
             presets={presets ?? []}
             credentials={activeCredentials}
             lockCredentialId={registerCredentialLocked ? credentialFilter : undefined}
-            lockCredentialLabel={filterCredential?.name}
-            initialProvider={filterCredential?.provider}
+            lockCredentialLabel={filterCredentialSummary?.name}
+            initialProvider={filterCredentialSummary?.provider}
             onSubmit={handleCreateSubmit}
             onCancel={goToList}
             isSubmitting={createMutation.isPending}

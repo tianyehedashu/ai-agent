@@ -28,9 +28,15 @@ const revealKeyMock = vi.fn(
 
 vi.mock('@/api/gateway', () => ({
   gatewayApi: {
-    listKeys: () => listKeysMock(),
-    revealKey: (id: string) => revealKeyMock(id),
+    listKeys: (_teamId: string) => listKeysMock(),
+    revealKey: (_teamId: string, id: string) => revealKeyMock(id),
   },
+}))
+
+vi.mock('@/stores/gateway-team', () => ({
+  getCurrentTeamId: () => 'team-test',
+  useGatewayTeamStore: (selector: (s: { currentTeamId: string }) => unknown) =>
+    selector({ currentTeamId: 'team-test' }),
 }))
 
 const STORAGE_KEY_V1 = LEGACY_STORAGE_KEYS[0]

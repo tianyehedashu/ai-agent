@@ -27,6 +27,11 @@ import {
 
 export const CUSTOM_MODEL_SENTINEL = '__custom__'
 
+export interface RouteCandidate {
+  name: string
+  primaryModels: string[]
+}
+
 export interface PlaygroundModelFieldProps {
   modelSelectId: string
   modelCustomId: string
@@ -34,10 +39,12 @@ export interface PlaygroundModelFieldProps {
   customModel: boolean
   onModelChange: (value: string) => void
   onCustomModelChange: (custom: boolean, model?: string) => void
+  routeCandidates: RouteCandidate[]
   teamCandidates: ModelCandidate[]
   personalCandidates: ModelCandidate[]
   filteredModels: ModelCandidate[]
   selectedCandidate: ModelCandidate | undefined
+  selectedRoute: RouteCandidate | undefined
   priceByName: Map<string, MyPriceRow>
   currency: DisplayCurrency
   playgroundMode: PlaygroundMode
@@ -51,10 +58,12 @@ export function PlaygroundModelField({
   customModel,
   onModelChange,
   onCustomModelChange,
+  routeCandidates,
   teamCandidates,
   personalCandidates,
   filteredModels,
   selectedCandidate,
+  selectedRoute,
   priceByName,
   currency,
   playgroundMode,
@@ -81,7 +90,7 @@ export function PlaygroundModelField({
             onChange={(e) => {
               onModelChange(e.target.value)
             }}
-            placeholder="输入模型别名或虚拟路由名"
+            placeholder="输入模型别名或虚拟路由名（也可输入未列出的名称）"
             autoComplete="off"
             spellCheck={false}
             className="font-mono"
@@ -92,9 +101,9 @@ export function PlaygroundModelField({
             variant="outline"
             size="sm"
             onClick={() => {
-              onCustomModelChange(false, filteredModels[0]?.name ?? '')
+              onCustomModelChange(false, routeCandidates[0]?.name || filteredModels[0]?.name || '')
             }}
-            disabled={filteredModels.length === 0}
+            disabled={filteredModels.length === 0 && routeCandidates.length === 0}
           >
             从列表选
           </Button>
@@ -104,13 +113,30 @@ export function PlaygroundModelField({
           <SelectTrigger id={modelSelectId} className="font-mono">
             <SelectValue
               placeholder={
-                filteredModels.length === 0
-                  ? `暂无支持「${PLAYGROUND_MODE_LABELS[playgroundMode]}」的模型`
-                  : '选择模型'
+                filteredModels.length === 0 && routeCandidates.length === 0
+                  ? `暂无支持「${PLAYGROUND_MODE_LABELS[playgroundMode]}」的模型或路由`
+                  : '选择模型或虚拟路由'
               }
             />
           </SelectTrigger>
           <SelectContent>
+            {routeCandidates.length > 0 ? (
+              <SelectGroup>
+                <SelectLabel>虚拟路由</SelectLabel>
+                {routeCandidates.map((item) => (
+                  <SelectItem key={`route-${item.name}`} value={item.name}>
+                    <span className="flex w-full items-center justify-between gap-3">
+                      <span className="min-w-0 flex-1 truncate font-mono" translate="no">
+                        {item.name}
+                      </span>
+                      <Badge variant="outline" className="shrink-0 text-muted-foreground">
+                        路由
+                      </Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ) : null}
             {teamCandidates.length > 0 ? (
               <SelectGroup>
                 <SelectLabel>团队模型</SelectLabel>
@@ -146,7 +172,8 @@ export function PlaygroundModelField({
       <ModelHint
         loading={modelsLoading}
         selected={selectedCandidate}
-        empty={filteredModels.length === 0}
+        selectedRoute={selectedRoute}
+        empty={filteredModels.length === 0 && routeCandidates.length === 0}
         mode={playgroundMode}
       />
     </div>
@@ -205,16 +232,25 @@ function ModelStatusBadge({ status }: Readonly<{ status: ModelTestStatus }>): Re
 function ModelHint({
   loading,
   selected,
+  selectedRoute,
   empty,
   mode,
 }: Readonly<{
   loading: boolean
   selected: ModelCandidate | undefined
+  selectedRoute: RouteCandidate | undefined
   empty: boolean
   mode: PlaygroundMode
 }>): React.JSX.Element | null {
   if (loading) {
     return <p className="text-xs text-muted-foreground">加载中…</p>
+  }
+  if (selectedRoute) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        虚拟路由 · 主模型：{selectedRoute.primaryModels.join('、') || '—'}
+      </p>
+    )
   }
   if (empty) {
     return (

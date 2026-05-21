@@ -2,7 +2,7 @@
  * AI Gateway · 日志、详情与大盘
  *
  * `usage_aggregation` 在「日志/大盘/利润」三组接口共用，决定聚合维度：
- * - `workspace`（产品文案：团队）：按当前 X-Team-Id 选中的团队（含 personal/shared）过滤
+ * - `workspace`（产品文案：团队）：按 URL 路径中的 teamId 过滤
  * - `user`（产品文案：我）：按当前登录账号跨团队聚合
  *
  * 字面量保留 `workspace` 是为了与预算 BudgetScope.team 字面量正交，避免 URL/JSON 中误读。
@@ -10,7 +10,7 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 /** 日志/大盘聚合维度 */
 export type GatewayUsageAggregation = 'workspace' | 'user'
@@ -101,12 +101,14 @@ export interface GatewayLogsPage {
 /** Logs / Dashboard 资源 API */
 export const logsApi = {
   /** 分页查询调用日志（按当前聚合维度过滤） */
-  listLogs: (params?: GatewayLogsQuery) =>
-    apiClient.get<GatewayLogsPage>(`${GATEWAY_API_BASE}/logs`, params),
+  listLogs: (teamId: string, params?: GatewayLogsQuery) =>
+    apiClient.get<GatewayLogsPage>(teamGatewayPath(teamId, '/logs'), params),
   /** 获取单条调用日志详情 */
-  getLog: (id: string, params?: { usage_aggregation?: GatewayUsageAggregation }) =>
-    apiClient.get<GatewayLogDetail>(`${GATEWAY_API_BASE}/logs/${id}`, params),
+  getLog: (teamId: string, id: string, params?: { usage_aggregation?: GatewayUsageAggregation }) =>
+    apiClient.get<GatewayLogDetail>(teamGatewayPath(teamId, `/logs/${id}`), params),
   /** 大盘汇总（次/吞吐/成本/成功率/延迟） */
-  dashboard: (params?: { days?: number; usage_aggregation?: GatewayUsageAggregation }) =>
-    apiClient.get<DashboardSummary>(`${GATEWAY_API_BASE}/dashboard/summary`, params),
+  dashboard: (
+    teamId: string,
+    params?: { days?: number; usage_aggregation?: GatewayUsageAggregation }
+  ) => apiClient.get<DashboardSummary>(teamGatewayPath(teamId, '/dashboard/summary'), params),
 } as const

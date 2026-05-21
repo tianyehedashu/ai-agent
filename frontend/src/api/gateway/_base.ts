@@ -1,12 +1,18 @@
 /**
  * AI Gateway API · 共享常量与基址
  *
- * - 所有 /api/v1/gateway/* 请求路径前缀
- * - apiClient 会自动注入 X-Team-Id（来自 gateway-team store）
+ * - 团队资源：`/api/v1/gateway/teams/{teamId}/*`（路径显式选团队）
+ * - 用户域：`/my-credentials`、`/my-models`、`/models/available` 无 team 路径
  */
 
 /** Gateway 管理端点公共前缀 */
 export const GATEWAY_API_BASE = '/api/v1/gateway'
+
+/** 团队 scoped 管理路径 */
+export function teamGatewayPath(teamId: string, suffix: string): string {
+  const normalized = suffix.startsWith('/') ? suffix : `/${suffix}`
+  return `${GATEWAY_API_BASE}/teams/${teamId}${normalized}`
+}
 
 /**
  * 与 Python 端 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 一致。

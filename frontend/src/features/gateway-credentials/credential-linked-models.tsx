@@ -18,6 +18,7 @@ import {
 import { ModelInventoryRow } from '@/features/gateway-models/team/model-inventory-row'
 import { preloadModelNavigation } from '@/features/gateway-models/team/preloads'
 import { preloadTeamModelDetailPane } from '@/features/gateway-models/team/team-model-detail-preload'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ExternalLink, Plus } from '@/lib/lucide-icons'
 
 const LINKED_MODEL_USAGE_DAYS = 7 satisfies UsagePeriodDays
@@ -38,12 +39,13 @@ export const CredentialModelsCard = memo(function CredentialModelsCard({
   canManageModels,
   onAddModels,
 }: CredentialModelsCardProps): React.JSX.Element {
-  const manageAllHref = teamModelsFilteredHref(credentialId)
-  const registerHref = teamModelsRegisterHref(credentialId)
+  const teamId = useGatewayTeamId()
+  const manageAllHref = teamModelsFilteredHref(teamId, credentialId)
+  const registerHref = teamModelsRegisterHref(teamId, credentialId)
 
   const getModelHref = useCallback(
-    (modelId: string) => teamModelDetailHref(modelId, { credentialId }),
-    [credentialId]
+    (modelId: string) => teamModelDetailHref(teamId, modelId, { credentialId }),
+    [teamId, credentialId]
   )
 
   const modelRows = useMemo(

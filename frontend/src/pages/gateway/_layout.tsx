@@ -27,7 +27,12 @@ import {
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
-type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
+type NavItem = {
+  to: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+  end?: boolean
+}
 
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
@@ -37,8 +42,8 @@ export default function GatewayLayout(): React.JSX.Element {
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
-      { to: 'overview', label: '概览', icon: BarChart3 },
-      { to: 'guide', label: '调用指南', icon: BookOpen },
+      { to: 'overview', label: '概览', icon: BarChart3, end: true },
+      { to: '/gateway/guide', label: '调用指南', icon: BookOpen },
       { to: 'keys', label: '虚拟 Key', icon: Key },
       { to: 'credentials', label: '凭据', icon: Database },
       { to: 'models', label: '模型', icon: Network },
@@ -47,10 +52,10 @@ export default function GatewayLayout(): React.JSX.Element {
       { to: 'budgets', label: '预算配额', icon: Receipt },
       { to: 'logs', label: '调用日志', icon: FileText },
       { to: 'alerts', label: '告警规则', icon: AlertTriangle },
-      { to: 'teams', label: '团队成员', icon: Users },
+      { to: 'members', label: '团队成员', icon: Users },
     ]
     if (isPlatformAdmin) {
-      base.push({ to: 'platform-stats', label: '平台统计', icon: LineChart })
+      base.push({ to: '/gateway/platform-stats', label: '平台统计', icon: LineChart })
     }
     return base
   }, [isPlatformAdmin])
@@ -75,7 +80,7 @@ export default function GatewayLayout(): React.JSX.Element {
             <NavLink
               key={it.to}
               to={it.to}
-              end={it.to === 'overview'}
+              end={it.end}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',

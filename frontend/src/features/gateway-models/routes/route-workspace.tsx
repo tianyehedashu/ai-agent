@@ -12,12 +12,20 @@ import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
 import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 export function RouteWorkspace(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { canWrite } = useGatewayPermission()
+  const currentTeam = useGatewayTeamStore((s) => s.current())
+  const isPersonalTeam = currentTeam?.kind === 'personal'
+  const modelsHref = isPersonalTeam
+    ? `/gateway/teams/${teamId}/models?tab=personal`
+    : `/gateway/teams/${teamId}/models?tab=shared`
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -29,14 +37,14 @@ export function RouteWorkspace(): React.JSX.Element {
   const [createFormKey, setCreateFormKey] = useState(0)
 
   const { data: routes, isLoading } = useQuery({
-    queryKey: ['gateway', 'routes'],
-    queryFn: () => gatewayApi.listRoutes(),
+    queryKey: ['gateway', 'routes', teamId],
+    queryFn: () => gatewayApi.listRoutes(teamId),
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
   const { data: models, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models'],
-    queryFn: () => gatewayApi.listModels(),
+    queryKey: ['gateway', 'models', teamId],
+    queryFn: () => gatewayApi.listModels(teamId),
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
@@ -67,7 +75,8 @@ export function RouteWorkspace(): React.JSX.Element {
   )
 
   const createMutation = useMutation({
-    mutationFn: gatewayApi.createRoute,
+    mutationFn: (body: Parameters<typeof gatewayApi.createRoute>[1]) =>
+      gatewayApi.createRoute(teamId, body),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
       setCreateMode(false)
@@ -89,7 +98,7 @@ export function RouteWorkspace(): React.JSX.Element {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: GatewayRouteUpdateBody }) =>
-      gatewayApi.updateRoute(id, body),
+      gatewayApi.updateRoute(teamId, id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
       toast({ title: '路由已更新' })
@@ -129,16 +138,51 @@ export function RouteWorkspace(): React.JSX.Element {
     setCreateMode(false)
   }
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => gatewayApi.deleteRoute(teamId, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+      setSelectedId(null)
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.delete('routeId')
+          return n
+        },
+        { replace: true }
+      )
+      toast({ title: '路由已删除' })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '删除失败', description: e.message })
+    },
+  })
+
+  const teamCustomRoutes = useMemo(
+    () => (routes ?? []).filter((r) => r.source !== 'system'),
+    [routes]
+  )
+
   return (
     <div className="space-y-4">
+      {currentTeam ? (
+        <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          {isPersonalTeam ? (
+            <>个人工作区 · 模型池来自个人注册别名</>
+          ) : (
+            <>
+              当前团队：<span className="font-medium text-foreground">{currentTeam.name}</span> ·
+              模型池来自团队注册别名
+            </>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted-foreground">
           虚拟路由定义客户端请求的 <span className="font-mono">model</span> 名与主模型池、Fallback
           及 Router 策略。需先在{' '}
-          <Link
-            to="/gateway/models?tab=shared"
-            className="text-primary underline-offset-4 hover:underline"
-          >
+          <Link to={modelsHref} className="text-primary underline-offset-4 hover:underline">
             模型管理
           </Link>{' '}
           配置供给。
@@ -178,7 +222,11 @@ export function RouteWorkspace(): React.JSX.Element {
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : filteredRoutes.length === 0 ? (
-              <p className="px-3 py-12 text-center text-sm text-muted-foreground">暂无路由</p>
+              <p className="px-3 py-12 text-center text-sm text-muted-foreground">
+                {teamCustomRoutes.length === 0
+                  ? '暂无团队自定义路由；系统路由见下方（只读）'
+                  : '暂无匹配的路由'}
+              </p>
             ) : (
               <ul className="divide-y">
                 {filteredRoutes.map((r) => (
@@ -193,7 +241,14 @@ export function RouteWorkspace(): React.JSX.Element {
                         selectRoute(r.id)
                       }}
                     >
-                      <p className="font-mono text-sm font-medium">{r.virtual_model}</p>
+                      <p className="flex items-center gap-2 font-mono text-sm font-medium">
+                        {r.virtual_model}
+                        {r.source === 'system' ? (
+                          <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+                            系统
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {routingStrategyLabel(r.strategy)} · {r.primary_models.join(', ') || '—'}
                       </p>
@@ -223,8 +278,12 @@ export function RouteWorkspace(): React.JSX.Element {
             models={models ?? []}
             pickerModels={pickerModels}
             isSaving={updateMutation.isPending}
+            isDeleting={deleteMutation.isPending}
             onSave={(id, body) => {
               updateMutation.mutate({ id, body })
+            }}
+            onDelete={(id) => {
+              deleteMutation.mutate(id)
             }}
           />
         )}

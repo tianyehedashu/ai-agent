@@ -10,6 +10,7 @@ import {
   invalidateGatewayModelAliasDependents,
   invalidateGatewayModelCaches,
 } from '@/features/gateway-models/utils'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 
 import type { UseMutationResult } from '@tanstack/react-query'
@@ -32,12 +33,13 @@ interface GatewayModelMutations {
 export function useGatewayModelMutations(
   options?: UseGatewayModelMutationsOptions
 ): GatewayModelMutations {
+  const teamId = useGatewayTeamId()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const filterCredentialId = options?.credentialId
 
   const createMutation = useMutation({
-    mutationFn: (body: GatewayModelCreateBody) => gatewayApi.createModel(body),
+    mutationFn: (body: GatewayModelCreateBody) => gatewayApi.createModel(teamId, body),
     onSuccess: (created) => {
       invalidateGatewayModelCaches(queryClient, {
         credentialId: filterCredentialId ?? created.credential_id,
@@ -53,7 +55,7 @@ export function useGatewayModelMutations(
 
   const updateModelMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: GatewayModelUpdateBody }) =>
-      gatewayApi.updateModel(id, body),
+      gatewayApi.updateModel(teamId, id, body),
     onSuccess: (_data, { body }) => {
       invalidateGatewayModelCaches(queryClient, {
         credentialId: filterCredentialId,
@@ -70,7 +72,7 @@ export function useGatewayModelMutations(
   })
 
   const testMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.testModel(id),
+    mutationFn: (id: string) => gatewayApi.testModel(teamId, id),
     onSuccess: (result) => {
       invalidateGatewayModelCaches(queryClient, { credentialId: filterCredentialId })
       if (result.success) {

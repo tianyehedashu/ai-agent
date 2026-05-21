@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
+import { getCurrentTeamId, useGatewayTeamStore } from '@/stores/gateway-team'
 import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-selection'
 
 import { migrateLegacyPlaygroundVkeyStorage } from './playground-vkey-persist'
@@ -64,8 +64,13 @@ export function usePlaygroundVirtualKey(
   }, [selectedKeyId, setLastSelectedId])
 
   const keysQuery = useQuery({
-    queryKey: ['gateway', 'keys'],
-    queryFn: () => gatewayApi.listKeys(),
+    queryKey: ['gateway', 'keys', currentTeamId],
+    queryFn: () => {
+      const teamId = getCurrentTeamId()
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.listKeys(teamId)
+    },
+    enabled: Boolean(currentTeamId),
     staleTime: 30_000,
   })
 
@@ -121,12 +126,14 @@ export function usePlaygroundVirtualKey(
     bootstrapKeyId === selectedKeyId
 
   const revealQuery = useQuery({
-    queryKey: ['gateway', 'keys', selectedKeyId, 'reveal'] as const,
+    queryKey: ['gateway', 'keys', currentTeamId, selectedKeyId, 'reveal'] as const,
     queryFn: () => {
       if (selectedKeyId === null) {
         return Promise.reject(new Error('未选择虚拟 Key'))
       }
-      return gatewayApi.revealKey(selectedKeyId)
+      const teamId = getCurrentTeamId()
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.revealKey(teamId, selectedKeyId)
     },
     enabled: selectedKeyId !== null && selectedKey !== null && !bootstrapActive,
     staleTime: 5 * 60_000,

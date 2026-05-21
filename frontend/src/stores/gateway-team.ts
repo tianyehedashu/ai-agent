@@ -3,7 +3,7 @@
  *
  * 管理当前选中的 AI Gateway 团队上下文。
  * - 持久化到 localStorage
- * - axios interceptor 会读取 currentTeamId 注入 X-Team-Id header
+ * - 与 Gateway 路由 `:teamId` 同步；Chat 请求体携带 `gateway_team_id`
  * - 切换 team 时调用方应该 invalidate ['gateway'] 相关查询
  */
 

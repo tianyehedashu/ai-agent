@@ -41,7 +41,9 @@ import {
   getProviderSchema,
   providerLabel,
 } from '@/features/gateway-credentials/provider-schemas'
+import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { ChevronRight, Loader2 } from '@/lib/lucide-icons'
 
@@ -60,6 +62,7 @@ function canEditGatewayCredential(
 }
 
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
@@ -74,8 +77,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     isError,
     error,
   } = useQuery({
-    queryKey: ['gateway', 'credential', id],
-    queryFn: () => gatewayApi.getCredential(id),
+    queryKey: ['gateway', 'credential', teamId, id],
+    queryFn: () => gatewayApi.getCredential(teamId, id),
     enabled: id.length > 0,
   })
 
@@ -109,12 +112,18 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
 
   // 头部「启用/禁用」走独立 mutation + 乐观更新，UI 即时响应，不再依赖本地 isActive state
   const toggleActiveMutation = useMutation({
-    mutationFn: (nextActive: boolean) => gatewayApi.updateCredential(id, { is_active: nextActive }),
+    mutationFn: (nextActive: boolean) =>
+      gatewayApi.updateCredential(teamId, id, { is_active: nextActive }),
     onMutate: async (nextActive: boolean) => {
-      await queryClient.cancelQueries({ queryKey: ['gateway', 'credential', id] })
-      const previous = queryClient.getQueryData<ProviderCredential>(['gateway', 'credential', id])
+      await queryClient.cancelQueries({ queryKey: ['gateway', 'credential', teamId, id] })
+      const previous = queryClient.getQueryData<ProviderCredential>([
+        'gateway',
+        'credential',
+        teamId,
+        id,
+      ])
       if (previous) {
-        queryClient.setQueryData<ProviderCredential>(['gateway', 'credential', id], {
+        queryClient.setQueryData<ProviderCredential>(['gateway', 'credential', teamId, id], {
           ...previous,
           is_active: nextActive,
         })
@@ -123,13 +132,14 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     },
     onError: (e: Error, _next, ctx) => {
       if (ctx?.previous) {
-        queryClient.setQueryData(['gateway', 'credential', id], ctx.previous)
+        queryClient.setQueryData(['gateway', 'credential', teamId, id], ctx.previous)
       }
       toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
     onSettled: () => {
       invalidateCredentialProbeCache(queryClient, 'team', id)
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', id] })
+      invalidateCredentialSummariesCache(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, id] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
     },
   })
@@ -139,7 +149,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       <div className="text-sm text-muted-foreground">
         无效的凭据 ID。
         <Link
-          to="/gateway/credentials?tab=shared"
+          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
           className="ml-2 text-primary underline-offset-4 hover:underline"
         >
           返回列表
@@ -159,7 +169,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           {error instanceof Error ? error.message : '无法加载凭据'}
         </p>
         <Link
-          to="/gateway/credentials?tab=shared"
+          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
           className="text-primary underline-offset-4 hover:underline"
         >
           返回凭据列表
@@ -171,7 +181,10 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/gateway/credentials?tab=shared" className="hover:text-foreground">
+        <Link
+          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
+          className="hover:text-foreground"
+        >
           凭据管理
         </Link>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
@@ -229,6 +242,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           </CardHeader>
           <CardContent className="space-y-4">
             <CredentialEditForm
+              teamId={teamId}
               // 用 cred.id + api_key_masked 复合 key：
               //  · 切换凭据时重挂（清空所有 form state）
               //  · 同一凭据轮换 key 成功后也重挂（清空「显示完整密钥」状态）
@@ -239,14 +253,16 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               configManaged={configManaged}
               onSaved={() => {
                 invalidateCredentialProbeCache(queryClient, 'team', id)
+                invalidateCredentialSummariesCache(queryClient)
               }}
             />
           </CardContent>
         </Card>
 
-        <ProviderPlansSection credentialId={id} />
+        <ProviderPlansSection teamId={teamId} credentialId={id} />
 
         <CredentialLinkedModelsSection
+          teamId={teamId}
           credentialId={id}
           canManageModels={editable}
           onAddModels={editable ? openAddModelsDialog : undefined}
@@ -315,18 +331,20 @@ function usageByPlanId(rows: ProviderPlanCost[] | undefined): Map<string, Provid
 }
 
 function ProviderPlansSection({
+  teamId,
   credentialId,
 }: Readonly<{
+  teamId: string
   credentialId: string
 }>): React.JSX.Element {
   const { data: plans, isLoading: plansLoading } = useQuery({
-    queryKey: ['gateway', 'credential', credentialId, 'provider-plans'],
-    queryFn: () => gatewayApi.listProviderPlans(credentialId),
+    queryKey: ['gateway', 'credential', teamId, credentialId, 'provider-plans'],
+    queryFn: () => gatewayApi.listProviderPlans(teamId, credentialId),
     enabled: credentialId.length > 0,
   })
   const { data: usage } = useQuery({
-    queryKey: ['gateway', 'credential', credentialId, 'provider-plan-usage', 30],
-    queryFn: () => gatewayApi.listProviderPlanUsage(credentialId, { days: 30 }),
+    queryKey: ['gateway', 'credential', teamId, credentialId, 'provider-plan-usage', 30],
+    queryFn: () => gatewayApi.listProviderPlanUsage(teamId, credentialId, { days: 30 }),
     enabled: credentialId.length > 0,
   })
   const usageMap = useMemo(() => usageByPlanId(usage), [usage])
@@ -388,17 +406,19 @@ function ProviderPlansSection({
  * 拉取并展示该凭据关联的注册模型。独立成段，避免与编辑表单耦合 query 失效逻辑。
  */
 function CredentialLinkedModelsSection({
+  teamId,
   credentialId,
   canManageModels,
   onAddModels,
 }: Readonly<{
+  teamId: string
   credentialId: string
   canManageModels: boolean
   onAddModels?: () => void
 }>): React.JSX.Element {
   const { data: linkedModels, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', 'by-credential', credentialId],
-    queryFn: () => gatewayApi.listModels({ credential_id: credentialId }),
+    queryKey: ['gateway', 'models', teamId, 'by-credential', credentialId],
+    queryFn: () => gatewayApi.listModels(teamId, { credential_id: credentialId }),
     enabled: credentialId.length > 0,
   })
   return (
@@ -417,11 +437,13 @@ function CredentialLinkedModelsSection({
  * 父组件需通过 `key` 触发重挂以在切换凭据或轮换 key 后重置状态。
  */
 function CredentialEditForm({
+  teamId,
   cred,
   editable,
   configManaged,
   onSaved,
 }: Readonly<{
+  teamId: string
   cred: ProviderCredential
   editable: boolean
   configManaged: boolean
@@ -440,7 +462,7 @@ function CredentialEditForm({
   const credId = cred.id
 
   const revealKeyMutation = useMutation({
-    mutationFn: () => gatewayApi.revealCredential(credId),
+    mutationFn: () => gatewayApi.revealCredential(teamId, credId),
     onSuccess: (data) => {
       setRevealedCurrentKey(data.api_key)
     },
@@ -455,10 +477,12 @@ function CredentialEditForm({
   })
 
   const updateMutation = useMutation({
-    mutationFn: (body: GatewayCredentialUpdateBody) => gatewayApi.updateCredential(credId, body),
+    mutationFn: (body: GatewayCredentialUpdateBody) =>
+      gatewayApi.updateCredential(teamId, credId, body),
     onSuccess: () => {
       onSaved?.()
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', credId] })
+      invalidateCredentialSummariesCache(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, credId] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
       void queryClient.invalidateQueries({

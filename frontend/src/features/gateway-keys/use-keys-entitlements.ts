@@ -20,14 +20,17 @@ export function filterActiveEntitlementPlans(plans: readonly EntitlementPlan[]):
   )
 }
 
-export function useKeysEntitlementsMap(vkeyIds: readonly string[]): {
+export function useKeysEntitlementsMap(
+  teamId: string,
+  vkeyIds: readonly string[]
+): {
   activeByVkeyId: Map<string, EntitlementPlan[]>
   isLoadingByVkeyId: Map<string, boolean>
 } {
   const queries = useQueries({
     queries: vkeyIds.map((id) => ({
-      queryKey: ['gateway', 'keys', id, 'entitlements'] as const,
-      queryFn: () => gatewayApi.listVkeyEntitlements(id),
+      queryKey: ['gateway', 'keys', teamId, id, 'entitlements'] as const,
+      queryFn: () => gatewayApi.listVkeyEntitlements(teamId, id),
       enabled: id.length > 0,
       staleTime: ENTITLEMENTS_STALE_MS,
     })),

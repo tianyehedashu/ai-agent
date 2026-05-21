@@ -6,6 +6,7 @@ import { sessionApi } from '@/api/session'
 import TeamSwitcher from '@/components/layout/team-switcher'
 import { useTheme } from '@/components/theme-provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { cn } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
@@ -34,6 +36,7 @@ export default function Header(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
   // 用户信息已由 AuthProvider 在应用启动时获取
   const { currentUser, logout } = useUserStore()
+  const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
 
   // 如果有 sessionId，获取会话信息以显示标题
   const { data: session } = useQuery({
@@ -101,6 +104,12 @@ export default function Header(): React.JSX.Element {
                 <div className="flex flex-col space-y-1 leading-none">
                   <p className="font-medium">{displayName}</p>
                   <p className="text-xs text-muted-foreground">{displayEmail}</p>
+                  {isPlatformAdmin && (
+                    <Badge variant="secondary" className="w-fit text-xs font-normal">
+                      平台管理员
+                    </Badge>
+                  )}
+                  {isPlatformViewer && <p className="text-xs text-muted-foreground">只读账号</p>}
                   {isAnonymous && <p className="text-xs italic text-muted-foreground">匿名用户</p>}
                 </div>
               </div>

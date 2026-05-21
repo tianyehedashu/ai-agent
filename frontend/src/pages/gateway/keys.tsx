@@ -35,11 +35,13 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { guardrailStatusLabel } from '@/lib/gateway-pii-guardrail'
 import { BookOpen, Copy, Plus, Trash2 } from '@/lib/lucide-icons'
 
 export default function GatewayKeysPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { isMember, isPlatformViewer } = useGatewayPermission()
@@ -51,26 +53,27 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
 
   const { data: keys, isLoading } = useQuery({
-    queryKey: ['gateway', 'keys'],
-    queryFn: () => gatewayApi.listKeys(),
+    queryKey: ['gateway', 'keys', teamId],
+    queryFn: () => gatewayApi.listKeys(teamId),
   })
 
   const { data: gatewayFeatures } = useQuery({
-    queryKey: ['gateway', 'features'],
-    queryFn: () => gatewayApi.getFeatures(),
+    queryKey: ['gateway', 'features', teamId],
+    queryFn: () => gatewayApi.getFeatures(teamId),
     staleTime: 5 * 60 * 1000,
   })
   const piiGuardrailGloballyEnabled = gatewayFeatures?.pii_guardrail_globally_enabled ?? false
 
   const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
-  const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(visibleVkeyIds)
+  const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(teamId, visibleVkeyIds)
   const allSelectableSelected =
     visibleKeys.length > 0 && visibleKeys.every((k) => selectedIds.has(k.id))
   const someSelectableSelected = visibleKeys.some((k) => selectedIds.has(k.id))
 
   const createMutation = useMutation({
-    mutationFn: gatewayApi.createKey,
+    mutationFn: (body: Parameters<typeof gatewayApi.createKey>[1]) =>
+      gatewayApi.createKey(teamId, body),
     onSuccess: (created) => {
       setCreatedKey(created.plain_key)
       setCreatedKeyId(created.id)
@@ -82,7 +85,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
   })
 
   const revokeMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.revokeKey(id),
+    mutationFn: (id: string) => gatewayApi.revokeKey(teamId, id),
     onSuccess: (_result, id) => {
       queryClient.setQueryData<VirtualKey[]>(['gateway', 'keys'], (prev) =>
         (prev ?? []).filter((k) => k.id !== id)
@@ -102,7 +105,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
   })
 
   const batchRevokeMutation = useMutation({
-    mutationFn: (ids: string[]) => gatewayApi.revokeKeysBatch(ids),
+    mutationFn: (ids: string[]) => gatewayApi.revokeKeysBatch(teamId, ids),
     onSuccess: (result) => {
       const revokedSet = new Set(result.revoked)
       queryClient.setQueryData<VirtualKey[]>(['gateway', 'keys'], (prev) =>

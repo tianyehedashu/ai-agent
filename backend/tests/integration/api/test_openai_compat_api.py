@@ -32,9 +32,9 @@ class TestOpenAiCompatApi:
             team = await TeamService(db_session).ensure_personal_team(test_user.id)
             await db_session.commit()
 
-            mgmt_headers = {**auth_headers, "X-Team-Id": str(team.id)}
+            mgmt_headers = auth_headers
             ck = await dev_client.post(
-                "/api/v1/gateway/keys",
+                f"/api/v1/gateway/teams{team.id}/keys",
                 headers=mgmt_headers,
                 json={"name": "itest-openai-compat-models"},
             )
@@ -165,5 +165,47 @@ class TestOpenAiCompatApi:
                 },
             )
             assert selected.status_code == 200, selected.text
+        finally:
+            clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_vkey_rejects_conflicting_x_team_id_header(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """sk-gw-* 绑定团队；冲突的 X-Team-Id 应 400，而非静默 override。"""
+        try:
+            team = await TeamService(db_session).ensure_personal_team(test_user.id)
+            other = await TeamService(db_session).create_team(
+                name="Other VKey Header Team",
+                owner_user_id=test_user.id,
+            )
+            await db_session.commit()
+
+            ck = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/keys",
+                headers=auth_headers,
+                json={"name": "itest-vkey-header-guard"},
+            )
+            assert ck.status_code == 201, ck.text
+            plain_key = ck.json()["plain_key"]
+
+            ok = await dev_client.get(
+                "/v1/models",
+                headers={"Authorization": f"Bearer {plain_key}"},
+            )
+            assert ok.status_code == 200, ok.text
+
+            bad = await dev_client.get(
+                "/v1/models",
+                headers={
+                    "Authorization": f"Bearer {plain_key}",
+                    "X-Team-Id": str(other.id),
+                },
+            )
+            assert bad.status_code == 400, bad.text
         finally:
             clear_permission_context()

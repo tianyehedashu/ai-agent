@@ -41,8 +41,6 @@ import {
   clearAuth,
   handleUnauthorized,
 } from '@/stores/auth'
-import { getCurrentTeamId } from '@/stores/gateway-team'
-
 // 开发环境为空（使用 vite proxy），生产环境按需配置
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 
@@ -203,12 +201,6 @@ class ApiClient {
       headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
-    // AI Gateway 团队上下文（仅在路径属于 gateway 管理面时附带；其它请求附带也无副作用）
-    const teamId = getCurrentTeamId()
-    if (teamId && !headers['X-Team-Id']) {
-      headers['X-Team-Id'] = teamId
-    }
-
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
@@ -361,11 +353,6 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`
     } else if (anonymousUserId) {
       headers['X-Anonymous-User-Id'] = anonymousUserId
-    }
-
-    const teamId = getCurrentTeamId()
-    if (teamId && !headers['X-Team-Id']) {
-      headers['X-Team-Id'] = teamId
     }
 
     try {

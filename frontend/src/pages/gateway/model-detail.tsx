@@ -4,11 +4,14 @@
 
 import { Suspense, lazy } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
+import {
+  canLinkToCredentialDetail,
+  credentialSummaryLabel,
+} from '@/features/gateway-credentials/credential-summary-display'
+import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { parseScopeTab, parseModelsPageView } from '@/features/gateway-models/constants'
 import { useGatewayModelLabel } from '@/features/gateway-models/hooks/use-gateway-model-label'
 import { usePersonalModelLabel } from '@/features/gateway-models/hooks/use-personal-model-label'
@@ -21,6 +24,8 @@ import {
 } from '@/features/gateway-models/paths'
 import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronLeft, ChevronRight, Loader2 } from '@/lib/lucide-icons'
 
 const TeamModelDetailPane = lazy(() =>
@@ -49,6 +54,7 @@ const paneSuspenseFallback = (
 )
 
 export default function GatewayModelDetailPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { modelId } = useParams<{ modelId: string }>()
   const id = modelId ?? ''
   const [searchParams] = useSearchParams()
@@ -57,22 +63,25 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const credentialId = searchParams.get('credentialId') ?? ''
   const isPersonal = scopeTab === 'personal'
   const isEdit = isPersonal && pageView === 'edit'
-
-  const { data: credential } = useQuery({
-    queryKey: ['gateway', 'credential', credentialId],
-    queryFn: () => gatewayApi.getCredential(credentialId),
-    enabled: !isPersonal && credentialId.length > 0,
-  })
+  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
+  const credentialSummary =
+    !isPersonal && credentialId.length > 0 ? credentialSummariesById.get(credentialId) : undefined
+  const credentialBreadcrumbLink = canLinkToCredentialDetail(
+    credentialSummary,
+    isAdmin,
+    isPlatformAdmin
+  )
 
   const teamLabel = useGatewayModelLabel(isPersonal ? '' : id, credentialId)
   const personalLabel = usePersonalModelLabel(isPersonal ? id : '')
   const modelLabel = isPersonal ? personalLabel : teamLabel
 
   const backHref = isPersonal
-    ? personalModelsIndexHref()
+    ? personalModelsIndexHref(teamId)
     : credentialId.length > 0
-      ? credentialDetailHref(credentialId)
-      : teamModelsIndexHref()
+      ? credentialDetailHref(teamId, credentialId)
+      : teamModelsIndexHref(teamId)
   const backLabel = isPersonal ? '全部个人模型' : credentialId.length > 0 ? '返回凭据' : '全部模型'
 
   const listPreload = isPersonal ? preloadPersonalModelsWorkspace : preloadTeamModelsWorkspace
@@ -83,7 +92,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         {isPersonal ? (
           <>
             <Link
-              to={personalModelsIndexHref()}
+              to={personalModelsIndexHref(teamId)}
               className="hover:text-foreground"
               onMouseEnter={listPreload}
               onFocus={listPreload}
@@ -95,14 +104,21 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
           </>
         ) : credentialId.length > 0 ? (
           <>
-            <Link to={credentialsTeamListHref()} className="hover:text-foreground">
+            <Link to={credentialsTeamListHref(teamId)} className="hover:text-foreground">
               凭据管理
             </Link>
             <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
-            {credential ? (
-              <Link to={credentialDetailHref(credentialId)} className="hover:text-foreground">
-                {credential.name}
-              </Link>
+            {credentialSummary ? (
+              credentialBreadcrumbLink ? (
+                <Link
+                  to={credentialDetailHref(teamId, credentialId)}
+                  className="hover:text-foreground"
+                >
+                  {credentialSummaryLabel(credentialSummary, credentialId)}
+                </Link>
+              ) : (
+                <span>{credentialSummaryLabel(credentialSummary, credentialId)}</span>
+              )
             ) : (
               <span>凭据</span>
             )}
@@ -112,7 +128,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         ) : (
           <>
             <Link
-              to={teamModelsIndexHref()}
+              to={teamModelsIndexHref(teamId)}
               className="hover:text-foreground"
               onMouseEnter={listPreload}
               onFocus={listPreload}
@@ -135,7 +151,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         {!isPersonal && credentialId.length > 0 ? (
           <Button variant="ghost" size="sm" className="h-8" asChild>
             <Link
-              to={teamModelsFilteredHref(credentialId)}
+              to={teamModelsFilteredHref(teamId, credentialId)}
               onMouseEnter={preloadTeamModelsWorkspace}
               onFocus={preloadTeamModelsWorkspace}
             >

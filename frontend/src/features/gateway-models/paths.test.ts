@@ -15,54 +15,68 @@ import {
   teamModelsRegisterHref,
 } from './paths'
 
+const TEAM = 'team-abc'
+
 describe('gateway model paths', () => {
   it('teamModelsFilteredHref without credential', () => {
-    expect(teamModelsFilteredHref()).toBe('/gateway/models?tab=shared')
+    expect(teamModelsFilteredHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=shared')
   })
 
   it('teamModelsFilteredHref with credential', () => {
-    expect(teamModelsFilteredHref('cred-1')).toBe('/gateway/models?tab=shared&credentialId=cred-1')
+    expect(teamModelsFilteredHref(TEAM, 'cred-1')).toBe(
+      '/gateway/teams/team-abc/models?tab=shared&credentialId=cred-1'
+    )
   })
 
   it('teamModelsRegisterHref locks credential', () => {
-    expect(teamModelsRegisterHref('cred-1')).toBe(
-      '/gateway/models?tab=shared&credentialId=cred-1&view=register'
+    expect(teamModelsRegisterHref(TEAM, 'cred-1')).toBe(
+      '/gateway/teams/team-abc/models?tab=shared&credentialId=cred-1&view=register'
     )
   })
 
   it('teamModelDetailHref includes credential context', () => {
-    expect(teamModelDetailHref('model-1', { credentialId: 'cred-1' })).toBe(
-      '/gateway/models/model-1?tab=shared&credentialId=cred-1'
+    expect(teamModelDetailHref(TEAM, 'model-1', { credentialId: 'cred-1' })).toBe(
+      '/gateway/teams/team-abc/models/model-1?tab=shared&credentialId=cred-1'
     )
   })
 
   it('credentialDetailHref encodes id', () => {
-    expect(credentialDetailHref('cred/1')).toBe('/gateway/credentials/cred%2F1')
+    expect(credentialDetailHref(TEAM, 'cred/1')).toBe(
+      '/gateway/teams/team-abc/credentials/cred%2F1'
+    )
   })
 
   it('credentialDetailAddModelsHref appends addModels query', () => {
-    expect(credentialDetailAddModelsHref('cred-1')).toBe('/gateway/credentials/cred-1?addModels=1')
+    expect(credentialDetailAddModelsHref(TEAM, 'cred-1')).toBe(
+      '/gateway/teams/team-abc/credentials/cred-1?addModels=1'
+    )
   })
 
   it('teamModelsIndexHref matches filtered without credential', () => {
-    expect(teamModelsIndexHref()).toBe(teamModelsFilteredHref())
-    expect(credentialsTeamListHref()).toBe('/gateway/credentials?tab=shared')
+    expect(teamModelsIndexHref(TEAM)).toBe(teamModelsFilteredHref(TEAM))
+    expect(credentialsTeamListHref(TEAM)).toBe('/gateway/teams/team-abc/credentials?tab=shared')
   })
 
   it('personalModelsIndexHref', () => {
-    expect(personalModelsIndexHref()).toBe('/gateway/models?tab=personal')
+    expect(personalModelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=personal')
   })
 
   it('personalModelsRegisterHref', () => {
-    expect(personalModelsRegisterHref()).toBe('/gateway/models?tab=personal&view=register')
+    expect(personalModelsRegisterHref(TEAM)).toBe(
+      '/gateway/teams/team-abc/models?tab=personal&view=register'
+    )
   })
 
   it('personalModelDetailHref', () => {
-    expect(personalModelDetailHref('pm-1')).toBe('/gateway/models/pm-1?tab=personal')
+    expect(personalModelDetailHref(TEAM, 'pm-1')).toBe(
+      '/gateway/teams/team-abc/models/pm-1?tab=personal'
+    )
   })
 
   it('personalModelEditHref', () => {
-    expect(personalModelEditHref('pm-1')).toBe('/gateway/models/pm-1?tab=personal&view=edit')
+    expect(personalModelEditHref(TEAM, 'pm-1')).toBe(
+      '/gateway/teams/team-abc/models/pm-1?tab=personal&view=edit'
+    )
   })
 })
 

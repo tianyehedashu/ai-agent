@@ -32,6 +32,8 @@ function getLastFetchUrl(): string {
 
 import { gatewayApi } from './gateway'
 
+const TEAM_ID = 'team-test'
+
 describe('gatewayApi.listAvailableModels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -66,10 +68,10 @@ describe('gatewayApi.revealKey', () => {
     vi.clearAllMocks()
   })
 
-  it('请求 GET /api/v1/gateway/keys/{id}/reveal', async () => {
+  it('请求 GET /api/v1/gateway/teams/{teamId}/keys/{id}/reveal', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse({ plain_key: 'sk-gw-test' }))
-    const data = await gatewayApi.revealKey('key-abc')
-    expect(getLastFetchUrl()).toContain('/api/v1/gateway/keys/key-abc/reveal')
+    const data = await gatewayApi.revealKey(TEAM_ID, 'key-abc')
+    expect(getLastFetchUrl()).toContain(`/api/v1/gateway/teams/${TEAM_ID}/keys/key-abc/reveal`)
     expect(data.plain_key).toBe('sk-gw-test')
   })
 })
@@ -79,9 +81,9 @@ describe('gatewayApi.listVkeyEntitlements', () => {
     vi.clearAllMocks()
   })
 
-  it('请求 GET /api/v1/gateway/keys/{id}/entitlements', async () => {
+  it('请求 GET /api/v1/gateway/teams/{teamId}/keys/{id}/entitlements', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse([]))
-    await gatewayApi.listVkeyEntitlements('vkey-1')
-    expect(getLastFetchUrl()).toContain('/api/v1/gateway/keys/vkey-1/entitlements')
+    await gatewayApi.listVkeyEntitlements(TEAM_ID, 'vkey-1')
+    expect(getLastFetchUrl()).toContain(`/api/v1/gateway/teams/${TEAM_ID}/keys/vkey-1/entitlements`)
   })
 })

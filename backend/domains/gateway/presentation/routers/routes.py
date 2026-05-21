@@ -6,6 +6,8 @@ import uuid
 
 from fastapi import APIRouter, status
 
+from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
@@ -27,13 +29,24 @@ from ._common import (
 router = APIRouter()
 
 
+def _route_to_response(record: GatewayRoute | SystemGatewayRoute) -> RouteResponse:
+    data = tenant_scoped_orm_dict(record)
+    if isinstance(record, SystemGatewayRoute):
+        data["team_id"] = None
+        data["tenant_id"] = None
+        data["source"] = "system"
+    else:
+        data["source"] = "team"
+    return RouteResponse.model_validate(data)
+
+
 @router.get("/routes", response_model=list[RouteResponse])
 async def list_routes(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[RouteResponse]:
     routes = await reads.list_gateway_routes(team.team_id, only_enabled=False)
-    return [RouteResponse.model_validate(tenant_scoped_orm_dict(r)) for r in routes]
+    return [_route_to_response(r) for r in routes]
 
 
 @router.post("/routes", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -52,7 +65,7 @@ async def create_route(
         strategy=body.strategy.value,
         retry_policy=body.retry_policy,
     )
-    return RouteResponse.model_validate(tenant_scoped_orm_dict(route))
+    return _route_to_response(route)
 
 
 @router.patch("/routes/{route_id}", response_model=RouteResponse)
@@ -70,7 +83,7 @@ async def update_route(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return RouteResponse.model_validate(tenant_scoped_orm_dict(updated))
+    return _route_to_response(updated)
 
 
 @router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT)

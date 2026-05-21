@@ -1,7 +1,20 @@
 ﻿import { useCallback, useMemo, useState } from 'react'
 
+import { Link } from 'react-router-dom'
+
 import type { GatewayModel, GatewayRoute, GatewayRouteUpdateBody } from '@/api/gateway'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
@@ -24,7 +37,9 @@ interface RouteTopologyEditorProps {
   models: GatewayModel[]
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
+  isDeleting?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
+  onDelete?: (id: string) => void
 }
 
 interface RouteTopologyFormProps {
@@ -32,7 +47,10 @@ interface RouteTopologyFormProps {
   models: GatewayModel[]
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
+  isDeleting?: boolean
+  readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
+  onDelete?: (id: string) => void
 }
 
 function RouteTopologyForm({
@@ -40,9 +58,13 @@ function RouteTopologyForm({
   models,
   pickerModels,
   isSaving,
+  isDeleting = false,
+  readOnly = false,
   onSave,
+  onDelete,
 }: RouteTopologyFormProps): React.JSX.Element {
   const { canWrite } = useGatewayPermission()
+  const editable = canWrite && !readOnly
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   const modelsByName = useMemo(() => new Map(models.map((m) => [m.name, m])), [models])
@@ -117,7 +139,14 @@ function RouteTopologyForm({
   return (
     <div className="flex min-h-0 flex-col rounded-lg border bg-card">
       <div className="border-b p-4">
-        <p className="font-mono text-base font-semibold">{route.virtual_model}</p>
+        <p className="flex items-center gap-2 font-mono text-base font-semibold">
+          {route.virtual_model}
+          {readOnly ? (
+            <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+              系统
+            </span>
+          ) : null}
+        </p>
         <p className="mt-1 text-sm text-muted-foreground">虚拟名 · 客户端请求 model 字段</p>
         <p className="mt-1 text-xs text-muted-foreground">
           策略：{routingStrategyLabel(strategy)}
@@ -125,7 +154,7 @@ function RouteTopologyForm({
             <span className="text-amber-600">（未保存）</span>
           ) : null}
         </p>
-        {canWrite ? (
+        {editable ? (
           <div className="mt-3 flex items-center gap-2">
             <Switch
               checked={enabled}
@@ -134,10 +163,23 @@ function RouteTopologyForm({
             />
             <span className="text-sm text-muted-foreground">{enabled ? '已启用' : '已禁用'}</span>
           </div>
+        ) : readOnly ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            系统级路由，仅可查看；团队可创建同名路由覆盖。
+          </p>
         ) : null}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <Alert>
+          <AlertDescription className="text-sm">
+            对外调用时，虚拟 Key 白名单需包含{' '}
+            <span className="font-mono">{route.virtual_model}</span>（留空表示允许全部）。{' '}
+            <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
+              管理虚拟 Key
+            </Link>
+          </AlertDescription>
+        </Alert>
         {validationIssues.length > 0 ? (
           <Alert variant="destructive">
             <AlertDescription>
@@ -157,7 +199,7 @@ function RouteTopologyForm({
           <RoutingStrategySelect
             value={strategy}
             onValueChange={setStrategy}
-            disabled={!canWrite}
+            disabled={!editable}
           />
         </section>
 
@@ -165,7 +207,7 @@ function RouteTopologyForm({
           models={pickerModels}
           selected={primaryModels}
           onSelectedChange={setPrimaryModelsAndPruneFallbacks}
-          disabled={!canWrite}
+          disabled={!editable}
           label="主模型（按优先级从上到下）"
           priceByName={priceByName}
           currency={GATEWAY_DISPLAY_CURRENCY}
@@ -185,7 +227,7 @@ function RouteTopologyForm({
               models={pickerModels}
               selected={fallbacksGeneral}
               onSelectedChange={setFallbacksGeneral}
-              disabled={!canWrite}
+              disabled={!editable}
               label="通用 Fallback"
               description="主模型均失败时按顺序尝试"
               excludeNames={primaryModels}
@@ -197,7 +239,7 @@ function RouteTopologyForm({
                 models={pickerModels}
                 selected={fallbacksContentPolicy}
                 onSelectedChange={setFallbacksContentPolicy}
-                disabled={!canWrite}
+                disabled={!editable}
                 label="内容策略"
                 excludeNames={primaryModels}
                 priceByName={priceByName}
@@ -207,7 +249,7 @@ function RouteTopologyForm({
                 models={pickerModels}
                 selected={fallbacksContextWindow}
                 onSelectedChange={setFallbacksContextWindow}
-                disabled={!canWrite}
+                disabled={!editable}
                 label="上下文窗口"
                 excludeNames={primaryModels}
                 priceByName={priceByName}
@@ -217,15 +259,50 @@ function RouteTopologyForm({
           </CollapsibleContent>
         </Collapsible>
 
-        {canWrite ? (
-          <Button
-            size="sm"
-            disabled={!dirty || isSaving || validationIssues.length > 0}
-            onClick={handleSave}
-          >
-            {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            保存路由
-          </Button>
+        {editable ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              disabled={!dirty || isSaving || validationIssues.length > 0}
+              onClick={handleSave}
+            >
+              {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              保存路由
+            </Button>
+            {onDelete ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={isDeleting || isSaving}
+                  >
+                    {isDeleting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                    删除路由
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>删除虚拟路由？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      将永久删除「{route.virtual_model}」。引用此虚拟名的虚拟 Key 白名单需手动更新。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        onDelete(route.id)
+                      }}
+                    >
+                      确认删除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -237,7 +314,9 @@ export function RouteTopologyEditor({
   models,
   pickerModels,
   isSaving,
+  isDeleting,
   onSave,
+  onDelete,
 }: RouteTopologyEditorProps): React.JSX.Element {
   if (!route) {
     return (
@@ -250,6 +329,8 @@ export function RouteTopologyEditor({
     )
   }
 
+  const readOnly = route.source === 'system'
+
   return (
     <RouteTopologyForm
       key={route.id}
@@ -257,7 +338,10 @@ export function RouteTopologyEditor({
       models={models}
       pickerModels={pickerModels}
       isSaving={isSaving}
+      isDeleting={isDeleting}
+      readOnly={readOnly}
       onSave={onSave}
+      onDelete={readOnly ? undefined : onDelete}
     />
   )
 }

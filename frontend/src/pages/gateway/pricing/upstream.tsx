@@ -34,6 +34,7 @@ import {
   findModelsMissingUpstream,
   UPSTREAM_DISPLAY_CURRENCY,
 } from '@/features/gateway-pricing/upstream-pricing-view'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2, Plus, RefreshCw } from '@/lib/lucide-icons'
 
 const columns: readonly PricingTableColumn[] = [
@@ -57,6 +58,7 @@ function toProviderSet(ids: readonly string[]): Set<string> {
 }
 
 export default function GatewayPricingUpstreamPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const queryClient = useQueryClient()
   const [syncOpen, setSyncOpen] = useState(false)
   const [selectedSyncProviders, setSelectedSyncProviders] = useState<string[]>([])
@@ -66,18 +68,18 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   const [formOpen, setFormOpen] = useState(false)
 
   const upstreamQuery = useQuery({
-    queryKey: UPSTREAM_PAGE_QUERY_KEYS.upstream,
-    queryFn: () => pricingApi.listUpstreamPricing({ currency: UPSTREAM_DISPLAY_CURRENCY }),
+    queryKey: [...UPSTREAM_PAGE_QUERY_KEYS.upstream, teamId],
+    queryFn: () => pricingApi.listUpstreamPricing(teamId, { currency: UPSTREAM_DISPLAY_CURRENCY }),
   })
 
   const providersQuery = useQuery({
-    queryKey: UPSTREAM_PAGE_QUERY_KEYS.providers,
-    queryFn: () => pricingApi.getEffectiveProviders(),
+    queryKey: [...UPSTREAM_PAGE_QUERY_KEYS.providers, teamId],
+    queryFn: () => pricingApi.getEffectiveProviders(teamId),
   })
 
   const modelsQuery = useQuery({
-    queryKey: UPSTREAM_PAGE_QUERY_KEYS.models,
-    queryFn: () => modelsApi.listModels(),
+    queryKey: [...UPSTREAM_PAGE_QUERY_KEYS.models, teamId],
+    queryFn: () => modelsApi.listModels(teamId),
   })
 
   const effectiveProviders = providersQuery.data ?? EMPTY_EFFECTIVE_PROVIDERS
@@ -118,7 +120,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   )
 
   const syncMutation = useMutation({
-    mutationFn: (providers: string[]) => pricingApi.syncUpstreamFromLitellm({ providers }),
+    mutationFn: (providers: string[]) => pricingApi.syncUpstreamFromLitellm(teamId, { providers }),
     onSuccess: async (report) => {
       await queryClient.invalidateQueries({ queryKey: UPSTREAM_PAGE_QUERY_KEYS.upstream })
       setSyncOpen(false)
@@ -132,7 +134,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   })
 
   const upsertMutation = useMutation({
-    mutationFn: (body: UpstreamPricingUpsertBody) => pricingApi.createUpstreamPricing(body),
+    mutationFn: (body: UpstreamPricingUpsertBody) => pricingApi.createUpstreamPricing(teamId, body),
     onSuccess: async () => {
       toast.success('上游成本已保存为新版本')
       setFormOpen(false)

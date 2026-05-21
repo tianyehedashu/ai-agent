@@ -40,12 +40,12 @@ class TenancyManagementTeamResolveUseCase:
         path_team_id: str | None,
     ) -> ManagementTeamContext:
         target_team_id: uuid.UUID | None = None
-        if x_team_id:
-            with suppress(ValueError):
-                target_team_id = uuid.UUID(x_team_id)
-        if target_team_id is None and path_team_id:
+        if path_team_id:
             with suppress(ValueError):
                 target_team_id = uuid.UUID(path_team_id)
+        if target_team_id is None and x_team_id:
+            with suppress(ValueError):
+                target_team_id = uuid.UUID(x_team_id)
 
         is_platform_admin = platform_user_role == "admin"
 

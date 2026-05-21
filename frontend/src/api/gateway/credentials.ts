@@ -11,7 +11,17 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
+
+/** 凭据摘要（无密钥 / api_base / extra），供 member 解析模型上的 credential_id */
+export interface CredentialSummary {
+  id: string
+  provider: string
+  name: string
+  scope: 'user' | 'team' | 'system' | null
+  is_active: boolean
+  is_config_managed: boolean
+}
 
 /** 后端 wire 形态（租户行 scope 可为 null，以 tenant_id 标识归属） */
 interface ProviderCredentialWire {
@@ -190,37 +200,44 @@ export interface TeamGatewayModelBatchImportResponse {
 export const credentialsApi = {
   // --- 团队 / 系统凭据 ---
   /** 列出团队/系统可见凭据 */
-  listCredentials: async () => {
-    const rows = await apiClient.get<ProviderCredentialWire[]>(`${GATEWAY_API_BASE}/credentials`)
+  listCredentials: async (teamId: string) => {
+    const rows = await apiClient.get<ProviderCredentialWire[]>(
+      teamGatewayPath(teamId, '/credentials')
+    )
     return rows.map(normalizeCredential)
   },
+  /** 凭据摘要目录（含 system；团队 member 可读，无密钥字段） */
+  listCredentialSummaries: (teamId: string) =>
+    apiClient.get<CredentialSummary[]>(teamGatewayPath(teamId, '/credentials/summaries')),
   /** 获取单条团队/系统凭据详情 */
-  getCredential: async (id: string) => {
-    const row = await apiClient.get<ProviderCredentialWire>(`${GATEWAY_API_BASE}/credentials/${id}`)
+  getCredential: async (teamId: string, id: string) => {
+    const row = await apiClient.get<ProviderCredentialWire>(
+      teamGatewayPath(teamId, `/credentials/${id}`)
+    )
     return normalizeCredential(row)
   },
   /** 揭示团队/系统凭据明文（要求 owner / admin） */
-  revealCredential: (id: string) =>
-    apiClient.get<{ api_key: string }>(`${GATEWAY_API_BASE}/credentials/${id}/reveal`),
+  revealCredential: (teamId: string, id: string) =>
+    apiClient.get<{ api_key: string }>(teamGatewayPath(teamId, `/credentials/${id}/reveal`)),
   /** 创建团队/系统凭据；scope 默认 team，system 仅平台管理员 */
-  createCredential: async (body: ProviderCredentialCreateBody) => {
+  createCredential: async (teamId: string, body: ProviderCredentialCreateBody) => {
     const row = await apiClient.post<ProviderCredentialWire>(
-      `${GATEWAY_API_BASE}/credentials`,
+      teamGatewayPath(teamId, '/credentials'),
       body
     )
     return normalizeCredential(row)
   },
   /** 更新团队/系统凭据；is_config_managed 凭据可能被服务端拒绝写入 */
-  updateCredential: async (id: string, body: GatewayCredentialUpdateBody) => {
+  updateCredential: async (teamId: string, id: string, body: GatewayCredentialUpdateBody) => {
     const row = await apiClient.patch<ProviderCredentialWire>(
-      `${GATEWAY_API_BASE}/credentials/${id}`,
+      teamGatewayPath(teamId, `/credentials/${id}`),
       body
     )
     return normalizeCredential(row)
   },
   /** 删除团队/系统凭据（不可恢复） */
-  deleteCredential: (id: string) =>
-    apiClient.delete<unknown>(`${GATEWAY_API_BASE}/credentials/${id}`),
+  deleteCredential: (teamId: string, id: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/credentials/${id}`)),
 
   // --- 我的（BYOK 个人）凭据 ---
   /** 列出我的个人凭据 */
@@ -265,22 +282,23 @@ export const credentialsApi = {
       body
     ),
   /** 探测团队凭据可用的上游模型列表 */
-  probeTeamCredential: (credentialId: string) =>
+  probeTeamCredential: (teamId: string, credentialId: string) =>
     apiClient.post<CredentialProbeResult>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/probe`,
+      teamGatewayPath(teamId, `/credentials/${credentialId}/probe`),
       {}
     ),
   /** 基于探测结果批量导入到团队 GatewayModel */
   batchImportTeamModelsFromUpstream: (
+    teamId: string,
     credentialId: string,
     body: TeamGatewayModelBatchImportBody
   ) =>
     apiClient.post<TeamGatewayModelBatchImportResponse>(
-      `${GATEWAY_API_BASE}/credentials/${credentialId}/batch-import-models`,
+      teamGatewayPath(teamId, `/credentials/${credentialId}/batch-import-models`),
       body
     ),
 
   /** 从用户配置文件（app.toml / .env）导入 system 凭据；返回新建条数 */
-  importFromUserConfig: () =>
-    apiClient.post<{ created: number }>(`${GATEWAY_API_BASE}/credentials/import`),
+  importFromUserConfig: (teamId: string) =>
+    apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
 } as const

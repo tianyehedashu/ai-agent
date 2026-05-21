@@ -15,6 +15,7 @@ import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/person
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronLeft, Loader2 } from '@/lib/lucide-icons'
 
 const PersonalModelsWorkspace = lazy(() =>
@@ -39,6 +40,7 @@ function ModelsPanelFallback(): React.JSX.Element {
 }
 
 export default function GatewayModelsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { scopeTab, setScopeTab, searchParams, setSearchParams } = useGatewayScopeTab({
     mutateParamsOnTabChange: (next, params) => {
       params.delete('view')
@@ -86,8 +88,8 @@ export default function GatewayModelsPage(): React.JSX.Element {
     }
   }, [searchParams, setSearchParams, pageView, scopeTab, canWrite])
 
-  const teamListBackHref = teamModelsFilteredHref(credentialId || undefined)
-  const personalListBackHref = personalModelsIndexHref()
+  const teamListBackHref = teamModelsFilteredHref(teamId, credentialId || undefined)
+  const personalListBackHref = personalModelsIndexHref(teamId)
 
   return (
     <div className="space-y-4">
@@ -107,11 +109,18 @@ export default function GatewayModelsPage(): React.JSX.Element {
             </>
           ) : (
             <>
-              个人模型进入 LiteLLM Router，可用于对话与{' '}
+              个人模型进入 LiteLLM Router；对外暴露名可在{' '}
+              <Link
+                to="/gateway/routes"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                虚拟路由
+              </Link>{' '}
+              编排，经{' '}
               <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
                 虚拟 Key
               </Link>{' '}
-              / OpenAI 兼容 API。点击列表进入详情；需先配置{' '}
+              / OpenAI 兼容 API 调用。点击列表进入详情；需先配置{' '}
               <Link
                 to="/gateway/credentials?tab=personal"
                 className="text-primary underline-offset-4 hover:underline"

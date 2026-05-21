@@ -11,6 +11,7 @@ import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-cur
 import { DownstreamPricingFormDialog } from '@/features/gateway-pricing/downstream-pricing-form-dialog'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Pencil, RefreshCw, RotateCcw } from '@/lib/lucide-icons'
 
 const columns: readonly PricingTableColumn[] = [
@@ -22,18 +23,19 @@ const columns: readonly PricingTableColumn[] = [
 ]
 
 export default function GatewayPricingDownstreamPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const currency = GATEWAY_DISPLAY_CURRENCY
   const qc = useQueryClient()
   const [editingRow, setEditingRow] = useState<DownstreamPricingRow | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
   const downstreamQuery = useQuery({
-    queryKey: ['gateway-pricing-downstream', currency],
-    queryFn: () => gatewayApi.listDownstreamPricing({ scope: 'tenant', currency }),
+    queryKey: ['gateway-pricing-downstream', teamId, currency],
+    queryFn: () => gatewayApi.listDownstreamPricing(teamId, { scope: 'tenant', currency }),
   })
 
   const syncMut = useMutation({
-    mutationFn: () => gatewayApi.syncDownstreamPricing({ scope: 'tenant' }),
+    mutationFn: () => gatewayApi.syncDownstreamPricing(teamId, { scope: 'tenant' }),
     onSuccess: (report) => {
       toast.success(`已同步：新增 ${String(report.created)}，跳过 ${String(report.skipped)}`)
       void qc.invalidateQueries({ queryKey: ['gateway-pricing-downstream'] })
@@ -45,7 +47,8 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
   })
 
   const upsertMut = useMutation({
-    mutationFn: (body: DownstreamPricingUpsertBody) => gatewayApi.createDownstreamPricing(body),
+    mutationFn: (body: DownstreamPricingUpsertBody) =>
+      gatewayApi.createDownstreamPricing(teamId, body),
     onSuccess: () => {
       toast.success('下游售价已保存为新版本')
       setFormOpen(false)

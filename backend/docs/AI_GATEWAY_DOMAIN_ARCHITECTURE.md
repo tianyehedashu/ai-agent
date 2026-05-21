@@ -181,10 +181,14 @@ flowchart TB
 
 | 入口 | 鉴权 | 团队 |
 |------|------|------|
-| `/v1/*` | `sk-gw-*` 或 `sk-*` + `gateway:proxy` + Gateway grant；**`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先） | `sk-gw-*` 固定绑定 key.team_id；`sk-*` 的 `X-Team-Id` 只能选择该 Key 已授权的 grant，缺省优先 personal grant |
-| `/api/v1/gateway/*` | JWT（`RequiredAuthUser`），匿名 **401** | `X-Team-Id` 优先，否则 personal team（`TenancyManagementTeamResolveUseCase` + `MembershipPort`） |
+| `/v1/*` | `sk-gw-*` 或 `sk-*` + `gateway:proxy` + Gateway grant；**`Authorization: Bearer`** 或 **`x-api-key`**（Bearer 优先） | **`sk-gw-*`**：创建时已绑定 `gateway_virtual_keys.tenant_id`，**勿传** `X-Team-Id`（传入且与 Key 团队不一致时 **400**）；**`sk-*`**：`X-Team-Id` 仅能从该 Key 已授权的 grant 中选择，缺省优先 personal grant |
+| `/api/v1/gateway/teams/{team_id}/*` | JWT（`RequiredAuthUser`），匿名 **401** | **路径 `team_id` 优先**于 `X-Team-Id`；缺省 personal team |
+| `/api/v1/gateway/my-*` | JWT | 用户域（BYOK / 个人模型），**无**团队路径 |
+| Agent `/api/v1/chat` | JWT / 匿名 | 可选请求体 `gateway_team_id` 写入 `PermissionContext`（内部 Gateway 桥接归账） |
 
 RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseCase`**。
+
+**入口凭据 vs 存储 `tenant_id`**：业务表 `tenant_id` 是行级归属键；代理面 `sk-gw-*` 对调用方是「一个 token 即完整上下文」，解析后仍展开为 `team_id` + `vkey_id` 等正交字段，并非重复标识。
 
 ### 4.1 域划分、术语与用量读模型（`UsageAggregation`）
 

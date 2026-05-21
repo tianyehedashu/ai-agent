@@ -11,6 +11,7 @@ import type {
 } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,11 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  canLinkToCredentialDetail,
+  credentialSummaryLabel,
+} from '@/features/gateway-credentials/credential-summary-display'
+import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { TESTABLE_CAPABILITIES, NO_CREDENTIAL } from '@/features/gateway-models/constants'
 import { credentialDetailHref } from '@/features/gateway-models/paths'
 import {
@@ -36,6 +42,7 @@ import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Copy, ExternalLink, Info, Loader2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -72,7 +79,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   onSave,
   onToggleEnabled,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
-  const { canWrite, isAdmin } = useGatewayPermission()
+  const teamId = useGatewayTeamId()
+  const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const myPrice = priceByName.get(model.name)
   const [usageScope, setUsageScope] = useState<'workspace' | 'user'>('workspace')
@@ -106,9 +115,11 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     [routes, model.name]
   )
 
-  const credential = useMemo(
-    () => credentials.find((c) => c.id === model.credential_id),
-    [credentials, model.credential_id]
+  const credentialSummary = credentialSummariesById.get(model.credential_id)
+  const showCredentialDetailLink = canLinkToCredentialDetail(
+    credentialSummary,
+    isAdmin,
+    isPlatformAdmin
   )
 
   const credentialOptions = useMemo(() => {
@@ -245,7 +256,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           <PricingBadge row={myPrice} currency={GATEWAY_DISPLAY_CURRENCY} />
           <div className="flex flex-wrap gap-2 text-xs">
             <Link
-              to={`/gateway/pricing/my-prices?model=${encodeURIComponent(model.name)}`}
+              to={`/gateway/teams/${teamId}/pricing/my-prices?model=${encodeURIComponent(model.name)}`}
               className="text-primary underline-offset-4 hover:underline"
             >
               我的价格
@@ -253,13 +264,13 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             {isAdmin ? (
               <>
                 <Link
-                  to={`/gateway/pricing/downstream?model_id=${encodeURIComponent(model.id)}`}
+                  to={`/gateway/teams/${teamId}/pricing/downstream?model_id=${encodeURIComponent(model.id)}`}
                   className="text-primary underline-offset-4 hover:underline"
                 >
                   下游定价
                 </Link>
                 <Link
-                  to="/gateway/pricing/upstream"
+                  to={`/gateway/teams/${teamId}/pricing/upstream`}
                   className="text-primary underline-offset-4 hover:underline"
                 >
                   上游成本
@@ -341,6 +352,11 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-xs">凭据</Label>
+                {credentialSummary?.scope === 'system' ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    该模型由平台维护，凭据由平台管理员管理。
+                  </p>
+                ) : null}
                 {canWrite ? (
                   <Select
                     value={credentialId || NO_CREDENTIAL}
@@ -360,11 +376,25 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="mt-1 text-sm">{credential?.name ?? model.credential_id}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="text-sm">
+                      {credentialSummaryLabel(credentialSummary, model.credential_id)}
+                    </p>
+                    {credentialSummary?.scope === 'system' ? (
+                      <Badge variant="secondary" className="text-[10px] font-normal">
+                        系统全局
+                      </Badge>
+                    ) : null}
+                    {!credentialSummary?.is_active ? (
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        已停用
+                      </Badge>
+                    ) : null}
+                  </div>
                 )}
-                {credential ? (
+                {showCredentialDetailLink && credentialSummary ? (
                   <Link
-                    to={credentialDetailHref(credential.id)}
+                    to={credentialDetailHref(teamId, credentialSummary.id)}
                     className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
                   >
                     凭据详情 <ExternalLink className="h-3 w-3" />
@@ -437,8 +467,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           <Link
             to={
               model.credential_id
-                ? `/gateway/logs?credential_id=${encodeURIComponent(model.credential_id)}`
-                : '/gateway/logs'
+                ? `/gateway/teams/${teamId}/logs?credential_id=${encodeURIComponent(model.credential_id)}`
+                : `/gateway/teams/${teamId}/logs`
             }
             className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
           >
@@ -457,7 +487,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               {referencingRoutes.map((r) => (
                 <li key={r.id}>
                   <Link
-                    to={`/gateway/routes?routeId=${encodeURIComponent(r.id)}`}
+                    to={`/gateway/teams/${teamId}/routes?routeId=${encodeURIComponent(r.id)}`}
                     className={cn(
                       'inline-flex items-center gap-1 font-mono text-sm text-primary underline-offset-4 hover:underline'
                     )}
@@ -470,7 +500,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             </ul>
           )}
           <Link
-            to="/gateway/routes"
+            to={`/gateway/teams/${teamId}/routes`}
             className="text-xs text-muted-foreground underline-offset-4 hover:underline"
           >
             管理虚拟路由

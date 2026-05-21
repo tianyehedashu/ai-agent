@@ -24,6 +24,7 @@ import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { credentialDetailHref, personalModelsRegisterHref } from '@/features/gateway-models/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -74,15 +75,16 @@ function TeamManualRegisterTab({
   onCloseDialog,
   onBackToImport,
 }: TeamManualRegisterTabProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { data: credentials } = useQuery({
-    queryKey: ['gateway', 'credentials'],
-    queryFn: () => gatewayApi.listCredentials(),
+    queryKey: ['gateway', 'credentials', teamId],
+    queryFn: () => gatewayApi.listCredentials(teamId),
     enabled: open,
   })
 
   const { data: presets } = useQuery({
-    queryKey: ['gateway', 'models', 'presets', provider],
-    queryFn: () => gatewayApi.listModelPresets({ provider }),
+    queryKey: ['gateway', 'models', 'presets', teamId, provider],
+    queryFn: () => gatewayApi.listModelPresets(teamId, { provider }),
     enabled: open,
   })
 
@@ -134,6 +136,7 @@ export function AddModelsDialog({
   onboardingHint,
   onEditPersonalCredential,
 }: AddModelsDialogProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const [teamTab, setTeamTab] = useState<TeamTab>('import')
   const [lastProbe, setLastProbe] = useState<CredentialProbeResult | null>(null)
 
@@ -193,6 +196,7 @@ export function AddModelsDialog({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {!isActive ? (
             <InactiveCredentialBanner
+              teamId={teamId}
               scope={scope}
               credentialId={credentialId}
               onEditPersonalCredential={onEditPersonalCredential}
@@ -254,7 +258,7 @@ export function AddModelsDialog({
           ) : (
             <div className="space-y-3">
               {lastProbe?.support === 'unsupported' ? (
-                <UserUnsupportedHint credentialId={credentialId} />
+                <UserUnsupportedHint teamId={teamId} credentialId={credentialId} />
               ) : null}
               <CredentialUpstreamModelsPanel
                 scope="user"
@@ -287,10 +291,12 @@ export function AddModelsDialog({
 }
 
 function InactiveCredentialBanner({
+  teamId,
   scope,
   credentialId,
   onEditPersonalCredential,
 }: {
+  teamId: string
   scope: CredentialUpstreamScope
   credentialId: string
   onEditPersonalCredential?: () => void
@@ -305,7 +311,7 @@ function InactiveCredentialBanner({
       <div>
         {scope === 'team' ? (
           <Button type="button" variant="link" className="mt-2 h-auto p-0" asChild>
-            <Link to={credentialDetailHref(credentialId)}>前往凭据详情启用</Link>
+            <Link to={credentialDetailHref(teamId, credentialId)}>前往凭据详情启用</Link>
           </Button>
         ) : onEditPersonalCredential ? (
           <Button
@@ -344,7 +350,13 @@ function UnsupportedProbeBanner({
   )
 }
 
-function UserUnsupportedHint({ credentialId }: { credentialId: string }): React.JSX.Element {
+function UserUnsupportedHint({
+  teamId,
+  credentialId,
+}: {
+  teamId: string
+  credentialId: string
+}): React.JSX.Element {
   return (
     <div
       role="status"
@@ -352,7 +364,7 @@ function UserUnsupportedHint({ credentialId }: { credentialId: string }): React.
     >
       此提供商不支持自动列举。可在{' '}
       <Link
-        to={personalModelsRegisterHref()}
+        to={personalModelsRegisterHref(teamId)}
         className="font-medium text-primary underline-offset-4 hover:underline"
       >
         个人模型管理

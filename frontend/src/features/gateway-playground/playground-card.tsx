@@ -35,21 +35,26 @@ import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-mo
 import {
   builtinReasoningPlaygroundHint,
   resolveThinkingParamForModel,
+  thinkingHintForModel,
   type ThinkingParam,
 } from '@/features/gateway-shared/thinking-param'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { getCurrentTeamId } from '@/stores/gateway-team'
 
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundKeyField } from './playground-key-field'
 import {
   endpointPathForMode,
   filterModelsByMode,
+  modelSupportsImageGen,
+  modelSupportsVideoGen,
+  modelSupportsVision,
   PLAYGROUND_MODE_LABELS,
   type ModelCandidate,
   type PlaygroundMode,
 } from './playground-mode-filter'
-import { PlaygroundModelField } from './playground-model-field'
+import { PlaygroundModelField, type RouteCandidate } from './playground-model-field'
 import { PlaygroundOutputPanel } from './playground-output-panel'
 import { PlaygroundStatusBadge } from './playground-status-badge'
 import { usePlaygroundCall } from './use-playground-call'
@@ -71,6 +76,22 @@ const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
 const DEFAULT_PROMPT = DEFAULT_PROMPTS.chat
 const DEFAULT_PROMPT_VALUES = new Set<string>(Object.values(DEFAULT_PROMPTS))
 const IMAGE_GEN_SIZES = ['1024x1024', '1024x1792', '1792x1024'] as const
+
+function routeSupportsMode(
+  primaryModels: string[],
+  mode: PlaygroundMode,
+  modelsByName: Map<string, ModelCandidate>
+): boolean {
+  if (mode === 'chat') return true
+  for (const name of primaryModels) {
+    const candidate = modelsByName.get(name)
+    if (!candidate) continue
+    if (mode === 'vision' && modelSupportsVision(candidate)) return true
+    if (mode === 'image_gen' && modelSupportsImageGen(candidate)) return true
+    if (mode === 'video_gen' && modelSupportsVideoGen(candidate)) return true
+  }
+  return false
+}
 
 const MODEL_STATUS_RANK: Record<'success' | 'null' | 'failed', number> = {
   success: 0,
@@ -141,16 +162,31 @@ export function PlaygroundCard({
   const { status, content, metadata, error, rawResponse, lastRequest, isRunning, cancel } =
     activeCall
 
-  const [teamModelsQuery, myModelsQuery] = useQueries({
+  const teamId = getCurrentTeamId()
+
+  const [teamModelsQuery, myModelsQuery, routesQuery] = useQueries({
     queries: [
       {
-        queryKey: GATEWAY_MODELS_ALL_QUERY_KEY,
-        queryFn: () => gatewayApi.listModels(),
+        queryKey: [...GATEWAY_MODELS_ALL_QUERY_KEY, teamId],
+        queryFn: () => {
+          if (!teamId) return Promise.reject(new Error('未选择团队'))
+          return gatewayApi.listModels(teamId)
+        },
+        enabled: Boolean(teamId),
         staleTime: 60_000,
       },
       {
         queryKey: GATEWAY_MY_MODELS_ALL_QUERY_KEY,
         queryFn: () => gatewayApi.listMyModels(),
+        staleTime: 60_000,
+      },
+      {
+        queryKey: ['gateway', 'routes', teamId],
+        queryFn: () => {
+          if (!teamId) return Promise.reject(new Error('未选择团队'))
+          return gatewayApi.listRoutes(teamId)
+        },
+        enabled: Boolean(teamId),
         staleTime: 60_000,
       },
     ],
@@ -186,6 +222,7 @@ export function PlaygroundCard({
           scope: 'personal',
           status: item.last_test_status,
           capability: item.capability,
+          selector_capabilities: item.selector_capabilities,
           model_types: item.model_types,
         })
       }
@@ -205,6 +242,19 @@ export function PlaygroundCard({
     [candidateModels, playgroundMode]
   )
 
+  const modelsByName = useMemo(
+    () => new Map(candidateModels.map((m) => [m.name, m])),
+    [candidateModels]
+  )
+
+  const routeCandidates = useMemo<RouteCandidate[]>(() => {
+    return (routesQuery.data ?? [])
+      .filter((r) => r.enabled)
+      .filter((r) => routeSupportsMode(r.primary_models, playgroundMode, modelsByName))
+      .map((r) => ({ name: r.virtual_model, primaryModels: r.primary_models }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [routesQuery.data, playgroundMode, modelsByName])
+
   const { teamCandidates, personalCandidates } = useMemo(() => {
     const team: ModelCandidate[] = []
     const personal: ModelCandidate[] = []
@@ -220,6 +270,11 @@ export function PlaygroundCard({
     [filteredModels, model]
   )
 
+  const selectedRoute = useMemo(
+    () => routeCandidates.find((r) => r.name === model),
+    [routeCandidates, model]
+  )
+
   const endpointPath = endpointPathForMode(
     playgroundMode,
     playgroundMode === 'chat' ? apiFlavor : 'openai'
@@ -228,12 +283,14 @@ export function PlaygroundCard({
   const showApiFlavorTabs = playgroundMode === 'chat'
 
   useEffect(() => {
-    if (model && filteredModels.some((m) => m.name === model)) return
+    const modelListed =
+      filteredModels.some((m) => m.name === model) || routeCandidates.some((r) => r.name === model)
+    if (model && modelListed) return
     if (customModel) return
-    const first = filteredModels[0]?.name
+    const first = routeCandidates[0]?.name ?? filteredModels[0]?.name
     if (first) setModel(first)
     else setModel('')
-  }, [filteredModels, customModel, model, playgroundMode])
+  }, [filteredModels, routeCandidates, customModel, model, playgroundMode])
 
   const onModelChangeRef = useRef(onModelChange)
   useEffect(() => {
@@ -267,10 +324,27 @@ export function PlaygroundCard({
     [trimmedModel, selectedCandidate?.selector_capabilities]
   )
 
-  const showThinkingSwitch =
-    playgroundMode === 'chat' &&
-    ((thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
-      (thinkingParam === 'anthropic_extended' && apiFlavor === 'anthropic'))
+  const thinkingFlavorMatch =
+    (thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
+    (thinkingParam === 'anthropic_extended' && apiFlavor === 'anthropic')
+
+  const thinkingSwitchInteractive = playgroundMode === 'chat' && thinkingFlavorMatch
+
+  const showThinkingSection = playgroundMode === 'chat' && thinkingParam !== 'builtin_reasoning'
+
+  const thinkingModelHint = useMemo(
+    () =>
+      playgroundMode === 'chat' && !thinkingSwitchInteractive
+        ? thinkingHintForModel(trimmedModel, apiFlavor, selectedCandidate?.selector_capabilities)
+        : null,
+    [
+      playgroundMode,
+      thinkingSwitchInteractive,
+      trimmedModel,
+      apiFlavor,
+      selectedCandidate?.selector_capabilities,
+    ]
+  )
 
   const builtinThinkingHint = useMemo(
     () => (playgroundMode === 'chat' ? builtinReasoningPlaygroundHint(thinkingParam) : null),
@@ -365,7 +439,7 @@ export function PlaygroundCard({
       ...params,
       stream: thinkingEnabled && thinkingParam === 'dashscope_enable_thinking' ? true : stream,
       flavor: apiFlavor,
-      enableThinking: showThinkingSwitch ? thinkingEnabled : false,
+      enableThinking: thinkingSwitchInteractive ? thinkingEnabled : false,
     })
   }
 
@@ -452,14 +526,18 @@ export function PlaygroundCard({
                 setCustomModel(nextCustom)
                 if (nextModel !== undefined) setModel(nextModel)
               }}
+              routeCandidates={routeCandidates}
               teamCandidates={teamCandidates}
               personalCandidates={personalCandidates}
               filteredModels={filteredModels}
               selectedCandidate={selectedCandidate}
+              selectedRoute={selectedRoute}
               priceByName={priceByName}
               currency={GATEWAY_DISPLAY_CURRENCY}
               playgroundMode={playgroundMode}
-              modelsLoading={teamModelsQuery.isLoading || myModelsQuery.isLoading}
+              modelsLoading={
+                teamModelsQuery.isLoading || myModelsQuery.isLoading || routesQuery.isLoading
+              }
             />
           </div>
 
@@ -558,17 +636,32 @@ export function PlaygroundCard({
                 </Label>
               </div>
             ) : null}
-            {showThinkingSwitch ? (
-              <div className="flex items-center gap-2">
-                <Switch
-                  id={thinkingId}
-                  checked={thinkingEnabled}
-                  onCheckedChange={handleThinkingCheckedChange}
-                  disabled={isRunning}
-                />
-                <Label htmlFor={thinkingId} className="cursor-pointer text-sm">
-                  思考模式
-                </Label>
+            {showThinkingSection ? (
+              <div className="flex min-w-[12rem] flex-1 flex-col gap-1.5 sm:max-w-md">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id={thinkingId}
+                    checked={thinkingSwitchInteractive ? thinkingEnabled : false}
+                    onCheckedChange={handleThinkingCheckedChange}
+                    disabled={isRunning || !thinkingSwitchInteractive}
+                  />
+                  <Label
+                    htmlFor={thinkingId}
+                    className={cn(
+                      'text-sm',
+                      thinkingSwitchInteractive
+                        ? 'cursor-pointer'
+                        : 'cursor-not-allowed text-muted-foreground'
+                    )}
+                  >
+                    思考模式
+                  </Label>
+                </div>
+                {!thinkingSwitchInteractive && thinkingModelHint ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {thinkingModelHint}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">

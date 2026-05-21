@@ -7,7 +7,7 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 export interface GatewayBudget {
   id: string
@@ -44,10 +44,12 @@ export interface BudgetUpsertBody {
 /** Budgets 资源 API */
 export const budgetsApi = {
   /** 列出当前 scope 可见的预算 */
-  listBudgets: () => apiClient.get<GatewayBudget[]>(`${GATEWAY_API_BASE}/budgets`),
+  listBudgets: (teamId: string) =>
+    apiClient.get<GatewayBudget[]>(teamGatewayPath(teamId, '/budgets')),
   /** 创建或更新预算（按 target_kind + target_id + period + model_name 主键去重） */
-  upsertBudget: (body: BudgetUpsertBody) =>
-    apiClient.put<GatewayBudget>(`${GATEWAY_API_BASE}/budgets`, body),
+  upsertBudget: (teamId: string, body: BudgetUpsertBody) =>
+    apiClient.put<GatewayBudget>(teamGatewayPath(teamId, '/budgets'), body),
   /** 删除预算 */
-  deleteBudget: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/budgets/${id}`),
+  deleteBudget: (teamId: string, id: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/budgets/${id}`)),
 } as const

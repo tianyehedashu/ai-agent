@@ -11,10 +11,10 @@ from domains.gateway.application.config_catalog_sync import (
     _config_managed_credential_extra,
     sync_app_config_gateway_catalog,
 )
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from libs.crypto import derive_encryption_key, encrypt_value
 
 
@@ -48,6 +48,45 @@ async def test_sync_marks_config_managed_tags(db_session) -> None:
     for r in managed:
         assert r.name
         assert r.real_model
+
+
+@pytest.mark.asyncio
+async def test_sync_disables_config_models_when_provider_key_revoked(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """provider API key 撤回后再次同步：之前的 system 模型应被 disable，
+    且 system 凭据 ``is_active=False``。"""
+    # 第一次：保证 openai key 存在 → catalog 写入 claude/gpt-4o 等系统模型
+    monkeypatch.setattr(
+        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        lambda p: ("sk-test", None) if p == "openai" else (None, None),
+    )
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+
+    cred_repo = SystemProviderCredentialRepository(db_session)
+    repo = GatewayModelRepository(db_session)
+    seeded = await repo.list_system(only_enabled=True)
+    openai_rows_before = [r for r in seeded if r.provider == "openai"]
+    if not openai_rows_before:
+        pytest.skip("openai not present in app.toml catalog")
+    openai_creds_before = [c for c in await cred_repo.list_all() if c.provider == "openai"]
+    assert openai_creds_before and all(c.is_active for c in openai_creds_before)
+
+    # 第二次：撤回 openai key → 既有 system 模型应被 disable + 凭据失活
+    monkeypatch.setattr(
+        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        lambda _provider: (None, None),
+    )
+    stats = await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+
+    assert stats["disabled"] >= len(openai_rows_before)
+    assert stats["credentials_deactivated"] >= len(openai_creds_before)
+    openai_rows_after = [r for r in await repo.list_system(only_enabled=False) if r.provider == "openai"]
+    assert openai_rows_after and all(not r.enabled for r in openai_rows_after)
+    openai_creds_after = [c for c in await cred_repo.list_all() if c.provider == "openai"]
+    assert openai_creds_after and all(not c.is_active for c in openai_creds_after)
 
 
 @pytest.mark.asyncio

@@ -169,6 +169,16 @@ class GatewayManagementReadService:
             out.extend(system_credential_from_orm(c) for c in system_rows)
         return out
 
+    async def list_credential_summaries_for_team(
+        self, team_id: UUID
+    ) -> list[CredentialReadModel]:
+        """团队凭据 + 全部 system 凭据（仅摘要字段，无密钥）。"""
+        rows = await self._creds.list_for_tenant(team_id)
+        out = [credential_from_orm(c) for c in rows]
+        system_rows = await self._system_creds.list_all()
+        out.extend(system_credential_from_orm(c) for c in system_rows)
+        return out
+
     async def get_managed_credential_for_team(
         self,
         credential_id: UUID,

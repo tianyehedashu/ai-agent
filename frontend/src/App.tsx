@@ -14,6 +14,7 @@ import GatewayAlertsPage from '@/pages/gateway/alerts'
 import GatewayBudgetsPage from '@/pages/gateway/budgets'
 import GatewayCredentialDetailPage from '@/pages/gateway/credential-detail'
 import GatewayCredentialsPage from '@/pages/gateway/credentials'
+import GatewayTeamRedirect from '@/pages/gateway/gateway-team-redirect'
 import GatewayGuidePage from '@/pages/gateway/guide'
 import GatewayKeysPage from '@/pages/gateway/keys'
 import GatewayLogsPage from '@/pages/gateway/logs'
@@ -77,29 +78,45 @@ function App(): React.JSX.Element {
                   <Route path="/product-info/*" element={<LegacyProductInfoRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/gateway/*" element={<GatewayLayout />}>
-                    <Route index element={<GatewayOverviewPage />} />
-                    <Route path="overview" element={<GatewayOverviewPage />} />
+                    <Route index element={<GatewayTeamRedirect />} />
                     <Route path="guide" element={<GatewayGuidePage />} />
-                    <Route path="keys" element={<GatewayKeysPage />} />
-                    <Route path="credentials" element={<GatewayCredentialsPage />} />
-                    <Route
-                      path="credentials/:credentialId"
-                      element={<GatewayCredentialDetailPage />}
-                    />
-                    <Route path="models" element={<GatewayModelsPage />} />
-                    <Route path="models/:modelId" element={<GatewayModelDetailPage />} />
-                    <Route path="routes" element={<GatewayRoutesPage />} />
-                    <Route path="pricing" element={<GatewayPricingLayout />}>
-                      <Route index element={<GatewayPricingMyPricesPage />} />
-                      <Route path="my-prices" element={<GatewayPricingMyPricesPage />} />
-                      <Route path="downstream" element={<GatewayPricingDownstreamPage />} />
-                      <Route path="upstream" element={<GatewayPricingUpstreamPage />} />
-                    </Route>
                     <Route path="platform-stats" element={<GatewayPlatformStatsPage />} />
-                    <Route path="budgets" element={<GatewayBudgetsPage />} />
-                    <Route path="logs" element={<GatewayLogsPage />} />
-                    <Route path="alerts" element={<GatewayAlertsPage />} />
-                    <Route path="teams" element={<GatewayTeamsPage />} />
+                    <Route path="teams/:teamId">
+                      <Route index element={<Navigate to="overview" replace />} />
+                      <Route path="overview" element={<GatewayOverviewPage />} />
+                      <Route path="keys" element={<GatewayKeysPage />} />
+                      <Route path="credentials" element={<GatewayCredentialsPage />} />
+                      <Route
+                        path="credentials/:credentialId"
+                        element={<GatewayCredentialDetailPage />}
+                      />
+                      <Route path="models" element={<GatewayModelsPage />} />
+                      <Route path="models/:modelId" element={<GatewayModelDetailPage />} />
+                      <Route path="routes" element={<GatewayRoutesPage />} />
+                      <Route path="pricing" element={<GatewayPricingLayout />}>
+                        <Route index element={<GatewayPricingMyPricesPage />} />
+                        <Route path="my-prices" element={<GatewayPricingMyPricesPage />} />
+                        <Route path="downstream" element={<GatewayPricingDownstreamPage />} />
+                        <Route path="upstream" element={<GatewayPricingUpstreamPage />} />
+                      </Route>
+                      <Route path="budgets" element={<GatewayBudgetsPage />} />
+                      <Route path="logs" element={<GatewayLogsPage />} />
+                      <Route path="alerts" element={<GatewayAlertsPage />} />
+                      <Route path="members" element={<GatewayTeamsPage />} />
+                    </Route>
+                    {/* Legacy flat paths → GatewayTeamRedirect */}
+                    <Route path="overview" element={<GatewayTeamRedirect />} />
+                    <Route path="keys" element={<GatewayTeamRedirect />} />
+                    <Route path="credentials" element={<GatewayTeamRedirect />} />
+                    <Route path="credentials/:credentialId" element={<GatewayTeamRedirect />} />
+                    <Route path="models" element={<GatewayTeamRedirect />} />
+                    <Route path="models/:modelId" element={<GatewayTeamRedirect />} />
+                    <Route path="routes" element={<GatewayTeamRedirect />} />
+                    <Route path="pricing/*" element={<GatewayTeamRedirect />} />
+                    <Route path="budgets" element={<GatewayTeamRedirect />} />
+                    <Route path="logs" element={<GatewayTeamRedirect />} />
+                    <Route path="alerts" element={<GatewayTeamRedirect />} />
+                    <Route path="teams" element={<GatewayTeamRedirect />} />
                   </Route>
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>

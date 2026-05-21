@@ -2,13 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
 import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 /** 从团队模型列表缓存解析显示名（与 TeamModelsWorkspace 共用 queryKey，避免重复请求） */
 export function useGatewayModelLabel(modelId: string, credentialId = ''): string {
+  const teamId = useGatewayTeamId()
   const { data: name } = useQuery({
-    queryKey: gatewayModelsListQueryKey('', credentialId),
+    queryKey: gatewayModelsListQueryKey(teamId, credentialId),
     queryFn: () =>
-      gatewayApi.listModels({
+      gatewayApi.listModels(teamId, {
         ...(credentialId ? { credential_id: credentialId } : {}),
       }),
     select: (items) => items.find((m) => m.id === modelId)?.name,

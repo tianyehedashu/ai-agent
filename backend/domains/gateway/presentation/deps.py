@@ -11,7 +11,7 @@ Gateway Presentation Dependencies - 网关认证依赖注入
 
 注意：
 - 匿名用户访问 Gateway 任何接口直接 401
-- 团队上下文从 X-Team-Id 头或路径变量解析；缺省取 personal team
+- 团队上下文：管理面 ``/teams/{team_id}/*`` 路径优先；``sk-gw-*`` 代理勿传 ``X-Team-Id``
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.errors import VirtualKeyInvalidError
+from domains.gateway.domain.errors import VirtualKeyInvalidError, GatewayVkeyTeamHeaderMismatchError
 from domains.gateway.domain.types import (
     ApiKeyGatewayGrantPrincipal,
     GatewayInboundVia,
@@ -69,6 +69,24 @@ __all__ = [
 
 _security = HTTPBearer(auto_error=True)
 _optional_security = HTTPBearer(auto_error=False)
+
+
+def _assert_vkey_team_header_compatible(
+    bound_team_id: uuid.UUID,
+    x_team_id: str | None,
+) -> None:
+    """sk-gw-* 已绑定团队；冲突的 X-Team-Id 视为客户端误用。"""
+    trimmed = (x_team_id or "").strip()
+    if not trimmed:
+        return
+    try:
+        header_team_id = uuid.UUID(trimmed)
+    except ValueError as exc:
+        from domains.gateway.domain.errors import GatewayTeamHeaderInvalidError
+
+        raise GatewayTeamHeaderInvalidError(trimmed) from exc
+    if header_team_id != bound_team_id:
+        raise GatewayVkeyTeamHeaderMismatchError()
 
 
 # =============================================================================
@@ -216,6 +234,7 @@ async def bearer_vkey_or_apikey_auth(
 
     if is_vkey_format(plain):
         gp = await _gateway_principal_from_vkey_plain(plain, db)
+        _assert_vkey_team_header_compatible(gp.team_id, x_team_id)
         return VkeyOrApikeyPrincipal(
             via="vkey",
             user_id=gp.user_id,

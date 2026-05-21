@@ -50,6 +50,7 @@ from domains.gateway.presentation.anthropic_compat_router import router as anthr
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
+from domains.identity.presentation.admin_users_router import router as admin_users_router
 from domains.identity.presentation.api_key_router import router as api_key_router
 from domains.identity.presentation.router import router as identity_router
 from domains.identity.presentation.usage_router import router as usage_router
@@ -478,6 +479,13 @@ app.include_router(
     admin_storage_router,
     prefix=f"{api_router_prefix}/admin/storage",
     tags=["Admin Storage"],
+)
+
+# 平台管理 - 用户角色
+app.include_router(
+    admin_users_router,
+    prefix=f"{api_router_prefix}/admin/users",
+    tags=["Admin Users"],
 )
 
 # 兼容旧路径 /product-info（带 Deprecation 响应头）

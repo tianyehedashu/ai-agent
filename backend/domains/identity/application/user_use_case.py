@@ -4,11 +4,18 @@ User Use Case - 用户用例
 编排用户相关的操作，包括注册、认证、Token 管理。
 """
 
+from dataclasses import dataclass
 import uuid
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.domain.policies.platform_role_policy import (
+    assert_bootstrap_grant_admin,
+    assert_bootstrap_revoke_admin,
+    assert_can_change_platform_role,
+)
+from domains.identity.domain.rbac import Role
 from domains.identity.domain.repositories.user_repository import UserRepository
 from domains.identity.domain.services.password_service import PasswordService
 from domains.identity.domain.services.token_service import TokenPair, TokenService
@@ -28,6 +35,25 @@ def _default_tenant_provisioner() -> DefaultTenantProvisionerPort:
     )
 
     return GatewayDefaultTenantProvisioner()
+
+
+@dataclass(frozen=True, slots=True)
+class UserSummary:
+    """平台用户摘要（管理面，不含敏感字段）。"""
+
+    id: str
+    email: str
+    name: str | None
+    role: str
+
+
+def _user_to_summary(user: User) -> UserSummary:
+    return UserSummary(
+        id=str(user.id),
+        email=user.email,
+        name=user.name,
+        role=user.role,
+    )
 
 
 class UserUseCase:
@@ -129,6 +155,67 @@ class UserUseCase:
         if not user:
             raise NotFoundError("User", user_id)
         return user
+
+    async def lookup_user_by_email(self, email: str) -> UserSummary:
+        """按邮箱查找用户（平台管理面，不区分大小写）。"""
+        user = await self.user_repo.get_by_email_insensitive(email)
+        if user is None:
+            raise NotFoundError("User", email.strip())
+        return _user_to_summary(user)
+
+    async def bootstrap_set_admin_by_email(self, email: str, *, revoke: bool = False) -> UserSummary:
+        """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""
+        user = await self.user_repo.get_by_email_insensitive(email)
+        if user is None:
+            raise NotFoundError("User", email.strip())
+
+        admin_count = await self.user_repo.count_by_role(Role.ADMIN.value)
+        if revoke:
+            assert_bootstrap_revoke_admin(
+                target_current_role=user.role,
+                admin_count=admin_count,
+            )
+            new_role = Role.USER.value
+        else:
+            assert_bootstrap_grant_admin(
+                target_current_role=user.role,
+                admin_count=admin_count,
+            )
+            new_role = Role.ADMIN.value
+
+        updated = await self.user_repo.update(user.id, role=new_role)
+        if updated is None:
+            raise NotFoundError("User", str(user.id))
+        return _user_to_summary(updated)
+
+    async def set_platform_role(
+        self,
+        *,
+        actor_id: str,
+        actor_role: str,
+        target_user_id: str,
+        new_role: str,
+    ) -> UserSummary:
+        """设置目标用户的平台角色（仅平台 admin）。"""
+        target_uuid = uuid.UUID(target_user_id)
+        target = await self.get_user_by_id_or_raise(target_user_id)
+        admin_count: int | None = None
+        if target.role == Role.ADMIN.value and new_role != Role.ADMIN.value:
+            admin_count = await self.user_repo.count_by_role(Role.ADMIN.value)
+
+        assert_can_change_platform_role(
+            actor_role=actor_role,
+            actor_id=uuid.UUID(actor_id),
+            target_id=target_uuid,
+            target_current_role=target.role,
+            new_role=new_role,
+            admin_count=admin_count,
+        )
+
+        updated = await self.user_repo.update(target_uuid, role=new_role)
+        if updated is None:
+            raise NotFoundError("User", target_user_id)
+        return _user_to_summary(updated)
 
     # =========================================================================
     # Authentication

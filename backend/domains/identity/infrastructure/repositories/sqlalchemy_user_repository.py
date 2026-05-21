@@ -4,6 +4,7 @@ SQLAlchemy User Repository - 用户仓储实现
 使用 SQLAlchemy 实现用户数据访问
 """
 
+from collections.abc import Sequence
 import uuid
 
 from sqlalchemy import func, select
@@ -50,6 +51,14 @@ class SQLAlchemyUserRepository(UserRepository):
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
+    async def get_by_email_insensitive(self, email: str) -> User | None:
+        """通过邮箱获取用户（不区分大小写）"""
+        normalized = email.strip().lower()
+        result = await self.db.execute(
+            select(User).where(func.lower(User.email) == normalized)
+        )
+        return result.scalar_one_or_none()
+
     async def update(
         self,
         user_id: uuid.UUID,
@@ -57,6 +66,7 @@ class SQLAlchemyUserRepository(UserRepository):
         avatar_url: str | None = None,
         hashed_password: str | None = None,
         vendor_creator_id: int | None = None,
+        role: str | None = None,
     ) -> User | None:
         """更新用户"""
         user = await self.get_by_id(user_id)
@@ -71,6 +81,8 @@ class SQLAlchemyUserRepository(UserRepository):
             user.hashed_password = hashed_password
         if vendor_creator_id is not None:
             user.vendor_creator_id = vendor_creator_id
+        if role is not None:
+            user.role = role
 
         await self.db.flush()
         await self.db.refresh(user)
@@ -80,3 +92,24 @@ class SQLAlchemyUserRepository(UserRepository):
         """统计用户总数"""
         result = await self.db.execute(select(func.count(User.id)))
         return result.scalar() or 0
+
+    async def count_by_role(self, role: str) -> int:
+        """统计指定平台角色的用户数"""
+        result = await self.db.execute(
+            select(func.count(User.id)).where(User.role == role)
+        )
+        return result.scalar() or 0
+
+    async def list_by_roles(
+        self,
+        roles: Sequence[str],
+        *,
+        limit: int = 100,
+    ) -> list[User]:
+        """按平台角色列表查询用户"""
+        if not roles:
+            return []
+        result = await self.db.execute(
+            select(User).where(User.role.in_(roles)).limit(limit)
+        )
+        return list(result.scalars().all())

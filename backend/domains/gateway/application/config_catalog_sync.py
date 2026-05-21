@@ -14,6 +14,9 @@ from domains.gateway.application.catalog_capability import infer_catalog_capabil
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.policies.catalog_provider_availability import (
+    build_catalog_provider_retirement_plan,
+)
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_NONE,
     effective_supports_reasoning,
@@ -66,10 +69,19 @@ def _provider_api_key_and_base(provider: str) -> tuple[str | None, str | None]:
 
 
 def _volcengine_extra() -> dict[str, Any] | None:
+    """``endpoint_id`` 用于 chat，``image_endpoint_id`` 用于 Seedream 生图探活与代理。
+
+    火山生图必须用图像接入点 ID 而非 ``volcengine/seedream`` 字面 model，
+    探活路径见 ``domains.gateway.domain.policies.volcengine_image_probe``。
+    """
     chat_id = settings.volcengine_chat_endpoint_id or settings.volcengine_endpoint_id
+    image_id = settings.volcengine_image_endpoint_id
+    extra: dict[str, Any] = {}
     if chat_id:
-        return {"endpoint_id": chat_id}
-    return None
+        extra["endpoint_id"] = chat_id
+    if image_id:
+        extra["image_endpoint_id"] = image_id
+    return extra or None
 
 
 def _config_managed_credential_extra(provider: str) -> dict[str, Any]:
@@ -271,9 +283,11 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
     """
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     models_repo = GatewayModelRepository(session)
+    creds_repo = SystemProviderCredentialRepository(session)
     desired_ids = {m.id for m in app_config.models.available if m.litellm_model or m.id}
     upserted = 0
     skipped = 0
+    providers_without_key: set[str] = set()
 
     for model in app_config.models.available:
         if not (model.litellm_model or model.id):
@@ -287,6 +301,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
                 model.id,
                 model.provider,
             )
+            providers_without_key.add(model.provider.strip().lower())
             skipped += 1
             continue
         raw_model = model.litellm_model or model.id
@@ -349,6 +364,27 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
             disabled += 1
             newly_disabled_names.append(row.name)
 
+    credentials_deactivated = 0
+    if providers_without_key:
+        plan = build_catalog_provider_retirement_plan(
+            providers_without_key=providers_without_key,
+            system_models=global_rows,
+            system_credentials=await creds_repo.list_all(),
+        )
+        for model_id in plan.model_ids_to_disable:
+            await models_repo.update_system(model_id, enabled=False)
+            disabled += 1
+        for cred_id in plan.credential_ids_to_deactivate:
+            await creds_repo.update(cred_id, is_active=False)
+            credentials_deactivated += 1
+        newly_disabled_names.extend(plan.affected_model_names)
+        if plan.affected_model_names:
+            logger.info(
+                "Gateway catalog sync: retired %d config-managed models for providers %s",
+                len(plan.affected_model_names),
+                sorted(providers_without_key),
+            )
+
     vkeys_pruned = 0
     routes_pruned = 0
     if settings.gateway_catalog_prune_vkey_allowed_models and newly_disabled_names:
@@ -358,10 +394,12 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
 
     await session.flush()
     logger.info(
-        "Gateway catalog sync finished: upserted=%s disabled=%s skipped_no_credential=%s vkeys_pruned=%s routes_pruned=%s",
+        "Gateway catalog sync finished: upserted=%s disabled=%s skipped_no_credential=%s "
+        "credentials_deactivated=%s vkeys_pruned=%s routes_pruned=%s",
         upserted,
         disabled,
         skipped,
+        credentials_deactivated,
         vkeys_pruned,
         routes_pruned,
     )
@@ -369,6 +407,7 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
         "upserted": upserted,
         "disabled": disabled,
         "skipped_no_credential": skipped,
+        "credentials_deactivated": credentials_deactivated,
         "vkeys_pruned": vkeys_pruned,
         "routes_pruned": routes_pruned,
     }

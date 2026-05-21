@@ -7,12 +7,14 @@
 
 import { apiClient } from '@/api/client'
 
-import { GATEWAY_API_BASE } from './_base'
+import { teamGatewayPath } from './_base'
 
 export interface GatewayRoute {
   id: string
   tenant_id?: string | null
   team_id: string | null
+  /** 团队自定义或系统级（只读） */
+  source?: 'team' | 'system'
   /** 调用方传入的 `model` 字段值 */
   virtual_model: string
   primary_models: string[]
@@ -52,13 +54,14 @@ export interface GatewayRouteUpdateBody {
 /** Routes 资源 API */
 export const routesApi = {
   /** 列出当前团队的虚拟路由 */
-  listRoutes: () => apiClient.get<GatewayRoute[]>(`${GATEWAY_API_BASE}/routes`),
+  listRoutes: (teamId: string) => apiClient.get<GatewayRoute[]>(teamGatewayPath(teamId, '/routes')),
   /** 创建路由 */
-  createRoute: (body: GatewayRouteCreateBody) =>
-    apiClient.post<GatewayRoute>(`${GATEWAY_API_BASE}/routes`, body),
+  createRoute: (teamId: string, body: GatewayRouteCreateBody) =>
+    apiClient.post<GatewayRoute>(teamGatewayPath(teamId, '/routes'), body),
   /** 更新路由（含 fallbacks / strategy / enabled） */
-  updateRoute: (id: string, body: GatewayRouteUpdateBody) =>
-    apiClient.patch<GatewayRoute>(`${GATEWAY_API_BASE}/routes/${id}`, body),
+  updateRoute: (teamId: string, id: string, body: GatewayRouteUpdateBody) =>
+    apiClient.patch<GatewayRoute>(teamGatewayPath(teamId, `/routes/${id}`), body),
   /** 删除路由 */
-  deleteRoute: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/routes/${id}`),
+  deleteRoute: (teamId: string, id: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/routes/${id}`)),
 } as const

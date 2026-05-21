@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { gatewayApi } from '@/api/gateway'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import { personalModelDetailHref } from '@/features/gateway-models/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2 } from '@/lib/lucide-icons'
 
@@ -16,6 +17,7 @@ interface PersonalModelEditPaneProps {
 }
 
 export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -33,7 +35,7 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
 
   const { updateMutation } = usePersonalModelMutations({
     onUpdateSuccess: () => {
-      navigate(personalModelDetailHref(modelId))
+      navigate(personalModelDetailHref(teamId, modelId))
     },
   })
 
@@ -58,8 +60,8 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
   )
 
   const handleCancel = useCallback((): void => {
-    navigate(personalModelDetailHref(modelId))
-  }, [navigate, modelId])
+    navigate(personalModelDetailHref(teamId, modelId))
+  }, [navigate, modelId, teamId])
 
   if (credsLoading || modelsLoading) {
     return (

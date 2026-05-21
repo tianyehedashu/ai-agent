@@ -152,6 +152,22 @@ class CredentialResponse(BaseModel):
     model_config = ConfigDict(from_attributes=False)
 
 
+class CredentialSummaryResponse(BaseModel):
+    """凭据摘要：供团队 member 解析模型上的 credential_id，不含密钥与 api_base。"""
+
+    id: uuid.UUID
+    provider: str
+    name: str
+    scope: str | None = None
+    is_active: bool = True
+    is_config_managed: bool = Field(
+        default=False,
+        description="app.toml/环境变量同步托管的 system 凭据",
+    )
+
+    model_config = ConfigDict(from_attributes=False)
+
+
 # =============================================================================
 # Gateway Model
 # =============================================================================
@@ -364,6 +380,7 @@ class PersonalModelResponse(BaseModel):
     is_system: bool = False
     capability: str
     name: str
+    selector_capabilities: dict[str, Any] = Field(default_factory=dict)
     last_test_status: str | None = None
     last_tested_at: datetime | None = None
     last_test_reason: str | None = None
@@ -403,6 +420,7 @@ class PersonalModelResponse(BaseModel):
             is_system=bool(raw.get("is_system", False)),
             capability=str(raw["capability"]),
             name=str(raw["name"]),
+            selector_capabilities=dict(raw.get("selector_capabilities") or {}),
             last_test_status=raw.get("last_test_status"),
             last_tested_at=_dt("last_tested_at"),
             last_test_reason=raw.get("last_test_reason"),
@@ -483,6 +501,7 @@ class RouteResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
+    source: Literal["team", "system"] = "team"
     virtual_model: str
     primary_models: list[str]
     fallbacks_general: list[str]

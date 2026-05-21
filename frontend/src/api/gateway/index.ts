@@ -2,7 +2,7 @@
  * AI Gateway API Client（聚合）
  *
  * 统一封装 /api/v1/gateway/* 管理端点。
- * 所有请求由 apiClient 注入 X-Team-Id（来自 gateway-team store）。
+ * 团队资源通过 URL 路径 `/teams/{teamId}/*` 显式选团队（见 `teamGatewayPath`）。
  *
  * 文件按资源拆分，详见同目录下：
  * - teams / keys / credentials / models / my-models / routes
@@ -46,6 +46,7 @@ export type {
 } from './keys'
 
 export type {
+  CredentialSummary,
   ProviderCredential,
   ProviderCredentialCreateBody,
   MyCredentialCreateBody,

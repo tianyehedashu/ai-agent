@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
 
@@ -44,18 +45,19 @@ function parseOptionalUsd(raw: string): number | null {
 }
 
 export default function GatewayBudgetsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { isAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['gateway', 'budgets'],
-    queryFn: () => gatewayApi.listBudgets(),
+    queryKey: ['gateway', 'budgets', teamId],
+    queryFn: () => gatewayApi.listBudgets(teamId),
   })
 
   const createMutation = useMutation({
-    mutationFn: gatewayApi.upsertBudget,
+    mutationFn: (body: BudgetUpsertBody) => gatewayApi.upsertBudget(teamId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'budgets'] })
       toast({ title: '预算已创建' })
@@ -67,7 +69,7 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.deleteBudget(id),
+    mutationFn: (id: string) => gatewayApi.deleteBudget(teamId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'budgets'] })
       toast({ title: '已删除' })

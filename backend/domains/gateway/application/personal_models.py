@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from domains.gateway.application.config_catalog_sync import model_types_for_gateway_registration
+from domains.gateway.application.config_catalog_sync import (
+    model_types_for_gateway_registration,
+    selector_capabilities_from_tags,
+)
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 
 if TYPE_CHECKING:
@@ -72,6 +75,9 @@ def gateway_model_to_personal_list_item(row: GatewayModel) -> dict[str, Any]:
         "is_system": False,
         "capability": row.capability,
         "name": row.name,
+        "selector_capabilities": selector_capabilities_from_tags(
+            tags, provider=row.provider, real_model=row.real_model
+        ),
         "last_test_status": row.last_test_status,
         "last_tested_at": row.last_tested_at.isoformat() if row.last_tested_at else None,
         "last_test_reason": row.last_test_reason,

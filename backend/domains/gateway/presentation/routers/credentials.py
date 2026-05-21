@@ -15,8 +15,13 @@ from domains.gateway.presentation.deps import (
     RequiredTeamAdmin,
 )
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.gateway.domain.types import (
+    credential_api_scope,
+    is_config_managed_system_credential,
+)
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
+    CredentialSummaryResponse,
     CredentialUpdate,
     ManagedCredentialCreate,
 )
@@ -51,6 +56,31 @@ async def list_credentials(
         team.team_id, include_system=team.is_platform_admin
     )
     return [build_credential_response(c, encryption_key=encryption_key()) for c in creds]
+
+
+@router.get("/credentials/summaries", response_model=list[CredentialSummaryResponse])
+async def list_credential_summaries(
+    team: CurrentTeam,
+    reads: MgmtReads,
+) -> list[CredentialSummaryResponse]:
+    """团队 member 可读：解析模型 credential_id → 显示名（含 system，无密钥）。"""
+    rows = await reads.list_credential_summaries_for_team(team.team_id)
+    return [
+        CredentialSummaryResponse(
+            id=r.id,
+            provider=r.provider,
+            name=r.name,
+            scope=credential_api_scope(scope=r.scope, tenant_id=r.tenant_id),
+            is_active=r.is_active,
+            is_config_managed=is_config_managed_system_credential(
+                scope=r.scope,
+                tenant_id=r.tenant_id,
+                name=r.name,
+                extra=r.extra,
+            ),
+        )
+        for r in rows
+    ]
 
 
 @router.get("/credentials/{credential_id}", response_model=CredentialResponse)

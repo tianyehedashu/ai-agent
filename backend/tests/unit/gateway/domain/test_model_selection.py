@@ -21,3 +21,23 @@ def test_merge_tenant_overrides_system_name() -> None:
     assert names == {"a", "b", "c"}
     by_name = {r.name: r for r in merged}
     assert by_name["a"] in tenant
+
+
+@dataclass
+class _RouteRow:
+    virtual_model: str
+    enabled: bool = True
+
+
+def test_merge_virtual_model_tenant_overrides_system() -> None:
+    from domains.gateway.domain.policies.model_selection import (
+        merge_virtual_model_rows_tenant_overrides_system,
+    )
+
+    tenant = [_RouteRow("fast"), _RouteRow("team-only")]
+    system = [_RouteRow("fast"), _RouteRow("global")]
+    merged = merge_virtual_model_rows_tenant_overrides_system(tenant, system)
+    names = {r.virtual_model for r in merged}
+    assert names == {"fast", "team-only", "global"}
+    by_name = {r.virtual_model: r for r in merged}
+    assert by_name["fast"] in tenant

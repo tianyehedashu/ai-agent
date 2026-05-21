@@ -10,6 +10,8 @@ import uuid
 from fastapi_users.schemas import BaseUser, BaseUserCreate
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from domains.identity.domain.rbac import Role
+
 # =============================================================================
 # 用户读取模式（FastAPI Users 兼容）
 # =============================================================================
@@ -132,10 +134,40 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., description="刷新令牌")
 
 
+# =============================================================================
+# 平台用户管理（Admin API）
+# =============================================================================
+
+
+class PlatformUserSummaryResponse(BaseModel):
+    """平台用户摘要响应。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    name: str | None = None
+    role: str
+
+
+class SetPlatformRoleBody(BaseModel):
+    """设置平台角色请求。"""
+
+    model_config = ConfigDict(strict=True)
+
+    role: str = Field(
+        ...,
+        description="平台角色：admin、user、viewer",
+        pattern=f"^({'|'.join([Role.ADMIN.value, Role.USER.value, Role.VIEWER.value])})$",
+    )
+
+
 __all__ = [
     "CurrentUser",
     "PasswordChange",
+    "PlatformUserSummaryResponse",
     "RefreshTokenRequest",
+    "SetPlatformRoleBody",
     "TokenResponse",
     "UserCreate",
     "UserLogin",

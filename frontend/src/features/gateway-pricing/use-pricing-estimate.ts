@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi, type PricingEstimateResult } from '@/api/gateway'
 import { formatMoney } from '@/lib/money'
+import { getCurrentTeamId } from '@/stores/gateway-team'
 
 export function formatPricingEstimateUsd(result: PricingEstimateResult): string {
   const usd = Number.parseFloat(result.downstream_revenue_usd)
@@ -19,20 +20,23 @@ export function usePricingEstimate(params: {
   isLoading: boolean
   isApiEstimate: boolean
 } {
+  const teamId = getCurrentTeamId()
   const pin = params.inputTokens ?? 0
   const pout = params.completionTokens ?? 0
   const hasUsage = pin + pout > 0
   const modelId = params.gatewayModelId?.trim() ?? ''
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['gateway-pricing-estimate', modelId, pin, pout],
-    queryFn: () =>
-      gatewayApi.estimatePricing({
+    queryKey: ['gateway-pricing-estimate', teamId, modelId, pin, pout],
+    queryFn: () => {
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.estimatePricing(teamId, {
         gateway_model_id: modelId,
         input_tokens: pin,
         output_tokens: pout,
-      }),
-    enabled: params.enabled && Boolean(modelId) && hasUsage,
+      })
+    },
+    enabled: params.enabled && Boolean(teamId) && Boolean(modelId) && hasUsage,
     staleTime: 30_000,
   })
 

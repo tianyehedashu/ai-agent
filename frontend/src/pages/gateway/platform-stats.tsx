@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { LineChart } from '@/lib/lucide-icons'
+import { getCurrentTeamId } from '@/stores/gateway-team'
 
 function coalesceNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -34,8 +35,12 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['gateway', 'admin', 'credential-stats', days],
-    queryFn: () => gatewayApi.adminCredentialStats({ days }),
-    enabled: isAuthenticated && isPlatformAdmin,
+    queryFn: () => {
+      const teamId = getCurrentTeamId()
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.adminCredentialStats(teamId, { days })
+    },
+    enabled: isAuthenticated && isPlatformAdmin && !!getCurrentTeamId(),
   })
 
   const sorted = useMemo(() => {
@@ -47,7 +52,7 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
     return <Navigate to="/login" replace />
   }
   if (!isPlatformAdmin) {
-    return <Navigate to="/gateway/overview" replace />
+    return <Navigate to="/gateway" replace />
   }
 
   return (

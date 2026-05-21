@@ -12,7 +12,7 @@
 import { apiClient } from '@/api/client'
 import type { AvailableModelsResponse, ModelTestStatus, ModelType } from '@/types/user-model'
 
-import { GATEWAY_API_BASE } from './_base'
+import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 
 /** Gateway 团队模型（注册行） */
 export interface GatewayModel {
@@ -163,26 +163,33 @@ export const modelsApi = {
   },
 
   /** 列出当前团队的 GatewayModel 注册行 */
-  listModels: (params?: { provider?: string; credential_id?: string }) =>
-    apiClient.get<GatewayModel[]>(`${GATEWAY_API_BASE}/models`, params),
+  listModels: (teamId: string, params?: { provider?: string; credential_id?: string }) =>
+    apiClient.get<GatewayModel[]>(teamGatewayPath(teamId, '/models'), params),
   /** 团队模型用量汇总（按 route 维度） */
-  modelsUsageSummary: (params?: { days?: number; provider?: string }) =>
-    apiClient.get<GatewayModelUsageSummary>(`${GATEWAY_API_BASE}/models/usage-summary`, params),
+  modelsUsageSummary: (teamId: string, params?: { days?: number; provider?: string }) =>
+    apiClient.get<GatewayModelUsageSummary>(
+      teamGatewayPath(teamId, '/models/usage-summary'),
+      params
+    ),
   /** 平台凭据用量与成功率统计（仅平台管理员） */
-  adminCredentialStats: (params?: { days?: number }) =>
-    apiClient.get<PlatformCredentialStat[]>(`${GATEWAY_API_BASE}/admin/credential-stats`, params),
+  adminCredentialStats: (teamId: string, params?: { days?: number }) =>
+    apiClient.get<PlatformCredentialStat[]>(
+      teamGatewayPath(teamId, '/admin/credential-stats'),
+      params
+    ),
   /** 平台预置模型模板（注册团队模型时的可选项） */
-  listModelPresets: (params?: { provider?: string }) =>
-    apiClient.get<GatewayModelPreset[]>(`${GATEWAY_API_BASE}/models/presets`, params),
+  listModelPresets: (teamId: string, params?: { provider?: string }) =>
+    apiClient.get<GatewayModelPreset[]>(teamGatewayPath(teamId, '/models/presets'), params),
   /** 创建团队 GatewayModel */
-  createModel: (body: GatewayModelCreateBody) =>
-    apiClient.post<GatewayModel>(`${GATEWAY_API_BASE}/models`, body),
+  createModel: (teamId: string, body: GatewayModelCreateBody) =>
+    apiClient.post<GatewayModel>(teamGatewayPath(teamId, '/models'), body),
   /** 更新团队 GatewayModel（部分字段） */
-  updateModel: (id: string, body: GatewayModelUpdateBody) =>
-    apiClient.patch<GatewayModel>(`${GATEWAY_API_BASE}/models/${id}`, body),
+  updateModel: (teamId: string, id: string, body: GatewayModelUpdateBody) =>
+    apiClient.patch<GatewayModel>(teamGatewayPath(teamId, `/models/${id}`), body),
   /** 删除团队 GatewayModel */
-  deleteModel: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/models/${id}`),
+  deleteModel: (teamId: string, id: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/models/${id}`)),
   /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */
-  testModel: (id: string) =>
-    apiClient.post<GatewayModelTestResult>(`${GATEWAY_API_BASE}/models/${id}/test`, {}),
+  testModel: (teamId: string, id: string) =>
+    apiClient.post<GatewayModelTestResult>(teamGatewayPath(teamId, `/models/${id}/test`), {}),
 } as const

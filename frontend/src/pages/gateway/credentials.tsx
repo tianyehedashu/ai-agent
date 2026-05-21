@@ -29,6 +29,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import {
   CreateCredentialDialog,
@@ -41,6 +42,7 @@ import {
   type CredentialFormScope,
 } from '@/features/gateway-credentials/provider-schemas'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
 import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
 import {
   credentialDetailAddModelsHref,
@@ -48,6 +50,7 @@ import {
 } from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 
@@ -101,6 +104,7 @@ function CredentialApiBaseCell({
 }
 
 export default function GatewayCredentialsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -121,8 +125,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   })
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['gateway', 'credentials'],
-    queryFn: () => gatewayApi.listCredentials(),
+    queryKey: ['gateway', 'credentials', teamId],
+    queryFn: () => gatewayApi.listCredentials(teamId),
     enabled: activeTab === 'shared',
   })
 
@@ -150,9 +154,11 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   )
 
   const createManagedMutation = useMutation({
-    mutationFn: gatewayApi.createCredential,
+    mutationFn: (body: Parameters<typeof gatewayApi.createCredential>[1]) =>
+      gatewayApi.createCredential(teamId, body),
     onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      invalidateCredentialSummariesCache(queryClient)
       openAddModelsAfterCreate(cred, 'team')
     },
     onError: (e: Error) => {
@@ -164,6 +170,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     mutationFn: gatewayApi.createMyCredential,
     onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
+      invalidateCredentialSummariesCache(queryClient)
       openAddModelsAfterCreate(cred, 'user')
     },
     onError: (e: Error) => {
@@ -173,9 +180,10 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: GatewayCredentialUpdateBody }) =>
-      gatewayApi.updateCredential(id, body),
+      gatewayApi.updateCredential(teamId, id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      invalidateCredentialSummariesCache(queryClient)
       toast({ title: '凭据已更新' })
     },
     onError: (e: Error) => {
@@ -184,9 +192,10 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   })
 
   const importMutation = useMutation({
-    mutationFn: gatewayApi.importFromUserConfig,
+    mutationFn: () => gatewayApi.importFromUserConfig(teamId),
     onSuccess: (r) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      invalidateCredentialSummariesCache(queryClient)
       toast({ title: `已导入 ${String(r.created)} 条` })
     },
     onError: (e: Error) => {
@@ -195,10 +204,11 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: gatewayApi.deleteCredential,
+    mutationFn: (id: string) => gatewayApi.deleteCredential(teamId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+      invalidateCredentialSummariesCache(queryClient)
       setCredentialPendingDelete(null)
       toast({ title: '凭据已删除', description: '关联的注册模型已一并移除' })
     },
@@ -279,15 +289,31 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                 导入
               </Button>
             ) : null}
-            <Button
-              size="sm"
-              onClick={() => {
-                handleOpenCreate()
-              }}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              新增
-            </Button>
+            {activeTab === 'shared' && !canWrite ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button size="sm" disabled aria-label="新增团队凭据（需要团队管理员权限）">
+                        <Plus className="mr-1.5 h-4 w-4" />
+                        新增
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>需要团队管理员或更高权限</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  handleOpenCreate()
+                }}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                新增
+              </Button>
+            )}
           </div>
         </div>
 
@@ -346,7 +372,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                             <div className="flex flex-wrap items-center gap-2">
                               {editable ? (
                                 <Link
-                                  to={credentialDetailHref(c.id)}
+                                  to={credentialDetailHref(teamId, c.id)}
                                   className="font-medium text-primary underline-offset-4 hover:underline"
                                 >
                                   {c.name}
@@ -404,7 +430,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                                   className="h-7 px-2 text-xs"
                                   asChild
                                 >
-                                  <Link to={credentialDetailHref(c.id)}>详情</Link>
+                                  <Link to={credentialDetailHref(teamId, c.id)}>详情</Link>
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -412,7 +438,9 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                                   className="h-7 px-2 text-xs"
                                   asChild
                                 >
-                                  <Link to={credentialDetailAddModelsHref(c.id)}>添加模型</Link>
+                                  <Link to={credentialDetailAddModelsHref(teamId, c.id)}>
+                                    添加模型
+                                  </Link>
                                 </Button>
                                 <Button
                                   size="icon"

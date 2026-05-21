@@ -1,0 +1,88 @@
+"""Catalog thinking_param 标签审计（app.toml 同步逻辑）。"""
+
+from __future__ import annotations
+
+from bootstrap.config_loader import ModelInfo
+from domains.gateway.application.config_catalog_sync import _build_tags_from_model_info
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_ANTHROPIC,
+    THINKING_PARAM_BUILTIN,
+    THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_NONE,
+)
+
+
+def _tags(model: ModelInfo) -> dict:
+    return _build_tags_from_model_info(model)
+
+
+def test_deepseek_reasoner_builtin_reasoning() -> None:
+    tags = _tags(
+        ModelInfo(
+            id="deepseek/deepseek-reasoner",
+            name="DeepSeek Reasoner (R1)",
+            provider="deepseek",
+            litellm_model="deepseek/deepseek-reasoner",
+            supports_reasoning=True,
+            thinking_param="builtin_reasoning",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_BUILTIN
+    assert tags["supports_reasoning"] is True
+
+
+def test_qwen3_dashscope_enable_thinking() -> None:
+    tags = _tags(
+        ModelInfo(
+            id="dashscope/qwen3-32b",
+            name="Qwen3 32B",
+            provider="dashscope",
+            litellm_model="dashscope/qwen3-32b",
+            supports_reasoning=True,
+            thinking_param="dashscope_enable_thinking",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_DASHSCOPE
+    assert tags["supports_reasoning"] is True
+
+
+def test_qwq_builtin_reasoning() -> None:
+    tags = _tags(
+        ModelInfo(
+            id="dashscope/qwq-32b-preview",
+            name="QwQ 32B",
+            provider="dashscope",
+            litellm_model="dashscope/qwq-32b-preview",
+            supports_reasoning=True,
+            thinking_param="builtin_reasoning",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_BUILTIN
+
+
+def test_claude_35_sonnet_no_extended_thinking() -> None:
+    tags = _tags(
+        ModelInfo(
+            id="claude-3-5-sonnet",
+            name="Claude 3.5 Sonnet",
+            provider="anthropic",
+            litellm_model="claude-3-5-sonnet-20241022",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_NONE
+    assert tags["supports_reasoning"] is False
+
+
+def test_claude_opus_47_anthropic_extended() -> None:
+    tags = _tags(
+        ModelInfo(
+            id="claude-opus-4-7",
+            name="Claude Opus 4.7",
+            provider="anthropic",
+            litellm_model="claude-opus-4-7",
+            supports_reasoning=True,
+            thinking_param="anthropic_extended",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_ANTHROPIC
+    assert tags["supports_reasoning"] is True

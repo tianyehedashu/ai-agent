@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import { personalModelEditHref, personalModelsIndexHref } from '@/features/gateway-models/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2, Pencil, Trash2, Zap } from '@/lib/lucide-icons'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
@@ -19,6 +20,7 @@ interface PersonalModelDetailPaneProps {
 export function PersonalModelDetailPane({
   modelId,
 }: PersonalModelDetailPaneProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const navigate = useNavigate()
 
   const { data: items = [], isLoading } = useQuery({
@@ -30,7 +32,7 @@ export function PersonalModelDetailPane({
 
   const { deleteMutation, testMutation } = usePersonalModelMutations({
     onDeleteSuccess: () => {
-      navigate(personalModelsIndexHref())
+      navigate(personalModelsIndexHref(teamId))
     },
   })
 
@@ -108,7 +110,7 @@ export function PersonalModelDetailPane({
             测试连接
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link to={personalModelEditHref(model.id)}>
+            <Link to={personalModelEditHref(teamId, model.id)}>
               <Pencil className="mr-1 h-4 w-4" />
               编辑
             </Link>

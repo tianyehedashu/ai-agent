@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronsUpDown, Users } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { gatewayApi, type GatewayTeam as ApiTeam } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,8 @@ import { useUserStore } from '@/stores/user'
 export default function TeamSwitcher(): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { currentUser } = useUserStore()
   const { currentTeamId, setCurrentTeamId, setTeams } = useGatewayTeamStore()
   const isAnonymous = currentUser?.is_anonymous ?? true
@@ -97,8 +100,13 @@ export default function TeamSwitcher(): React.JSX.Element | null {
                   onSelect={() => {
                     setCurrentTeamId(team.id)
                     setOpen(false)
-                    // 切换 team 后 invalidate 所有 gateway 数据
                     void queryClient.invalidateQueries({ queryKey: ['gateway'] })
+
+                    const match = /^\/gateway\/teams\/[^/]+(\/.*)?$/.exec(location.pathname)
+                    if (match) {
+                      const suffix = match[1] || '/overview'
+                      navigate(`/gateway/teams/${team.id}${suffix}`)
+                    }
                   }}
                 >
                   <Check

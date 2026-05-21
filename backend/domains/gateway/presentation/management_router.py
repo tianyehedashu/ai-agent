@@ -3,18 +3,9 @@ Gateway Management Router (/api/v1/gateway/*)
 
 聚合入口 — 按现有 section 注释拆分至 ``presentation/routers/`` 子模块,本文件仅 ``include_router``：
 
-- ``virtual_keys``  : ``/keys`` 列表 / 创建 / 撤销
-- ``credentials``   : ``/credentials`` 团队凭据 CRUD + 探测 + 批量导入
-- ``my_credentials``: ``/my-credentials`` 用户私有凭据（JWT only,不要求 X-Team-Id）
-- ``my_models``     : ``/my-models`` 个人注册模型 + ``/models/available``
-- ``models``        : ``/models`` 团队模型 + ``/models/presets`` + ``/admin/credential-stats``
-- ``routes``        : ``/routes`` 虚拟路由
-- ``budgets``       : ``/budgets`` 预算
-- ``logs``          : ``/logs`` 调用日志（``UsageAggregation`` workspace/user 切片）
-- ``dashboard``     : ``/dashboard/summary``、``/dashboard/margin``
-- ``alerts``        : ``/alerts/rules``、``/alerts/events``
-- ``plans``         : ``ProviderPlan`` + ``EntitlementPlan``
-- ``features``      : ``/features`` 运行时能力开关（与 GATEWAY_* env 对齐）
+- ``team_scoped``   : ``/teams/{team_id}/*`` 团队资源（keys / credentials / models / …）
+- ``my_credentials``: ``/my-credentials`` 用户私有凭据（JWT only, 不要求 team 路径）
+- ``my_models``     : ``/my-models`` 个人注册模型 + ``/models/available``（用户域）
 
 团队 CRUD 与成员见 ``domains.tenancy.presentation.teams_router``（同前缀挂载）。
 
@@ -30,35 +21,15 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from domains.gateway.presentation.routers import (
-    alerts,
-    budgets,
-    credentials,
-    dashboard,
-    features,
-    logs,
-    models,
     my_credentials,
     my_models,
-    plans,
-    pricing,
-    routes,
-    virtual_keys,
+    team_scoped,
 )
 
 router = APIRouter(prefix="/api/v1/gateway", tags=["AI Gateway"])
 
-router.include_router(virtual_keys.router)
-router.include_router(credentials.router)
+router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)
 router.include_router(my_models.router)
-router.include_router(models.router)
-router.include_router(routes.router)
-router.include_router(budgets.router)
-router.include_router(logs.router)
-router.include_router(dashboard.router)
-router.include_router(alerts.router)
-router.include_router(plans.router)
-router.include_router(pricing.router)
-router.include_router(features.router)
 
 __all__ = ["router"]

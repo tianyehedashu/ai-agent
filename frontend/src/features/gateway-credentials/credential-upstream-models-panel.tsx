@@ -31,6 +31,7 @@ import {
 } from '@/features/gateway-credentials/upstream-import-utils'
 import { UpstreamModelList } from '@/features/gateway-credentials/upstream-model-list'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, RefreshCw, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -119,6 +120,7 @@ export function CredentialUpstreamModelsPanel({
   cacheKey: cacheKeyProp,
   onProbeResult,
 }: CredentialUpstreamModelsPanelProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const cacheKey = cacheKeyProp ?? credentialProbeCacheKey(scope, credentialId)
@@ -155,7 +157,7 @@ export function CredentialUpstreamModelsPanel({
     mutationFn: async () =>
       scope === 'user'
         ? gatewayApi.probeMyCredential(credentialId)
-        : gatewayApi.probeTeamCredential(credentialId),
+        : gatewayApi.probeTeamCredential(teamId, credentialId),
     onSuccess: (data) => {
       writeProbeCache(data)
       setSelected(new Set())
@@ -222,7 +224,7 @@ export function CredentialUpstreamModelsPanel({
         enabled,
         items: ids.map((upstream_model_id) => ({ upstream_model_id, name: null })),
       }
-      return gatewayApi.batchImportTeamModelsFromUpstream(credentialId, body)
+      return gatewayApi.batchImportTeamModelsFromUpstream(teamId, credentialId, body)
     },
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })

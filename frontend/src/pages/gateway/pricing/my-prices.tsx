@@ -8,6 +8,7 @@ import { gatewayApi } from '@/api/gateway'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { cn } from '@/lib/utils'
 
 const columns: readonly PricingTableColumn[] = [
@@ -17,12 +18,13 @@ const columns: readonly PricingTableColumn[] = [
 ]
 
 export default function GatewayPricingMyPricesPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const currency = GATEWAY_DISPLAY_CURRENCY
   const [searchParams] = useSearchParams()
   const targetModel = searchParams.get('model')?.trim() ?? ''
   const pricesQuery = useQuery({
-    queryKey: ['gateway-pricing-my', currency],
-    queryFn: () => gatewayApi.listMyPrices({ currency }),
+    queryKey: ['gateway-pricing-my', teamId, currency],
+    queryFn: () => gatewayApi.listMyPrices(teamId, { currency }),
   })
 
   const rows = useMemo(() => {

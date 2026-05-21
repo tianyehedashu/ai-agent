@@ -11,9 +11,14 @@ import uuid
 from httpx import AsyncClient
 import pytest
 
+from bootstrap.config import settings
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
+)
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.identity.application import UserUseCase
+from libs.crypto import derive_encryption_key, encrypt_value
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 
@@ -82,8 +87,8 @@ class TestGatewayManagementApi:
         db_session.add(row)
         await db_session.commit()
 
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
-        r = await dev_client.get(f"/api/v1/gateway/logs/{log_id}", headers=headers)
+        headers = auth_headers
+        r = await dev_client.get(ff"/api/v1/gateway/teams{team.id}/logs/{log_id}", headers=headers)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["id"] == str(log_id)
@@ -179,9 +184,9 @@ class TestGatewayManagementApi:
         )
         await db_session.commit()
 
-        headers = {**auth_headers, "X-Team-Id": str(shared.id)}
+        headers = auth_headers
         logs = await dev_client.get(
-            "/api/v1/gateway/logs?usage_aggregation=user&page_size=10",
+            f"/api/v1/gateway/teams{shared.id}/logs?usage_aggregation=user&page_size=10",
             headers=headers,
         )
         assert logs.status_code == 200, logs.text
@@ -191,14 +196,14 @@ class TestGatewayManagementApi:
         assert str(other_log_id) not in ids
 
         detail = await dev_client.get(
-            f"/api/v1/gateway/logs/{personal_log_id}?usage_aggregation=user",
+            ff"/api/v1/gateway/teams{shared.id}/logs/{personal_log_id}?usage_aggregation=user",
             headers=headers,
         )
         assert detail.status_code == 200, detail.text
         assert detail.json()["id"] == str(personal_log_id)
 
         summary = await dev_client.get(
-            "/api/v1/gateway/dashboard/summary?usage_aggregation=user&days=1",
+            f"/api/v1/gateway/teams{shared.id}/dashboard/summary?usage_aggregation=user&days=1",
             headers=headers,
         )
         assert summary.status_code == 200, summary.text
@@ -311,10 +316,10 @@ class TestGatewayManagementApi:
         member_uc = UserUseCase(db_session)
         member_token = await member_uc.create_token(member)
         member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
-        team_headers = {**member_headers, "X-Team-Id": str(shared.id)}
+        team_headers = member_headers
 
         logs = await dev_client.get(
-            "/api/v1/gateway/logs",
+            f"/api/v1/gateway/teams{shared.id}/logs",
             params={"usage_aggregation": "workspace", "page_size": 50, "page": 1},
             headers=team_headers,
         )
@@ -325,14 +330,14 @@ class TestGatewayManagementApi:
         assert ids == {str(log_member_vkey), str(log_member_platform)}
 
         ok = await dev_client.get(
-            f"/api/v1/gateway/logs/{log_member_vkey}",
+            ff"/api/v1/gateway/teams{shared.id}/logs/{log_member_vkey}",
             params={"usage_aggregation": "workspace"},
             headers=team_headers,
         )
         assert ok.status_code == 200, ok.text
 
         denied = await dev_client.get(
-            f"/api/v1/gateway/logs/{log_owner_vkey}",
+            ff"/api/v1/gateway/teams{shared.id}/logs/{log_owner_vkey}",
             params={"usage_aggregation": "workspace"},
             headers=team_headers,
         )
@@ -348,15 +353,15 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
-        r_all = await dev_client.get("/api/v1/gateway/models/presets", headers=headers)
+        headers = auth_headers
+        r_all = await dev_client.get(f"/api/v1/gateway/teams{team.id}/models/presets", headers=headers)
         assert r_all.status_code == 200, r_all.text
         all_presets = r_all.json()
         if not all_presets:
             pytest.skip("no catalog presets in environment")
         p0 = str(all_presets[0]["provider"])
         r_f = await dev_client.get(
-            "/api/v1/gateway/models/presets",
+            f"/api/v1/gateway/teams{team.id}/models/presets",
             params={"provider": p0},
             headers=headers,
         )
@@ -375,10 +380,10 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         name = f"int-test-cred-{uuid.uuid4().hex[:8]}"
         r_create = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "openai",
@@ -394,21 +399,21 @@ class TestGatewayManagementApi:
         assert "api_key_masked" in cred_body
         assert "sk-int-test-key-for-gateway-123456" not in cred_body["api_key_masked"]
 
-        r_get = await dev_client.get(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        r_get = await dev_client.get(ff"/api/v1/gateway/teams{team.id}/credentials/{cid}", headers=headers)
         assert r_get.status_code == 200, r_get.text
         got = r_get.json()
         assert got["id"] == cid
         assert got["name"] == name
 
         r_reveal = await dev_client.get(
-            f"/api/v1/gateway/credentials/{cid}/reveal",
+            ff"/api/v1/gateway/teams{team.id}/credentials/{cid}/reveal",
             headers=headers,
         )
         assert r_reveal.status_code == 200, r_reveal.text
         assert r_reveal.json()["api_key"] == "sk-int-test-key-for-gateway-123456"
 
         r_models = await dev_client.get(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             params={"credential_id": cid},
         )
@@ -426,10 +431,10 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         cred_name = f"del-cascade-{uuid.uuid4().hex[:8]}"
         r_cred = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "openai",
@@ -442,7 +447,7 @@ class TestGatewayManagementApi:
         cid = r_cred.json()["id"]
         model_name = f"vm-del-{uuid.uuid4().hex[:6]}"
         r_model = await dev_client.post(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             json={
                 "name": model_name,
@@ -458,14 +463,14 @@ class TestGatewayManagementApi:
         assert model_body["tenant_id"] == str(team.id)
         assert model_body["team_id"] == str(team.id)
 
-        r_del = await dev_client.delete(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        r_del = await dev_client.delete(ff"/api/v1/gateway/teams{team.id}/credentials/{cid}", headers=headers)
         assert r_del.status_code == 204, r_del.text
 
-        r_cred_after = await dev_client.get(f"/api/v1/gateway/credentials/{cid}", headers=headers)
+        r_cred_after = await dev_client.get(ff"/api/v1/gateway/teams{team.id}/credentials/{cid}", headers=headers)
         assert r_cred_after.status_code == 404
 
         r_models_after = await dev_client.get(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             params={"credential_id": cid},
         )
@@ -483,10 +488,10 @@ class TestGatewayManagementApi:
         """团队 POST /models：短 id 落库为 LiteLLM 全称；前缀与 provider 不一致时 400。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         cred_name = f"dscope-{uuid.uuid4().hex[:8]}"
         r_cred = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "dashscope",
@@ -499,7 +504,7 @@ class TestGatewayManagementApi:
         cid = r_cred.json()["id"]
         model_name = f"alias-{uuid.uuid4().hex[:6]}"
         r_model = await dev_client.post(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             json={
                 "name": model_name,
@@ -513,7 +518,7 @@ class TestGatewayManagementApi:
         assert r_model.json()["real_model"] == "dashscope/qwen-max"
 
         r_bad = await dev_client.post(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             json={
                 "name": f"alias-bad-{uuid.uuid4().hex[:6]}",
@@ -536,9 +541,9 @@ class TestGatewayManagementApi:
         """团队 POST /models：provider 与凭据 provider 不一致时 400。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         r_openai = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "openai",
@@ -550,7 +555,7 @@ class TestGatewayManagementApi:
         assert r_openai.status_code == 201, r_openai.text
         cid = r_openai.json()["id"]
         r_model = await dev_client.post(
-            "/api/v1/gateway/models",
+            f"/api/v1/gateway/teams{team.id}/models",
             headers=headers,
             json={
                 "name": f"mismatch-{uuid.uuid4().hex[:6]}",
@@ -576,10 +581,10 @@ class TestGatewayManagementApi:
         """Azure 凭据可携带 api_version 等 extra 字段；tenant_id 落库正确。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         name = f"azure-{uuid.uuid4().hex[:8]}"
         r = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "azure",
@@ -609,10 +614,10 @@ class TestGatewayManagementApi:
         """Bedrock 凭据：api_key 装 access_key_id；secret/region/session_token 放 extra。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         name = f"bedrock-{uuid.uuid4().hex[:8]}"
         r = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "bedrock",
@@ -642,9 +647,9 @@ class TestGatewayManagementApi:
         """未在 MANAGED_GATEWAY_CREDENTIAL_PROVIDERS 白名单内的 provider → 422。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         r = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "nonexistent-vendor",
@@ -743,9 +748,9 @@ class TestGatewayManagementApi:
         assert registration_name
         model_id = created[0]["id"]
 
-        mgmt_headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        mgmt_headers = auth_headers
         ck = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{team.id}/keys",
             headers=mgmt_headers,
             json={"name": f"itest-personal-model-v1-{uuid.uuid4().hex[:6]}"},
         )
@@ -777,13 +782,13 @@ class TestGatewayManagementApi:
         """三组套餐管理 API：ProviderPlan、EntitlementPlan、usage/margin 读入口。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
         now = datetime.now(UTC).replace(microsecond=0)
         valid_from = (now - timedelta(minutes=1)).isoformat()
         valid_until = (now + timedelta(days=30)).isoformat()
 
         r_cred = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team.id}/credentials",
             headers=headers,
             json={
                 "provider": "openai",
@@ -796,7 +801,7 @@ class TestGatewayManagementApi:
         credential_id = r_cred.json()["id"]
 
         r_provider_create = await dev_client.post(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            ff"/api/v1/gateway/teams{team.id}/credentials/{credential_id}/provider-plans",
             headers=headers,
             json={
                 "real_model": "openai/gpt-4o-mini",
@@ -820,14 +825,14 @@ class TestGatewayManagementApi:
         assert provider_plan["quotas"][0]["reset_strategy"] == "calendar_daily_utc"
 
         r_provider_list = await dev_client.get(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            ff"/api/v1/gateway/teams{team.id}/credentials/{credential_id}/provider-plans",
             headers=headers,
         )
         assert r_provider_list.status_code == 200, r_provider_list.text
         assert any(p["id"] == provider_plan_id for p in r_provider_list.json())
 
         r_provider_patch = await dev_client.patch(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            ff"/api/v1/gateway/teams{team.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
             headers=headers,
             json={
                 "label": "OpenAI monthly pack",
@@ -846,14 +851,14 @@ class TestGatewayManagementApi:
         assert r_provider_patch.json()["quotas"][0]["reset_strategy"] == "calendar_monthly_utc"
 
         r_provider_usage = await dev_client.get(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plan-usage?days=7",
+            ff"/api/v1/gateway/teams{team.id}/credentials/{credential_id}/provider-plan-usage?days=7",
             headers=headers,
         )
         assert r_provider_usage.status_code == 200, r_provider_usage.text
         assert isinstance(r_provider_usage.json(), list)
 
         r_key = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{team.id}/keys",
             headers=headers,
             json={"name": f"plan-vkey-{uuid.uuid4().hex[:8]}"},
         )
@@ -861,7 +866,7 @@ class TestGatewayManagementApi:
         vkey_id = r_key.json()["id"]
 
         r_ent_create = await dev_client.post(
-            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            ff"/api/v1/gateway/teams{team.id}/keys/{vkey_id}/entitlements",
             headers=headers,
             json={
                 "label": "Customer daily pack",
@@ -888,7 +893,7 @@ class TestGatewayManagementApi:
         assert entitlement["quotas"][0]["reset_strategy"] == "calendar_daily_utc"
 
         r_ent_list = await dev_client.get(
-            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            ff"/api/v1/gateway/teams{team.id}/keys/{vkey_id}/entitlements",
             headers=headers,
         )
         assert r_ent_list.status_code == 200, r_ent_list.text
@@ -911,7 +916,7 @@ class TestGatewayManagementApi:
         assert r_ent_usage.json()["plan_id"] == entitlement_id
 
         r_margin = await dev_client.get(
-            "/api/v1/gateway/dashboard/margin?days=7&group_by=credential",
+            f"/api/v1/gateway/teams{team.id}/dashboard/margin?days=7&group_by=credential",
             headers=headers,
         )
         assert r_margin.status_code == 200, r_margin.text
@@ -940,13 +945,13 @@ class TestGatewayManagementApi:
         """
         team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers_a = {**auth_headers, "X-Team-Id": str(team_a.id)}
+        headers_a = auth_headers
         now = datetime.now(UTC).replace(microsecond=0)
         valid_from = (now - timedelta(minutes=1)).isoformat()
         valid_until = (now + timedelta(days=30)).isoformat()
 
         r_cred = await dev_client.post(
-            "/api/v1/gateway/credentials",
+            f"/api/v1/gateway/teams{team_a.id}/credentials",
             headers=headers_a,
             json={
                 "provider": "openai",
@@ -959,7 +964,7 @@ class TestGatewayManagementApi:
         credential_id = r_cred.json()["id"]
 
         r_pp = await dev_client.post(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            ff"/api/v1/gateway/teams{team_a.id}/credentials/{credential_id}/provider-plans",
             headers=headers_a,
             json={
                 "real_model": "openai/gpt-4o-mini",
@@ -975,7 +980,7 @@ class TestGatewayManagementApi:
         provider_plan_id = r_pp.json()["id"]
 
         r_key = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{team_a.id}/keys",
             headers=headers_a,
             json={"name": f"cross-team-vkey-{uuid.uuid4().hex[:8]}"},
         )
@@ -983,7 +988,7 @@ class TestGatewayManagementApi:
         vkey_id = r_key.json()["id"]
 
         r_ent = await dev_client.post(
-            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            ff"/api/v1/gateway/teams{team_a.id}/keys/{vkey_id}/entitlements",
             headers=headers_a,
             json={
                 "label": "Owner Entitlement",
@@ -1014,32 +1019,32 @@ class TestGatewayManagementApi:
         }
 
         r1 = await dev_client.get(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans",
+            ff"/api/v1/gateway/teams{team_a.id}/credentials/{credential_id}/provider-plans",
             headers=headers_b,
         )
         assert r1.status_code == 404, r1.text
 
         r2 = await dev_client.patch(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            ff"/api/v1/gateway/teams{team_a.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
             headers=headers_b,
             json={"label": "hijacked"},
         )
         assert r2.status_code == 404, r2.text
 
         r3 = await dev_client.delete(
-            f"/api/v1/gateway/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+            ff"/api/v1/gateway/teams{team_a.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
             headers=headers_b,
         )
         assert r3.status_code == 404, r3.text
 
         r4 = await dev_client.get(
-            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            ff"/api/v1/gateway/teams{team_a.id}/keys/{vkey_id}/entitlements",
             headers=headers_b,
         )
         assert r4.status_code == 404, r4.text
 
         r5 = await dev_client.post(
-            f"/api/v1/gateway/keys/{vkey_id}/entitlements",
+            ff"/api/v1/gateway/teams{team_a.id}/keys/{vkey_id}/entitlements",
             headers=headers_b,
             json={
                 "label": "hijack",
@@ -1087,10 +1092,10 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
 
         r_create = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{team.id}/keys",
             headers=headers,
             json={"name": f"reveal-{uuid.uuid4().hex[:6]}"},
         )
@@ -1100,26 +1105,26 @@ class TestGatewayManagementApi:
         key_id = created["id"]
 
         r_reveal = await dev_client.get(
-            f"/api/v1/gateway/keys/{key_id}/reveal",
+            ff"/api/v1/gateway/teams{team.id}/keys/{key_id}/reveal",
             headers=headers,
         )
         assert r_reveal.status_code == 200, r_reveal.text
         assert r_reveal.json()["plain_key"] == plain_at_create
 
         r_missing = await dev_client.get(
-            f"/api/v1/gateway/keys/{uuid.uuid4()}/reveal",
+            ff"/api/v1/gateway/teams{team.id}/keys/{uuid.uuid4()}/reveal",
             headers=headers,
         )
         assert r_missing.status_code == 404, r_missing.text
 
         r_revoke = await dev_client.delete(
-            f"/api/v1/gateway/keys/{key_id}",
+            ff"/api/v1/gateway/teams{team.id}/keys/{key_id}",
             headers=headers,
         )
         assert r_revoke.status_code == 204, r_revoke.text
 
         r_reveal_revoked = await dev_client.get(
-            f"/api/v1/gateway/keys/{key_id}/reveal",
+            ff"/api/v1/gateway/teams{team.id}/keys/{key_id}/reveal",
             headers=headers,
         )
         assert r_reveal_revoked.status_code == 404, r_reveal_revoked.text
@@ -1147,7 +1152,7 @@ class TestGatewayManagementApi:
         await ts.add_member(shared.id, member.id, "member")
         await db_session.commit()
 
-        owner_headers = {**auth_headers, "X-Team-Id": str(shared.id)}
+        owner_headers = auth_headers
         member_uc = UserUseCase(db_session)
         member_token = await member_uc.create_token(member)
         member_headers = {
@@ -1156,7 +1161,7 @@ class TestGatewayManagementApi:
         }
 
         r_owner_key = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{shared.id}/keys",
             headers=owner_headers,
             json={"name": f"owner-key-{uuid.uuid4().hex[:6]}"},
         )
@@ -1164,31 +1169,31 @@ class TestGatewayManagementApi:
         owner_key_id = r_owner_key.json()["id"]
 
         r_member_key = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{shared.id}/keys",
             headers=member_headers,
             json={"name": f"member-key-{uuid.uuid4().hex[:6]}"},
         )
         assert r_member_key.status_code == 201, r_member_key.text
         member_key_id = r_member_key.json()["id"]
 
-        r_owner_list = await dev_client.get("/api/v1/gateway/keys", headers=owner_headers)
+        r_owner_list = await dev_client.get(f"/api/v1/gateway/teams{shared.id}/keys", headers=owner_headers)
         assert r_owner_list.status_code == 200, r_owner_list.text
         owner_ids = {item["id"] for item in r_owner_list.json()}
         assert owner_ids == {owner_key_id}
 
-        r_member_list = await dev_client.get("/api/v1/gateway/keys", headers=member_headers)
+        r_member_list = await dev_client.get(f"/api/v1/gateway/teams{shared.id}/keys", headers=member_headers)
         assert r_member_list.status_code == 200, r_member_list.text
         member_ids = {item["id"] for item in r_member_list.json()}
         assert member_ids == {member_key_id}
 
         r_member_reveal_owner = await dev_client.get(
-            f"/api/v1/gateway/keys/{owner_key_id}/reveal",
+            ff"/api/v1/gateway/teams{shared.id}/keys/{owner_key_id}/reveal",
             headers=member_headers,
         )
         assert r_member_reveal_owner.status_code == 404, r_member_reveal_owner.text
 
         r_owner_reveal_member = await dev_client.get(
-            f"/api/v1/gateway/keys/{member_key_id}/reveal",
+            ff"/api/v1/gateway/teams{shared.id}/keys/{member_key_id}/reveal",
             headers=owner_headers,
         )
         assert r_owner_reveal_member.status_code == 404, r_owner_reveal_member.text
@@ -1203,12 +1208,12 @@ class TestGatewayManagementApi:
     ) -> None:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
 
         key_ids: list[str] = []
         for i in range(2):
             r_create = await dev_client.post(
-                "/api/v1/gateway/keys",
+                f"/api/v1/gateway/teams{team.id}/keys",
                 headers=headers,
                 json={"name": f"batch-revoke-{i}-{uuid.uuid4().hex[:6]}"},
             )
@@ -1216,7 +1221,7 @@ class TestGatewayManagementApi:
             key_ids.append(r_create.json()["id"])
 
         r_batch = await dev_client.post(
-            "/api/v1/gateway/keys/revoke-batch",
+            f"/api/v1/gateway/teams{team.id}/keys/revoke-batch",
             headers=headers,
             json={"key_ids": key_ids},
         )
@@ -1225,7 +1230,7 @@ class TestGatewayManagementApi:
         assert payload["revoked"] == key_ids
         assert payload["failed"] == []
 
-        r_list = await dev_client.get("/api/v1/gateway/keys", headers=headers)
+        r_list = await dev_client.get(f"/api/v1/gateway/teams{team.id}/keys", headers=headers)
         assert r_list.status_code == 200, r_list.text
         listed_ids = {item["id"] for item in r_list.json()}
         for key_id in key_ids:
@@ -1233,7 +1238,7 @@ class TestGatewayManagementApi:
 
         missing_id = str(uuid.uuid4())
         r_partial = await dev_client.post(
-            "/api/v1/gateway/keys/revoke-batch",
+            f"/api/v1/gateway/teams{team.id}/keys/revoke-batch",
             headers=headers,
             json={"key_ids": [missing_id]},
         )
@@ -1243,6 +1248,94 @@ class TestGatewayManagementApi:
         assert len(partial["failed"]) == 1
         assert partial["failed"][0]["key_id"] == missing_id
         assert partial["failed"][0]["reason"] == "not_found"
+
+    @pytest.mark.asyncio
+    async def test_credential_summaries_member_includes_system_without_secrets(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """团队 member 可通过 summaries 解析 system 凭据名；完整列表仍不含 system。"""
+        owner = test_user
+        member = User(
+            email=f"cred_sum_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Cred Summary Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Cred Summary Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+
+        encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+        sys_name = f"sys-sum-{uuid.uuid4().hex[:8]}"
+        sys_cred = await SystemProviderCredentialRepository(db_session).create(
+            provider="openai",
+            name=sys_name,
+            api_key_encrypted=encrypt_value("sk-sys-summary-test-key", encryption_key),
+            api_base="https://api.openai.com/v1",
+        )
+        await db_session.commit()
+
+        owner_headers = auth_headers
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        team_cred_name = f"team-sum-{uuid.uuid4().hex[:8]}"
+        r_team_cred = await dev_client.post(
+            f"/api/v1/gateway/teams{shared.id}/credentials",
+            headers=owner_headers,
+            json={
+                "provider": "openai",
+                "name": team_cred_name,
+                "api_key": "sk-team-summary-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_team_cred.status_code == 201, r_team_cred.text
+        team_cred_id = r_team_cred.json()["id"]
+
+        r_summaries = await dev_client.get(
+            f"/api/v1/gateway/teams{shared.id}/credentials/summaries",
+            headers=member_headers,
+        )
+        assert r_summaries.status_code == 200, r_summaries.text
+        summaries = r_summaries.json()
+        by_id = {item["id"]: item for item in summaries}
+        assert str(sys_cred.id) in by_id
+        assert by_id[str(sys_cred.id)]["name"] == sys_name
+        assert by_id[str(sys_cred.id)]["scope"] == "system"
+        assert by_id[str(team_cred_id)]["name"] == team_cred_name
+        assert by_id[str(team_cred_id)]["scope"] == "team"
+        for item in summaries:
+            assert "api_key_masked" not in item
+            assert "api_base" not in item
+            assert "extra" not in item
+            assert "created_at" not in item
+
+        r_list = await dev_client.get(
+            f"/api/v1/gateway/teams{shared.id}/credentials",
+            headers=member_headers,
+        )
+        assert r_list.status_code == 200, r_list.text
+        list_ids = {item["id"] for item in r_list.json()}
+        assert str(team_cred_id) in list_ids
+        assert str(sys_cred.id) not in list_ids
+
+        r_sys_detail = await dev_client.get(
+            ff"/api/v1/gateway/teams{shared.id}/credentials/{sys_cred.id}",
+            headers=member_headers,
+        )
+        assert r_sys_detail.status_code == 403, r_sys_detail.text
 
 
 @pytest.mark.integration
@@ -1260,15 +1353,15 @@ class TestGatewayFeaturesApi:
 
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
 
         monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", False)
-        r_off = await dev_client.get("/api/v1/gateway/features", headers=headers)
+        r_off = await dev_client.get(f"/api/v1/gateway/teams{team.id}/features", headers=headers)
         assert r_off.status_code == 200, r_off.text
         assert r_off.json()["pii_guardrail_globally_enabled"] is False
 
         monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", True)
-        r_on = await dev_client.get("/api/v1/gateway/features", headers=headers)
+        r_on = await dev_client.get(f"/api/v1/gateway/teams{team.id}/features", headers=headers)
         assert r_on.status_code == 200, r_on.text
         assert r_on.json()["pii_guardrail_globally_enabled"] is True
 
@@ -1289,10 +1382,10 @@ class TestGatewayPiiGuardrailCreateKey:
         monkeypatch.setattr(settings, "gateway_default_guardrail_enabled", False)
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
-        headers = {**auth_headers, "X-Team-Id": str(team.id)}
+        headers = auth_headers
 
         r = await dev_client.post(
-            "/api/v1/gateway/keys",
+            f"/api/v1/gateway/teams{team.id}/keys",
             headers=headers,
             json={"name": f"pii-off-{uuid.uuid4().hex[:6]}", "guardrail_enabled": True},
         )

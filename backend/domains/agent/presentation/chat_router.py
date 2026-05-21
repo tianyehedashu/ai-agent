@@ -13,6 +13,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 import json
 import logging
 from typing import Annotated, Any
+import uuid
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -26,14 +27,14 @@ from domains.gateway.application.sql_model_catalog import get_model_catalog_adap
 from domains.identity.application.permission_context_composer import PermissionContextComposer
 from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase
-from domains.tenancy.presentation.team_dependencies import AttachOptionalTeamContext
+from domains.tenancy.presentation.team_dependencies import merge_optional_gateway_team
 from libs.api.deps import (
     build_session_use_case,
     get_checkpoint_service,
     get_sandbox_service,
     get_session_service,
 )
-from libs.db.database import get_session_context
+from libs.db.database import get_db, get_session_context
 from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
 
@@ -136,6 +137,10 @@ class ChatRequest(BaseModel):
         le=1.0,
         description="图生图强度（仅 image_gen 且提供参考图时有效）",
     )
+    gateway_team_id: uuid.UUID | None = Field(
+        default=None,
+        description="可选：Gateway 计费团队（UI 团队切换器）；写入 PermissionContext 供内部桥接",
+    )
 
     @field_validator("session_id")
     @classmethod
@@ -155,6 +160,10 @@ class ResumeRequest(BaseModel):
     checkpoint_id: str
     action: str = Field(..., pattern="^(approve|reject|modify)$")
     modified_args: dict[str, Any] | None = None
+    gateway_team_id: uuid.UUID | None = Field(
+        default=None,
+        description="可选：Gateway 计费团队（与 POST /chat 一致）",
+    )
 
 
 class DiffRequest(BaseModel):
@@ -194,14 +203,22 @@ class DiffResponse(BaseModel):
 async def chat(
     request: ChatRequest,
     http_request: Request,
-    _: AttachOptionalTeamContext,
     current_user: AuthUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> StreamingResponse:
     """
     发送消息并获取流式响应
 
     使用 Server-Sent Events (SSE) 返回事件流
     """
+
+    if not current_user.is_anonymous and request.gateway_team_id is not None:
+        await merge_optional_gateway_team(
+            db,
+            user_id=uuid.UUID(current_user.id),
+            platform_user_role=current_user.role,
+            team_id=request.gateway_team_id,
+        )
 
     permission_context = get_permission_context()
 
@@ -258,14 +275,22 @@ async def chat(
 async def resume_execution(
     request: ResumeRequest,
     http_request: Request,
-    _: AttachOptionalTeamContext,
     current_user: AuthUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> StreamingResponse:
     """
     恢复中断的执行
 
     用于 Human-in-the-Loop 场景
     """
+
+    if not current_user.is_anonymous and request.gateway_team_id is not None:
+        await merge_optional_gateway_team(
+            db,
+            user_id=uuid.UUID(current_user.id),
+            platform_user_role=current_user.role,
+            team_id=request.gateway_team_id,
+        )
 
     permission_context = get_permission_context()
 

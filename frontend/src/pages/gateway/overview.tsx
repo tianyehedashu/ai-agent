@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { marginGroupRowTitle } from '@/features/gateway-usage/credential-display'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] = [
   { value: '1d', days: 1, label: '24 小时' },
@@ -32,17 +33,18 @@ function coalesceNumber(value: unknown): number {
 }
 
 export default function GatewayOverviewPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['gateway', 'dashboard', usageAggregation, days],
-    queryFn: () => gatewayApi.dashboard({ days, usage_aggregation: usageAggregation }),
+    queryKey: ['gateway', 'dashboard', teamId, usageAggregation, days],
+    queryFn: () => gatewayApi.dashboard(teamId, { days, usage_aggregation: usageAggregation }),
   })
   const { data: margin, isLoading: marginLoading } = useQuery({
-    queryKey: ['gateway', 'dashboard', 'margin', days, 'credential'],
-    queryFn: () => gatewayApi.dashboardMargin({ days, group_by: 'credential' }),
+    queryKey: ['gateway', 'dashboard', 'margin', teamId, days, 'credential'],
+    queryFn: () => gatewayApi.dashboardMargin(teamId, { days, group_by: 'credential' }),
   })
 
   const totalTokens = useMemo(() => {

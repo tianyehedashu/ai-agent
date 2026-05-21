@@ -48,6 +48,7 @@ import {
 import { invalidateCredentialProbeCache } from './credential-probe-cache'
 import { displayListApiKeyMasked } from './mask-display'
 import { apiKeyLabelForProvider, extraFieldsForProvider } from './provider-schemas'
+import { invalidateCredentialSummariesCache } from './use-credential-directory'
 
 const AddModelsDialog = lazy(() =>
   import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
@@ -110,6 +111,7 @@ export function PersonalCredentialsPanel({
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+    invalidateCredentialSummariesCache(queryClient)
   }, [queryClient])
 
   const resetEditForm = useCallback((): void => {

@@ -7,6 +7,8 @@ import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
 
 import { ModelInspector } from './model-inspector'
@@ -16,32 +18,35 @@ interface TeamModelDetailPaneProps {
 }
 
 export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
+  const { canWrite } = useGatewayPermission()
   const [searchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
   const [usageDays] = useState<UsagePeriodDays>(7)
 
   const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey('', credentialFilter),
+    queryKey: gatewayModelsListQueryKey(teamId, '', credentialFilter),
     queryFn: () =>
-      gatewayApi.listModels({
+      gatewayApi.listModels(teamId, {
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       }),
   })
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
-    queryKey: ['gateway', 'models', 'usage-summary', '', usageDays],
-    queryFn: () => gatewayApi.modelsUsageSummary({ days: usageDays }),
+    queryKey: ['gateway', 'models', 'usage-summary', teamId, '', usageDays],
+    queryFn: () => gatewayApi.modelsUsageSummary(teamId, { days: usageDays }),
   })
 
   const { data: routes } = useQuery({
-    queryKey: ['gateway', 'routes'],
-    queryFn: () => gatewayApi.listRoutes(),
+    queryKey: ['gateway', 'routes', teamId],
+    queryFn: () => gatewayApi.listRoutes(teamId),
     enabled: modelId !== '',
   })
 
   const { data: credentials } = useQuery({
-    queryKey: ['gateway', 'credentials'],
-    queryFn: () => gatewayApi.listCredentials(),
+    queryKey: ['gateway', 'credentials', teamId],
+    queryFn: () => gatewayApi.listCredentials(teamId),
+    enabled: canWrite,
   })
 
   const usageByRouteName = useMemo(() => {

@@ -29,7 +29,7 @@ from domains.tenancy.domain.policies.team_role import (
     assert_team_role,
 )
 from libs.db.database import get_db
-from libs.iam.permission_context import merge_team_into_permission_context
+from libs.iam.permission_context import merge_team_into_permission_context, get_permission_context
 from libs.exceptions import (
     PermissionDeniedError,
     PersonalTeamNotInitializedError,
@@ -38,21 +38,47 @@ from libs.exceptions import (
 )
 from libs.iam.team_http import map_team_access_exception_to_http
 
-__all__ = [
-    "AttachOptionalTeamContext",
-    "CurrentTeam",
-    "RequiredGatewayAdmin",
-    "RequiredTeamAdmin",
-    "RequiredTeamMember",
-    "RequiredTeamOwner",
-    "ResolvedTeam",
-    "attach_optional_team_from_header",
-    "resolve_current_team",
-]
-
 ResolvedTeam = ManagementTeamContext
 
 _GATEWAY_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def merge_optional_gateway_team(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    platform_user_role: str,
+    team_id: uuid.UUID | None,
+) -> None:
+    """将显式 team_id 写入 PermissionContext（Chat 等无路径团队入口）。"""
+    if team_id is None:
+        return
+    if get_permission_context() is None:
+        return
+    resolver = TenancyManagementTeamResolveUseCase(db)
+    try:
+        resolved = await resolver.resolve_management_team(
+            user_id=user_id,
+            platform_user_role=platform_user_role,
+            x_team_id=None,
+            path_team_id=str(team_id),
+        )
+    except (
+        TeamNotFoundError,
+        TeamPermissionDeniedError,
+        PersonalTeamNotInitializedError,
+    ) as exc:
+        http_exc = map_team_access_exception_to_http(exc)
+        if http_exc is None:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unmapped team access error",
+            ) from exc
+        raise http_exc from exc
+    merge_team_into_permission_context(
+        team_id=resolved.team_id,
+        team_role=resolved.team_role,
+    )
 
 
 def _assert_gateway_not_viewer_write(request: Request, platform_role: str) -> None:
@@ -72,7 +98,7 @@ async def resolve_current_team(
     db: Annotated[AsyncSession, Depends(get_db)],
     x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
 ) -> ManagementTeamContext:
-    """解析当前团队：X-Team-Id > 路径 team_id > personal team。匿名 401。"""
+    """解析当前团队：路径 team_id > X-Team-Id > personal team。匿名 401。"""
     if current_user.is_anonymous:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -223,3 +249,17 @@ RequiredTeamMember = Annotated[ManagementTeamContext, Depends(require_team_membe
 RequiredTeamAdmin = Annotated[ManagementTeamContext, Depends(require_team_admin)]
 RequiredTeamOwner = Annotated[ManagementTeamContext, Depends(require_team_owner)]
 RequiredGatewayAdmin = Annotated[ManagementTeamContext, Depends(require_gateway_admin)]
+
+
+__all__ = [
+    "AttachOptionalTeamContext",
+    "CurrentTeam",
+    "RequiredGatewayAdmin",
+    "RequiredTeamAdmin",
+    "RequiredTeamMember",
+    "RequiredTeamOwner",
+    "ResolvedTeam",
+    "attach_optional_team_from_header",
+    "merge_optional_gateway_team",
+    "resolve_current_team",
+]

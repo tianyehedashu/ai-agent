@@ -19,6 +19,7 @@ from domains.gateway.domain.errors import (
     EntitlementPlanExhaustedError,
     GatewayTeamHeaderInvalidError,
     GatewayTeamHeaderRequiredError,
+    GatewayVkeyTeamHeaderMismatchError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
     PlatformApiKeyInvalidError,
@@ -71,7 +72,7 @@ _GATEWAY_DOMAIN_HTTP: list[tuple[tuple[type[Exception], ...], _GatewayHttpBuilde
         lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
     ),
     (
-        (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError),
+        (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError, GatewayVkeyTeamHeaderMismatchError),
         lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
     ),
     (

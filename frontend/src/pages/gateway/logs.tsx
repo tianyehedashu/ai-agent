@@ -25,6 +25,7 @@ import {
 } from '@/features/gateway-usage/credential-display'
 import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakdown'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronDown } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 
@@ -34,14 +35,15 @@ const PAGE_SIZE = 100
 const LOG_GRID_COLS = 'grid grid-cols-[150px_120px_112px_88px_72px_96px_80px_72px_minmax(0,1fr)]'
 
 export default function GatewayLogsPage(): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
-    queryKey: ['gateway', 'logs', usageAggregation],
+    queryKey: ['gateway', 'logs', teamId, usageAggregation],
     initialPageParam: 1,
     queryFn: ({ pageParam }: { pageParam: number }) =>
-      gatewayApi.listLogs({
+      gatewayApi.listLogs(teamId, {
         usage_aggregation: usageAggregation,
         page: pageParam,
         page_size: PAGE_SIZE,
@@ -73,12 +75,12 @@ export default function GatewayLogsPage(): React.JSX.Element {
   }, [lastVisibleIndex, items.length, hasNextPage, isFetching, fetchNextPage])
 
   const { data: detail } = useQuery({
-    queryKey: ['gateway', 'log', selectedId, usageAggregation],
+    queryKey: ['gateway', 'log', teamId, selectedId, usageAggregation],
     queryFn: () => {
       if (typeof selectedId !== 'string' || selectedId.length === 0) {
         return Promise.reject(new Error('selectedId is required when query runs'))
       }
-      return gatewayApi.getLog(selectedId, { usage_aggregation: usageAggregation })
+      return gatewayApi.getLog(teamId, selectedId, { usage_aggregation: usageAggregation })
     },
     enabled: !!selectedId,
   })
