@@ -6,11 +6,11 @@ Product Image Gen Task Model - 产品 8 图生成任务
 
 import uuid
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel, OwnedMixin
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
 class ProductImageGenTaskStatus:
@@ -22,28 +22,19 @@ class ProductImageGenTaskStatus:
     FAILED = "failed"
 
 
-class ProductImageGenTask(BaseModel, OwnedMixin):
-    """产品 8 图生成任务"""
+class ProductImageGenTask(BaseModel, TenantScopedMixin):
+    """产品 8 图生成任务。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "product_image_gen_tasks"
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
-    anonymous_user_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-    )
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("product_info_jobs.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="关联的产品信息任务",
+        comment="refs product_info_jobs.id (no DB FK)",
     )
     status: Mapped[str] = mapped_column(
         String(20),

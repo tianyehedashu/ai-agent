@@ -272,6 +272,7 @@ markers = [
     "integration: Integration tests",
     "e2e: End-to-end tests",
     "slow: Slow tests (multi-turn conversations, long context)",
+    "architecture: Architecture guardrail tests",
 ]
 filterwarnings = [
     # 抑制 litellm 的 RuntimeWarning（第三方库问题）

@@ -17,7 +17,7 @@ from domains.session.domain.interfaces.session_repository import (
 from domains.session.infrastructure.models.session import Session
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.db.base_repository import TenantScopedRepositoryBase
-from libs.db.permission_context import get_permission_context
+from libs.iam.permission_context import get_permission_context
 
 
 class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryInterface):
@@ -95,13 +95,24 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
                     "This may indicate an authorization bug."
                 )
 
-        return await self.find_for_tenants(
-            skip=skip,
-            limit=limit,
-            order_by="updated_at",
-            order_desc=True,
-            agent_id=agent_id,
-        )
+        if user_id is not None:
+            tenant_id = await self._personal_tenant_id(user_id)
+        elif anonymous_user_id:
+            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
+                anonymous_user_id
+            )
+            tenant_id = await self._personal_tenant_id(shadow_id)
+        else:
+            msg = "Either user_id or anonymous_user_id is required"
+            raise ValueError(msg)
+
+        query = select(self.model_class).where(self.model_class.tenant_id == tenant_id)
+        if agent_id is not None:
+            query = query.where(self.model_class.agent_id == agent_id)
+        order_column = self.model_class.updated_at
+        query = query.order_by(order_column.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
     async def update(
         self,

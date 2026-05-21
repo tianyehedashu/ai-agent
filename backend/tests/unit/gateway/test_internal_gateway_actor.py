@@ -6,7 +6,7 @@ from domains.gateway.application.internal_bridge_actor import (
     resolve_internal_gateway_team_id,
     resolve_internal_gateway_user_id,
 )
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,

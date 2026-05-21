@@ -11,7 +11,6 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -52,9 +51,9 @@ class SystemGatewayModel(BaseModel):
     real_model: Mapped[str] = mapped_column(String(200), nullable=False)
     credential_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("system_provider_credentials.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+        comment="refs system_provider_credentials.id (no DB FK)",
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     weight: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)

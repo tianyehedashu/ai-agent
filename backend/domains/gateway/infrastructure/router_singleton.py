@@ -200,7 +200,11 @@ def _build_deployment(
         ),
         "model_info": {
             "id": str(src.id),
-            "team_id": str(tid) if (tid := getattr(src, "tenant_id", None)) else None,
+            "team_id": (
+                str(src_tenant_id)
+                if (src_tenant_id := getattr(src, "tenant_id", None)) is not None
+                else None
+            ),
             "capability": src.capability,
             "weight": src.weight,
             "gateway_model_name": src.name,

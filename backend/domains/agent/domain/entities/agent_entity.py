@@ -14,7 +14,7 @@ import uuid
 class AgentConfig:
     """Agent 配置值对象"""
 
-    model: str = "claude-3-5-sonnet-20241022"
+    model: str = "claude-3-5-sonnet"
     temperature: float = 0.7
     max_tokens: int = 4096
     max_iterations: int = 20

@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.agent.domain.types import MessageRole
-from domains.identity.domain.types import Principal
 from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
+from domains.identity.domain.rbac import Role
+from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
+from domains.session.domain.policies.session_access import can_access_personal_session
 from domains.session.infrastructure.repositories import SessionRepository
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.exceptions import NotFoundError, PermissionDeniedError
@@ -157,6 +159,42 @@ class SessionUseCase:
             limit=limit,
         )
 
+    async def list_sessions_for_principal(
+        self,
+        *,
+        principal_id: str,
+        is_anonymous: bool,
+        agent_id: str | None = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> list[Session]:
+        """按认证主体列出 personal 工作区会话。"""
+        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        return await self.list_sessions(
+            user_id=str(owner.user_id) if owner.user_id else None,
+            anonymous_user_id=owner.anonymous_user_id,
+            agent_id=agent_id,
+            skip=skip,
+            limit=limit,
+        )
+
+    async def create_session_for_principal(
+        self,
+        *,
+        principal_id: str,
+        is_anonymous: bool,
+        agent_id: str | None = None,
+        title: str | None = None,
+    ) -> Session:
+        """按认证主体创建会话。"""
+        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        return await self.create_session(
+            user_id=str(owner.user_id) if owner.user_id else None,
+            anonymous_user_id=owner.anonymous_user_id,
+            agent_id=agent_id,
+            title=title,
+        )
+
     async def update_session(
         self,
         session_id: str,
@@ -261,6 +299,27 @@ class SessionUseCase:
     # =========================================================================
     # Ownership Check
     # =========================================================================
+
+    async def assert_session_accessible(
+        self,
+        session: Session,
+        *,
+        principal_id: str,
+        is_anonymous: bool,
+        role: str = "user",
+    ) -> None:
+        """断言当前主体可访问该会话（personal tenant 等值；平台 admin 放行）。"""
+        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        expected_tenant = await self._tenant_id_for_owner(owner)
+        if not can_access_personal_session(
+            session,
+            personal_tenant_id=expected_tenant,
+            is_platform_admin=role == Role.ADMIN.value,
+        ):
+            raise PermissionDeniedError(
+                message="You don't have permission to access this session",
+                resource="Session",
+            )
 
     async def get_session_with_ownership_check(
         self,

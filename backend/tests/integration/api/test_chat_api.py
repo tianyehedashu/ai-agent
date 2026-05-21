@@ -74,7 +74,7 @@ class TestChatAPI:
             content_type = response.headers.get("content-type", "")
             assert "text/event-stream" in content_type
 
-            # 读取 SSE 事件
+            # 读取 SSE 事件（见到 session_created 即可，不必等 LLM 跑完）
             events = []
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
@@ -84,10 +84,11 @@ class TestChatAPI:
                     try:
                         event_data = json.loads(data_str)
                         events.append(event_data)
+                        if event_data.get("type") in ("session_created", "error"):
+                            break
                     except json.JSONDecodeError:
                         pass
 
-            # 验证至少收到了 session_created 事件
             session_created = any(event.get("type") == "session_created" for event in events)
             assert session_created, "Should receive session_created event"
 

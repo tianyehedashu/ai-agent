@@ -9,6 +9,7 @@ LangGraph Store Wrapper - 长期记忆存储
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -38,20 +39,23 @@ def _create_store_factory(
 
         @asynccontextmanager
         async def postgres_store_context():
-            sync_context = PostgresStore.from_conn_string(db_url)
+            holder: dict[str, PostgresStore] = {}
+            release = threading.Event()
 
-            def enter_context():
-                return sync_context.__enter__()
+            def worker() -> None:
+                with PostgresStore.from_conn_string(db_url) as store:
+                    holder["store"] = store
+                    release.wait()
 
-            store = await asyncio.to_thread(enter_context)
+            thread = threading.Thread(target=worker, daemon=True)
+            thread.start()
+            while "store" not in holder:
+                await asyncio.sleep(0.01)
             try:
-                yield store
+                yield holder["store"]
             finally:
-
-                def exit_context():
-                    sync_context.__exit__(None, None, None)
-
-                await asyncio.to_thread(exit_context)
+                release.set()
+                thread.join(timeout=30.0)
 
         return postgres_store_context
 

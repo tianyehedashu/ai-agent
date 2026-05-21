@@ -18,21 +18,23 @@ from sqlalchemy import ARRAY, Boolean, DateTime, Index, Integer, String, Text, U
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel, TimestampMixin
+from libs.orm.base import BaseModel, TenantScopedMixin, TimestampMixin
 
 
-class ApiKey(BaseModel, TimestampMixin):
+class ApiKey(BaseModel, TenantScopedMixin):
     """API Key 模型
 
     存储用户的 API Key 信息，用于自动化脚本访问。
     完整 Key 以哈希形式存储，明文仅在创建时返回。
+
+    ``tenant_id``：数据作用域（personal team tenant），由 ``TenantScopedMixin`` 提供。
+    ``user_id``：所有者/创建者，与 tenant 归属正交。
 
     注意：业务逻辑（如 status、is_valid 等）在 Domain Entity 中实现。
     """
 
     __tablename__ = "api_keys"
 
-    # 用户关联
     user_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
         nullable=False,

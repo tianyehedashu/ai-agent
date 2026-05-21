@@ -166,6 +166,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 await self.session_use_case.update_session_mcp_config(
                     session_id, mcp_config["enabled_servers"]
                 )
+            yield AgentEvent.session_created(session_id)
 
         event_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
         self._event_queues[session_id] = event_queue
@@ -230,9 +231,6 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 return
 
             await self._persist_picked_chat_model_ref(session_id, picked_chat_model_for_persist)
-
-            if is_new_session:
-                yield AgentEvent.session_created(session_id)
 
             if session_recreated_event:
                 yield session_recreated_event

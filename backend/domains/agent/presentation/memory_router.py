@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from domains.agent.application.memory_service import MemoryService
-from domains.identity.presentation.deps import AuthUser, check_ownership
+from domains.identity.presentation.deps import AuthUser, check_tenant_access
 from libs.api.deps import get_memory_service
 
 router = APIRouter()
@@ -136,7 +136,7 @@ async def delete_memory(
 ) -> None:
     """删除记忆"""
     memory = await memory_service.get_by_id_or_raise(memory_id)
-    check_ownership(str(memory.user_id), current_user, "Memory")
+    check_tenant_access(memory.tenant_id, current_user, "Memory")
     await memory_service.delete(memory_id)
 
 

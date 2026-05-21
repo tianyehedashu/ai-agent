@@ -19,7 +19,6 @@ import uuid
 from sqlalchemy import (
     Boolean,
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -40,9 +39,9 @@ class ProviderPlan(BaseModel):
 
     credential_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("provider_credentials.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs provider_credentials.id (no DB FK)",
     )
     real_model: Mapped[str | None] = mapped_column(
         String(200),
@@ -101,9 +100,9 @@ class ProviderPlanQuota(BaseModel):
 
     plan_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("provider_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs provider_plans.id (no DB FK)",
     )
     label: Mapped[str] = mapped_column(
         String(40),

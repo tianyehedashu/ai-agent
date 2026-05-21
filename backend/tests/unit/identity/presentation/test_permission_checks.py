@@ -1,356 +1,92 @@
-"""
-权限检查函数单元测试
+"""租户显式鉴权辅助函数单元测试。"""
 
-测试 check_ownership、check_ownership_or_public、check_session_ownership 等函数。
-"""
+from __future__ import annotations
 
 import uuid
 
 import pytest
 
-from domains.identity.domain.types import Principal
 from domains.identity.presentation.deps import (
     ADMIN_ROLE,
-    check_ownership,
-    check_ownership_or_public,
-    check_session_ownership,
+    check_tenant_access,
+    check_tenant_access_or_public,
 )
 from domains.identity.presentation.schemas import CurrentUser
-from domains.session.infrastructure.models import Session
-from libs.db.permission_context import (
+from libs.exceptions import PermissionDeniedError
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import PermissionDeniedError
+
+
+def _user(*, role: str = "user") -> CurrentUser:
+    uid = uuid.uuid4()
+    return CurrentUser(
+        id=str(uid),
+        email="test@example.com",
+        name="Test User",
+        is_anonymous=False,
+        role=role,
+    )
 
 
 @pytest.mark.unit
-class TestCheckOwnership:
-    """check_ownership 测试"""
-
-    def test_owner_can_access(self):
-        """测试: 所有者可以访问资源"""
-        user_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        # 不应该抛出异常
-        check_ownership(user_id, user, "Resource")
-
-    def test_non_owner_cannot_access(self):
-        """测试: 非所有者不能访问资源"""
-        user1_id = str(uuid.uuid4())
-        user2_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user1_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        with pytest.raises(PermissionDeniedError) as exc_info:
-            check_ownership(user2_id, user, "Resource")
-        assert "permission" in exc_info.value.message.lower()
-
-    def test_admin_can_access_all(self):
-        """测试: 管理员可以访问所有资源"""
-        admin_id = str(uuid.uuid4())
-        resource_owner_id = str(uuid.uuid4())
-        admin = CurrentUser(
-            id=admin_id,
-            email="admin@example.com",
-            name="Admin",
-            is_anonymous=False,
-            role=ADMIN_ROLE,
-        )
-
-        # 管理员应该可以访问，不抛出异常
-        check_ownership(resource_owner_id, admin, "Resource")
-
-    def test_custom_resource_name(self):
-        """测试: 自定义资源名称"""
-        user_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        with pytest.raises(PermissionDeniedError) as exc_info:
-            check_ownership(str(uuid.uuid4()), user, "CustomResource")
-        assert "customresource" in exc_info.value.message.lower()
-
-
-@pytest.mark.unit
-class TestCheckOwnershipAnonymousUser:
-    """匿名主体与资源所有者 ID（裸 UUID 或带前缀）的一致性。"""
-
-    def _anon_user(self, raw_id: str) -> CurrentUser:
-        return CurrentUser(
-            id=Principal.make_anonymous_id(raw_id),
-            email=Principal.make_anonymous_email(raw_id),
-            name="Anonymous",
-            is_anonymous=True,
-            role="user",
-        )
-
-    def test_anonymous_owner_raw_storage_id(self):
-        raw = str(uuid.uuid4())
-        user = self._anon_user(raw)
-        check_ownership(raw, user, "Resource")
-
-    def test_anonymous_owner_prefixed_storage_id(self):
-        raw = str(uuid.uuid4())
-        user = self._anon_user(raw)
-        check_ownership(Principal.make_anonymous_id(raw), user, "Resource")
-
-    def test_anonymous_non_owner_raw(self):
-        raw_a = str(uuid.uuid4())
-        raw_b = str(uuid.uuid4())
-        user = self._anon_user(raw_a)
-        with pytest.raises(PermissionDeniedError):
-            check_ownership(raw_b, user, "Resource")
-
-    def test_principal_resource_owner_matches_symmetry(self):
-        raw = str(uuid.uuid4())
-        pid = Principal.make_anonymous_id(raw)
-        assert Principal.resource_owner_matches_principal(
-            resource_owner_id=raw,
-            principal_id=pid,
-            principal_is_anonymous=True,
-        )
-        assert Principal.resource_owner_matches_principal(
-            resource_owner_id=pid,
-            principal_id=pid,
-            principal_is_anonymous=True,
-        )
-
-
-@pytest.mark.unit
-class TestCheckOwnershipOrPublic:
-    """check_ownership_or_public 测试"""
-
-    def test_owner_can_access_private(self):
-        """测试: 所有者可以访问私有资源"""
-        user_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        check_ownership_or_public(user_id, user, is_public=False, resource_name="Resource")
-
-    def test_anyone_can_access_public(self):
-        """测试: 任何人都可以访问公开资源"""
-        user_id = str(uuid.uuid4())
-        resource_owner_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        # 公开资源，非所有者也可以访问
-        check_ownership_or_public(resource_owner_id, user, is_public=True, resource_name="Resource")
-
-    def test_non_owner_cannot_access_private(self):
-        """测试: 非所有者不能访问私有资源"""
-        user1_id = str(uuid.uuid4())
-        user2_id = str(uuid.uuid4())
-        user = CurrentUser(
-            id=user1_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-        with pytest.raises(PermissionDeniedError):
-            check_ownership_or_public(user2_id, user, is_public=False, resource_name="Resource")
-
-    def test_admin_can_access_all(self):
-        """测试: 管理员可以访问所有资源（包括私有）"""
-        admin_id = str(uuid.uuid4())
-        resource_owner_id = str(uuid.uuid4())
-        admin = CurrentUser(
-            id=admin_id,
-            email="admin@example.com",
-            name="Admin",
-            is_anonymous=False,
-            role=ADMIN_ROLE,
-        )
-
-        # 管理员应该可以访问，不抛出异常
-        check_ownership_or_public(
-            resource_owner_id, admin, is_public=False, resource_name="Resource"
-        )
-
-    def test_anonymous_owner_private_raw_id(self):
-        raw = str(uuid.uuid4())
-        user = CurrentUser(
-            id=Principal.make_anonymous_id(raw),
-            email=Principal.make_anonymous_email(raw),
-            name="Anonymous",
-            is_anonymous=True,
-            role="user",
-        )
-        check_ownership_or_public(raw, user, is_public=False, resource_name="Resource")
-
-    def test_anonymous_non_owner_private(self):
-        raw_a = str(uuid.uuid4())
-        raw_b = str(uuid.uuid4())
-        user = CurrentUser(
-            id=Principal.make_anonymous_id(raw_a),
-            email=Principal.make_anonymous_email(raw_a),
-            name="Anonymous",
-            is_anonymous=True,
-            role="user",
-        )
-        with pytest.raises(PermissionDeniedError):
-            check_ownership_or_public(raw_b, user, is_public=False, resource_name="Resource")
-
-    def test_anonymous_non_owner_but_public(self):
-        raw_a = str(uuid.uuid4())
-        raw_b = str(uuid.uuid4())
-        user = CurrentUser(
-            id=Principal.make_anonymous_id(raw_a),
-            email=Principal.make_anonymous_email(raw_a),
-            name="Anonymous",
-            is_anonymous=True,
-            role="user",
-        )
-        check_ownership_or_public(raw_b, user, is_public=True, resource_name="Resource")
-
-
-@pytest.mark.unit
-class TestCheckSessionOwnership:
-    """check_session_ownership 测试"""
-
-    def _create_session(self, tenant_id: uuid.UUID) -> Session:
-        return Session(
-            id=uuid.uuid4(),
-            tenant_id=tenant_id,
-            status="active",
-            message_count=0,
-            token_count=0,
-        )
-
-    def _create_registered_user(self, user_id: str | None = None) -> CurrentUser:
-        """创建注册用户"""
-        if user_id is None:
-            user_id = str(uuid.uuid4())
-        return CurrentUser(
-            id=user_id,
-            email="test@example.com",
-            name="Test User",
-            is_anonymous=False,
-            role="user",
-        )
-
-    def _create_anonymous_user(self, anonymous_id: str | None = None) -> CurrentUser:
-        """创建匿名用户"""
-        if anonymous_id is None:
-            anonymous_id = str(uuid.uuid4())
-
-        principal_id = Principal.make_anonymous_id(anonymous_id)
-        return CurrentUser(
-            id=principal_id,
-            email=Principal.make_anonymous_email(anonymous_id),
-            name="Anonymous",
-            is_anonymous=True,
-            role="user",
-        )
-
-    def test_registered_user_owns_session(self):
-        user_id = uuid.uuid4()
+class TestCheckTenantAccess:
+    def test_allows_tenant_in_team_ids(self) -> None:
         tenant_id = uuid.uuid4()
-        user = self._create_registered_user(str(user_id))
-        session = self._create_session(tenant_id)
+        user = _user()
         set_permission_context(
-            PermissionContext(
-                user_id=user_id,
-                role="user",
-                team_ids=frozenset({tenant_id}),
-            )
+            PermissionContext(user_id=uuid.UUID(user.id), team_ids=frozenset({tenant_id}))
         )
         try:
-            check_session_ownership(session, user)
+            check_tenant_access(tenant_id, user, "Agent")
         finally:
             clear_permission_context()
 
-    def test_registered_user_cannot_access_other_session(self):
-        user1_id = uuid.uuid4()
-        user = self._create_registered_user(str(user1_id))
-        session = self._create_session(uuid.uuid4())
+    def test_denies_foreign_tenant(self) -> None:
+        user = _user()
         set_permission_context(
             PermissionContext(
-                user_id=user1_id,
-                role="user",
+                user_id=uuid.UUID(user.id),
                 team_ids=frozenset({uuid.uuid4()}),
             )
         )
         try:
             with pytest.raises(PermissionDeniedError):
-                check_session_ownership(session, user)
+                check_tenant_access(uuid.uuid4(), user, "Agent")
         finally:
             clear_permission_context()
 
-    def test_anonymous_user_owns_session(self):
-        anonymous_id = "test-anonymous-id"
+    def test_admin_bypasses_tenant_check(self) -> None:
+        admin = _user(role=ADMIN_ROLE)
+        check_tenant_access(uuid.uuid4(), admin, "Agent")
+
+    def test_missing_context_denies(self) -> None:
+        clear_permission_context()
+        user = _user()
+        with pytest.raises(PermissionDeniedError):
+            check_tenant_access(uuid.uuid4(), user, "Agent")
+
+
+@pytest.mark.unit
+class TestCheckTenantAccessOrPublic:
+    def test_public_resource_skips_tenant_check(self) -> None:
+        clear_permission_context()
+        user = _user()
+        check_tenant_access_or_public(uuid.uuid4(), user, is_public=True, resource_name="Agent")
+
+    def test_private_delegates_to_tenant_check(self) -> None:
         tenant_id = uuid.uuid4()
-        user = self._create_anonymous_user(anonymous_id)
-        session = self._create_session(tenant_id)
+        user = _user()
         set_permission_context(
-            PermissionContext(
-                anonymous_user_id=anonymous_id,
-                role="user",
-                team_ids=frozenset({tenant_id}),
-            )
+            PermissionContext(user_id=uuid.UUID(user.id), team_ids=frozenset({tenant_id}))
         )
         try:
-            check_session_ownership(session, user)
-        finally:
-            clear_permission_context()
-
-    def test_anonymous_user_cannot_access_other_session(self):
-        anonymous_id1 = "anon-1"
-        user = self._create_anonymous_user(anonymous_id1)
-        session = self._create_session(uuid.uuid4())
-        set_permission_context(
-            PermissionContext(
-                anonymous_user_id=anonymous_id1,
-                role="user",
-                team_ids=frozenset({uuid.uuid4()}),
-            )
-        )
-        try:
+            check_tenant_access_or_public(tenant_id, user, is_public=False, resource_name="Agent")
             with pytest.raises(PermissionDeniedError):
-                check_session_ownership(session, user)
+                check_tenant_access_or_public(
+                    uuid.uuid4(), user, is_public=False, resource_name="Agent"
+                )
         finally:
             clear_permission_context()
-
-    def test_admin_can_access_all_sessions(self):
-        admin_id = uuid.uuid4()
-        admin = CurrentUser(
-            id=str(admin_id),
-            email="admin@example.com",
-            name="Admin",
-            is_anonymous=False,
-            role=ADMIN_ROLE,
-        )
-        session = self._create_session(uuid.uuid4())
-        check_session_ownership(session, admin)

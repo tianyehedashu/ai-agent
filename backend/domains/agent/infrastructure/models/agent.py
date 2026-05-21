@@ -3,10 +3,9 @@ Agent Model - Agent 模型
 """
 
 from typing import TYPE_CHECKING
-import uuid
 
 from sqlalchemy import Boolean, Float, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from libs.orm.base import BaseModel, TenantScopedMixin
@@ -16,15 +15,13 @@ if TYPE_CHECKING:
 
 
 class Agent(BaseModel, TenantScopedMixin):
-    """Agent 模型（归属 personal / shared team 的 ``tenant_id``）。"""
+    """Agent 模型（归属 personal / shared team 的 ``tenant_id``）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "agents"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        nullable=False,
-        index=True,
-    )
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -39,7 +36,7 @@ class Agent(BaseModel, TenantScopedMixin):
     )
     model: Mapped[str] = mapped_column(
         String(100),
-        default="claude-3-5-sonnet-20241022",
+        default="claude-3-5-sonnet",  # Gateway catalog id
         nullable=False,
     )
     tools: Mapped[list[str]] = mapped_column(
@@ -76,6 +73,8 @@ class Agent(BaseModel, TenantScopedMixin):
     sessions: Mapped[list["Session"]] = relationship(
         "Session",
         back_populates="agent",
+        primaryjoin="Session.agent_id == Agent.id",
+        foreign_keys="Session.agent_id",
     )
 
     def __repr__(self) -> str:

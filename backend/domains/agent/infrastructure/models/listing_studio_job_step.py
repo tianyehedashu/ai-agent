@@ -7,7 +7,7 @@ Listing Studio Job Step Model - Listing 工作流步骤
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,9 +27,9 @@ class ListingStudioJobStep(BaseModel):
 
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("product_info_jobs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs product_info_jobs.id (no DB FK)",
     )
     sort_order: Mapped[int] = mapped_column(
         Integer,
@@ -86,6 +86,8 @@ class ListingStudioJobStep(BaseModel):
     job: Mapped["ListingStudioJob"] = relationship(
         "ListingStudioJob",
         back_populates="steps",
+        primaryjoin="ListingStudioJobStep.job_id == ListingStudioJob.id",
+        foreign_keys="ListingStudioJobStep.job_id",
     )
 
     def __repr__(self) -> str:

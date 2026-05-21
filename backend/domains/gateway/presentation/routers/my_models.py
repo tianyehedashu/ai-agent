@@ -20,7 +20,6 @@ from domains.gateway.presentation.schemas.common import (
 from domains.identity.presentation.deps import (
     OptionalAuthUser,
     RequiredAuthUser,
-    get_owned_user_ids,
     get_user_uuid,
 )
 from libs.db.database import get_db
@@ -140,7 +139,9 @@ async def list_available_models_for_chat(
     validate_optional_provider(provider)
     effective_type = effective_model_type_query(model_type=model_type, mode=mode)
     catalog = get_model_catalog_adapter(db)
-    user_id, _ = get_owned_user_ids(current_user) if current_user is not None else (None, None)
+    user_id: uuid.UUID | None = None
+    if current_user is not None and not current_user.is_anonymous:
+        user_id = uuid.UUID(current_user.id)
     return await list_available_models(
         catalog,
         model_type=effective_type,

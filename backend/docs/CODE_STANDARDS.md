@@ -16,7 +16,7 @@ backend/
 ├── libs/                          # 纯技术基础设施（无业务规则、无「限界上下文」语义）
 │   ├── types/                     # Result[T] 等通用代数类型
 │   ├── config/                    # ExecutionConfig、校验器、多来源配置加载
-│   ├── db/                        # AsyncSession 工厂、permission_context、Redis、向量辅助
+│   ├── db/                        # AsyncSession 工厂、Redis、向量辅助（permission_context 见 libs/iam）
 │   ├── api/                       # get_*_service 组合根、错误常量、共享 Query 参数
 │   ├── exceptions/                # AIAgentError、HttpMappableDomainError 及子类层次
 │   ├── iam/                       # TenantId、MembershipPort、团队错误 → HTTP 映射（跨域 IAM 抽象）
@@ -198,13 +198,14 @@ backend/
 from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
 
 # ✅ 从 identity 域导入认证依赖
-from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_session_ownership
+from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_tenant_access
 from domains.identity.presentation.schemas import CurrentUser
 
 # ✅ 从 agent 域导入消息/事件类型
 from domains.agent.domain.types import Message, AgentEvent, EventType, AgentConfig, ToolCall
 
-# ✅ 从 session 域导入会话相关（Agent UseCase 依赖 SessionApplicationPort，组合根注入 SessionUseCase）
+# ✅ 从 session 域导入会话相关（列表/详情/检查点鉴权用 SessionUseCase.assert_session_accessible）
+# ✅ 租户资源显式鉴权用 identity.deps.check_tenant_access
 from domains.session.application import SessionUseCase, TitleUseCase
 from domains.session.application.ports import SessionApplicationPort
 from domains.session.infrastructure.models import Session

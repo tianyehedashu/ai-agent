@@ -39,7 +39,8 @@ from domains.agent.presentation.schemas.listing_studio import (
     job_list_response,
     job_response,
 )
-from domains.identity.presentation.deps import AuthUser, get_owned_user_ids
+from domains.identity.presentation.deps import AuthUser
+from domains.session.domain.entities.session import SessionOwner
 from libs.api.deps import (
     get_chat_model_resolution_service,
     get_listing_studio_image_service,
@@ -67,12 +68,9 @@ async def create_job(
     session_id: str | None = Query(None),
 ) -> ListingStudioJobResponse:
     """创建 Listing 创作任务"""
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
     session_uuid = parse_optional_uuid(session_id, "session_id")
     data = await service.create_job(
         principal_id=current_user.id,
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
         session_id=session_uuid,
         title=title,
     )
@@ -241,14 +239,14 @@ async def create_template(
     prompt_service: ListingStudioPromptTemplateUseCase = Depends(get_listing_studio_prompt_service),
 ) -> dict[str, Any]:
     """保存为用户模板"""
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
+    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
     return await prompt_service.create_template(
         capability_id=capability_id,
         name=body.name,
         content=body.content,
         prompts=body.prompts,
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
+        user_id=owner.user_id,
+        anonymous_user_id=owner.anonymous_user_id,
     )
 
 
@@ -312,13 +310,11 @@ async def run_pipeline(
     """一键异步执行：创建 Job，后台按依赖分层执行，立即返回 job_id。"""
     if body is None:
         body = RunPipelineBody(model_overrides=None)
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
+    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
     session_uuid = parse_optional_uuid(body.session_id, "session_id")
 
     job = await service.create_job(
         principal_id=current_user.id,
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
         session_id=session_uuid,
         title="一键执行",
         status="running",
@@ -328,8 +324,8 @@ async def run_pipeline(
     pipeline_bg_task = asyncio.create_task(
         run_pipeline_async(
             job_id=uuid.UUID(job_id),
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+            user_id=owner.user_id,
+            anonymous_user_id=owner.anonymous_user_id,
             inputs=body.inputs or {},
             steps=body.steps,
             model_overrides=body.model_overrides,
@@ -391,7 +387,7 @@ async def create_image_gen_task(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
+    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
     job_uuid = parse_optional_uuid(body.job_id, "job_id")
 
     provider = body.provider or resolved.provider
@@ -406,8 +402,8 @@ async def create_image_gen_task(
     prompts = [{**global_defaults, **item} for item in body.prompts]
 
     return await image_gen_service.create(
-        user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
+        user_id=owner.user_id,
+        anonymous_user_id=owner.anonymous_user_id,
         job_id=job_uuid,
         prompts=prompts,
         api_key_override=resolved.api_key,

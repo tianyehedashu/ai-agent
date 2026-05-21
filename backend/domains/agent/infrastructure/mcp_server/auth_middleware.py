@@ -142,8 +142,16 @@ async def verify_mcp_access(
             f"key_id={entity.key_id}, user_id={entity.user_id}"
         )
 
-        # 记录 API Key 使用
+        # 记录 API Key 使用（须安装 PermissionContext 供 ApiKey 仓储 tenant 过滤）
         try:
+            # pylint: disable=import-outside-toplevel
+            from domains.identity.application.permission_context_composer import (
+                PermissionContextComposer,
+            )
+            # pylint: enable=import-outside-toplevel
+
+            composer = PermissionContextComposer(db)
+            composer.install(await composer.compose_for_user_id(entity.user_id))
             await use_case.record_usage(
                 api_key_id=entity.id,
                 endpoint=request.url.path,

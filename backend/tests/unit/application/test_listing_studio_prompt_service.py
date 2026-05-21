@@ -13,7 +13,7 @@ from domains.agent.application.listing_studio_prompt_service import (
     list_capabilities,
 )
 from domains.identity.infrastructure.models.user import User
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -92,7 +92,9 @@ class TestListingStudioPromptTemplateUseCase:
     @pytest.mark.asyncio
     async def test_create_and_list_templates(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioPromptTemplateUseCase(db_session)
@@ -114,7 +116,9 @@ class TestListingStudioPromptTemplateUseCase:
     @pytest.mark.asyncio
     async def test_get_template_not_found_raises(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioPromptTemplateUseCase(db_session)
@@ -126,7 +130,9 @@ class TestListingStudioPromptTemplateUseCase:
     @pytest.mark.asyncio
     async def test_update_and_delete_template(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioPromptTemplateUseCase(db_session)

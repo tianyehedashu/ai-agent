@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.memory import Memory
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
+from libs.db.data_scope_clause import DataScopeEnforcer
 from libs.exceptions import NotFoundError
 
 
@@ -47,7 +49,9 @@ class MemoryRepository:
         if not user_uuid:
             raise ValueError(f"Invalid user_id format: {user_id}")
 
+        tenant_id = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_uuid)
         memory = Memory(
+            tenant_id=tenant_id,
             user_id=user_uuid,
             type=type,
             content=content,
@@ -61,8 +65,10 @@ class MemoryRepository:
         return memory
 
     async def get_by_id(self, memory_id: str) -> Memory | None:
-        """通过 ID 获取记忆"""
-        result = await self.db.execute(select(Memory).where(Memory.id == uuid.UUID(memory_id)))
+        """通过 ID 获取记忆（tenant 作用域）。"""
+        q = select(Memory).where(Memory.id == uuid.UUID(memory_id))
+        q = DataScopeEnforcer.apply_to_query(q, Memory)
+        result = await self.db.execute(q)
         return result.scalar_one_or_none()
 
     async def get_by_id_or_raise(self, memory_id: str) -> Memory:

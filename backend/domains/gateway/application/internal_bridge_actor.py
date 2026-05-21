@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from bootstrap.config import settings
-from libs.db.permission_context import get_permission_context
+from libs.iam.permission_context import get_permission_context
 
 
 def resolve_internal_gateway_team_id() -> uuid.UUID | None:

@@ -227,15 +227,15 @@ class RequestLogRepository:
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
         ]
-        client_label = func.coalesce(GatewayRequestLog.client_type, "unknown")
+        client_type_expr = func.coalesce(GatewayRequestLog.client_type, "unknown")
         stmt = (
             select(
-                client_label.label("client_type"),
+                client_type_expr.label("client_type"),
                 func.count(GatewayRequestLog.id).label("requests"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
             .where(and_(*clauses))
-            .group_by(client_label)
+            .group_by(client_type_expr)
             .order_by(func.count(GatewayRequestLog.id).desc())
         )
         rows = (await self._session.execute(stmt)).all()

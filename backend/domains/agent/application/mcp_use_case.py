@@ -12,29 +12,42 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 import tiktoken
 
-from domains.agent.domain.config.mcp_config import (
-    MCPScope,
-    MCPServerEntityConfig,
-    MCPTemplate,
-)
-from domains.agent.domain.config.templates import BUILTIN_TEMPLATES, get_effective_env_config
-from domains.agent.infrastructure.repositories.mcp_server_repository import (
-    MCPServerRepository,
-)
-from domains.agent.infrastructure.tools.mcp.client import test_mcp_connection
-from domains.agent.presentation.schemas.mcp_schemas import (
+from domains.agent.application.mcp_api_models import (
     MCPServerCreateRequest,
-    MCPServerResponse,
     MCPServersListResponse,
     MCPServerUpdateRequest,
     MCPToolInfo,
     MCPToolsListResponse,
 )
+from domains.agent.application.mcp_server_mapper import mcp_server_to_response
+from domains.agent.domain.config.mcp_config import (
+    MCPEnvironmentType,
+    MCPScope,
+    MCPServerEntityConfig,
+    MCPTemplate,
+)
+from domains.agent.domain.config.templates import BUILTIN_TEMPLATES, get_effective_env_config
+from domains.agent.domain.policies.mcp_access import (
+    McpAccessAction,
+    assert_mcp_access,
+    assert_mcp_delete,
+    mcp_server_kind,
+)
+from domains.agent.infrastructure.models.mcp_server import MCPServer
+from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
+from domains.agent.infrastructure.repositories.mcp_server_repository import (
+    MCPServerRepository,
+)
+from domains.agent.infrastructure.tools.mcp.client import test_mcp_connection
 from domains.identity.presentation.schemas import CurrentUser
-from libs.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
+from libs.exceptions import ConflictError, NotFoundError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _is_system_server(server: MCPServer | SystemMCPServer) -> bool:
+    return isinstance(server, SystemMCPServer)
 
 
 class MCPManagementUseCase:
@@ -44,24 +57,55 @@ class MCPManagementUseCase:
         self.db = db
         self.repository = MCPServerRepository(db)
 
+    async def _get_server_or_raise(
+        self, server_id: uuid.UUID
+    ) -> MCPServer | SystemMCPServer:
+        server = await self.repository.get_by_id(server_id)
+        if not server:
+            raise NotFoundError("MCP Server", str(server_id))
+        return server
+
+    def _assert_access(
+        self,
+        server: MCPServer | SystemMCPServer,
+        current_user: CurrentUser,
+        action: McpAccessAction,
+    ) -> None:
+        assert_mcp_access(
+            kind=mcp_server_kind(is_system=_is_system_server(server)),
+            is_platform_admin=current_user.is_admin,
+            action=action,
+        )
+
+    def _entity_config_from_server(
+        self, server: MCPServer | SystemMCPServer
+    ) -> MCPServerEntityConfig:
+        scope = MCPScope.SYSTEM if _is_system_server(server) else MCPScope.USER
+        return MCPServerEntityConfig(
+            id=server.id,
+            name=server.name,
+            display_name=server.display_name,
+            url=server.url,
+            scope=scope,
+            env_type=MCPEnvironmentType(server.env_type),
+            env_config=server.env_config or {},
+            enabled=server.enabled,
+            template_id=getattr(server, "template_id", None),
+            inherit_defaults=getattr(server, "inherit_defaults", False),
+        )
+
     def _calculate_token_count(self, tool_config: Any) -> int:
         """计算工具定义的 Token 占用"""
         try:
-            # 使用 GPT-4 的 tokenizer
             encoding = tiktoken.encoding_for_model("gpt-4")
-
-            # 构建工具定义字符串
             tool_def = {
                 "name": tool_config.get("name", ""),
                 "description": tool_config.get("description", ""),
                 "inputSchema": tool_config.get("inputSchema", {}),
             }
             tool_str = json.dumps(tool_def, ensure_ascii=False)
-
-            # 计算 token 数量
             return len(encoding.encode(tool_str))
         except Exception:
-            # 如果计算失败，使用估算: 1 token ≈ 4 字符
             tool_str = json.dumps(tool_config, ensure_ascii=False)
             return len(tool_str) // 4
 
@@ -70,34 +114,17 @@ class MCPManagementUseCase:
         return BUILTIN_TEMPLATES
 
     async def list_servers(self, current_user: CurrentUser) -> MCPServersListResponse:
-        """
-        列出可用的 MCP 服务器
-
-        Args:
-            current_user: 当前用户
-
-        Returns:
-            服务器列表（system + user）
-        """
         system_servers, user_servers = await self.repository.list_available()
-
+        owner_id = uuid.UUID(current_user.id)
         return MCPServersListResponse(
-            system_servers=[MCPServerResponse.model_validate(server) for server in system_servers],
-            user_servers=[MCPServerResponse.model_validate(server) for server in user_servers],
+            system_servers=[mcp_server_to_response(server) for server in system_servers],
+            user_servers=[
+                mcp_server_to_response(server, owner_user_id=owner_id)
+                for server in user_servers
+            ],
         )
 
     async def add_server(self, request: MCPServerCreateRequest, current_user: CurrentUser):
-        """
-        添加 MCP 服务器
-
-        Args:
-            request: 创建请求
-            current_user: 当前用户
-
-        Returns:
-            创建的服务器配置
-        """
-        # 检查名称是否已存在
         existing = await self.repository.get_by_name(request.name)
         if existing:
             raise ConflictError(
@@ -105,7 +132,6 @@ class MCPManagementUseCase:
                 code="SERVER_NAME_EXISTS",
             )
 
-        # 从模板加载默认配置（如果指定）
         if request.template_id:
             template = next((t for t in BUILTIN_TEMPLATES if t.id == request.template_id), None)
             if not template:
@@ -113,7 +139,6 @@ class MCPManagementUseCase:
                     f"Template not found: {request.template_id}",
                     code="TEMPLATE_NOT_FOUND",
                 )
-            # 使用模板的默认配置，但允许请求中的字段覆盖
             config = template.default_config.model_copy(
                 update={
                     "name": request.name,
@@ -139,9 +164,7 @@ class MCPManagementUseCase:
                 inherit_defaults=getattr(request, "inherit_defaults", False),
             )
 
-        # 创建服务器
-        server = await self.repository.create(config=config, user_id=uuid.UUID(current_user.id))
-
+        server = await self.repository.create(config=config)
         await self.db.commit()
 
         logger.info(
@@ -149,7 +172,6 @@ class MCPManagementUseCase:
             server.name,
             uuid.UUID(current_user.id),
         )
-
         return server
 
     async def update_server(
@@ -158,137 +180,68 @@ class MCPManagementUseCase:
         request: MCPServerUpdateRequest,
         current_user: CurrentUser,
     ):
-        """
-        更新 MCP 服务器
+        server = await self._get_server_or_raise(server_id)
+        self._assert_access(server, current_user, McpAccessAction.MUTATE)
 
-        Args:
-            server_id: 服务器 ID
-            request: 更新请求
-            current_user: 当前用户
-
-        Returns:
-            更新后的服务器配置
-        """
-        server = await self.repository.get_by_id(server_id)
-        if not server:
-            raise NotFoundError("MCP Server", str(server_id))
-
-        # 权限检查：只有管理员或创建者可以更新
-        if server.scope == "system" and not current_user.is_admin:
-            raise PermissionDeniedError(
-                "Cannot update system server",
-                code="CANNOT_UPDATE_SYSTEM_SERVER",
-            )
-
-        if server.scope == "user":
-            if server.user_id is None:
-                raise ValidationError(
-                    "User server must have an owner",
-                    code="INVALID_SERVER",
-                )
-            if str(server.user_id) != current_user.id and not current_user.is_admin:
-                raise PermissionDeniedError(
-                    "You don't have permission to update this server",
-                    code="PERMISSION_DENIED",
-                )
-
-        # 构建更新配置
-        config = MCPServerEntityConfig.model_validate(server)
+        config = self._entity_config_from_server(server)
         update_data = request.model_dump(exclude_unset=True)
-
         for field, value in update_data.items():
             if hasattr(config, field):
                 setattr(config, field, value)
 
-        # 更新
-        updated_server = await self.repository.update(server_id, config)
+        if _is_system_server(server):
+            updated_server = await self.repository.update_system(server_id, config)
+        else:
+            updated_server = await self.repository.update(server_id, config)
         if not updated_server:
             raise NotFoundError("MCP Server", str(server_id))
 
         await self.db.commit()
-
         logger.info("Updated MCP server: %s", server.name)
-
         return updated_server
 
     async def delete_server(self, server_id: uuid.UUID, current_user: CurrentUser) -> None:
-        """
-        删除 MCP 服务器
+        server = await self._get_server_or_raise(server_id)
+        assert_mcp_delete(
+            kind=mcp_server_kind(is_system=_is_system_server(server)),
+            is_platform_admin=current_user.is_admin,
+        )
 
-        Args:
-            server_id: 服务器 ID
-            current_user: 当前用户
-        """
-        server = await self.repository.get_by_id(server_id)
-        if not server:
+        if _is_system_server(server):
+            deleted = await self.repository.delete_system(server_id)
+        else:
+            deleted = await self.repository.delete(server_id)
+        if not deleted:
             raise NotFoundError("MCP Server", str(server_id))
 
-        # 权限检查
-        if server.scope == "system" and not current_user.is_admin:
-            raise PermissionDeniedError(
-                "Cannot delete system server",
-                code="CANNOT_DELETE_SYSTEM_SERVER",
-            )
-
-        if server.scope == "user":
-            if server.user_id is None:
-                raise ValidationError(
-                    "User server must have an owner",
-                    code="INVALID_SERVER",
-                )
-            if str(server.user_id) != current_user.id:
-                raise PermissionDeniedError(
-                    "You don't have permission to delete this server",
-                    code="PERMISSION_DENIED",
-                )
-
-        await self.repository.delete(server_id)
         await self.db.commit()
-
         logger.info("Deleted MCP server: %s", server.name)
 
     async def toggle_server(self, server_id: uuid.UUID, enabled: bool, current_user: CurrentUser):
-        """
-        切换服务器启用状态
+        server = await self._get_server_or_raise(server_id)
+        self._assert_access(server, current_user, McpAccessAction.MUTATE)
 
-        Args:
-            server_id: 服务器 ID
-            enabled: 启用状态
-            current_user: 当前用户
-
-        Returns:
-            更新后的服务器配置
-        """
-        server = await self.repository.toggle(server_id, enabled)
-        if not server:
+        if _is_system_server(server):
+            updated = await self.repository.toggle_system(server_id, enabled)
+        else:
+            updated = await self.repository.toggle(server_id, enabled)
+        if not updated:
             raise NotFoundError("MCP Server", str(server_id))
 
         await self.db.commit()
-
-        logger.info("Toggled MCP server %s: %s", server.name, "enabled" if enabled else "disabled")
-
-        return server
+        logger.info(
+            "Toggled MCP server %s: %s",
+            updated.name,
+            "enabled" if enabled else "disabled",
+        )
+        return updated
 
     async def test_connection(
         self, server_id: uuid.UUID, current_user: CurrentUser
     ) -> dict[str, Any]:
-        """
-        测试 MCP 服务器连接
+        server = await self._get_server_or_raise(server_id)
+        self._assert_access(server, current_user, McpAccessAction.READ_TOOLS)
 
-        使用 langchain-mcp-adapters 进行真实的 MCP 协议连接测试。
-
-        Args:
-            server_id: 服务器 ID
-            current_user: 当前用户
-
-        Returns:
-            测试结果，包含连接状态、工具列表等信息
-        """
-        server = await self.repository.get_by_id(server_id)
-        if not server:
-            raise NotFoundError("MCP Server", str(server_id))
-
-        # 检查服务器是否启用
         if not server.enabled:
             return {
                 "success": False,
@@ -301,7 +254,6 @@ class MCPManagementUseCase:
                 "tools_sample": [],
             }
 
-        # 使用真实 MCP 连接测试
         logger.info("Testing MCP connection for server: %s (%s)", server.name, server.url)
 
         effective_env_config = get_effective_env_config(
@@ -317,7 +269,6 @@ class MCPManagementUseCase:
             )
 
             if success:
-                # 连接成功
                 server.connection_status = "connected"
                 server.last_connected_at = datetime.now().isoformat()
                 server.last_error = None
@@ -329,7 +280,6 @@ class MCPManagementUseCase:
                 message = f"连接成功！发现 {len(tools)} 个可用工具"
                 tools_sample = [tool["name"] for tool in tools[:5]]
             else:
-                # 连接失败
                 server.connection_status = "failed"
                 server.last_connected_at = datetime.now().isoformat()
                 server.last_error = error or "连接失败"
@@ -350,7 +300,6 @@ class MCPManagementUseCase:
             }
 
         except Exception as e:
-            # 发生异常
             error_msg = str(e)
             logger.error("MCP connection test failed for %s: %s", server.name, error_msg)
 
@@ -374,26 +323,12 @@ class MCPManagementUseCase:
     async def list_server_tools(
         self, server_id: uuid.UUID, current_user: CurrentUser
     ) -> MCPToolsListResponse:
-        """获取服务器的工具列表"""
-        server = await self.repository.get_by_id(server_id)
-        if not server:
-            raise NotFoundError("MCP Server", str(server_id))
+        server = await self._get_server_or_raise(server_id)
+        self._assert_access(server, current_user, McpAccessAction.READ_TOOLS)
 
-        # 用户级服务器：仅所有者或管理员可查看工具列表
-        if server.scope == "user":
-            if server.user_id is None:
-                raise NotFoundError("MCP Server", str(server_id))
-            if str(server.user_id) != current_user.id and not current_user.is_admin:
-                raise PermissionDeniedError(
-                    "You don't have permission to access this server's tools",
-                    code="PERMISSION_DENIED",
-                )
-
-        # 从 available_tools 中提取工具信息
         tools_data = server.available_tools or {}
-        tools = []
+        tools: list[MCPToolInfo] = []
 
-        # 处理工具数据结构
         if isinstance(tools_data, dict) and "tools" in tools_data:
             tool_list = tools_data["tools"]
         else:
@@ -401,14 +336,15 @@ class MCPManagementUseCase:
 
         for tool in tool_list:
             if isinstance(tool, dict):
-                tool_info = MCPToolInfo(
-                    name=tool.get("name", ""),
-                    description=tool.get("description"),
-                    input_schema=tool.get("inputSchema", {}),
-                    enabled=tool.get("enabled", True),
-                    token_count=self._calculate_token_count(tool),
+                tools.append(
+                    MCPToolInfo(
+                        name=tool.get("name", ""),
+                        description=tool.get("description"),
+                        input_schema=tool.get("inputSchema", {}),
+                        enabled=tool.get("enabled", True),
+                        token_count=self._calculate_token_count(tool),
+                    )
                 )
-                tools.append(tool_info)
 
         total_tokens = sum(t.token_count for t in tools)
         enabled_count = sum(1 for t in tools if t.enabled)
@@ -424,31 +360,9 @@ class MCPManagementUseCase:
     async def toggle_tool_enabled(
         self, server_id: uuid.UUID, tool_name: str, enabled: bool, current_user: CurrentUser
     ) -> MCPToolInfo:
-        """切换工具启用状态"""
-        server = await self.repository.get_by_id(server_id)
-        if not server:
-            raise NotFoundError("MCP Server", str(server_id))
+        server = await self._get_server_or_raise(server_id)
+        self._assert_access(server, current_user, McpAccessAction.MUTATE_SYSTEM_TOOLS)
 
-        # 权限检查
-        if server.scope == "system" and not current_user.is_admin:
-            raise PermissionDeniedError(
-                "Cannot modify system server tools",
-                code="CANNOT_MODIFY_SYSTEM_SERVER",
-            )
-
-        if server.scope == "user":
-            if server.user_id is None:
-                raise ValidationError(
-                    "User server must have an owner",
-                    code="INVALID_SERVER",
-                )
-            if str(server.user_id) != current_user.id and not current_user.is_admin:
-                raise PermissionDeniedError(
-                    "You don't have permission to modify this server",
-                    code="PERMISSION_DENIED",
-                )
-
-        # 更新工具启用状态
         tools_data = dict(server.available_tools or {})
         if "tools" in tools_data:
             tool_list = tools_data["tools"]
@@ -460,7 +374,6 @@ class MCPManagementUseCase:
         server.available_tools = tools_data
         await self.db.commit()
 
-        # 返回更新后的工具信息
         tool_config = next(
             (
                 t

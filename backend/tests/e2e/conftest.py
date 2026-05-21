@@ -4,11 +4,40 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 import httpx
 import pytest
 
 from tests.e2e.config import E2E_API_BASE_URL
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+
+def _e2e_backend_reachable() -> bool:
+    try:
+        with httpx.Client(base_url=E2E_API_BASE_URL, timeout=3.0) as client:
+            return client.get("/health").status_code == 200
+    except Exception:
+        return False
+
+
+def pytest_collection_modifyitems(_config, items) -> None:
+    """未启动后端时跳过 E2E，避免 ``pytest tests/`` 误报失败。"""
+    if os.environ.get("RUN_E2E", "").strip() == "1":
+        return
+    if _e2e_backend_reachable():
+        return
+    skip = pytest.mark.skip(
+        reason=(
+            f"E2E 需要可访问的后端 ({E2E_API_BASE_URL}/health)。"
+            "请运行仓库根目录 scripts/run-e2e.ps1，或启动 uvicorn 后设置 RUN_E2E=1。"
+        )
+    )
+    for item in items:
+        if "e2e" in item.keywords:
+            item.add_marker(skip)
 
 
 def _e2e_credentials() -> tuple[str, str] | None:

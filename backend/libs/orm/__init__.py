@@ -1,8 +1,7 @@
 from libs.orm.base import (
     Base,
     BaseModel,
-    OwnedMixin,
-    OwnedProtocol,
+    TenantScopedMixin,
     TimestampMixin,
     generate_uuid,
 )
@@ -10,8 +9,7 @@ from libs.orm.base import (
 __all__ = [
     "Base",
     "BaseModel",
-    "OwnedMixin",
-    "OwnedProtocol",
+    "TenantScopedMixin",
     "TimestampMixin",
     "generate_uuid",
 ]

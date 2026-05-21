@@ -12,6 +12,7 @@ from bootstrap.config import settings
 from bootstrap.config_loader import ModelInfo, app_config
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
@@ -261,7 +262,8 @@ async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, in
             )
             skipped += 1
             continue
-        real_model = model.litellm_model or model.id
+        raw_model = model.litellm_model or model.id
+        real_model = build_litellm_model_id(model.provider, raw_model)
         capability = infer_catalog_capability(model)
         tags = _build_tags_from_model_info(model)
         existing = await models_repo.get_system_by_name(model.id)

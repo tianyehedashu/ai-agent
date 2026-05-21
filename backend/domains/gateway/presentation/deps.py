@@ -42,14 +42,10 @@ from domains.tenancy.presentation.team_dependencies import (
     ResolvedTeam,
     resolve_current_team,
 )
-from domains.identity.application.permission_context_factory import (
-    build_permission_context_with_team_ids,
+from domains.identity.application.permission_context_composer import (
+    PermissionContextComposer,
 )
 from libs.db.database import get_db
-from libs.db.permission_context import (
-    ensure_tenant_in_team_ids,
-    set_permission_context,
-)
 from libs.exceptions import HttpMappableDomainError
 from utils.logging import get_logger
 
@@ -152,16 +148,13 @@ async def _gateway_principal_from_vkey_plain(
         is_system=record.is_system,
     )
 
-    ctx = await build_permission_context_with_team_ids(
-        db,
-        user_id=record.created_by_user_id,
-        anonymous_user_id=None,
-        role="user",
-        team_id=record.tenant_id,
-        team_role=team_role,
-    )
-    set_permission_context(
-        ctx.with_team_ids(ensure_tenant_in_team_ids(ctx.team_ids, record.tenant_id))
+    composer = PermissionContextComposer(db)
+    composer.install(
+        await composer.compose_for_gateway_vkey(
+            created_by_user_id=record.created_by_user_id,
+            tenant_id=record.tenant_id,
+            team_role=team_role,
+        )
     )
 
     return GatewayPrincipal(
@@ -253,16 +246,13 @@ async def bearer_vkey_or_apikey_auth(
             detail="Invalid API key Gateway grant capability configuration",
         ) from None
 
-    ctx = await build_permission_context_with_team_ids(
-        db,
-        user_id=auth.user_id,
-        anonymous_user_id=None,
-        role="user",
-        team_id=auth.team_id,
-        team_role=auth.team_role,
-    )
-    set_permission_context(
-        ctx.with_team_ids(ensure_tenant_in_team_ids(ctx.team_ids, auth.team_id))
+    composer = PermissionContextComposer(db)
+    composer.install(
+        await composer.compose_for_gateway_vkey(
+            created_by_user_id=auth.user_id,
+            tenant_id=auth.team_id,
+            team_role=auth.team_role,
+        )
     )
 
     return VkeyOrApikeyPrincipal(

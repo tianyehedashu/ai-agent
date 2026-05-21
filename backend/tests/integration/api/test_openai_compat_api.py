@@ -10,7 +10,7 @@ import pytest
 from domains.identity.domain.api_key_types import ApiKeyScope
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
-from libs.db.permission_context import clear_permission_context
+from libs.iam.permission_context import clear_permission_context
 
 
 @pytest.mark.integration

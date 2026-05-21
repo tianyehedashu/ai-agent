@@ -167,9 +167,7 @@ def _anniversary_segment_bounds(
     if window_seconds <= 0:
         return valid_from, valid_from
     elapsed = (now - valid_from).total_seconds()
-    k = int(elapsed // window_seconds)
-    if k < 0:
-        k = 0
+    k = max(int(elapsed // window_seconds), 0)
     seg_start = valid_from + timedelta(seconds=k * window_seconds)
     seg_end = valid_from + timedelta(seconds=(k + 1) * window_seconds)
     return seg_start, seg_end

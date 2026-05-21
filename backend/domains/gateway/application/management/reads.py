@@ -7,6 +7,9 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from domains.gateway.application.management.access_assertions import (
+    GatewayManagementAccessAssertions,
+)
 from domains.gateway.application.management.credential_read_mappers import (
     credential_from_orm,
     system_credential_from_orm,
@@ -31,30 +34,27 @@ from domains.gateway.application.management.virtual_key_read_mappers import virt
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
-    ManagementEntityNotFoundError,
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.policies.usage_log_visibility import (
+    member_can_view_request_log_record,
+    usage_log_access_from_management_ctx,
+    workspace_axis_member_user_id,
+)
 from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     filter_virtual_keys_visible_to_actor,
 )
-from domains.gateway.infrastructure.models.entitlement_plan import (
-    EntitlementPlan,
-)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
-from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
-)
-from domains.gateway.infrastructure.repositories.system_credential_repository import (
-    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
@@ -68,6 +68,9 @@ from domains.gateway.infrastructure.repositories.provider_plan_repository import
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
+)
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
@@ -83,7 +86,6 @@ if TYPE_CHECKING:
 
     from domains.gateway.infrastructure.models.alert import GatewayAlertRule
     from domains.tenancy.domain.management_context import ManagementTeamContext
-    from domains.tenancy.infrastructure.models.team import Team, TeamMember
 
 
 class GatewayManagementReadService:
@@ -113,15 +115,12 @@ class GatewayManagementReadService:
         self._provider_plans = ProviderPlanRepository(session)
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._plan_usage = GatewayPlanUsageReadService(session)
-
-    async def list_teams_with_roles_for_user(self, user_id: UUID) -> list[tuple[Team, str | None]]:
-        return await self._teams.list_teams_with_roles_for_user(user_id)
-
-    async def get_team(self, team_id: UUID) -> Team | None:
-        return await self._teams.get_team(team_id)
-
-    async def list_team_members(self, team_id: UUID) -> list[TeamMember]:
-        return await self._teams.list_team_members(team_id)
+        self.access = GatewayManagementAccessAssertions(
+            creds=self._creds,
+            vkeys=self._vkeys,
+            api_key_grants=self._api_key_grants,
+            entitlement_plans=self._entitlement_plans,
+        )
 
     async def list_virtual_keys_for_team(
         self,
@@ -135,8 +134,6 @@ class GatewayManagementReadService:
         filtered = filter_virtual_keys_visible_to_actor(
             keys,
             actor_user_id=actor_user_id,
-            team_role=team_role,
-            is_platform_admin=is_platform_admin,
         )
         return [virtual_key_from_orm(k) for k in filtered]
 
@@ -156,8 +153,6 @@ class GatewayManagementReadService:
             key_id=str(key_id),
             tenant_id=tenant_id,
             actor_user_id=actor_user_id,
-            team_role=team_role,
-            is_platform_admin=is_platform_admin,
             require_active=True,
         )
         if record is None:
@@ -278,11 +273,9 @@ class GatewayManagementReadService:
         """
         if aggregation == UsageAggregation.USER:
             return UsageAxis.user(ctx.user_id)
-        member_only = not ctx.is_platform_admin and ctx.team_role == "member" and vkey_id is None
-        return UsageAxis.workspace(
-            ctx.team_id,
-            member_user_id=ctx.user_id if member_only else None,
-        )
+        snapshot = usage_log_access_from_management_ctx(ctx)
+        member_user_id = workspace_axis_member_user_id(snapshot, vkey_id=vkey_id)
+        return UsageAxis.workspace(ctx.team_id, member_user_id=member_user_id)
 
     async def list_request_logs(
         self,
@@ -327,23 +320,22 @@ class GatewayManagementReadService:
         record = await self._logs.get_by_axis(axis, log_id)
         if record is None or usage_aggregation == UsageAggregation.USER:
             return record
-        if not ctx.is_platform_admin and ctx.team_role == "member":
-            if record.vkey_id is None:
-                allowed = record.user_id == ctx.user_id
-            else:
-                allowed = await self._vkeys.is_non_system_vkey_owned_by_user_on_team(
-                    record.vkey_id,
-                    team_id=ctx.team_id,
-                    user_id=ctx.user_id,
-                )
-            if not allowed:
-                raise TeamPermissionDeniedError(str(ctx.team_id))
+        snapshot = usage_log_access_from_management_ctx(ctx)
+        vkey_owned = False
+        if record.vkey_id is not None:
+            vkey_owned = await self._vkeys.is_non_system_vkey_owned_by_user_on_team(
+                record.vkey_id,
+                team_id=ctx.team_id,
+                user_id=ctx.user_id,
+            )
+        if not member_can_view_request_log_record(
+            snapshot,
+            record_user_id=record.user_id,
+            record_has_vkey=record.vkey_id is not None,
+            vkey_owned_by_user=vkey_owned,
+        ):
+            raise TeamPermissionDeniedError(str(ctx.team_id))
         return record
-
-    async def get_request_log_for_team(
-        self, ctx: ManagementTeamContext, log_id: UUID
-    ) -> Any | None:
-        return await self.get_request_log(ctx, log_id, usage_aggregation=UsageAggregation.WORKSPACE)
 
     async def aggregate_request_log_summary(
         self,
@@ -452,75 +444,6 @@ class GatewayManagementReadService:
     #
     # 套餐列表/详情返回 application 读模型；presentation 再映射为 HTTP Schema。
     # ------------------------------------------------------------------
-    async def assert_credential_in_team(
-        self,
-        credential_id: UUID,
-        *,
-        tenant_id: UUID,
-        is_platform_admin: bool,
-    ) -> ProviderCredential:
-        row = await self._creds.get_bindable_for_team_gateway_model(
-            credential_id,
-            tenant_id=tenant_id,
-            is_platform_admin=is_platform_admin,
-        )
-        if row is None:
-            raise CredentialNotFoundError(str(credential_id))
-        return row
-
-    async def assert_vkey_in_team(
-        self,
-        vkey_id: UUID,
-        *,
-        tenant_id: UUID,
-        is_platform_admin: bool,
-    ) -> None:
-        record = await self._vkeys.get(vkey_id)
-        if record is None:
-            raise VirtualKeyNotFoundError(str(vkey_id))
-        if not is_platform_admin and record.tenant_id != tenant_id:
-            raise VirtualKeyNotFoundError(str(vkey_id))
-
-    async def assert_apikey_grant_in_team(
-        self,
-        grant_id: UUID,
-        *,
-        tenant_id: UUID,
-        is_platform_admin: bool,
-    ) -> None:
-        from libs.exceptions import NotFoundError
-
-        try:
-            await self._api_key_grants.assert_gateway_grant_in_team(
-                grant_id,
-                team_id=tenant_id,
-                is_platform_admin=is_platform_admin,
-            )
-        except NotFoundError as exc:
-            raise ManagementEntityNotFoundError("apikey_grant", str(grant_id)) from exc
-
-    async def assert_entitlement_plan_in_team(
-        self,
-        plan_id: UUID,
-        *,
-        tenant_id: UUID,
-        is_platform_admin: bool,
-    ) -> EntitlementPlan:
-        plan = await self._entitlement_plans.get(plan_id)
-        if plan is None:
-            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
-        if plan.target_kind == "vkey":
-            await self.assert_vkey_in_team(
-                plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
-            )
-        elif plan.target_kind == "apikey_grant":
-            await self.assert_apikey_grant_in_team(
-                plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
-            )
-        else:
-            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
-        return plan
-
     async def list_provider_plans_with_quotas_for_credential(
         self, credential_id: UUID
     ) -> list[ProviderPlanReadModel]:

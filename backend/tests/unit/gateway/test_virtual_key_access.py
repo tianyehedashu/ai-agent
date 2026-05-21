@@ -44,8 +44,6 @@ def test_assert_rejects_missing_or_wrong_team() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=uuid.uuid4(),
-            team_role="owner",
-            is_platform_admin=False,
         )
     with pytest.raises(VirtualKeyNotFoundError):
         assert_virtual_key_accessible_by_actor(
@@ -53,8 +51,6 @@ def test_assert_rejects_missing_or_wrong_team() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=uuid.uuid4(),
-            team_role="owner",
-            is_platform_admin=False,
         )
 
 
@@ -71,8 +67,6 @@ def test_assert_rejects_inactive_when_required() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=user_id,
-            team_role="owner",
-            is_platform_admin=False,
             require_active=True,
         )
 
@@ -82,8 +76,6 @@ def test_assert_rejects_inactive_when_required() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=user_id,
-            team_role="owner",
-            is_platform_admin=False,
             require_active=False,
         )
         is record
@@ -105,8 +97,6 @@ def test_assert_rejects_system_and_non_creator() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=owner_id,
-            team_role="owner",
-            is_platform_admin=False,
         )
 
     with pytest.raises(VirtualKeyNotFoundError):
@@ -115,8 +105,6 @@ def test_assert_rejects_system_and_non_creator() -> None:
             key_id=key_id,
             tenant_id=team_id,
             actor_user_id=owner_id,
-            team_role="owner",
-            is_platform_admin=False,
         )
 
 
@@ -132,13 +120,9 @@ def test_filter_only_creator_keys() -> None:
     assert filter_virtual_keys_visible_to_actor(
         keys,
         actor_user_id=member_id,
-        team_role="member",
-        is_platform_admin=False,
     ) == [own]
 
     assert filter_virtual_keys_visible_to_actor(
         keys,
         actor_user_id=owner_id,
-        team_role="owner",
-        is_platform_admin=False,
     ) == [other]

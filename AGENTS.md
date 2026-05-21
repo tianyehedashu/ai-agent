@@ -92,4 +92,4 @@ from libs.types import Result
 
 ## 详细规范
 
-[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md)
+[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md) | 数据库 **Schema 设计 + 迁移**：Skill [`.agents/skills/database-schema/SKILL.md`](.agents/skills/database-schema/SKILL.md)（`basemodel.md` / `design.md` / `reference.md`）

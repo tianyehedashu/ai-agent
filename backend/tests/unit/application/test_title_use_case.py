@@ -10,7 +10,7 @@ import pytest
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import TitleUseCase
 from domains.session.application.ports import TitleLlmChatResult
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -103,7 +103,9 @@ class TestTitleUseCase:
         """Test: Update session title."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = TitleUseCase(db_session)
@@ -174,7 +176,9 @@ class TestTitleUseCase:
         """Test: Long title gets truncated."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = TitleUseCase(db_session)
@@ -206,7 +210,9 @@ class TestTitleUseCase:
         """Test: Generate and update title."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = TitleUseCase(db_session)

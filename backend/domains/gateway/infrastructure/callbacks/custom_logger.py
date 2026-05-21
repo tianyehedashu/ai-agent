@@ -518,6 +518,41 @@ def _metadata_extra_non_gateway(metadata: dict[str, Any]) -> dict[str, Any] | No
     return extra or None
 
 
+def _settlement_from_response(
+    *,
+    metadata: dict[str, Any],
+    kwargs: dict[str, Any],
+    response_obj: Any,
+    status: str,
+) -> tuple[int, int, int, Decimal, Decimal, dict[str, Any]]:
+    """用量 + 成本结算 + pricing_snapshot（从 _persist_event 抽出以降低复杂度）。"""
+    input_tokens, output_tokens, cached_tokens = _extract_usage(response_obj)
+    if status == "success":
+        upstream_cost, cost_source = _calc_cost(kwargs, response_obj)
+    else:
+        upstream_cost, cost_source = Decimal("0"), "zero"
+    from domains.gateway.application.pricing.pricing_settlement import (
+        merge_pricing_snapshot,
+        settle_request_log_amounts,
+    )
+
+    cost_usd, revenue_usd, settlement_extra = settle_request_log_amounts(
+        metadata=metadata,
+        litellm_cost_usd=upstream_cost,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_tokens=cached_tokens,
+    )
+    settlement_extra["cost_source"] = cost_source
+    pricing_snapshot = merge_pricing_snapshot(
+        _build_pricing_snapshot(kwargs, response_obj, cost_usd),
+        settlement_extra,
+        cost_usd=cost_usd,
+        revenue_usd=revenue_usd,
+    )
+    return input_tokens, output_tokens, cached_tokens, cost_usd, revenue_usd, pricing_snapshot
+
+
 async def _persist_event(
     *,
     kwargs: dict[str, Any],
@@ -558,29 +593,18 @@ async def _persist_event(
     entitlement_plan_id = _to_uuid(metadata.get("gateway_entitlement_plan_id"))
     provider_plan_id = _to_uuid(metadata.get("gateway_provider_plan_id"))
 
-    input_tokens, output_tokens, cached_tokens = _extract_usage(response_obj)
-    if status == "success":
-        upstream_cost, cost_source = _calc_cost(kwargs, response_obj)
-    else:
-        upstream_cost, cost_source = Decimal("0"), "zero"
-    from domains.gateway.application.pricing.pricing_settlement import (
-        merge_pricing_snapshot,
-        settle_request_log_amounts,
-    )
-
-    cost_usd, revenue_usd, settlement_extra = settle_request_log_amounts(
+    (
+        input_tokens,
+        output_tokens,
+        cached_tokens,
+        cost_usd,
+        revenue_usd,
+        pricing_snapshot,
+    ) = _settlement_from_response(
         metadata=metadata,
-        litellm_cost_usd=upstream_cost,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cached_tokens=cached_tokens,
-    )
-    settlement_extra["cost_source"] = cost_source
-    pricing_snapshot = merge_pricing_snapshot(
-        _build_pricing_snapshot(kwargs, response_obj, cost_usd),
-        settlement_extra,
-        cost_usd=cost_usd,
-        revenue_usd=revenue_usd,
+        kwargs=kwargs,
+        response_obj=response_obj,
+        status=status,
     )
 
     start_dt = _safe_dt(start_time)

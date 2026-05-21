@@ -11,11 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 
-from domains.identity.presentation.deps import (
-    AuthUser,
-    check_session_ownership,
-    get_owned_user_ids,
-)
+from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase, TitleUseCase
 from domains.session.infrastructure.models.session import Session
 from libs.api.deps import get_session_service, get_title_service
@@ -204,11 +200,9 @@ async def list_sessions(
     agent_id: str | None = None,
 ) -> list[SessionResponse]:
     """获取用户的会话列表"""
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
-    user_id_str = str(user_id) if user_id else None
-    sessions = await session_service.list_sessions(
-        user_id=user_id_str,
-        anonymous_user_id=anonymous_user_id,
+    sessions = await session_service.list_sessions_for_principal(
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
         skip=skip,
         limit=limit,
         agent_id=agent_id,
@@ -223,12 +217,10 @@ async def create_session(
     session_service: SessionUseCase = Depends(get_session_service),
 ) -> SessionResponse:
     """创建新会话"""
-    user_id, anonymous_user_id = get_owned_user_ids(current_user)
-    user_id_str = str(user_id) if user_id else None
     try:
-        session = await session_service.create_session(
-            user_id=user_id_str,
-            anonymous_user_id=anonymous_user_id,
+        session = await session_service.create_session_for_principal(
+            principal_id=current_user.id,
+            is_anonymous=current_user.is_anonymous,
             agent_id=data.agent_id,
             title=data.title,
         )
@@ -250,7 +242,12 @@ async def get_session(
 ) -> SessionResponse:
     """获取会话详情"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
     return _session_to_response(session)
 
 
@@ -263,7 +260,12 @@ async def update_session(
 ) -> SessionResponse:
     """更新会话"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
 
     # Check which fields were explicitly set (including None)
     # Use model_dump(exclude_unset=True) to see what was provided
@@ -299,7 +301,12 @@ async def generate_session_title(
 ) -> SessionResponse:
     """生成会话标题"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
 
     if strategy not in ["first_message", "summary"]:
         raise HTTPException(
@@ -338,7 +345,12 @@ async def delete_session(
 ) -> None:
     """删除会话"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
     await session_service.delete_session(session_id)
 
 
@@ -354,7 +366,12 @@ async def get_session_mcp_config(
 ) -> SessionMCPConfigResponse:
     """获取当前会话的 MCP 工具配置（启用的服务器 ID 列表）"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
     config = session_service.get_session_mcp_config(session)
     return SessionMCPConfigResponse(**config)
 
@@ -372,7 +389,12 @@ async def update_session_mcp_config(
 ) -> SessionMCPConfigResponse:
     """更新当前会话的 MCP 工具配置（选择在该对话中启用的 MCP 服务器）"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
     await session_service.update_session_mcp_config(session_id, data.enabled_servers)
     return SessionMCPConfigResponse(enabled_servers=data.enabled_servers)
 
@@ -387,7 +409,12 @@ async def get_session_messages(
 ) -> list[MessageResponse]:
     """获取会话的消息历史"""
     session = await session_service.get_session_or_raise(session_id)
-    check_session_ownership(session, current_user)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
 
     messages = await session_service.get_messages(session_id, skip=skip, limit=limit)
     result = []

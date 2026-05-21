@@ -16,8 +16,8 @@ from domains.identity.infrastructure.models.api_key import (
     ApiKeyGatewayGrant,
     ApiKeyUsageLog,
 )
-from libs.db.base_repository import OwnedRepositoryBase
-from libs.db.permission_context import get_permission_context
+from libs.db.base_repository import TenantScopedRepositoryBase
+from libs.iam.permission_context import get_permission_context
 
 if TYPE_CHECKING:
     import uuid
@@ -27,10 +27,10 @@ if TYPE_CHECKING:
     from domains.identity.domain.api_key_types import ApiKeyGatewayGrantRequest, ApiKeyScope
 
 
-class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
+class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
     """API Key 仓储实现
 
-    继承 OwnedRepositoryBase 提供自动权限过滤功能。
+    继承 TenantScopedRepositoryBase，按 tenant_id 行级过滤。
     仅支持注册用户。
     """
 
@@ -73,7 +73,11 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
         Returns:
             创建的 ApiKey 模型
         """
+        from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
+
+        tenant_id = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
         api_key = ApiKey(
+            tenant_id=tenant_id,
             user_id=user_id,
             key_hash=key_hash,
             key_id=key_id,
@@ -91,7 +95,7 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
 
     async def get_by_id(self, api_key_id: uuid.UUID) -> ApiKey | None:
         """通过 ID 获取 API Key（自动检查所有权）"""
-        return await self.get_owned(api_key_id)
+        return await self.get_in_tenants(api_key_id)
 
     async def get_encrypted_key(self, api_key_id: uuid.UUID) -> str:
         """获取加密的完整 Key
@@ -153,9 +157,8 @@ class ApiKeyRepository(OwnedRepositoryBase[ApiKey]):
                 "This may indicate an authorization bug."
             )
 
-        # 使用 find_owned 自动应用权限过滤
         query = select(self.model_class)
-        query = self._apply_ownership_filter(query)
+        query = self._apply_tenant_scope(query)
 
         # 应用状态过滤
         if not include_expired:

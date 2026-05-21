@@ -7,26 +7,22 @@ GatewayRoute - 路由配置（含三类 fallback）
 from __future__ import annotations
 
 from typing import Any
-import uuid
 
-from sqlalchemy import ARRAY, Boolean, ForeignKey, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import ARRAY, Boolean, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.orm.base import BaseModel, TenantScopedMixin
 
 
 class GatewayRoute(BaseModel, TenantScopedMixin):
-    """路由配置（仅租户行；系统级见 ``system_gateway_routes``）。"""
+    """路由配置（仅租户行；系统级见 ``system_gateway_routes``）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "gateway_routes"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     virtual_model: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     primary_models: Mapped[list[str]] = mapped_column(
         ARRAY(String(200)), nullable=False, server_default="{}"

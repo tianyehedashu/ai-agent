@@ -22,11 +22,8 @@ from domains.agent.infrastructure.models.product_image_gen_task import (
 from domains.agent.infrastructure.repositories.product_image_gen_task_repository import (
     ProductImageGenTaskRepository,
 )
-from domains.identity.application.permission_context_factory import (
-    build_permission_context_with_team_ids,
-)
+from domains.identity.application.permission_context_composer import PermissionContextComposer
 from libs.db.database import get_session_factory
-from libs.db.permission_context import set_permission_context
 from libs.exceptions import NotFoundError
 from utils.logging import get_logger
 
@@ -60,12 +57,13 @@ async def _generate_images_background(
     """后台异步生成 8 张图片，逐条调用 ImageGenerator 并更新数据库。"""
     session_factory = get_session_factory()
     async with session_factory() as db:
-        ctx = await build_permission_context_with_team_ids(
-            db,
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+        composer = PermissionContextComposer(db)
+        composer.install(
+            await composer.compose_for_owner(
+                user_id=user_id,
+                anonymous_user_id=anonymous_user_id,
+            )
         )
-        set_permission_context(ctx)
         from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
             create_listing_studio_image_service,
         )
@@ -207,8 +205,6 @@ class ProductImageGenTaskUseCase:
         ChatModelResolutionUseCase.resolve_image_gen_model_for_chat 解析后传入。
         """
         task = await self.repo.create(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
             job_id=job_id,
             prompts=prompts or [],
             status=ProductImageGenTaskStatus.PENDING,
@@ -245,19 +241,19 @@ class ProductImageGenTaskUseCase:
         filters: dict[str, Any] = {}
         if job_id:
             filters["job_id"] = job_id
-        items = await self.repo.find_owned(
+        items = await self.repo.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="created_at",
             order_desc=True,
             **filters,
         )
-        total = await self.repo.count_owned(**filters)
+        total = await self.repo.count_for_tenants(**filters)
         return ([_task_to_dict(t) for t in items], total)
 
     async def get_task(self, task_id: uuid.UUID) -> dict[str, Any]:
         """详情（当前用户）。"""
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("ProductImageGenTask", str(task_id))
         return _task_to_dict(task)

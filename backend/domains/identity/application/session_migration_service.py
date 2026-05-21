@@ -114,4 +114,3 @@ async def migrate_anonymous_data_on_auth(
         video_task_service=video_task_service,
     )
     return await service.migrate(user_id, anonymous_user_id)
-

@@ -1,4 +1,20 @@
 {
+  // 终端：Agent / 任务 / 集成终端统一使用 PowerShell 7
+  "terminal.integrated.profiles.windows": {
+    "PowerShell 7": {
+      "path": "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe",
+      "args": ["-NoLogo"],
+      "icon": "terminal-powershell"
+    },
+    "Windows PowerShell": null,
+    "PowerShell": null
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell 7",
+  "terminal.integrated.automationProfile.windows": {
+    "path": "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe",
+    "args": ["-NoLogo"]
+  },
+
   // ============================================================================
   // Python Linting 配置 - 与项目 Makefile 保持一致
   // ============================================================================

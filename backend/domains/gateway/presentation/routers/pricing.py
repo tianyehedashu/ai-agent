@@ -129,7 +129,7 @@ async def estimate_pricing(
     try:
         payload = await estimate_usage_cost(
             db,
-            tenant_id=team.team_id,
+            team_id=team.team_id,
             gateway_model_id=body.gateway_model_id,
             input_tokens=body.input_tokens,
             output_tokens=body.output_tokens,
@@ -151,7 +151,7 @@ async def pricing_reconciliation(
     month: int = Query(..., ge=1, le=12),
 ) -> PricingReconciliationResponse:
     _ = admin
-    payload = await team_month_reconciliation(db, tenant_id=team.team_id, year=year, month=month)
+    payload = await team_month_reconciliation(db, team_id=team.team_id, year=year, month=month)
     return PricingReconciliationResponse.model_validate(payload)
 
 
@@ -301,7 +301,7 @@ async def sync_downstream_from_upstream(
     report = await svc.bulk_mirror_from_upstream(
         scope=scope_norm,
         scope_id=sid,
-        tenant_id=team.team_id,
+        team_id=team.team_id,
     )
     await db.commit()
     return SyncReportResponse(created=report.created, skipped=report.skipped)
@@ -316,7 +316,7 @@ async def list_my_prices(
 ) -> list[PricingRateMemberView]:
     _ = user
     cur = _parse_currency(currency)
-    rows = await _catalog_reads(db).list_my_prices(tenant_id=team.team_id, currency=cur)
+    rows = await _catalog_reads(db).list_my_prices(team_id=team.team_id, currency=cur)
     return [PricingRateMemberView.model_validate(r) for r in rows]
 
 

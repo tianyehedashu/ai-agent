@@ -119,10 +119,10 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
 
     await run_gateway_startup(_fastapi_app)
 
-    # 初始化 Redis
+    # 初始化 Redis（开发机未起 redis 时仅告警，不阻断启动）
     try:
         await init_redis()
-    except (ConnectionError, OSError) as e:
+    except Exception as e:  # noqa: BLE001 — redis/asyncio 可能抛多种连接异常
         logger.warning("Redis not available: %s", e)
 
     await run_agent_startup(_fastapi_app)

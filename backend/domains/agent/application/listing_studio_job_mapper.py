@@ -11,8 +11,7 @@ if TYPE_CHECKING:
 def job_to_dict(job: ListingStudioJob) -> dict[str, Any]:
     return {
         "id": str(job.id),
-        "user_id": str(job.user_id) if job.user_id else None,
-        "anonymous_user_id": job.anonymous_user_id,
+        "tenant_id": str(job.tenant_id),
         "session_id": str(job.session_id) if job.session_id else None,
         "title": job.title,
         "status": job.status,

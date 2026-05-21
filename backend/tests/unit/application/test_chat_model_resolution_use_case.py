@@ -16,7 +16,7 @@ from domains.agent.application.chat_model_resolution_use_case import (
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.identity.infrastructure.models.user import User
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -88,7 +88,9 @@ class TestResolveTextChatModelLegacyPaths:
         await db_session.flush()
         await db_session.refresh(user)
         self.user = user
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         self.catalog = AsyncMock()
         self.uc = ChatModelResolutionUseCase(db_session, catalog=self.catalog)
@@ -164,7 +166,9 @@ class TestGetAvailableModels:
         db_session.add(user)
         await db_session.flush()
         await db_session.refresh(user)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
         from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter

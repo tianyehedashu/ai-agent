@@ -33,7 +33,7 @@ class AgentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Agent 名称")
     description: str | None = Field(default=None, max_length=500, description="描述")
     system_prompt: str = Field(..., min_length=1, description="系统提示")
-    model: str = Field(default="claude-3-5-sonnet-20241022", description="模型名称")
+    model: str = Field(default="claude-3-5-sonnet", description="模型名称")
     tools: list[str] = Field(default_factory=list, description="启用的工具列表")
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度参数")
     max_tokens: int = Field(default=4096, ge=1, le=128000, description="最大输出Token")

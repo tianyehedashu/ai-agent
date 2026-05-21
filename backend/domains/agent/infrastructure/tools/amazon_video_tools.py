@@ -15,7 +15,7 @@ from domains.agent.domain.types import ToolCategory, ToolResult
 from domains.agent.infrastructure.tools.base import BaseTool, ToolParameters, register_tool
 from domains.identity.domain.types import ANONYMOUS_ID_PREFIX
 from libs.db.database import get_session_factory
-from libs.db.permission_context import get_permission_context
+from libs.iam.permission_context import get_permission_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

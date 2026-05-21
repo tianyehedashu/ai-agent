@@ -42,48 +42,31 @@ tests/
 - ContextVar 的线程安全设置和获取
 - 上下文清理机制
 
-### 2. Repository 基类测试 (`test_base_repository.py`)
+### 2. Repository 基类测试
 
-**测试内容**：
-- ✅ `model_class` 属性
-- ✅ `anonymous_user_id_column` 属性
-- ✅ `user_id_column` 默认值
-- ✅ 管理员绕过权限过滤
-- ✅ 注册用户权限过滤
-- ✅ 匿名用户权限过滤
-- ✅ 无权限上下文时返回空结果
-- ✅ `find_owned` 方法（管理员）
-- ✅ `get_owned` 方法（权限检查）
-- ✅ `count_owned` 方法
-
-**关键测试点**：
-- `_apply_ownership_filter` 方法的过滤逻辑
-- 管理员绕过机制
-- 不同用户类型的过滤行为
+- ✅ `test_tenant_scoped_repository.py` — `TenantScopedRepositoryBase` 与 `team_ids` 过滤
+- ❌ `test_base_repository.py`（`OwnedRepositoryBase`）— **已删除**
 
 ### 3. 权限检查函数测试 (`test_permission_checks.py`)
 
 **测试内容**：
 
-#### `check_ownership` 测试
-- ✅ 所有者可以访问资源
-- ✅ 非所有者不能访问资源
-- ✅ 管理员可以访问所有资源
-- ✅ 自定义资源名称
+#### `check_tenant_access` / `check_tenant_access_or_public`
+- ✅ `tenant_id ∈ team_ids` 放行
+- ✅ 外 tenant 拒绝
+- ✅ 平台 admin 旁路
+- ✅ 无 `PermissionContext` 拒绝
+- ✅ 公开资源跳过 tenant 检查
 
-#### `check_ownership_or_public` 测试
-- ✅ 所有者可以访问私有资源
-- ✅ 任何人都可以访问公开资源
-- ✅ 非所有者不能访问私有资源
-- ✅ 管理员可以访问所有资源（包括私有）
+#### Session 鉴权（`SessionUseCase.assert_session_accessible` + 集成 API）
+- ✅ 注册用户/匿名用户会话隔离（`test_session_permissions.py`）
+- ✅ REST 与 Chat 对外部 session_id 拒绝语义一致（`test_session_authz_path_parity.py`）
+- ✅ Chat 检查点须先会话鉴权（`test_chat_checkpoint_authz.py`）
+- ✅ `can_access_personal_session` 域策略（`tests/unit/session/domain/test_session_access_policy.py`）
+- ✅ 管理员可按 ID 读取任意会话；列表仍仅 personal tenant
 
-#### `check_session_ownership` 测试
-- ✅ 注册用户拥有自己的会话
-- ✅ 注册用户不能访问其他用户的会话
-- ✅ 匿名用户拥有自己的会话
-- ✅ 匿名用户不能访问其他匿名用户的会话
-- ✅ 管理员可以访问所有会话
-- ✅ 管理员可以访问匿名用户的会话
+#### Gateway 域策略
+- ✅ 成员请求日志可见性（`tests/unit/gateway/domain/test_usage_log_visibility_policy.py`）
 
 **关键测试点**：
 - 管理员绕过机制
@@ -97,8 +80,8 @@ tests/
 #### 会话仓储权限过滤
 - ✅ `find_by_user` 根据权限上下文过滤
 - ✅ `get_by_id` 根据权限上下文过滤
-- ✅ 管理员可以访问所有会话
-- ✅ 匿名用户根据 `anonymous_user_id` 过滤
+- ✅ 会话列表仅 personal tenant；admin `get_by_id` 可绕过 tenant 过滤
+- ✅ 匿名用户按 personal tenant 隔离
 
 #### Agent 仓储权限过滤
 - ✅ `find_by_user` 根据权限上下文过滤
@@ -167,9 +150,8 @@ pytest tests/unit/libs/db/test_permission_context.py::TestPermissionContext::tes
    - ✅ 不同用户类型过滤
 
 3. **权限检查函数**
-   - ✅ `check_ownership`
-   - ✅ `check_ownership_or_public`
-   - ✅ `check_session_ownership`
+   - ✅ `check_tenant_access` / `check_tenant_access_or_public`
+   - ✅ `assert_session_accessible` / `test_session_access_policy`
    - ✅ 管理员绕过机制
 
 4. **Repository 实现**

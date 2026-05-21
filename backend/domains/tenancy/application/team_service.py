@@ -180,10 +180,7 @@ class TeamService:
         if team is None:
             team = await self._teams.get_personal(user_id)
         if team is None:
-            raise PersonalTeamNotInitializedError(
-                message="Personal team is not initialized for this user",
-                resource="Team",
-            )
+            raise PersonalTeamNotInitializedError()
         role = await self._membership.member_role(
             self._session,
             tenant_id=TenantId(team.id),

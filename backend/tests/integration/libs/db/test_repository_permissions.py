@@ -16,7 +16,7 @@ from domains.identity.infrastructure.models.user import User
 from domains.session.infrastructure.models import Session
 from domains.session.infrastructure.repositories import SessionRepository
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -137,17 +137,11 @@ class TestSessionRepositoryPermissions:
             clear_permission_context()
 
     @pytest.mark.asyncio
-    async def test_admin_can_access_all_sessions(self, db_session: AsyncSession, test_user: User):
+    async def test_admin_get_by_id_bypasses_tenant_list_scope(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """平台 admin 可按 ID 读取任意会话；列表仍仅 personal tenant。"""
         session1, _ = await _add_session_for_user(db_session, test_user, title="User 1 Session")
-
-        other_user = User(
-            email="other@example.com",
-            hashed_password="hashed",
-            role="user",
-        )
-        db_session.add(other_user)
-        await db_session.flush()
-        session2, _ = await _add_session_for_user(db_session, other_user, title="User 2 Session")
         await db_session.commit()
 
         admin_user = User(
@@ -163,12 +157,9 @@ class TestSessionRepositoryPermissions:
 
         try:
             repository = SessionRepository(db_session)
-            sessions = await repository.find_by_user(user_id=admin_user.id)
-
-            assert len(sessions) >= 2
-            session_ids = {s.id for s in sessions}
-            assert session1.id in session_ids
-            assert session2.id in session_ids
+            assert await repository.get_by_id(session1.id) is not None
+            listed = await repository.find_by_user(user_id=admin_user.id)
+            assert session1.id not in {s.id for s in listed}
         finally:
             clear_permission_context()
 

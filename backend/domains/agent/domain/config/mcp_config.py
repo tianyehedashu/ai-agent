@@ -34,7 +34,6 @@ class MCPServerEntityConfig(BaseModel):
     display_name: str | None = Field(default=None, description="显示名称")
     url: str = Field(..., description="MCP 服务器 URL")
     scope: MCPScope = Field(..., description="作用域（system/user）")
-    user_id: uuid.UUID | None = Field(default=None, description="创建者 ID（system 级为 NULL）")
     env_type: MCPEnvironmentType = Field(..., description="环境类型")
     env_config: dict[str, Any] = Field(default_factory=dict, description="环境配置")
     enabled: bool = Field(default=True, description="是否启用")

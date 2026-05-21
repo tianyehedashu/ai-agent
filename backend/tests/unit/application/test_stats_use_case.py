@@ -14,7 +14,7 @@ from domains.agent.infrastructure.repositories.message_repository import Message
 from domains.identity.application import UserUseCase
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -49,7 +49,9 @@ class TestStatsService:
         db_session.add(user)
         await db_session.flush()
 
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             agent_service = AgentUseCase(db_session)
@@ -99,7 +101,9 @@ class TestStatsService:
         db_session.add(user)
         await db_session.flush()
 
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             agent_service = AgentUseCase(db_session)

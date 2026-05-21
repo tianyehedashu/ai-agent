@@ -1,6 +1,4 @@
-"""
-Listing Studio Prompt Template Repository - Listing Studio 提示词模板仓储
-"""
+"""Listing Studio Prompt Template Repository"""
 
 from typing import Any
 import uuid
@@ -8,30 +6,27 @@ import uuid
 from domains.agent.infrastructure.models.listing_studio_prompt_template import (
     ListingStudioPromptTemplate,
 )
-from libs.db.base_repository import OwnedRepositoryBase
+from libs.db.base_repository import TenantScopedRepositoryBase
+from libs.db.tenant_resolve import resolve_tenant_id_for_write
 
 
-class ListingStudioPromptTemplateRepository(OwnedRepositoryBase[ListingStudioPromptTemplate]):
+class ListingStudioPromptTemplateRepository(TenantScopedRepositoryBase[ListingStudioPromptTemplate]):
     @property
     def model_class(self) -> type[ListingStudioPromptTemplate]:
         return ListingStudioPromptTemplate
 
-    @property
-    def anonymous_user_id_column(self) -> str:
-        return "anonymous_user_id"
-
     async def create(
         self,
-        user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
+        *,
         capability_id: str = "",
         name: str = "",
         content: str | None = None,
         prompts: list | None = None,
+        tenant_id: uuid.UUID | None = None,
     ) -> ListingStudioPromptTemplate:
+        resolved = tenant_id or await resolve_tenant_id_for_write(self.db)
         t = ListingStudioPromptTemplate(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+            tenant_id=resolved,
             capability_id=capability_id,
             name=name,
             content=content,
@@ -47,7 +42,7 @@ class ListingStudioPromptTemplateRepository(OwnedRepositoryBase[ListingStudioPro
         template_id: uuid.UUID,
         **kwargs: Any,
     ) -> ListingStudioPromptTemplate | None:
-        t = await self.get_owned(template_id)
+        t = await self.get_in_tenants(template_id)
         if not t:
             return None
         allowed = {"name", "content", "prompts"}

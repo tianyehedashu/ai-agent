@@ -21,9 +21,7 @@ from domains.agent.infrastructure.repositories.video_gen_task_repository import 
     VideoGenTaskRepository,
 )
 from domains.agent.infrastructure.video_api.client import VideoAPIClient
-from domains.identity.domain.types import Principal
 from domains.session.application.ports import SessionApplicationPort
-from domains.session.domain.entities import SessionOwner
 from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
@@ -100,14 +98,14 @@ class VideoTaskUseCase:
         if prompt_source:
             filters["prompt_source"] = prompt_source
 
-        tasks = await self.repo.find_owned(
+        tasks = await self.repo.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="created_at",
             order_desc=True,
             **filters,
         )
-        total = await self.repo.count_owned(**filters)
+        total = await self.repo.count_for_tenants(**filters)
 
         return [self._to_dict(t) for t in tasks], total
 
@@ -123,7 +121,7 @@ class VideoTaskUseCase:
         Raises:
             NotFoundError: 任务不存在或无权限
         """
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
         return self._to_dict(task)
@@ -169,10 +167,6 @@ class VideoTaskUseCase:
                 "principal_id is required",
                 code="MISSING_OWNER",
             )
-
-        owner = SessionOwner.from_principal_id(
-            principal_id, Principal.is_anonymous_id(principal_id)
-        )
 
         # 验证 marketplace
         valid_marketplaces = {"jp", "us", "de", "uk", "fr", "it", "es"}
@@ -223,8 +217,6 @@ class VideoTaskUseCase:
                 )
 
         task = await self.repo.create(
-            user_id=owner.user_id,
-            anonymous_user_id=owner.anonymous_user_id,
             session_id=actual_session_id,
             prompt_text=prompt_text,
             prompt_source=prompt_source,
@@ -283,7 +275,7 @@ class VideoTaskUseCase:
         Raises:
             NotFoundError: 任务不存在或无权限
         """
-        task = await self.repo.update(task_id, **kwargs)
+        task = await self.repo.update_fields(task_id, **kwargs)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
 
@@ -303,7 +295,7 @@ class VideoTaskUseCase:
             NotFoundError: 任务不存在或无权限
             ValidationError: 任务状态不允许提交
         """
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
 
@@ -337,7 +329,7 @@ class VideoTaskUseCase:
             NotFoundError: 任务不存在或无权限
             ValidationError: 任务状态不允许轮询
         """
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
 
@@ -383,7 +375,7 @@ class VideoTaskUseCase:
             NotFoundError: 任务不存在或无权限
             ValidationError: 任务状态不允许取消
         """
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
 
@@ -393,7 +385,7 @@ class VideoTaskUseCase:
                 code="INVALID_TASK_STATUS",
             )
 
-        task = await self.repo.update(
+        task = await self.repo.update_fields(
             task_id,
             status=VideoGenTaskStatus.CANCELLED,
         )
@@ -415,7 +407,7 @@ class VideoTaskUseCase:
             NotFoundError: 任务不存在或无权限
             ValidationError: 任务状态不允许重试
         """
-        task = await self.repo.get_owned(task_id)
+        task = await self.repo.get_in_tenants(task_id)
         if not task:
             raise NotFoundError("VideoGenTask", str(task_id))
 
@@ -564,8 +556,7 @@ class VideoTaskUseCase:
         """将任务转换为字典"""
         return {
             "id": str(task.id),
-            "user_id": str(task.user_id) if task.user_id else None,
-            "anonymous_user_id": task.anonymous_user_id,
+            "tenant_id": str(task.tenant_id),
             "session_id": str(task.session_id) if task.session_id else None,
             "workflow_id": task.workflow_id,
             "run_id": task.run_id,

@@ -35,8 +35,6 @@ def assert_virtual_key_accessible_by_actor(
     key_id: str,
     tenant_id: UUID,
     actor_user_id: UUID | None,
-    team_role: str,  # noqa: ARG001 — 保留签名；可见性仅按创建者
-    is_platform_admin: bool,  # noqa: ARG001
     require_active: bool = True,
 ) -> VirtualKeyAccessView:
     """校验 actor 是否可访问指定 vkey；失败抛领域异常。
@@ -59,8 +57,6 @@ def filter_virtual_keys_visible_to_actor(
     keys: list[VirtualKeyAccessView],
     *,
     actor_user_id: UUID | None,
-    team_role: str,  # noqa: ARG001
-    is_platform_admin: bool,  # noqa: ARG001
 ) -> list[VirtualKeyAccessView]:
     """按创建者过滤 vkey 列表（与 ``assert_virtual_key_accessible_by_actor`` 可见集合一致）。"""
     if actor_user_id is None:

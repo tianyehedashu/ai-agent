@@ -11,68 +11,62 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.mcp_server import MCPServer
+from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
 from domains.identity.infrastructure.models.user import User
 
 
 @pytest.fixture(autouse=True)
 async def setup_system_mcp_servers(db_session: AsyncSession):
-    """为测试创建默认系统级 MCP 服务器"""
-    # 检查是否已存在系统服务器
-    result = await db_session.execute(select(MCPServer).where(MCPServer.scope == "system"))
+    """为测试创建默认系统级 MCP 服务器（``system_mcp_servers`` 表）。"""
+    result = await db_session.execute(select(SystemMCPServer))
     existing = result.scalars().all()
 
     if not existing:
-        # 创建默认系统服务器（与迁移中的数据一致）
         system_servers = [
-            MCPServer(
+            SystemMCPServer(
                 name="filesystem",
                 display_name="文件系统",
                 url="stdio://npx -y @modelcontextprotocol/server-filesystem",
-                scope="system",
                 env_type="preinstalled",
                 env_config={"allowedDirectories": ["."]},
                 enabled=True,
                 description="访问本地文件系统",
                 category="productivity",
             ),
-            MCPServer(
+            SystemMCPServer(
                 name="github",
                 display_name="GitHub",
                 url="stdio://npx -y @modelcontextprotocol/server-github",
-                scope="system",
                 env_type="dynamic_injected",
                 env_config={},
                 enabled=False,
                 description="GitHub 仓库集成（需要配置 token）",
                 category="development",
             ),
-            MCPServer(
+            SystemMCPServer(
                 name="postgres",
                 display_name="PostgreSQL",
                 url="stdio://npx -y @modelcontextprotocol/server-postgres",
-                scope="system",
                 env_type="dynamic_injected",
                 env_config={"connectionString": ""},
                 enabled=False,
                 description="PostgreSQL 数据库访问",
                 category="database",
             ),
-            MCPServer(
+            SystemMCPServer(
                 name="slack",
                 display_name="Slack",
                 url="stdio://npx -y @modelcontextprotocol/server-slack",
-                scope="system",
                 env_type="dynamic_injected",
                 env_config={},
                 enabled=False,
                 description="Slack 集成（需要配置 token）",
                 category="communication",
             ),
-            MCPServer(
+            SystemMCPServer(
                 name="brave-search",
                 display_name="Brave 搜索",
                 url="stdio://npx -y @modelcontextprotocol/server-brave-search",
-                scope="system",
                 env_type="preinstalled",
                 env_config={},
                 enabled=True,

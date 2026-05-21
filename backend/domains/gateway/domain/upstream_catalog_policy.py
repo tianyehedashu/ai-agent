@@ -72,15 +72,7 @@ def derive_client_facing_model_alias(upstream_model_id: str) -> str:
     parts = raw.split("-")
 
     # OpenAI 形：尾部三段 "YYYY-MM-DD"
-    if (
-        len(parts) >= 4
-        and len(parts[-3]) == 4
-        and parts[-3].isdigit()
-        and len(parts[-2]) == 2
-        and parts[-2].isdigit()
-        and len(parts[-1]) == 2
-        and parts[-1].isdigit()
-    ):
+    if _has_openai_trailing_date_suffix(parts):
         return "-".join(parts[:-3])
 
     # Anthropic 形：尾部一段 "YYYYMMDD"
@@ -90,8 +82,14 @@ def derive_client_facing_model_alias(upstream_model_id: str) -> str:
     return raw
 
 
+def _has_openai_trailing_date_suffix(parts: list[str]) -> bool:
+    if len(parts) < 4:
+        return False
+    y, m, d = parts[-3], parts[-2], parts[-1]
+    return len(y) == 4 and y.isdigit() and len(m) == 2 and m.isdigit() and len(d) == 2 and d.isdigit()
+
+
 __all__ = [
     "derive_client_facing_model_alias",
     "resolve_openai_compatible_models_list_url",
 ]
-

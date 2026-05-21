@@ -4,7 +4,6 @@ Base Model - 模型基类
 包含:
 - TimestampMixin: 时间戳混入类
 - TenantScopedMixin / AuditableMixin / PolicyTargetMixin: 多租户与审计
-- OwnedMixin: 用户归属（grace 期与 TenantScoped 并存）
 - BaseModel: 模型基类
 """
 
@@ -14,7 +13,7 @@ import uuid
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from libs.db.database import Base
 
@@ -37,17 +36,29 @@ class TenantScopedProtocol(Protocol):
 
 
 class TenantScopedMixin:
-    """多租户混入类
+    """多租户混入类。
 
-    子类须定义 ``tenant_id`` 列，或 ``mapped_column("team_id", ...)`` 别名。
+    默认提供 ``tenant_id UUID NOT NULL + index``，**不设 DB 外键**
+    （由应用层保证引用完整性；与项目主流约定一致）。
+
+    若某张表确需 DB 外键或其他差异（罕见），在子类内同名 ``mapped_column``
+    显式覆盖即可——会替换 ``declared_attr`` 生成的列。
+
     系统级配置请使用 ``system_*`` 表，勿在本表留 NULL tenant。
     """
 
-    tenant_id: "Mapped[uuid.UUID]"
+    @declared_attr
+    @classmethod
+    def tenant_id(cls) -> Mapped[uuid.UUID]:
+        return mapped_column(
+            UUID(as_uuid=True),
+            nullable=False,
+            index=True,
+        )
 
 
 class AuditableMixin:
-    """审计字段（不参与行级授权）。"""
+    """审计字段（不参与行级授权）。子类按需声明 ``created_by`` / ``updated_by`` 列。"""
 
     created_by: "Mapped[uuid.UUID | None]"
     updated_by: "Mapped[uuid.UUID | None]"
@@ -61,73 +72,14 @@ class PolicyTargetProtocol(Protocol):
 
 
 class PolicyTargetMixin:
-    """策略挂载混入类（EntitlementPlan、按 vkey 的 Budget 等）。"""
+    """策略挂载混入类（EntitlementPlan、按 vkey 的 Budget 等）。
+
+    各子类的 ``target_kind`` / ``target_id`` nullable / index 约束差异较大，
+    Mixin 仅作类型协议，列在子类显式声明。
+    """
 
     target_kind: "Mapped[str | None]"
     target_id: "Mapped[uuid.UUID | None]"
-
-
-# =============================================================================
-# 所有权协议和混入类（grace：user_id 资源逐步迁到 personal team tenant_id）
-# =============================================================================
-
-
-@runtime_checkable
-class OwnedProtocol(Protocol):
-    """所有权协议 - 用于类型检查
-
-    定义拥有所有权的模型必须实现的接口。
-    """
-
-    user_id: uuid.UUID | None
-    anonymous_user_id: str | None
-
-
-class OwnedMixin:
-    """所有权混入类
-
-    为模型提供所有权字段的类型声明和通用方法。
-    各模型仍然自己定义字段（必填/可选），Mixin 只提供类型协议。
-
-    使用方式：
-    - Agent: 继承 OwnedMixin，user_id 必填
-    - Session: 继承 OwnedMixin，user_id 可选，anonymous_user_id 可选
-
-    Example:
-        class Agent(BaseModel, OwnedMixin):
-            user_id: Mapped[uuid.UUID] = mapped_column(...)  # 必填
-
-        class Session(BaseModel, OwnedMixin):
-            user_id: Mapped[uuid.UUID | None] = mapped_column(...)  # 可选
-            anonymous_user_id: Mapped[str | None] = mapped_column(...)  # 可选
-    """
-
-    # 类型声明（不定义字段，由子类自己定义）
-    # 使用字符串注解避免循环导入
-    user_id: "Mapped[uuid.UUID | None]"
-    anonymous_user_id: "Mapped[str | None] | None"
-
-    def is_owned_by(
-        self,
-        user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
-    ) -> bool:
-        """检查是否被指定用户拥有
-
-        Args:
-            user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
-
-        Returns:
-            是否被指定用户拥有
-        """
-        # 优先检查匿名用户
-        if anonymous_user_id and hasattr(self, "anonymous_user_id"):
-            return getattr(self, "anonymous_user_id", None) == anonymous_user_id
-        # 检查注册用户
-        if user_id:
-            return getattr(self, "user_id", None) == user_id
-        return False
 
 
 # =============================================================================

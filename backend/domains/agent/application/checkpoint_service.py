@@ -48,10 +48,24 @@ class CheckpointService:
             checkpoint_id,
             checkpoint.model_dump(mode="json"),
         )
+        await self.cache.bind_checkpoint_session(checkpoint_id, session_id)
 
         await self.cache.add_to_session_index(session_id, checkpoint_id, step)
 
         return checkpoint_id
+
+    async def resolve_session_id(self, checkpoint_id: str) -> str | None:
+        """解析检查点所属会话 ID（不加载完整状态）。"""
+        return await self.cache.resolve_session_id(checkpoint_id)
+
+    async def resolve_session_id_or_raise(self, checkpoint_id: str) -> str:
+        session_id = await self.resolve_session_id(checkpoint_id)
+        if not session_id:
+            raise CheckpointError(
+                f"Checkpoint not found: {checkpoint_id}",
+                checkpoint_id=checkpoint_id,
+            )
+        return session_id
 
     async def load(self, checkpoint_id: str) -> AgentState:
         """加载检查点状态"""

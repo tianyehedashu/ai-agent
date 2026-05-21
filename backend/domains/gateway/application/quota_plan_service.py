@@ -114,11 +114,7 @@ class QuotaPlanService:
             limit_usd = spec.limit_usd
             limit_tokens = spec.limit_tokens
             limit_requests = spec.limit_requests
-            if (
-                limit_usd is not None
-                and limit_usd > 0
-                and snap.used_usd + estimate_usd >= limit_usd
-            ):
+            if limit_usd is not None and 0 < limit_usd <= snap.used_usd + estimate_usd:
                 return QuotaPlanCheckResult(
                     allowed=False,
                     snapshots=snapshots,
@@ -133,8 +129,7 @@ class QuotaPlanService:
                 )
             if (
                 limit_tokens is not None
-                and limit_tokens > 0
-                and snap.used_tokens + estimate_tokens >= limit_tokens
+                and 0 < limit_tokens <= snap.used_tokens + estimate_tokens
             ):
                 return QuotaPlanCheckResult(
                     allowed=False,
@@ -150,8 +145,7 @@ class QuotaPlanService:
                 )
             if (
                 limit_requests is not None
-                and limit_requests > 0
-                and snap.used_requests + request_count > limit_requests
+                and 0 < limit_requests < snap.used_requests + request_count
             ):
                 return QuotaPlanCheckResult(
                     allowed=False,

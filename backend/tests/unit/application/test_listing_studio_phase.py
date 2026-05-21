@@ -33,8 +33,7 @@ from domains.agent.infrastructure.models.listing_studio_job_step import (
 )
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
-from libs.db.permission_context import (
-    PermissionContext,
+from libs.iam.permission_context import (
     clear_permission_context,
     set_permission_context,
 )
@@ -445,13 +444,15 @@ class TestRunStep:
     async def test_run_step_renders_and_executes(self, db_session):
         """run_step 渲染提示词后直接执行 Runner，status 为 completed"""
         user = await self._create_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             from domains.agent.application.listing_studio_use_case import ListingStudioUseCase
 
             uc = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
-            job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Test")
+            job = await uc.create_job(principal_id=str(user.id), title="Test")
             job_id = uuid.UUID(job["id"])
 
             captured_prompt = []
@@ -487,13 +488,15 @@ class TestRunStep:
     async def test_run_step_uses_default_prompt_when_none(self, db_session):
         """未提供 meta_prompt 时使用系统默认提示词"""
         user = await self._create_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             from domains.agent.application.listing_studio_use_case import ListingStudioUseCase
 
             uc = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
-            job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Default")
+            job = await uc.create_job(principal_id=str(user.id), title="Default")
             job_id = uuid.UUID(job["id"])
 
             captured_prompt = []
@@ -524,13 +527,15 @@ class TestRunStep:
     async def test_run_step_failure_sets_failed(self, db_session):
         """Runner 异常时 step status → failed"""
         user = await self._create_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             from domains.agent.application.listing_studio_use_case import ListingStudioUseCase
 
             uc = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
-            job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Fail")
+            job = await uc.create_job(principal_id=str(user.id), title="Fail")
             job_id = uuid.UUID(job["id"])
 
             async def _mock_runner(_i, _p, _g, **_kw):
@@ -561,13 +566,15 @@ class TestRunStep:
     async def test_step_serialization_includes_fields(self, db_session):
         """序列化结果中包含 meta_prompt 和 prompt_used"""
         user = await self._create_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             from domains.agent.application.listing_studio_use_case import ListingStudioUseCase
 
             uc = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
-            job = await uc.create_job(principal_id=str(user.id), user_id=user.id, title="Ser")
+            job = await uc.create_job(principal_id=str(user.id), title="Ser")
             job_id = uuid.UUID(job["id"])
 
             async def _mock_runner(_i, _p, _g, **_kw):

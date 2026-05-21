@@ -85,15 +85,15 @@ class ListingStudioPromptTemplateUseCase:
         limit: int = 50,
     ) -> tuple[list[dict], int]:
         """列出某能力下的用户模板。"""
-        # 按 capability_id 过滤需在 find_owned 里支持；OwnedRepositoryBase 支持 **filters
-        items = await self.repo.find_owned(
+        # capability_id 经 find_for_tenants **filters 过滤
+        items = await self.repo.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="updated_at",
             order_desc=True,
             capability_id=capability_id,
         )
-        total = await self.repo.count_owned(capability_id=capability_id)
+        total = await self.repo.count_for_tenants(capability_id=capability_id)
         return [_template_to_dict(t) for t in items], total
 
     async def create_template(
@@ -107,8 +107,6 @@ class ListingStudioPromptTemplateUseCase:
     ) -> dict[str, Any]:
         """保存为用户模板。"""
         t = await self.repo.create(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
             capability_id=capability_id,
             name=name,
             content=content,
@@ -120,7 +118,7 @@ class ListingStudioPromptTemplateUseCase:
 
     async def get_template(self, template_id: uuid.UUID) -> dict[str, Any]:
         """获取单条模板。"""
-        t = await self.repo.get_owned(template_id)
+        t = await self.repo.get_in_tenants(template_id)
         if not t:
             raise NotFoundError("ListingStudioPromptTemplate", str(template_id))
         return _template_to_dict(t)
@@ -140,7 +138,7 @@ class ListingStudioPromptTemplateUseCase:
 
     async def delete_template(self, template_id: uuid.UUID) -> None:
         """删除用户模板。"""
-        t = await self.repo.get_owned(template_id)
+        t = await self.repo.get_in_tenants(template_id)
         if not t:
             raise NotFoundError("ListingStudioPromptTemplate", str(template_id))
         await self.db.delete(t)
@@ -150,8 +148,7 @@ class ListingStudioPromptTemplateUseCase:
 def _template_to_dict(t: Any) -> dict[str, Any]:
     return {
         "id": str(t.id),
-        "user_id": str(t.user_id) if t.user_id else None,
-        "anonymous_user_id": t.anonymous_user_id,
+        "tenant_id": str(t.tenant_id),
         "capability_id": t.capability_id,
         "name": t.name,
         "content": t.content,

@@ -12,18 +12,26 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.mcp_server import MCPServer
+from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
 from domains.identity.infrastructure.models.user import User
+from domains.tenancy.application.team_service import TeamService
+
+
+async def _personal_tenant_id(db_session: AsyncSession, user_id: uuid.UUID) -> uuid.UUID:
+    team = await TeamService(db_session).ensure_personal_team(user_id)
+    return team.id
 
 
 @pytest.fixture
 async def mcp_server(db_session: AsyncSession, test_user: User) -> MCPServer:
     """创建测试用 MCP 服务器 fixture"""
+    tenant_id = await _personal_tenant_id(db_session, test_user.id)
     server = MCPServer(
         name=f"test-server-{uuid.uuid4().hex[:8]}",
         display_name="Test MCP Server",
         url="stdio://test",
         scope="user",
-        user_id=test_user.id,
+        tenant_id=tenant_id,
         env_type="dynamic_injected",
         env_config={},
         enabled=True,
@@ -122,12 +130,13 @@ class TestMCPToolsAPI:
         self, authenticated_client, db_session: AsyncSession, test_user: User
     ):
         """测试获取没有可用工具的服务器列表"""
+        tenant_id = await _personal_tenant_id(db_session, test_user.id)
         server = MCPServer(
             name=f"empty-server-{uuid.uuid4().hex[:8]}",
             display_name="Empty Server",
             url="stdio://empty",
             scope="user",
-            user_id=test_user.id,
+            tenant_id=tenant_id,
             env_type="dynamic_injected",
             env_config={},
             enabled=True,
@@ -247,12 +256,12 @@ class TestMCPToolsPermissions:
         await db_session.commit()
         await db_session.refresh(other_user)
 
-        # 创建属于其他用户的服务器
+        other_tenant_id = await _personal_tenant_id(db_session, other_user.id)
         other_server = MCPServer(
             name=f"other-server-{uuid.uuid4().hex[:8]}",
             url="stdio://other",
             scope="user",
-            user_id=other_user.id,
+            tenant_id=other_tenant_id,
             env_type="dynamic_injected",
             env_config={},
             enabled=True,
@@ -297,12 +306,12 @@ class TestMCPToolsPermissions:
         await db_session.commit()
         await db_session.refresh(other_user)
 
-        # 创建属于其他用户的服务器
+        other_tenant_id = await _personal_tenant_id(db_session, other_user.id)
         other_server = MCPServer(
             name=f"other-server2-{uuid.uuid4().hex[:8]}",
             url="stdio://other2",
             scope="user",
-            user_id=other_user.id,
+            tenant_id=other_tenant_id,
             env_type="dynamic_injected",
             env_config={},
             enabled=True,
@@ -338,12 +347,9 @@ class TestMCPToolsPermissions:
         self, client: AsyncClient, auth_headers: dict, db_session: AsyncSession
     ):
         """测试系统服务器工具对所有用户可见"""
-        # 创建系统服务器
-        system_server = MCPServer(
+        system_server = SystemMCPServer(
             name=f"system-server-{uuid.uuid4().hex[:8]}",
             url="stdio://system",
-            scope="system",
-            user_id=None,
             env_type="preinstalled",
             env_config={},
             enabled=True,

@@ -11,7 +11,6 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -94,9 +93,9 @@ class EntitlementPlanQuota(BaseModel):
 
     plan_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("entitlement_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs entitlement_plans.id (no DB FK)",
     )
     label: Mapped[str] = mapped_column(String(40), nullable=False)
     window_seconds: Mapped[int] = mapped_column(

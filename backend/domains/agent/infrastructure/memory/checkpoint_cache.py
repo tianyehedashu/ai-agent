@@ -31,6 +31,27 @@ class CheckpointCache(CacheService):
         """保存检查点"""
         await self.set(checkpoint_id, data, ttl=ttl)
 
+    async def bind_checkpoint_session(
+        self,
+        checkpoint_id: str,
+        session_id: str,
+        *,
+        ttl: int = 86400 * 7,
+    ) -> None:
+        """轻量映射：检查点 → 会话（鉴权先于加载完整状态）。"""
+        await self.set(f"sid:{checkpoint_id}", session_id, ttl=ttl)
+
+    async def resolve_session_id(self, checkpoint_id: str) -> str | None:
+        """解析检查点所属 session_id，不加载 AgentState。"""
+        sid = await self.get(f"sid:{checkpoint_id}")
+        if isinstance(sid, str):
+            return sid
+        data = await self.get_checkpoint(checkpoint_id)
+        if data is None:
+            return None
+        raw = data.get("session_id")
+        return raw if isinstance(raw, str) else None
+
     async def get_checkpoint(self, checkpoint_id: str) -> dict[str, Any] | None:
         """获取检查点"""
         return await self.get(checkpoint_id)

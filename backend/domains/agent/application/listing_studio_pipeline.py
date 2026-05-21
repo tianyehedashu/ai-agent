@@ -16,11 +16,9 @@ from domains.agent.infrastructure.repositories.listing_studio_job_step_repositor
     ListingStudioJobStepRepository,
 )
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
-from domains.identity.application.permission_context_factory import (
-    build_permission_context_with_team_ids,
-)
+from domains.identity.application.permission_context_composer import PermissionContextComposer
 from libs.db.database import get_session_context
-from libs.db.permission_context import clear_permission_context, set_permission_context
+from libs.iam.permission_context import clear_permission_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -55,13 +53,13 @@ async def run_pipeline_async(
     overrides = model_overrides or {}
     try:
         async with get_session_context() as db:
-            ctx = await build_permission_context_with_team_ids(
-                db,
-                user_id=user_id,
-                anonymous_user_id=anonymous_user_id,
-                role="user",
+            composer = PermissionContextComposer(db)
+            composer.install(
+                await composer.compose_for_owner(
+                    user_id=user_id,
+                    anonymous_user_id=anonymous_user_id,
+                )
             )
-            set_permission_context(ctx)
         order_to_run = CAPABILITY_ORDER
         if steps:
             order_to_run = [(o, c) for o, c in order_to_run if c in steps]

@@ -10,7 +10,6 @@ import uuid
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    ForeignKey,
     Index,
     Numeric,
     String,
@@ -37,10 +36,9 @@ class DownstreamModelPricing(BaseModel):
     )
     gateway_model_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("gateway_models.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
-        comment="NULL = 该 scope 内默认价",
+        comment="refs gateway_models.id; NULL = 该 scope 内默认价 (no DB FK)",
     )
 
     input_cost_per_token: Mapped[Decimal | None] = mapped_column(Numeric(14, 10), nullable=True)

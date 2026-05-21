@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,9 +32,9 @@ class Team(BaseModel):
     )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs users.id (no DB FK)",
     )
     settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(
@@ -56,15 +56,15 @@ class TeamMember(BaseModel):
 
     team_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("gateway_teams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs gateway_teams.id (no DB FK)",
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs users.id (no DB FK)",
     )
     role: Mapped[str] = mapped_column(
         String(20),

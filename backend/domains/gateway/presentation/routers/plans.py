@@ -43,7 +43,7 @@ async def list_provider_plans(
     reads: MgmtReads,
 ) -> list[ProviderPlanResponse]:
     try:
-        await reads.assert_credential_in_team(
+        await reads.access.assert_credential_in_team(
             credential_id,
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
@@ -159,7 +159,7 @@ async def list_provider_plan_usage(
     days: int = Query(30, ge=1, le=180),
 ) -> list[ProviderPlanCostResponse]:
     try:
-        await reads.assert_credential_in_team(
+        await reads.access.assert_credential_in_team(
             credential_id,
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
@@ -196,7 +196,7 @@ async def list_vkey_entitlements(
     reads: MgmtReads,
 ) -> list[EntitlementPlanResponse]:
     try:
-        await reads.assert_vkey_in_team(
+        await reads.access.assert_vkey_in_team(
             vkey_id,
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
@@ -308,7 +308,7 @@ async def get_entitlement_plan_usage(
     days: int = Query(30, ge=1, le=180),
 ) -> EntitlementUsageResponse:
     try:
-        await reads.assert_entitlement_plan_in_team(
+        await reads.access.assert_entitlement_plan_in_team(
             plan_id,
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
@@ -340,7 +340,7 @@ async def list_apikey_grant_entitlements(
     reads: MgmtReads,
 ) -> list[EntitlementPlanResponse]:
     try:
-        await reads.assert_apikey_grant_in_team(
+        await reads.access.assert_apikey_grant_in_team(
             grant_id,
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,

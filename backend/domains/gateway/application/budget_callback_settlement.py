@@ -13,6 +13,7 @@ from domains.gateway.application.budget_service import (
     PERIOD_TOTAL,
     BudgetService,
 )
+from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
@@ -81,26 +82,21 @@ async def commit_budget_from_callback(
         return
 
     budget = BudgetService()
-    scope_items: list[tuple[str, str | None]] = [
-        ("team", str(team_id)),
-        ("user", str(user_id) if user_id else None),
-        ("key", str(vkey_id) if vkey_id else None),
-    ]
+    target_items = budget_targets(tenant_id=team_id, user_id=user_id, vkey_id=vkey_id)
     periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
-    model_keys: list[str | None] = [None]
-    if budget_model:
-        model_keys.append(budget_model)
+    model_keys = budget_model_keys(budget_model)
 
     _ = total_tokens  # token 用量由 proxy 路径结算，callback 仅补成本
-    for scope, scope_id in scope_items:
-        if scope_id is None:
+    for target_kind, target_id in target_items:
+        if target_id is None:
             continue
+        target_id_str = str(target_id)
         for period in periods:
             for mk in model_keys:
                 with suppress(Exception):
                     await budget.commit(
-                        scope=scope,
-                        scope_id=scope_id,
+                        target_kind=target_kind,
+                        target_id=target_id_str,
                         period=period,
                         delta_cost=delta,
                         delta_tokens=0,
@@ -116,13 +112,17 @@ async def commit_budget_from_callback(
 
             async with get_session_context() as session:
                 repo = BudgetRepository(session)
-                for scope, scope_id in scope_items:
-                    if scope_id is None:
+                for target_kind, target_id in target_items:
+                    if target_id is None:
                         continue
-                    scope_uuid = uuid.UUID(scope_id)
                     for period in periods:
                         for mk in model_keys:
-                            record = await repo.get_for(scope, scope_uuid, period, model_name=mk)
+                            record = await repo.get_for(
+                                target_kind,
+                                target_id,
+                                period,
+                                model_name=mk,
+                            )
                             if record is None:
                                 continue
                             await repo.settle_usage(

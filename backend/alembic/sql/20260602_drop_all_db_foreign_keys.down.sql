@@ -1,0 +1,5 @@
+-- =============================================================================
+-- DOWNGRADE  intentionally empty.
+-- Restoring all historical FK constraints requires environment-specific DDL.
+-- Restore from backup or regenerate from pre-20260602 schema if needed.
+-- =============================================================================

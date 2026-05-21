@@ -65,6 +65,8 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         "Memory",
         back_populates="user",
         cascade=CASCADE_DELETE_ORPHAN,
+        primaryjoin="Memory.user_id == User.id",
+        foreign_keys="Memory.user_id",
     )
 
     def __repr__(self) -> str:

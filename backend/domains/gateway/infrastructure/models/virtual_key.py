@@ -14,7 +14,6 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     DateTime,
-    ForeignKey,
     Integer,
     String,
     Text,
@@ -22,10 +21,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
-class GatewayVirtualKey(BaseModel):
+class GatewayVirtualKey(BaseModel, TenantScopedMixin):
     """虚拟 Key
 
     业务规则：
@@ -37,17 +36,11 @@ class GatewayVirtualKey(BaseModel):
 
     __tablename__ = "gateway_virtual_keys"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+        comment="refs users.id (no DB FK)",
     )
 
     # Key 信息

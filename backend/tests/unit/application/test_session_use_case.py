@@ -11,7 +11,7 @@ from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from domains.session.domain.entities import SessionOwner
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -102,14 +102,15 @@ class TestSessionUseCase:
     @pytest.mark.asyncio
     async def test_get_session_not_found(self, db_session):
         """Test: Get non-existent session."""
-        # Arrange
-        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
-
-        # Act
-        found = await use_case.get_session(str(uuid.uuid4()))
-
-        # Assert
-        assert found is None
+        user = await self._create_test_user(db_session)
+        ctx = await self._permission_ctx_for_user(db_session, user)
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
+            found = await use_case.get_session(str(uuid.uuid4()))
+            assert found is None
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_list_sessions(self, db_session):
@@ -190,12 +191,15 @@ class TestSessionUseCase:
     @pytest.mark.asyncio
     async def test_delete_session_not_found(self, db_session):
         """Test: Delete non-existent session raises exception."""
-        # Arrange
-        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
-
-        # Act & Assert
-        with pytest.raises(NotFoundError):
-            await use_case.delete_session(str(uuid.uuid4()))
+        user = await self._create_test_user(db_session)
+        ctx = await self._permission_ctx_for_user(db_session, user)
+        set_permission_context(ctx)
+        try:
+            use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
+            with pytest.raises(NotFoundError):
+                await use_case.delete_session(str(uuid.uuid4()))
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_add_message(self, db_session):

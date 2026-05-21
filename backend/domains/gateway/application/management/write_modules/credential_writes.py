@@ -10,7 +10,6 @@ from bootstrap.config import settings
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
-    SystemCredentialAdminRequiredError,
     SystemVirtualKeyRevokeForbiddenError,
     TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
@@ -40,7 +39,13 @@ class CredentialWritesMixin:
 
     async def revoke_virtual_key(self, key_id: uuid.UUID, *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> None:
         record = await self._vkeys.get(key_id)
-        assert_virtual_key_accessible_by_actor(record, key_id=str(key_id), tenant_id=tenant_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin, require_active=False)
+        assert_virtual_key_accessible_by_actor(
+            record,
+            key_id=str(key_id),
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            require_active=False,
+        )
         await self._vkeys.revoke(key_id)
 
     async def revoke_virtual_keys_batch(self, key_ids: list[uuid.UUID], *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
@@ -76,8 +81,11 @@ class CredentialWritesMixin:
         return row
 
     async def create_system_credential(self, *, is_platform_admin: bool, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
-        if not is_platform_admin:
-            raise SystemCredentialAdminRequiredError()
+        from domains.gateway.domain.policies.credential_scope import (
+            assert_system_credential_mutation_allowed,
+        )
+
+        assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
         row = await self._system_creds.create(
             provider=provider,
             name=name,
@@ -91,8 +99,11 @@ class CredentialWritesMixin:
     async def update_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> Any:
         system_existing = await self._system_creds.get(credential_id)
         if system_existing is not None:
-            if not is_platform_admin:
-                raise SystemCredentialAdminRequiredError()
+            from domains.gateway.domain.policies.credential_scope import (
+                assert_system_credential_mutation_allowed,
+            )
+
+            assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
             if name is not None and name != system_existing.name and is_config_managed_system_credential(
                 scope="system", name=system_existing.name, extra=system_existing.extra
             ):
@@ -131,8 +142,11 @@ class CredentialWritesMixin:
     async def delete_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
         system_existing = await self._system_creds.get(credential_id)
         if system_existing is not None:
-            if not is_platform_admin:
-                raise SystemCredentialAdminRequiredError()
+            from domains.gateway.domain.policies.credential_scope import (
+                assert_system_credential_mutation_allowed,
+            )
+
+            assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
             await self._cascade_delete_models_for_credential(credential_id)
             await self._system_creds.delete(credential_id)
             await self.reload_litellm_router()

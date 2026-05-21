@@ -1,7 +1,7 @@
 """
 Listing Studio Job Step Repository - Listing Studio 步骤仓储
 
-不继承 OwnedRepositoryBase：Step 始终通过 Job 的权限间接保护，
+Step 不单独做 tenant 过滤：始终通过 Job 的权限间接保护，
 UseCase 层在操作 Step 前必须先校验 Job 归属权限。
 """
 

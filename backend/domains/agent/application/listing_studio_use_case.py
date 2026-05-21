@@ -71,16 +71,13 @@ class ListingStudioUseCase:
     async def create_job(
         self,
         principal_id: str,
-        user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
         session_id: uuid.UUID | None = None,
         title: str | None = None,
         status: str = ListingStudioJobStatus.DRAFT,
     ) -> dict[str, Any]:
-        """创建 Listing 创作任务（Job）。"""
+        """创建 Listing 创作任务（Job）。``principal_id`` 保留供审计扩展。"""
+        _ = principal_id
         job = await self.job_repo.create(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
             session_id=session_id,
             title=title or "Listing 创作",
             status=status,
@@ -100,14 +97,14 @@ class ListingStudioUseCase:
             filters["status"] = status
         if session_id:
             filters["session_id"] = session_id
-        items = await self.job_repo.find_owned(
+        items = await self.job_repo.find_for_tenants(
             skip=skip,
             limit=limit,
             order_by="created_at",
             order_desc=True,
             **filters,
         )
-        total = await self.job_repo.count_owned(**filters)
+        total = await self.job_repo.count_for_tenants(**filters)
         return [job_to_dict(j) for j in items], total
 
     async def get_job(self, job_id: uuid.UUID) -> dict[str, Any]:
@@ -119,7 +116,7 @@ class ListingStudioUseCase:
 
     async def delete_job(self, job_id: uuid.UUID) -> None:
         """删除任务。"""
-        job = await self.job_repo.get_owned(job_id)
+        job = await self.job_repo.get_in_tenants(job_id)
         if not job:
             raise NotFoundError("ListingStudioJob", str(job_id))
         await self.db.delete(job)

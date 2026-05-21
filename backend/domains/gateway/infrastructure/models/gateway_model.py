@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 import uuid
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,16 +18,13 @@ from libs.orm.base import BaseModel, TenantScopedMixin
 
 
 class GatewayModel(BaseModel, TenantScopedMixin):
-    """模型注册表（仅租户行；系统级见 ``system_gateway_models``）。"""
+    """模型注册表（仅租户行；系统级见 ``system_gateway_models``）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "gateway_models"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("gateway_teams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     name: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
@@ -49,9 +46,9 @@ class GatewayModel(BaseModel, TenantScopedMixin):
     )
     credential_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("provider_credentials.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+        comment="refs provider_credentials.id (no DB FK)",
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     weight: Mapped[int] = mapped_column(

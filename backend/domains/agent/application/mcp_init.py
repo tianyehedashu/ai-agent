@@ -11,7 +11,7 @@ from domains.agent.domain.config.mcp_config import (
     MCPScope,
     MCPServerEntityConfig,
 )
-from domains.agent.infrastructure.models.mcp_server import MCPServer
+from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
 from libs.db.database import get_session_context
 from utils.logging import get_logger
 
@@ -77,25 +77,21 @@ async def init_default_mcp_servers() -> None:
     """
     async with get_session_context() as db:
         try:
-            # 查询现有的系统级服务器
-            result = await db.execute(select(MCPServer).where(MCPServer.scope == "system"))
+            result = await db.execute(select(SystemMCPServer))
             existing_servers = result.scalars().all()
             existing_names = {server.name for server in existing_servers}
 
-            # 创建缺失的默认服务器
             created_count = 0
             for config in DEFAULT_SYSTEM_MCPS:
                 if config.name not in existing_names:
                     logger.info("Creating default MCP server: %s", config.name)
-                    server = MCPServer(
+                    server = SystemMCPServer(
                         name=config.name,
                         display_name=config.display_name,
                         url=config.url,
-                        scope=config.scope.value,
                         env_type=config.env_type.value,
                         env_config=config.env_config,
                         enabled=config.enabled,
-                        user_id=None,  # 系统级服务器，user_id 为 NULL
                     )
                     db.add(server)
                     created_count += 1

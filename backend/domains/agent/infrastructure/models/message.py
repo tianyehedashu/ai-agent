@@ -5,7 +5,7 @@ Message Model - 消息模型
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,9 +22,9 @@ class Message(BaseModel):
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs sessions.id (no DB FK)",
     )
     role: Mapped[str] = mapped_column(
         String(20),
@@ -57,6 +57,8 @@ class Message(BaseModel):
     session: Mapped["Session"] = relationship(
         "Session",
         back_populates="messages",
+        primaryjoin="Message.session_id == Session.id",
+        foreign_keys="Message.session_id",
     )
 
     def __repr__(self) -> str:

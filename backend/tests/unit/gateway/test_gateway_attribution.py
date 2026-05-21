@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,

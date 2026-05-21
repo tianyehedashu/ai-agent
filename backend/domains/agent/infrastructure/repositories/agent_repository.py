@@ -15,7 +15,7 @@ from domains.agent.domain.interfaces.agent_repository import (
 from domains.agent.infrastructure.models.agent import Agent
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.db.base_repository import TenantScopedRepositoryBase
-from libs.db.permission_context import get_permission_context
+from libs.iam.permission_context import get_permission_context
 
 
 class AgentRepository(TenantScopedRepositoryBase[Agent], AgentRepositoryInterface):
@@ -38,7 +38,7 @@ class AgentRepository(TenantScopedRepositoryBase[Agent], AgentRepositoryInterfac
         name: str,
         system_prompt: str,
         description: str | None = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str = "claude-3-5-sonnet",
         tools: list[str] | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,

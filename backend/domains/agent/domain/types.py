@@ -19,6 +19,7 @@ from typing import Any, ClassVar, Literal, Protocol, TypedDict, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
+from domains.agent.domain.constants import DEFAULT_AGENT_MODEL_ID
 from utils.serialization import SerializableDict, Serializer
 
 # ============================================================================
@@ -445,7 +446,7 @@ class AgentConfig(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     mode: AgentMode = AgentMode.EXECUTE
-    model: str = "claude-3-5-sonnet-20241022"
+    model: str = DEFAULT_AGENT_MODEL_ID
     max_iterations: int = Field(default=20, ge=1, le=100)
     temperature: float = Field(default=0.7, ge=0, le=2)
     max_tokens: int = Field(default=4096, ge=1, le=128000)
@@ -491,7 +492,7 @@ class AgentConfig(BaseModel):
         """
         return cls(
             name=name,
-            model=model or "claude-3-5-sonnet-20241022",
+            model=model or DEFAULT_AGENT_MODEL_ID,
             max_iterations=AgentExecutionLimits.DEFAULT_MAX_ITERATIONS,
             temperature=0.7,
             max_tokens=AgentExecutionLimits.DEFAULT_MAX_TOKENS,

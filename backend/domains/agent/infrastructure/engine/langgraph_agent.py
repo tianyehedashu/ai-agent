@@ -324,12 +324,20 @@ class LangGraphAgentEngine:
         if self.memory_store is None:
             return {"recalled_memories": []}
 
-        # 搜索当前会话的相关记忆
-        memories = await self.memory_store.search(
-            session_id=view.session_id,
-            query=view.last_message_content,
-            limit=5,
-        )
+        try:
+            memories = await self.memory_store.search(
+                session_id=view.session_id,
+                query=view.last_message_content,
+                limit=5,
+            )
+        except Exception as e:
+            logger.warning(
+                "Long-term memory recall failed for session %s: %s",
+                view.session_id[:8] if view.session_id else "?",
+                e,
+                exc_info=True,
+            )
+            return {"recalled_memories": []}
 
         return {"recalled_memories": memories}
 

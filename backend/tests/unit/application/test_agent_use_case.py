@@ -8,7 +8,7 @@ import pytest
 
 from domains.agent.application.agent_use_case import AgentUseCase
 from domains.identity.infrastructure.models.user import User
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
@@ -57,7 +57,9 @@ class TestAgentUseCase:
         """Test: Get agent by ID."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = AgentUseCase(db_session)
@@ -80,21 +82,25 @@ class TestAgentUseCase:
     @pytest.mark.asyncio
     async def test_get_agent_not_found(self, db_session):
         """Test: Get non-existent agent."""
-        # Arrange
-        use_case = AgentUseCase(db_session)
+        user = await self._create_test_user(db_session)
+        from tests.helpers.permission_context import permission_context_for_user
 
-        # Act
-        found = await use_case.get_agent(str(uuid.uuid4()))
-
-        # Assert
-        assert found is None
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
+        set_permission_context(ctx)
+        try:
+            found = await AgentUseCase(db_session).get_agent(str(uuid.uuid4()))
+            assert found is None
+        finally:
+            clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_list_agents(self, db_session):
         """Test: List user's agents."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = AgentUseCase(db_session)
@@ -124,7 +130,9 @@ class TestAgentUseCase:
         """Test: Update agent."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = AgentUseCase(db_session)
@@ -153,7 +161,9 @@ class TestAgentUseCase:
         """Test: Delete agent."""
         # Arrange
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = AgentUseCase(db_session)
@@ -176,9 +186,13 @@ class TestAgentUseCase:
     @pytest.mark.asyncio
     async def test_delete_agent_not_found(self, db_session):
         """Test: Delete non-existent agent raises exception."""
-        # Arrange
-        use_case = AgentUseCase(db_session)
+        user = await self._create_test_user(db_session)
+        from tests.helpers.permission_context import permission_context_for_user
 
-        # Act & Assert
-        with pytest.raises(NotFoundError):
-            await use_case.delete_agent(str(uuid.uuid4()))
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
+        set_permission_context(ctx)
+        try:
+            with pytest.raises(NotFoundError):
+                await AgentUseCase(db_session).delete_agent(str(uuid.uuid4()))
+        finally:
+            clear_permission_context()

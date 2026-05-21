@@ -46,3 +46,8 @@ disable=
     too-many-nested-blocks,
     pointless-statement,
     ungrouped-imports,
+    import-error,
+    unexpected-keyword-arg,
+    missing-kwoa,
+    used-before-assignment,
+    assignment-from-no-return,

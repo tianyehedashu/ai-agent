@@ -12,11 +12,7 @@ from domains.agent.domain.types import (
 )
 from domains.identity.infrastructure.models.user import User
 from libs.api.deps import build_session_use_case
-from libs.db.permission_context import (
-    PermissionContext,
-    clear_permission_context,
-    set_permission_context,
-)
+from libs.iam.permission_context import clear_permission_context, set_permission_context
 
 
 @pytest.mark.unit
@@ -68,7 +64,9 @@ class TestChatUseCase:
     @pytest.mark.asyncio
     async def test_chat_create_new_session(self, service, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             message = "Hello"
@@ -108,7 +106,9 @@ class TestChatUseCase:
     @pytest.mark.asyncio
     async def test_chat_use_existing_session(self, service, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             session = await build_session_use_case(db_session).create_session(
@@ -149,7 +149,9 @@ class TestChatUseCase:
     @pytest.mark.asyncio
     async def test_chat_saves_messages(self, service, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             message = "Hello"
@@ -191,7 +193,9 @@ class TestChatUseCase:
     @pytest.mark.asyncio
     async def test_chat_handles_error(self, service, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             message = "Hello"
@@ -228,7 +232,9 @@ class TestChatUseCase:
         from domains.agent.application import AgentUseCase
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             agent = await AgentUseCase(db_session).create_agent(
@@ -260,7 +266,9 @@ class TestChatUseCase:
         from unittest.mock import AsyncMock, patch
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             session = await build_session_use_case(db_session).create_session(
@@ -305,7 +313,9 @@ class TestChatUseCase:
         from unittest.mock import AsyncMock, patch
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             message = "我想学习 Python 编程，请给我一些建议"

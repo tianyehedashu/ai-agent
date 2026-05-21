@@ -1,5 +1,7 @@
 """Identity Domain - Application Layer（延迟导出，避免与 infrastructure 循环导入）。"""
 
+# pylint: disable=undefined-all-variable  # __getattr__ 延迟导出 __all__ 中的符号
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -12,6 +12,25 @@ _BACKEND = Path(__file__).resolve().parents[2]
 _LIBS = _BACKEND / "libs"
 
 TIMESTAMP_ALLOWLIST = frozenset({"users"})
+
+TENANT_BUSINESS_TABLES = frozenset(
+    {
+        "sessions",
+        "agents",
+        "memories",
+        "mcp_servers",
+        "video_gen_tasks",
+        "product_image_gen_tasks",
+        "product_info_jobs",
+        "product_info_prompt_templates",
+        "gateway_models",
+        "gateway_routes",
+        "gateway_alert_rules",
+        "gateway_virtual_keys",
+        "api_keys",
+    }
+)
+
 TENANT_OPTIONAL_ALLOWLIST = frozenset(
     {
         "gateway_request_logs",
@@ -53,6 +72,83 @@ def test_libs_no_domain_owner_kind_literals() -> None:
                 if node.value in forbidden:
                     msg = f"{path}: forbidden literal {node.value!r}"
                     raise AssertionError(msg)
+
+
+def _tenant_business_orm_classes() -> dict[str, type]:
+    """显式导入租户业务 ORM，避免 Base.registry 未加载全部 mapper。"""
+    from domains.agent.infrastructure.models.agent import Agent
+    from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob
+    from domains.agent.infrastructure.models.listing_studio_prompt_template import (
+        ListingStudioPromptTemplate,
+    )
+    from domains.agent.infrastructure.models.mcp_server import MCPServer
+    from domains.agent.infrastructure.models.memory import Memory
+    from domains.agent.infrastructure.models.product_image_gen_task import ProductImageGenTask
+    from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
+    from domains.gateway.infrastructure.models.alert import GatewayAlertRule
+    from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+    from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+    from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
+    from domains.identity.infrastructure.models.api_key import ApiKey
+    from domains.session.infrastructure.models.session import Session
+
+    return {
+        "sessions": Session,
+        "agents": Agent,
+        "memories": Memory,
+        "mcp_servers": MCPServer,
+        "video_gen_tasks": VideoGenTask,
+        "product_image_gen_tasks": ProductImageGenTask,
+        "product_info_jobs": ListingStudioJob,
+        "product_info_prompt_templates": ListingStudioPromptTemplate,
+        "gateway_models": GatewayModel,
+        "gateway_routes": GatewayRoute,
+        "gateway_alert_rules": GatewayAlertRule,
+        "gateway_virtual_keys": GatewayVirtualKey,
+        "api_keys": ApiKey,
+    }
+
+
+def _orm_class_by_table(table_name: str) -> type:
+    mapping = _tenant_business_orm_classes()
+    if table_name not in mapping:
+        msg = f"No ORM class registered for table {table_name!r}"
+        raise AssertionError(msg)
+    return mapping[table_name]
+
+
+def _iter_tenant_scoped_orm_classes() -> list[type]:
+    mapping = _tenant_business_orm_classes()
+    return [mapping[name] for name in sorted(TENANT_BUSINESS_TABLES)]
+
+
+def test_all_tenant_business_tables_inherit_mixin() -> None:
+    """所有租户业务 ORM 类必须继承 TenantScopedMixin。"""
+    for table_name in TENANT_BUSINESS_TABLES:
+        model = _orm_class_by_table(table_name)
+        assert issubclass(model, TenantScopedMixin), table_name
+        assert "tenant_id" in model.__table__.c, table_name
+        assert "team_id" not in model.__table__.c, table_name
+
+
+def test_orm_metadata_has_no_db_foreign_keys() -> None:
+    """全库 ORM 元数据不得声明 DB FOREIGN KEY（应用层保证引用完整性）。"""
+    violations: list[str] = []
+    for table_name, table in sorted(Base.metadata.tables.items()):
+        for col in table.c:
+            col_fks = list(col.foreign_keys)
+            if col_fks:
+                violations.append(f"{table_name}.{col.name}: {col_fks}")
+        for fk in table.foreign_keys:
+            violations.append(f"{table_name} (table-level): {fk}")
+    assert not violations, "ORM metadata has DB FK:\n" + "\n".join(violations)
+
+
+def test_tenant_id_has_no_db_foreign_key() -> None:
+    """tenant_id 列不得带 DB 外键（由 test_orm_metadata_has_no_db_foreign_keys 覆盖）。"""
+    for model in _iter_tenant_scoped_orm_classes():
+        col = model.__table__.c["tenant_id"]
+        assert not list(col.foreign_keys), f"{model.__name__}: tenant_id has FK"
 
 
 def test_tenant_scoped_models_expose_tenant_id() -> None:
@@ -103,11 +199,11 @@ def test_gateway_budgets_uses_target_kind() -> None:
     assert "scope_id" not in GatewayBudget.__table__.c
 
 
-def test_system_gateway_models_credential_fk_to_system_pc() -> None:
+def test_system_gateway_models_credential_id_column_exists() -> None:
     from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 
-    fk = next(iter(SystemGatewayModel.__table__.foreign_keys))
-    assert fk.column.table.name == "system_provider_credentials"
+    assert "credential_id" in SystemGatewayModel.__table__.c
+    assert not list(SystemGatewayModel.__table__.c.credential_id.foreign_keys)
 
 
 def test_config_catalog_sync_no_scope_system_write() -> None:

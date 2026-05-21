@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     get_permission_context,

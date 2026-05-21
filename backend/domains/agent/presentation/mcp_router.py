@@ -8,6 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, status
 
+from domains.agent.application.mcp_server_mapper import mcp_server_to_response
 from domains.agent.application.mcp_use_case import MCPManagementUseCase
 from domains.agent.presentation.schemas.mcp_schemas import (
     MCPServerCreateRequest,
@@ -78,7 +79,7 @@ async def add_server(
 ) -> MCPServerResponse:
     """添加新的 MCP 服务器"""
     server = await use_case.add_server(request, current_user)
-    return MCPServerResponse.model_validate(server)
+    return mcp_server_to_response(server, owner_user_id=uuid.UUID(current_user.id))
 
 
 @router.put(
@@ -93,7 +94,7 @@ async def update_server(
 ) -> MCPServerResponse:
     """更新 MCP 服务器配置"""
     server = await use_case.update_server(server_id, request, current_user)
-    return MCPServerResponse.model_validate(server)
+    return mcp_server_to_response(server, owner_user_id=uuid.UUID(current_user.id))
 
 
 @router.delete(
@@ -122,7 +123,7 @@ async def toggle_server(
 ) -> MCPServerResponse:
     """启用或禁用 MCP 服务器"""
     server = await use_case.toggle_server(server_id, enabled, current_user)
-    return MCPServerResponse.model_validate(server)
+    return mcp_server_to_response(server, owner_user_id=uuid.UUID(current_user.id))
 
 
 @router.post(

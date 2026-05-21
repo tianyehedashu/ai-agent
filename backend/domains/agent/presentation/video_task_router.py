@@ -89,9 +89,10 @@ class VideoTaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    user_id: str | None
-    anonymous_user_id: str | None
-    session_id: str | None
+    tenant_id: str | None = None
+    user_id: str | None = None
+    anonymous_user_id: str | None = None
+    session_id: str | None = None
     workflow_id: str | None
     run_id: str | None
     status: str
@@ -107,7 +108,7 @@ class VideoTaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_validator("id", "user_id", "session_id", mode="before")
+    @field_validator("id", "tenant_id", "user_id", "session_id", mode="before")
     @classmethod
     def convert_uuid_to_str(cls, v: uuid.UUID | str | None) -> str | None:
         """将 UUID 转换为字符串"""

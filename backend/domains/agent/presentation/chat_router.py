@@ -8,6 +8,8 @@ Chat API - 对话 API
 - GET /chat/checkpoints/{checkpoint_id}/state: 获取检查点状- POST /chat/checkpoints/diff: 对比检查点
 """
 
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 import json
 import logging
 from typing import Annotated, Any
@@ -21,20 +23,49 @@ from domains.agent.application import ChatUseCase
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.identity.application.permission_context_composer import PermissionContextComposer
 from domains.identity.presentation.deps import AuthUser
+from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import AttachOptionalTeamContext
-from libs.api.deps import build_session_use_case, get_checkpoint_service, get_sandbox_service
-from libs.db.database import get_session_context
-from libs.db.permission_context import (
-    PermissionContext,
-    get_permission_context,
-    set_permission_context,
+from libs.api.deps import (
+    build_session_use_case,
+    get_checkpoint_service,
+    get_sandbox_service,
+    get_session_service,
 )
+from libs.db.database import get_session_context
+from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+
+@asynccontextmanager
+async def _optional_permission_scope(
+    ctx: PermissionContext | None,
+) -> AsyncIterator[None]:
+    if isinstance(ctx, PermissionContext):
+        async with PermissionContextComposer.scoped(ctx):
+            yield
+    else:
+        yield
+
+
+async def _assert_checkpoint_session_accessible(
+    session_service: SessionUseCase,
+    *,
+    session_id: str,
+    current_user: AuthUser,
+) -> None:
+    session = await session_service.get_session_or_raise(session_id)
+    await session_service.assert_session_accessible(
+        session,
+        principal_id=current_user.id,
+        is_anonymous=current_user.is_anonymous,
+        role=current_user.role,
+    )
 
 
 def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
@@ -176,9 +207,11 @@ async def chat(
 
     async def event_generator():
         try:
-            if isinstance(permission_context, PermissionContext):
-                set_permission_context(permission_context)
-            async with get_session_context() as db:
+            async with AsyncExitStack() as stack:
+                await stack.enter_async_context(
+                    _optional_permission_scope(permission_context)
+                )
+                db = await stack.enter_async_context(get_session_context())
                 chat_service = _build_stream_chat_service(db, http_request)
                 mcp_config_dict = (
                     {"enabled_servers": request.mcp_config.enabled_servers}
@@ -238,9 +271,11 @@ async def resume_execution(
 
     async def event_generator():
         try:
-            if isinstance(permission_context, PermissionContext):
-                set_permission_context(permission_context)
-            async with get_session_context() as db:
+            async with AsyncExitStack() as stack:
+                await stack.enter_async_context(
+                    _optional_permission_scope(permission_context)
+                )
+                db = await stack.enter_async_context(get_session_context())
                 chat_service = _build_stream_chat_service(db, http_request)
                 async for event in chat_service.resume(
                     session_id=request.session_id,
@@ -273,10 +308,16 @@ async def resume_execution(
 async def list_checkpoints(
     session_id: str,
     current_user: AuthUser,
+    session_service: SessionUseCase = Depends(get_session_service),
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[CheckpointItem]:
     """获取会话的检查点列表"""
+    await _assert_checkpoint_session_accessible(
+        session_service,
+        session_id=session_id,
+        current_user=current_user,
+    )
     checkpoints = await checkpoint_service.list_history(session_id, limit)
     return [
         CheckpointItem(
@@ -294,9 +335,16 @@ async def list_checkpoints(
 async def get_checkpoint_state(
     checkpoint_id: str,
     current_user: AuthUser,
+    session_service: SessionUseCase = Depends(get_session_service),
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> dict[str, Any]:
     """获取检查点状态"""
+    session_id = await checkpoint_service.resolve_session_id_or_raise(checkpoint_id)
+    await _assert_checkpoint_session_accessible(
+        session_service,
+        session_id=session_id,
+        current_user=current_user,
+    )
     checkpoint = await checkpoint_service.get_or_raise(checkpoint_id)
     state_dict = checkpoint.state.model_dump(mode="json")
     return Serializer.serialize(state_dict)  # type: ignore[return-value]
@@ -306,9 +354,26 @@ async def get_checkpoint_state(
 async def diff_checkpoints(
     request: DiffRequest,
     current_user: AuthUser,
+    session_service: SessionUseCase = Depends(get_session_service),
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> DiffResponse:
     """对比两个检查点"""
+    session_id_1 = await checkpoint_service.resolve_session_id_or_raise(
+        request.checkpoint_id_1
+    )
+    session_id_2 = await checkpoint_service.resolve_session_id_or_raise(
+        request.checkpoint_id_2
+    )
+    await _assert_checkpoint_session_accessible(
+        session_service,
+        session_id=session_id_1,
+        current_user=current_user,
+    )
+    await _assert_checkpoint_session_accessible(
+        session_service,
+        session_id=session_id_2,
+        current_user=current_user,
+    )
     result = await checkpoint_service.diff(
         request.checkpoint_id_1,
         request.checkpoint_id_2,

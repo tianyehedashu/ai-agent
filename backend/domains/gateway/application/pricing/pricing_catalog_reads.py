@@ -32,11 +32,12 @@ from domains.gateway.infrastructure.repositories.model_repository import Gateway
 from domains.gateway.infrastructure.repositories.pricing_repository import (
     DownstreamPricingRepository,
 )
+from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
 
 def is_pricing_admin(team: ManagementTeamContext) -> bool:
-    return team.is_platform_admin or team.team_role in ("owner", "admin")
+    return can_view_pricing_cost_fields(team)
 
 
 def _rate_to_million_displays(

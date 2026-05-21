@@ -11,7 +11,7 @@ import pytest
 from domains.agent.domain.types import AgentEvent, EventType
 from domains.agent.presentation import chat_router
 from domains.identity.presentation.schemas import CurrentUser
-from libs.db.permission_context import (
+from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,

@@ -42,6 +42,12 @@ def upgrade() -> None:
           )
         """
     )
+    op.alter_column(
+        "provider_credentials",
+        "scope",
+        existing_type=sa.String(20),
+        nullable=True,
+    )
     op.execute(
         """
         UPDATE provider_credentials

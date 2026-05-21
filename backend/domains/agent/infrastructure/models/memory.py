@@ -6,26 +6,29 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, text
+from sqlalchemy import DateTime, Float, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
     from domains.identity.infrastructure.models.user import User
 
 
-class Memory(BaseModel):
-    """记忆模型"""
+class Memory(BaseModel, TenantScopedMixin):
+    """记忆模型（归属 personal team tenant）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "memories"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="refs users.id (no DB FK)",
     )
     type: Mapped[str] = mapped_column(
         String(20),
@@ -55,8 +58,8 @@ class Memory(BaseModel):
     )
     source_session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("sessions.id", ondelete="SET NULL"),
         nullable=True,
+        comment="refs sessions.id (no DB FK)",
     )
     last_accessed: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -68,6 +71,8 @@ class Memory(BaseModel):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="memories",
+        primaryjoin="Memory.user_id == User.id",
+        foreign_keys="Memory.user_id",
     )
 
     def __repr__(self) -> str:

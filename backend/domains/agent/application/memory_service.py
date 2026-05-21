@@ -5,33 +5,17 @@ Memory Service - 记忆服务
 """
 
 from typing import Any
-import uuid
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.memory import Memory
-from libs.exceptions import NotFoundError
-
-
-def _safe_uuid(value: str | None) -> uuid.UUID | None:
-    """安全地将字符串转换为 UUID"""
-    if not value:
-        return None
-    try:
-        return uuid.UUID(value)
-    except (ValueError, AttributeError, TypeError):
-        return None
-
-
+from domains.agent.infrastructure.repositories.memory_repository import MemoryRepository
 class MemoryService:
-    """记忆服务
-
-    管理用户的长期记忆存储和检索。
-    """
+    """记忆服务（委托 ``MemoryRepository``，写入带 ``tenant_id``）。"""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self._repo = MemoryRepository(db)
 
     async def create(
         self,
@@ -42,35 +26,20 @@ class MemoryService:
         metadata: dict[str, Any] | None = None,
         source_session_id: str | None = None,
     ) -> Memory:
-        """创建记忆"""
-        user_uuid = _safe_uuid(user_id)
-        if not user_uuid:
-            raise ValueError(f"Invalid user_id format: {user_id}")
-
-        memory = Memory(
-            user_id=user_uuid,
+        return await self._repo.create(
+            user_id=user_id,
             type=type,
             content=content,
             importance=importance,
-            extra_data=metadata or {},
-            source_session_id=_safe_uuid(source_session_id),
+            metadata=metadata,
+            source_session_id=source_session_id,
         )
-        self.db.add(memory)
-        await self.db.flush()
-        await self.db.refresh(memory)
-        return memory
 
     async def get_by_id(self, memory_id: str) -> Memory | None:
-        """通过 ID 获取记忆"""
-        result = await self.db.execute(select(Memory).where(Memory.id == uuid.UUID(memory_id)))
-        return result.scalar_one_or_none()
+        return await self._repo.get_by_id(memory_id)
 
     async def get_by_id_or_raise(self, memory_id: str) -> Memory:
-        """通过 ID 获取记忆，不存在则抛出异常"""
-        memory = await self.get_by_id(memory_id)
-        if not memory:
-            raise NotFoundError("Memory", memory_id)
-        return memory
+        return await self._repo.get_by_id_or_raise(memory_id)
 
     async def list_by_user(
         self,
@@ -79,25 +48,15 @@ class MemoryService:
         limit: int = 20,
         type_filter: str | None = None,
     ) -> list[Memory]:
-        """获取用户的记忆列表"""
-        user_uuid = _safe_uuid(user_id)
-        if not user_uuid:
-            return []
-
-        query = select(Memory).where(Memory.user_id == user_uuid)
-
-        if type_filter:
-            query = query.where(Memory.type == type_filter)
-
-        query = query.order_by(Memory.created_at.desc()).offset(skip).limit(limit)
-
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return await self._repo.list_by_user(
+            user_id=user_id,
+            skip=skip,
+            limit=limit,
+            type_filter=type_filter,
+        )
 
     async def delete(self, memory_id: str) -> None:
-        """删除记忆"""
-        memory = await self.get_by_id_or_raise(memory_id)
-        await self.db.delete(memory)
+        await self._repo.delete(memory_id)
 
     async def search(
         self,
@@ -106,24 +65,12 @@ class MemoryService:
         top_k: int = 10,
         type_filter: str | None = None,
     ) -> list[Memory]:
-        """搜索记忆"""
-        user_uuid = _safe_uuid(user_id)
-        if not user_uuid:
-            return []
-
-        stmt = (
-            select(Memory)
-            .where(Memory.user_id == user_uuid)
-            .where(Memory.content.ilike(f"%{query}%"))
+        return await self._repo.search(
+            user_id=user_id,
+            query=query,
+            top_k=top_k,
+            type_filter=type_filter,
         )
-
-        if type_filter:
-            stmt = stmt.where(Memory.type == type_filter)
-
-        stmt = stmt.order_by(Memory.importance.desc()).limit(top_k)
-
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
 
     async def import_knowledge(
         self,
@@ -132,42 +79,12 @@ class MemoryService:
         source: str,
         chunk_size: int = 1000,
     ) -> str:
-        """导入知识"""
-        chunks = self._chunk_text(content, chunk_size)
-
-        for i, chunk in enumerate(chunks):
-            await self.create(
-                user_id=user_id,
-                type="fact",
-                content=chunk,
-                importance=0.5,
-                metadata={
-                    "source": source,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                },
-            )
-
-        return str(uuid.uuid4())
+        return await self._repo.import_knowledge(
+            user_id=user_id,
+            content=content,
+            source=source,
+            chunk_size=chunk_size,
+        )
 
     def _chunk_text(self, text: str, chunk_size: int) -> list[str]:
-        """分块文本"""
-        chunks = []
-        words = text.split()
-        current_chunk: list[str] = []
-        current_size = 0
-
-        for word in words:
-            word_size = len(word) + 1
-            if current_size + word_size > chunk_size and current_chunk:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [word]
-                current_size = word_size
-            else:
-                current_chunk.append(word)
-                current_size += word_size
-
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
-
-        return chunks
+        return self._repo._chunk_text(text, chunk_size)

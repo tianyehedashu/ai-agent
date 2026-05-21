@@ -1,0 +1,130 @@
+"""Chat 检查点 API 须通过 Session 个人私有鉴权。"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+import uuid
+
+from fastapi import status
+from httpx import AsyncClient
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bootstrap.main import app
+from domains.agent.application.checkpoint_service import CheckpointService
+from domains.agent.domain.types import AgentState
+from domains.identity.application import UserUseCase
+from domains.identity.infrastructure.models.user import User
+from libs.api.deps import DbSession, get_checkpoint_service
+from tests.helpers.in_memory_checkpoint_cache import InMemoryCheckpointCache
+
+
+@asynccontextmanager
+async def _in_memory_checkpoint_service(
+    db_session: AsyncSession,
+) -> AsyncGenerator[InMemoryCheckpointCache, None]:
+    """与 HTTP 依赖注入共用同一内存存根，避免集成测依赖 Redis。"""
+    store = InMemoryCheckpointCache()
+
+    async def override_get_checkpoint_service(db: DbSession) -> CheckpointService:
+        service = CheckpointService(db)
+        service.cache = store  # type: ignore[assignment]
+        return service
+
+    app.dependency_overrides[get_checkpoint_service] = override_get_checkpoint_service
+    try:
+        yield store
+    finally:
+        app.dependency_overrides.pop(get_checkpoint_service, None)
+
+
+async def _auth_headers_for_user(db_session, user: User) -> dict[str, str]:
+    token_pair = await UserUseCase(db_session).create_token(user)
+    return {"Authorization": f"Bearer {token_pair.access_token}"}
+
+
+@pytest.mark.integration
+class TestChatCheckpointAuthz:
+    @pytest.mark.asyncio
+    async def test_foreign_user_cannot_list_checkpoints(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        create = await dev_client.post(
+            "/api/v1/sessions/",
+            json={"title": "Cp Session"},
+            headers=auth_headers,
+        )
+        assert create.status_code == status.HTTP_201_CREATED
+        session_id = create.json()["id"]
+
+        other = User(
+            email=f"other_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Other",
+        )
+        db_session.add(other)
+        await db_session.commit()
+        await db_session.refresh(other)
+        other_headers = await _auth_headers_for_user(db_session, other)
+
+        resp = await dev_client.get(
+            f"/api/v1/chat/checkpoints/{session_id}",
+            headers=other_headers,
+        )
+        assert resp.status_code in (
+            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    @pytest.mark.asyncio
+    async def test_foreign_user_cannot_read_checkpoint_state(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        create = await dev_client.post(
+            "/api/v1/sessions/",
+            json={"title": "Cp State"},
+            headers=auth_headers,
+        )
+        session_id = create.json()["id"]
+
+        async with _in_memory_checkpoint_service(db_session) as store:
+            cp_service = CheckpointService(db_session)
+            cp_service.cache = store  # type: ignore[assignment]
+            cp_id = await cp_service.save(
+                session_id,
+                step=1,
+                state=AgentState(session_id=session_id, messages=[]),
+            )
+            await db_session.commit()
+
+            other = User(
+                email=f"other2_{uuid.uuid4()}@example.com",
+                hashed_password="hashed_password",
+                name="Other2",
+            )
+            db_session.add(other)
+            await db_session.commit()
+            await db_session.refresh(other)
+            other_headers = await _auth_headers_for_user(db_session, other)
+
+            resp = await dev_client.get(
+                f"/api/v1/chat/checkpoints/{cp_id}/state",
+                headers=other_headers,
+            )
+            assert resp.status_code in (
+                status.HTTP_403_FORBIDDEN,
+                status.HTTP_404_NOT_FOUND,
+            )
+
+            owner_resp = await dev_client.get(
+                f"/api/v1/chat/checkpoints/{cp_id}/state",
+                headers=auth_headers,
+            )
+            assert owner_resp.status_code == status.HTTP_200_OK

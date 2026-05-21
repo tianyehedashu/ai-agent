@@ -5,7 +5,7 @@ Session Model - 会话模型
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,20 +18,18 @@ if TYPE_CHECKING:
 
 
 class Session(BaseModel, TenantScopedMixin):
-    """会话模型（归属 ``tenant_id``：注册用户 personal team 或匿名 shadow user team）。"""
+    """会话模型（归属 ``tenant_id``：注册用户 personal team 或匿名 shadow user team）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "sessions"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        nullable=False,
-        index=True,
-    )
     agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+        comment="refs agents.id (no DB FK)",
     )
     title: Mapped[str | None] = mapped_column(
         String(200),
@@ -67,16 +65,22 @@ class Session(BaseModel, TenantScopedMixin):
     agent: Mapped["Agent"] = relationship(
         "Agent",
         back_populates="sessions",
+        primaryjoin="Session.agent_id == Agent.id",
+        foreign_keys="Session.agent_id",
     )
     messages: Mapped[list["Message"]] = relationship(
         "Message",
         back_populates="session",
         cascade="all, delete-orphan",
+        primaryjoin="Message.session_id == Session.id",
+        foreign_keys="Message.session_id",
     )
     video_tasks: Mapped[list["VideoGenTask"]] = relationship(
         "VideoGenTask",
         back_populates="session",
         cascade="all, delete-orphan",
+        primaryjoin="VideoGenTask.session_id == Session.id",
+        foreign_keys="VideoGenTask.session_id",
     )
 
     def __repr__(self) -> str:

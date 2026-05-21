@@ -129,7 +129,6 @@ class MCPToolService:
                         display_name=server.display_name,
                         url=server.url,
                         scope=MCPScope(server.scope),
-                        user_id=server.user_id,
                         env_type=server.env_type,
                         env_config=effective_env_config,
                         enabled=server.enabled,

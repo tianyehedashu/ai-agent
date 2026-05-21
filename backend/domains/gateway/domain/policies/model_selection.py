@@ -21,7 +21,7 @@ def merge_named_rows_tenant_overrides_system(
     only_enabled: bool = True,
 ) -> list[_T]:
     """同名时保留 tenant 行，system 行仅补 tenant 未覆盖的名称。"""
-    by_name: dict[str, T] = {}
+    by_name: dict[str, _T] = {}
     for row in tenant_rows:
         if only_enabled and not row.enabled:
             continue

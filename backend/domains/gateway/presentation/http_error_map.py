@@ -6,6 +6,8 @@ ProxyUseCase 业务错误另由 ``gateway_proxy_business_error_classify`` 转换
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import HTTPException, status
 
 from domains.gateway.domain.errors import (
@@ -27,60 +29,92 @@ from domains.gateway.domain.errors import (
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
 )
-from libs.iam.team_http import map_team_access_exception_to_http
+from libs.iam.authz_http import map_authz_error_to_http
+
+_GatewayHttpBuilder = Callable[[Exception], HTTPException]
+
+
+def _entitlement_exhausted_http(exc: Exception) -> HTTPException:
+    assert isinstance(exc, EntitlementPlanExhaustedError)
+    headers: dict[str, str] = {}
+    if exc.retry_at:
+        headers["X-Plan-Retry-At"] = exc.retry_at
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": "gateway/entitlement_exhausted",
+            "message": str(exc),
+            "plan_id": exc.plan_id,
+            "quota_label": exc.quota_label,
+            "reason": exc.reason,
+            "retry_at": exc.retry_at,
+        },
+        headers=headers or None,
+    )
+
+
+_GATEWAY_DOMAIN_HTTP: list[tuple[tuple[type[Exception], ...], _GatewayHttpBuilder]] = [
+    (
+        (VirtualKeyInvalidError, PlatformApiKeyInvalidError),
+        lambda exc: HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ),
+    ),
+    (
+        (PlatformApiKeyMissingGatewayProxyScopeError,),
+        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+    ),
+    (
+        (NoPersonalTeamForProxyError,),
+        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+    ),
+    (
+        (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError),
+        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+    ),
+    (
+        (ApiKeyGatewayGrantDeniedError, ApiKeyGatewayGrantRequiredError),
+        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+    ),
+    ((VirtualKeyNotFoundError,), lambda exc: HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))),
+    (
+        (SystemVirtualKeyForbiddenError,),
+        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+    ),
+    (
+        (CredentialApiKeyDecryptError, VirtualKeyDecryptError),
+        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+    ),
+    (
+        (CredentialNotFoundError, ManagementEntityNotFoundError),
+        lambda exc: HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)),
+    ),
+    (
+        (CredentialNameConflictError,),
+        lambda exc: HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)),
+    ),
+    (
+        (SystemCredentialAdminRequiredError,),
+        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+    ),
+    ((EntitlementPlanExhaustedError,), _entitlement_exhausted_http),
+]
 
 
 def _http_exception_for_gateway_domain(exc: Exception) -> HTTPException | None:
     """将已知的 Gateway 领域异常映射为 ``HTTPException``；未知类型返回 ``None``。"""
-    if isinstance(exc, (VirtualKeyInvalidError, PlatformApiKeyInvalidError)):
-        return HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if isinstance(exc, PlatformApiKeyMissingGatewayProxyScopeError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, NoPersonalTeamForProxyError):
-        return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if isinstance(exc, (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError)):
-        return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if isinstance(exc, (ApiKeyGatewayGrantDeniedError, ApiKeyGatewayGrantRequiredError)):
-        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, VirtualKeyNotFoundError):
-        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, SystemVirtualKeyForbiddenError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, (CredentialApiKeyDecryptError, VirtualKeyDecryptError)):
-        return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if isinstance(exc, (CredentialNotFoundError, ManagementEntityNotFoundError)):
-        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, CredentialNameConflictError):
-        return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
-    if isinstance(exc, SystemCredentialAdminRequiredError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, EntitlementPlanExhaustedError):
-        headers: dict[str, str] = {}
-        if exc.retry_at:
-            headers["X-Plan-Retry-At"] = exc.retry_at
-        return HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "code": "gateway/entitlement_exhausted",
-                "message": str(exc),
-                "plan_id": exc.plan_id,
-                "quota_label": exc.quota_label,
-                "reason": exc.reason,
-                "retry_at": exc.retry_at,
-            },
-            headers=headers or None,
-        )
+    for types, builder in _GATEWAY_DOMAIN_HTTP:
+        if isinstance(exc, types):
+            return builder(exc)
     return None
 
 
 def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
-    team_http = map_team_access_exception_to_http(exc)
-    if team_http is not None:
-        return team_http
+    authz_http = map_authz_error_to_http(exc)
+    if authz_http is not None:
+        return authz_http
     mapped = _http_exception_for_gateway_domain(exc)
     if mapped is not None:
         return mapped

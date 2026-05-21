@@ -64,13 +64,14 @@ def upgrade() -> None:
             last_test_status, last_tested_at, last_test_reason,
             created_at, updated_at
         )
-        SELECT
+        SELECT DISTINCT ON (name)
             id, name, capability, real_model, credential_id, provider,
             weight, rpm_limit, tpm_limit, enabled, tags,
             last_test_status, last_tested_at, last_test_reason,
             created_at, updated_at
         FROM gateway_models
         WHERE team_id IS NULL
+        ORDER BY name, updated_at DESC NULLS LAST, id
         """
     )
     op.execute("DELETE FROM gateway_models WHERE team_id IS NULL")
@@ -112,12 +113,13 @@ def upgrade() -> None:
             fallbacks_content_policy, fallbacks_context_window,
             strategy, retry_policy, enabled, created_at, updated_at
         )
-        SELECT
+        SELECT DISTINCT ON (virtual_model)
             id, virtual_model, primary_models, fallbacks_general,
             fallbacks_content_policy, fallbacks_context_window,
             strategy, retry_policy, enabled, created_at, updated_at
         FROM gateway_routes
         WHERE team_id IS NULL
+        ORDER BY virtual_model, updated_at DESC NULLS LAST, id
         """
     )
     op.execute("DELETE FROM gateway_routes WHERE team_id IS NULL")
@@ -194,11 +196,12 @@ def upgrade() -> None:
             id, provider, name, api_key_encrypted, api_base, extra,
             is_active, created_at, updated_at
         )
-        SELECT
+        SELECT DISTINCT ON (provider, name)
             id, provider, name, api_key_encrypted, api_base, extra,
             is_active, created_at, updated_at
         FROM provider_credentials
         WHERE scope = 'system'
+        ORDER BY provider, name, updated_at DESC NULLS LAST, id
         """
     )
     op.execute(

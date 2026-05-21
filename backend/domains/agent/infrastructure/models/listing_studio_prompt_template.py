@@ -6,29 +6,21 @@ Listing Studio Prompt Template Model - Listing 提示词模板（用户）
 
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.orm.base import BaseModel, OwnedMixin
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 
-class ListingStudioPromptTemplate(BaseModel, OwnedMixin):
-    """Listing Studio 提示词模板（用户自定义）"""
+class ListingStudioPromptTemplate(BaseModel, TenantScopedMixin):
+    """Listing Studio 提示词模板（用户自定义）。
+
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
+    """
 
     __tablename__ = "product_info_prompt_templates"
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
-    anonymous_user_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-    )
     capability_id: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

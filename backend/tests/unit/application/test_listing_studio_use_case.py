@@ -14,12 +14,11 @@ from domains.agent.domain.listing_studio.constants import (
 )
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
-from libs.db.permission_context import (
-    PermissionContext,
+from libs.exceptions import NotFoundError, ValidationError
+from libs.iam.permission_context import (
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import NotFoundError, ValidationError
 
 
 @pytest.mark.unit
@@ -61,37 +60,38 @@ class TestListingStudioUseCase:
     @pytest.mark.asyncio
     async def test_create_job(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="My Job",
             )
             assert job["id"] is not None
             assert job["title"] == "My Job"
             assert job["status"] == "draft"
-            assert job["user_id"] == str(user.id)
+            assert job["tenant_id"] is not None
         finally:
             clear_permission_context()
 
     @pytest.mark.asyncio
     async def test_list_jobs(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="J1",
             )
             await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="J2",
             )
             items, total = await use_case.list_jobs(skip=0, limit=10)
@@ -103,7 +103,9 @@ class TestListingStudioUseCase:
     @pytest.mark.asyncio
     async def test_get_job_not_found_raises(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
@@ -115,13 +117,14 @@ class TestListingStudioUseCase:
     @pytest.mark.asyncio
     async def test_get_job_with_steps(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="With Steps",
             )
             fetched = await use_case.get_job(uuid.UUID(job["id"]))
@@ -134,13 +137,14 @@ class TestListingStudioUseCase:
     @pytest.mark.asyncio
     async def test_delete_job(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="To Delete",
             )
             await use_case.delete_job(uuid.UUID(job["id"]))
@@ -152,13 +156,14 @@ class TestListingStudioUseCase:
     @pytest.mark.asyncio
     async def test_run_step_unknown_capability_raises(self, db_session):
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="Run Step",
             )
             with pytest.raises(ValidationError):
@@ -175,13 +180,14 @@ class TestListingStudioUseCase:
         from unittest.mock import AsyncMock, patch
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="Run Step Job",
             )
             job_id = uuid.UUID(job["id"])
@@ -231,13 +237,14 @@ class TestListingStudioUseCase:
         from bootstrap.config_loader import ModelInfo, ModelsConfig
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="Vision Test",
             )
             job_id = uuid.UUID(job["id"])
@@ -306,13 +313,14 @@ class TestListingStudioUseCase:
         from unittest.mock import AsyncMock, patch
 
         user = await self._create_test_user(db_session)
-        ctx = PermissionContext(user_id=user.id, role="user")
+        from tests.helpers.permission_context import permission_context_for_user
+
+        ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
             use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
             job = await use_case.create_job(
                 principal_id=str(user.id),
-                user_id=user.id,
                 title="Text Model Test",
             )
             job_id = uuid.UUID(job["id"])

@@ -9,29 +9,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob
-from libs.db.base_repository import OwnedRepositoryBase
+from libs.db.base_repository import TenantScopedRepositoryBase
+from libs.db.tenant_resolve import resolve_tenant_id_for_write
 
 
-class ListingStudioJobRepository(OwnedRepositoryBase[ListingStudioJob]):
+class ListingStudioJobRepository(TenantScopedRepositoryBase[ListingStudioJob]):
     @property
     def model_class(self) -> type[ListingStudioJob]:
         return ListingStudioJob
 
-    @property
-    def anonymous_user_id_column(self) -> str:
-        return "anonymous_user_id"
-
     async def create(
         self,
-        user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
+        *,
         session_id: uuid.UUID | None = None,
         title: str | None = None,
         status: str = "draft",
+        tenant_id: uuid.UUID | None = None,
     ) -> ListingStudioJob:
+        resolved = tenant_id or await resolve_tenant_id_for_write(self.db)
         job = ListingStudioJob(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
+            tenant_id=resolved,
             session_id=session_id,
             title=title,
             status=status,
@@ -42,7 +39,7 @@ class ListingStudioJobRepository(OwnedRepositoryBase[ListingStudioJob]):
         return job
 
     async def update(self, job_id: uuid.UUID, **kwargs: Any) -> ListingStudioJob | None:
-        job = await self.get_owned(job_id)
+        job = await self.get_in_tenants(job_id)
         if not job:
             return None
         allowed = {"title", "status"}
@@ -59,6 +56,6 @@ class ListingStudioJobRepository(OwnedRepositoryBase[ListingStudioJob]):
             .where(ListingStudioJob.id == job_id)
             .options(selectinload(ListingStudioJob.steps))
         )
-        q = self._apply_ownership_filter(q)
+        q = self._apply_tenant_scope(q)
         result = await self.db.execute(q)
         return result.unique().scalar_one_or_none()

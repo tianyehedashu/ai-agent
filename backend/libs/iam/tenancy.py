@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import NewType, Protocol
 import uuid
+
+
+class TeamRole(str, Enum):
+    """团队内角色（与 gateway_teams 成员 role 列一致）。"""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,5 +59,6 @@ __all__ = [
     "DefaultTenantProvisionerPort",
     "MembershipPort",
     "ScopeContext",
+    "TeamRole",
     "TenantId",
 ]

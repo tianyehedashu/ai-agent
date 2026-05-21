@@ -7,11 +7,11 @@ Video Gen Task Model - 视频生成任务模型
 from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from libs.orm.base import BaseModel, OwnedMixin
+from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
     from domains.identity.infrastructure.models.user import User
@@ -28,36 +28,20 @@ class VideoGenTaskStatus:
     CANCELLED = "cancelled"  # 已取消
 
 
-class VideoGenTask(BaseModel, OwnedMixin):
-    """视频生成任务模型
+class VideoGenTask(BaseModel, TenantScopedMixin):
+    """视频生成任务模型（归属 personal / shared team tenant）。
 
-    继承 OwnedMixin 提供所有权相关的类型协议和方法。
-    支持注册用户（user_id）和匿名用户（anonymous_user_id）。
+    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
     """
 
     __tablename__ = "video_gen_tasks"
 
-    # 所有权字段
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
-    anonymous_user_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="匿名用户ID，用于未登录用户的任务",
-    )
-
     # 关联会话（可选）
     session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("sessions.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="关联的会话ID",
+        comment="refs sessions.id (no DB FK)",
     )
 
     # 厂商任务标识
@@ -135,14 +119,11 @@ class VideoGenTask(BaseModel, OwnedMixin):
         comment="错误信息",
     )
 
-    # 关系
-    user: Mapped["User | None"] = relationship(
-        "User",
-        foreign_keys=[user_id],
-    )
     session: Mapped["Session | None"] = relationship(
         "Session",
         back_populates="video_tasks",
+        primaryjoin="VideoGenTask.session_id == Session.id",
+        foreign_keys="VideoGenTask.session_id",
     )
 
     def __repr__(self) -> str:
