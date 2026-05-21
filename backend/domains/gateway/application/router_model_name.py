@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import uuid
 
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.domain.router_model_name import (
+    deployment_scope_team_id,
+    encode_router_model_name,
+)
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
@@ -14,11 +17,11 @@ if TYPE_CHECKING:
 
 
 def router_model_name_for_gateway_model(model: GatewayModel) -> str:
-    return encode_router_model_name(getattr(model, "tenant_id", None), model.name)
+    return encode_router_model_name(deployment_scope_team_id(model), model.name)
 
 
 def router_model_name_for_route(route: GatewayRoute) -> str:
-    return encode_router_model_name(route.tenant_id, route.virtual_model)
+    return encode_router_model_name(deployment_scope_team_id(route), route.virtual_model)
 
 
 def router_model_name_for_client(
@@ -33,9 +36,8 @@ def router_model_name_for_client(
     if resolved is None:
         return cleaned
     if resolved.route is not None:
-        return encode_router_model_name(team_id, cleaned)
-    record_team_id = getattr(resolved.record, "tenant_id", None)
-    return encode_router_model_name(record_team_id or team_id, cleaned)
+        return encode_router_model_name(deployment_scope_team_id(resolved.route), cleaned)
+    return encode_router_model_name(deployment_scope_team_id(resolved.record), cleaned)
 
 
 __all__ = [

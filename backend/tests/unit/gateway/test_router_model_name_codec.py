@@ -6,6 +6,7 @@ import uuid
 
 from domains.gateway.domain.router_model_name import (
     decode_router_model_name,
+    deployment_scope_team_id,
     encode_router_model_name,
 )
 
@@ -14,6 +15,12 @@ def test_encode_team_and_system() -> None:
     team = uuid.uuid4()
     assert encode_router_model_name(team, "gpt-4o") == f"gw/t/{team}/gpt-4o"
     assert encode_router_model_name(None, "gpt-4o") == "gw/s/gpt-4o"
+
+
+def test_deployment_scope_team_id() -> None:
+    team = uuid.uuid4()
+    assert deployment_scope_team_id(type("T", (), {"tenant_id": team})()) == team
+    assert deployment_scope_team_id(type("S", (), {})()) is None
 
 
 def test_decode_roundtrip() -> None:
