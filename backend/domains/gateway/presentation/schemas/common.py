@@ -11,13 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
-from domains.tenancy.presentation.schemas.teams import (
-    TeamCreate,
-    TeamMemberAdd,
-    TeamMemberResponse,
-    TeamResponse,
-    TeamUpdate,
-)
 
 # =============================================================================
 # Gateway features（运行时能力开关，与部署 env 对齐）
@@ -919,11 +912,6 @@ __all__ = [
     "RouteCreate",
     "RouteResponse",
     "RouteUpdate",
-    "TeamCreate",
-    "TeamMemberAdd",
-    "TeamMemberResponse",
-    "TeamResponse",
-    "TeamUpdate",
     "TimeSeriesPointResponse",
     "UserCredentialCreate",
     "VirtualKeyCreate",

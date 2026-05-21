@@ -10,7 +10,7 @@ import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway'
  * 与 `BudgetScope.team`、`CredentialScope.team`（写入归属层级）正交，
  * URL 字面量虽不同（`shared` vs `team`），语义相互独立。
  */
-export type GatewayScopeTab = 'personal' | 'shared'
+export type GatewayScopeTab = 'personal' | 'shared' | 'system'
 
 /** @deprecated 使用 `GatewayScopeTab`；保留单版本兼容旧 import。 */
 export type ModelScopeTab = GatewayScopeTab
@@ -108,11 +108,29 @@ export type HealthFilter = 'all' | 'success' | 'failed' | 'unknown'
 export const USAGE_PERIOD_DAYS = [1, 7, 30] as const
 export type UsagePeriodDays = (typeof USAGE_PERIOD_DAYS)[number]
 
-export function parseScopeTab(raw: string | null): GatewayScopeTab {
+export interface ParseScopeTabOptions {
+  /** 平台管理员可解析 `?tab=system` */
+  allowSystem?: boolean
+}
+
+export function parseScopeTab(
+  raw: string | null,
+  options: ParseScopeTabOptions = {}
+): GatewayScopeTab {
+  if (options.allowSystem && raw === 'system') return 'system'
   if (raw === 'personal') return 'personal'
   if (raw === 'shared') return 'shared'
   if (raw === 'team') return 'shared'
   return 'shared'
+}
+
+export function isGatewayScopeTabValue(
+  value: string,
+  options: ParseScopeTabOptions = {}
+): value is GatewayScopeTab {
+  if (value === 'personal' || value === 'shared') return true
+  if (options.allowSystem && value === 'system') return true
+  return false
 }
 
 /** 模型页子视图：清单 / 注册 / 编辑（个人详情深链） */

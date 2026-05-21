@@ -8,44 +8,23 @@ Alert Models - 告警规则与事件
 
 from __future__ import annotations
 
-
-
 from datetime import datetime
-
 from typing import Any
-
 import uuid
 
-
-
 from sqlalchemy import (
-
     Boolean,
-
     DateTime,
-
     Index,
-
     Integer,
-
     Numeric,
-
     String,
-
     Text,
-
 )
-
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-
 from sqlalchemy.orm import Mapped, mapped_column
 
-
-
 from libs.orm.base import BaseModel, TenantScopedMixin
-
-
-
 
 
 class GatewayAlertRule(BaseModel, TenantScopedMixin):

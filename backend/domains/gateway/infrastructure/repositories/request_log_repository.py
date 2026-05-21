@@ -14,6 +14,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import defer
 
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.repositories.usage_axis_sql import usage_axis_base_clauses
 
 
 def _request_log_list_defer_options() -> tuple:
@@ -137,7 +138,7 @@ class RequestLogRepository:
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[GatewayRequestLog], int]:
-        clauses = list(axis.base_clauses())
+        clauses = list(usage_axis_base_clauses(axis))
         if start:
             clauses.append(GatewayRequestLog.created_at >= start)
         if end:
@@ -173,14 +174,14 @@ class RequestLogRepository:
     ) -> GatewayRequestLog | None:
         """按 ID 读取日志，且必须满足 axis 基础约束。
 
-        与 ``list_by_axis`` / ``aggregate_*_by_axis`` 对称，统一经 ``axis.base_clauses()``
+        与 ``list_by_axis`` / ``aggregate_*_by_axis`` 对称，统一经 ``usage_axis_base_clauses``
         生成 WHERE 子句。注意 ``UsageAxis.workspace.member_user_id`` 子约束会让单条查询
         在分区表上引入 EXISTS 子查询，对 partition pruning 略不友好；调用方（应用层
         ``get_request_log``）习惯传入未携带 ``member_user_id`` 的 axis，由应用层自行处理
         团队成员可见性，以便区分 ``NotFound`` 与 ``PermissionDenied``。
         """
         # 分区表主键为 (id, created_at)，不可用 session.get 单单传入 id
-        clauses = [*axis.base_clauses(), GatewayRequestLog.id == log_id]
+        clauses = [*usage_axis_base_clauses(axis), GatewayRequestLog.id == log_id]
         stmt = select(GatewayRequestLog).where(and_(*clauses)).limit(1)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
@@ -192,7 +193,7 @@ class RequestLogRepository:
         end: datetime,
     ) -> dict[str, Any]:
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
         ]
@@ -223,7 +224,7 @@ class RequestLogRepository:
         end: datetime,
     ) -> list[dict[str, Any]]:
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
         ]
@@ -255,7 +256,7 @@ class RequestLogRepository:
         end: datetime,
     ) -> dict[str, Any]:
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
         ]
@@ -283,7 +284,7 @@ class RequestLogRepository:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
         ]
@@ -327,7 +328,7 @@ class RequestLogRepository:
             return {}
         uniq = list(dict.fromkeys(route_names))[:500]
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
             GatewayRequestLog.route_name.in_(uniq),
@@ -378,7 +379,7 @@ class RequestLogRepository:
             return {}
         uniq = list(dict.fromkeys(model_ids))[:500]
         clauses = [
-            *axis.base_clauses(),
+            *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
             GatewayRequestLog.deployment_gateway_model_id.in_(uniq),

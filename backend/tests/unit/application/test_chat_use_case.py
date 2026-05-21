@@ -293,9 +293,15 @@ class TestChatUseCase:
             message = "测试消息"
             user_id = str(user.id)
 
-            with patch(
-                "domains.agent.application.chat_use_case.get_session_context",
-                new=mock_session_context,
+            with (
+                patch(
+                    "domains.agent.application.chat_use_case.get_session_context",
+                    new=mock_session_context,
+                ),
+                patch(
+                    "domains.session.application.title_use_case.require_scenario_default",
+                    new=AsyncMock(return_value="test/fast-model"),
+                ),
             ):
                 # 这应该成功，不会抛出 IllegalStateChangeError
                 # 后台任务会使用 mock 的独立会话
@@ -344,6 +350,10 @@ class TestChatUseCase:
                 patch(
                     "domains.agent.application.chat_use_case.get_session_context",
                     new=mock_session_context,
+                ),
+                patch(
+                    "domains.session.application.title_use_case.require_scenario_default",
+                    new=AsyncMock(return_value="test/fast-model"),
                 ),
             ):
                 mock_engine = AsyncMock()

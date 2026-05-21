@@ -7,7 +7,6 @@ Video Prompt Optimize Use Case - 视频提示词优化用例
 from typing import Any
 
 import httpx
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings

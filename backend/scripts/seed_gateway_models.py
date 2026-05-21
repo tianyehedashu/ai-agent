@@ -40,7 +40,7 @@ def main() -> None:
         "--seed",
         type=Path,
         default=None,
-        help="Path to gateway-catalog.seed.json (default: backend/config/gateway-catalog.seed.json)",
+        help="Path to gateway-catalog.seed.json (default: backend/seeds/gateway-catalog.seed.json)",
     )
     parser.add_argument(
         "--reload-router",

@@ -97,4 +97,9 @@ describe('parseScopeTab', () => {
   it('compatibility: legacy ?tab=team maps to shared', () => {
     expect(parseScopeTab('team')).toBe('shared')
   })
+
+  it('returns system only when allowSystem', () => {
+    expect(parseScopeTab('system')).toBe('shared')
+    expect(parseScopeTab('system', { allowSystem: true })).toBe('system')
+  })
 })

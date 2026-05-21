@@ -28,92 +28,89 @@ class TestMCPServerInitializationOrder:
     def test_server_not_initialized_initially(self):
         """服务器初始时应该未初始化"""
         # 重置模块状态
-        from domains.agent.presentation import mcp_server_router
+        from domains.agent.application import mcp_server_facade as mcp
 
-        # 清空缓存以测试初始状态
-        original_apps = mcp_server_router._STREAMABLE_HTTP_APPS.copy()
-        original_initialized = mcp_server_router._initialized
+        original_apps = mcp._STREAMABLE_HTTP_APPS.copy()
+        original_initialized = mcp._initialized
 
         try:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._initialized = False
+            mcp._STREAMABLE_HTTP_APPS.clear()
+            mcp._initialized = False
 
-            # 验证初始状态
-            assert not mcp_server_router.is_server_initialized("llm-server")
-            assert not mcp_server_router._initialized
+            assert not mcp.is_mcp_server_initialized("llm-server")
+            assert not mcp._initialized
         finally:
-            # 恢复状态
-            mcp_server_router._STREAMABLE_HTTP_APPS.update(original_apps)
-            mcp_server_router._initialized = original_initialized
+            mcp._STREAMABLE_HTTP_APPS.update(original_apps)
+            mcp._initialized = original_initialized
 
     def test_ensure_initialized_creates_streamable_http_app(self):
         """ensure_initialized 应该创建 streamable_http_app"""
-        from domains.agent.presentation import mcp_server_router
+        from domains.agent.application import mcp_server_facade
 
         # 保存原始状态
-        original_apps = mcp_server_router._STREAMABLE_HTTP_APPS.copy()
+        original_apps = mcp_server_facade._STREAMABLE_HTTP_APPS.copy()
 
         try:
             # 清空缓存
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
 
             # Mock SERVER_MAP 中的服务器
             mock_server = MagicMock()
             mock_app = MagicMock()
             mock_server.streamable_http_app.return_value = mock_app
 
-            with patch.dict(mcp_server_router.SERVER_MAP, {"test-server": mock_server}):
+            with patch.dict(mcp_server_facade.SERVER_MAP, {"test-server": mock_server}):
                 # 调用 ensure_initialized
-                mcp_server_router.ensure_initialized("test-server")
+                mcp_server_facade.ensure_mcp_server_initialized("test-server")
 
                 # 验证 streamable_http_app 被调用
                 mock_server.streamable_http_app.assert_called_once()
 
                 # 验证服务器现在已初始化
-                assert mcp_server_router.is_server_initialized("test-server")
+                assert mcp_server_facade.is_mcp_server_initialized("test-server")
         finally:
             # 恢复状态
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._STREAMABLE_HTTP_APPS.update(original_apps)
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.update(original_apps)
 
     def test_ensure_initialized_is_idempotent(self):
         """ensure_initialized 应该是幂等的（多次调用只初始化一次）"""
-        from domains.agent.presentation import mcp_server_router
+        from domains.agent.application import mcp_server_facade
 
-        original_apps = mcp_server_router._STREAMABLE_HTTP_APPS.copy()
+        original_apps = mcp_server_facade._STREAMABLE_HTTP_APPS.copy()
 
         try:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
 
             mock_server = MagicMock()
             mock_app = MagicMock()
             mock_server.streamable_http_app.return_value = mock_app
 
-            with patch.dict(mcp_server_router.SERVER_MAP, {"test-server": mock_server}):
+            with patch.dict(mcp_server_facade.SERVER_MAP, {"test-server": mock_server}):
                 # 多次调用
-                mcp_server_router.ensure_initialized("test-server")
-                mcp_server_router.ensure_initialized("test-server")
-                mcp_server_router.ensure_initialized("test-server")
+                mcp_server_facade.ensure_mcp_server_initialized("test-server")
+                mcp_server_facade.ensure_mcp_server_initialized("test-server")
+                mcp_server_facade.ensure_mcp_server_initialized("test-server")
 
                 # streamable_http_app 应该只被调用一次
                 mock_server.streamable_http_app.assert_called_once()
         finally:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._STREAMABLE_HTTP_APPS.update(original_apps)
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.update(original_apps)
 
     @pytest.mark.asyncio
     async def test_initialize_mcp_servers_calls_streamable_http_app_before_session_manager(
         self,
     ):
         """initialize_mcp_servers 应该在访问 session_manager 之前调用 streamable_http_app"""
-        from domains.agent.presentation import mcp_server_router
+        from domains.agent.application import mcp_server_facade
 
-        original_apps = mcp_server_router._STREAMABLE_HTTP_APPS.copy()
-        original_initialized = mcp_server_router._initialized
+        original_apps = mcp_server_facade._STREAMABLE_HTTP_APPS.copy()
+        original_initialized = mcp_server_facade._initialized
 
         try:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._initialized = False
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._initialized = False
 
             # 记录调用顺序
             call_order = []
@@ -141,8 +138,8 @@ class TestMCPServerInitializationOrder:
             mock_session_manager.run.return_value = MockRunContext()
             mock_server.session_manager = mock_session_manager
 
-            with patch.dict(mcp_server_router.SERVER_MAP, {"test-server": mock_server}, clear=True):
-                async with mcp_server_router.initialize_mcp_servers():
+            with patch.dict(mcp_server_facade.SERVER_MAP, {"test-server": mock_server}, clear=True):
+                async with mcp_server_facade.initialize_mcp_servers():
                     pass
 
             # 验证调用顺序：streamable_http_app 必须在 session_manager.run 之前
@@ -151,21 +148,21 @@ class TestMCPServerInitializationOrder:
                 "streamable_http_app 必须在 session_manager.run 之前调用"
             )
         finally:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._STREAMABLE_HTTP_APPS.update(original_apps)
-            mcp_server_router._initialized = original_initialized
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.update(original_apps)
+            mcp_server_facade._initialized = original_initialized
 
     @pytest.mark.asyncio
     async def test_initialize_mcp_servers_sets_initialized_flag(self):
         """initialize_mcp_servers 应该设置 _initialized 标志"""
-        from domains.agent.presentation import mcp_server_router
+        from domains.agent.application import mcp_server_facade
 
-        original_apps = mcp_server_router._STREAMABLE_HTTP_APPS.copy()
-        original_initialized = mcp_server_router._initialized
+        original_apps = mcp_server_facade._STREAMABLE_HTTP_APPS.copy()
+        original_initialized = mcp_server_facade._initialized
 
         try:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._initialized = False
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._initialized = False
 
             mock_server = MagicMock()
             mock_app = MagicMock()
@@ -183,19 +180,19 @@ class TestMCPServerInitializationOrder:
             mock_session_manager.run.return_value = MockRunContext()
             mock_server.session_manager = mock_session_manager
 
-            with patch.dict(mcp_server_router.SERVER_MAP, {"test-server": mock_server}, clear=True):
-                assert not mcp_server_router._initialized
+            with patch.dict(mcp_server_facade.SERVER_MAP, {"test-server": mock_server}, clear=True):
+                assert not mcp_server_facade._initialized
 
-                async with mcp_server_router.initialize_mcp_servers():
+                async with mcp_server_facade.initialize_mcp_servers():
                     # 在上下文中应该已初始化
-                    assert mcp_server_router._initialized
+                    assert mcp_server_facade._initialized
 
                 # 退出上下文后应该重置
-                assert not mcp_server_router._initialized
+                assert not mcp_server_facade._initialized
         finally:
-            mcp_server_router._STREAMABLE_HTTP_APPS.clear()
-            mcp_server_router._STREAMABLE_HTTP_APPS.update(original_apps)
-            mcp_server_router._initialized = original_initialized
+            mcp_server_facade._STREAMABLE_HTTP_APPS.clear()
+            mcp_server_facade._STREAMABLE_HTTP_APPS.update(original_apps)
+            mcp_server_facade._initialized = original_initialized
 
 
 class TestSessionManagerLazyInitialization:

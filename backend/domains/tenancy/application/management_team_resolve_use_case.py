@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.tenancy.domain.management_context import ManagementTeamContext
+from domains.tenancy.domain.policies.team_target import parse_team_id_header
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
 from libs.exceptions import (
@@ -39,13 +39,7 @@ class TenancyManagementTeamResolveUseCase:
         x_team_id: str | None,
         path_team_id: str | None,
     ) -> ManagementTeamContext:
-        target_team_id: uuid.UUID | None = None
-        if path_team_id:
-            with suppress(ValueError):
-                target_team_id = uuid.UUID(path_team_id)
-        if target_team_id is None and x_team_id:
-            with suppress(ValueError):
-                target_team_id = uuid.UUID(x_team_id)
+        target_team_id = parse_team_id_header(path_team_id, x_team_id)
 
         is_platform_admin = platform_user_role == "admin"
 

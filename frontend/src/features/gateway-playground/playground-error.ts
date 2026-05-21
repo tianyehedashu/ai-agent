@@ -71,6 +71,6 @@ export function buildNetworkPlaygroundError(error: unknown, url: string): Playgr
   const browserMessage = error instanceof Error ? error.message : '网络请求失败'
   return {
     message: browserMessage,
-    hint: `无法连接到 ${url}。请确认后端服务可用、部署环境的 /v1 反向代理或 VITE_API_URL 配置正确；若浏览器控制台提示 CORS，请检查跨域配置。`,
+    hint: `无法连接到 ${url}。请确认后端服务可用、OpenAI 兼容面路径为 /api/v1/openai/v1/*（或部署时配置 VITE_API_URL / VITE_APP_ROOT）；若浏览器控制台提示 CORS，请检查跨域配置。`,
   }
 }

@@ -2,7 +2,7 @@
 
 LiteLLM ``aimage_generation`` 当前不支持火山 ``ep-xxx`` image endpoint，
 必须直连 ``{api_base}/images/generations`` 并把 image endpoint_id 作为 ``model``。
-本模块只产出请求"快照"，HTTP 执行在 ``infrastructure/external``。
+本模块只产出请求"快照"，HTTP 执行在 ``infrastructure/upstream``。
 """
 
 from __future__ import annotations

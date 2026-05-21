@@ -76,7 +76,7 @@ class GatewayMetricsRollupRepository:
             values = {
                 "id": uuid.uuid4(),
                 "bucket_at": row.bucket_at,
-                "team_id": row.tenant_id,
+                "tenant_id": row.tenant_id,
                 "user_id": row.user_id,
                 "vkey_id": row.vkey_id,
                 "credential_id": row.credential_id,

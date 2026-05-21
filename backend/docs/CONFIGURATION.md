@@ -175,7 +175,7 @@ from bootstrap.config import settings
 
 default_chat = settings.default_model  # 或 ScenarioDefaultsService + ModelCatalogPort
 
-# 系统模型目录种子：config/gateway-catalog.seed.json → make seed-gateway
+# 系统模型目录种子：seeds/gateway-catalog.seed.json → make seed-gateway
 ```
 
 ### 环境变量覆盖

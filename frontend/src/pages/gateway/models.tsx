@@ -8,9 +8,17 @@ import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs'
-import { parseModelsPageView } from '@/features/gateway-models/constants'
+import {
+  type GatewayScopeTab,
+  isGatewayScopeTabValue,
+  parseModelsPageView,
+} from '@/features/gateway-models/constants'
 import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
-import { personalModelsIndexHref, teamModelsFilteredHref } from '@/features/gateway-models/paths'
+import {
+  personalModelsIndexHref,
+  systemModelsFilteredHref,
+  teamModelsFilteredHref,
+} from '@/features/gateway-models/paths'
 import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -41,30 +49,33 @@ function ModelsPanelFallback(): React.JSX.Element {
 
 export default function GatewayModelsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const mutateParamsOnTabChange = useCallback((next: GatewayScopeTab, params: URLSearchParams) => {
+    params.delete('view')
+    if (next === 'personal') {
+      params.delete('credentialId')
+      params.delete('modelId')
+    }
+  }, [])
   const { scopeTab, setScopeTab, searchParams, setSearchParams } = useGatewayScopeTab({
-    mutateParamsOnTabChange: (next, params) => {
-      params.delete('view')
-      if (next === 'personal') {
-        params.delete('credentialId')
-        params.delete('modelId')
-      }
-    },
+    allowSystemTab: isPlatformAdmin,
+    mutateParamsOnTabChange,
   })
   const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''
-  const { canWrite } = useGatewayPermission()
   const isTeamRegister = scopeTab === 'shared' && pageView === 'register' && canWrite
+  const isSystemRegister = scopeTab === 'system' && pageView === 'register' && isPlatformAdmin
   const isPersonalRegister = scopeTab === 'personal' && pageView === 'register'
 
   const handleScopeTabsChange = useCallback(
     (v: string): void => {
-      if (v === 'personal' || v === 'shared') {
+      if (isGatewayScopeTabValue(v, { allowSystem: isPlatformAdmin })) {
         startTransition(() => {
           setScopeTab(v)
         })
       }
     },
-    [setScopeTab]
+    [setScopeTab, isPlatformAdmin]
   )
 
   useEffect(() => {
@@ -83,12 +94,20 @@ export default function GatewayModelsPage(): React.JSX.Element {
       needsUpdate = true
     }
 
+    if (pageView === 'register' && scopeTab === 'system' && !isPlatformAdmin) {
+      next.delete('view')
+      needsUpdate = true
+    }
+
     if (needsUpdate) {
       setSearchParams(next, { replace: true })
     }
-  }, [searchParams, setSearchParams, pageView, scopeTab, canWrite])
+  }, [searchParams, setSearchParams, pageView, scopeTab, canWrite, isPlatformAdmin])
 
-  const teamListBackHref = teamModelsFilteredHref(teamId, credentialId || undefined)
+  const teamListBackHref =
+    scopeTab === 'system'
+      ? systemModelsFilteredHref(teamId, credentialId || undefined)
+      : teamModelsFilteredHref(teamId, credentialId || undefined)
   const personalListBackHref = personalModelsIndexHref(teamId)
 
   return (
@@ -96,7 +115,25 @@ export default function GatewayModelsPage(): React.JSX.Element {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">模型</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {scopeTab === 'shared' ? (
+          {scopeTab === 'system' ? (
+            <>
+              系统级模型挂载在平台{' '}
+              <Link
+                to="/gateway/credentials?tab=system"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                系统凭据
+              </Link>
+              上；对外暴露名在{' '}
+              <Link
+                to="/gateway/routes"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                虚拟路由
+              </Link>{' '}
+              编排。
+            </>
+          ) : scopeTab === 'shared' ? (
             <>
               团队别名映射至 LiteLLM 上游；对外暴露名在{' '}
               <Link
@@ -135,7 +172,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
 
       <Tabs value={scopeTab} onValueChange={handleScopeTabsChange}>
         <TabsList>
-          <GatewayScopeTabTriggers />
+          <GatewayScopeTabTriggers showSystemTab={isPlatformAdmin} />
         </TabsList>
 
         {scopeTab === 'personal' ? (
@@ -162,6 +199,30 @@ export default function GatewayModelsPage(): React.JSX.Element {
               </Suspense>
             </TabsContent>
           )
+        ) : scopeTab === 'system' && isPlatformAdmin ? (
+          isSystemRegister ? (
+            <TabsContent value="system" className="mt-4 space-y-4 focus-visible:outline-none">
+              <Button variant="ghost" size="sm" className="h-8" asChild>
+                <Link
+                  to={teamListBackHref}
+                  onMouseEnter={preloadTeamModelsWorkspace}
+                  onFocus={preloadTeamModelsWorkspace}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  返回模型列表
+                </Link>
+              </Button>
+              <Suspense fallback={<ModelsPanelFallback />}>
+                <TeamModelsWorkspace pageView="register" hideRegisterAction listMode="system" />
+              </Suspense>
+            </TabsContent>
+          ) : (
+            <TabsContent value="system" className="mt-4 focus-visible:outline-none">
+              <Suspense fallback={<ModelsPanelFallback />}>
+                <TeamModelsWorkspace listMode="system" />
+              </Suspense>
+            </TabsContent>
+          )
         ) : isTeamRegister ? (
           <TabsContent value="shared" className="mt-4 space-y-4 focus-visible:outline-none">
             <Button variant="ghost" size="sm" className="h-8" asChild>
@@ -181,7 +242,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
         ) : (
           <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
             <Suspense fallback={<ModelsPanelFallback />}>
-              <TeamModelsWorkspace />
+              <TeamModelsWorkspace listMode="team" />
             </Suspense>
           </TabsContent>
         )}

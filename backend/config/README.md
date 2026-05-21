@@ -13,7 +13,7 @@ config/
 ├── execution.toml              # 执行环境系统默认配置
 ├── tools.toml                  # 工具配置
 ├── mcp.toml                    # MCP 服务器配置
-├── gateway-catalog.seed.json   # Gateway 系统模型目录种子（权威运行时：DB）
+# 模型目录种子见 ../seeds/gateway-catalog.seed.json（权威运行时：DB）
 ├── litellm_models.yaml         # LiteLLM 模型配置
 ├── environments/               # 环境模板目录
 │   ├── docker-dev.toml         # Docker 开发环境（网络已启用）
@@ -84,7 +84,7 @@ export SIMPLEMEM_ENABLED=false
 | 敏感信息 | `.env` | API Keys、数据库密码 |
 | 环境相关 | `.env` | DATABASE_URL、APP_ENV |
 | 功能开关 | `app.toml` | simplemem.enabled |
-| 模型目录 | `config/gateway-catalog.seed.json` + DB | `make seed-gateway` |
+| 模型目录 | `seeds/gateway-catalog.seed.json` + DB | `make seed-gateway` |
 | 场景默认模型 | `.env` | `DEFAULT_MODEL`, `FAST_MODEL`, … |
 | 环境特定 | `app.{env}.toml` | logging.level |
 | 执行环境 | `execution.toml` | 沙箱、网络、资源限制 |

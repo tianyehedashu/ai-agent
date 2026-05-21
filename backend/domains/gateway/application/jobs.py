@@ -11,28 +11,17 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
-from typing import TYPE_CHECKING, Any
-
-import httpx
-from sqlalchemy import func, select
+from typing import Any
 
 from bootstrap.config import settings
+from domains.gateway.application.gateway_alert_job import gateway_alert_loop
 from domains.gateway.infrastructure.jobs.sql_jobs_repository import GatewaySqlJobsRepository
-from domains.gateway.infrastructure.models.alert import (
-    GatewayAlertEvent,
-    GatewayAlertRule,
-)
-from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.metrics_rollup_repository import (
     GatewayMetricsRollupRepository,
 )
 from libs.background_tasks import register_app_background_task
 from libs.db.database import get_session_context
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -97,127 +86,6 @@ async def gateway_request_log_retention_loop() -> None:
                         )
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_request_log_retention_loop error: %s", exc)
-        await asyncio.sleep(interval)
-
-
-# =============================================================================
-# Alerts
-# =============================================================================
-
-
-async def _evaluate_rule(
-    session: AsyncSession,
-    rule: GatewayAlertRule,
-    now: datetime,
-) -> tuple[bool, float] | None:
-    """评估规则；返回 (triggered, value) 或 None（数据不足）"""
-    window_start = now - timedelta(minutes=rule.window_minutes)
-    base_q = select(GatewayRequestLog).where(
-        GatewayRequestLog.created_at >= window_start,
-        GatewayRequestLog.created_at <= now,
-    )
-    if rule.tenant_id is not None:
-        base_q = base_q.where(GatewayRequestLog.tenant_id == rule.tenant_id)
-
-    metric = rule.metric
-    if metric == "error_rate":
-        cnt_total = (
-            await session.execute(select(func.count()).select_from(base_q.subquery()))
-        ).scalar_one()
-        if cnt_total == 0:
-            return None
-        cnt_err = (
-            await session.execute(
-                select(func.count()).select_from(
-                    base_q.where(GatewayRequestLog.status != "success").subquery()
-                )
-            )
-        ).scalar_one()
-        rate = float(cnt_err) / float(cnt_total)
-        return rate > float(rule.threshold), rate
-    if metric == "request_rate":
-        cnt = (
-            await session.execute(select(func.count()).select_from(base_q.subquery()))
-        ).scalar_one()
-        rate_per_min = float(cnt) / max(rule.window_minutes, 1)
-        return rate_per_min > float(rule.threshold), rate_per_min
-    if metric == "latency_p95":
-        sub = base_q.subquery()
-        stmt = select(func.percentile_cont(0.95).within_group(sub.c.latency_ms.asc()).label("p95"))
-        row = (await session.execute(stmt)).one()
-        p95 = float(row.p95 or 0)
-        return p95 > float(rule.threshold), p95
-    if metric == "budget_usage":
-        sub = base_q.subquery()
-        total = (await session.execute(select(func.sum(sub.c.cost_usd)))).scalar_one() or 0
-        total_f = float(total)
-        return total_f > float(rule.threshold), total_f
-    return None
-
-
-async def _send_webhook(url: str, payload: dict[str, Any]) -> None:
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(url, json=payload)
-    except Exception as exc:  # pragma: no cover
-        logger.warning("alert webhook failed: %s", exc)
-
-
-async def gateway_alert_loop() -> None:
-    """1 分钟一次，扫规则触发"""
-    interval = settings.gateway_alert_interval_seconds
-    while True:
-        try:
-            async with get_session_context() as session:
-                rules = (
-                    (
-                        await session.execute(
-                            select(GatewayAlertRule).where(GatewayAlertRule.enabled.is_(True))
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                now = datetime.now(UTC)
-                for rule in rules:
-                    result = await _evaluate_rule(session, rule, now)
-                    if result is None:
-                        continue
-                    triggered, value = result
-                    if not triggered:
-                        continue
-                    if (
-                        rule.last_triggered_at
-                        and (now - rule.last_triggered_at).total_seconds() < 300
-                    ):
-                        continue
-                    event = GatewayAlertEvent(
-                        rule_id=rule.id,
-                        tenant_id=rule.tenant_id,
-                        metric_value=Decimal(str(value)),
-                        threshold=rule.threshold,
-                        severity="warning",
-                        payload={"window_minutes": rule.window_minutes, "metric": rule.metric},
-                        notified=False,
-                    )
-                    session.add(event)
-                    rule.last_triggered_at = now
-                    await session.flush()
-                    payload = {
-                        "rule": rule.name,
-                        "metric": rule.metric,
-                        "value": value,
-                        "threshold": float(rule.threshold),
-                        "team_id": str(rule.tenant_id) if rule.tenant_id else None,
-                        "at": now.isoformat(),
-                    }
-                    channels = rule.channels or {}
-                    if channels.get("webhook"):
-                        await _send_webhook(channels["webhook"], payload)
-                    event.notified = True
-                await session.commit()
-        except Exception as exc:  # pragma: no cover
-            logger.warning("gateway_alert_job error: %s", exc)
         await asyncio.sleep(interval)
 
 

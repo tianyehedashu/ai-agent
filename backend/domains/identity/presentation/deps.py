@@ -23,9 +23,9 @@ from domains.identity.application import (
 from domains.identity.application.permission_context_composer import PermissionContextComposer
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
+from libs.exceptions import PermissionDeniedError
 from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
 from libs.iam.permission_context import get_permission_context
-from libs.exceptions import PermissionDeniedError
 
 __all__ = [
     "ADMIN_ROLE",

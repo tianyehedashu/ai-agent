@@ -18,11 +18,12 @@ export function resolveGatewayV1BaseUrl(): string {
       return base.endsWith(GATEWAY_OPENAI_V1_BASE) ? base : `${base}${GATEWAY_OPENAI_V1_BASE}`
     }
   }
-  if (import.meta.env.DEV) {
-    return `http://localhost:8000${GATEWAY_OPENAI_V1_BASE}`
-  }
+  // 未配置 VITE_API_URL：走当前页面 origin（开发经 Vite /api 代理，生产同域 nginx）
   if (typeof window !== 'undefined') {
     return `${window.location.origin}${GATEWAY_OPENAI_V1_BASE}`
+  }
+  if (import.meta.env.DEV) {
+    return `http://localhost:8000${GATEWAY_OPENAI_V1_BASE}`
   }
   return `https://your-api-host${APP_ROOT}/api/v1/openai/v1`
 }

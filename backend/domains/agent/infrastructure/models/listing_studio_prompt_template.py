@@ -4,10 +4,9 @@ Listing Studio Prompt Template Model - Listing 提示词模板（用户）
 按能力维度存储用户保存的提示词模板；系统默认提示词不落库。
 """
 
-import uuid
 
 from sqlalchemy import String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.orm.base import BaseModel, TenantScopedMixin

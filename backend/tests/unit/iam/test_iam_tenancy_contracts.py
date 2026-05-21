@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
-    GatewayDefaultTenantProvisioner,
+from domains.tenancy.application.default_tenant_provisioner import (
+    TenancyDefaultTenantProvisioner,
 )
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
@@ -40,8 +40,8 @@ async def test_provision_default_tenant_logs_on_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gateway_default_tenant_provisioner_returns_tenant_id(db_session, test_user):
-    prov = GatewayDefaultTenantProvisioner()
+async def test_tenancy_default_tenant_provisioner_returns_tenant_id(db_session, test_user):
+    prov = TenancyDefaultTenantProvisioner()
     tid = await prov.ensure_default_tenant(
         db_session,
         test_user.id,

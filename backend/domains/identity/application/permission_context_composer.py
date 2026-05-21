@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from typing import AsyncIterator
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession

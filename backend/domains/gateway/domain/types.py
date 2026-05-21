@@ -386,6 +386,7 @@ __all__ = [
     "BudgetScope",
     "CredentialScope",
     "DashboardSummary",
+    "DownstreamPricingScope",
     "EntitlementListStatus",
     "FallbackKind",
     "GatewayCapability",
@@ -403,8 +404,7 @@ __all__ = [
     "VirtualKeyBatchRevokeReason",
     "VirtualKeyPrincipal",
     "allowed_capabilities_from_storage",
-    "DownstreamPricingScope",
     "credential_api_scope",
-    "normalize_downstream_pricing_scope",
     "is_config_managed_system_credential",
+    "normalize_downstream_pricing_scope",
 ]

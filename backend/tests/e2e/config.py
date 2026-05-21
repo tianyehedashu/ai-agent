@@ -4,7 +4,7 @@ E2E 测试共享配置。
 通过环境变量覆盖默认地址，便于 CI 或自定义端口：
 
 - ``E2E_API_BASE_URL``：后端根 URL，默认 ``http://localhost:8000``（无尾部斜杠）。
-- ``E2E_ROOT_PATH`` / ``ROOT_PATH``：服务级前缀，须与后端进程一致（默认空）。
+- ``E2E_ROOT_PATH`` / ``ROOT_PATH``：服务级前缀，须与后端进程一致（默认 ``/ai-agent``）。
 - ``E2E_USER_EMAIL`` / ``E2E_USER_PASSWORD``：可选；用于需登录的 E2E。
 """
 
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # 与后端 ROOT_PATH 对齐后再导入 paths（清除 settings 缓存）
-_e2e_root = os.environ.get("E2E_ROOT_PATH", os.environ.get("ROOT_PATH", "")).strip()
+_e2e_root = os.environ.get("E2E_ROOT_PATH", os.environ.get("ROOT_PATH", "/ai-agent")).strip()
 if _e2e_root:
     os.environ["ROOT_PATH"] = _e2e_root
 

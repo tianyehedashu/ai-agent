@@ -15,7 +15,6 @@ ProxyUseCase - 网关调用编排
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -34,18 +33,19 @@ from domains.gateway.application.proxy_guard import (
     ProxyGuard,
 )
 from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
-from domains.gateway.application.proxy_metadata_builder import ProxyMetadataBuilder
+from domains.gateway.application.proxy_metadata_builder import (
+    PreparedLitellmKwargs,
+    ProxyMetadataBuilder,
+)
+from domains.gateway.application.proxy_non_chat_pipeline import ProxyNonChatMixin
 from domains.gateway.application.proxy_response_adapter import (
     adapt_anthropic_response,
     adapt_anthropic_stream,
     adapt_response,
     adapt_stream,
-    pricing_kwargs_from_litellm,
-    schedule_settle_usage,
 )
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
-from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import (
     GatewayCapability,
@@ -114,7 +114,7 @@ class ProxyContext:
     client_type: str = "unknown"
 
 
-class ProxyUseCase:
+class ProxyUseCase(ProxyNonChatMixin):
     """对外 LLM 代理用例（``/v1/*`` 编排门面）。
 
     **公开入口**：``chat_completion`` / ``anthropic_messages`` / ``embedding`` /
@@ -201,12 +201,7 @@ class ProxyUseCase:
     ) -> dict[str, Any]:
         return await self._metadata_builder.build(ctx, user_kwargs=user_kwargs)
 
-    async def _prepare_litellm_kwargs(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        prepared = await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
+    def _kwargs_from_prepared(self, prepared: PreparedLitellmKwargs) -> dict[str, Any]:
         resolved = prepared.resolved
         tags = resolved.record.tags if resolved is not None else None
         tag_dict = tags if isinstance(tags, dict) else None
@@ -221,6 +216,14 @@ class ProxyUseCase:
             tags=tag_dict,
         )
 
+    async def _prepare_litellm_kwargs(
+        self,
+        ctx: ProxyContext,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        prepared = await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
+        return self._kwargs_from_prepared(prepared)
+
     async def _should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
         return await self._litellm.should_use_internal_direct_litellm(ctx, model)
 
@@ -233,6 +236,18 @@ class ProxyUseCase:
 
     async def _direct_embedding(self, kwargs: dict[str, Any]) -> Any:
         return await self._litellm.direct_embedding(kwargs)
+
+    async def _dashscope_direct_embedding(
+        self,
+        ctx: ProxyContext,
+        client_model: str,
+        kwargs: dict[str, Any],
+        *,
+        real_model: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._litellm.dashscope_direct_embedding(
+            ctx, client_model, kwargs, real_model=real_model
+        )
 
     async def _merge_direct_deployment_litellm_params(
         self,
@@ -404,273 +419,6 @@ class ProxyUseCase:
         except Exception:
             pass
         return estimate_anthropic_request_tokens(body)
-
-    async def embedding(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.EMBEDDING
-        model = str(body.get("model", "")).strip()
-        if not model:
-            raise ValueError("model is required")
-        ctx.budget_model = model
-        self._guard.check_model(model, ctx)
-        self._guard.check_capability(ctx)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        try:
-            if await self._should_use_internal_direct_litellm(ctx, model):
-                response = await self._direct_embedding(kwargs)
-            else:
-                router = await get_router(self._session)
-                response = await router.aembedding(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
-    async def image_generation(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.IMAGE
-        ctx.budget_model = self._optional_body_model(body)
-        if ctx.budget_model:
-            self._guard.check_model(ctx.budget_model, ctx)
-        self._guard.check_capability(ctx)
-        if ctx.budget_model:
-            await self._guard.assert_request_capability_matches_model(ctx, ctx.budget_model)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        try:
-            router = await get_router(self._session)
-            response = await router.aimage_generation(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
-    async def audio_transcription(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.AUDIO_TRANSCRIPTION
-        ctx.budget_model = self._optional_body_model(body)
-        self._guard.check_capability(ctx)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        try:
-            router = await get_router(self._session)
-            response = await router.atranscription(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
-    async def audio_speech(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any] | bytes:
-        ctx.capability = GatewayCapability.AUDIO_SPEECH
-        ctx.budget_model = self._optional_body_model(body)
-        self._guard.check_capability(ctx)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        # 使用全局 litellm.aspeech 因为 Router 不一定暴露 aspeech
-        from litellm import aspeech
-
-        try:
-            result = await aspeech(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        # TTS 多为二进制返回，无 usage；仍结算请求/占位 token 与 DB 用量，与 limit_requests 预扣对齐
-        schedule_settle_usage(
-            ctx,
-            self._budget,
-            tokens=0,
-            cost=Decimal("0"),
-            requests=1,
-            entitlement_guard=self._entitlement_guard,
-        )
-        return result
-
-    async def rerank(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.RERANK
-        ctx.budget_model = self._optional_body_model(body)
-        self._guard.check_capability(ctx)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import arerank
-
-        try:
-            response = await arerank(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
-    async def moderation(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        """处理 ``POST /v1/moderations``（经 LiteLLM ``amoderation``）。"""
-        ctx.capability = GatewayCapability.MODERATION
-        raw_model = body.get("model")
-        model = str(raw_model).strip() if raw_model is not None else ""
-        ctx.budget_model = model or None
-        if model:
-            self._guard.check_model(model, ctx)
-        self._guard.check_capability(ctx)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import amoderation
-
-        try:
-            response = await amoderation(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
-    async def video_generation(
-        self,
-        ctx: ProxyContext,
-        body: dict[str, Any],
-    ) -> dict[str, Any]:
-        """处理 ``POST /v1/videos``（经 LiteLLM ``avideo_generation``）。"""
-        ctx.capability = GatewayCapability.VIDEO_GENERATION
-        model = str(body.get("model", "")).strip()
-        if not model:
-            raise ValueError("model is required")
-        ctx.budget_model = model
-        self._guard.check_model(model, ctx)
-        self._guard.check_capability(ctx)
-        await self._guard.assert_request_capability_matches_model(ctx, model)
-        await self._guard.check_limits(ctx)
-        reservations = await self._guard.check_budget(ctx)
-        try:
-            await self._guard.check_entitlement(ctx, model)
-        except EntitlementPlanExhaustedError:
-            await self._guard.release_budget_reservations(reservations)
-            raise
-        kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import avideo_generation
-
-        try:
-            response = await avideo_generation(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
-        return adapt_response(
-            response,
-            ctx,
-            self._budget,
-            self._entitlement_guard,
-            metadata=meta,
-            upstream_custom=up_c,
-            downstream_custom=down_c,
-        )
-
 
 __all__ = [
     "ProxyContext",

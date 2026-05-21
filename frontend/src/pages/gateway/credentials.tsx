@@ -43,6 +43,7 @@ import {
 } from '@/features/gateway-credentials/provider-schemas'
 import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
+import { isGatewayScopeTabValue } from '@/features/gateway-models/constants'
 import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
 import {
   credentialDetailAddModelsHref,
@@ -74,6 +75,162 @@ function canEditGatewayCredential(
   isPlatformAdmin: boolean
 ): boolean {
   return (c.scope === 'team' && canWrite) || (c.scope === 'system' && isPlatformAdmin)
+}
+
+interface ManagedCredentialsTableProps {
+  items: ProviderCredential[] | undefined
+  isLoading: boolean
+  teamId: string
+  canWrite: boolean
+  isPlatformAdmin: boolean
+  emptyHint: string
+  onAdd: () => void
+  onDelete: (c: ProviderCredential) => void
+  updateMutation: {
+    isPending: boolean
+    mutate: (args: { id: string; body: GatewayCredentialUpdateBody }) => void
+  }
+}
+
+function ManagedCredentialsTable({
+  items,
+  isLoading,
+  teamId,
+  canWrite,
+  isPlatformAdmin,
+  emptyHint,
+  onAdd,
+  onDelete,
+  updateMutation,
+}: ManagedCredentialsTableProps): React.JSX.Element {
+  const showAdd = canWrite || isPlatformAdmin
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <ScrollArea className="w-full overscroll-y-contain">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">名称</th>
+                <th className="px-4 py-2 text-left font-medium">API Key</th>
+                <th className="px-4 py-2 text-left font-medium">提供商</th>
+                <th className="px-4 py-2 text-left font-medium">作用域</th>
+                <th className="px-4 py-2 text-left font-medium">api_base</th>
+                <th className="px-4 py-2 text-left font-medium">启用</th>
+                <th className="px-4 py-2 text-left font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
+                    加载中…
+                  </td>
+                </tr>
+              )}
+              {!isLoading && (items?.length ?? 0) === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    <span className="mr-3">{emptyHint}</span>
+                    {showAdd ? (
+                      <Button size="sm" variant="secondary" onClick={onAdd}>
+                        新增
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              )}
+              {items?.map((c: ProviderCredential) => {
+                const editable = canEditGatewayCredential(c, canWrite, isPlatformAdmin)
+                const configManaged = isConfigManagedSystemCredential(c)
+                return (
+                  <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {editable ? (
+                          <Link
+                            to={credentialDetailHref(teamId, c.id)}
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                        ) : (
+                          <span className="font-medium">{c.name}</span>
+                        )}
+                        {configManaged ? (
+                          <Badge variant="secondary" className="text-[10px] font-normal">
+                            配置同步
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                      {c.api_key_masked}
+                    </td>
+                    <td className="px-4 py-2 text-xs">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{providerLabel(c.provider)}</span>
+                        <span
+                          className="font-mono text-[10px] text-muted-foreground"
+                          title={c.provider}
+                        >
+                          {c.provider}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-xs">{c.scope}</td>
+                    <td className="px-4 py-2 text-xs">
+                      <CredentialApiBaseCell credential={c} />
+                    </td>
+                    <td className="px-4 py-2">
+                      {editable ? (
+                        <Switch
+                          checked={c.is_active}
+                          disabled={updateMutation.isPending}
+                          onCheckedChange={(checked) => {
+                            updateMutation.mutate({ id: c.id, body: { is_active: checked } })
+                          }}
+                          aria-label={c.is_active ? '停用凭据' : '启用凭据'}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {c.is_active ? '启用' : '禁用'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {editable ? (
+                        <div className="flex items-center gap-0.5">
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+                            <Link to={credentialDetailHref(teamId, c.id)}>详情</Link>
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+                            <Link to={credentialDetailAddModelsHref(teamId, c.id)}>添加模型</Link>
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            disabled={updateMutation.isPending}
+                            onClick={() => {
+                              onDelete(c)
+                            }}
+                            aria-label="删除凭据"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  )
 }
 
 function CredentialApiBaseCell({
@@ -121,23 +278,25 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   }, [])
 
   const { scopeTab: activeTab, setScopeTab: setActiveTab } = useGatewayScopeTab({
+    allowSystemTab: isPlatformAdmin,
     onBeforeTabChange: closeCreateUi,
   })
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['gateway', 'credentials', teamId],
     queryFn: () => gatewayApi.listCredentials(teamId),
-    enabled: activeTab === 'shared',
+    enabled: activeTab === 'shared' || activeTab === 'system',
   })
 
-  const closeCreateDialog = useCallback((): void => {
-    setOpen(false)
-    setPendingProvider(undefined)
-  }, [])
+  const teamCredentials = useMemo(() => (items ?? []).filter((c) => c.scope !== 'system'), [items])
+  const systemCredentials = useMemo(
+    () => (items ?? []).filter((c) => c.scope === 'system'),
+    [items]
+  )
 
   const openAddModelsAfterCreate = useCallback(
     (cred: ProviderCredential, scope: CredentialUpstreamScope): void => {
-      closeCreateDialog()
+      closeCreateUi()
       setJustCreated({
         id: cred.id,
         provider: cred.provider,
@@ -150,16 +309,17 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         description: '正在准备添加模型，也可稍后在凭据详情中操作。',
       })
     },
-    [closeCreateDialog, toast]
+    [closeCreateUi, toast]
   )
 
   const createManagedMutation = useMutation({
     mutationFn: (body: Parameters<typeof gatewayApi.createCredential>[1]) =>
       gatewayApi.createCredential(teamId, body),
-    onSuccess: (cred) => {
+    onSuccess: (cred, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       invalidateCredentialSummariesCache(queryClient)
-      openAddModelsAfterCreate(cred, 'team')
+      const scope: CredentialUpstreamScope = variables.scope === 'system' ? 'system' : 'team'
+      openAddModelsAfterCreate(cred, scope)
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -240,14 +400,16 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   }
 
   const allowedScopes = useMemo<ReadonlyArray<CredentialFormScope>>(() => {
+    if (activeTab === 'system') return ['system']
     const scopes: CredentialFormScope[] = ['user']
     if (canWrite) scopes.push('team')
     if (isPlatformAdmin) scopes.push('system')
     return scopes
-  }, [canWrite, isPlatformAdmin])
+  }, [activeTab, canWrite, isPlatformAdmin])
   // 注意：此处 'team' 是 `CredentialScope.team`（凭据写入归属），
-  // 与 ScopeTab 的 'shared' / 'personal' 是不同概念，禁止合并字面量。
-  const defaultScope: CredentialFormScope = activeTab === 'personal' ? 'user' : 'team'
+  // 与 ScopeTab 的 'shared' / 'personal' / 'system' 是不同概念，禁止合并字面量。
+  const defaultScope: CredentialFormScope =
+    activeTab === 'personal' ? 'user' : activeTab === 'system' ? 'system' : 'team'
   const createSubmitting = createManagedMutation.isPending || createUserMutation.isPending
 
   const handleOpenCreate = useCallback((provider?: string): void => {
@@ -265,7 +427,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
-          if (v === 'personal' || v === 'shared') {
+          if (isGatewayScopeTabValue(v, { allowSystem: isPlatformAdmin })) {
             startTransition(() => {
               setActiveTab(v)
             })
@@ -274,7 +436,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TabsList>
-            <GatewayScopeTabTriggers />
+            <GatewayScopeTabTriggers showSystemTab={isPlatformAdmin} />
           </TabsList>
           <div className="flex flex-wrap gap-2">
             {activeTab === 'shared' && canWrite ? (
@@ -303,7 +465,9 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
                   <TooltipContent>需要团队管理员或更高权限</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            ) : (
+            ) : null}
+            {((activeTab === 'system' && isPlatformAdmin) ||
+              (activeTab === 'shared' && canWrite)) && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -317,155 +481,39 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
           </div>
         </div>
 
-        <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
-          <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
-        </TabsContent>
-
-        <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
-          <Card>
-            <CardContent className="p-0">
-              <ScrollArea className="w-full overscroll-y-contain">
-                <table className="w-full min-w-[720px] text-sm">
-                  <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">名称</th>
-                      <th className="px-4 py-2 text-left font-medium">API Key</th>
-                      <th className="px-4 py-2 text-left font-medium">提供商</th>
-                      <th className="px-4 py-2 text-left font-medium">作用域</th>
-                      <th className="px-4 py-2 text-left font-medium">api_base</th>
-                      <th className="px-4 py-2 text-left font-medium">启用</th>
-                      <th className="px-4 py-2 text-left font-medium">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
-                          加载中…
-                        </td>
-                      </tr>
-                    )}
-                    {!isLoading && (items?.length ?? 0) === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                          <span className="mr-3">暂无凭据</span>
-                          {canWrite ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                handleOpenCreate()
-                              }}
-                            >
-                              新增
-                            </Button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    )}
-                    {items?.map((c: ProviderCredential) => {
-                      const editable = canEditGatewayCredential(c, canWrite, isPlatformAdmin)
-                      const configManaged = isConfigManagedSystemCredential(c)
-                      return (
-                        <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
-                          <td className="px-4 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {editable ? (
-                                <Link
-                                  to={credentialDetailHref(teamId, c.id)}
-                                  className="font-medium text-primary underline-offset-4 hover:underline"
-                                >
-                                  {c.name}
-                                </Link>
-                              ) : (
-                                <span className="font-medium">{c.name}</span>
-                              )}
-                              {configManaged ? (
-                                <Badge variant="secondary" className="text-[10px] font-normal">
-                                  配置同步
-                                </Badge>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                            {c.api_key_masked}
-                          </td>
-                          <td className="px-4 py-2 text-xs">
-                            <div className="flex flex-col">
-                              <span className="font-medium">{providerLabel(c.provider)}</span>
-                              <span
-                                className="font-mono text-[10px] text-muted-foreground"
-                                title={c.provider}
-                              >
-                                {c.provider}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 text-xs">{c.scope}</td>
-                          <td className="px-4 py-2 text-xs">
-                            <CredentialApiBaseCell credential={c} />
-                          </td>
-                          <td className="px-4 py-2">
-                            {editable ? (
-                              <Switch
-                                checked={c.is_active}
-                                disabled={updateMutation.isPending}
-                                onCheckedChange={(checked) => {
-                                  updateMutation.mutate({ id: c.id, body: { is_active: checked } })
-                                }}
-                                aria-label={c.is_active ? '停用凭据' : '启用凭据'}
-                              />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {c.is_active ? '启用' : '禁用'}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2">
-                            {editable ? (
-                              <div className="flex items-center gap-0.5">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  asChild
-                                >
-                                  <Link to={credentialDetailHref(teamId, c.id)}>详情</Link>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  asChild
-                                >
-                                  <Link to={credentialDetailAddModelsHref(teamId, c.id)}>
-                                    添加模型
-                                  </Link>
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  disabled={deleteMutation.isPending}
-                                  onClick={() => {
-                                    setCredentialPendingDelete(c)
-                                  }}
-                                  aria-label="删除凭据"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            ) : null}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {activeTab === 'personal' ? (
+          <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
+            <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
+          </TabsContent>
+        ) : activeTab === 'system' && isPlatformAdmin ? (
+          <TabsContent value="system" className="mt-4 focus-visible:outline-none">
+            <ManagedCredentialsTable
+              items={systemCredentials}
+              isLoading={isLoading}
+              teamId={teamId}
+              canWrite={false}
+              isPlatformAdmin={isPlatformAdmin}
+              emptyHint="暂无系统凭据"
+              onAdd={handleOpenCreate}
+              onDelete={setCredentialPendingDelete}
+              updateMutation={updateMutation}
+            />
+          </TabsContent>
+        ) : (
+          <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
+            <ManagedCredentialsTable
+              items={teamCredentials}
+              isLoading={isLoading}
+              teamId={teamId}
+              canWrite={canWrite}
+              isPlatformAdmin={isPlatformAdmin}
+              emptyHint="暂无团队凭据"
+              onAdd={handleOpenCreate}
+              onDelete={setCredentialPendingDelete}
+              updateMutation={updateMutation}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       <CreateCredentialDialog

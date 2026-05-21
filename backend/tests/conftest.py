@@ -39,7 +39,10 @@ warnings.filterwarnings(
 if "PYTHONWARNINGS" not in os.environ:
     os.environ["PYTHONWARNINGS"] = "ignore::RuntimeWarning,ignore::UserWarning"
 
-# 场景模型 / Embedding 测试默认值（解耦 toml 后 Settings 默认为空）
+# 集成测试大量硬编码 /api/v1；未显式配置时沿用无前缀，root_path 专项用例自行设置 ROOT_PATH
+if "ROOT_PATH" not in os.environ:
+    os.environ["ROOT_PATH"] = ""
+
 os.environ.setdefault("DEFAULT_MODEL", "deepseek/deepseek-chat")
 os.environ.setdefault("FAST_MODEL", "dashscope/qwen-turbo")
 os.environ.setdefault("VISION_MODEL", "dashscope/qwen-vl-max")

@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
+from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
 from domains.gateway.infrastructure.models.alert import GatewayAlertEvent, GatewayAlertRule
+from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayAlertRule
 from libs.db.base_repository import TenantScopedRepositoryBase
 
 if TYPE_CHECKING:
-    from decimal import Decimal
+    from datetime import datetime
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,6 +107,146 @@ class GatewayAlertRepository(TenantScopedRepositoryBase[GatewayAlertRule]):
     async def delete_rule(self, rule: GatewayAlertRule) -> None:
         await self._session.delete(rule)
         await self._session.flush()
+
+    async def list_all_enabled_rules(self) -> list[AlertRuleSnapshot]:
+        """租户 + 系统级所有已启用规则（告警 job 用）。"""
+        tenant_rows = (
+            await self._session.execute(
+                select(GatewayAlertRule).where(GatewayAlertRule.enabled.is_(True))
+            )
+        ).scalars().all()
+        system_rows = await self.list_system(only_enabled=True)
+        snapshots: list[AlertRuleSnapshot] = [
+            AlertRuleSnapshot(
+                rule_id=row.id,
+                tenant_id=row.tenant_id,
+                is_system=False,
+                name=row.name,
+                metric=row.metric,
+                threshold=row.threshold,
+                window_minutes=row.window_minutes,
+                channels=dict(row.channels or {}),
+                last_triggered_at=row.last_triggered_at,
+            )
+            for row in tenant_rows
+        ]
+        snapshots.extend(
+            AlertRuleSnapshot(
+                rule_id=row.id,
+                tenant_id=None,
+                is_system=True,
+                name=row.name,
+                metric=row.metric,
+                threshold=row.threshold,
+                window_minutes=row.window_minutes,
+                channels=dict(row.channels or {}),
+                last_triggered_at=row.last_triggered_at,
+            )
+            for row in system_rows
+        )
+        return snapshots
+
+    async def fetch_rule_metric_aggregates(
+        self,
+        snapshot: AlertRuleSnapshot,
+        now: datetime,
+    ) -> AlertMetricAggregates:
+        """按窗口聚合 request log，返回原始指标（评估在 domain）。"""
+        window_start = now - timedelta(minutes=snapshot.window_minutes)
+        base_q = select(GatewayRequestLog).where(
+            GatewayRequestLog.created_at >= window_start,
+            GatewayRequestLog.created_at <= now,
+        )
+        if snapshot.tenant_id is not None:
+            base_q = base_q.where(GatewayRequestLog.tenant_id == snapshot.tenant_id)
+
+        metric = snapshot.metric
+        if metric == "error_rate":
+            cnt_total = (
+                await self._session.execute(select(func.count()).select_from(base_q.subquery()))
+            ).scalar_one()
+            cnt_err = (
+                await self._session.execute(
+                    select(func.count()).select_from(
+                        base_q.where(GatewayRequestLog.status != "success").subquery()
+                    )
+                )
+            ).scalar_one()
+            return AlertMetricAggregates(
+                metric=metric,
+                total_count=int(cnt_total),
+                error_count=int(cnt_err),
+                window_minutes=snapshot.window_minutes,
+            )
+        if metric == "request_rate":
+            cnt = (
+                await self._session.execute(select(func.count()).select_from(base_q.subquery()))
+            ).scalar_one()
+            return AlertMetricAggregates(
+                metric=metric,
+                request_count=int(cnt),
+                window_minutes=snapshot.window_minutes,
+            )
+        if metric == "latency_p95":
+            sub = base_q.subquery()
+            stmt = select(
+                func.percentile_cont(0.95).within_group(sub.c.latency_ms.asc()).label("p95")
+            )
+            row = (await self._session.execute(stmt)).one()
+            p95 = float(row.p95) if row.p95 is not None else None
+            return AlertMetricAggregates(
+                metric=metric,
+                latency_p95_ms=p95,
+                window_minutes=snapshot.window_minutes,
+            )
+        if metric == "budget_usage":
+            sub = base_q.subquery()
+            total = (await self._session.execute(select(func.sum(sub.c.cost_usd)))).scalar_one() or 0
+            return AlertMetricAggregates(
+                metric=metric,
+                cost_sum=float(total),
+                window_minutes=snapshot.window_minutes,
+            )
+        return AlertMetricAggregates(metric=metric, window_minutes=snapshot.window_minutes)
+
+    async def record_trigger(
+        self,
+        snapshot: AlertRuleSnapshot,
+        *,
+        value: float,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        """写入事件、更新 last_triggered_at；返回 webhook payload（无 webhook 则仍返回 payload）。"""
+        event = GatewayAlertEvent(
+            rule_id=snapshot.rule_id,
+            tenant_id=snapshot.tenant_id,
+            metric_value=Decimal(str(value)),
+            threshold=snapshot.threshold,
+            severity="warning",
+            payload={
+                "window_minutes": snapshot.window_minutes,
+                "metric": snapshot.metric,
+            },
+            notified=True,
+        )
+        self._session.add(event)
+        if snapshot.is_system:
+            system_rule = await self._session.get(SystemGatewayAlertRule, snapshot.rule_id)
+            if system_rule is not None:
+                system_rule.last_triggered_at = now
+        else:
+            tenant_rule = await self._session.get(GatewayAlertRule, snapshot.rule_id)
+            if tenant_rule is not None:
+                tenant_rule.last_triggered_at = now
+        await self._session.flush()
+        return {
+            "rule": snapshot.name,
+            "metric": snapshot.metric,
+            "value": value,
+            "threshold": float(snapshot.threshold),
+            "team_id": str(snapshot.tenant_id) if snapshot.tenant_id else None,
+            "at": now.isoformat(),
+        }
 
 
 __all__ = ["GatewayAlertRepository"]

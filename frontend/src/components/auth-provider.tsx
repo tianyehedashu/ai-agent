@@ -88,13 +88,17 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
 
   // 严重错误状态（如服务不可用）- 401/403 是正常的未登录状态
   if (error && !isAuthError) {
+    const detail =
+      error instanceof ApiError && error.status === 404
+        ? 'API 路径不存在，请确认后端 ROOT_PATH 与前端 VITE_APP_ROOT 一致（默认 /ai-agent），并重启 make dev'
+        : '无法连接到服务器，请检查网络连接'
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 text-center">
           <AlertCircle className="h-12 w-12 text-destructive" />
           <div>
             <p className="font-medium text-foreground">连接失败</p>
-            <p className="mt-1 text-sm text-muted-foreground">无法连接到服务器，请检查网络连接</p>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">{detail}</p>
           </div>
           <button
             onClick={() => refetch()}

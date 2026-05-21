@@ -15,7 +15,6 @@ from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.listing_studio_job_step import ListingStudioJobStep
-    from domains.identity.infrastructure.models.user import User
     from domains.session.infrastructure.models.session import Session
 
 

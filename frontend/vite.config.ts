@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 import type { ProxyOptions } from 'vite'
 import { defineConfig, loadEnv } from 'vite'
 
+const DEFAULT_APP_ROOT = '/ai-agent'
+
 /** 开发代理：鉴权走 Authorization / X-Anonymous-User-Id，避免 Cookie 在 localhost 膨胀触发 431 */
 function apiDevProxy(): ProxyOptions {
   return {
@@ -24,10 +26,13 @@ function apiDevProxy(): ProxyOptions {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const appRoot = (env.VITE_APP_ROOT ?? '').replace(/\/$/, '')
-  const proxyPrefix = appRoot || '/api'
+  const appRootRaw = env.VITE_APP_ROOT
+  const appRoot = (appRootRaw === undefined ? DEFAULT_APP_ROOT : appRootRaw).replace(/\/$/, '')
+  // 仅代理 API（/ai-agent/api/*），勿代理 SPA 静态页（/ai-agent/）
+  const proxyPrefix = appRoot ? `${appRoot}/api` : '/api'
 
   return {
+    base: appRoot ? `${appRoot}/` : '/',
     plugins: [react()],
     resolve: {
       alias: {

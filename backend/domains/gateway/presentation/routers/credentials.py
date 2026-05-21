@@ -6,6 +6,10 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
+from domains.gateway.domain.types import (
+    credential_api_scope,
+    is_config_managed_system_credential,
+)
 from domains.gateway.presentation.credential_response import (
     build_credential_response,
     decrypt_credential_api_key_for_reveal,
@@ -15,10 +19,6 @@ from domains.gateway.presentation.deps import (
     RequiredTeamAdmin,
 )
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
-from domains.gateway.domain.types import (
-    credential_api_scope,
-    is_config_managed_system_credential,
-)
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
     CredentialSummaryResponse,

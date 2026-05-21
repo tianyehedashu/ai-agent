@@ -171,12 +171,12 @@ class TeamService:
         user_id: uuid.UUID,
         x_team_id: str | None,
     ) -> tuple[TeamSnapshot, str]:
-        from contextlib import suppress
+        from domains.tenancy.domain.policies.team_target import parse_team_id_header
 
         team: Team | None = None
-        if x_team_id:
-            with suppress(ValueError):
-                team = await self._teams.get(uuid.UUID(x_team_id))
+        target_id = parse_team_id_header(None, x_team_id)
+        if target_id is not None:
+            team = await self._teams.get(target_id)
         if team is None:
             team = await self._teams.get_personal(user_id)
         if team is None:

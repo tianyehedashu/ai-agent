@@ -31,7 +31,7 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 # ============================================
 FROM dependencies AS build
 
-ARG VITE_APP_ROOT=
+ARG VITE_APP_ROOT=/ai-agent
 ENV VITE_APP_ROOT=${VITE_APP_ROOT}
 
 COPY . .

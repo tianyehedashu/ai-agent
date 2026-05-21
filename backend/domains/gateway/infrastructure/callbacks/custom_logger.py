@@ -22,6 +22,13 @@ from typing import Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.infrastructure.callbacks.cost_calculation import (
+    _calc_cost,
+    _extract_usage,
+)
+from domains.gateway.infrastructure.callbacks.cost_calculation import (
+    extract_gateway_metadata as _extract_gateway_metadata,
+)
 from domains.gateway.infrastructure.gateway_log_sampling import (
     should_persist_request_log_row,
 )
@@ -191,45 +198,6 @@ def _build_pricing_snapshot(
     return snapshot
 
 
-def _calc_cost(kwargs: dict[str, Any], response_obj: Any) -> tuple[Decimal, str]:
-    """计算单次调用的上游成本（USD）及来源标签。"""
-    from domains.gateway.application.pricing.upstream_cost_resolver import (
-        resolve_upstream_cost_usd,
-    )
-
-    metadata = _extract_gateway_metadata(kwargs)
-    slo = kwargs.get("standard_logging_object")
-    slo_dict = slo if isinstance(slo, dict) else None
-    return resolve_upstream_cost_usd(
-        response=response_obj,
-        model=kwargs.get("model"),
-        metadata=metadata,
-        standard_logging=slo_dict,
-    )
-
-
-def _extract_usage(response_obj: Any) -> tuple[int, int, int]:
-    """提取 (input, output, cached) tokens"""
-    if response_obj is None:
-        return 0, 0, 0
-    usage = getattr(response_obj, "usage", None) or {}
-
-    def _usage_get(key: str, default: Any = None) -> Any:
-        if isinstance(usage, dict):
-            return usage.get(key, default)
-        return getattr(usage, key, default)
-
-    input_tokens = int(_usage_get("prompt_tokens", 0) or 0)
-    output_tokens = int(_usage_get("completion_tokens", 0) or 0)
-    cached_tokens = 0
-    cache_details = _usage_get("prompt_tokens_details", None)
-    if isinstance(cache_details, dict):
-        cached_tokens = int(cache_details.get("cached_tokens", 0) or 0)
-    elif cache_details is not None:
-        cached_tokens = int(getattr(cache_details, "cached_tokens", 0) or 0)
-    return input_tokens, output_tokens, cached_tokens
-
-
 def _truncate_str(text: str, max_len: int) -> tuple[str, bool]:
     if max_len <= 0:
         return "", True
@@ -324,35 +292,6 @@ def _summarize_response(
                     summary["tool_calls_digest"] = tc_digest
                 summary["finish_reason"] = getattr(first, "finish_reason", None)
     return summary or None
-
-
-def _extract_gateway_metadata(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """从 LiteLLM 回调 ``kwargs`` 中拿到 Gateway 自定义 metadata。
-
-    LiteLLM Router / acompletion 在不同版本会把用户传入的 ``metadata`` 放到
-    不同位置（顶层 ``metadata``、``litellm_params.metadata``、``standard_logging_object.metadata``
-    等）。``_build_metadata`` 注入的字段都以 ``gateway_`` 开头，这里按已知路径合并，
-    保证 ``gateway_team_id`` / ``gateway_user_id`` / ``gateway_vkey_id`` 不会因 LiteLLM
-    内部搬运而丢失。
-    """
-    candidates: list[dict[str, Any]] = []
-    for top_key in ("metadata", "litellm_metadata"):
-        value = kwargs.get(top_key)
-        if isinstance(value, dict):
-            candidates.append(value)
-    for container_key in ("litellm_params", "standard_logging_object", "optional_params"):
-        container = kwargs.get(container_key)
-        if isinstance(container, dict):
-            inner = container.get("metadata")
-            if isinstance(inner, dict):
-                candidates.append(inner)
-
-    merged: dict[str, Any] = {}
-    for m in candidates:
-        for k, v in m.items():
-            if k not in merged or merged[k] is None:
-                merged[k] = v
-    return merged
 
 
 _UPSTREAM_QUOTA_KEYWORDS: tuple[str, ...] = (

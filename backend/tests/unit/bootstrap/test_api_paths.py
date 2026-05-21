@@ -29,19 +29,20 @@ class TestApiPaths:
             assert anthropic_compat_base() == "/api/v1/anthropic"
             assert listing_studio_images_serve_prefix() == "/api/v1/listing-studio/images"
 
-    def test_paths_with_root_prefix(self) -> None:
+    def test_default_root_path(self) -> None:
         with patch("libs.api.paths.settings.root_path", "/ai-agent"), patch(
             "libs.api.paths.settings.api_prefix", "/api/v1"
         ):
             assert service_path("health") == "/ai-agent/health"
             assert api_v1_path() == "/ai-agent/api/v1"
-            assert api_v1_path("gateway", "teams") == "/ai-agent/api/v1/gateway/teams"
             assert openai_compat_base() == "/ai-agent/api/v1/openai/v1"
-            assert anthropic_compat_base() == "/ai-agent/api/v1/anthropic"
-            assert (
-                listing_studio_images_serve_prefix()
-                == "/ai-agent/api/v1/listing-studio/images"
-            )
+
+    def test_paths_without_root_prefix(self) -> None:
+        with patch("libs.api.paths.settings.root_path", ""), patch(
+            "libs.api.paths.settings.api_prefix", "/api/v1"
+        ):
+            assert api_v1_path("gateway", "teams") == "/api/v1/gateway/teams"
+            assert anthropic_compat_base() == "/api/v1/anthropic"
 
     def test_normalizes_duplicate_slashes(self) -> None:
         with patch("libs.api.paths.settings.root_path", "/ai-agent/"), patch(

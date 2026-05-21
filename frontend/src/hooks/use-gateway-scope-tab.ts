@@ -2,9 +2,15 @@ import { useCallback, useEffect } from 'react'
 
 import { useSearchParams } from 'react-router-dom'
 
-import { type GatewayScopeTab, parseScopeTab } from '@/features/gateway-models/constants'
+import {
+  type GatewayScopeTab,
+  isGatewayScopeTabValue,
+  parseScopeTab,
+} from '@/features/gateway-models/constants'
 
 export interface UseGatewayScopeTabOptions {
+  /** 平台管理员可使用 `?tab=system` */
+  allowSystemTab?: boolean
   /** 写入 URL 前调用（如关闭弹窗） */
   onBeforeTabChange?: () => void
   /** 切换 tab 时对 URLSearchParams 的额外修改 */
@@ -27,13 +33,19 @@ export interface UseGatewayScopeTabResult {
 export function useGatewayScopeTab(
   options: UseGatewayScopeTabOptions = {}
 ): UseGatewayScopeTabResult {
-  const { onBeforeTabChange, mutateParamsOnTabChange, mutateParamsOnLegacyMigrate } = options
+  const {
+    allowSystemTab = false,
+    onBeforeTabChange,
+    mutateParamsOnTabChange,
+    mutateParamsOnLegacyMigrate,
+  } = options
+  const parseOptions = { allowSystem: allowSystemTab }
   const [searchParams, setSearchParams] = useSearchParams()
-  const scopeTab = parseScopeTab(searchParams.get('tab'))
+  const scopeTab = parseScopeTab(searchParams.get('tab'), parseOptions)
 
   useEffect(() => {
     const raw = searchParams.get('tab')
-    if (raw !== null && raw !== 'personal' && raw !== 'shared') {
+    if (raw !== null && !isGatewayScopeTabValue(raw, { allowSystem: allowSystemTab })) {
       onBeforeTabChange?.()
       setSearchParams(
         (prev) => {
@@ -45,7 +57,13 @@ export function useGatewayScopeTab(
         { replace: true }
       )
     }
-  }, [searchParams, setSearchParams, onBeforeTabChange, mutateParamsOnLegacyMigrate])
+  }, [
+    searchParams,
+    setSearchParams,
+    onBeforeTabChange,
+    mutateParamsOnLegacyMigrate,
+    allowSystemTab,
+  ])
 
   const setScopeTab = useCallback(
     (next: GatewayScopeTab): void => {

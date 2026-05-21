@@ -10,9 +10,16 @@ from domains.gateway.application.model_or_route_resolution import resolve_model_
 from domains.gateway.application.router_deployment_params import (
     resolve_deployment_litellm_params,
 )
+from domains.gateway.domain.litellm_credential_extra_keys import litellm_api_key_param_name
+from domains.gateway.domain.policies.dashscope_embedding import (
+    build_dashscope_embedding_request,
+)
 from domains.gateway.infrastructure.router_singleton import (
     filter_litellm_params_for_direct_anthropic,
     get_router,
+)
+from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
+    perform_dashscope_embedding,
 )
 
 if TYPE_CHECKING:
@@ -75,6 +82,34 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         return await aembedding(**kwargs)
+
+    async def dashscope_direct_embedding(
+        self,
+        ctx: ProxyContext,
+        client_model: str,
+        kwargs: dict[str, Any],
+        *,
+        real_model: str | None = None,
+    ) -> dict[str, Any]:
+        """经 deployment 凭据直连 DashScope OpenAI 兼容 ``/embeddings``。"""
+        dep = await resolve_deployment_litellm_params(
+            self._session, ctx.team_id, client_model
+        )
+        if dep is None:
+            raise ValueError(f"no deployment for embedding model: {client_model}")
+        provider = "dashscope"
+        key_name = litellm_api_key_param_name(provider)
+        api_key = dep.get(key_name) or dep.get("api_key")
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("dashscope embedding requires api_key on deployment")
+        model_id = real_model or client_model
+        request = build_dashscope_embedding_request(
+            api_key=api_key.strip(),
+            api_base=dep.get("api_base") if isinstance(dep.get("api_base"), str) else None,
+            model_id=model_id,
+            input_payload=kwargs.get("input"),
+        )
+        return await perform_dashscope_embedding(request)
 
     async def merge_direct_deployment_litellm_params(
         self,

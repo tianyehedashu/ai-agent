@@ -19,6 +19,7 @@ from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
 )
 from domains.identity.infrastructure.models.user import User
+from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
 from utils.logging import get_logger
 
@@ -26,14 +27,6 @@ logger = get_logger(__name__)
 
 # 匿名用户 Cookie 名称（与 principal_service 保持一致）
 _ANONYMOUS_USER_COOKIE = "anonymous_user_id"
-
-
-def _default_tenant_provisioner() -> DefaultTenantProvisionerPort:
-    from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
-        GatewayDefaultTenantProvisioner,
-    )
-
-    return GatewayDefaultTenantProvisioner()
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -54,7 +47,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self._anonymous_reassignment_service = anonymous_reassignment_service
 
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
-        return self._tenant_provisioner or _default_tenant_provisioner()
+        return self._tenant_provisioner or get_default_tenant_provisioner()
 
     async def _migrate_anonymous_data(
         self,

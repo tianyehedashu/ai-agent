@@ -27,11 +27,37 @@ import {
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
+type GatewayNavMatch =
+  | 'credentials-default'
+  | 'credentials-system'
+  | 'models-default'
+  | 'models-system'
+
 type NavItem = {
   to: string
   label: string
   icon: ComponentType<{ className?: string }>
   end?: boolean
+  /** 与带 `?tab=system` 的入口区分高亮 */
+  navMatch?: GatewayNavMatch
+}
+
+function scopeTabFromSearch(search: string): string | null {
+  return new URLSearchParams(search).get('tab')
+}
+
+function isGatewayNavActive(pathname: string, search: string, navMatch: GatewayNavMatch): boolean {
+  const tab = scopeTabFromSearch(search)
+  switch (navMatch) {
+    case 'credentials-system':
+      return /\/credentials(?:\/|$)/.test(pathname) && tab === 'system'
+    case 'credentials-default':
+      return /\/credentials(?:\/|$)/.test(pathname) && tab !== 'system'
+    case 'models-system':
+      return /\/models(?:\/|$)/.test(pathname) && tab === 'system'
+    case 'models-default':
+      return /\/models(?:\/|$)/.test(pathname) && tab !== 'system'
+  }
 }
 
 export default function GatewayLayout(): React.JSX.Element {
@@ -45,8 +71,8 @@ export default function GatewayLayout(): React.JSX.Element {
       { to: 'overview', label: '概览', icon: BarChart3, end: true },
       { to: '/gateway/guide', label: '调用指南', icon: BookOpen },
       { to: 'keys', label: '虚拟 Key', icon: Key },
-      { to: 'credentials', label: '凭据', icon: Database },
-      { to: 'models', label: '模型', icon: Network },
+      { to: 'credentials', label: '凭据', icon: Database, navMatch: 'credentials-default' },
+      { to: 'models', label: '模型', icon: Network, navMatch: 'models-default' },
       { to: 'pricing', label: '定价目录', icon: CircleDollarSign },
       { to: 'routes', label: '虚拟路由', icon: Route },
       { to: 'budgets', label: '预算配额', icon: Receipt },
@@ -55,7 +81,16 @@ export default function GatewayLayout(): React.JSX.Element {
       { to: 'members', label: '团队成员', icon: Users },
     ]
     if (isPlatformAdmin) {
-      base.push({ to: '/gateway/platform-stats', label: '平台统计', icon: LineChart })
+      base.push(
+        {
+          to: 'credentials?tab=system',
+          label: '系统凭据',
+          icon: Database,
+          navMatch: 'credentials-system',
+        },
+        { to: 'models?tab=system', label: '系统模型', icon: Network, navMatch: 'models-system' },
+        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart }
+      )
     }
     return base
   }, [isPlatformAdmin])
@@ -76,24 +111,30 @@ export default function GatewayLayout(): React.JSX.Element {
           </div>
         ) : null}
         <nav className="flex flex-col gap-1">
-          {items.map((it) => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              end={it.end}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                )
-              }
-            >
-              <it.icon className="h-4 w-4" />
-              <span>{it.label}</span>
-            </NavLink>
-          ))}
+          {items.map((it) => {
+            const customActive =
+              it.navMatch !== undefined
+                ? isGatewayNavActive(location.pathname, location.search, it.navMatch)
+                : null
+            return (
+              <NavLink
+                key={it.to}
+                to={it.to}
+                end={it.end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+                    (customActive ?? isActive)
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )
+                }
+              >
+                <it.icon className="h-4 w-4" />
+                <span>{it.label}</span>
+              </NavLink>
+            )
+          })}
         </nav>
       </aside>
       <section

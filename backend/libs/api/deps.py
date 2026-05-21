@@ -94,7 +94,7 @@ async def get_user_service(
         DefaultTenantProvisionerPort, Depends(get_default_tenant_provisioner)
     ],
 ) -> UserUseCase:
-    """获取用户服务"""
+    """获取用户服务（同类工厂见 ``bootstrap.composition.identity_services``）。"""
     return UserUseCase(db, tenant_provisioner=tenant_provisioner)
 
 

@@ -60,15 +60,32 @@ const registerFormSuspenseFallback = (
   </div>
 )
 
+/** 团队列表排除 system；系统 Tab 仅展示 system 凭据下的模型 */
+export type TeamModelsListMode = 'team' | 'system'
+
+function modelMatchesListMode(
+  credentialId: string,
+  listMode: TeamModelsListMode | undefined,
+  credentialSummariesById: Map<string, { scope: string | null }>
+): boolean {
+  if (!listMode) return true
+  const scope = credentialSummariesById.get(credentialId)?.scope
+  if (listMode === 'system') return scope === 'system'
+  return scope !== 'system'
+}
+
 interface TeamModelsWorkspaceProps {
   hideRegisterAction?: boolean
   /** 由父级传入时优先于 URL `view` */
   pageView?: Extract<ModelsPageView, 'list' | 'register'>
+  /** `team`：共享 Tab；`system`：平台管理员系统 Tab */
+  listMode?: TeamModelsListMode
 }
 
 export function TeamModelsWorkspace({
   hideRegisterAction = false,
   pageView: pageViewProp,
+  listMode,
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
@@ -80,7 +97,8 @@ export function TeamModelsWorkspace({
   const credentialFilter = searchParams.get('credentialId') ?? ''
   const highlightModelId = searchParams.get('modelId') ?? ''
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
-  const isRegisterView = pageView === 'register' && canWrite
+  const canManageModels = listMode === 'system' ? isPlatformAdmin : canWrite
+  const isRegisterView = pageView === 'register' && canManageModels
 
   const [providerFilter, setProviderFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -134,7 +152,7 @@ export function TeamModelsWorkspace({
   const { data: credentials } = useQuery({
     queryKey: ['gateway', 'credentials', teamId],
     queryFn: () => gatewayApi.listCredentials(teamId),
-    enabled: isRegisterView && canWrite,
+    enabled: isRegisterView && canManageModels,
   })
 
   const filterCredentialSummary = credentialFilter
@@ -162,33 +180,52 @@ export function TeamModelsWorkspace({
 
   const activeCredentials = useMemo(
     () =>
-      (credentials ?? []).filter(
-        (c) => c.is_active || (credentialFilter !== '' && c.id === credentialFilter)
-      ),
-    [credentials, credentialFilter]
+      (credentials ?? []).filter((c) => {
+        if (listMode === 'system' && c.scope !== 'system') return false
+        if (listMode === 'team' && c.scope === 'system') return false
+        return c.is_active || (credentialFilter !== '' && c.id === credentialFilter)
+      }),
+    [credentials, credentialFilter, listMode]
   )
+
+  const scopedItems = useMemo(
+    () =>
+      (items ?? []).filter((m) =>
+        modelMatchesListMode(m.credential_id, listMode, credentialSummariesById)
+      ),
+    [items, listMode, credentialSummariesById]
+  )
+
+  const scopedRouteNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const m of scopedItems) {
+      names.add(m.name)
+    }
+    return names
+  }, [scopedItems])
 
   const usageByRouteName = useMemo(() => {
     const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
     for (const row of usageSummary?.items ?? []) {
+      if (listMode !== undefined && !scopedRouteNames.has(row.route_name)) continue
       m.set(row.route_name, row)
     }
     return m
-  }, [usageSummary])
+  }, [usageSummary, listMode, scopedRouteNames])
 
   const providerChoices = useMemo(() => {
     const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
-    if (providerFilter === '' && items?.length) {
-      for (const m of items) {
+    if (providerFilter === '' && scopedItems.length > 0) {
+      for (const m of scopedItems) {
         s.add(m.provider)
       }
     }
     return Array.from(s).sort()
-  }, [items, providerFilter])
+  }, [scopedItems, providerFilter])
 
   const filteredModels = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase()
-    return (items ?? []).filter((m) => {
+    return scopedItems.filter((m) => {
       if (!matchesHealthFilter(m, healthFilter)) return false
       if (!q) return true
       return (
@@ -197,7 +234,7 @@ export function TeamModelsWorkspace({
         m.provider.toLowerCase().includes(q)
       )
     })
-  }, [items, healthFilter, deferredSearch])
+  }, [scopedItems, healthFilter, deferredSearch])
 
   const { createMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
@@ -230,7 +267,7 @@ export function TeamModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const testableItems = useMemo(() => filterTestableConnectivityModels(items ?? []), [items])
+  const testableItems = useMemo(() => filterTestableConnectivityModels(scopedItems), [scopedItems])
 
   const handleTestAll = useCallback((): void => {
     if (testableItems.length === 0) return
@@ -260,7 +297,7 @@ export function TeamModelsWorkspace({
   )
 
   const showEmptyOnboarding =
-    !isRegisterView && !isLoading && (items?.length ?? 0) === 0 && !credentialFilter
+    !isRegisterView && !isLoading && scopedItems.length === 0 && !credentialFilter
 
   const credentialBanner = credentialFilter ? (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
@@ -280,7 +317,7 @@ export function TeamModelsWorkspace({
         )}
       </span>
       <div className="flex flex-wrap items-center gap-1">
-        {canWrite &&
+        {canManageModels &&
         filterCredentialSummary &&
         (filterCredentialSummary.scope !== 'system' || isPlatformAdmin) ? (
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
@@ -326,14 +363,23 @@ export function TeamModelsWorkspace({
 
       {showEmptyOnboarding ? (
         <div className="rounded-lg border border-dashed bg-muted/10 p-8">
-          <h3 className="text-lg font-semibold">配置团队模型供给链</h3>
+          <h3 className="text-lg font-semibold">
+            {listMode === 'system' ? '配置系统模型供给链' : '配置团队模型供给链'}
+          </h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>
               在{' '}
-              <Link to="/gateway/credentials?tab=shared" className="text-primary underline">
-                凭据管理
+              <Link
+                to={
+                  listMode === 'system'
+                    ? '/gateway/credentials?tab=system'
+                    : '/gateway/credentials?tab=shared'
+                }
+                className="text-primary underline"
+              >
+                {listMode === 'system' ? '系统凭据' : '凭据管理'}
               </Link>{' '}
-              添加并启用团队凭据
+              添加并启用{listMode === 'system' ? '系统' : '团队'}凭据
             </li>
             <li>注册第一条模型（别名 → 上游 + 凭据）</li>
             <li>
@@ -344,7 +390,7 @@ export function TeamModelsWorkspace({
               将别名编排为对外虚拟名（可选）
             </li>
           </ol>
-          {canWrite ? (
+          {canManageModels ? (
             <Button
               className="mt-4"
               size="sm"
@@ -361,7 +407,7 @@ export function TeamModelsWorkspace({
         <Suspense fallback={inventorySuspenseFallback}>
           <ModelInventory
             models={filteredModels}
-            allModels={items ?? []}
+            allModels={scopedItems}
             selectedId={null}
             getModelHref={getModelHref}
             isLoading={isLoading}
@@ -377,10 +423,10 @@ export function TeamModelsWorkspace({
             highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
             healthFilter={healthFilter}
             onHealthFilterChange={setHealthFilter}
-            canWrite={canWrite}
-            onTestAll={canWrite && testableItems.length > 0 ? handleTestAll : undefined}
+            canWrite={canManageModels}
+            onTestAll={canManageModels && testableItems.length > 0 ? handleTestAll : undefined}
             testingAll={testingAll}
-            onRegister={!hideRegisterAction && canWrite ? goToRegister : undefined}
+            onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
             onPreloadRegister={preloadRegisterModelForm}
             onPreloadRowNavigate={preloadTeamModelDetailPane}
           />

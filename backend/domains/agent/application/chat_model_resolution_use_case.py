@@ -20,8 +20,8 @@ from domains.gateway.application.model_selector_reads import (
 )
 from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
-from libs.iam.permission_context import get_permission_context
 from libs.exceptions import ValidationError
+from libs.iam.permission_context import get_permission_context
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

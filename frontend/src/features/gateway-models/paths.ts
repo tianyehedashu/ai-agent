@@ -44,6 +44,19 @@ export function teamModelsFilteredHref(teamId: string, credentialId?: string): s
   return `${teamBase(teamId)}/models?${teamModelsBaseParams(credentialId).toString()}`
 }
 
+function systemModelsBaseParams(credentialId?: string): URLSearchParams {
+  const params = new URLSearchParams({ tab: 'system' })
+  if (credentialId) {
+    params.set('credentialId', credentialId)
+  }
+  return params
+}
+
+/** 系统模型列表（平台管理员；可选按凭据筛选） */
+export function systemModelsFilteredHref(teamId: string, credentialId?: string): string {
+  return `${teamBase(teamId)}/models?${systemModelsBaseParams(credentialId).toString()}`
+}
+
 /** 团队模型注册（可选锁定凭据） */
 export function teamModelsRegisterHref(teamId: string, credentialId?: string): string {
   const params = teamModelsBaseParams(credentialId)

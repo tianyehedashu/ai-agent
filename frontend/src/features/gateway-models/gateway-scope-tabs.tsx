@@ -12,11 +12,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 
 /** 置于父级 `<Tabs>` 内，仅渲染触发器。 */
-export function GatewayScopeTabTriggers(): React.ReactElement {
+export function GatewayScopeTabTriggers({
+  showSystemTab = false,
+}: Readonly<{ showSystemTab?: boolean }>): React.ReactElement {
   return (
     <>
       <TabsTrigger value="personal">个人</TabsTrigger>
       <TabsTrigger value="shared">团队</TabsTrigger>
+      {showSystemTab ? <TabsTrigger value="system">系统</TabsTrigger> : null}
     </>
   )
 }
@@ -34,7 +37,7 @@ export function GatewayScopeTabs({ teamHint }: GatewayScopeTabsProps): React.Rea
       <Tabs
         value={scopeTab}
         onValueChange={(v) => {
-          if (v === 'personal' || v === 'shared') {
+          if (v === 'personal' || v === 'shared' || v === 'system') {
             startTransition(() => {
               setScopeTab(v)
             })

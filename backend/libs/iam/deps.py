@@ -6,12 +6,12 @@ from libs.iam.tenancy import DefaultTenantProvisionerPort
 
 
 def get_default_tenant_provisioner() -> DefaultTenantProvisionerPort:
-    """默认租户供给：当前绑定 domains.tenancy.application.TeamService 实现。"""
-    from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
-        GatewayDefaultTenantProvisioner,
+    """默认租户供给：绑定 tenancy 域 ``TenancyDefaultTenantProvisioner``。"""
+    from domains.tenancy.application.default_tenant_provisioner import (
+        TenancyDefaultTenantProvisioner,
     )
 
-    return GatewayDefaultTenantProvisioner()
+    return TenancyDefaultTenantProvisioner()
 
 
 __all__ = ["get_default_tenant_provisioner"]

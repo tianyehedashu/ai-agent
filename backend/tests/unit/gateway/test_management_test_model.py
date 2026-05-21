@@ -98,6 +98,37 @@ async def test_chat_capability_failure_persists(db_session, test_user) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashscope_embedding_probe_uses_compatible_client(db_session, test_user) -> None:
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="embedding",
+        real_model="text-embedding-v3",
+        provider="dashscope",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    fake_response = {
+        "object": "list",
+        "data": [],
+        "model": "text-embedding-v3",
+        "usage": {"prompt_tokens": 0, "total_tokens": 0},
+    }
+
+    with (
+        patch(
+            "domains.gateway.application.management.write_modules.probe.perform_dashscope_embedding",
+            new=AsyncMock(return_value=fake_response),
+        ) as perform_mock,
+        patch("litellm.aembedding", new=AsyncMock()) as litellm_embed,
+    ):
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+
+    assert result["success"] is True
+    perform_mock.assert_awaited_once()
+    litellm_embed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_embedding_capability_uses_aembedding(db_session, test_user) -> None:
     team_id, model_id = await _seed_team_credential_and_model(
         db_session,

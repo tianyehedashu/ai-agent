@@ -1,0 +1,73 @@
+"""gateway_alert_job：webhook 在 commit 之后调用。"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, patch
+import uuid
+
+import pytest
+
+from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
+from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
+from domains.gateway.domain.policies.alert_evaluation import AlertEvaluationResult
+from domains.gateway.application import gateway_alert_job as job_module
+
+
+@pytest.mark.asyncio
+async def test_run_gateway_alert_cycle_webhook_after_commit() -> None:
+    rule_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    snapshot = AlertRuleSnapshot(
+        rule_id=rule_id,
+        tenant_id=tenant_id,
+        is_system=False,
+        name="test-rule",
+        metric="error_rate",
+        threshold=Decimal("0.5"),
+        window_minutes=5,
+        channels={"webhook": "https://example.com/hook"},
+        last_triggered_at=None,
+    )
+    eval_result = AlertEvaluationResult(triggered=True, value=0.9)
+    aggregates = AlertMetricAggregates(
+        metric="error_rate",
+        total_count=10,
+        error_count=9,
+        window_minutes=5,
+    )
+    call_order: list[str] = []
+    session_count = 0
+
+    mock_repo = MagicMock()
+    mock_repo.list_all_enabled_rules = AsyncMock(return_value=[snapshot])
+    mock_repo.fetch_rule_metric_aggregates = AsyncMock(return_value=aggregates)
+
+    async def record_trigger(*_args: object, **_kwargs: object) -> dict[str, str]:
+        call_order.append("record")
+        return {"rule": "test-rule"}
+
+    mock_repo.record_trigger = AsyncMock(side_effect=record_trigger)
+
+    async def fake_webhook(url: str, payload: dict[str, str]) -> None:
+        call_order.append("webhook")
+        assert url == "https://example.com/hook"
+
+    def make_ctx(*_args: object, **_kwargs: object) -> MagicMock:
+        nonlocal session_count
+        session_count += 1
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+        ctx.__aexit__ = AsyncMock(return_value=None)
+        return ctx
+
+    with (
+        patch.object(job_module, "get_session_context", side_effect=make_ctx),
+        patch.object(job_module, "GatewayAlertRepository", return_value=mock_repo),
+        patch.object(job_module, "_send_webhook", side_effect=fake_webhook),
+    ):
+        await job_module.run_gateway_alert_cycle()
+
+    assert session_count == 2
+    assert call_order == ["record", "webhook"]

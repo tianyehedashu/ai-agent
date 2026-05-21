@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     debug: bool = True
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"))
     api_prefix: str = "/api/v1"
-    root_path: str = ""  # 服务级前缀，如 /ai-agent（环境变量 ROOT_PATH）
+    root_path: str = "/ai-agent"  # 服务级前缀（环境变量 ROOT_PATH；设为空字符串可关闭）
     cookie_secure: bool | None = None  # None = 自动（生产 HTTPS 时 True）；内网 HTTP 部署设为 False
 
     # ========================================================================

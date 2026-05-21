@@ -29,7 +29,7 @@ qdrant_url = "${QDRANT_URL:http://localhost:6333}"
 # LLM 提供商配置（API Keys 从环境变量读取）
 # -----------------------------------------------------------------------------
 
-# LLM 提供商凭据（模型目录见 gateway-catalog.seed.json + Gateway DB）
+# LLM 提供商凭据（模型目录见 seeds/gateway-catalog.seed.json + Gateway DB）
 [llm.openai]
 api_key = "${OPENAI_API_KEY:}"
 api_base = "${OPENAI_API_BASE:https://api.openai.com/v1}"

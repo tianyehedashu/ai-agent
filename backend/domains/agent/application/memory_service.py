@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.memory import Memory
 from domains.agent.infrastructure.repositories.memory_repository import MemoryRepository
+
+
 class MemoryService:
     """记忆服务（委托 ``MemoryRepository``，写入带 ``tenant_id``）。"""
 

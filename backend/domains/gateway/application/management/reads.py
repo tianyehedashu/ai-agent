@@ -10,6 +10,10 @@ from uuid import UUID
 from domains.gateway.application.management.access_assertions import (
     GatewayManagementAccessAssertions,
 )
+from domains.gateway.application.management.alert_read_model import (
+    AlertRuleSummary,
+    alert_rule_from_orm,
+)
 from domains.gateway.application.management.credential_read_mappers import (
     credential_from_orm,
     system_credential_from_orm,
@@ -23,7 +27,7 @@ from domains.gateway.application.management.plan_read_models import (
     EntitlementPlanReadModel,
     ProviderPlanReadModel,
 )
-from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
+from domains.gateway.application.management.usage_log_reads import GatewayUsageLogReadMixin
 from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
     GatewayPlanUsageReadService,
@@ -34,17 +38,9 @@ from domains.gateway.application.management.virtual_key_read_mappers import virt
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
-    TeamPermissionDeniedError,
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.margin_read_model import MarginGroupBy
-from domains.gateway.domain.policies.usage_log_visibility import (
-    member_can_view_request_log_record,
-    usage_log_access_from_management_ctx,
-    workspace_axis_member_user_id,
-)
-from domains.gateway.domain.usage_axis import UsageAxis
-from domains.gateway.domain.usage_read_model import UsageAggregation
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     filter_virtual_keys_visible_to_actor,
@@ -84,11 +80,9 @@ from libs.iam.tenancy import MembershipPort
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.infrastructure.models.alert import GatewayAlertRule
-    from domains.tenancy.domain.management_context import ManagementTeamContext
 
 
-class GatewayManagementReadService:
+class GatewayManagementReadService(GatewayUsageLogReadMixin):
     """管理 API 只读用例，经仓储访问数据"""
 
     def __init__(
@@ -268,100 +262,9 @@ class GatewayManagementReadService:
             budgets.extend(await self._budgets.list_for_target("user", user_id))
         return budgets
 
-    @staticmethod
-    def _resolve_usage_axis(
-        ctx: ManagementTeamContext,
-        aggregation: UsageAggregation,
-        *,
-        vkey_id: UUID | None = None,
-    ) -> UsageAxis:
-        """把"产品视角"的 ``UsageAggregation`` 映射为仓储层 ``UsageAxis``。
-
-        - ``USER`` → ``UsageAxis.user(ctx.user_id)``。
-        - ``WORKSPACE`` → ``UsageAxis.workspace(ctx.team_id)``；对"团队普通成员 + 未指定 vkey_id"
-          的场景附加 ``member_user_id`` 子约束（仅可见自己创建的非系统 vkey 行 + 自己的平台入站行）。
-        """
-        if aggregation == UsageAggregation.USER:
-            return UsageAxis.user(ctx.user_id)
-        snapshot = usage_log_access_from_management_ctx(ctx)
-        member_user_id = workspace_axis_member_user_id(snapshot, vkey_id=vkey_id)
-        return UsageAxis.workspace(ctx.team_id, member_user_id=member_user_id)
-
-    async def list_request_logs(
-        self,
-        ctx: ManagementTeamContext,
-        *,
-        usage_aggregation: UsageAggregation,
-        page: int,
-        page_size: int,
-        start: datetime | None,
-        end: datetime | None,
-        status_filter: str | None,
-        capability: str | None,
-        vkey_id: UUID | None,
-        credential_id: UUID | None = None,
-    ) -> tuple[list[Any], int]:
-        axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=vkey_id)
-        return await self._logs.list_by_axis(
-            axis,
-            start=start,
-            end=end,
-            status=status_filter,
-            capability=capability,
-            vkey_id=vkey_id,
-            credential_id=credential_id,
-            page=page,
-            page_size=page_size,
-        )
-
-    async def get_request_log(
-        self,
-        ctx: ManagementTeamContext,
-        log_id: UUID,
-        *,
-        usage_aggregation: UsageAggregation,
-    ) -> Any | None:
-        # 详情访问 axis **不**附带 member_user_id：单条查询只用基础 team_id/user_id 约束，
-        # 团队成员可见性由下方应用层显式判断，未命中走 PermissionDenied 语义而非 NotFound。
-        if usage_aggregation == UsageAggregation.USER:
-            axis = UsageAxis.user(ctx.user_id)
-        else:
-            axis = UsageAxis.workspace(ctx.team_id)
-        record = await self._logs.get_by_axis(axis, log_id)
-        if record is None or usage_aggregation == UsageAggregation.USER:
-            return record
-        snapshot = usage_log_access_from_management_ctx(ctx)
-        vkey_owned = False
-        if record.vkey_id is not None:
-            vkey_owned = await self._vkeys.is_non_system_vkey_owned_by_user_on_team(
-                record.vkey_id,
-                team_id=ctx.team_id,
-                user_id=ctx.user_id,
-            )
-        if not member_can_view_request_log_record(
-            snapshot,
-            record_user_id=record.user_id,
-            record_has_vkey=record.vkey_id is not None,
-            vkey_owned_by_user=vkey_owned,
-        ):
-            raise TeamPermissionDeniedError(str(ctx.team_id))
-        return record
-
-    async def aggregate_request_log_summary(
-        self,
-        ctx: ManagementTeamContext,
-        start: datetime,
-        end: datetime,
-        *,
-        usage_aggregation: UsageAggregation,
-    ) -> dict[str, Any]:
-        axis = self._resolve_usage_axis(ctx, usage_aggregation)
-        summary = await self._logs.aggregate_summary_by_axis(axis, start, end)
-        summary["by_client_type"] = await self._logs.aggregate_by_client_type(axis, start, end)
-        return summary
-
-    async def list_alert_rules(self, team_id: UUID) -> list[GatewayAlertRule]:
-        return await self._alerts.list_rules_for_tenant(team_id)
+    async def list_alert_rules(self, team_id: UUID) -> list[AlertRuleSummary]:
+        rows = await self._alerts.list_rules_for_tenant(team_id)
+        return [alert_rule_from_orm(r) for r in rows]
 
     async def list_alert_events_as_dicts(
         self, team_id: UUID, *, limit: int
@@ -383,71 +286,6 @@ class GatewayManagementReadService:
             }
             for r in rows
         ]
-
-    async def aggregate_gateway_model_route_usage(
-        self,
-        ctx: ManagementTeamContext,
-        *,
-        days: int,
-        provider: str | None = None,
-    ) -> dict[str, Any]:
-        """按注册模型聚合用量：``deployment_gateway_model_id``（经路由命中）+ 仅 ``route_name`` 的历史/直连行。
-
-        与 ``GatewayModel`` 列表行一一对应；``route_name`` 可为客户端虚拟名，与注册 ``name`` 不同。
-        """
-        end = datetime.now(UTC)
-        start = end - timedelta(days=days)
-        models = await self._models.list_for_tenant(
-            ctx.team_id, only_enabled=False, provider=provider
-        )
-        if not models:
-            return {"start": start, "end": end, "items": []}
-        models_sorted = sorted(models, key=lambda m: (m.name, str(m.id)))[:500]
-        route_names = [m.name for m in models_sorted]
-        model_ids = [m.id for m in models_sorted]
-        ws_axis = UsageAxis.workspace(ctx.team_id)
-        u_axis = UsageAxis.user(ctx.user_id)
-        by_ws_route = await self._logs.aggregate_by_route_names_by_axis(
-            ws_axis, route_names, start, end
-        )
-        by_user_route = await self._logs.aggregate_by_route_names_by_axis(
-            u_axis, route_names, start, end
-        )
-        by_ws_dep = await self._logs.aggregate_by_deployment_ids_by_axis(
-            ws_axis, model_ids, start, end
-        )
-        by_user_dep = await self._logs.aggregate_by_deployment_ids_by_axis(
-            u_axis, model_ids, start, end
-        )
-        items: list[dict[str, Any]] = []
-        for m in models_sorted:
-            name = m.name
-            w = merge_gateway_usage_slices(
-                by_ws_dep.get(m.id, {}),
-                by_ws_route.get(name, {}),
-            )
-            u = merge_gateway_usage_slices(
-                by_user_dep.get(m.id, {}),
-                by_user_route.get(name, {}),
-            )
-            items.append(
-                {
-                    "route_name": name,
-                    "workspace": {
-                        "requests": int(w["requests"]),
-                        "input_tokens": int(w["input_tokens"]),
-                        "output_tokens": int(w["output_tokens"]),
-                        "cost_usd": w["cost_usd"],
-                    },
-                    "user": {
-                        "requests": int(u["requests"]),
-                        "input_tokens": int(u["input_tokens"]),
-                        "output_tokens": int(u["output_tokens"]),
-                        "cost_usd": u["cost_usd"],
-                    },
-                }
-            )
-        return {"start": start, "end": end, "items": items}
 
     # ------------------------------------------------------------------
     # ProviderPlan / EntitlementPlan reads

@@ -22,6 +22,7 @@ from domains.gateway.application.pricing.pricing_service import (
     ResolvedPricing,
 )
 from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay
+from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
 from domains.gateway.domain.pricing_calculator import PricingRate
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.models.pricing_downstream import DownstreamModelPricing
@@ -32,7 +33,6 @@ from domains.gateway.infrastructure.repositories.model_repository import Gateway
 from domains.gateway.infrastructure.repositories.pricing_repository import (
     DownstreamPricingRepository,
 )
-from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
 

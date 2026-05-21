@@ -38,7 +38,27 @@ async def list_alert_rules(
     reads: MgmtReads,
 ) -> list[AlertRuleResponse]:
     rows = await reads.list_alert_rules(team.team_id)
-    return [AlertRuleResponse.model_validate(tenant_scoped_orm_dict(r)) for r in rows]
+    return [
+        AlertRuleResponse.model_validate(
+            apply_tenant_team_mirror(
+                {
+                    "id": r.id,
+                    "tenant_id": r.tenant_id,
+                    "name": r.name,
+                    "description": r.description,
+                    "metric": r.metric,
+                    "threshold": r.threshold,
+                    "window_minutes": r.window_minutes,
+                    "channels": r.channels,
+                    "enabled": r.enabled,
+                    "last_triggered_at": r.last_triggered_at,
+                    "created_at": r.created_at,
+                    "updated_at": r.updated_at,
+                }
+            )
+        )
+        for r in rows
+    ]
 
 
 @router.post("/alerts/rules", response_model=AlertRuleResponse, status_code=status.HTTP_201_CREATED)

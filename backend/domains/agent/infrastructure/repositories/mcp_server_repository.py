@@ -11,7 +11,6 @@ from domains.agent.infrastructure.models.mcp_server import MCPServer
 from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
 from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.tenant_resolve import resolve_tenant_id_for_write
-
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -56,7 +55,7 @@ class MCPServerRepository(TenantScopedRepositoryBase[MCPServer]):
     async def create(
         self,
         config: MCPServerEntityConfig,
-        user_id: uuid.UUID | None = None,  # noqa: ARG002 — 归属由 tenant 解析
+        user_id: uuid.UUID | None = None,
     ) -> MCPServer:
         if config.scope.value != "user":
             msg = "user-scoped MCPServer must use scope=user; system servers use SystemMCPServer"

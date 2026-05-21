@@ -22,8 +22,8 @@ from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_user_id,
     get_mcp_vendor_creator_id,
 )
-from libs.config import get_llm_config
 from domains.identity.application.permission_context_composer import PermissionContextComposer
+from libs.config import get_llm_config
 from libs.db.database import get_session_context
 from libs.iam.permission_context import clear_permission_context
 

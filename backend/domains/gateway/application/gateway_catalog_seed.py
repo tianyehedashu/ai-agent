@@ -11,7 +11,7 @@ from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SEED_PATH = Path(__file__).resolve().parents[3] / "config" / "gateway-catalog.seed.json"
+DEFAULT_SEED_PATH = Path(__file__).resolve().parents[3] / "seeds" / "gateway-catalog.seed.json"
 
 
 def default_seed_path() -> Path:

@@ -1,7 +1,3 @@
-"""Gateway IAM 适配器导出。"""
+"""Gateway IAM 基础设施（租户供给已迁至 tenancy 域）。"""
 
-from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
-    GatewayDefaultTenantProvisioner,
-)
-
-__all__ = ["GatewayDefaultTenantProvisioner"]
+__all__: list[str] = []

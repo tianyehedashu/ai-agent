@@ -13,13 +13,21 @@ import secrets
 from typing import Protocol
 
 from cryptography.fernet import Fernet
-from fastapi_users.password import PasswordHelper
 
 from domains.identity.domain.api_key_types import (
     API_KEY_SCOPE_GROUPS,
     ApiKeyFormat,
     ApiKeyScope,
 )
+from domains.identity.domain.ports.password_hasher import PasswordHasherPort
+
+
+def _default_password_hasher() -> PasswordHasherPort:
+    from domains.identity.infrastructure.password_hasher_fastapi_users import (
+        default_password_hasher,
+    )
+
+    return default_password_hasher()
 
 
 class ApiKeyGeneratorProtocol(Protocol):
@@ -89,8 +97,13 @@ class ApiKeyGenerator:
     # Fernet 密钥长度为 32 字节（base64 编码后 44 字符）
     ENCRYPTION_KEY_LENGTH = 32
 
-    def __init__(self, encryption_key: str | None = None) -> None:
-        self._password_helper = PasswordHelper()
+    def __init__(
+        self,
+        encryption_key: str | None = None,
+        *,
+        password_hasher: PasswordHasherPort | None = None,
+    ) -> None:
+        self._password_hasher = password_hasher or _default_password_hasher()
         self._encryption_key = encryption_key
 
     def _get_fernet(self, encryption_key: str | None = None) -> Fernet:
@@ -140,11 +153,11 @@ class ApiKeyGenerator:
 
     def hash_key(self, key: str) -> str:
         """对 Key 进行哈希（使用与密码相同的 bcrypt）"""
-        return self._password_helper.hash(key)
+        return self._password_hasher.hash(key)
 
     def verify_key(self, key: str, key_hash: str) -> bool:
         """验证 Key 是否匹配哈希"""
-        verified, _ = self._password_helper.verify_and_update(key, key_hash)
+        verified = self._password_hasher.verify(key, key_hash)
         return verified
 
     def encrypt_key(self, plain_key: str, encryption_key: str) -> str:

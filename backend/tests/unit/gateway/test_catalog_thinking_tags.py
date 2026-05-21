@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
-from domains.gateway.application.config_catalog_sync import _build_tags_from_seed_model
+from domains.gateway.application.config_catalog_sync import build_tags_from_seed_model
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
@@ -13,7 +13,7 @@ from domains.gateway.domain.thinking_param import (
 
 
 def _tags(model: CatalogSeedModel) -> dict:
-    return _build_tags_from_seed_model(model)
+    return build_tags_from_seed_model(model)
 
 
 def test_deepseek_reasoner_builtin_reasoning() -> None:

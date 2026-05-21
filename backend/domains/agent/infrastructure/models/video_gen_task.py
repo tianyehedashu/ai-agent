@@ -14,7 +14,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from libs.orm.base import BaseModel, TenantScopedMixin
 
 if TYPE_CHECKING:
-    from domains.identity.infrastructure.models.user import User
     from domains.session.infrastructure.models.session import Session
 
 

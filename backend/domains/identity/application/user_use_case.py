@@ -18,7 +18,7 @@ from domains.identity.domain.policies.platform_role_policy import (
 from domains.identity.domain.rbac import Role
 from domains.identity.domain.repositories.user_repository import UserRepository
 from domains.identity.domain.services.password_service import PasswordService
-from domains.identity.domain.services.token_service import TokenPair, TokenService
+from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.infrastructure.authentication import get_jwt_strategy
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
@@ -26,15 +26,8 @@ from domains.identity.infrastructure.default_tenant_lifecycle import (
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
 from libs.exceptions import AuthenticationError, NotFoundError
+from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
-
-
-def _default_tenant_provisioner() -> DefaultTenantProvisionerPort:
-    from domains.gateway.infrastructure.iam.default_tenant_provisioner import (
-        GatewayDefaultTenantProvisioner,
-    )
-
-    return GatewayDefaultTenantProvisioner()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +69,7 @@ class UserUseCase:
         self._tenant_provisioner = tenant_provisioner
 
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
-        return self._tenant_provisioner or _default_tenant_provisioner()
+        return self._tenant_provisioner or get_default_tenant_provisioner()
 
     async def count_users(self) -> int:
         """统计用户总数。"""

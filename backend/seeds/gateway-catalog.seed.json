@@ -395,6 +395,21 @@
         "image_gen"
       ],
       "description": "OpenAI 图像生成（1024×1024）"
+    },
+    {
+      "id": "dashscope/text-embedding-v3",
+      "name": "通义 Embedding V3",
+      "provider": "dashscope",
+      "litellm_model": "dashscope/text-embedding-v3",
+      "context_window": 8192,
+      "input_price": 0.0007,
+      "output_price": 0.0,
+      "supports_vision": false,
+      "supports_tools": false,
+      "recommended_for": [
+        "embedding"
+      ],
+      "description": "文本向量化（记忆 / 检索）"
     }
   ]
 }

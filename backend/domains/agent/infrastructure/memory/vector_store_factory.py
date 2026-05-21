@@ -46,7 +46,7 @@ def create_text_embedding_port() -> TextEmbeddingPort:
 
 
 async def create_text_embedding_port_async(
-    model_catalog: "ModelCatalogPort",
+    model_catalog: ModelCatalogPort,
 ) -> TextEmbeddingPort:
     return _EmbeddingServiceAdapter(await create_embedding_service_from_catalog(model_catalog))
 

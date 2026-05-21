@@ -21,9 +21,6 @@ from domains.gateway.infrastructure.repositories.budget_repository import Budget
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
-from domains.gateway.infrastructure.repositories.system_credential_repository import (
-    SystemProviderCredentialRepository,
-)
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
 )
@@ -33,6 +30,9 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 )
 from domains.gateway.infrastructure.repositories.provider_plan_repository import (
     ProviderPlanRepository,
+)
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,

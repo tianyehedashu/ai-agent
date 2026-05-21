@@ -89,7 +89,7 @@ async def run_agent_shutdown(app: FastAPI) -> None:
 @asynccontextmanager
 async def agent_streamable_http_lifespan() -> AsyncGenerator[None, None]:
     """Streamable HTTP MCP servers lifecycle (wraps app request serving)."""
-    from domains.agent.presentation.mcp_server_router import (
+    from domains.agent.application.mcp_server_facade import (
         initialize_mcp_servers,
         sync_dynamic_prompts_for_streamable_http,
         sync_dynamic_tools_for_streamable_http,

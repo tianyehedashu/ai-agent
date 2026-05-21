@@ -446,7 +446,17 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ---
 
-## 8. 相关文档
+## 8. 后台任务与仓储分层约定
+
+| 主题 | 约定 |
+|------|------|
+| **告警 job** | `gateway_alert_job.run_gateway_alert_cycle`：只读 session 评估指标；每条触发独立 write session + `commit` 后再发 webhook，避免长事务占用 DB 连接。 |
+| **UsageAxis** | 纯值对象在 `domain/usage_axis.py`；SQL WHERE 在 `infrastructure/repositories/usage_axis_sql.py`。 |
+| **默认租户** | `TenancyDefaultTenantProvisioner`（tenancy 域）；`libs.iam.deps.get_default_tenant_provisioner` 绑定该实现。 |
+
+---
+
+## 9. 相关文档
 
 - [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md) — Claude Code / Cursor 第三方客户端适配（能力、别名、部署、代码索引）
 - [GATEWAY_THIRDPARTY_CLIENT_GUIDE.md](./GATEWAY_THIRDPARTY_CLIENT_GUIDE.md) — 第三方客户端速查配置

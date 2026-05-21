@@ -19,6 +19,12 @@ from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.catalog_provider_availability import (
     build_catalog_provider_retirement_plan,
 )
+from domains.gateway.domain.provider_env_catalog import (
+    ProviderEnvSnapshot,
+    provider_env_snapshot_from_settings,
+    resolve_provider_credentials,
+    volcengine_extra_from_snapshot,
+)
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_NONE,
     effective_supports_reasoning,
@@ -42,54 +48,23 @@ MANAGED_CONFIG = CONFIG_MANAGED_BY
 SYSTEM_CREDENTIAL_NAME = CONFIG_MANAGED_CREDENTIAL_NAME
 
 
+def _provider_env_snapshot() -> ProviderEnvSnapshot:
+    return provider_env_snapshot_from_settings(settings)
+
+
 def _provider_api_key_and_base(provider: str) -> tuple[str | None, str | None]:
-    """从 Settings 读取明文 API Key 与 base（无则返回 None）。"""
-    if provider == "openai":
-        key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
-        return key, settings.openai_api_base
-    if provider == "deepseek":
-        key = settings.deepseek_api_key.get_secret_value() if settings.deepseek_api_key else None
-        return key, settings.deepseek_api_base
-    if provider == "anthropic":
-        key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
-        return key, None
-    if provider == "dashscope":
-        key = settings.dashscope_api_key.get_secret_value() if settings.dashscope_api_key else None
-        return key, settings.dashscope_api_base
-    if provider == "zhipuai":
-        key = settings.zhipuai_api_key.get_secret_value() if settings.zhipuai_api_key else None
-        return key, settings.zhipuai_api_base
-    if provider == "volcengine":
-        key = (
-            settings.volcengine_api_key.get_secret_value() if settings.volcengine_api_key else None
-        )
-        return key, settings.volcengine_api_base
-    if provider == "custom":
+    """从 Settings 快照读取明文 API Key 与 base（无则 return None）。"""
+    creds = resolve_provider_credentials(provider, _provider_env_snapshot())
+    if creds is None:
+        logger.warning("Unknown provider %s for gateway catalog sync", provider)
         return None, None
-    logger.warning("Unknown provider %s for gateway catalog sync", provider)
-    return None, None
-
-
-def _volcengine_extra() -> dict[str, Any] | None:
-    """``endpoint_id`` 用于 chat，``image_endpoint_id`` 用于 Seedream 生图探活与代理。
-
-    火山生图必须用图像接入点 ID 而非 ``volcengine/seedream`` 字面 model，
-    探活路径见 ``domains.gateway.domain.policies.volcengine_image_probe``。
-    """
-    chat_id = settings.volcengine_chat_endpoint_id or settings.volcengine_endpoint_id
-    image_id = settings.volcengine_image_endpoint_id
-    extra: dict[str, Any] = {}
-    if chat_id:
-        extra["endpoint_id"] = chat_id
-    if image_id:
-        extra["image_endpoint_id"] = image_id
-    return extra or None
+    return creds.api_key, creds.api_base
 
 
 def _config_managed_credential_extra(provider: str) -> dict[str, Any]:
     extra: dict[str, Any] = {MANAGED_BY_KEY: MANAGED_CONFIG}
     if provider == "volcengine":
-        ve = _volcengine_extra()
+        ve = volcengine_extra_from_snapshot(_provider_env_snapshot())
         if ve:
             extra.update(ve)
     return extra
@@ -131,7 +106,7 @@ async def _ensure_system_credential(
     return created.id
 
 
-def _build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
+def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
     real_model = (model.litellm_model or model.id).strip()
     explicit_tp = getattr(model, "thinking_param", None)
     thinking_param = infer_thinking_param(
@@ -328,7 +303,7 @@ async def _sync_catalog_models(
         raw_model = model.litellm_model or model.id
         real_model = build_litellm_model_id(model.provider, raw_model)
         capability = infer_catalog_capability(model)
-        tags = _build_tags_from_seed_model(model)
+        tags = build_tags_from_seed_model(model)
         existing = await models_repo.get_system_by_name(model.id)
         if existing is None:
             await models_repo.create_system(
