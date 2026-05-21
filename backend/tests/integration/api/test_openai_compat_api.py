@@ -34,7 +34,7 @@ class TestOpenAiCompatApi:
 
             mgmt_headers = auth_headers
             ck = await dev_client.post(
-                f"/api/v1/gateway/teams{team.id}/keys",
+                f"/api/v1/gateway/teams/{team.id}/keys",
                 headers=mgmt_headers,
                 json={"name": "itest-openai-compat-models"},
             )

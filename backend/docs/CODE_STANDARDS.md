@@ -47,7 +47,7 @@ backend/
 │   ├── tenancy/                   # 团队/成员权威：Team、TeamMember、TeamService
 │   │   ├── application/
 │   │   ├── infrastructure/models/
-│   │   └── presentation/          # 管理面团队解析、X-Team-Id 依赖
+│   │   └── presentation/          # 管理面团队解析（/teams/{team_id}/*）
 │   │
 │   ├── gateway/                   # AI Gateway、/v1 OpenAI + Anthropic、团队/预算/日志
 │   │   ├── presentation/          # /api/v1/gateway/*、/v1/* 路由与 deps（不直连仓储）

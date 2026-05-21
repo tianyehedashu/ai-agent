@@ -24,15 +24,19 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.errors import VirtualKeyInvalidError, GatewayVkeyTeamHeaderMismatchError
+from domains.gateway.domain.errors import VirtualKeyInvalidError
 from domains.gateway.domain.types import (
     ApiKeyGatewayGrantPrincipal,
     GatewayInboundVia,
     VirtualKeyPrincipal,
     allowed_capabilities_from_storage,
 )
+from domains.gateway.domain.virtual_key_access import assert_vkey_team_header_compatible
 from domains.gateway.domain.virtual_key_service import is_vkey_format
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.identity.application.permission_context_composer import (
+    PermissionContextComposer,
+)
 from domains.tenancy.presentation.team_dependencies import (
     CurrentTeam,
     RequiredGatewayAdmin,
@@ -41,9 +45,6 @@ from domains.tenancy.presentation.team_dependencies import (
     RequiredTeamOwner,
     ResolvedTeam,
     resolve_current_team,
-)
-from domains.identity.application.permission_context_composer import (
-    PermissionContextComposer,
 )
 from libs.db.database import get_db
 from libs.exceptions import HttpMappableDomainError
@@ -69,24 +70,6 @@ __all__ = [
 
 _security = HTTPBearer(auto_error=True)
 _optional_security = HTTPBearer(auto_error=False)
-
-
-def _assert_vkey_team_header_compatible(
-    bound_team_id: uuid.UUID,
-    x_team_id: str | None,
-) -> None:
-    """sk-gw-* 已绑定团队；冲突的 X-Team-Id 视为客户端误用。"""
-    trimmed = (x_team_id or "").strip()
-    if not trimmed:
-        return
-    try:
-        header_team_id = uuid.UUID(trimmed)
-    except ValueError as exc:
-        from domains.gateway.domain.errors import GatewayTeamHeaderInvalidError
-
-        raise GatewayTeamHeaderInvalidError(trimmed) from exc
-    if header_team_id != bound_team_id:
-        raise GatewayVkeyTeamHeaderMismatchError()
 
 
 # =============================================================================
@@ -234,7 +217,7 @@ async def bearer_vkey_or_apikey_auth(
 
     if is_vkey_format(plain):
         gp = await _gateway_principal_from_vkey_plain(plain, db)
-        _assert_vkey_team_header_compatible(gp.team_id, x_team_id)
+        assert_vkey_team_header_compatible(gp.team_id, x_team_id)
         return VkeyOrApikeyPrincipal(
             via="vkey",
             user_id=gp.user_id,

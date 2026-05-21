@@ -7,11 +7,14 @@ import uuid
 import pytest
 
 from domains.gateway.domain.errors import (
+    GatewayTeamHeaderInvalidError,
+    GatewayVkeyTeamHeaderMismatchError,
     SystemVirtualKeyForbiddenError,
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
+    assert_vkey_team_header_compatible,
     filter_virtual_keys_visible_to_actor,
 )
 
@@ -126,3 +129,28 @@ def test_filter_only_creator_keys() -> None:
         keys,
         actor_user_id=owner_id,
     ) == [other]
+
+
+@pytest.mark.unit
+def test_vkey_team_header_ignored_when_absent() -> None:
+    team_id = uuid.uuid4()
+    assert_vkey_team_header_compatible(team_id, None) is None
+    assert_vkey_team_header_compatible(team_id, "  ") is None
+
+
+@pytest.mark.unit
+def test_vkey_team_header_matching_ok() -> None:
+    team_id = uuid.uuid4()
+    assert_vkey_team_header_compatible(team_id, str(team_id)) is None
+
+
+@pytest.mark.unit
+def test_vkey_team_header_mismatch_raises() -> None:
+    with pytest.raises(GatewayVkeyTeamHeaderMismatchError):
+        assert_vkey_team_header_compatible(uuid.uuid4(), str(uuid.uuid4()))
+
+
+@pytest.mark.unit
+def test_vkey_team_header_invalid_uuid_raises() -> None:
+    with pytest.raises(GatewayTeamHeaderInvalidError):
+        assert_vkey_team_header_compatible(uuid.uuid4(), "not-a-uuid")

@@ -1,4 +1,4 @@
-"""管理面团队上下文（JWT + X-Team-Id 解析结果）。"""
+"""管理面团队上下文（JWT + URL /teams/{team_id} 或 legacy X-Team-Id 解析结果）。"""
 
 from __future__ import annotations
 

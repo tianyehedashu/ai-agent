@@ -24,8 +24,12 @@ export interface ChatRequest {
 }
 
 // 转换为后端期望的格式（snake_case）
-function toBackendRequest(request: ChatRequest): Record<string, unknown> {
+function gatewayTeamPayload(): Record<string, unknown> {
   const gatewayTeamId = getCurrentTeamId()
+  return gatewayTeamId ? { gateway_team_id: gatewayTeamId } : {}
+}
+
+function toBackendRequest(request: ChatRequest): Record<string, unknown> {
   return {
     message: request.message,
     session_id: request.sessionId,
@@ -34,13 +38,23 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
       ? { enabled_servers: request.mcpConfig.enabledServers }
       : undefined,
     model_ref: request.modelRef === undefined ? undefined : request.modelRef,
-    gateway_team_id: gatewayTeamId ?? undefined,
+    ...gatewayTeamPayload(),
     gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
     creative_mode: request.creativeMode ?? undefined,
     reference_image_urls: request.referenceImageUrls?.length
       ? request.referenceImageUrls
       : undefined,
     image_gen_strength: request.imageGenStrength ?? undefined,
+  }
+}
+
+function toBackendResumeBody(sessionId: string, request: ResumeRequest): Record<string, unknown> {
+  return {
+    session_id: sessionId,
+    checkpoint_id: request.checkpointId,
+    action: request.action,
+    modified_args: request.modifiedArgs,
+    ...gatewayTeamPayload(),
   }
 }
 
@@ -86,7 +100,7 @@ export const chatApi = {
   ): Promise<void> {
     return apiClient.stream(
       '/api/v1/chat/resume',
-      { sessionId, ...request },
+      toBackendResumeBody(sessionId, request),
       (event) => {
         onEvent(event as unknown as ChatEvent)
       },

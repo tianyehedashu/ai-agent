@@ -11,7 +11,7 @@
 ``GET /dashboard/summary`` 的查询切片：
 
 - ``workspace``（产品文案：**团队**）：按当前 ``ManagementTeamContext.team_id``
-  （由 ``X-Team-Id`` 解析）过滤/聚合；该 ID 可为 **personal** 或 **shared** 团队。
+  （由 URL ``/teams/{team_id}`` 或 legacy ``X-Team-Id`` 解析）过滤/聚合；该 ID 可为 **personal** 或 **shared** 团队。
 - ``user``（产品文案：**我**）：按当前 JWT 对应 ``user_id`` 跨团队聚合/过滤；
   **不**表示「无团队用户」。
 
@@ -35,8 +35,9 @@ class UsageAggregation(StrEnum):
 
 
 USAGE_AGGREGATION_QUERY_DESCRIPTION = (
-    "用量切片：workspace（产品文案：团队）=按当前 X-Team-Id 选中的团队"
-    "（含 personal/shared）;user（产品文案：我）=按当前登录账号跨团队聚合。"
+    "用量切片：workspace（产品文案：团队）=按当前团队工作区"
+    "（URL /teams/{team_id} 或 legacy X-Team-Id；含 personal/shared）;"
+    "user（产品文案：我）=按当前登录账号跨团队聚合。"
 )
 """``UsageAggregation`` 在 FastAPI ``Query(description=...)`` 中的统一文案；
 路由层（``logs.py`` / ``dashboard.py`` 等）共享同一字符串，避免三处漂移。"""

@@ -20,7 +20,7 @@ class PermissionContext:
         user_id: 注册用户 ID（如果是注册用户）
         anonymous_user_id: 匿名用户 ID（如果是匿名用户）
         role: 用户角色（admin, user, viewer）
-        team_id: 当前 **活动团队租户**（X-Team-Id 解析结果）
+        team_id: 当前 **活动团队租户**（URL `/teams/{team_id}` 或 legacy `X-Team-Id` 解析结果）
         team_role: 当前团队角色（owner/admin/member），仅 team_id 非空时有意义
         team_ids: 用户可访问的全部 tenant_id（经 team_members）；admin 时为空集表示不过滤
     """

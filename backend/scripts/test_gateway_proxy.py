@@ -432,7 +432,7 @@ def main() -> int:
             file=sys.stderr,
         )
         print(
-            "\n获取虚拟 Key：登录后 POST /api/v1/gateway/keys（需 JWT + X-Team-Id），响应 plain_key。",
+            "\n获取虚拟 Key：登录后 POST /api/v1/gateway/teams/{team_id}/keys（JWT + 路径 team_id），响应 plain_key。",
             file=sys.stderr,
         )
         return 1

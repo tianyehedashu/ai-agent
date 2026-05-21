@@ -5,42 +5,30 @@ Tenancy 管理面团队依赖（/api/v1/gateway/* 团队上下文）
 HTTP 映射经 ``libs.iam.team_http``；团队路由仅使用 ``TeamService``，不依赖 ``domains.gateway``。
 """
 
-from __future__ import annotations
-
-from typing import Annotated
-import uuid
-
-from fastapi import Depends, Header, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from domains.identity.presentation.deps import (
-    RequiredAuthUser,
-    VIEWER_ROLE,
-    get_current_user,
-)
-from domains.identity.presentation.schemas import CurrentUser
-from domains.tenancy.application.management_team_resolve_use_case import (
-    TenancyManagementTeamResolveUseCase,
-)
-from domains.tenancy.domain.management_context import ManagementTeamContext
-from domains.tenancy.domain.policies.team_role import (
-    TeamRole,
-    assert_gateway_admin,
-    assert_team_role,
-)
-from libs.db.database import get_db
-from libs.iam.permission_context import merge_team_into_permission_context, get_permission_context
-from libs.exceptions import (
-    PermissionDeniedError,
-    PersonalTeamNotInitializedError,
-    TeamNotFoundError,
-    TeamPermissionDeniedError,
-)
-from libs.iam.team_http import map_team_access_exception_to_http
-
-ResolvedTeam = ManagementTeamContext
+from __future__ import annotationsfrom typing import Annotated, NoReturnimport uuidfrom fastapi import Depends, Header, HTTPException, Request, statusfrom sqlalchemy.ext.asyncio import AsyncSessionfrom domains.identity.presentation.deps import VIEWER_ROLE, RequiredAuthUserfrom domains.tenancy.application.management_team_installer import install_management_team_contextfrom domains.tenancy.domain.management_context import ManagementTeamContextfrom domains.tenancy.domain.policies.team_role import (    TeamRole,    assert_gateway_admin,    assert_team_role,)from libs.db.database import get_dbfrom libs.exceptions import (    PermissionDeniedError,    PersonalTeamNotInitializedError,    TeamNotFoundError,    TeamPermissionDeniedError,)from libs.iam.team_http import map_team_access_exception_to_httpResolvedTeam = ManagementTeamContext
 
 _GATEWAY_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _raise_http_from_team_access(exc: Exception) -> NoReturn:
+    http_exc = map_team_access_exception_to_http(exc)
+    if http_exc is None:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unmapped team access error",
+        ) from exc
+    raise http_exc from exc
+
+
+def _assert_gateway_not_viewer_write(request: Request, platform_role: str) -> None:
+    if platform_role != VIEWER_ROLE:
+        return
+    if request.method in _GATEWAY_READ_ONLY_METHODS:
+        return
+    raise PermissionDeniedError(
+        message="Viewer accounts are read-only on AI Gateway",
+        resource="AI Gateway",
+    )
 
 
 async def merge_optional_gateway_team(
@@ -53,43 +41,25 @@ async def merge_optional_gateway_team(
     """将显式 team_id 写入 PermissionContext（Chat 等无路径团队入口）。"""
     if team_id is None:
         return
-    if get_permission_context() is None:
-        return
-    resolver = TenancyManagementTeamResolveUseCase(db)
     try:
-        resolved = await resolver.resolve_management_team(
+        await install_management_team_context(
+            db,
             user_id=user_id,
             platform_user_role=platform_user_role,
-            x_team_id=None,
             path_team_id=str(team_id),
+            x_team_id=None,
         )
     except (
         TeamNotFoundError,
         TeamPermissionDeniedError,
         PersonalTeamNotInitializedError,
     ) as exc:
-        http_exc = map_team_access_exception_to_http(exc)
-        if http_exc is None:
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unmapped team access error",
-            ) from exc
-        raise http_exc from exc
-    merge_team_into_permission_context(
-        team_id=resolved.team_id,
-        team_role=resolved.team_role,
-    )
-
-
-def _assert_gateway_not_viewer_write(request: Request, platform_role: str) -> None:
-    if platform_role != VIEWER_ROLE:
-        return
-    if request.method in _GATEWAY_READ_ONLY_METHODS:
-        return
-    raise PermissionDeniedError(
-        message="Viewer accounts are read-only on AI Gateway",
-        resource="AI Gateway",
-    )
+        _raise_http_from_team_access(exc)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
 
 
 async def resolve_current_team(
@@ -113,9 +83,9 @@ async def resolve_current_team(
     path_raw = request.path_params.get("team_id")
     path_team_id = path_raw if isinstance(path_raw, str) else None
 
-    resolver = TenancyManagementTeamResolveUseCase(db)
     try:
-        resolved = await resolver.resolve_management_team(
+        return await install_management_team_context(
+            db,
             user_id=user_id,
             platform_user_role=current_user.role,
             x_team_id=x_team_id,
@@ -126,69 +96,15 @@ async def resolve_current_team(
         TeamPermissionDeniedError,
         PersonalTeamNotInitializedError,
     ) as exc:
-        http_exc = map_team_access_exception_to_http(exc)
-        if http_exc is None:
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unmapped team access error",
-            ) from exc
-        raise http_exc from exc
-
-    merge_team_into_permission_context(
-        team_id=resolved.team_id,
-        team_role=resolved.team_role,
-    )
-
-    return resolved
+        _raise_http_from_team_access(exc)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
 
 
 CurrentTeam = Annotated[ManagementTeamContext, Depends(resolve_current_team)]
-
-
-async def attach_optional_team_from_header(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
-) -> None:
-    """将 ``X-Team-Id`` 写入 ``PermissionContext``，供内部 Gateway 桥接按当前团队归账。
-
-    未带头或匿名会话时不修改上下文（桥接仍用 personal team）。
-    解析与成员校验与 ``resolve_current_team`` 一致。
-    """
-    if current_user.is_anonymous:
-        return
-    trimmed = (x_team_id or "").strip()
-    if not trimmed:
-        return
-    user_id = uuid.UUID(current_user.id)
-    resolver = TenancyManagementTeamResolveUseCase(db)
-    try:
-        resolved = await resolver.resolve_management_team(
-            user_id=user_id,
-            platform_user_role=current_user.role,
-            x_team_id=trimmed,
-            path_team_id=None,
-        )
-    except (
-        TeamNotFoundError,
-        TeamPermissionDeniedError,
-        PersonalTeamNotInitializedError,
-    ) as exc:
-        http_exc = map_team_access_exception_to_http(exc)
-        if http_exc is None:
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unmapped team access error",
-            ) from exc
-        raise http_exc from exc
-
-    merge_team_into_permission_context(
-        team_id=resolved.team_id,
-        team_role=resolved.team_role,
-    )
-
-
-AttachOptionalTeamContext = Annotated[None, Depends(attach_optional_team_from_header)]
 
 
 def _require_team_role(*roles: str):
@@ -198,13 +114,7 @@ def _require_team_role(*roles: str):
         try:
             assert_team_role(team, *roles)
         except TeamPermissionDeniedError as exc:
-            http_exc = map_team_access_exception_to_http(exc)
-            if http_exc is None:
-                raise HTTPException(
-                    status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Unmapped team access error",
-                ) from exc
-            raise http_exc from exc
+            _raise_http_from_team_access(exc)
         return team
 
     return _dep
@@ -235,13 +145,7 @@ async def require_gateway_admin(
     try:
         assert_gateway_admin(team)
     except TeamPermissionDeniedError as exc:
-        http_exc = map_team_access_exception_to_http(exc)
-        if http_exc is None:
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unmapped team access error",
-            ) from exc
-        raise http_exc from exc
+        _raise_http_from_team_access(exc)
     return team
 
 
@@ -252,14 +156,13 @@ RequiredGatewayAdmin = Annotated[ManagementTeamContext, Depends(require_gateway_
 
 
 __all__ = [
-    "AttachOptionalTeamContext",
     "CurrentTeam",
     "RequiredGatewayAdmin",
     "RequiredTeamAdmin",
     "RequiredTeamMember",
     "RequiredTeamOwner",
     "ResolvedTeam",
-    "attach_optional_team_from_header",
     "merge_optional_gateway_team",
     "resolve_current_team",
 ]
+

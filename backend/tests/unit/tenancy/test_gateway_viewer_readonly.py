@@ -13,7 +13,7 @@ def _request(method: str) -> Request:
     scope = {
         "type": "http",
         "method": method,
-        "path": "/api/v1/gateway/keys",
+        "path": "/api/v1/gateway/teams/00000000-0000-4000-8000-000000000001/keys",
         "headers": [],
     }
     return Request(scope)

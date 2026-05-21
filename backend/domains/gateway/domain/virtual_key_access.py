@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
+from uuid import UUID
 
 from domains.gateway.domain.errors import (
+    GatewayTeamHeaderInvalidError,
+    GatewayVkeyTeamHeaderMismatchError,
     SystemVirtualKeyForbiddenError,
     VirtualKeyNotFoundError,
 )
-
-if TYPE_CHECKING:
-    from uuid import UUID
 
 
 class VirtualKeyAccessView(Protocol):
@@ -64,8 +64,25 @@ def filter_virtual_keys_visible_to_actor(
     return [k for k in keys if _actor_owns_vkey(k, actor_user_id) and not k.is_system]
 
 
+def assert_vkey_team_header_compatible(
+    bound_team_id: UUID,
+    x_team_id: str | None,
+) -> None:
+    """``sk-gw-*`` 已绑定团队；非空且冲突的 ``X-Team-Id`` 视为客户端误用。"""
+    trimmed = (x_team_id or "").strip()
+    if not trimmed:
+        return
+    try:
+        header_team_id = UUID(trimmed)
+    except ValueError as exc:
+        raise GatewayTeamHeaderInvalidError(trimmed) from exc
+    if header_team_id != bound_team_id:
+        raise GatewayVkeyTeamHeaderMismatchError()
+
+
 __all__ = [
     "VirtualKeyAccessView",
     "assert_virtual_key_accessible_by_actor",
+    "assert_vkey_team_header_compatible",
     "filter_virtual_keys_visible_to_actor",
 ]

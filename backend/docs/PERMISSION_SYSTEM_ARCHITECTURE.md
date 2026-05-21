@@ -255,7 +255,7 @@ class PermissionContext:
 `PermissionContext` 由认证依赖显式设置：
 
 - `get_current_user` / `get_current_user_optional_with_anonymous`（含 `team_ids`）
-- `resolve_current_team` / `attach_optional_team_from_header`（`merge_team_into_permission_context`，保留 `team_ids`）
+- `resolve_current_team` / Chat 请求体 `gateway_team_id` → `merge_optional_gateway_team`（`install_management_team_context`，保留 `team_ids`）
 - Gateway `/v1/*`：`bearer_vkey_auth` / `bearer_vkey_or_apikey_auth`（`build_permission_context_with_team_ids`）
 - 后台任务：`build_permission_context_with_team_ids`（Listing Studio、MCP 视频工具等）
 
@@ -396,13 +396,13 @@ async def get_agent(
 
 - **数据库**（权威）：租户行在 `gateway_models.tenant_id`；系统行在 `system_gateway_models`（无 `tenant_id`）。`GatewayModelRepository.list_for_tenant` 合并租户行与 system 行（同名时租户行优先）。
 - **配置同步**：`config_catalog_sync` 将 `app.toml` 的 `models.available` 幂等写入 `system_gateway_models`；`tags.managed_by == "config"` 表示配置托管。`POST /api/v1/gateway/catalog/reload-from-config`（`AdminUser`）触发同步并重载 LiteLLM Router。
-- **团队自建**：`POST /api/v1/gateway/models` 在当前工作区（`tenant_id` = 团队 UUID）下创建租户行。
+- **团队自建**：`POST /api/v1/gateway/teams/{team_id}/models` 在当前工作区（`tenant_id` = 团队 UUID）下创建租户行。
 
 **路由（GatewayRoute）**
 
 - **仅数据库**：租户路由 `gateway_routes.tenant_id`；系统路由 `system_gateway_routes`。`GatewayRouteRepository.list_for_tenant` 返回租户路由；解析时与 system 回退合并。写操作后 `reload_litellm_router`。
 
-**与聊天选模型的关系**：聊天侧「可用模型」来自系统目录（`ModelCatalogPort.list_visible_models`）+ personal team `gateway_models`（`list_personal_models_for_selector`）；统一经 `GET /api/v1/gateway/models/available`。团队控制台列表为 `GET /gateway/models`（`CurrentTeam`）。
+**与聊天选模型的关系**：聊天侧「可用模型」来自系统目录（`ModelCatalogPort.list_visible_models`）+ personal team `gateway_models`（`list_personal_models_for_selector`）；统一经 `GET /api/v1/gateway/models/available`。团队控制台列表为 `GET /api/v1/gateway/teams/{team_id}/models`（`CurrentTeam`）。
 
 ```mermaid
 flowchart LR
@@ -427,13 +427,13 @@ flowchart LR
 
 **模型列表**：区分 `team_id` 是否为空（系统全局 vs 当前团队）；`name`、`real_model`、`provider`、`capability`、`enabled`；`weight`、RPM/TPM 限制（若有）；`tags.managed_by == config` 时标明「配置托管」；若产品需要可展示连通性字段（如 `last_test_status` / `last_test_reason` / `last_tested_at`）。
 
-**预设目录**：`GET /api/v1/gateway/models/presets` 优先已同步 DB 的配置托管行，否则回退 `get_app_config().models.available`；用于「从目录点选创建团队模型」类 UI。
+**预设目录**：`GET /api/v1/gateway/teams/{team_id}/models/presets` 优先已同步 DB 的配置托管行，否则回退 `get_app_config().models.available`；用于「从目录点选创建团队模型」类 UI。
 
 **路由列表**：`virtual_model`、`primary_models`、三类 `fallbacks_*`、`strategy`、`retry_policy`、`enabled`；同样区分系统路由与团队路由（`team_id`）。
 
 ### 操作权限
 
-**团队上下文**：`/api/v1/gateway/*` 经 `resolve_current_team`（`domains/tenancy/presentation/team_dependencies.py`）；**匿名用户 401**；须为可解析团队的已认证用户（`X-Team-Id`、路径 `team_id`、默认 personal team 等由 `TenancyManagementTeamResolveUseCase` 解析）。
+**团队上下文**：`/api/v1/gateway/teams/{team_id}/*` 经 `resolve_current_team`（`domains/tenancy/presentation/team_dependencies.py`）；**匿名用户 401**；路径 `team_id` 优先于 legacy `X-Team-Id`，缺省 personal team（`TenancyManagementTeamResolveUseCase`）。
 
 **API 依赖**
 
