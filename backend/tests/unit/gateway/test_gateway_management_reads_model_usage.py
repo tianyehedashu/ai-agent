@@ -10,6 +10,7 @@ import uuid
 import pytest
 
 from domains.gateway.application.management.reads import GatewayManagementReadService
+from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.presentation.schemas.common import PlatformCredentialStatItem
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
@@ -104,6 +105,43 @@ async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -
     assert raw["items"][0]["workspace"]["requests"] == 2
     assert raw["items"][0]["user"]["requests"] == 1
     assert raw["items"][1]["route_name"] == "beta-model"
+
+
+@pytest.mark.asyncio
+async def test_aggregate_gateway_model_route_usage_member_workspace_axis_filtered() -> None:
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    team_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+    ctx = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="member",
+        user_id=member_id,
+        is_platform_admin=False,
+    )
+    captured: list[UsageAxis] = []
+
+    async def _route_axis(axis, _names, _s, _e):
+        captured.append(axis)
+        return {}
+
+    async def _dep_axis(axis, _ids, _s, _e):
+        return {}
+
+    svc._logs.aggregate_by_route_names_by_axis = AsyncMock(side_effect=_route_axis)
+    svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock(side_effect=_dep_axis)
+
+    m1 = SimpleNamespace(id=uuid.uuid4(), name="alpha-model")
+    with patch(
+        "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
+        new=AsyncMock(return_value=[m1]),
+    ):
+        await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
+
+    ws_axes = [a for a in captured if a.is_workspace()]
+    assert len(ws_axes) >= 1
+    assert all(a.member_user_id == member_id for a in ws_axes)
 
 
 @pytest.mark.asyncio

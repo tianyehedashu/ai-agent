@@ -22,11 +22,27 @@ class VirtualKeyAccessView(Protocol):
     created_by_user_id: UUID | None
 
 
+def actor_owns_non_system_vkey(
+    *,
+    created_by_user_id: UUID | None,
+    actor_user_id: UUID,
+    is_system: bool,
+) -> bool:
+    """非系统 vkey 且创建者为 actor（日志可见性、管理面访问共用）。"""
+    return not is_system and created_by_user_id == actor_user_id
+
+
 def _actor_owns_vkey(
     record: VirtualKeyAccessView,
     actor_user_id: UUID | None,
 ) -> bool:
-    return actor_user_id is not None and record.created_by_user_id == actor_user_id
+    if actor_user_id is None:
+        return False
+    return actor_owns_non_system_vkey(
+        created_by_user_id=record.created_by_user_id,
+        actor_user_id=actor_user_id,
+        is_system=record.is_system,
+    )
 
 
 def assert_virtual_key_accessible_by_actor(
@@ -61,7 +77,7 @@ def filter_virtual_keys_visible_to_actor(
     """按创建者过滤 vkey 列表（与 ``assert_virtual_key_accessible_by_actor`` 可见集合一致）。"""
     if actor_user_id is None:
         return []
-    return [k for k in keys if _actor_owns_vkey(k, actor_user_id) and not k.is_system]
+    return [k for k in keys if _actor_owns_vkey(k, actor_user_id)]
 
 
 def assert_vkey_team_header_compatible(
@@ -82,6 +98,7 @@ def assert_vkey_team_header_compatible(
 
 __all__ = [
     "VirtualKeyAccessView",
+    "actor_owns_non_system_vkey",
     "assert_virtual_key_accessible_by_actor",
     "assert_vkey_team_header_compatible",
     "filter_virtual_keys_visible_to_actor",

@@ -344,6 +344,36 @@ class TestGatewayManagementApi:
         )
         assert denied.status_code == 403, denied.text
 
+        filtered_other_vkey = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/logs",
+            params={
+                "usage_aggregation": "workspace",
+                "vkey_id": str(owner_key.id),
+                "page_size": 50,
+                "page": 1,
+            },
+            headers=team_headers,
+        )
+        assert filtered_other_vkey.status_code == 200, filtered_other_vkey.text
+        other_body = filtered_other_vkey.json()
+        assert other_body["total"] == 0
+        assert other_body["items"] == []
+
+        filtered_own_vkey = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/logs",
+            params={
+                "usage_aggregation": "workspace",
+                "vkey_id": str(member_key.id),
+                "page_size": 50,
+                "page": 1,
+            },
+            headers=team_headers,
+        )
+        assert filtered_own_vkey.status_code == 200, filtered_own_vkey.text
+        own_body = filtered_own_vkey.json()
+        assert own_body["total"] == 1
+        assert {item["id"] for item in own_body["items"]} == {str(log_member_vkey)}
+
     @pytest.mark.asyncio
     async def test_list_model_presets_filter_by_provider(
         self,

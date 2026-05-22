@@ -19,13 +19,16 @@ from domains.gateway.domain.policies.usage_log_visibility import (
     UsageLogAccessSnapshot,
     member_can_view_request_log_record,
     member_requires_request_log_detail_filter,
+    snapshot_is_team_member_only,
     usage_log_access_from_management_ctx,
     workspace_axis_member_user_id,
 )
+from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 
 __all__ = [
     "SystemModelVisibilitySnapshot",
     "UsageLogAccessSnapshot",
+    "actor_owns_non_system_vkey",
     "assert_platform_admin",
     "assert_system_credential_mutation_allowed",
     "registry_kind_for_merged_row",
@@ -34,6 +37,7 @@ __all__ = [
     "credential_visible_in_tenant",
     "member_can_view_request_log_record",
     "member_requires_request_log_detail_filter",
+    "snapshot_is_team_member_only",
     "usage_log_access_from_management_ctx",
     "visible_system_model_ids",
     "workspace_axis_member_user_id",

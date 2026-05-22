@@ -40,7 +40,10 @@ class VirtualKeyRepository:
         team_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> bool:
-        """该 vkey 是否属于指定团队下由该用户创建的非系统 Key（用于成员读单条日志）。"""
+        """该 vkey 是否属于指定团队下由该用户创建的非系统 Key。
+
+        语义同 ``virtual_key_access.actor_owns_non_system_vkey``；新调用方优先 ``get`` + 域纯函数。
+        """
         stmt = (
             select(GatewayVirtualKey.id)
             .where(

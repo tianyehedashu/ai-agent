@@ -160,7 +160,12 @@ async def test_get_request_log_member_allows_own_vkey_or_own_platform_sk() -> No
         user_id=member_id,
         is_platform_admin=False,
     )
-    svc._vkeys.is_non_system_vkey_owned_by_user_on_team = AsyncMock(return_value=True)
+    own_vkey = SimpleNamespace(
+        tenant_id=team_id,
+        created_by_user_id=member_id,
+        is_system=False,
+    )
+    svc._vkeys.get = AsyncMock(return_value=own_vkey)
 
     rec_vkey = SimpleNamespace(vkey_id=my_vkey_id, user_id=uuid.uuid4())
     svc._logs.get_by_axis = AsyncMock(return_value=rec_vkey)
@@ -189,7 +194,12 @@ async def test_get_request_log_member_denies_other_vkey_and_other_platform_sk() 
         user_id=member_id,
         is_platform_admin=False,
     )
-    svc._vkeys.is_non_system_vkey_owned_by_user_on_team = AsyncMock(return_value=False)
+    other_vkey = SimpleNamespace(
+        tenant_id=team_id,
+        created_by_user_id=uuid.uuid4(),
+        is_system=False,
+    )
+    svc._vkeys.get = AsyncMock(return_value=other_vkey)
 
     rec_other_vkey = SimpleNamespace(vkey_id=other_vkey_id, user_id=member_id)
     svc._logs.get_by_axis = AsyncMock(return_value=rec_other_vkey)
@@ -202,8 +212,8 @@ async def test_get_request_log_member_denies_other_vkey_and_other_platform_sk() 
         await svc.get_request_log(ctx, log_id, usage_aggregation=UsageAggregation.WORKSPACE)
 
 
-def test_resolve_usage_axis_member_only_when_no_vkey_filter() -> None:
-    """``_resolve_usage_axis`` 仅当 (普通成员 + workspace + vkey_id 未指定) 时附加 member_user_id。"""
+def test_resolve_usage_axis_member_keeps_filter_when_vkey_filter_set() -> None:
+    """成员 workspace 轴在指定 ``vkey_id`` 时仍附加 member_user_id（防列表越权）。"""
     team_id = uuid.uuid4()
     uid = uuid.uuid4()
     ctx_member = ManagementTeamContext(
@@ -222,7 +232,7 @@ def test_resolve_usage_axis_member_only_when_no_vkey_filter() -> None:
     axis2 = GatewayManagementReadService._resolve_usage_axis(
         ctx_member, UsageAggregation.WORKSPACE, vkey_id=uuid.uuid4()
     )
-    assert axis2.is_workspace() and axis2.member_user_id is None
+    assert axis2.is_workspace() and axis2.member_user_id == uid
 
     axis3 = GatewayManagementReadService._resolve_usage_axis(
         ctx_member, UsageAggregation.USER

@@ -15,7 +15,12 @@ if TYPE_CHECKING:
 
 
 def usage_axis_base_clauses(axis: UsageAxis) -> list[ColumnElement[bool]]:
-    """生成基础 WHERE 子句（不含时间窗等其它维度）。"""
+    """生成基础 WHERE 子句（不含时间窗等其它维度）。
+
+    workspace 轴 ``member_user_id`` 子约束（EXISTS 自有非系统 vkey / 本人 platform 入站）
+    须与 ``domains.gateway.domain.policies.usage_log_visibility.member_can_view_request_log_record``
+    保持同步。
+    """
     if axis.kind == "workspace":
         if axis.team_id is None:
             raise ValueError("UsageAxis.workspace requires team_id")

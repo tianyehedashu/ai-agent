@@ -16,6 +16,7 @@ from domains.gateway.domain.policies.usage_log_visibility import (
 )
 from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.domain.usage_read_model import UsageAggregation
+from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 
 if TYPE_CHECKING:
     from domains.tenancy.domain.management_context import ManagementTeamContext
@@ -23,6 +24,11 @@ if TYPE_CHECKING:
 
 class GatewayUsageLogReadMixin:
     """``GatewayManagementReadService`` 的日志/用量读方法。"""
+
+    @staticmethod
+    def _workspace_axis_for_detail_fetch(ctx: ManagementTeamContext) -> UsageAxis:
+        """单条详情：先按团队宽轴取行，再由 policy 区分 404/403。"""
+        return UsageAxis.workspace(ctx.team_id)
 
     @staticmethod
     def _resolve_usage_axis(
@@ -71,20 +77,26 @@ class GatewayUsageLogReadMixin:
         *,
         usage_aggregation: UsageAggregation,
     ) -> Any | None:
-        if usage_aggregation == UsageAggregation.USER:
-            axis = UsageAxis.user(ctx.user_id)
-        else:
-            axis = UsageAxis.workspace(ctx.team_id)
+        axis = (
+            self._resolve_usage_axis(ctx, UsageAggregation.USER)
+            if usage_aggregation == UsageAggregation.USER
+            else self._workspace_axis_for_detail_fetch(ctx)
+        )
         record = await self._logs.get_by_axis(axis, log_id)
         if record is None or usage_aggregation == UsageAggregation.USER:
             return record
         snapshot = usage_log_access_from_management_ctx(ctx)
         vkey_owned = False
         if record.vkey_id is not None:
-            vkey_owned = await self._vkeys.is_non_system_vkey_owned_by_user_on_team(
-                record.vkey_id,
-                team_id=ctx.team_id,
-                user_id=ctx.user_id,
+            vkey = await self._vkeys.get(record.vkey_id)
+            vkey_owned = (
+                vkey is not None
+                and vkey.tenant_id == ctx.team_id
+                and actor_owns_non_system_vkey(
+                    created_by_user_id=vkey.created_by_user_id,
+                    actor_user_id=ctx.user_id,
+                    is_system=vkey.is_system,
+                )
             )
         if not member_can_view_request_log_record(
             snapshot,
@@ -129,7 +141,9 @@ class GatewayUsageLogReadMixin:
         models_sorted = sorted(models, key=lambda m: (m.name, str(m.id)))[:500]
         route_names = [m.name for m in models_sorted]
         model_ids = [m.id for m in models_sorted]
-        ws_axis = UsageAxis.workspace(ctx.team_id)
+        snapshot = usage_log_access_from_management_ctx(ctx)
+        member_user_id = workspace_axis_member_user_id(snapshot)
+        ws_axis = UsageAxis.workspace(ctx.team_id, member_user_id=member_user_id)
         u_axis = UsageAxis.user(ctx.user_id)
         by_ws_route = await self._logs.aggregate_by_route_names_by_axis(
             ws_axis, route_names, start, end

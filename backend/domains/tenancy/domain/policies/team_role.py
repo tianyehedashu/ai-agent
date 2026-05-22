@@ -26,6 +26,21 @@ def is_team_admin_or_platform(team: ManagementTeamContext) -> bool:
     )
 
 
+def is_plain_team_member_role(*, is_platform_admin: bool, team_role: str) -> bool:
+    """普通团队成员角色（非 owner/admin，且非平台 admin）；快照与 ``ManagementTeamContext`` 共用。"""
+    if is_platform_admin:
+        return False
+    return team_role == TeamRole.MEMBER.value
+
+
+def is_team_member_only(team: ManagementTeamContext) -> bool:
+    """普通团队成员（非 owner/admin，且非平台 admin）。"""
+    return is_plain_team_member_role(
+        is_platform_admin=team.is_platform_admin,
+        team_role=team.team_role,
+    )
+
+
 def is_team_owner_or_platform(team: ManagementTeamContext) -> bool:
     return team.is_platform_admin or team.team_role == TeamRole.OWNER.value
 
@@ -58,7 +73,9 @@ __all__ = [
     "TeamRole",
     "assert_gateway_admin",
     "assert_team_role",
+    "is_plain_team_member_role",
     "is_platform_admin",
     "is_team_admin_or_platform",
+    "is_team_member_only",
     "is_team_owner_or_platform",
 ]
