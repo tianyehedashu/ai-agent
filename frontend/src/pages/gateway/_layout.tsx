@@ -63,6 +63,7 @@ const FLAT_GATEWAY_ROUTES = ['platform-stats', 'guide'] as const
 
 const TEAM_NAV_SEGMENTS = new Set([
   'overview',
+  'stats',
   'keys',
   'credentials',
   'models',
@@ -117,6 +118,7 @@ export default function GatewayLayout(): React.JSX.Element {
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
       { to: gatewayTeamNavHref(teamId, 'overview'), label: '概览', icon: BarChart3, end: true },
+      { to: gatewayTeamNavHref(teamId, 'stats'), label: '调用统计', icon: LineChart },
       { to: '/gateway/guide', label: '调用指南', icon: BookOpen },
       { to: gatewayTeamNavHref(teamId, 'keys'), label: '虚拟 Key', icon: Key },
       {
@@ -137,7 +139,7 @@ export default function GatewayLayout(): React.JSX.Element {
         ? [{ to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt }]
         : []),
       { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText },
-      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队成员', icon: Users },
+      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队管理', icon: Users },
     ]
     if (isPlatformAdmin) {
       base.push(
@@ -182,7 +184,7 @@ export default function GatewayLayout(): React.JSX.Element {
                 : null
             return (
               <NavLink
-                key={it.to}
+                key={`${it.label}-${it.to}`}
                 to={it.to}
                 end={it.end}
                 className={({ isActive }) =>

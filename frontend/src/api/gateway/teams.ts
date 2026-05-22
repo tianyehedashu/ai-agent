@@ -39,6 +39,13 @@ export interface TeamMember {
   user_name?: string | null
 }
 
+/** 按邮箱查找用户（团队 admin 添加成员前） */
+export interface TeamMemberLookup {
+  id: string
+  email: string
+  name: string | null
+}
+
 /** Teams 资源 API */
 export const teamsApi = {
   /** 列出当前用户可见的全部团队（含 personal + shared） */
@@ -46,13 +53,21 @@ export const teamsApi = {
   /** 创建共享团队（personal 团队由后端自动 provisioning） */
   createTeam: (body: { name: string; slug?: string }) =>
     apiClient.post<GatewayTeam>(`${GATEWAY_API_BASE}/teams`, body),
+  /** 更新团队（仅 admin+） */
+  updateTeam: (id: string, body: { name?: string; settings?: Record<string, unknown> }) =>
+    apiClient.patch<GatewayTeam>(`${GATEWAY_API_BASE}/teams/${id}`, body),
   /** 删除团队（仅 owner） */
   deleteTeam: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/teams/${id}`),
   /** 列出指定团队成员 */
   listMembers: (teamId: string) => apiClient.get<TeamMember[]>(teamGatewayPath(teamId, '/members')),
+  /** 按邮箱查找已注册用户（仅 admin+） */
+  lookupMemberByEmail: (teamId: string, email: string) =>
+    apiClient.get<TeamMemberLookup>(teamGatewayPath(teamId, '/members/lookup'), { email }),
   /** 添加成员（仅 owner / admin） */
   addMember: (teamId: string, body: { user_id: string; role: string }) =>
     apiClient.post<TeamMember>(teamGatewayPath(teamId, '/members'), body),
+  /** 当前用户退出团队 */
+  leaveTeam: (teamId: string) => apiClient.delete<unknown>(teamGatewayPath(teamId, '/members/me')),
   /** 移除成员（仅 owner / admin；不可移除自己） */
   removeMember: (teamId: string, userId: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/members/${userId}`)),

@@ -5,16 +5,17 @@ from __future__ import annotations
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
+from domains.identity.application.user_use_case import UserUseCase
 from domains.identity.presentation.deps import RequiredAuthUser
+from domains.tenancy.application.team_member_reads import EnrichedTeamMember, enrich_team_members
 from domains.tenancy.application.team_service import TeamService
-from domains.tenancy.infrastructure.models.team import TeamMember
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamMemberAdd,
+    TeamMemberLookupResponse,
     TeamMemberResponse,
     TeamResponse,
     TeamUpdate,
@@ -27,6 +28,7 @@ from domains.tenancy.presentation.team_dependencies import (
 from libs.db.database import get_db
 from libs.exceptions import TeamNotFoundError
 from libs.iam.team_http import map_team_access_exception_to_http
+from libs.identity_bridge_deps import get_user_use_case
 
 router = APIRouter(tags=["Tenancy / Teams"])
 
@@ -36,25 +38,13 @@ def _team_service(db: Annotated[AsyncSession, Depends(get_db)]) -> TeamService:
 
 
 TeamSvc = Annotated[TeamService, Depends(_team_service)]
+UserSvc = Annotated[UserUseCase, Depends(get_user_use_case)]
 
 
-async def _team_member_responses(
-    db: AsyncSession,
-    members: list[TeamMember],
+def _to_member_responses(
+    enriched: list[EnrichedTeamMember],
 ) -> list[TeamMemberResponse]:
-    if not members:
-        return []
-    users = await SQLAlchemyUserRepository(db).list_by_ids([m.user_id for m in members])
-    users_by_id = {user.id: user for user in users}
-    out: list[TeamMemberResponse] = []
-    for member in members:
-        resp = TeamMemberResponse.model_validate(member)
-        user = users_by_id.get(member.user_id)
-        if user is not None:
-            resp.user_email = user.email
-            resp.user_name = user.name
-        out.append(resp)
-    return out
+    return [TeamMemberResponse.model_validate(item) for item in enriched]
 
 
 @router.get("/teams", response_model=list[TeamResponse])
@@ -76,11 +66,11 @@ async def list_my_teams(
 async def create_team(
     body: TeamCreate,
     current_user: RequiredAuthUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: TeamSvc,
 ) -> TeamResponse:
     if current_user.is_anonymous:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Anonymous cannot create team")
-    team = await TeamService(db).create_team(
+    team = await svc.create_team(
         name=body.name,
         owner_user_id=uuid.UUID(current_user.id),
         slug=body.slug,
@@ -124,10 +114,28 @@ async def list_team_members(
     team_id: uuid.UUID,
     team: RequiredTeamMember,
     svc: TeamSvc,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    user_service: UserSvc,
 ) -> list[TeamMemberResponse]:
     members = await svc.list_team_members(team_id)
-    return await _team_member_responses(db, members)
+    enriched = await enrich_team_members(members, user_service)
+    return _to_member_responses(enriched)
+
+
+@router.get("/teams/{team_id}/members/lookup", response_model=TeamMemberLookupResponse)
+async def lookup_user_for_team_invite(
+    team_id: uuid.UUID,
+    team: RequiredTeamAdmin,
+    email: Annotated[str, Query(min_length=3, max_length=320)],
+    user_service: UserSvc,
+) -> TeamMemberLookupResponse:
+    """按邮箱查找已注册用户（团队 admin+，用于添加成员）。"""
+    _ = team_id
+    summary = await user_service.lookup_user_by_email(email)
+    return TeamMemberLookupResponse(
+        id=uuid.UUID(summary.id),
+        email=summary.email,
+        name=summary.name,
+    )
 
 
 @router.post("/teams/{team_id}/members", response_model=TeamMemberResponse)
@@ -135,10 +143,11 @@ async def add_team_member(
     team_id: uuid.UUID,
     body: TeamMemberAdd,
     team: RequiredTeamAdmin,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: TeamSvc,
+    user_service: UserSvc,
 ) -> TeamMemberResponse:
     try:
-        member = await TeamService(db).add_member(team_id, body.user_id, body.role)
+        member = await svc.add_member(team_id, body.user_id, body.role)
     except TeamNotFoundError as exc:
         mapped = map_team_access_exception_to_http(exc)
         if mapped is None:
@@ -149,8 +158,8 @@ async def add_team_member(
         raise mapped from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    enriched = await _team_member_responses(db, [member])
-    return enriched[0]
+    enriched = await enrich_team_members([member], user_service)
+    return _to_member_responses(enriched)[0]
 
 
 @router.delete(
@@ -161,11 +170,11 @@ async def remove_self_from_team(
     team_id: uuid.UUID,
     team: RequiredTeamMember,
     current_user: RequiredAuthUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: TeamSvc,
 ) -> None:
     """当前用户退出所在团队（personal 的 owner 不可退出，与 remove_member 规则一致）。"""
     try:
-        await TeamService(db).remove_member(team_id, uuid.UUID(current_user.id))
+        await svc.remove_member(team_id, uuid.UUID(current_user.id))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -175,9 +184,9 @@ async def remove_team_member(
     team_id: uuid.UUID,
     user_id: uuid.UUID,
     team: RequiredTeamAdmin,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: TeamSvc,
 ) -> None:
     try:
-        await TeamService(db).remove_member(team_id, user_id)
+        await svc.remove_member(team_id, user_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

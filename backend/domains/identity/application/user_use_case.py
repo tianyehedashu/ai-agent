@@ -4,12 +4,14 @@ User Use Case - 用户用例
 编排用户相关的操作，包括注册、认证、Token 管理。
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 import uuid
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
     assert_bootstrap_revoke_admin,
@@ -18,7 +20,6 @@ from domains.identity.domain.policies.platform_role_policy import (
 from domains.identity.domain.rbac import Role
 from domains.identity.domain.repositories.user_repository import UserRepository
 from domains.identity.domain.services.password_service import PasswordService
-from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.infrastructure.authentication import get_jwt_strategy
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
@@ -155,6 +156,15 @@ class UserUseCase:
         if user is None:
             raise NotFoundError("User", email.strip())
         return _user_to_summary(user)
+
+    async def list_summaries_by_ids(
+        self, user_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, UserSummary]:
+        """按 ID 批量返回用户摘要（不含敏感字段）。"""
+        if not user_ids:
+            return {}
+        users = await self.user_repo.list_by_ids(user_ids)
+        return {user.id: _user_to_summary(user) for user in users}
 
     async def bootstrap_set_admin_by_email(self, email: str, *, revoke: bool = False) -> UserSummary:
         """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""

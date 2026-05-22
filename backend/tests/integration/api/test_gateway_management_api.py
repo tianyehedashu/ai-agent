@@ -75,6 +75,94 @@ class TestGatewayManagementApi:
         assert "Personal teams cannot have members other than the owner" in r.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_lookup_member_by_email_as_admin(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        invitee = User(
+            email=f"lookup_target_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Lookup Target",
+        )
+        db_session.add(invitee)
+        await db_session.commit()
+        await db_session.refresh(invitee)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Lookup Team", owner_user_id=test_user.id)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/lookup",
+            headers=auth_headers,
+            params={"email": invitee.email},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["id"] == str(invitee.id)
+        assert data["email"] == invitee.email
+        assert data["name"] == invitee.name
+        assert "role" not in data
+
+    @pytest.mark.asyncio
+    async def test_lookup_member_by_email_forbidden_for_member(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"lookup_member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Lookup Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Lookup Forbidden Team", owner_user_id=test_user.id)
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/lookup",
+            headers=member_headers,
+            params={"email": test_user.email},
+        )
+        assert r.status_code == 403, r.text
+
+    @pytest.mark.asyncio
+    async def test_lookup_member_by_email_not_found(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Lookup Not Found Team", owner_user_id=test_user.id)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/lookup",
+            headers=auth_headers,
+            params={"email": f"no_such_{uuid.uuid4()}@example.com"},
+        )
+        assert r.status_code == 404, r.text
+
+    @pytest.mark.asyncio
     async def test_get_log_detail(
         self,
         dev_client: AsyncClient,

@@ -22,6 +22,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
@@ -32,7 +33,7 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   const navigate = useNavigate()
   const location = useLocation()
   const { currentUser } = useUserStore()
-  const { currentTeamId, setCurrentTeamId, setTeams } = useGatewayTeamStore()
+  const { currentTeamId, setTeams } = useGatewayTeamStore()
   const isAnonymous = currentUser?.is_anonymous ?? true
 
   const { data: teams } = useQuery({
@@ -98,15 +99,8 @@ export default function TeamSwitcher(): React.JSX.Element | null {
                   key={team.id}
                   value={`${team.name} ${team.slug}`}
                   onSelect={() => {
-                    setCurrentTeamId(team.id)
                     setOpen(false)
-                    void queryClient.invalidateQueries({ queryKey: ['gateway'] })
-
-                    const match = /^\/gateway\/teams\/[^/]+(\/.*)?$/.exec(location.pathname)
-                    if (match) {
-                      const suffix = match[1] || '/overview'
-                      navigate(`/gateway/teams/${team.id}${suffix}`)
-                    }
+                    switchGatewayTeam(team.id, navigate, location, queryClient)
                   }}
                 >
                   <Check

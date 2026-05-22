@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
+
+JsonObject = dict[str, object]
 
 
 class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     slug: str | None = None
-    settings: dict[str, Any] | None = None
+    settings: JsonObject | None = None
 
 
 class TeamUpdate(BaseModel):
     name: str | None = None
-    settings: dict[str, Any] | None = None
+    settings: JsonObject | None = None
 
 
 class TeamResponse(BaseModel):
@@ -26,7 +27,7 @@ class TeamResponse(BaseModel):
     slug: str
     kind: str
     owner_user_id: uuid.UUID
-    settings: dict[str, Any] | None = None
+    settings: JsonObject | None = None
     is_active: bool = True
     created_at: datetime
     team_role: str | None = None
@@ -53,9 +54,18 @@ class TeamMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeamMemberLookupResponse(BaseModel):
+    """按邮箱查找用户（团队 admin 添加成员前，不暴露平台 role）。"""
+
+    id: uuid.UUID
+    email: str
+    name: str | None = None
+
+
 __all__ = [
     "TeamCreate",
     "TeamMemberAdd",
+    "TeamMemberLookupResponse",
     "TeamMemberResponse",
     "TeamResponse",
     "TeamUpdate",
