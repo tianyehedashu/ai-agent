@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.proxy_use_case import ProxyContext
+from domains.gateway.application.proxy_context import ProxyContext
 from domains.gateway.domain.proxy_policy import rate_limit_target
 from domains.gateway.domain.proxy_rate_limit_port import RateLimitUsageReader
 from domains.gateway.domain.proxy_ratelimit_headers import (

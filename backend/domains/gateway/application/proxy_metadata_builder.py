@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-    from domains.gateway.application.proxy_use_case import ProxyContext
+    from domains.gateway.application.proxy_context import ProxyContext
 
 
 @dataclass(frozen=True, slots=True)

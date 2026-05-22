@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.application.proxy_use_case import ProxyContext
+from domains.gateway.application.proxy_context import ProxyContext
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 

@@ -232,7 +232,7 @@ flowchart TD
 
 ### 4.2 代理调用前：注入 metadata
 
-`proxy_use_case` 在 `_build_metadata` 中调用 `attach_downstream_pricing_metadata()`：
+`ProxyMetadataBuilder.build` 在拼装 metadata 时调用 `attach_downstream_pricing_metadata()`：
 
 | metadata 键 | 用途 |
 |-------------|------|

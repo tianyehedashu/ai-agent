@@ -37,7 +37,7 @@ from domains.gateway.infrastructure.repositories.budget_repository import Budget
 from libs.db.database import get_session_context
 
 if TYPE_CHECKING:
-    from domains.gateway.application.proxy_use_case import ProxyContext
+    from domains.gateway.application.proxy_context import ProxyContext
 
 
 def to_response_dict(obj: Any) -> dict[str, Any]:

@@ -136,8 +136,12 @@ async def test_anthropic_messages_passes_body_fields_to_router(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", no_direct)
-    monkeypatch.setattr(use_case, "_router_anthropic_messages", fake_router_anthropic)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", no_direct
+    )
+    monkeypatch.setattr(
+        use_case.litellm, "router_anthropic_messages", fake_router_anthropic
+    )
 
     async def fake_metadata(
         _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
@@ -151,7 +155,7 @@ async def test_anthropic_messages_passes_body_fields_to_router(
                         meta[key] = val
         return meta
 
-    monkeypatch.setattr(use_case, "_build_metadata", fake_metadata)
+    monkeypatch.setattr(use_case.metadata_builder, "build", fake_metadata)
 
     async def noop_entitlement(*_a: object, **_k: object) -> None:
         return None
@@ -217,8 +221,12 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", no_direct)
-    monkeypatch.setattr(use_case, "_router_anthropic_messages", fake_router_anthropic)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", no_direct
+    )
+    monkeypatch.setattr(
+        use_case.litellm, "router_anthropic_messages", fake_router_anthropic
+    )
 
     async def fake_metadata(
         _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
@@ -226,7 +234,7 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
         _ = user_kwargs
         return {}
 
-    monkeypatch.setattr(use_case, "_build_metadata", fake_metadata)
+    monkeypatch.setattr(use_case.metadata_builder, "build", fake_metadata)
 
     async def noop_entitlement(*_a: object, **_k: object) -> None:
         return None

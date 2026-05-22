@@ -1,9 +1,8 @@
 """Chat / Anthropic Messages 代理入站公共流水线（校验、预算、kwargs 准备）。
 
 校验/限流/预算/entitlement 经 :class:`ProxyGuard` 公开 API 完成（``check_*`` /
-``release_*``），不再访问 ``ProxyUseCase`` 的 ``_``-前缀方法；下游 LiteLLM 调度
-（kwargs 准备、router miss 判定、直连降级判定）仍由 ``ProxyUseCase`` 内部 helper
-负责，本模块仅做编排穿透。
+``release_*``）；LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_kwargs`` 拼装。
+本模块仅做入站编排穿透。
 """
 
 from __future__ import annotations
@@ -77,7 +76,7 @@ async def prepare_chat_proxy_request(
         await guard.release_budget_reservations(reservations)
         raise
 
-    kwargs = await use_case._prepare_litellm_kwargs(ctx, body)
+    kwargs = await use_case.prepare_litellm_kwargs(ctx, body)
     meta = kwargs.get("metadata")
     metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}
     stream = bool(body.get("stream"))
@@ -97,6 +96,5 @@ async def prepare_chat_proxy_request(
 __all__ = [
     "ChatProxyPrepared",
     "apply_stream_cost_defer_flag",
-    "invoke_router_with_direct_fallback",
     "prepare_chat_proxy_request",
 ]

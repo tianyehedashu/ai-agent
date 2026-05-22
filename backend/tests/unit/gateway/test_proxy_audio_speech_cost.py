@@ -121,7 +121,7 @@ async def test_audio_speech_proxy_uses_adapt_binary(
     monkeypatch.setattr(use_case, "_invoke_non_chat_with_router_fallback", fake_invoke)
     monkeypatch.setattr(
         use_case,
-        "_prepare_litellm_kwargs",
+        "prepare_litellm_kwargs",
         AsyncMock(
             return_value={
                 "model": "tts-1",

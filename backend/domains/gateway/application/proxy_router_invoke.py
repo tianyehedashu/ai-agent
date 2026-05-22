@@ -5,17 +5,20 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
+
 if TYPE_CHECKING:
-    from domains.gateway.application.proxy_guard import BudgetReservation
-    from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+    from domains.gateway.application.proxy_context import ProxyContext
+    from domains.gateway.application.proxy_guard import BudgetReservation, ProxyGuard
 
 
 async def invoke_router_with_direct_fallback(
-    use_case: ProxyUseCase,
+    *,
+    guard: ProxyGuard,
+    litellm: ProxyLiteLLMClient,
     ctx: ProxyContext,
     model: str,
     reservations: list[BudgetReservation],
-    *,
     use_direct: bool,
     direct_call: Callable[[], Awaitable[Any]],
     router_call: Callable[[], Awaitable[Any]],
@@ -26,10 +29,9 @@ async def invoke_router_with_direct_fallback(
             return await direct_call()
         return await router_call()
     except Exception as exc:
-        guard = use_case.guard
-        if use_case._is_router_model_miss(
+        if ProxyLiteLLMClient.is_router_model_miss(
             exc
-        ) and await use_case._should_use_internal_direct_litellm(ctx, model):
+        ) and await litellm.should_use_internal_direct_litellm(ctx, model):
             try:
                 return await direct_call()
             except Exception:

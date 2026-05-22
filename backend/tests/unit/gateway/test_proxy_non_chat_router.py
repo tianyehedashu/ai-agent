@@ -67,31 +67,31 @@ def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
     [
         (
             "rerank",
-            "_direct_rerank",
+            "direct_rerank",
             "arerank",
             {"model": "cohere-rerank", "query": "q", "documents": ["a"]},
         ),
         (
             "moderation",
-            "_direct_moderation",
+            "direct_moderation",
             "amoderation",
             {"model": "text-moderation", "input": "hello"},
         ),
         (
             "video_generation",
-            "_direct_video_generation",
+            "direct_video_generation",
             "avideo_generation",
             {"model": "video-model", "prompt": "a cat"},
         ),
         (
             "image_generation",
-            "_direct_image_generation",
+            "direct_image_generation",
             "aimage_generation",
             {"model": "dall-e-3", "prompt": "a cat"},
         ),
         (
             "audio_transcription",
-            "_direct_transcription",
+            "direct_transcription",
             "atranscription",
             {"model": "whisper-1", "file": "audio.wav"},
         ),
@@ -120,14 +120,16 @@ async def test_non_chat_uses_router_not_direct_litellm(
         direct_called = True
         raise AssertionError("direct litellm must not be called when router succeeds")
 
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", no_direct
+    )
     monkeypatch.setattr(
         use_case,
-        "_prepare_litellm_kwargs",
+        "prepare_litellm_kwargs",
         AsyncMock(return_value={"model": body.get("model", ""), "metadata": {}}),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
-    monkeypatch.setattr(use_case, direct_method, block_direct)
+    monkeypatch.setattr(use_case.litellm, direct_method, block_direct)
 
     with patch(
         "domains.gateway.application.proxy_litellm_client.get_router",
@@ -156,10 +158,12 @@ async def test_audio_speech_uses_router_aspeech(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", no_direct
+    )
     monkeypatch.setattr(
         use_case,
-        "_prepare_litellm_kwargs",
+        "prepare_litellm_kwargs",
         AsyncMock(return_value={"model": "tts-1", "input": "hi", "metadata": {}}),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
@@ -192,10 +196,12 @@ async def test_non_chat_router_miss_falls_back_to_direct(
         calls.append(True)
         return len(calls) >= 2
 
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", direct_on_second_check)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", direct_on_second_check
+    )
     monkeypatch.setattr(
         use_case,
-        "_prepare_litellm_kwargs",
+        "prepare_litellm_kwargs",
         AsyncMock(return_value={"model": "cohere-rerank", "metadata": {}}),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
@@ -205,7 +211,7 @@ async def test_non_chat_router_miss_falls_back_to_direct(
     )
     router = MagicMock(arerank=router_fn)
     direct_rerank = AsyncMock(return_value={"fallback": True})
-    monkeypatch.setattr(use_case, "_direct_rerank", direct_rerank)
+    monkeypatch.setattr(use_case.litellm, "direct_rerank", direct_rerank)
 
     with patch(
         "domains.gateway.application.proxy_litellm_client.get_router",

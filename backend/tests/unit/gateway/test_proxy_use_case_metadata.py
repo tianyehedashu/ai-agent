@@ -1,4 +1,4 @@
-"""ProxyUseCase._build_metadata 安全与注入字段单测。"""
+"""ProxyMetadataBuilder.build 安全与注入字段单测（经 ProxyUseCase.metadata_builder）。"""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ async def test_build_metadata_ignores_user_gateway_prefix_keys(
         guardrail_enabled=True,
     )
     uc = ProxyUseCase(db_session)
-    meta = await uc._build_metadata(
+    meta = await uc.metadata_builder.build(
         ctx,
         user_kwargs={
             "metadata": {
@@ -161,7 +161,7 @@ async def test_build_metadata_verbose_sets_response_max_chars(
         guardrail_enabled=True,
     )
     uc = ProxyUseCase(db_session)
-    meta = await uc._build_metadata(ctx, user_kwargs=None)
+    meta = await uc.metadata_builder.build(ctx, user_kwargs=None)
     assert meta["gateway_store_full_messages"] is True
     assert meta["gateway_inbound_via"] == "vkey"
     assert meta["gateway_platform_api_key_id"] is None
@@ -195,7 +195,7 @@ async def test_build_metadata_apikey_inbound_sets_platform_key_id(
         platform_api_key_id=akid,
     )
     uc = ProxyUseCase(db_session)
-    meta = await uc._build_metadata(ctx, user_kwargs=None)
+    meta = await uc.metadata_builder.build(ctx, user_kwargs=None)
     assert meta["gateway_inbound_via"] == "apikey"
     assert meta["gateway_platform_api_key_id"] == str(akid)
     assert meta["gateway_vkey_id"] is None
@@ -251,7 +251,7 @@ async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
         guardrail_enabled=True,
     )
     uc = ProxyUseCase(db_session)
-    meta = await uc._build_metadata(ctx, user_kwargs={"model": "vm1"})
+    meta = await uc.metadata_builder.build(ctx, user_kwargs={"model": "vm1"})
     assert meta["gateway_route_snapshot"] == snap
 
 
@@ -300,7 +300,7 @@ async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
         guardrail_enabled=True,
     )
     uc = ProxyUseCase(db_session)
-    meta = await uc._build_metadata(ctx, user_kwargs={"model": "bare-model"})
+    meta = await uc.metadata_builder.build(ctx, user_kwargs={"model": "bare-model"})
     assert "gateway_route_snapshot" not in meta
 
 

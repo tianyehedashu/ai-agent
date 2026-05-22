@@ -48,7 +48,7 @@ from domains.gateway.infrastructure.repositories.budget_repository import Budget
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.application.proxy_use_case import ProxyContext
+    from domains.gateway.application.proxy_context import ProxyContext
 
 
 BudgetReservation = tuple[str, str | None, str, str | None]
@@ -238,7 +238,7 @@ class ProxyGuard:
 
         无匹配 plan = 默认放行；命中但任一桶耗尽抛 ``EntitlementPlanExhaustedError``。
         """
-        from domains.gateway.application.proxy_use_case import EntitlementReservationState
+        from domains.gateway.application.proxy_context import EntitlementReservationState
 
         ent_ctx = EntitlementContext(
             vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,

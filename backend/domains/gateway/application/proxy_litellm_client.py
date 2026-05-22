@@ -25,7 +25,7 @@ from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.application.proxy_use_case import ProxyContext
+    from domains.gateway.application.proxy_context import ProxyContext
 
 
 class ProxyLiteLLMClient:

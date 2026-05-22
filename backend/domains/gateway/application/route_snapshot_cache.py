@@ -1,4 +1,4 @@
-"""``gateway_route_snapshot`` 元数据短 TTL 缓存（降低 ``ProxyUseCase._build_metadata`` 热路径读库）。"""
+"""``gateway_route_snapshot`` 元数据短 TTL 缓存（降低 ``ProxyMetadataBuilder.build`` 热路径读库）。"""
 
 from __future__ import annotations
 

@@ -156,9 +156,11 @@ async def test_chat_failure_releases_all_request_reservations(
 
     monkeypatch.setattr(proxy_guard, "BudgetRepository", FakeBudgetRepository)
     monkeypatch.setattr(proxy_guard, "resolve_model_or_route", _none_resolve)
-    monkeypatch.setattr(use_case, "_should_use_internal_direct_litellm", use_direct)
-    monkeypatch.setattr(use_case, "_direct_chat_completion", fail_direct)
-    monkeypatch.setattr(use_case, "_prepare_litellm_kwargs", prepare_litellm_kwargs)
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", use_direct
+    )
+    monkeypatch.setattr(use_case.litellm, "direct_chat_completion", fail_direct)
+    monkeypatch.setattr(use_case, "prepare_litellm_kwargs", prepare_litellm_kwargs)
 
     ctx = ProxyContext(
         team_id=team_id,

@@ -12,7 +12,7 @@ from domains.gateway.application.pricing.upstream_cost_resolver import resolve_u
 if TYPE_CHECKING:
     from domains.gateway.application.budget_service import BudgetService
     from domains.gateway.application.entitlement_guard import EntitlementGuard
-    from domains.gateway.application.proxy_use_case import ProxyContext
+    from domains.gateway.application.proxy_context import ProxyContext
 
 
 def stream_usage_token_total(usage: dict[str, Any]) -> int:
