@@ -29,6 +29,7 @@ def test_deepseek_reasoner_builtin_reasoning() -> None:
     )
     assert tags["thinking_param"] == THINKING_PARAM_BUILTIN
     assert tags["supports_reasoning"] is True
+    assert tags["temperature_policy"] == "fixed_1"
 
 
 def test_qwen3_dashscope_enable_thinking() -> None:

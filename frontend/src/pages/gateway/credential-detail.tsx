@@ -41,6 +41,7 @@ import {
   getProviderSchema,
   providerLabel,
 } from '@/features/gateway-credentials/provider-schemas'
+import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -233,6 +234,9 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-6">
+        {cred.scope === 'system' && isPlatformAdmin ? (
+          <SystemCredentialVisibilityCard cred={cred} teamId={teamId} />
+        ) : null}
         <Card>
           <CardHeader>
             <CardTitle>凭据与密钥</CardTitle>
@@ -418,7 +422,11 @@ function CredentialLinkedModelsSection({
 }>): React.JSX.Element {
   const { data: linkedModels, isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'models', teamId, 'by-credential', credentialId],
-    queryFn: () => gatewayApi.listModels(teamId, { credential_id: credentialId }),
+    queryFn: () =>
+      gatewayApi.listModels(teamId, {
+        registry_scope: 'callable',
+        credential_id: credentialId,
+      }),
     enabled: credentialId.length > 0,
   })
   return (

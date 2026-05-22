@@ -29,7 +29,7 @@ from domains.gateway.infrastructure.models.pricing_downstream import DownstreamM
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
+from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.infrastructure.repositories.pricing_repository import (
     DownstreamPricingRepository,
 )
@@ -243,13 +243,17 @@ class PricingCatalogReadService:
         self,
         *,
         team_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         currency: DisplayCurrency,
     ) -> list[dict[str, Any]]:
         fx = build_static_fx_adapter()
         projector = build_money_projector(fx)
         svc = self._svc()
-        models = await GatewayModelRepository(self.session).list_for_tenant(
-            team_id, only_enabled=True
+        models = await list_merged_models_for_tenant(
+            self.session,
+            team_id,
+            only_enabled=True,
+            user_id=user_id,
         )
         out: list[dict[str, Any]] = []
         for model in models:

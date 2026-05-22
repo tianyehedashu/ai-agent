@@ -44,7 +44,7 @@ export function RouteWorkspace(): React.JSX.Element {
 
   const { data: models, isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'models', teamId],
-    queryFn: () => gatewayApi.listModels(teamId),
+    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'callable' }),
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 

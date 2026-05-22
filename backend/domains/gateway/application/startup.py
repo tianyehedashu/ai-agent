@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from bootstrap.config import settings
 from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+from domains.gateway.application.credential_env_audit import log_config_managed_api_base_drift
 from domains.gateway.infrastructure.router_singleton import get_router, reload_router
 from libs.db.database import get_session_context, get_session_factory
 from utils.logging import get_logger
@@ -67,6 +68,7 @@ async def run_gateway_startup(app: FastAPI) -> None:
                         route_report.virtual_model_shadowed_by_model[:5],
                     )
                 await session.commit()
+                await log_config_managed_api_base_drift(session, settings)
                 await reload_router(session)
         except Exception as exc:
             logger.warning("Gateway catalog startup sync failed: %s", exc, exc_info=True)

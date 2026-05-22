@@ -25,9 +25,10 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const [usageDays] = useState<UsagePeriodDays>(7)
 
   const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, '', credentialFilter),
+    queryKey: gatewayModelsListQueryKey(teamId, 'callable', '', credentialFilter),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
+        registry_scope: 'callable',
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       }),
   })

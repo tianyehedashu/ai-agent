@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.bridge_catalog import resolve_capabilities_for_bridge
+from domains.gateway.application.invocation_overrides import merge_invocation_overrides_into_body
 from domains.gateway.application.ports import (
     GatewayCallContext,
     GatewayResponse,
@@ -166,6 +168,15 @@ class GatewayBridge:
             if team_id is None:
                 team = await TeamService(session).ensure_personal_team(ctx.user_id)
                 team_id = team.id
+            if ctx.invocation_overrides is not None and model:
+                snap = await resolve_capabilities_for_bridge(
+                    session, model_id=model, billing_team_id=team_id
+                )
+                merge_invocation_overrides_into_body(
+                    body,
+                    ctx.invocation_overrides,
+                    capabilities=snap,
+                )
             vkey = await _ensure_system_vkey(session, team_id)
             proxy_ctx = ProxyContext(
                 team_id=team_id,

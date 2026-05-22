@@ -8,6 +8,7 @@ import { cn, formatRelativeTime } from '@/lib/utils'
 
 import { channelLabel, classifyFailureReason, formatUsageLine } from '../utils'
 import { ModelCapabilityBadges } from './model-capability-badges'
+import { SystemModelAdminMeta } from './system-model-admin-meta'
 
 import type { UsagePeriodDays } from '../constants'
 
@@ -22,6 +23,7 @@ interface ModelInventoryRowProps {
   href?: string
   onSelect?: (id: string) => void
   onPreloadNavigate?: () => void
+  showSystemAdmin?: boolean
 }
 
 export const ModelInventoryRow = memo(function ModelInventoryRow({
@@ -34,6 +36,7 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
   href,
   onSelect,
   onPreloadNavigate,
+  showSystemAdmin = false,
 }: ModelInventoryRowProps): React.JSX.Element {
   const wsReq = usageRow?.workspace.requests ?? 0
   const wsTok = (usageRow?.workspace.input_tokens ?? 0) + (usageRow?.workspace.output_tokens ?? 0)
@@ -84,6 +87,9 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
       </div>
       {!model.enabled ? (
         <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">已禁用</p>
+      ) : null}
+      {showSystemAdmin && model.registry_kind === 'system' ? (
+        <SystemModelAdminMeta model={model} />
       ) : null}
     </>
   )

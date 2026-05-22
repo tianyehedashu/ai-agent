@@ -6,7 +6,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 import uuid
 
-from domains.gateway.application.config_catalog_sync import model_types_for_gateway_registration
+from domains.gateway.application.config_catalog_sync import (
+    model_types_for_gateway_registration,
+    selector_capabilities_from_tags,
+)
 from domains.gateway.application.entitlement_model_status import (
     compute_model_callable,
     connectivity_status_from_last_test,
@@ -50,6 +53,9 @@ def build_openai_model_list_item(
             "callable": compute_model_callable(
                 connectivity_status=connectivity,
                 entitlement_status=entitlement_status,
+            ),
+            "selector_capabilities": selector_capabilities_from_tags(
+                tags, provider=row.provider, real_model=row.real_model
             ),
         },
     }

@@ -12,6 +12,7 @@ from domains.gateway.domain.types import (
     credential_api_scope,
     is_config_managed_system_credential,
 )
+from domains.gateway.domain.visibility import credential_visibility_for_api
 from domains.gateway.presentation.schemas.common import CredentialResponse
 from libs.crypto import decrypt_value
 from utils.logging import get_logger
@@ -62,6 +63,7 @@ def build_credential_response(
         )
         api_key_masked = "（无法展示）"
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
+    vis = credential_visibility_for_api(cred.visibility) if api_scope == "system" else None
     return CredentialResponse(
         id=cred.id,
         tenant_id=cred.tenant_id,
@@ -78,6 +80,7 @@ def build_credential_response(
             name=cred.name,
             extra=cred.extra,
         ),
+        visibility=vis,
         created_at=cred.created_at,
         api_key_masked=api_key_masked,
     )

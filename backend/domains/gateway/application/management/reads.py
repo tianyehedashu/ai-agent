@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
+from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
+from domains.gateway.application.gateway_model_listing import (
+    GatewayRegistryModelRow,
+    list_callable_system_model_names,
+    list_merged_models_for_tenant,
+)
 from domains.gateway.application.management.access_assertions import (
     GatewayManagementAccessAssertions,
 )
@@ -36,17 +42,22 @@ from domains.gateway.application.management.usage_reads import (
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
+from domains.gateway.application.system_visibility_filter import load_system_credentials_by_ids
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.types import CredentialScope, credential_api_scope
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     filter_virtual_keys_visible_to_actor,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
-from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
+from domains.gateway.infrastructure.models.system_gateway import (
+    SystemGatewayModel,
+    SystemProviderCredential,
+)
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -228,15 +239,59 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self,
         tenant_id: UUID,
         *,
+        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
         only_enabled: bool,
         provider: str | None = None,
         credential_id: UUID | None = None,
-    ) -> list[GatewayModel]:
-        return await self._models.list_for_tenant(
+        user_id: UUID | None = None,
+    ) -> list[GatewayRegistryModelRow]:
+        """``team`` / ``system``：注册表行；``callable``：合并列表；``requestable``：可发起代理请求（enabled 且未 failed）。"""
+        if registry_scope == "team":
+            return await self._models.list_tenant_owned(
+                tenant_id,
+                only_enabled=only_enabled,
+                provider=provider,
+                credential_id=credential_id,
+            )
+        if registry_scope == "system":
+            return await self._models.list_system(
+                only_enabled=only_enabled,
+                provider=provider,
+                credential_id=credential_id,
+            )
+        merged = await list_merged_models_for_tenant(
+            self._session,
             tenant_id,
-            only_enabled=only_enabled,
+            only_enabled=True if registry_scope == "requestable" else only_enabled,
             provider=provider,
             credential_id=credential_id,
+            user_id=user_id,
+            apply_visibility_filter=True,
+        )
+        if registry_scope == "requestable":
+            return [row for row in merged if is_connectivity_requestable(row.last_test_status)]
+        return merged
+
+    async def map_system_credentials_by_id(
+        self, credential_ids: set[UUID]
+    ) -> dict[UUID, SystemProviderCredential]:
+        return await load_system_credentials_by_ids(self._session, credential_ids)
+
+    async def personal_team_id_for_user(self, user_id: UUID) -> UUID:
+        personal = await self._teams.ensure_personal_team(user_id)
+        return personal.id
+
+    async def list_callable_system_model_names(
+        self,
+        tenant_id: UUID,
+        *,
+        user_id: UUID | None = None,
+    ) -> list[str]:
+        """callable 合并列表中的平台注册模型名（已应用可见性策略）。"""
+        return await list_callable_system_model_names(
+            self._session,
+            tenant_id,
+            user_id=user_id,
         )
 
     async def list_system_gateway_models(
@@ -357,26 +412,48 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         end = datetime.now(UTC)
         start = end - timedelta(days=days)
         global_usage = await self._logs.aggregate_by_credential_global(start, end)
-        counts_list = await self._models.count_models_grouped_by_credential()
-        counts: dict[UUID, int] = dict(counts_list)
+        counts: dict[UUID, int] = dict(await self._models.count_models_grouped_by_credential())
+        for cid, cnt in await self._models.count_system_models_grouped_by_credential():
+            counts[cid] = counts.get(cid, 0) + cnt
         all_ids = sorted(set(global_usage.keys()) | set(counts.keys()))
         if not all_ids:
             return []
         creds = await self._creds.list_by_ids(all_ids)
         cred_by_id = {c.id: c for c in creds}
+        missing_ids = {cid for cid in all_ids if cid not in cred_by_id}
+        system_rows = await self._system_creds.list_by_ids(missing_ids)
+        system_by_id = {row.id: row for row in system_rows}
         rows: list[dict[str, Any]] = []
         for cid in all_ids:
             g = global_usage.get(cid, {})
+            sys_c = system_by_id.get(cid)
             c = cred_by_id.get(cid)
+            if sys_c is not None:
+                provider = sys_c.provider
+                name = sys_c.name
+                scope = CredentialScope.SYSTEM.value
+                scope_id = None
+                is_active = bool(sys_c.is_active)
+            elif c is not None:
+                provider = c.provider
+                name = c.name
+                scope = credential_api_scope(scope=c.scope, tenant_id=c.tenant_id)
+                scope_id = c.scope_id
+                is_active = bool(c.is_active)
+            else:
+                provider = ""
+                name = "(已删除)"
+                scope = "unknown"
+                scope_id = None
+                is_active = False
             rows.append(
                 {
                     "credential_id": cid,
-                    "provider": c.provider if c else "",
-                    "name": c.name if c else "(已删除)",
-                    "tenant_id": c.tenant_id if c else None,
-                    "scope": c.scope if c else "",
-                    "scope_id": c.scope_id if c else None,
-                    "is_active": bool(c.is_active) if c else False,
+                    "provider": provider,
+                    "name": name,
+                    "scope": scope,
+                    "scope_id": scope_id,
+                    "is_active": is_active,
                     "gateway_model_count": int(counts.get(cid, 0)),
                     "requests": int(g.get("requests", 0)),
                     "input_tokens": int(g.get("input_tokens", 0)),

@@ -9,6 +9,7 @@ from domains.gateway.application.config_catalog_sync import (
     MANAGED_CONFIG,
     SYSTEM_CREDENTIAL_NAME,
     _config_managed_credential_extra,
+    _ensure_system_credential,
     sync_app_config_gateway_catalog,
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
@@ -114,3 +115,56 @@ async def test_sync_does_not_duplicate_system_credential_after_rename(db_session
     ]
     assert len(system_openai) == 1
     assert system_openai[0].id == created.id
+
+
+CODING_ZHIPU_BASE = "https://open.bigmodel.cn/api/coding/paas/v4"
+MANAGED_ZHIPU_BASE = "https://admin-managed.example.com/v1"
+
+
+@pytest.mark.asyncio
+async def test_sync_preserves_existing_api_base_over_env(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """管理面已设置的 api_base 不应被 catalog sync 的 env 覆盖。"""
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = SystemProviderCredentialRepository(db_session)
+
+    monkeypatch.setattr(
+        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
+    )
+    created_id = await _ensure_system_credential(
+        db_session, provider="zhipuai", encryption_key=encryption_key
+    )
+    assert created_id is not None
+    await cred_repo.update(created_id, api_base=MANAGED_ZHIPU_BASE)
+    await db_session.flush()
+
+    await _ensure_system_credential(db_session, provider="zhipuai", encryption_key=encryption_key)
+    await db_session.flush()
+
+    row = await cred_repo.get(created_id)
+    assert row is not None
+    assert row.api_base == MANAGED_ZHIPU_BASE
+
+
+@pytest.mark.asyncio
+async def test_sync_backfills_empty_api_base_from_env(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = SystemProviderCredentialRepository(db_session)
+
+    monkeypatch.setattr(
+        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
+    )
+    created_id = await _ensure_system_credential(
+        db_session, provider="zhipuai", encryption_key=encryption_key
+    )
+    assert created_id is not None
+    await cred_repo.update(created_id, api_base=None)
+    await db_session.flush()
+
+    await _ensure_system_credential(db_session, provider="zhipuai", encryption_key=encryption_key)
+    await db_session.flush()
+
+    row = await cred_repo.get(created_id)
+    assert row is not None
+    assert row.api_base == CODING_ZHIPU_BASE

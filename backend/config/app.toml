@@ -30,6 +30,8 @@ qdrant_url = "${QDRANT_URL:http://localhost:6333}"
 # -----------------------------------------------------------------------------
 
 # LLM 提供商凭据（模型目录见 seeds/gateway-catalog.seed.json + Gateway DB）
+# api_base 默认值权威：domains/gateway/domain/provider_api_base.py
+# 运行时 Router 只读 DB 凭据 api_base，env 仅用于 catalog sync bootstrap。
 [llm.openai]
 api_key = "${OPENAI_API_KEY:}"
 api_base = "${OPENAI_API_BASE:https://api.openai.com/v1}"

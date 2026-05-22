@@ -17,8 +17,19 @@ from domains.gateway.domain.upstream_catalog_policy import (
         ("deepseek", None, "ok", "https://api.deepseek.com/v1/models"),
         ("custom", None, "unsupported", None),
         ("custom", "https://example.com/v1", "ok", "https://example.com/v1/models"),
-        ("dashscope", None, "unsupported", None),
+        (
+            "dashscope",
+            None,
+            "ok",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+        ),
         ("dashscope", "https://x.com/foo", "ok", "https://x.com/foo/models"),
+        (
+            "zhipuai",
+            None,
+            "ok",
+            "https://open.bigmodel.cn/api/paas/v4/models",
+        ),
     ],
 )
 def test_resolve_url(

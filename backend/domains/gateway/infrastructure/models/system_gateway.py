@@ -37,6 +37,9 @@ class SystemProviderCredential(BaseModel):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    visibility: Mapped[str] = mapped_column(
+        String(20), default="public", server_default="public", nullable=False
+    )
 
     __table_args__ = (
         UniqueConstraint("provider", "name", name="uq_system_provider_credentials_provider_name"),
@@ -61,6 +64,9 @@ class SystemGatewayModel(BaseModel):
     tpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(20), default="inherit", server_default="inherit", nullable=False
     )
     tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     last_test_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -125,8 +131,37 @@ class SystemGatewayAlertRule(BaseModel):
     __table_args__ = (Index("ix_system_gateway_alert_rules_enabled", "enabled"),)
 
 
+class SystemGatewayGrant(BaseModel):
+    """系统级凭据/模型对 team 或 user 的可见性白名单（仅 restricted 时生效）。"""
+
+    __tablename__ = "system_gateway_grants"
+
+    subject_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    target_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    granted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_kind",
+            "subject_id",
+            "target_kind",
+            "target_id",
+            name="uq_system_gateway_grants_subject_target",
+        ),
+        Index("ix_system_gateway_grants_subject", "subject_kind", "subject_id"),
+        Index("ix_system_gateway_grants_target", "target_kind", "target_id"),
+    )
+
+
 __all__ = [
     "SystemGatewayAlertRule",
+    "SystemGatewayGrant",
     "SystemGatewayModel",
     "SystemGatewayRoute",
     "SystemProviderCredential",

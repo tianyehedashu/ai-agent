@@ -41,6 +41,17 @@ export interface GatewayModel {
   last_tested_at: string | null
   /** 上次失败/不支持时的说明；成功或未测过为 null */
   last_test_reason: string | null
+  /** 注册表归属：team=团队注册行；system=平台预置行 */
+  registry_kind?: 'team' | 'system'
+  /** 系统模型可见性（inherit/public/restricted） */
+  visibility?: 'inherit' | 'public' | 'restricted' | null
+  /** 平台管理员：系统模型绑定的厂商凭据 */
+  system_credential?: {
+    id: string
+    provider: string
+    name: string
+    visibility: 'public' | 'restricted'
+  } | null
   /** 当前调用方客户套餐命中状态；管理列表可缺省 */
   entitlement_status?: 'active' | 'exhausted' | 'resetting' | 'expired' | 'none'
   entitlement_reset_at?: string | null
@@ -143,6 +154,8 @@ export interface GatewayModelUpdateBody {
   tags?: Record<string, unknown> | null
 }
 
+export type GatewayModelRegistryScope = 'team' | 'system' | 'callable' | 'requestable'
+
 /** Models 资源 API */
 export const modelsApi = {
   /**
@@ -162,9 +175,21 @@ export const modelsApi = {
     return apiClient.get<AvailableModelsResponse>(`${GATEWAY_API_BASE}/models/available`, search)
   },
 
-  /** 列出当前团队的 GatewayModel 注册行 */
-  listModels: (teamId: string, params?: { provider?: string; credential_id?: string }) =>
-    apiClient.get<GatewayModel[]>(teamGatewayPath(teamId, '/models'), params),
+  /** 列出 Gateway 模型注册行或合并可调用列表（``registry_scope`` 与后端对齐） */
+  listModels: (
+    teamId: string,
+    params?: {
+      registry_scope?: GatewayModelRegistryScope
+      provider?: string
+      credential_id?: string
+    }
+  ) => {
+    const search: Record<string, string> = {}
+    if (params?.registry_scope) search.registry_scope = params.registry_scope
+    if (params?.provider) search.provider = params.provider
+    if (params?.credential_id) search.credential_id = params.credential_id
+    return apiClient.get<GatewayModel[]>(teamGatewayPath(teamId, '/models'), search)
+  },
   /** 团队模型用量汇总（按 route 维度） */
   modelsUsageSummary: (teamId: string, params?: { days?: number; provider?: string }) =>
     apiClient.get<GatewayModelUsageSummary>(

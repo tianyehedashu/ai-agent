@@ -34,10 +34,16 @@ class ModelCatalogPort(Protocol):
         *,
         billing_team_id: uuid.UUID | None,
         model_type: str | None,
+        user_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]:
-        """返回与模型选择器兼容的 system_models 项结构。"""
+        """返回与模型选择器兼容的 system_models 项结构（system 行经可见性过滤）。"""
 
-    async def resolve_capabilities(self, model_id: str) -> ModelCapabilitySnapshot | None:
+    async def resolve_capabilities(
+        self,
+        model_id: str,
+        *,
+        billing_team_id: uuid.UUID | None = None,
+    ) -> ModelCapabilitySnapshot | None:
         """按虚拟模型名解析能力；未知返回 None。"""
 
     async def model_features(self, model_id: str) -> frozenset[str] | None:

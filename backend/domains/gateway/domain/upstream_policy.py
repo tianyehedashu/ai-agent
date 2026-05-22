@@ -77,16 +77,28 @@ def adapt_kwargs_by_capability(
     kwargs: dict[str, Any],
     flags: UpstreamCapabilityFlags,
 ) -> dict[str, Any]:
-    adapted = dict(kwargs)
-    if flags.supports_reasoning:
-        adapted.pop("response_format", None)
-        adapted["temperature"] = 1.0
-    elif not flags.supports_json_mode:
-        adapted.pop("response_format", None)
-    if not flags.supports_tools:
-        adapted.pop("tools", None)
-        adapted.pop("tool_choice", None)
-    return adapted
+    """已废弃：请改用 ``apply_invocation_kwargs`` + ``ModelCapabilitySnapshot``。
+
+    计划在后续版本移除本包装；新代码勿再调用。
+    """
+    from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
+    from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
+    from domains.gateway.domain.temperature_policy import (
+        TEMPERATURE_POLICY_CLIENT,
+        TEMPERATURE_POLICY_FIXED_1,
+    )
+
+    snap = ModelCapabilitySnapshot(
+        supports_tools=flags.supports_tools,
+        supports_reasoning=flags.supports_reasoning,
+        supports_json_mode=flags.supports_json_mode,
+        temperature_policy=(
+            TEMPERATURE_POLICY_FIXED_1
+            if flags.supports_reasoning
+            else TEMPERATURE_POLICY_CLIENT
+        ),
+    )
+    return apply_invocation_kwargs(snap, kwargs, validate=False)
 
 
 __all__ = [

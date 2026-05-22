@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
+
+RegistryKind = Literal["team", "system"]
 
 
 class _NamedModel(Protocol):
@@ -18,6 +20,13 @@ class _VirtualModelRoute(Protocol):
 
 _T = TypeVar("_T", bound=_NamedModel)
 _R = TypeVar("_R", bound=_VirtualModelRoute)
+
+
+def registry_kind_for_merged_row(record: object) -> RegistryKind:
+    """合并列表中的注册行：``gateway_models`` 有 ``tenant_id``，``system_gateway_models`` 无。"""
+    if getattr(record, "tenant_id", None) is not None:
+        return "team"
+    return "system"
 
 
 def merge_named_rows_tenant_overrides_system(
@@ -59,6 +68,8 @@ def merge_virtual_model_rows_tenant_overrides_system(
 
 
 __all__ = [
+    "RegistryKind",
     "merge_named_rows_tenant_overrides_system",
     "merge_virtual_model_rows_tenant_overrides_system",
+    "registry_kind_for_merged_row",
 ]

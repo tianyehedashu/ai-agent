@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_selector_reads import (
     get_default_for_model_type,
@@ -126,7 +127,7 @@ class ChatModelResolutionUseCase:
         return (
             resolution.is_active
             and "text" in resolution.model_types
-            and resolution.last_test_status != "failed"
+            and is_connectivity_requestable(resolution.last_test_status)
         )
 
     async def _resolve_personal_text(self, model_id: uuid.UUID) -> ResolvedModel | None:
@@ -140,7 +141,7 @@ class ChatModelResolutionUseCase:
             return None
         if not resolution.is_active:
             raise ValidationError("该 Gateway 个人模型已停用")
-        if resolution.last_test_status == "failed":
+        if not is_connectivity_requestable(resolution.last_test_status):
             raise ValidationError(
                 "该 Gateway 个人模型最近一次连通性测试失败，请先在 Gateway 凭据/模型中修复并测试通过，或选择其他模型。"
             )
@@ -159,7 +160,7 @@ class ChatModelResolutionUseCase:
             return None
         if not resolution.is_active:
             raise ValidationError("该 Gateway 个人模型已停用")
-        if resolution.last_test_status == "failed":
+        if not is_connectivity_requestable(resolution.last_test_status):
             raise ValidationError(
                 "该 Gateway 个人模型最近一次连通性测试失败，请先在 Gateway 凭据/模型中修复并测试通过，或选择其他模型。"
             )
@@ -180,7 +181,7 @@ class ChatModelResolutionUseCase:
             return None
         if not resolution.is_active:
             raise ValidationError("该 Gateway 个人模型已停用")
-        if resolution.last_test_status == "failed":
+        if not is_connectivity_requestable(resolution.last_test_status):
             raise ValidationError(
                 "该 Gateway 个人模型最近一次连通性测试失败，请先在 Gateway 凭据/模型中修复并测试通过，或选择其他模型。"
             )

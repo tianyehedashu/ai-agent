@@ -16,6 +16,14 @@ if TYPE_CHECKING:
     import uuid
 
 
+@dataclass(frozen=True)
+class InvocationOverrides:
+    """单次内部桥接调用的可选参数覆盖（由 Agent Chat 等消费方设置）。"""
+
+    temperature: float | None = None
+    thinking_enabled: bool | None = None
+
+
 @dataclass
 class GatewayCallContext:
     """内部模块经 ``GatewayBridge`` 调用 Gateway 时的上下文。
@@ -41,6 +49,8 @@ class GatewayCallContext:
     metadata: dict[str, Any] = field(default_factory=dict)
     request_id: str | None = None
     store_full_messages: bool | None = None
+    invocation_overrides: InvocationOverrides | None = None
+    """可选：覆盖温度 / 思考开关；出站前由 Bridge 合并，再经 ``UpstreamAdapter`` 应用领域策略。"""
 
 
 @dataclass
@@ -117,4 +127,5 @@ __all__ = [
     "GatewayProxyProtocol",
     "GatewayResponse",
     "GatewayStreamChunk",
+    "InvocationOverrides",
 ]

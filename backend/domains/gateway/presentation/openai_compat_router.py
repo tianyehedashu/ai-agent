@@ -278,7 +278,12 @@ async def list_models(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, object]:
     reads = GatewayManagementReadService(db)
-    models = await reads.list_gateway_models(principal.team_id, only_enabled=True)
+    models = await reads.list_gateway_models(
+        principal.team_id,
+        registry_scope="callable",
+        only_enabled=True,
+        user_id=principal.user_id,
+    )
     if principal.vkey and principal.vkey.allowed_models:
         allowed = set(principal.vkey.allowed_models)
         models = [m for m in models if m.name in allowed]

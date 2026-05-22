@@ -104,10 +104,9 @@ class Settings(BaseSettings):
     volcengine_chat_endpoint_id: str | None = None  # 对话模型接入点 (Doubao-pro/lite)
     volcengine_image_endpoint_id: str | None = None  # 图像生成接入点 (Seedream)
 
-    # 智谱AI (GLM)
+    # 智谱AI (GLM) — 默认 base 权威见 domains/gateway/domain/provider_api_base.py
     zhipuai_api_key: SecretStr | None = None
-    zhipuai_api_base: str = "https://open.bigmodel.cn/api/paas/v4"  # 通用端点
-    zhipuai_coding_api_base: str | None = None  # Coding端点（用于GLM-4.7编码套餐）
+    zhipuai_api_base: str = "https://open.bigmodel.cn/api/paas/v4"
 
     # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"

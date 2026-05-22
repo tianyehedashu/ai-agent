@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
@@ -41,7 +41,9 @@ class ProxyLiteLLMClient:
         if ctx.vkey is None or not ctx.vkey.is_system:
             return False
 
-        resolved = await resolve_model_or_route(self._session, ctx.team_id, model)
+        resolved = await resolve_model_or_route(
+            self._session, ctx.team_id, model, user_id=ctx.user_id
+        )
         if resolved is None:
             return True
         if resolved.route is not None:
@@ -142,11 +144,97 @@ class ProxyLiteLLMClient:
         return await litellm_anthropic_messages(**kwargs)
 
     async def router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="aanthropic_messages",
+            direct_call=lambda: self.direct_anthropic_messages(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def direct_speech(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import aspeech
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await aspeech(**kwargs)
+
+    async def router_speech(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="aspeech",
+            direct_call=lambda: self.direct_speech(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def direct_rerank(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import arerank
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await arerank(**kwargs)
+
+    async def router_rerank(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="arerank",
+            direct_call=lambda: self.direct_rerank(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def direct_moderation(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import amoderation
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await amoderation(**kwargs)
+
+    async def router_moderation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="amoderation",
+            direct_call=lambda: self.direct_moderation(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def direct_video_generation(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import avideo_generation
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await avideo_generation(**kwargs)
+
+    async def router_video_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="avideo_generation",
+            direct_call=lambda: self.direct_video_generation(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def _invoke_router_or_direct(
+        self,
+        *,
+        router_method: str,
+        direct_call: Callable[[], Awaitable[Any]],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
         router = await get_router(self._session)
-        aanthropic = getattr(router, "aanthropic_messages", None)
-        if not callable(aanthropic):
-            return await self.direct_anthropic_messages(kwargs)
-        result = aanthropic(**kwargs)
+        router_fn = getattr(router, router_method, None)
+        if not callable(router_fn):
+            return await direct_call()
+        result = router_fn(**kwargs)
         if isinstance(result, Awaitable):
             return await result
         return result

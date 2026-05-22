@@ -90,7 +90,9 @@ class ProxyGuard:
         name = model.strip()
         if not name:
             return
-        resolved = await resolve_model_or_route(self._session, ctx.team_id, name)
+        resolved = await resolve_model_or_route(
+            self._session, ctx.team_id, name, user_id=ctx.user_id
+        )
         if resolved is None:
             return
         assert_registered_model_capability(

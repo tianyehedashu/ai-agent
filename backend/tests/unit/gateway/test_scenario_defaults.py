@@ -18,8 +18,8 @@ class _FakeCatalog:
     def __init__(self, items: list[dict[str, object]]) -> None:
         self._items = items
 
-    async def list_visible_models(self, *, billing_team_id, model_type):  # noqa: ANN001
-        _ = billing_team_id
+    async def list_visible_models(self, *, billing_team_id, model_type, user_id=None, **_kw):  # noqa: ANN001
+        _ = billing_team_id, user_id
         if model_type is None:
             return self._items
         return [i for i in self._items if model_type in (i.get("model_types") or [])]

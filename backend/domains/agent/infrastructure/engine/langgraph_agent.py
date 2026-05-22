@@ -8,11 +8,16 @@ LangGraph Agent Engine - 基于 LangGraph 的 Agent 执行引擎
 - 工具调用循环
 """
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import AsyncGenerator
 import operator
 import time
-from typing import Annotated, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict
+
+if TYPE_CHECKING:
+    from domains.gateway.application.ports import InvocationOverrides
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
@@ -187,6 +192,7 @@ class LangGraphAgentEngine:
         max_tool_iterations: int | None = None,
         timeout_seconds: int | None = None,
         execution_config: ExecutionConfig | None = None,
+        invocation_overrides: InvocationOverrides | None = None,
     ) -> None:
         """
         初始化 LangGraph Agent Engine
@@ -217,6 +223,7 @@ class LangGraphAgentEngine:
             else AgentExecutionLimits.DEFAULT_TIMEOUT_SECONDS
         )
         self.execution_config = execution_config
+        self._invocation_overrides = invocation_overrides
         # 初始化记忆提取器
         self.memory_extractor = MemoryExtractor(llm_gateway=llm_gateway)
 
@@ -385,6 +392,7 @@ class LangGraphAgentEngine:
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             tools=tools,
+            invocation_overrides=self._invocation_overrides,
         )
         usage = response.usage or {}
         usage_totals = _merge_usage(view.usage_totals, usage)

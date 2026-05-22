@@ -77,6 +77,13 @@ class PlatformApiKeyMissingGatewayProxyScopeError(GatewayError):
         super().__init__("API key missing scope: gateway:proxy")
 
 
+class InvalidSystemVisibilityError(GatewayError):
+    """系统凭据/模型 visibility 或 grant subject/target 枚举非法。"""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 class ManagementEntityNotFoundError(GatewayError):
     """管理面资源不存在（模型/路由/告警规则等）"""
 
@@ -159,6 +166,10 @@ class ModelNotAllowedError(GatewayError):
     def __init__(self, model: str) -> None:
         super().__init__(f"模型不在白名单: {model}")
         self.model = model
+
+
+class InvocationPolicyViolationError(GatewayError):
+    """出站调用策略违规（思考模式 / 温度等）。"""
 
 
 class CapabilityNotAllowedError(GatewayError):
@@ -261,6 +272,7 @@ __all__ = [
     "GatewayTeamHeaderRequiredError",
     "GatewayVkeyTeamHeaderMismatchError",
     "GuardrailBlockedError",
+    "InvocationPolicyViolationError",
     "HttpMappableDomainError",
     "ManagementEntityNotFoundError",
     "ModelNotAllowedError",

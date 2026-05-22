@@ -137,6 +137,10 @@ class CredentialResponse(BaseModel):
         default=False,
         description="app.toml/环境变量同步托管的 system 凭据（不可重命名；删除后同步可能恢复）",
     )
+    visibility: Literal["public", "restricted"] | None = Field(
+        default=None,
+        description="系统凭据可见性；团队/BYOK 凭据无此字段",
+    )
     created_at: datetime
     api_key_masked: str = Field(
         description="解密后仅用于展示的掩码，不包含完整密钥",
@@ -164,6 +168,60 @@ class CredentialSummaryResponse(BaseModel):
 # =============================================================================
 # Gateway Model
 # =============================================================================
+
+
+class SystemCredentialSummary(BaseModel):
+    """系统模型绑定的平台凭据摘要（仅 PlatformAdmin 列表返回）。"""
+
+    id: uuid.UUID
+    provider: str
+    name: str
+    visibility: Literal["public", "restricted"] = "public"
+
+
+class SystemVisibilityPatch(BaseModel):
+    visibility: Literal["public", "restricted"]
+
+
+class SystemModelVisibilityPatch(BaseModel):
+    visibility: Literal["inherit", "public", "restricted"]
+
+
+class SystemGatewayGrantCreate(BaseModel):
+    subject_kind: Literal["credential", "model"]
+    subject_id: uuid.UUID
+    target_kind: Literal["team", "user"]
+    target_id: uuid.UUID
+    note: str | None = None
+
+
+class SystemGatewayGrantUpdate(BaseModel):
+    enabled: bool | None = None
+    note: str | None = None
+
+
+class SystemGatewayGrantResponse(BaseModel):
+    id: uuid.UUID
+    subject_kind: Literal["credential", "model"]
+    subject_id: uuid.UUID
+    target_kind: Literal["team", "user"]
+    target_id: uuid.UUID
+    enabled: bool
+    note: str | None = None
+    granted_by: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SystemVisibilityTargetSnapshot(BaseModel):
+    """某 team/user 当前命中的 grants 与可见系统模型名。"""
+
+    target_kind: Literal["team", "user"]
+    target_id: uuid.UUID
+    grants: list[SystemGatewayGrantResponse] = Field(default_factory=list)
+    visible_model_names: list[str] = Field(default_factory=list)
 
 
 class GatewayModelCreate(BaseModel):
@@ -241,10 +299,32 @@ class GatewayModelUpdate(BaseModel):
     tags: dict[str, Any] | None = None
 
 
+class ModelSelectorCapabilities(BaseModel):
+    """与 ``ModelCapabilitySnapshot`` / 选择器扁平字段对齐。"""
+
+    supports_vision: bool = False
+    supports_tools: bool = True
+    supports_reasoning: bool = False
+    thinking_param: str = "none"
+    temperature_policy: str = "client"
+    temperature_default: float = 0.7
+    supports_json_mode: bool = True
+    supports_image_gen: bool = False
+    supports_txt2img: bool = True
+    supports_img2img: bool = False
+    supports_video_gen: bool = False
+    supports_image_to_video: bool = False
+    max_reference_images: int = 0
+
+
 class GatewayModelResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
+    registry_kind: Literal["team", "system"] = Field(
+        default="team",
+        description="注册表归属：team=租户 gateway_models；system=平台 system_gateway_models",
+    )
     name: str
     capability: str = Field(
         description="主调用面：与 OpenAI 兼容路由入口一致，不等同于 tags 中的多特性组合",
@@ -268,6 +348,14 @@ class GatewayModelResponse(BaseModel):
     last_test_status: str | None = None
     last_tested_at: datetime | None = None
     last_test_reason: str | None = None
+    visibility: str | None = Field(
+        default=None,
+        description="系统模型可见性：inherit/public/restricted；团队行无此字段",
+    )
+    system_credential: SystemCredentialSummary | None = Field(
+        default=None,
+        description="平台管理员视角：系统模型绑定的厂商凭据摘要",
+    )
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -902,6 +990,13 @@ __all__ = [
     "PlanQuotaUpsert",
     "PlanResetStrategy",
     "PlatformCredentialStatItem",
+    "SystemCredentialSummary",
+    "SystemGatewayGrantCreate",
+    "SystemGatewayGrantResponse",
+    "SystemGatewayGrantUpdate",
+    "SystemModelVisibilityPatch",
+    "SystemVisibilityPatch",
+    "SystemVisibilityTargetSnapshot",
     "ProviderPlanCostResponse",
     "ProviderPlanCreate",
     "ProviderPlanResponse",

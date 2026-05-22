@@ -20,6 +20,7 @@ from domains.gateway.domain.errors import (
     GatewayTeamHeaderInvalidError,
     GatewayTeamHeaderRequiredError,
     GatewayVkeyTeamHeaderMismatchError,
+    InvalidSystemVisibilityError,
     ManagementEntityNotFoundError,
     NoPersonalTeamForProxyError,
     PlatformApiKeyInvalidError,
@@ -95,6 +96,10 @@ _GATEWAY_DOMAIN_HTTP: list[tuple[tuple[type[Exception], ...], _GatewayHttpBuilde
     (
         (CredentialNameConflictError,),
         lambda exc: HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)),
+    ),
+    (
+        (InvalidSystemVisibilityError,),
+        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
     ),
     (
         (SystemCredentialAdminRequiredError,),

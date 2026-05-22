@@ -10,7 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-DEFAULT_VOLCENGINE_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+from domains.gateway.domain.provider_api_base import (
+    get_default_api_base,
+    resolve_effective_api_base,
+)
+
+DEFAULT_VOLCENGINE_API_BASE = (
+    get_default_api_base("volcengine") or "https://ark.cn-beijing.volces.com/api/v3"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +37,7 @@ def build_volcengine_image_probe_request(
     size: str = "1024x1024",
 ) -> VolcengineImageProbeRequest:
     """根据凭据 + image endpoint 构建探活请求；``size`` 与 Agent 探活默认对齐。"""
-    base = (api_base or DEFAULT_VOLCENGINE_API_BASE).rstrip("/")
+    base = (resolve_effective_api_base("volcengine", api_base) or DEFAULT_VOLCENGINE_API_BASE).rstrip("/")
     return VolcengineImageProbeRequest(
         url=f"{base}/images/generations",
         auth_header=f"Bearer {api_key}",

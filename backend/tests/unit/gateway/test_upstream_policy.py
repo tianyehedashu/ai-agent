@@ -1,12 +1,13 @@
 """upstream_policy 领域策略单测。"""
 
+from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
 from domains.gateway.domain.upstream_policy import (
-    UpstreamCapabilityFlags,
-    adapt_kwargs_by_capability,
     clamp_max_tokens,
     is_deepseek_reasoner,
     preprocess_messages_for_reasoner,
 )
+from domains.gateway.domain.temperature_policy import TEMPERATURE_POLICY_FIXED_1
 
 
 def test_deepseek_reasoner_message_padding() -> None:
@@ -26,10 +27,14 @@ def test_clamp_max_tokens() -> None:
 
 
 def test_reasoning_model_strips_response_format() -> None:
-    flags = UpstreamCapabilityFlags(supports_reasoning=True)
-    out = adapt_kwargs_by_capability(
+    snap = ModelCapabilitySnapshot(
+        supports_reasoning=True,
+        temperature_policy=TEMPERATURE_POLICY_FIXED_1,
+    )
+    out = apply_invocation_kwargs(
+        snap,
         {"response_format": {"type": "json_object"}, "temperature": 0.2},
-        flags,
+        validate=False,
     )
     assert "response_format" not in out
     assert out["temperature"] == 1.0

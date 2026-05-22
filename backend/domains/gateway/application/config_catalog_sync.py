@@ -10,10 +10,15 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
+from domains.gateway.application.catalog.litellm_capability_hint import merge_litellm_reasoning_hint
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.gateway_catalog_seed import resolve_catalog_seed_models
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
+from domains.gateway.domain.credential_sync_policy import (
+    credential_force_env_sync,
+    resolve_bootstrap_api_base,
+)
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.catalog_provider_availability import (
@@ -28,7 +33,7 @@ from domains.gateway.domain.provider_env_catalog import (
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_NONE,
     effective_supports_reasoning,
-    infer_thinking_param,
+    enrich_gateway_model_tags,
 )
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
@@ -85,11 +90,18 @@ async def _ensure_system_credential(
     existing = await repo.find_config_managed(provider)
     encrypted = encrypt_value(plain_key, encryption_key)
     extra = _config_managed_credential_extra(provider)
+    resolved_base = resolve_bootstrap_api_base(
+        provider=provider,
+        env_base=api_base,
+        existing_base=existing.api_base if existing is not None else None,
+        is_new_credential=existing is None,
+        force_env_sync=credential_force_env_sync(existing.extra if existing else None),
+    )
     if existing is not None:
         await repo.update(
             existing.id,
             api_key_encrypted=encrypted,
-            api_base=api_base,
+            api_base=resolved_base,
             extra=extra,
             is_active=True,
         )
@@ -99,7 +111,7 @@ async def _ensure_system_credential(
         provider=provider,
         name=SYSTEM_CREDENTIAL_NAME,
         api_key_encrypted=encrypted,
-        api_base=api_base,
+        api_base=resolved_base,
         extra=extra,
         is_active=True,
     )
@@ -109,20 +121,13 @@ async def _ensure_system_credential(
 def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
     real_model = (model.litellm_model or model.id).strip()
     explicit_tp = getattr(model, "thinking_param", None)
-    thinking_param = infer_thinking_param(
-        provider=model.provider,
-        real_model=real_model,
-        supports_reasoning=model.supports_reasoning,
-        explicit=explicit_tp if isinstance(explicit_tp, str) else None,
-    )
     tags: dict[str, Any] = {
         MANAGED_BY_KEY: MANAGED_CONFIG,
         "display_name": model.name,
         "context_window": model.context_window,
         "supports_vision": model.supports_vision,
         "supports_tools": model.supports_tools,
-        "supports_reasoning": model.supports_reasoning or thinking_param != THINKING_PARAM_NONE,
-        "thinking_param": thinking_param,
+        "supports_reasoning": model.supports_reasoning,
         "supports_json_mode": model.supports_json_mode,
         "supports_image_gen": model.supports_image_gen,
         # 旧字段：单位混乱（¥/千tokens 或 $/1M tokens），保留只供前端展示用。
@@ -131,6 +136,8 @@ def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
         "description": model.description,
         "recommended_for": list(model.recommended_for),
     }
+    if isinstance(explicit_tp, str) and explicit_tp.strip():
+        tags["thinking_param"] = explicit_tp.strip()
     if model.supports_image_gen:
         tags["supports_txt2img"] = model.supports_txt2img
         tags["supports_img2img"] = model.supports_img2img
@@ -141,6 +148,18 @@ def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
     if int(model.max_reference_images or 0) > 0:
         tags["max_reference_images"] = int(model.max_reference_images)
 
+    tags = merge_litellm_reasoning_hint(
+        tags, provider=model.provider, real_model=real_model
+    )
+    hint_tp = tags.pop("_litellm_hint_thinking_param", None)
+    if hint_tp and "thinking_param" not in tags:
+        logger.warning(
+            "catalog seed %s: litellm hint thinking_param=%s (no explicit seed value)",
+            model.id,
+            hint_tp,
+        )
+    tags = enrich_gateway_model_tags(tags, provider=model.provider, real_model=real_model)
+    thinking_param = str(tags.get("thinking_param") or THINKING_PARAM_NONE)
     tags["supports_reasoning"] = effective_supports_reasoning(tags, thinking_param)
 
     # 计费用单价写入 upstream_model_pricing（见 _upsert_upstream_pricing_from_model），不再写入 tags。
@@ -242,6 +261,8 @@ def _selector_capabilities_payload(
         "supports_tools": snap.supports_tools,
         "supports_reasoning": snap.supports_reasoning,
         "thinking_param": snap.thinking_param,
+        "temperature_policy": snap.temperature_policy,
+        "temperature_default": snap.temperature_default,
         "supports_json_mode": snap.supports_json_mode,
         "supports_image_gen": snap.supports_image_gen,
         "supports_txt2img": snap.supports_txt2img,
@@ -340,6 +361,7 @@ async def _sync_catalog_models(
             provider=model.provider,
             enabled=True,
             tags=merged_tags,
+            # visibility / grants 由平台管理员维护，catalog reload 不覆盖
         )
         await _upsert_upstream_pricing_from_model(
             session, model=model, real_model=real_model, capability=capability
@@ -425,6 +447,10 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
         "real_model": row.real_model,
         "model_id": row.name,
         "model_types": _infer_model_types_from_tags(tags, row.capability),
+        "selector_capabilities": _selector_capabilities_payload(
+            tags, provider=row.provider, real_model=row.real_model
+        ),
+        # Deprecated: 与 selector_capabilities 同义；计划 2026-Q3 前移除，请改用 selector_capabilities。
         "capabilities": _selector_capabilities_payload(
             tags, provider=row.provider, real_model=row.real_model
         ),

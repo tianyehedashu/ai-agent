@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.temperature_policy import (
+    DEFAULT_CLIENT_TEMPERATURE,
+    TEMPERATURE_POLICY_CLIENT,
+    resolve_temperature_default_from_tags,
+    resolve_temperature_policy_from_tags,
+)
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_NONE,
     resolve_thinking_param_from_tags,
@@ -18,6 +24,8 @@ class ModelCapabilitySnapshot:
     supports_tools: bool = True
     supports_reasoning: bool = False
     thinking_param: str = THINKING_PARAM_NONE
+    temperature_policy: str = TEMPERATURE_POLICY_CLIENT
+    temperature_default: float = DEFAULT_CLIENT_TEMPERATURE
     supports_json_mode: bool = True
     supports_vision: bool = False
     supports_image_gen: bool = False
@@ -69,10 +77,16 @@ def tags_to_capability_snapshot(
     )
     if thinking_param != THINKING_PARAM_NONE:
         supports_reasoning = True
+    temperature_policy = resolve_temperature_policy_from_tags(
+        tags, thinking_param=thinking_param
+    )
+    temperature_default = resolve_temperature_default_from_tags(tags)
     return ModelCapabilitySnapshot(
         supports_tools=bool(tags.get("supports_tools", True)),
         supports_reasoning=supports_reasoning,
         thinking_param=thinking_param,
+        temperature_policy=temperature_policy,
+        temperature_default=temperature_default,
         supports_json_mode=bool(tags.get("supports_json_mode", True)),
         supports_vision=bool(tags.get("supports_vision", False)),
         supports_image_gen=supports_image_gen,

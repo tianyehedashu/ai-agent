@@ -39,19 +39,20 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
     set_permission_context(original_ctx)
 
     events: list[str] = []
-    db = object()
+    stream_db = object()
+    injected_db = object()
     http_request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(checkpointer=None)))
     built = Mock(return_value=_FakeChatService())
 
     @asynccontextmanager
     async def fake_session_context() -> AsyncGenerator[object, None]:
         events.append("enter-session")
-        yield db
+        yield stream_db
         events.append("exit-session")
 
     def fake_builder(seen_db: object, seen_request: object) -> _FakeChatService:
         events.append("build-service")
-        assert seen_db is db
+        assert seen_db is stream_db
         assert seen_request is http_request
         assert chat_router.get_permission_context() == original_ctx
         return built(seen_db, seen_request)
@@ -63,7 +64,7 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
         response = await chat_router.chat(
             request=chat_router.ChatRequest(message="hello"),
             http_request=http_request,  # type: ignore[arg-type]
-            _=None,
+            db=injected_db,  # type: ignore[arg-type]
             current_user=CurrentUser(
                 id=str(user_id),
                 email="user@example.com",

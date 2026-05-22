@@ -12,6 +12,8 @@ from domains.gateway.application.config_catalog_sync import (
     gateway_model_to_selector_item,
     model_types_for_gateway_registration,
 )
+from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
+from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_catalog_port import (
     ModelCapabilitySnapshot,
@@ -45,8 +47,14 @@ class SqlModelCatalogAdapter:
         *,
         billing_team_id: uuid.UUID | None,
         model_type: str | None,
+        user_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]:
-        rows = await self._models.list_for_tenant(billing_team_id, only_enabled=True)
+        rows = await list_merged_models_for_tenant(
+            self._session,
+            billing_team_id,
+            only_enabled=True,
+            user_id=user_id,
+        )
         # 仓储已按「团队行先于全局行」排序；同名只保留第一条（团队覆盖全局）
         by_name: dict[str, GatewayModel] = {}
         for row in rows:
@@ -56,7 +64,7 @@ class SqlModelCatalogAdapter:
         for row in sorted(by_name.values(), key=lambda r: r.name):
             # 与模型选择器一致：已知连通性测试失败的模型不进入「可用」目录，
             # 避免管理页标「不可用」但对话/产品信息仍可点选。
-            if row.last_test_status == "failed":
+            if not is_connectivity_requestable(row.last_test_status):
                 continue
             item = gateway_model_to_selector_item(row)
             if model_type and model_type not in item["model_types"]:
@@ -78,7 +86,7 @@ class SqlModelCatalogAdapter:
         )
         items: list[dict[str, Any]] = []
         for row in rows:
-            if row.last_test_status == "failed":
+            if not is_connectivity_requestable(row.last_test_status):
                 continue
             item = gateway_model_to_selector_user_item(row)
             if model_type and model_type not in item["model_types"]:
@@ -132,12 +140,21 @@ class SqlModelCatalogAdapter:
             model_types=tuple(types),
         )
 
-    async def resolve_capabilities(self, model_id: str) -> ModelCapabilitySnapshot | None:
-        team_id = resolve_internal_gateway_team_id()
+    async def resolve_capabilities(
+        self,
+        model_id: str,
+        *,
+        billing_team_id: uuid.UUID | None = None,
+    ) -> ModelCapabilitySnapshot | None:
+        team_id = billing_team_id or resolve_internal_gateway_team_id()
         row = await self._models.resolve_by_name(team_id, model_id)
         if row is None or not row.enabled:
             return None
-        return tags_to_capability_snapshot(row.tags or {})
+        return tags_to_capability_snapshot(
+            row.tags or {},
+            provider=row.provider,
+            real_model=row.real_model,
+        )
 
     async def model_features(self, model_id: str) -> frozenset[str] | None:
         snap = await self.resolve_capabilities(model_id)

@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +16,7 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     downstream_custom_from_metadata,
     upstream_custom_from_metadata,
 )
-from domains.gateway.application.proxy_guard import BudgetReservation
+from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.types import GatewayCapability
 
@@ -93,40 +93,13 @@ async def prepare_chat_proxy_request(
     )
 
 
-async def invoke_litellm_with_direct_fallback(
-    use_case: ProxyUseCase,
-    ctx: ProxyContext,
-    model: str,
-    reservations: list[BudgetReservation],
-    *,
-    use_direct: bool,
-    direct_call: Callable[[], Awaitable[Any]],
-    router_call: Callable[[], Awaitable[Any]],
-) -> Any:
-    """Router 调用；model miss 时回退直连，失败时释放预扣。"""
-    try:
-        if use_direct:
-            return await direct_call()
-        return await router_call()
-    except Exception as exc:
-        guard = use_case.guard
-        if use_case._is_router_model_miss(
-            exc
-        ) and await use_case._should_use_internal_direct_litellm(ctx, model):
-            try:
-                return await direct_call()
-            except Exception:
-                await guard.release_budget_reservations(reservations)
-                await guard.release_entitlement_reservations(ctx)
-                raise
-        await guard.release_budget_reservations(reservations)
-        await guard.release_entitlement_reservations(ctx)
-        raise
+invoke_litellm_with_direct_fallback = invoke_router_with_direct_fallback
 
 
 __all__ = [
     "ChatProxyPrepared",
     "apply_stream_cost_defer_flag",
     "invoke_litellm_with_direct_fallback",
+    "invoke_router_with_direct_fallback",
     "prepare_chat_proxy_request",
 ]

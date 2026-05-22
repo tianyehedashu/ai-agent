@@ -13,8 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from domains.gateway.infrastructure.repositories.model_repository import (
-    GatewayModelRepository,
+from domains.gateway.application.gateway_model_listing import resolve_by_name_visible
+from domains.gateway.infrastructure.repositories.gateway_route_repository import (
     GatewayRouteRepository,
 )
 
@@ -50,6 +50,8 @@ async def resolve_model_or_route(
     session: AsyncSession,
     team_id: uuid.UUID,
     name: str,
+    *,
+    user_id: uuid.UUID | None = None,
 ) -> ResolvedModelName | None:
     """``GatewayModel.name`` 优先，未命中则按 ``GatewayRoute.virtual_model`` 解析主选模型。
 
@@ -59,15 +61,18 @@ async def resolve_model_or_route(
     cleaned = name.strip() if name else ""
     if not cleaned:
         return None
-    model_repo = GatewayModelRepository(session)
-    record = await model_repo.resolve_by_name(team_id, cleaned)
+    record = await resolve_by_name_visible(
+        session, team_id, cleaned, user_id=user_id
+    )
     if record is not None:
         return ResolvedModelName(record=record, route=None, via_route=None)
     route = await GatewayRouteRepository(session).resolve_by_virtual_model(team_id, cleaned)
     if route is None:
         return None
     for primary in route.primary_models or ():
-        primary_record = await model_repo.resolve_by_name(team_id, primary)
+        primary_record = await resolve_by_name_visible(
+            session, team_id, primary, user_id=user_id
+        )
         if primary_record is not None:
             return ResolvedModelName(
                 record=primary_record,

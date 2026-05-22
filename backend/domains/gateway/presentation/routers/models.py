@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,10 +15,12 @@ from domains.gateway.application.config_catalog_sync import (
     selector_capabilities_from_tags,
     sync_gateway_catalog_from_seed,
 )
+from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
+from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     GatewayModelCreate,
@@ -102,16 +104,46 @@ async def reload_gateway_catalog_from_config(
 async def list_models(
     team: CurrentTeam,
     reads: MgmtReads,
+    registry_scope: Literal["team", "system", "callable", "requestable"] = Query(
+        "team",
+        description=(
+            "team=当前团队注册行；system=平台注册行（仅平台管理员）；"
+            "callable=租户+平台合并；requestable=enabled 且连通性未 failed（试调/请求用）"
+        ),
+    ),
     provider: str | None = Query(None, min_length=1, max_length=50),
     credential_id: uuid.UUID | None = Query(None),
 ) -> list[GatewayModelResponse]:
+    if registry_scope == "system" and not team.is_platform_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform admin can list system registry models",
+        )
     models = await reads.list_gateway_models(
         team.team_id,
+        registry_scope=registry_scope,
         only_enabled=False,
         provider=provider,
         credential_id=credential_id,
+        user_id=team.user_id,
     )
-    return [GatewayModelResponse.model_validate(tenant_scoped_orm_dict(m)) for m in models]
+    include_cred = registry_scope == "system" and team.is_platform_admin
+    credentials_by_id = None
+    if include_cred:
+        cred_ids = {
+            getattr(m, "credential_id")
+            for m in models
+            if registry_kind_for_merged_row(m) == "system"
+        }
+        credentials_by_id = await reads.map_system_credentials_by_id(cred_ids)
+    return [
+        build_gateway_model_response(
+            m,
+            include_system_credential=include_cred,
+            credentials_by_id=credentials_by_id if include_cred else None,
+        )
+        for m in models
+    ]
 
 
 @router.get("/models/usage-summary", response_model=GatewayModelUsageSummaryResponse)

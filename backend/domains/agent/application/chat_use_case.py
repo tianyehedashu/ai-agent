@@ -141,6 +141,8 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         creative_mode: str = "chat",
         reference_image_urls: list[str] | None = None,
         image_gen_strength: float | None = None,
+        temperature: float | None = None,
+        thinking_enabled: bool | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """处理对话请求"""
         await self._ensure_memory_store_initialized()
@@ -227,7 +229,13 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             try:
                 engine, session_recreated_event, picked_chat_model_for_persist = (
                     await self._prepare_agent_engine(
-                        agent_id, session_id, user_id, session, model_ref
+                        agent_id,
+                        session_id,
+                        user_id,
+                        session,
+                        model_ref,
+                        request_temperature=temperature,
+                        thinking_enabled=thinking_enabled,
                     )
                 )
             except ValidationError as e:

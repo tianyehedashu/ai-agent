@@ -1,4 +1,9 @@
-import type { GatewayModel, GatewayModelPreset, GatewayRoute } from '@/api/gateway'
+import type {
+  GatewayModel,
+  GatewayModelPreset,
+  GatewayModelRegistryScope,
+} from '@/api/gateway/models'
+import type { GatewayRoute } from '@/api/gateway/routes'
 import { formatMoney } from '@/lib/money'
 import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
@@ -12,6 +17,43 @@ export interface ModelWithConnectivityStatus {
   id: string
   capability: string
   last_test_status: ModelTestStatus
+  enabled?: boolean
+  is_active?: boolean
+  entitlement_status?: 'active' | 'exhausted' | 'resetting' | 'expired' | 'none'
+}
+
+/**
+ * 管理面 ``registry_scope=requestable``：已启用且连通性探活未 failed。
+ * 与后端 ``is_connectivity_requestable`` + ``only_enabled`` 对齐。
+ */
+export function isRegistryRequestableModel(model: ModelWithConnectivityStatus): boolean {
+  const active = model.enabled ?? model.is_active ?? false
+  if (!active) return false
+  if (model.last_test_status === 'failed') return false
+  return true
+}
+
+export function filterRegistryRequestableModels<T extends ModelWithConnectivityStatus>(
+  items: readonly T[]
+): T[] {
+  return items.filter(isRegistryRequestableModel)
+}
+
+/**
+ * 代理端 ``gateway.callable`` / ``compute_model_callable``：在 registry 可请求基础上，
+ * 排除 entitlement 耗尽或过期（需条目带 ``entitlement_status``，如个人模型列表）。
+ */
+export function isProxyCallableModel(model: ModelWithConnectivityStatus): boolean {
+  if (!isRegistryRequestableModel(model)) return false
+  const entitlement = model.entitlement_status
+  if (entitlement === 'exhausted' || entitlement === 'expired') return false
+  return true
+}
+
+export function filterProxyCallableModels<T extends ModelWithConnectivityStatus>(
+  items: readonly T[]
+): T[] {
+  return items.filter(isProxyCallableModel)
 }
 
 /** 接入通道 id → 展示名（模块级 Map，避免列表内反复线性查找） */
@@ -19,19 +61,27 @@ const MODEL_PROVIDER_NAME_BY_ID: ReadonlyMap<string, string> = new Map(
   MODEL_PROVIDERS.map((p) => [p.id, p.name])
 )
 
-/** 无筛选的全量注册模型列表（Guide、Playground、路由页等共享，避免同页重复请求） */
-export const GATEWAY_MODELS_ALL_QUERY_KEY = ['gateway', 'models'] as const
+/** 注册表查询范围（与后端 ``registry_scope`` 对齐） */
+export type { GatewayModelRegistryScope } from '@/api/gateway/models'
 
 /** 无 channel 筛选的个人模型列表 */
 export const GATEWAY_MY_MODELS_ALL_QUERY_KEY = ['gateway', 'my-models'] as const
 
+/** 与 TeamModelsWorkspace / Guide / Playground 共用的 requestable 列表 query key */
+export function gatewayModelsRequestableQueryKey(
+  teamId: string
+): ReturnType<typeof gatewayModelsListQueryKey> {
+  return gatewayModelsListQueryKey(teamId, 'requestable')
+}
+
 /** 与 TeamModelsWorkspace listModels 查询键一致 */
 export function gatewayModelsListQueryKey(
   teamId: string,
+  registryScope: GatewayModelRegistryScope = 'team',
   providerFilter = '',
   credentialFilter = ''
-): readonly ['gateway', 'models', string, string, string] {
-  return ['gateway', 'models', teamId, providerFilter, credentialFilter]
+): readonly ['gateway', 'models', string, GatewayModelRegistryScope, string, string] {
+  return ['gateway', 'models', teamId, registryScope, providerFilter, credentialFilter]
 }
 
 export function channelLabel(id: string): string {

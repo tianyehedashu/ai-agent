@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +11,7 @@ from domains.gateway.application.proxy_response_adapter import (
     pricing_kwargs_from_litellm,
     schedule_settle_usage,
 )
+from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.policies.dashscope_embedding import (
     should_use_dashscope_direct_embedding,
@@ -18,11 +20,38 @@ from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import get_router
 
 if TYPE_CHECKING:
+    from domains.gateway.application.proxy_guard import BudgetReservation
     from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 
 
 class ProxyNonChatMixin:
     """``ProxyUseCase`` 的非对话能力入口（mixin）。"""
+
+    async def _invoke_non_chat_with_router_fallback(
+        self: ProxyUseCase,
+        ctx: ProxyContext,
+        model: str | None,
+        reservations: list[BudgetReservation],
+        kwargs: dict[str, Any],
+        *,
+        router_call: Callable[[], Awaitable[Any]],
+        direct_call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        budget_model = (model or "").strip()
+        use_direct = (
+            await self._should_use_internal_direct_litellm(ctx, budget_model)
+            if budget_model
+            else False
+        )
+        return await invoke_router_with_direct_fallback(
+            self,
+            ctx,
+            budget_model,
+            reservations,
+            use_direct=use_direct,
+            direct_call=direct_call,
+            router_call=router_call,
+        )
 
     async def embedding(
         self: ProxyUseCase,
@@ -166,10 +195,15 @@ class ProxyNonChatMixin:
             await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
-        from litellm import aspeech
-
         try:
-            result = await aspeech(**kwargs)
+            result = await self._invoke_non_chat_with_router_fallback(
+                ctx,
+                ctx.budget_model,
+                reservations,
+                kwargs,
+                router_call=lambda: self._router_speech(kwargs),
+                direct_call=lambda: self._direct_speech(kwargs),
+            )
         except Exception:
             await self._guard.release_budget_reservations(reservations)
             await self._guard.release_entitlement_reservations(ctx)
@@ -201,14 +235,14 @@ class ProxyNonChatMixin:
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import arerank
-
-        try:
-            response = await arerank(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
+        response = await self._invoke_non_chat_with_router_fallback(
+            ctx,
+            ctx.budget_model,
+            reservations,
+            kwargs,
+            router_call=lambda: self._router_rerank(kwargs),
+            direct_call=lambda: self._direct_rerank(kwargs),
+        )
         return adapt_response(
             response,
             ctx,
@@ -240,14 +274,14 @@ class ProxyNonChatMixin:
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import amoderation
-
-        try:
-            response = await amoderation(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
+        response = await self._invoke_non_chat_with_router_fallback(
+            ctx,
+            ctx.budget_model,
+            reservations,
+            kwargs,
+            router_call=lambda: self._router_moderation(kwargs),
+            direct_call=lambda: self._direct_moderation(kwargs),
+        )
         return adapt_response(
             response,
             ctx,
@@ -280,14 +314,14 @@ class ProxyNonChatMixin:
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        from litellm import avideo_generation
-
-        try:
-            response = await avideo_generation(**kwargs)
-        except Exception:
-            await self._guard.release_budget_reservations(reservations)
-            await self._guard.release_entitlement_reservations(ctx)
-            raise
+        response = await self._invoke_non_chat_with_router_fallback(
+            ctx,
+            model,
+            reservations,
+            kwargs,
+            router_call=lambda: self._router_video_generation(kwargs),
+            direct_call=lambda: self._direct_video_generation(kwargs),
+        )
         return adapt_response(
             response,
             ctx,

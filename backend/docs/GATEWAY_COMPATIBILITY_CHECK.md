@@ -213,7 +213,7 @@ async for chunk in response:
 |-------------|--------------|------|
 | `model` / `max_tokens` / `messages` | ✅ | 必填 |
 | `system` | ✅ | 字符串或 text block 数组 |
-| `temperature` / `top_p` / `top_k` | ✅ | 透传 |
+| `temperature` / `top_p` / `top_k` | ✅ | 透传；出站前由 ``invocation_policy`` 钳制 [0,2] 或推理模型强制 1.0 |
 | `stop_sequences` | ✅ | 透传 |
 | `stream` | ✅ | Anthropic SSE 事件 |
 | `tools` / `tool_choice` | ✅ | 透传 |

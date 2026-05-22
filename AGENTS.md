@@ -89,6 +89,7 @@ from libs.types import Result
 - **业务/技术分离** - 业务类型在 `domains/`，纯技术基础设施在 `libs/`
 - **前端** - 个人模型与 BYOK 凭据的 UI 在 **`/gateway/*`** 与 `frontend/src/features/gateway-*`；设置页（`pages/settings`）仅保留账户、API Key、MCP 等，**不**再内嵌凭据/模型 Tab（见 `frontend/docs/CODE_STANDARDS.md`）
 - **Agent LLM** - `domains/agent/infrastructure/llm/agent_llm_facade.py`（`AgentLlmFacade`）仅做领域消息与 Gateway 桥接；`message_formatter` / `langchain_messages` 留在 **agent/infrastructure/llm**；provider 适配、凭据、Prompt Cache、模型能力/LiteLLM ID 在 **domains/gateway**（`UpstreamAdapter`、`PromptCacheMiddleware`、`domain/model_capability`、`domain/litellm_model_id` 等）。**勿**在 `libs/llm` 放 BC 相关逻辑；跨域契约用 `domains/gateway/application/ports.py` 与 `model_catalog_port.py`。
+- **系统模型可见性** - `system_provider_credentials` / `system_gateway_models` 的 `visibility` + `system_gateway_grants`（PlatformAdmin 配置）；合并列表经 `gateway_model_listing.list_merged_models_for_tenant`（domain 纯规则 + application IO）；配额/定价仍用 `gateway_budgets` / `downstream_model_pricing`（见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md` §5.1）。
 
 ## 详细规范
 

@@ -66,6 +66,7 @@ interface CallParams {
   /** 视觉理解：OpenAI 多模态 content */
   imageUrl?: string
   enableThinking?: boolean
+  temperature?: number
 }
 
 interface UsePlaygroundCallReturn {
@@ -146,6 +147,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
           flavor: params.flavor,
           maxTokens: params.maxTokens,
           enableThinking: params.enableThinking,
+          temperature: params.temperature,
         })
     const body = JSON.stringify(bodyObject)
     const headers: Record<string, string> = {

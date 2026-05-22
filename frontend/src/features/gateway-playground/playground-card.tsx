@@ -27,11 +27,17 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  GATEWAY_MODELS_ALL_QUERY_KEY,
+  GATEWAY_MODELS_STALE_MS,
   GATEWAY_MY_MODELS_ALL_QUERY_KEY,
+  gatewayModelsRequestableQueryKey,
+  isProxyCallableModel,
 } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
+import {
+  temperatureDefaultFromCapabilities,
+  temperaturePolicyFromCapabilities,
+} from '@/features/gateway-shared/model-selector-capabilities'
 import {
   builtinReasoningPlaygroundHint,
   resolveThinkingParamForModel,
@@ -40,7 +46,7 @@ import {
 } from '@/features/gateway-shared/thinking-param'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { getCurrentTeamId } from '@/stores/gateway-team'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundKeyField } from './playground-key-field'
@@ -117,6 +123,7 @@ export function PlaygroundCard({
   const promptId = useId()
   const streamId = useId()
   const thinkingId = useId()
+  const temperatureId = useId()
   const visionImageUrlId = useId()
   const videoImageUrlId = useId()
   const imageSizeId = useId()
@@ -129,6 +136,7 @@ export function PlaygroundCard({
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
   const [stream, setStream] = useState(true)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [temperature, setTemperature] = useState(0.7)
   const [apiFlavor, setApiFlavor] = useState<PlaygroundApiFlavor>('openai')
   const [showKey, setShowKey] = useState(false)
   const [visionImageUrl, setVisionImageUrl] = useState('')
@@ -162,23 +170,25 @@ export function PlaygroundCard({
   const { status, content, metadata, error, rawResponse, lastRequest, isRunning, cancel } =
     activeCall
 
-  const teamId = getCurrentTeamId()
+  const teamId = useGatewayTeamStore((s) => s.currentTeamId)
 
   const [teamModelsQuery, myModelsQuery, routesQuery] = useQueries({
     queries: [
       {
-        queryKey: [...GATEWAY_MODELS_ALL_QUERY_KEY, teamId],
+        queryKey: teamId
+          ? gatewayModelsRequestableQueryKey(teamId)
+          : ['gateway', 'models', 'requestable', 'none'],
         queryFn: () => {
           if (!teamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listModels(teamId)
+          return gatewayApi.listModels(teamId, { registry_scope: 'requestable' })
         },
         enabled: Boolean(teamId),
-        staleTime: 60_000,
+        staleTime: GATEWAY_MODELS_STALE_MS,
       },
       {
         queryKey: GATEWAY_MY_MODELS_ALL_QUERY_KEY,
         queryFn: () => gatewayApi.listMyModels(),
-        staleTime: 60_000,
+        staleTime: GATEWAY_MODELS_STALE_MS,
       },
       {
         queryKey: ['gateway', 'routes', teamId],
@@ -187,7 +197,7 @@ export function PlaygroundCard({
           return gatewayApi.listRoutes(teamId)
         },
         enabled: Boolean(teamId),
-        staleTime: 60_000,
+        staleTime: GATEWAY_MODELS_STALE_MS,
       },
     ],
   })
@@ -203,29 +213,27 @@ export function PlaygroundCard({
   const candidateModels = useMemo<ModelCandidate[]>(() => {
     const seen = new Map<string, ModelCandidate>()
     for (const item of teamModelsQuery.data ?? []) {
-      if (item.enabled && item.name && !seen.has(item.name)) {
-        seen.set(item.name, {
-          name: item.name,
-          scope: 'team',
-          status: item.last_test_status,
-          capability: item.capability,
-          selector_capabilities: item.selector_capabilities,
-          model_types: item.model_types,
-        })
-      }
+      if (!item.name || seen.has(item.name)) continue
+      seen.set(item.name, {
+        name: item.name,
+        scope: 'team',
+        status: item.last_test_status,
+        capability: item.capability,
+        selector_capabilities: item.selector_capabilities,
+        model_types: item.model_types,
+      })
     }
     for (const item of myModelsQuery.data ?? []) {
       const key = item.name || item.display_name
-      if (item.is_active && key && !seen.has(key)) {
-        seen.set(key, {
-          name: key,
-          scope: 'personal',
-          status: item.last_test_status,
-          capability: item.capability,
-          selector_capabilities: item.selector_capabilities,
-          model_types: item.model_types,
-        })
-      }
+      if (!key || seen.has(key) || !isProxyCallableModel(item)) continue
+      seen.set(key, {
+        name: key,
+        scope: 'personal',
+        status: item.last_test_status,
+        capability: item.capability,
+        selector_capabilities: item.selector_capabilities,
+        model_types: item.model_types,
+      })
     }
     const all = Array.from(seen.values())
     all.sort((a, b) => {
@@ -319,10 +327,27 @@ export function PlaygroundCard({
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
 
+  const modelsListLoaded = teamModelsQuery.isSuccess || myModelsQuery.isSuccess
+
   const thinkingParam = useMemo<ThinkingParam>(
-    () => resolveThinkingParamForModel(trimmedModel, selectedCandidate?.selector_capabilities),
-    [trimmedModel, selectedCandidate?.selector_capabilities]
+    () =>
+      resolveThinkingParamForModel(trimmedModel, selectedCandidate?.selector_capabilities, {
+        allowNameFallback: !modelsListLoaded,
+      }),
+    [trimmedModel, selectedCandidate?.selector_capabilities, modelsListLoaded]
   )
+
+  const temperaturePolicy = useMemo(
+    () => temperaturePolicyFromCapabilities(selectedCandidate?.selector_capabilities),
+    [selectedCandidate?.selector_capabilities]
+  )
+
+  const temperatureInteractive = playgroundMode === 'chat' && temperaturePolicy === 'client'
+
+  const temperatureFixedHint = useMemo(() => {
+    if (playgroundMode !== 'chat' || temperaturePolicy !== 'fixed_1') return null
+    return '推理/思考类模型：temperature 固定为 1.0，无需调整。'
+  }, [playgroundMode, temperaturePolicy])
 
   const thinkingFlavorMatch =
     (thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
@@ -335,7 +360,9 @@ export function PlaygroundCard({
   const thinkingModelHint = useMemo(
     () =>
       playgroundMode === 'chat' && !thinkingSwitchInteractive
-        ? thinkingHintForModel(trimmedModel, apiFlavor, selectedCandidate?.selector_capabilities)
+        ? thinkingHintForModel(trimmedModel, apiFlavor, selectedCandidate?.selector_capabilities, {
+            allowNameFallback: !modelsListLoaded,
+          })
         : null,
     [
       playgroundMode,
@@ -343,6 +370,7 @@ export function PlaygroundCard({
       trimmedModel,
       apiFlavor,
       selectedCandidate?.selector_capabilities,
+      modelsListLoaded,
     ]
   )
 
@@ -365,8 +393,24 @@ export function PlaygroundCard({
     setThinkingEnabled(false)
   }, [model, apiFlavor, playgroundMode])
 
+  useEffect(() => {
+    if (selectedCandidate?.selector_capabilities) {
+      setTemperature(temperatureDefaultFromCapabilities(selectedCandidate.selector_capabilities))
+    }
+  }, [model, selectedCandidate?.selector_capabilities])
+
+  const selectedModelRequestable = useMemo(() => {
+    if (customModel) return trimmedModel.length > 0
+    if (selectedRoute) {
+      return selectedRoute.primaryModels.every((name) => modelsByName.has(name))
+    }
+    if (selectedCandidate) return true
+    return false
+  }, [customModel, trimmedModel, selectedRoute, selectedCandidate, modelsByName])
+
   const canSubmit =
     Boolean(trimmedKey && trimmedModel && trimmedPrompt) &&
+    selectedModelRequestable &&
     (playgroundMode !== 'vision' || Boolean(trimmedVisionUrl))
 
   const thinkingContent = 'thinkingContent' in activeCall ? activeCall.thinkingContent : ''
@@ -440,6 +484,7 @@ export function PlaygroundCard({
       stream: thinkingEnabled && thinkingParam === 'dashscope_enable_thinking' ? true : stream,
       flavor: apiFlavor,
       enableThinking: thinkingSwitchInteractive ? thinkingEnabled : false,
+      temperature: temperatureInteractive ? temperature : undefined,
     })
   }
 
@@ -618,6 +663,31 @@ export function PlaygroundCard({
             <p className="rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-xs text-muted-foreground">
               {builtinThinkingHint}
             </p>
+          ) : null}
+
+          {temperatureFixedHint ? (
+            <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+              {temperatureFixedHint}
+            </p>
+          ) : null}
+
+          {temperatureInteractive ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={temperatureId}>Temperature ({temperature.toFixed(2)})</Label>
+              <input
+                id={temperatureId}
+                type="range"
+                min={0}
+                max={2}
+                step={0.05}
+                value={temperature}
+                disabled={isRunning}
+                onChange={(e) => {
+                  setTemperature(Number.parseFloat(e.target.value))
+                }}
+                className="w-full accent-primary"
+              />
+            </div>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-2">

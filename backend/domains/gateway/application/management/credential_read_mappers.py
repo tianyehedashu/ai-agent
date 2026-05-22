@@ -24,6 +24,7 @@ def credential_from_orm(cred: ProviderCredential) -> CredentialReadModel:
         is_active=cred.is_active,
         created_at=cred.created_at,
         api_key_encrypted=cred.api_key_encrypted,
+        visibility=None,
     )
 
 
@@ -40,6 +41,7 @@ def system_credential_from_orm(cred: SystemProviderCredential) -> CredentialRead
         is_active=cred.is_active,
         created_at=cred.created_at,
         api_key_encrypted=cred.api_key_encrypted,
+        visibility=cred.visibility,
     )
 
 

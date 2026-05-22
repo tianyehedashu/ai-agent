@@ -141,6 +141,16 @@ class ChatRequest(BaseModel):
         default=None,
         description="可选：Gateway 计费团队（UI 团队切换器）；写入 PermissionContext 供内部桥接",
     )
+    temperature: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="可选：覆盖 Agent 默认 temperature（0–2）",
+    )
+    thinking_enabled: bool | None = Field(
+        default=None,
+        description="可选：开启模型思考模式（仅当模型 selector_capabilities 支持时生效）",
+    )
 
     @field_validator("session_id")
     @classmethod
@@ -246,6 +256,8 @@ async def chat(
                     creative_mode=request.creative_mode,
                     reference_image_urls=request.reference_image_urls,
                     image_gen_strength=request.image_gen_strength,
+                    temperature=request.temperature,
+                    thinking_enabled=request.thinking_enabled,
                 ):
                     try:
                         event_dict = event.model_dump(mode="json", warnings="error")

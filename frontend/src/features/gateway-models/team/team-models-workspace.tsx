@@ -24,8 +24,10 @@ import {
 } from '@/features/gateway-models/paths'
 import {
   gatewayModelsListQueryKey,
+  gatewayModelsRequestableQueryKey,
   invalidateGatewayModelCaches,
   filterTestableConnectivityModels,
+  GATEWAY_MODELS_STALE_MS,
   matchesHealthFilter,
   runBatchConnectivityTests,
 } from '@/features/gateway-models/utils'
@@ -40,6 +42,12 @@ import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
 const ModelInventory = lazy(() =>
   import('./model-inventory').then((m) => ({ default: m.ModelInventory }))
+)
+
+const PlatformCallableModelsPanel = lazy(() =>
+  import('./platform-callable-models-panel').then((m) => ({
+    default: m.PlatformCallableModelsPanel,
+  }))
 )
 
 const RegisterModelForm = lazy(() =>
@@ -60,18 +68,16 @@ const registerFormSuspenseFallback = (
   </div>
 )
 
-/** 团队列表排除 system；系统 Tab 仅展示 system 凭据下的模型 */
+/** 团队 Tab 与系统 Tab 对应后端 ``registry_scope`` */
 export type TeamModelsListMode = 'team' | 'system'
 
-function modelMatchesListMode(
-  credentialId: string,
+function resolveRegistryScope(
   listMode: TeamModelsListMode | undefined,
-  credentialSummariesById: Map<string, { scope: string | null }>
-): boolean {
-  if (!listMode) return true
-  const scope = credentialSummariesById.get(credentialId)?.scope
-  if (listMode === 'system') return scope === 'system'
-  return scope !== 'system'
+  credentialFilter: string
+): 'team' | 'system' | 'callable' {
+  if (credentialFilter !== '') return 'callable'
+  if (listMode === 'system') return 'system'
+  return 'team'
 }
 
 interface TeamModelsWorkspaceProps {
@@ -107,6 +113,9 @@ export function TeamModelsWorkspace({
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [testingAll, setTestingAll] = useState(false)
 
+  const registryScope = resolveRegistryScope(listMode, credentialFilter)
+  const showPlatformCallablePanel = listMode === 'team' && credentialFilter === ''
+
   const goToRegister = useCallback((): void => {
     preloadRegisterModelForm()
     setSearchParams(
@@ -131,13 +140,28 @@ export function TeamModelsWorkspace({
   }, [setSearchParams])
 
   const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, providerFilter, credentialFilter),
+    queryKey: gatewayModelsListQueryKey(teamId, registryScope, providerFilter, credentialFilter),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
+        registry_scope: registryScope,
         ...(providerFilter ? { provider: providerFilter } : {}),
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       }),
   })
+
+  const { data: requestableItems = [] } = useQuery({
+    queryKey: gatewayModelsRequestableQueryKey(teamId),
+    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'requestable' }),
+    enabled: showPlatformCallablePanel,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const platformRequestableModels = useMemo(
+    () => requestableItems.filter((m) => m.registry_kind === 'system'),
+    [requestableItems]
+  )
+
+  const registryItems = items ?? []
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
@@ -188,21 +212,13 @@ export function TeamModelsWorkspace({
     [credentials, credentialFilter, listMode]
   )
 
-  const scopedItems = useMemo(
-    () =>
-      (items ?? []).filter((m) =>
-        modelMatchesListMode(m.credential_id, listMode, credentialSummariesById)
-      ),
-    [items, listMode, credentialSummariesById]
-  )
-
   const scopedRouteNames = useMemo(() => {
     const names = new Set<string>()
-    for (const m of scopedItems) {
+    for (const m of registryItems) {
       names.add(m.name)
     }
     return names
-  }, [scopedItems])
+  }, [registryItems])
 
   const usageByRouteName = useMemo(() => {
     const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
@@ -215,17 +231,17 @@ export function TeamModelsWorkspace({
 
   const providerChoices = useMemo(() => {
     const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
-    if (providerFilter === '' && scopedItems.length > 0) {
-      for (const m of scopedItems) {
+    if (providerFilter === '' && registryItems.length > 0) {
+      for (const m of registryItems) {
         s.add(m.provider)
       }
     }
     return Array.from(s).sort()
-  }, [scopedItems, providerFilter])
+  }, [registryItems, providerFilter])
 
   const filteredModels = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase()
-    return scopedItems.filter((m) => {
+    return registryItems.filter((m) => {
       if (!matchesHealthFilter(m, healthFilter)) return false
       if (!q) return true
       return (
@@ -234,7 +250,7 @@ export function TeamModelsWorkspace({
         m.provider.toLowerCase().includes(q)
       )
     })
-  }, [scopedItems, healthFilter, deferredSearch])
+  }, [registryItems, healthFilter, deferredSearch])
 
   const { createMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
@@ -267,7 +283,10 @@ export function TeamModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const testableItems = useMemo(() => filterTestableConnectivityModels(scopedItems), [scopedItems])
+  const testableItems = useMemo(
+    () => filterTestableConnectivityModels(registryItems),
+    [registryItems]
+  )
 
   const handleTestAll = useCallback((): void => {
     if (testableItems.length === 0) return
@@ -297,7 +316,11 @@ export function TeamModelsWorkspace({
   )
 
   const showEmptyOnboarding =
-    !isRegisterView && !isLoading && scopedItems.length === 0 && !credentialFilter
+    !isRegisterView &&
+    !isLoading &&
+    registryItems.length === 0 &&
+    !credentialFilter &&
+    platformRequestableModels.length === 0
 
   const credentialBanner = credentialFilter ? (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
@@ -404,33 +427,43 @@ export function TeamModelsWorkspace({
           ) : null}
         </div>
       ) : (
-        <Suspense fallback={inventorySuspenseFallback}>
-          <ModelInventory
-            models={filteredModels}
-            allModels={scopedItems}
-            selectedId={null}
-            getModelHref={getModelHref}
-            isLoading={isLoading}
-            search={search}
-            onSearchChange={setSearch}
-            providerFilter={providerFilter}
-            onProviderFilterChange={setProviderFilter}
-            providerChoices={providerChoices}
-            usageDays={usageDays}
-            onUsageDaysChange={setUsageDays}
-            usageByRouteName={usageByRouteName}
-            usageLoading={usageLoading}
-            highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
-            healthFilter={healthFilter}
-            onHealthFilterChange={setHealthFilter}
-            canWrite={canManageModels}
-            onTestAll={canManageModels && testableItems.length > 0 ? handleTestAll : undefined}
-            testingAll={testingAll}
-            onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
-            onPreloadRegister={preloadRegisterModelForm}
-            onPreloadRowNavigate={preloadTeamModelDetailPane}
-          />
-        </Suspense>
+        <>
+          {registryItems.length > 0 ? (
+            <Suspense fallback={inventorySuspenseFallback}>
+              <ModelInventory
+                models={filteredModels}
+                allModels={registryItems}
+                selectedId={null}
+                getModelHref={getModelHref}
+                isLoading={isLoading}
+                search={search}
+                onSearchChange={setSearch}
+                providerFilter={providerFilter}
+                onProviderFilterChange={setProviderFilter}
+                providerChoices={providerChoices}
+                usageDays={usageDays}
+                onUsageDaysChange={setUsageDays}
+                usageByRouteName={usageByRouteName}
+                usageLoading={usageLoading}
+                highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
+                healthFilter={healthFilter}
+                onHealthFilterChange={setHealthFilter}
+                canWrite={canManageModels}
+                onTestAll={canManageModels && testableItems.length > 0 ? handleTestAll : undefined}
+                testingAll={testingAll}
+                onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
+                onPreloadRegister={preloadRegisterModelForm}
+                onPreloadRowNavigate={preloadTeamModelDetailPane}
+                showSystemAdmin={listMode === 'system' && isPlatformAdmin}
+              />
+            </Suspense>
+          ) : null}
+          {showPlatformCallablePanel && platformRequestableModels.length > 0 ? (
+            <Suspense fallback={inventorySuspenseFallback}>
+              <PlatformCallableModelsPanel models={platformRequestableModels} />
+            </Suspense>
+          ) : null}
+        </>
       )}
     </div>
   )

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.provider_api_base import resolve_effective_api_base
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderCredentialsSnapshot:
@@ -33,6 +35,12 @@ class ProviderEnvSnapshot:
     volcengine_image_endpoint_id: str | None = None
 
 
+def _snapshot_base(snapshot: ProviderEnvSnapshot, attr: str, provider: str) -> str | None:
+    raw = getattr(snapshot, attr, None)
+    env_base = raw if isinstance(raw, str) else None
+    return resolve_effective_api_base(provider, env_base)
+
+
 def resolve_provider_credentials(
     provider: str,
     snapshot: ProviderEnvSnapshot,
@@ -40,17 +48,32 @@ def resolve_provider_credentials(
     """按 provider 从快照解析 api_key / api_base；custom 返回空凭据。"""
     p = provider.strip().lower()
     if p == "openai":
-        return ProviderCredentialsSnapshot(snapshot.openai_api_key, snapshot.openai_api_base)
+        return ProviderCredentialsSnapshot(
+            snapshot.openai_api_key,
+            _snapshot_base(snapshot, "openai_api_base", p),
+        )
     if p == "deepseek":
-        return ProviderCredentialsSnapshot(snapshot.deepseek_api_key, snapshot.deepseek_api_base)
+        return ProviderCredentialsSnapshot(
+            snapshot.deepseek_api_key,
+            _snapshot_base(snapshot, "deepseek_api_base", p),
+        )
     if p == "anthropic":
         return ProviderCredentialsSnapshot(snapshot.anthropic_api_key, None)
     if p == "dashscope":
-        return ProviderCredentialsSnapshot(snapshot.dashscope_api_key, snapshot.dashscope_api_base)
+        return ProviderCredentialsSnapshot(
+            snapshot.dashscope_api_key,
+            _snapshot_base(snapshot, "dashscope_api_base", p),
+        )
     if p == "zhipuai":
-        return ProviderCredentialsSnapshot(snapshot.zhipuai_api_key, snapshot.zhipuai_api_base)
+        return ProviderCredentialsSnapshot(
+            snapshot.zhipuai_api_key,
+            _snapshot_base(snapshot, "zhipuai_api_base", p),
+        )
     if p == "volcengine":
-        return ProviderCredentialsSnapshot(snapshot.volcengine_api_key, snapshot.volcengine_api_base)
+        return ProviderCredentialsSnapshot(
+            snapshot.volcengine_api_key,
+            _snapshot_base(snapshot, "volcengine_api_base", p),
+        )
     if p == "custom":
         return ProviderCredentialsSnapshot(None, None)
     return None

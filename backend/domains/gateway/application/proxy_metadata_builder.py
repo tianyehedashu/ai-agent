@@ -45,12 +45,18 @@ class ProxyMetadataBuilder:
         self._session = session
 
     async def credential_metadata_for_virtual_model(
-        self, team_id: uuid.UUID, virtual_model: str | None
+        self,
+        team_id: uuid.UUID,
+        virtual_model: str | None,
+        *,
+        user_id: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         """按虚拟模型名解析 GatewayModel -> 凭据，供日志归因。"""
         if not virtual_model:
             return {}
-        resolved = await resolve_model_or_route(self._session, team_id, virtual_model)
+        resolved = await resolve_model_or_route(
+            self._session, team_id, virtual_model, user_id=user_id
+        )
         if resolved is None:
             return {}
         if resolved.route is not None:
@@ -131,7 +137,9 @@ class ProxyMetadataBuilder:
         client_model = str(raw_model).strip() if raw_model is not None else ""
         resolved = None
         if client_model:
-            resolved = await resolve_model_or_route(self._session, ctx.team_id, client_model)
+            resolved = await resolve_model_or_route(
+                self._session, ctx.team_id, client_model, user_id=ctx.user_id
+            )
             kwargs["model"] = router_model_name_for_client(ctx.team_id, client_model, resolved)
         return PreparedLitellmKwargs(
             kwargs=kwargs,
@@ -158,7 +166,11 @@ class ProxyMetadataBuilder:
         virtual_model = str(raw_model).strip() if raw_model is not None else None
         if not virtual_model:
             return
-        meta.update(await self.credential_metadata_for_virtual_model(ctx.team_id, virtual_model))
+        meta.update(
+            await self.credential_metadata_for_virtual_model(
+                ctx.team_id, virtual_model, user_id=ctx.user_id
+            )
+        )
         snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
         if snap is not None:
             meta["gateway_route_snapshot"] = snap

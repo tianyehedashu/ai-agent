@@ -79,6 +79,8 @@ export interface ProviderCredential {
   is_active: boolean
   /** app.toml/环境变量同步托管的 system 凭据；UI 不允许直接修改 */
   is_config_managed?: boolean
+  /** 系统凭据可见性（public / restricted） */
+  visibility?: 'public' | 'restricted' | null
   extra: Record<string, unknown> | null
   created_at: string
   /** 后端解密后掩码展示，不含完整密钥 */

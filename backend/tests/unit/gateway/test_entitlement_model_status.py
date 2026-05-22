@@ -13,6 +13,7 @@ from domains.gateway.application.entitlement_model_status import (
     compute_model_callable,
     connectivity_status_from_last_test,
     entitlement_status_by_model_names,
+    is_connectivity_requestable,
     resolve_entitlement_scope,
 )
 from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
@@ -59,6 +60,18 @@ def test_connectivity_status_from_last_test() -> None:
     assert connectivity_status_from_last_test("success") == "success"
     assert connectivity_status_from_last_test("failed") == "failed"
     assert connectivity_status_from_last_test(None) is None
+
+
+@pytest.mark.parametrize(
+    ("last_test_status", "expected"),
+    [
+        ("success", True),
+        (None, True),
+        ("failed", False),
+    ],
+)
+def test_is_connectivity_requestable(last_test_status: str | None, expected: bool) -> None:
+    assert is_connectivity_requestable(last_test_status) is expected
 
 
 def test_status_from_quota_snapshots_resetting() -> None:

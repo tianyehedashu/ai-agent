@@ -24,6 +24,7 @@ from domains.agent.domain.types import (
 from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxManager
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
+from domains.gateway.application.ports import InvocationOverrides
 from libs.db.database import get_session_context
 from utils.logging import get_logger
 
@@ -43,6 +44,9 @@ class ChatAgentRunMixin:
         user_id: str,
         session: object,
         request_model_ref: str | None,
+        *,
+        request_temperature: float | None = None,
+        thinking_enabled: bool | None = None,
     ) -> tuple[LangGraphAgentEngine, AgentEvent | None, str | None]:
         """准备 Agent 引擎"""
         allowed = await self._visible_text_system_ids()
@@ -75,6 +79,13 @@ class ChatAgentRunMixin:
 
         from domains.agent.application.chat_engine import LangGraphAgentEngine
 
+        invocation_overrides: InvocationOverrides | None = None
+        if request_temperature is not None or thinking_enabled is not None:
+            invocation_overrides = InvocationOverrides(
+                temperature=request_temperature,
+                thinking_enabled=thinking_enabled,
+            )
+
         engine = LangGraphAgentEngine(
             config=agent_config,
             llm_gateway=self.llm_gateway,
@@ -82,6 +93,7 @@ class ChatAgentRunMixin:
             tool_registry=configured_tool_registry,
             checkpointer=self.checkpointer,
             execution_config=execution_config,
+            invocation_overrides=invocation_overrides,
         )
 
         return engine, session_recreated_event, picked

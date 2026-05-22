@@ -4,13 +4,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from domains.gateway.domain.policies.model_selection import merge_named_rows_tenant_overrides_system
+from domains.gateway.domain.policies.model_selection import (
+    merge_named_rows_tenant_overrides_system,
+    registry_kind_for_merged_row,
+)
 
 
 @dataclass
 class _Row:
     name: str
     enabled: bool = True
+
+
+@dataclass
+class _TeamRow:
+    name: str
+    tenant_id: object
+
+
+def test_registry_kind_team_when_tenant_id_present() -> None:
+    assert registry_kind_for_merged_row(_TeamRow("m", tenant_id=object())) == "team"
+
+
+def test_registry_kind_system_without_tenant_id() -> None:
+    assert registry_kind_for_merged_row(_Row("m")) == "system"
 
 
 def test_merge_tenant_overrides_system_name() -> None:

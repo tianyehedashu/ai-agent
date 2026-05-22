@@ -37,7 +37,6 @@ import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitle
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
-import { guardrailStatusLabel } from '@/lib/gateway-pii-guardrail'
 import { BookOpen, Copy, Plus, Trash2 } from '@/lib/lucide-icons'
 
 export default function GatewayKeysPage(): React.JSX.Element {
@@ -56,13 +55,6 @@ export default function GatewayKeysPage(): React.JSX.Element {
     queryKey: ['gateway', 'keys', teamId],
     queryFn: () => gatewayApi.listKeys(teamId),
   })
-
-  const { data: gatewayFeatures } = useQuery({
-    queryKey: ['gateway', 'features', teamId],
-    queryFn: () => gatewayApi.getFeatures(teamId),
-    staleTime: 5 * 60 * 1000,
-  })
-  const piiGuardrailGloballyEnabled = gatewayFeatures?.pii_guardrail_globally_enabled ?? false
 
   const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
@@ -223,7 +215,6 @@ export default function GatewayKeysPage(): React.JSX.Element {
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
                 <th className="px-4 py-2 text-left font-medium">每分钟请求 / 每分钟令牌</th>
                 <th className="px-4 py-2 text-left font-medium">客户套餐</th>
-                <th className="px-4 py-2 text-left font-medium">守卫</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
                 <th className="px-4 py-2 text-left font-medium" />
               </tr>
@@ -232,7 +223,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {isLoading && (
                 <tr>
                   <td
-                    colSpan={canManageKeys ? 9 : 8}
+                    colSpan={canManageKeys ? 8 : 7}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     加载中...
@@ -242,7 +233,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {!isLoading && visibleKeys.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canManageKeys ? 9 : 8}
+                    colSpan={canManageKeys ? 8 : 7}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     暂无虚拟 Key
@@ -277,9 +268,6 @@ export default function GatewayKeysPage(): React.JSX.Element {
                       activePlans={activeByVkeyId.get(k.id) ?? []}
                       isLoading={isLoadingByVkeyId.get(k.id) ?? false}
                     />
-                  </td>
-                  <td className="px-4 py-2 text-xs">
-                    {guardrailStatusLabel(k.guardrail_enabled, piiGuardrailGloballyEnabled)}
                   </td>
                   <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
                   <td className="px-4 py-2">
@@ -317,7 +305,6 @@ export default function GatewayKeysPage(): React.JSX.Element {
 
       <CreateKeyDialog
         open={open}
-        piiGuardrailGloballyEnabled={piiGuardrailGloballyEnabled}
         onOpenChange={(v) => {
           setOpen(v)
           if (!v) {
@@ -382,7 +369,6 @@ function KeyEntitlementsCell({
 
 interface CreateKeyValues {
   name: string
-  guardrail_enabled: boolean
   store_full_messages: boolean
   rpm_limit?: number | null
   tpm_limit?: number | null
@@ -390,14 +376,12 @@ interface CreateKeyValues {
 
 function CreateKeyDialog({
   open,
-  piiGuardrailGloballyEnabled,
   onOpenChange,
   onSubmit,
   plaintext,
   createdKeyId,
 }: Readonly<{
   open: boolean
-  piiGuardrailGloballyEnabled: boolean
   onOpenChange: (v: boolean) => void
   onSubmit: (v: CreateKeyValues) => void
   plaintext: string | null
@@ -405,7 +389,6 @@ function CreateKeyDialog({
 }>): React.JSX.Element {
   const [values, setValues] = useState<CreateKeyValues>({
     name: '',
-    guardrail_enabled: false,
     store_full_messages: false,
   })
   const { toast } = useToast()
@@ -488,24 +471,6 @@ function CreateKeyDialog({
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="guardrail" className="flex flex-col gap-1">
-                <span>PII 守卫</span>
-                <span className="text-xs text-muted-foreground">
-                  {piiGuardrailGloballyEnabled
-                    ? '脱敏手机/邮箱/身份证/银行卡/IP 等敏感数据后再请求'
-                    : '即将推出：脱敏手机/邮箱/身份证/银行卡/IP 等敏感数据后再请求（当前不生效）'}
-                </span>
-              </Label>
-              <Switch
-                id="guardrail"
-                checked={piiGuardrailGloballyEnabled && values.guardrail_enabled}
-                disabled={!piiGuardrailGloballyEnabled}
-                onCheckedChange={(v) => {
-                  setValues({ ...values, guardrail_enabled: v })
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
               <Label htmlFor="store" className="flex flex-col gap-1">
                 <span>记录完整消息</span>
                 <span className="text-xs text-muted-foreground">
@@ -544,12 +509,7 @@ function CreateKeyDialog({
               <Button
                 onClick={() => {
                   if (!values.name) return
-                  onSubmit({
-                    ...values,
-                    guardrail_enabled: piiGuardrailGloballyEnabled
-                      ? values.guardrail_enabled
-                      : false,
-                  })
+                  onSubmit(values)
                 }}
                 disabled={!values.name}
               >

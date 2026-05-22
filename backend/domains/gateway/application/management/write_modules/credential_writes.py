@@ -7,6 +7,7 @@ from typing import Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.credential_api_base import resolve_credential_api_base_for_create
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -74,7 +75,7 @@ class CredentialWritesMixin:
             provider=provider,
             name=name,
             api_key_encrypted=api_key_encrypted,
-            api_base=api_base,
+            api_base=resolve_credential_api_base_for_create(provider, api_base),
             extra=extra,
         )
         await self.reload_litellm_router()
@@ -90,7 +91,7 @@ class CredentialWritesMixin:
             provider=provider,
             name=name,
             api_key_encrypted=api_key_encrypted,
-            api_base=api_base,
+            api_base=resolve_credential_api_base_for_create(provider, api_base),
             extra=extra,
         )
         await self.reload_litellm_router()
@@ -186,7 +187,7 @@ class CredentialWritesMixin:
         dup = await self._creds.find_user_by_provider_and_name(actor_user_id, provider, name)
         if dup is not None:
             raise CredentialNameConflictError(provider, name)
-        row = await self._creds.create(scope='user', scope_id=actor_user_id, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=api_base, extra=extra)
+        row = await self._creds.create(scope='user', scope_id=actor_user_id, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=resolve_credential_api_base_for_create(provider, api_base), extra=extra)
         await self.reload_litellm_router()
         return row
 

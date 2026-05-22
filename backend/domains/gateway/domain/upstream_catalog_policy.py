@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from domains.gateway.domain.provider_api_base import resolve_effective_api_base
+
 _ANTHROPIC_UNSUPPORTED = "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，或使用带 OpenAI 兼容列表端点的代理。"
 
 
@@ -16,7 +18,7 @@ def resolve_openai_compatible_models_list_url(
         ``(status, list_url, reason)`` — ``reason`` 仅在 ``unsupported`` 时非空。
     """
     p = provider.lower().strip()
-    base = (api_base or "").strip() or None
+    base = resolve_effective_api_base(p, api_base)
 
     if p == "anthropic":
         return ("unsupported", None, _ANTHROPIC_UNSUPPORTED)
@@ -31,7 +33,9 @@ def resolve_openai_compatible_models_list_url(
         return ("ok", f"{base.rstrip('/')}/models", None)
 
     if p == "deepseek":
-        root = base.rstrip("/") if base else "https://api.deepseek.com/v1"
+        root = (base or "https://api.deepseek.com").rstrip("/")
+        if not root.endswith("/v1"):
+            root = f"{root}/v1"
         return ("ok", f"{root}/models", None)
 
     if p in ("dashscope", "zhipuai", "volcengine"):

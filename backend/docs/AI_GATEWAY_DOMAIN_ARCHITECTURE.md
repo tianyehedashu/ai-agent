@@ -1,7 +1,7 @@
 # AI Gateway 领域架构与工程实践
 
 > **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、**OpenAI 兼容（`/api/v1/openai/v1/*`）与 Anthropic Messages（`/api/v1/anthropic/v1/*`）** 对外入口、管理 API、内部 LLM 桥接及相关前端。可选 **`ROOT_PATH`**（如 `/ai-agent`）作为服务级前缀。  
-> **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)；Claude Code / Cursor 适配见 [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md)。
+> **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；**能力矩阵（已用/未用）**见 [LITELLM_CAPABILITY_MATRIX.md](./LITELLM_CAPABILITY_MATRIX.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)；Claude Code / Cursor 适配见 [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md)。
 
 ---
 
@@ -270,6 +270,26 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 组装逻辑：Presentation 解析 ``resolve_entitlement_scope``（``application/entitlement_model_status.py``）后调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
 
+#### 4.5.2 模型调用策略（Invocation Policy）
+
+出站 OpenAI 形 kwargs 在 ``UpstreamAdapter`` 中统一经领域策略处理（**禁止**在 ``ProxyUseCase`` 内散落 thinking/temperature 分支）：
+
+| 模块 | 职责 |
+|------|------|
+| ``domain/thinking_param.py`` | ``thinking_param`` 四值枚举；写侧 ``enrich_gateway_model_tags`` |
+| ``domain/temperature_policy.py`` | ``temperature_policy``（``client`` / ``fixed_1`` / ``probe_0``） |
+| ``domain/policies/invocation_policy.py`` | ``validate_invocation_kwargs`` / ``apply_invocation_kwargs`` |
+| ``domain/model_capability.py`` | ``ModelCapabilitySnapshot`` 读模型 |
+| ``application/invocation_overrides.py`` | 内部桥接 ``InvocationOverrides`` 合并（Agent Chat） |
+
+**写侧**：种子 / 管理面注册 → ``build_tags_from_seed_model`` → 可选 ``merge_litellm_reasoning_hint``（仅抬高 ``supports_reasoning``，**不覆盖**显式 ``thinking_param``）→ ``enrich_gateway_model_tags``。
+
+**读侧**：``tags_to_capability_snapshot`` → ``selector_capabilities``（管理 API、``GET /v1/models`` 的 ``gateway.selector_capabilities``、模型选择器 ``selector_capabilities`` + 一期别名 ``capabilities``）。
+
+**违规**：``InvocationPolicyViolationError`` → 代理路由 ``classify_proxy_use_case_business_error`` → HTTP 400（``invocation_policy_violation``）。
+
+**跨域**：Agent 仅依赖 ``gateway.application.ports``（``InvocationOverrides``、``GatewayCallContext``）与 ``ModelCatalogPort``；策略在 ``GatewayBridge`` + ``UpstreamAdapter`` 执行，与 HTTP 代理一致。
+
 ### 4.6 LiteLLM Router 与「同别名多调用面」
 
 LiteLLM Router 的 ``model_list`` 以 **deployment 的 ``model_name``** 参与调度；同一字符串多 deployment 时行为依赖版本与具体调用函数（``acompletion`` / ``aimage_generation`` / ``avideo_generation`` 等），**不应依赖未文档化的隐式过滤**。
@@ -381,7 +401,22 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 
 - **分区表**：`gateway_request_logs` 为分区表；主键 **`(id, created_at)`**。禁止仅用 `session.get(Log, id)`，见 `RequestLogRepository.get_for_team`。
 - **凭据**：`provider_credentials` 加密；Router 构建时解密参与 `model_list`。
+- **api_base 权威链**：运行时 LiteLLM Router 只读 DB 凭据 `api_base`（见 `router_singleton._build_litellm_params`），**不**读 LiteLLM 全局 env。内置默认 URL 单一来源：`domain/provider_api_base.get_default_api_base`；config-managed 凭据 bootstrap 写入策略：`domain/credential_sync_policy.resolve_bootstrap_api_base`（管理面已填 base 时 catalog sync 不覆盖）。`.env` 的 `ZHIPUAI_API_BASE` 等仅用于首次 seed / 空 base 回填；Coding 等非默认端点请在管理面凭据或 env bootstrap 配置。
 - **迁移**：`alembic/versions/`。
+
+### 5.1 系统模型可见性（`system_*` + `system_gateway_grants`）
+
+| 概念 | 说明 |
+|------|------|
+| **默认** | `system_provider_credentials.visibility=public`；`system_gateway_models.visibility=inherit`（跟随凭据）。迁移后行为与历史「全平台共享 enabled 系统模型」一致。 |
+| **restricted** | 凭据或模型设为 `restricted` 后，仅 `system_gateway_grants` 白名单中的 `target_kind=team|user` 在合并列表（`callable` / `requestable` / `/v1/models`）中可见。 |
+| **继承** | 模型 `inherit` 时有效可见性 = 凭据 `visibility`；模型可 `public` / `restricted` 覆盖凭据。 |
+| **grant 并集** | 同一模型同时可挂 model 级与 credential 级 grant；任意命中即放行。 |
+| **管理 API** | PlatformAdmin：`PATCH /api/v1/gateway/system/credentials|models/{id}/visibility`；`POST/PATCH/DELETE /api/v1/gateway/system/grants`；反查 `GET /api/v1/gateway/admin/teams|users/{id}/system-visibility`。 |
+| **注册表 scope** | `registry_scope=system` **不过滤**可见性（管理员看全表）；`callable` / `requestable` 经 `gateway_model_listing.list_merged_models_for_tenant(..., user_id=...)` 过滤。 |
+| **配额/定价** | **不**写入 grants 表；继续用 `gateway_budgets`（`target_kind` + 可选 `model_name`）与 `downstream_model_pricing`（`scope=tenant` 等）。 |
+| **catalog reload** | `config_catalog_sync` 更新 system 模型时不覆盖 `visibility` / grants。 |
+| **分层** | 纯规则：`domain/policies/system_visibility.py`；IO 编排：`application/system_visibility_filter.py`；合并列表/按名解析：`application/gateway_model_listing.py`。`GatewayModelRepository.list_for_tenant` 仅做 tenant+system 合并，**不**含可见性过滤。 |
 
 ---
 

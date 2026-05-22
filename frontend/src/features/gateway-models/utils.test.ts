@@ -12,6 +12,10 @@ import {
   pickInspectorModelId,
   routesReferencingModel,
   filterTestableConnectivityModels,
+  filterProxyCallableModels,
+  filterRegistryRequestableModels,
+  isProxyCallableModel,
+  isRegistryRequestableModel,
   runBatchConnectivityTests,
   runWithConcurrency,
   stringArraysEqual,
@@ -44,6 +48,81 @@ function model(
     ...partial,
   }
 }
+
+describe('isRegistryRequestableModel', () => {
+  it('allows enabled non-failed models', () => {
+    expect(isRegistryRequestableModel(model({ enabled: true, last_test_status: 'success' }))).toBe(
+      true
+    )
+    expect(isRegistryRequestableModel(model({ enabled: true, last_test_status: null }))).toBe(true)
+  })
+
+  it('rejects disabled or failed models', () => {
+    expect(isRegistryRequestableModel(model({ enabled: false, last_test_status: 'success' }))).toBe(
+      false
+    )
+    expect(isRegistryRequestableModel(model({ enabled: true, last_test_status: 'failed' }))).toBe(
+      false
+    )
+  })
+
+  it('ignores entitlement_status', () => {
+    expect(
+      isRegistryRequestableModel(
+        model({ enabled: true, last_test_status: 'success', entitlement_status: 'exhausted' })
+      )
+    ).toBe(true)
+  })
+})
+
+describe('isProxyCallableModel', () => {
+  it('rejects exhausted or expired entitlements', () => {
+    expect(
+      isProxyCallableModel(
+        model({ enabled: true, last_test_status: 'success', entitlement_status: 'exhausted' })
+      )
+    ).toBe(false)
+    expect(
+      isProxyCallableModel(
+        model({ enabled: true, last_test_status: 'success', entitlement_status: 'expired' })
+      )
+    ).toBe(false)
+  })
+
+  it('allows active entitlement when registry requestable', () => {
+    expect(
+      isProxyCallableModel(
+        model({ enabled: true, last_test_status: 'success', entitlement_status: 'active' })
+      )
+    ).toBe(true)
+  })
+})
+
+describe('filterRegistryRequestableModels', () => {
+  it('returns only registry-requestable models', () => {
+    const items = [
+      model({ id: 'ok', enabled: true, last_test_status: 'success' }),
+      model({ id: 'fail', enabled: true, last_test_status: 'failed' }),
+      model({ id: 'off', enabled: false, last_test_status: 'success' }),
+    ]
+    expect(filterRegistryRequestableModels(items).map((m) => m.id)).toEqual(['ok'])
+  })
+})
+
+describe('filterProxyCallableModels', () => {
+  it('excludes entitlement-blocked models', () => {
+    const items = [
+      model({ id: 'ok', enabled: true, last_test_status: 'success', entitlement_status: 'active' }),
+      model({
+        id: 'ex',
+        enabled: true,
+        last_test_status: 'success',
+        entitlement_status: 'exhausted',
+      }),
+    ]
+    expect(filterProxyCallableModels(items).map((m) => m.id)).toEqual(['ok'])
+  })
+})
 
 describe('pickInspectorModelId', () => {
   const candidates = [

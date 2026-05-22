@@ -23,6 +23,7 @@ from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
 from domains.gateway.application.ports import (
     GatewayCallContext,
+    InvocationOverrides,
     GatewayResponse,
     GatewayStreamChunk,
 )
@@ -132,6 +133,7 @@ class AgentLlmFacade:
         tool_choice: str | dict | None,
         stream: bool,
         response_format: dict[str, Any] | None,
+        invocation_overrides: InvocationOverrides | None = None,
     ) -> AgentLlmResponse | AsyncGenerator[AgentStreamChunk, None]:
         self._require_bridge_user_id()
         attr = resolve_gateway_bridge_attribution()
@@ -140,6 +142,7 @@ class AgentLlmFacade:
             team_id=attr.billing_team_id,
             capability="chat",
             store_full_messages=get_internal_store_full_override(),
+            invocation_overrides=invocation_overrides,
         )
         bridge = self._gateway_proxy
 
@@ -212,6 +215,7 @@ class AgentLlmFacade:
         tool_choice: str | dict | None = None,
         stream: bool = False,
         response_format: dict[str, Any] | None = None,
+        invocation_overrides: InvocationOverrides | None = None,
     ) -> AgentLlmResponse | AsyncGenerator[AgentStreamChunk, None]:
         """聊天补全（仅经 AI Gateway 桥接；凭据由 Gateway 凭据池解析）。"""
         model_name = model or self.config.default_model
@@ -224,6 +228,7 @@ class AgentLlmFacade:
             tool_choice=tool_choice,
             stream=stream,
             response_format=response_format,
+            invocation_overrides=invocation_overrides,
         )
 
     def format_messages(self, messages: list[Message]) -> list[dict[str, Any]]:

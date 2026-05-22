@@ -316,7 +316,11 @@ async def list_my_prices(
 ) -> list[PricingRateMemberView]:
     _ = user
     cur = _parse_currency(currency)
-    rows = await _catalog_reads(db).list_my_prices(team_id=team.team_id, currency=cur)
+    rows = await _catalog_reads(db).list_my_prices(
+        team_id=team.team_id,
+        user_id=team.user_id,
+        currency=cur,
+    )
     return [PricingRateMemberView.model_validate(r) for r in rows]
 
 

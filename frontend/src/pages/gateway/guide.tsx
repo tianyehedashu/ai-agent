@@ -22,7 +22,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { GATEWAY_MODELS_ALL_QUERY_KEY } from '@/features/gateway-models/utils'
+import {
+  GATEWAY_MODELS_STALE_MS,
+  gatewayModelsRequestableQueryKey,
+} from '@/features/gateway-models/utils'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { thinkingHintForModel } from '@/features/gateway-shared/thinking-param'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
@@ -40,7 +43,7 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
-import { getCurrentTeamId } from '@/stores/gateway-team'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
@@ -207,27 +210,42 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [gatewayV1Base, displayKey, activeModel]
   )
 
+  const teamId = useGatewayTeamStore((s) => s.currentTeamId)
+
   const { data: gatewayModels } = useQuery({
-    queryKey: [...GATEWAY_MODELS_ALL_QUERY_KEY, getCurrentTeamId()],
+    queryKey: teamId
+      ? gatewayModelsRequestableQueryKey(teamId)
+      : ['gateway', 'models', 'requestable', 'none'],
     queryFn: () => {
-      const teamId = getCurrentTeamId()
       if (!teamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.listModels(teamId)
+      return gatewayApi.listModels(teamId, { registry_scope: 'requestable' })
     },
-    enabled: Boolean(getCurrentTeamId()),
-    staleTime: 60_000,
+    enabled: Boolean(teamId),
+    staleTime: GATEWAY_MODELS_STALE_MS,
   })
+
+  const requestableModels = gatewayModels ?? []
+
+  useEffect(() => {
+    if (requestableModels.length === 0) return
+    setActiveModel((prev) => {
+      if (requestableModels.some((m) => m.name === prev)) return prev
+      return requestableModels[0]?.name ?? PLACEHOLDER_MODEL
+    })
+  }, [requestableModels])
 
   const activeModelCapabilities = useMemo(() => {
     const name = activeModel || PLACEHOLDER_MODEL
-    const row = gatewayModels?.find((m) => m.name === name)
+    const row = requestableModels.find((m) => m.name === name)
     return row?.selector_capabilities
-  }, [gatewayModels, activeModel])
+  }, [requestableModels, activeModel])
 
   const thinkingModelHint = useMemo(
     () =>
-      thinkingHintForModel(activeModel || PLACEHOLDER_MODEL, apiFlavor, activeModelCapabilities),
-    [activeModel, apiFlavor, activeModelCapabilities]
+      thinkingHintForModel(activeModel || PLACEHOLDER_MODEL, apiFlavor, activeModelCapabilities, {
+        allowNameFallback: requestableModels.length === 0,
+      }),
+    [activeModel, apiFlavor, activeModelCapabilities, requestableModels.length]
   )
   const [copy, copiedKey] = useCopyToClipboardKeyed<string>()
   const handleCopy = useCallback(
@@ -237,7 +255,11 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [copy]
   )
   const handlePlaygroundModelChange = useCallback((next: string) => {
-    setActiveModel(next || PLACEHOLDER_MODEL)
+    if (!next) {
+      setActiveModel(PLACEHOLDER_MODEL)
+      return
+    }
+    setActiveModel(next)
   }, [])
 
   // 示例流式 / API 风格变化时，把典型返回 Tab 默认联动到对应组合，但仍允许独立切换

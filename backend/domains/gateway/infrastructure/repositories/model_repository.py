@@ -10,7 +10,9 @@ from domains.gateway.domain.policies.model_selection import merge_named_rows_ten
 from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
-from domains.gateway.infrastructure.repositories.gateway_route_repository import GatewayRouteRepository
+from domains.gateway.infrastructure.repositories.gateway_route_repository import (
+    GatewayRouteRepository,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -88,7 +90,7 @@ class GatewayModelRepository:
         provider: str | None = None,
         credential_id: uuid.UUID | None = None,
     ) -> list[GatewayModel]:
-        """``tenant_id is None`` 仅 system；否则 tenant 行 + system 行合并（tenant 同名优先）。"""
+        """tenant + system 行合并（无可见性过滤；过滤见 ``gateway_model_listing``）。"""
         if tenant_id is None:
             return list(
                 await self.list_system(
@@ -339,6 +341,17 @@ class GatewayModelRepository:
             select(GatewayModel.credential_id, func.count(GatewayModel.id))
             .group_by(GatewayModel.credential_id)
             .order_by(GatewayModel.credential_id)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(cid, int(cnt or 0)) for cid, cnt in rows]
+
+    async def count_system_models_grouped_by_credential(
+        self,
+    ) -> list[tuple[uuid.UUID, int]]:
+        stmt = (
+            select(SystemGatewayModel.credential_id, func.count(SystemGatewayModel.id))
+            .group_by(SystemGatewayModel.credential_id)
+            .order_by(SystemGatewayModel.credential_id)
         )
         rows = (await self._session.execute(stmt)).all()
         return [(cid, int(cnt or 0)) for cid, cnt in rows]

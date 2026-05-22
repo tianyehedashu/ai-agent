@@ -17,13 +17,13 @@ import { alertsApi } from './alerts'
 import { budgetsApi } from './budgets'
 import { credentialsApi } from './credentials'
 import { entitlementsApi } from './entitlements'
-import { featuresApi } from './features'
 import { keysApi } from './keys'
 import { logsApi } from './logs'
 import { modelsApi } from './models'
 import { myModelsApi } from './my-models'
 import { pricingApi } from './pricing'
 import { routesApi } from './routes'
+import { systemVisibilityApi } from './system-visibility'
 import { teamsApi } from './teams'
 
 // ---------- 常量 / 共享类型 ----------
@@ -33,8 +33,6 @@ export { GATEWAY_API_BASE, GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from './_
 // ---------- 资源类型 re-export ----------
 
 export type { GatewayTeam, TeamMember } from './teams'
-
-export type { GatewayFeatures } from './features'
 
 export type {
   VirtualKey,
@@ -66,10 +64,20 @@ export type {
 } from './credentials'
 
 export type {
+  SystemCredentialSummary,
+  SystemGatewayGrant,
+  SystemGatewayGrantCreateBody,
+  SystemModelVisibility,
+  SystemVisibility,
+  SystemVisibilityTargetSnapshot,
+} from './system-visibility'
+
+export type {
   GatewayModel,
   GatewayModelRouteUsageSlice,
   GatewayModelRouteUsageItem,
   GatewayModelUsageSummary,
+  GatewayModelRegistryScope,
   PlatformCredentialStat,
   GatewayModelTestResult,
   GatewayModelPreset,
@@ -137,7 +145,6 @@ export type {
 
 export {
   teamsApi,
-  featuresApi,
   keysApi,
   credentialsApi,
   modelsApi,
@@ -148,6 +155,7 @@ export {
   alertsApi,
   entitlementsApi,
   pricingApi,
+  systemVisibilityApi,
 }
 
 // ---------- 聚合：统一对外的 gatewayApi ----------
@@ -159,7 +167,6 @@ export {
  */
 export const gatewayApi = {
   ...teamsApi,
-  ...featuresApi,
   ...keysApi,
   ...credentialsApi,
   ...modelsApi,
@@ -170,4 +177,5 @@ export const gatewayApi = {
   ...alertsApi,
   ...entitlementsApi,
   ...pricingApi,
+  ...systemVisibilityApi,
 } as const

@@ -265,6 +265,30 @@ class ProxyUseCase(ProxyNonChatMixin):
     async def _router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
         return await self._litellm.router_anthropic_messages(kwargs)
 
+    async def _direct_speech(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_speech(kwargs)
+
+    async def _router_speech(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_speech(kwargs)
+
+    async def _direct_rerank(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_rerank(kwargs)
+
+    async def _router_rerank(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_rerank(kwargs)
+
+    async def _direct_moderation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_moderation(kwargs)
+
+    async def _router_moderation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_moderation(kwargs)
+
+    async def _direct_video_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_video_generation(kwargs)
+
+    async def _router_video_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_video_generation(kwargs)
+
     # ---------------------------------------------------------------------
     # 主入口
     # ---------------------------------------------------------------------

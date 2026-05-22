@@ -36,6 +36,16 @@ class SystemProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_ids(
+        self, credential_ids: set[uuid.UUID] | list[uuid.UUID]
+    ) -> list[SystemProviderCredential]:
+        ids = list(credential_ids)
+        if not ids:
+            return []
+        stmt = select(SystemProviderCredential).where(SystemProviderCredential.id.in_(ids))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_by_provider_and_name(
         self, provider: str, name: str
     ) -> SystemProviderCredential | None:
@@ -111,6 +121,7 @@ class SystemProviderCredentialRepository:
         extra: dict[str, Any] | None = None,
         is_active: bool | None = None,
         name: str | None = None,
+        visibility: str | None = None,
     ) -> SystemProviderCredential | None:
         row = await self.get(credential_id)
         if row is None:
@@ -125,6 +136,8 @@ class SystemProviderCredentialRepository:
             row.is_active = is_active
         if name is not None:
             row.name = name
+        if visibility is not None:
+            row.visibility = visibility
         await self._session.flush()
         return row
 

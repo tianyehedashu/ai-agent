@@ -21,6 +21,7 @@ class CredentialReadModel:
     is_active: bool
     created_at: datetime
     api_key_encrypted: str
+    visibility: str | None = None
 
 
 __all__ = ["CredentialReadModel"]

@@ -8,9 +8,10 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 export function useGatewayModelLabel(modelId: string, credentialId = ''): string {
   const teamId = useGatewayTeamId()
   const { data: name } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, credentialId),
+    queryKey: gatewayModelsListQueryKey(teamId, 'callable', '', credentialId),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
+        registry_scope: 'callable',
         ...(credentialId ? { credential_id: credentialId } : {}),
       }),
     select: (items) => items.find((m) => m.id === modelId)?.name,

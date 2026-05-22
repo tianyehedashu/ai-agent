@@ -5,9 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
 from domains.gateway.domain.upstream_policy import (
-    UpstreamCapabilityFlags,
-    adapt_kwargs_by_capability,
     clamp_max_tokens,
     max_output_tokens_limit,
     preprocess_messages_for_reasoner,
@@ -31,13 +30,12 @@ class UpstreamAdapter:
             return dict(kwargs)
         record = resolved.record
         tags = record.tags if isinstance(record.tags, dict) else {}
-        snap = tags_to_capability_snapshot(tags)
-        flags = UpstreamCapabilityFlags(
-            supports_tools=snap.supports_tools,
-            supports_reasoning=snap.supports_reasoning,
-            supports_json_mode=snap.supports_json_mode,
+        snap = tags_to_capability_snapshot(
+            tags,
+            provider=record.provider,
+            real_model=record.real_model,
         )
-        adapted = adapt_kwargs_by_capability(kwargs, flags)
+        adapted = apply_invocation_kwargs(snap, kwargs)
         limit = max_output_tokens_limit(tags, record.provider)
         adapted = clamp_max_tokens(adapted, limit)
         messages = adapted.get("messages")

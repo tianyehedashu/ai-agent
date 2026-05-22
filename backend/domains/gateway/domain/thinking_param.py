@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from domains.gateway.domain.temperature_policy import enrich_temperature_tags
+
 THINKING_PARAM_NONE = "none"
 THINKING_PARAM_DASHSCOPE = "dashscope_enable_thinking"
 THINKING_PARAM_BUILTIN = "builtin_reasoning"
@@ -107,7 +109,7 @@ def enrich_gateway_model_tags(
     )
     merged["thinking_param"] = thinking_param
     merged["supports_reasoning"] = effective_supports_reasoning(merged, thinking_param)
-    return merged
+    return enrich_temperature_tags(merged, thinking_param=thinking_param)
 
 
 def effective_supports_reasoning(tags: dict[str, Any], thinking_param: str) -> bool:

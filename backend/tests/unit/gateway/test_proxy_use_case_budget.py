@@ -148,7 +148,10 @@ async def test_chat_failure_releases_all_request_reservations(
     ) -> dict[str, object]:
         return {**body, "metadata": {}}
 
-    async def _none_resolve(_session: object, _team_id: object, _name: str) -> None:
+    async def _none_resolve(
+        _session: object, _team_id: object, _name: str, *, user_id: object | None = None
+    ) -> None:
+        _ = user_id
         return None
 
     monkeypatch.setattr(proxy_guard, "BudgetRepository", FakeBudgetRepository)

@@ -14,6 +14,8 @@ export interface BuildPlaygroundRequestBodyParams {
   enableThinking?: boolean
   /** Anthropic Extended Thinking */
   anthropicThinkingBudgetTokens?: number
+  /** 仅 temperature_policy=client 时写入 */
+  temperature?: number
 }
 
 const DEFAULT_ANTHROPIC_MAX_TOKENS = 1024
@@ -34,6 +36,9 @@ export function buildPlaygroundRequestBody(
         budget_tokens: params.anthropicThinkingBudgetTokens ?? 8000,
       }
     }
+    if (params.temperature !== undefined) {
+      body.temperature = params.temperature
+    }
     return body
   }
   const body: Record<string, unknown> = {
@@ -43,6 +48,9 @@ export function buildPlaygroundRequestBody(
   }
   if (params.enableThinking) {
     body.extra_body = { enable_thinking: true }
+  }
+  if (params.temperature !== undefined) {
+    body.temperature = params.temperature
   }
   return body
 }

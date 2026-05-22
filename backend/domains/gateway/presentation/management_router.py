@@ -23,6 +23,7 @@ from fastapi import APIRouter
 from domains.gateway.presentation.routers import (
     my_credentials,
     my_models,
+    system_visibility,
     team_scoped,
 )
 
@@ -31,5 +32,7 @@ router = APIRouter(tags=["AI Gateway"])
 router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)
 router.include_router(my_models.router)
+router.include_router(system_visibility.router)
+router.include_router(system_visibility.admin_router)
 
 __all__ = ["router"]

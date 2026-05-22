@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
 from domains.gateway.domain.errors import TeamPermissionDeniedError
 from domains.gateway.domain.policies.usage_log_visibility import (
@@ -116,8 +117,12 @@ class GatewayUsageLogReadMixin:
     ) -> dict[str, Any]:
         end = datetime.now(UTC)
         start = end - timedelta(days=days)
-        models = await self._models.list_for_tenant(
-            ctx.team_id, only_enabled=False, provider=provider
+        models = await list_merged_models_for_tenant(
+            self._session,
+            ctx.team_id,
+            only_enabled=False,
+            provider=provider,
+            user_id=ctx.user_id,
         )
         if not models:
             return {"start": start, "end": end, "items": []}

@@ -54,6 +54,8 @@ interface ModelInventoryProps {
   onPreloadRegister?: () => void
   /** 列表行链至详情时预加载详情 chunk */
   onPreloadRowNavigate?: () => void
+  /** 系统 Tab：展示可见性 / 凭据归属 / 授权 */
+  showSystemAdmin?: boolean
 }
 
 export const ModelInventory = memo(function ModelInventory({
@@ -81,6 +83,7 @@ export const ModelInventory = memo(function ModelInventory({
   onRegister,
   onPreloadRegister,
   onPreloadRowNavigate,
+  showSystemAdmin = false,
 }: ModelInventoryProps): React.JSX.Element {
   const showToolbar = allModels.length > 0
 
@@ -207,6 +210,7 @@ export const ModelInventory = memo(function ModelInventory({
                 href={getModelHref?.(m.id)}
                 onSelect={getModelHref ? undefined : onSelect}
                 onPreloadNavigate={getModelHref ? onPreloadRowNavigate : undefined}
+                showSystemAdmin={showSystemAdmin}
               />
             ))}
           </ul>

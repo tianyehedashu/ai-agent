@@ -11,6 +11,7 @@ from domains.gateway.domain.errors import (
     CapabilityNotAllowedError,
     EntitlementPlanExhaustedError,
     GuardrailBlockedError,
+    InvocationPolicyViolationError,
     ModelNotAllowedError,
     RateLimitExceededError,
 )
@@ -70,6 +71,13 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             http_status=status.HTTP_400_BAD_REQUEST,
             message=str(exc),
             openai_error_type="guardrail_blocked",
+            anthropic_error_type="invalid_request_error",
+        )
+    if isinstance(exc, InvocationPolicyViolationError):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_400_BAD_REQUEST,
+            message=str(exc),
+            openai_error_type="invocation_policy_violation",
             anthropic_error_type="invalid_request_error",
         )
     if isinstance(exc, ValueError):

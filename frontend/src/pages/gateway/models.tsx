@@ -135,7 +135,11 @@ export default function GatewayModelsPage(): React.JSX.Element {
             </>
           ) : scopeTab === 'shared' ? (
             <>
-              团队别名映射至 LiteLLM 上游；对外暴露名在{' '}
+              团队自注册别名映射至 LiteLLM 上游；平台预置模型见下方「平台可用模型」或{' '}
+              <Link to="/gateway/guide" className="text-primary underline-offset-4 hover:underline">
+                调用指南
+              </Link>
+              。对外暴露名在{' '}
               <Link
                 to="/gateway/routes"
                 className="text-primary underline-offset-4 hover:underline"

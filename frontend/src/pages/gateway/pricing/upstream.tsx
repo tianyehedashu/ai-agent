@@ -79,7 +79,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
 
   const modelsQuery = useQuery({
     queryKey: [...UPSTREAM_PAGE_QUERY_KEYS.models, teamId],
-    queryFn: () => modelsApi.listModels(teamId),
+    queryFn: () => modelsApi.listModels(teamId, { registry_scope: 'callable' }),
   })
 
   const effectiveProviders = providersQuery.data ?? EMPTY_EFFECTIVE_PROVIDERS

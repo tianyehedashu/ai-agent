@@ -44,6 +44,11 @@ def connectivity_status_from_last_test(
     return None
 
 
+def is_connectivity_requestable(last_test_status: str | None) -> bool:
+    """连通性探活未失败时方可进入「可用/可请求」目录（与 ``registry_scope=requestable`` 对齐）。"""
+    return last_test_status != "failed"
+
+
 def compute_model_callable(
     *,
     connectivity_status: ModelConnectivityStatus | None,
@@ -99,5 +104,6 @@ __all__ = [
     "compute_model_callable",
     "connectivity_status_from_last_test",
     "entitlement_status_by_model_names",
+    "is_connectivity_requestable",
     "resolve_entitlement_scope",
 ]
