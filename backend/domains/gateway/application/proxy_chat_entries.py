@@ -16,8 +16,11 @@ from domains.gateway.application.proxy_response_adapter import (
     adapt_stream,
 )
 from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
+from domains.gateway.application.proxy_router_team_metadata import (
+    ensure_litellm_router_team_metadata,
+)
 from domains.gateway.domain.types import GatewayCapability
-from domains.gateway.infrastructure.router_singleton import get_router
+from domains.gateway.infrastructure.router_singleton import ensure_router_deployment
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -74,7 +77,9 @@ class ProxyChatMixin:
             return await self.litellm.direct_chat_completion(prepared.kwargs)
 
         async def _router() -> Any:
-            router = await get_router(self.session)
+            encoded = str(prepared.kwargs.get("model") or "")
+            ensure_litellm_router_team_metadata(prepared.kwargs, ctx.team_id)
+            router = await ensure_router_deployment(self.session, encoded)
             return await router.acompletion(**prepared.kwargs)
 
         response = await invoke_router_with_direct_fallback(

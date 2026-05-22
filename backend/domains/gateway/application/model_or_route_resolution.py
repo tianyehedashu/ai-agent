@@ -46,6 +46,24 @@ class ResolvedModelName:
     via_route: str | None
 
 
+async def _resolve_personal_team_model(
+    session: AsyncSession,
+    current_team_id: uuid.UUID,
+    name: str,
+    *,
+    user_id: uuid.UUID,
+) -> GatewayModel | SystemGatewayModel | None:
+    """共享团队 vkey 下调用个人团队 ``gateway_models`` 注册别名。"""
+    from domains.tenancy.application.team_service import TeamService
+
+    personal = await TeamService(session).ensure_personal_team(user_id)
+    if personal.id == current_team_id:
+        return None
+    return await resolve_by_name_visible(
+        session, personal.id, name, user_id=user_id
+    )
+
+
 async def resolve_model_or_route(
     session: AsyncSession,
     team_id: uuid.UUID,
@@ -61,6 +79,18 @@ async def resolve_model_or_route(
     cleaned = name.strip() if name else ""
     if not cleaned:
         return None
+
+    if user_id is not None:
+        personal_record = await _resolve_personal_team_model(
+            session, team_id, cleaned, user_id=user_id
+        )
+        if personal_record is not None:
+            return ResolvedModelName(
+                record=personal_record,
+                route=None,
+                via_route=None,
+            )
+
     record = await resolve_by_name_visible(
         session, team_id, cleaned, user_id=user_id
     )

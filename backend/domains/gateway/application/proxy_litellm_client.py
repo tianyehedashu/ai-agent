@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
 from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.proxy_router_team_metadata import (
+    ensure_litellm_router_team_metadata,
+)
 from domains.gateway.application.router_deployment_params import (
     resolve_deployment_litellm_params,
 )
@@ -15,8 +18,8 @@ from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
 )
 from domains.gateway.infrastructure.router_singleton import (
+    ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
-    get_router,
 )
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
@@ -95,7 +98,7 @@ class ProxyLiteLLMClient:
     ) -> dict[str, Any]:
         """经 deployment 凭据直连 DashScope OpenAI 兼容 ``/embeddings``。"""
         dep = await resolve_deployment_litellm_params(
-            self._session, ctx.team_id, client_model
+            self._session, ctx.team_id, client_model, user_id=ctx.user_id
         )
         if dep is None:
             raise ValueError(f"no deployment for embedding model: {client_model}")
@@ -120,7 +123,9 @@ class ProxyLiteLLMClient:
         virtual_model: str,
     ) -> dict[str, Any]:
         """直连 LiteLLM 时注入 deployment 凭据，并将 model 换为 litellm model id。"""
-        dep = await resolve_deployment_litellm_params(self._session, ctx.team_id, virtual_model)
+        dep = await resolve_deployment_litellm_params(
+            self._session, ctx.team_id, virtual_model, user_id=ctx.user_id
+        )
         if dep is None:
             return kwargs
         merged = dict(kwargs)
@@ -264,7 +269,9 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
-        router = await get_router(self._session)
+        encoded = str(kwargs.get("model") or "")
+        ensure_litellm_router_team_metadata(kwargs)
+        router = await ensure_router_deployment(self._session, encoded)
         router_fn = getattr(router, router_method, None)
         if not callable(router_fn):
             return await direct_call()

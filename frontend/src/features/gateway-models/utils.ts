@@ -86,11 +86,36 @@ export function resolveTeamModelsRegistryScope(
 /** 无 channel 筛选的个人模型列表 */
 export const GATEWAY_MY_MODELS_ALL_QUERY_KEY = ['gateway', 'my-models'] as const
 
-/** 与 TeamModelsWorkspace / Guide / Playground 共用的 requestable 列表 query key */
+/** 无凭据筛选时的 requestable 列表 query key（TeamModelsWorkspace 等） */
 export function gatewayModelsRequestableQueryKey(
-  teamId: string
+  teamId: string,
+  credentialFilter = ''
 ): ReturnType<typeof gatewayModelsListQueryKey> {
-  return gatewayModelsListQueryKey(teamId, 'requestable')
+  return gatewayModelsListQueryKey(teamId, 'requestable', '', credentialFilter)
+}
+
+/**
+ * Playground / Guide 团队模型列表 scope：无凭据用 requestable，有凭据用 callable（与 TeamModelsWorkspace 一致）。
+ */
+export function resolvePlaygroundTeamRegistryScope(
+  credentialFilter: string
+): GatewayModelRegistryScope {
+  return credentialFilter !== ''
+    ? resolveTeamModelsRegistryScope(undefined, credentialFilter)
+    : 'requestable'
+}
+
+/** Playground / Guide 团队模型 query key（scope 随凭据筛选自动切换） */
+export function playgroundTeamModelsQueryKey(
+  teamId: string,
+  credentialFilter = ''
+): ReturnType<typeof gatewayModelsListQueryKey> {
+  return gatewayModelsListQueryKey(
+    teamId,
+    resolvePlaygroundTeamRegistryScope(credentialFilter),
+    '',
+    credentialFilter
+  )
 }
 
 /** 与 TeamModelsWorkspace listModels 查询键一致 */

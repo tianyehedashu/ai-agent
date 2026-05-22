@@ -219,5 +219,8 @@ class GatewayManagementWriteBaseMixin:
 
     async def reload_litellm_router(self) -> None:
         from domains.gateway.infrastructure.router_singleton import reload_router
-        with suppress(Exception):
+
+        try:
             await reload_router(self._session)
+        except Exception:
+            logger.exception("LiteLLM Router reload failed")

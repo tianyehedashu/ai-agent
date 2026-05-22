@@ -9,9 +9,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
-import { useQueries } from '@tanstack/react-query'
-
-import { gatewayApi } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -26,12 +23,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  GATEWAY_MODELS_STALE_MS,
-  GATEWAY_MY_MODELS_ALL_QUERY_KEY,
-  gatewayModelsRequestableQueryKey,
-  isProxyCallableModel,
-} from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import {
@@ -46,16 +37,15 @@ import {
 } from '@/features/gateway-shared/thinking-param'
 import { Loader2, PlayCircle, RotateCcw, StopCircle } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 import { VisionInput } from './modes/vision-input'
+import { PlaygroundCredentialField } from './playground-credential-field'
 import { PlaygroundKeyField } from './playground-key-field'
 import {
   endpointPathForMode,
   filterModelsByMode,
-  modelSupportsImageGen,
-  modelSupportsVideoGen,
-  modelSupportsVision,
+  filterPlaygroundRouteCandidates,
+  buildModelCandidateIndex,
   PLAYGROUND_MODE_LABELS,
   type ModelCandidate,
   type PlaygroundMode,
@@ -69,6 +59,7 @@ import { usePlaygroundVideoCall } from './use-playground-video'
 import { useSyncApiKeyFromVkey } from './use-sync-api-key-from-vkey'
 
 import type { PlaygroundApiFlavor } from './types'
+import type { PlaygroundModelsSnapshot } from './use-playground-filtered-models'
 import type { UsePlaygroundVirtualKeyReturn } from './use-playground-virtual-key'
 
 const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
@@ -83,41 +74,49 @@ const DEFAULT_PROMPT = DEFAULT_PROMPTS.chat
 const DEFAULT_PROMPT_VALUES = new Set<string>(Object.values(DEFAULT_PROMPTS))
 const IMAGE_GEN_SIZES = ['1024x1024', '1024x1792', '1792x1024'] as const
 
-function routeSupportsMode(
-  primaryModels: string[],
-  mode: PlaygroundMode,
-  modelsByName: Map<string, ModelCandidate>
-): boolean {
-  if (mode === 'chat') return true
-  for (const name of primaryModels) {
-    const candidate = modelsByName.get(name)
-    if (!candidate) continue
-    if (mode === 'vision' && modelSupportsVision(candidate)) return true
-    if (mode === 'image_gen' && modelSupportsImageGen(candidate)) return true
-    if (mode === 'video_gen' && modelSupportsVideoGen(candidate)) return true
-  }
-  return false
-}
-
-const MODEL_STATUS_RANK: Record<'success' | 'null' | 'failed', number> = {
-  success: 0,
-  null: 1,
-  failed: 2,
-}
-
 interface PlaygroundCardProps {
   baseUrl: string
   onModelChange?: (model: string) => void
+  /** 可选凭据筛选（Guide 页与 URL 同步） */
+  credentialId?: string
+  onCredentialChange?: (id: string) => void
   /** 由父级调用 ``usePlaygroundVirtualKey`` 注入，避免重复 list/reveal 请求 */
   virtualKey: UsePlaygroundVirtualKeyReturn
+  /** 由父级 ``usePlaygroundFilteredModels`` 注入（凭据目录 + 模型候选 + 路由）；卡片内不自行查询 */
+  filteredModels: PlaygroundModelsSnapshot
 }
 
 export function PlaygroundCard({
   baseUrl,
   onModelChange,
+  credentialId: credentialIdProp = '',
+  onCredentialChange,
   virtualKey,
+  filteredModels: {
+    credentialGroups,
+    credentialById,
+    candidateModels,
+    routes,
+    modelsLoading,
+    credentialsLoading,
+    credentialsEmpty,
+    teamModelsLoaded,
+    myModelsLoaded,
+  },
 }: PlaygroundCardProps): React.JSX.Element {
+  const isCredentialControlled = onCredentialChange !== undefined
+  const [localCredentialId, setLocalCredentialId] = useState('')
+  const credentialId = isCredentialControlled ? credentialIdProp : localCredentialId
+  const handleCredentialChange = useCallback(
+    (id: string) => {
+      if (onCredentialChange) onCredentialChange(id)
+      else setLocalCredentialId(id)
+    },
+    [onCredentialChange]
+  )
+
   const apiKeyId = useId()
+  const credentialSelectId = useId()
   const modelSelectId = useId()
   const modelCustomId = useId()
   const promptId = useId()
@@ -170,37 +169,6 @@ export function PlaygroundCard({
   const { status, content, metadata, error, rawResponse, lastRequest, isRunning, cancel } =
     activeCall
 
-  const teamId = useGatewayTeamStore((s) => s.currentTeamId)
-
-  const [teamModelsQuery, myModelsQuery, routesQuery] = useQueries({
-    queries: [
-      {
-        queryKey: teamId
-          ? gatewayModelsRequestableQueryKey(teamId)
-          : ['gateway', 'models', 'requestable', 'none'],
-        queryFn: () => {
-          if (!teamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listModels(teamId, { registry_scope: 'requestable' })
-        },
-        enabled: Boolean(teamId),
-        staleTime: GATEWAY_MODELS_STALE_MS,
-      },
-      {
-        queryKey: GATEWAY_MY_MODELS_ALL_QUERY_KEY,
-        queryFn: () => gatewayApi.listMyModels(),
-        staleTime: GATEWAY_MODELS_STALE_MS,
-      },
-      {
-        queryKey: ['gateway', 'routes', teamId],
-        queryFn: () => {
-          if (!teamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listRoutes(teamId)
-        },
-        enabled: Boolean(teamId),
-        staleTime: GATEWAY_MODELS_STALE_MS,
-      },
-    ],
-  })
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   useSyncApiKeyFromVkey({
@@ -210,72 +178,38 @@ export function PlaygroundCard({
     setApiKey,
   })
 
-  const candidateModels = useMemo<ModelCandidate[]>(() => {
-    const seen = new Map<string, ModelCandidate>()
-    for (const item of teamModelsQuery.data ?? []) {
-      if (!item.name || seen.has(item.name)) continue
-      seen.set(item.name, {
-        name: item.name,
-        scope: 'team',
-        status: item.last_test_status,
-        capability: item.capability,
-        selector_capabilities: item.selector_capabilities,
-        model_types: item.model_types,
-      })
-    }
-    for (const item of myModelsQuery.data ?? []) {
-      const key = item.name || item.display_name
-      if (!key || seen.has(key) || !isProxyCallableModel(item)) continue
-      seen.set(key, {
-        name: key,
-        scope: 'personal',
-        status: item.last_test_status,
-        capability: item.capability,
-        selector_capabilities: item.selector_capabilities,
-        model_types: item.model_types,
-      })
-    }
-    const all = Array.from(seen.values())
-    all.sort((a, b) => {
-      const ra = MODEL_STATUS_RANK[a.status ?? 'null']
-      const rb = MODEL_STATUS_RANK[b.status ?? 'null']
-      if (ra !== rb) return ra - rb
-      return a.name.localeCompare(b.name)
-    })
-    return all
-  }, [teamModelsQuery.data, myModelsQuery.data])
-
-  const filteredModels = useMemo(
+  const modeFilteredModels = useMemo(
     () => filterModelsByMode(candidateModels, playgroundMode),
     [candidateModels, playgroundMode]
   )
 
-  const modelsByName = useMemo(
-    () => new Map(candidateModels.map((m) => [m.name, m])),
-    [candidateModels]
-  )
+  const modelsByName = useMemo(() => buildModelCandidateIndex(candidateModels), [candidateModels])
 
-  const routeCandidates = useMemo<RouteCandidate[]>(() => {
-    return (routesQuery.data ?? [])
-      .filter((r) => r.enabled)
-      .filter((r) => routeSupportsMode(r.primary_models, playgroundMode, modelsByName))
-      .map((r) => ({ name: r.virtual_model, primaryModels: r.primary_models }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [routesQuery.data, playgroundMode, modelsByName])
+  const routeCandidates = useMemo<RouteCandidate[]>(
+    () =>
+      filterPlaygroundRouteCandidates(
+        routes,
+        credentialId,
+        candidateModels,
+        playgroundMode,
+        modelsByName
+      ),
+    [routes, credentialId, candidateModels, playgroundMode, modelsByName]
+  )
 
   const { teamCandidates, personalCandidates } = useMemo(() => {
     const team: ModelCandidate[] = []
     const personal: ModelCandidate[] = []
-    for (const m of filteredModels) {
+    for (const m of modeFilteredModels) {
       if (m.scope === 'team') team.push(m)
       else personal.push(m)
     }
     return { teamCandidates: team, personalCandidates: personal }
-  }, [filteredModels])
+  }, [modeFilteredModels])
 
   const selectedCandidate = useMemo(
-    () => filteredModels.find((m) => m.name === model),
-    [filteredModels, model]
+    () => modeFilteredModels.find((m) => m.name === model),
+    [modeFilteredModels, model]
   )
 
   const selectedRoute = useMemo(
@@ -292,13 +226,14 @@ export function PlaygroundCard({
 
   useEffect(() => {
     const modelListed =
-      filteredModels.some((m) => m.name === model) || routeCandidates.some((r) => r.name === model)
+      modeFilteredModels.some((m) => m.name === model) ||
+      routeCandidates.some((r) => r.name === model)
     if (model && modelListed) return
     if (customModel) return
-    const first = routeCandidates[0]?.name ?? filteredModels[0]?.name
+    const first = routeCandidates[0]?.name ?? modeFilteredModels[0]?.name
     if (first) setModel(first)
     else setModel('')
-  }, [filteredModels, routeCandidates, customModel, model, playgroundMode])
+  }, [modeFilteredModels, routeCandidates, customModel, model, playgroundMode])
 
   const onModelChangeRef = useRef(onModelChange)
   useEffect(() => {
@@ -327,7 +262,7 @@ export function PlaygroundCard({
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
 
-  const modelsListLoaded = teamModelsQuery.isSuccess || myModelsQuery.isSuccess
+  const modelsListLoaded = teamModelsLoaded && myModelsLoaded
 
   const thinkingParam = useMemo<ThinkingParam>(
     () =>
@@ -344,10 +279,10 @@ export function PlaygroundCard({
 
   const temperatureInteractive = playgroundMode === 'chat' && temperaturePolicy === 'client'
 
-  const temperatureFixedHint = useMemo(() => {
-    if (playgroundMode !== 'chat' || temperaturePolicy !== 'fixed_1') return null
-    return '推理/思考类模型：temperature 固定为 1.0，无需调整。'
-  }, [playgroundMode, temperaturePolicy])
+  const temperatureFixedHint =
+    playgroundMode === 'chat' && temperaturePolicy === 'fixed_1'
+      ? '推理/思考类模型：temperature 固定为 1.0，无需调整。'
+      : null
 
   const thinkingFlavorMatch =
     (thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
@@ -561,29 +496,38 @@ export function PlaygroundCard({
               onSelectKey={handleSelectKey}
               onUserEditedReset={handleUserEditedReset}
             />
-            <PlaygroundModelField
-              modelSelectId={modelSelectId}
-              modelCustomId={modelCustomId}
-              model={model}
-              customModel={customModel}
-              onModelChange={setModel}
-              onCustomModelChange={(nextCustom, nextModel) => {
-                setCustomModel(nextCustom)
-                if (nextModel !== undefined) setModel(nextModel)
-              }}
-              routeCandidates={routeCandidates}
-              teamCandidates={teamCandidates}
-              personalCandidates={personalCandidates}
-              filteredModels={filteredModels}
-              selectedCandidate={selectedCandidate}
-              selectedRoute={selectedRoute}
-              priceByName={priceByName}
-              currency={GATEWAY_DISPLAY_CURRENCY}
-              playgroundMode={playgroundMode}
-              modelsLoading={
-                teamModelsQuery.isLoading || myModelsQuery.isLoading || routesQuery.isLoading
-              }
+            <PlaygroundCredentialField
+              credentialSelectId={credentialSelectId}
+              credentialId={credentialId}
+              onCredentialChange={handleCredentialChange}
+              grouped={credentialGroups}
+              selectedSummary={credentialId ? credentialById.get(credentialId) : undefined}
+              isLoading={credentialsLoading}
+              isEmpty={credentialsEmpty}
             />
+            <div className="md:col-span-2 xl:col-span-1 2xl:col-span-2">
+              <PlaygroundModelField
+                modelSelectId={modelSelectId}
+                modelCustomId={modelCustomId}
+                model={model}
+                customModel={customModel}
+                onModelChange={setModel}
+                onCustomModelChange={(nextCustom, nextModel) => {
+                  setCustomModel(nextCustom)
+                  if (nextModel !== undefined) setModel(nextModel)
+                }}
+                routeCandidates={routeCandidates}
+                teamCandidates={teamCandidates}
+                personalCandidates={personalCandidates}
+                filteredModels={modeFilteredModels}
+                selectedCandidate={selectedCandidate}
+                selectedRoute={selectedRoute}
+                priceByName={priceByName}
+                currency={GATEWAY_DISPLAY_CURRENCY}
+                playgroundMode={playgroundMode}
+                modelsLoading={modelsLoading}
+              />
+            </div>
           </div>
 
           {playgroundMode === 'vision' ? (

@@ -23,6 +23,28 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+async def _registry_row_deployable(
+    session: AsyncSession,
+    row: GatewayRegistryModelRow,
+) -> bool:
+    """与 Router ``_models_to_deployments`` 对齐：enabled 且凭据存在且 active。"""
+    if not row.enabled:
+        return False
+    if registry_kind_for_merged_row(row) == "team":
+        from domains.gateway.infrastructure.repositories.credential_repository import (
+            ProviderCredentialRepository,
+        )
+
+        cred = await ProviderCredentialRepository(session).get(row.credential_id)
+        return cred is not None and cred.is_active
+    from domains.gateway.infrastructure.repositories.system_credential_repository import (
+        SystemProviderCredentialRepository,
+    )
+
+    cred = await SystemProviderCredentialRepository(session).get(row.credential_id)
+    return cred is not None and cred.is_active
+
+
 async def list_merged_models_for_tenant(
     session: AsyncSession,
     tenant_id: uuid.UUID | None,
@@ -79,16 +101,22 @@ async def resolve_by_name_visible(
     *,
     user_id: uuid.UUID | None = None,
 ) -> GatewayRegistryModelRow | None:
-    """租户行优先；system 行经可见性策略过滤（代理入站须用此入口）。"""
+    """租户行优先；system 行经可见性策略过滤（代理入站须用此入口）。
+
+    已禁用或凭据未激活的租户行不参与代理解析（与 Router 注册条件一致），避免遮蔽
+    同名 system 行或阻断 ``resolve_model_or_route`` 的 personal team 回退。
+    """
     repo = GatewayModelRepository(session)
-    record = await repo.resolve_by_name(tenant_id, name)
-    if record is None:
+    tenant_row = await repo.get_by_name(tenant_id, name)
+    if tenant_row is not None and await _registry_row_deployable(session, tenant_row):
+        return tenant_row
+
+    system_row = await repo.get_system_by_name(name)
+    if system_row is None or not await _registry_row_deployable(session, system_row):
         return None
-    if registry_kind_for_merged_row(record) == "team":
-        return record
     visible = await filter_visible_system_gateway_models(
         session,
-        [record],
+        [system_row],
         tenant_id=tenant_id,
         user_id=user_id,
     )
@@ -114,6 +142,7 @@ async def list_callable_system_model_names(
 
 __all__ = [
     "GatewayRegistryModelRow",
+    "_registry_row_deployable",
     "list_callable_system_model_names",
     "list_merged_models_for_tenant",
     "resolve_by_name_visible",

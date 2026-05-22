@@ -11,6 +11,9 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     apply_downstream_custom_pricing_kwargs,
     attach_downstream_pricing_metadata,
 )
+from domains.gateway.application.proxy_router_team_metadata import (
+    ensure_litellm_router_team_metadata,
+)
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
 from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
@@ -87,8 +90,11 @@ class ProxyMetadataBuilder:
         """生成单次代理调用的 Gateway metadata。"""
         team = await TeamService(self._session).get_team(ctx.team_id)
         verbose_log = bool(ctx.store_full_messages)
+        team_id_str = str(ctx.team_id)
         meta: dict[str, Any] = {
-            "gateway_team_id": str(ctx.team_id),
+            "gateway_team_id": team_id_str,
+            # LiteLLM Router async 路径 filter_team_based_models 要求与 model_info.team_id 一致
+            "user_api_key_team_id": team_id_str,
             "gateway_user_id": str(ctx.user_id) if ctx.user_id else None,
             "gateway_vkey_id": str(ctx.vkey.vkey_id) if ctx.vkey else None,
             "gateway_inbound_via": ctx.inbound_via,
@@ -132,6 +138,7 @@ class ProxyMetadataBuilder:
         metadata = await self.build(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
+        ensure_litellm_router_team_metadata(kwargs, ctx.team_id)
         apply_downstream_custom_pricing_kwargs(kwargs)
         raw_model = kwargs.get("model")
         client_model = str(raw_model).strip() if raw_model is not None else ""
@@ -140,7 +147,8 @@ class ProxyMetadataBuilder:
             resolved = await resolve_model_or_route(
                 self._session, ctx.team_id, client_model, user_id=ctx.user_id
             )
-            kwargs["model"] = router_model_name_for_client(ctx.team_id, client_model, resolved)
+            encoded = router_model_name_for_client(ctx.team_id, client_model, resolved)
+            kwargs["model"] = encoded
         return PreparedLitellmKwargs(
             kwargs=kwargs,
             client_model=client_model,

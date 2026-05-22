@@ -37,3 +37,10 @@ export function useOptionalGatewayTeamId(): string | null {
 
   return teamId ?? null
 }
+
+/** 路由 teamId 优先，否则回退 gateway-team store（Guide / Playground 等扁平路由） */
+export function useResolvedGatewayTeamId(): string | null {
+  const routeTeamId = useOptionalGatewayTeamId()
+  const storeTeamId = useGatewayTeamStore((s) => s.currentTeamId)
+  return routeTeamId ?? storeTeamId
+}

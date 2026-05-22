@@ -48,4 +48,16 @@ describe('canLinkToCredentialDetail', () => {
   it('allows platform admin on system credential', () => {
     expect(canLinkToCredentialDetail(systemSummary, true, true)).toBe(true)
   })
+
+  it('blocks detail link for personal BYOK credential', () => {
+    const userSummary: CredentialSummary = {
+      id: 'cred-user',
+      provider: 'openai',
+      name: 'My OpenAI',
+      scope: 'user',
+      is_active: true,
+      is_config_managed: false,
+    }
+    expect(canLinkToCredentialDetail(userSummary, true, true)).toBe(false)
+  })
 })

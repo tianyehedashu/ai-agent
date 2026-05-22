@@ -20,6 +20,7 @@ from domains.gateway.application.pricing.pricing_service import (
     PricingService,
     RateUnavailableError,
     ResolvedPricing,
+    resolved_inheritance_strategy,
 )
 from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay
 from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
@@ -163,7 +164,8 @@ def resolved_to_admin_view_dict(
         )
         downstream = {
             "gateway_model_id": gateway_model_id,
-            "inheritance_strategy": "upstream_passthrough",
+            "inheritance_strategy": resolved_inheritance_strategy(resolved)
+            or "upstream_passthrough",
             "input_cost_per_million_display": inp_api,
             "output_cost_per_million_display": out_api,
             "display_currency": currency,
@@ -268,11 +270,7 @@ class PricingCatalogReadService:
                 )
             except RateUnavailableError:
                 continue
-            strategy = (
-                resolved.downstream_row.inheritance_strategy
-                if resolved.downstream_row is not None
-                else "upstream_passthrough"
-            )
+            strategy = resolved_inheritance_strategy(resolved) or "upstream_passthrough"
             out.append(
                 rate_to_member_price_dict(
                     gateway_model_id=model.id,
@@ -314,7 +312,7 @@ class PricingCatalogReadService:
                 fx=fx,
                 projector=projector,
             )
-        strategy = resolved.downstream_row.inheritance_strategy if resolved.downstream_row else None
+        strategy = resolved_inheritance_strategy(resolved)
         return rate_to_member_price_dict(
             gateway_model_id=gateway_model_id,
             model_name=model.name,

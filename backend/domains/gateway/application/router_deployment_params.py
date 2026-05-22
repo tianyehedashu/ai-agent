@@ -21,6 +21,7 @@ async def resolve_deployment_litellm_params(
     team_id: uuid.UUID,
     client_model: str,
     *,
+    user_id: uuid.UUID | None = None,
     pricing_lookup: PricingLookup | None = None,
 ) -> dict[str, Any] | None:
     """解析 ``GatewayModel`` / ``GatewayRoute`` 主选行，构造直连 ``litellm`` 的 kwargs 片段。
@@ -33,7 +34,9 @@ async def resolve_deployment_litellm_params(
         _pricing_for_model,
     )
 
-    resolved = await resolve_model_or_route(session, team_id, client_model)
+    resolved = await resolve_model_or_route(
+        session, team_id, client_model, user_id=user_id
+    )
     if resolved is None:
         return None
     record = resolved.record

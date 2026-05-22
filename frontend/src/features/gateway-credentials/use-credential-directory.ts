@@ -7,7 +7,7 @@ import { useMemo } from 'react'
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type CredentialSummary } from '@/api/gateway'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 export function credentialSummariesQueryKey(
   teamId: string
@@ -22,10 +22,17 @@ export interface GatewayCredentialDirectory {
 }
 
 export function useGatewayCredentialDirectory(): GatewayCredentialDirectory {
-  const teamId = useGatewayTeamId()
+  const teamId = useResolvedGatewayTeamId()
+
   const { data: list = [], isLoading } = useQuery({
-    queryKey: credentialSummariesQueryKey(teamId),
-    queryFn: () => gatewayApi.listCredentialSummaries(teamId),
+    queryKey: teamId
+      ? credentialSummariesQueryKey(teamId)
+      : ['gateway', 'credential-summaries', 'none'],
+    queryFn: () => {
+      if (!teamId) return Promise.resolve([])
+      return gatewayApi.listCredentialSummaries(teamId)
+    },
+    enabled: Boolean(teamId),
   })
 
   const byId = useMemo(() => {

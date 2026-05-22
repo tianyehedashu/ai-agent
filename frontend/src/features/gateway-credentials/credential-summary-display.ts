@@ -13,13 +13,14 @@ export function credentialSummaryLabel(
   return `未知凭据 (${short})`
 }
 
-/** 团队 admin+ 可打开凭据详情；system 凭据仅平台管理员 */
+/** 团队 admin+ 可打开团队凭据详情；system 凭据仅平台管理员；个人 BYOK 无团队详情页 */
 export function canLinkToCredentialDetail(
   summary: CredentialSummary | undefined,
   isAdmin: boolean,
   isPlatformAdmin: boolean
 ): boolean {
   if (!summary || !isAdmin) return false
+  if (summary.scope === 'user') return false
   if (summary.scope === 'system') return isPlatformAdmin
   return true
 }

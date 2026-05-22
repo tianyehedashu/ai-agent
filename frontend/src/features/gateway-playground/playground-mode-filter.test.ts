@@ -1,44 +1,56 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  filterModelsByMode,
-  modelSupportsImageGen,
-  modelSupportsVideoGen,
-  type ModelCandidate,
-} from './playground-mode-filter'
+import { filterPlaygroundRouteCandidates, type ModelCandidate } from './playground-mode-filter'
 
-const base = (overrides: Partial<ModelCandidate>): ModelCandidate => ({
-  name: 'm',
+const chatModel: ModelCandidate = {
+  name: 'chat-model',
   scope: 'team',
-  status: null,
+  status: 'success',
   capability: 'chat',
-  ...overrides,
-})
+  selector_capabilities: {},
+  model_types: ['chat'],
+}
 
-describe('playground-mode-filter', () => {
-  it('filters chat models', () => {
-    const models = [
-      base({ name: 'a', capability: 'chat' }),
-      base({ name: 'b', capability: 'video_generation' }),
-    ]
-    expect(filterModelsByMode(models, 'chat').map((m) => m.name)).toEqual(['a'])
+const visionModel: ModelCandidate = {
+  name: 'vision-model',
+  scope: 'team',
+  status: 'success',
+  capability: 'chat',
+  selector_capabilities: { supports_vision: true },
+  model_types: ['chat'],
+}
+
+describe('filterPlaygroundRouteCandidates', () => {
+  const routes = [
+    {
+      enabled: true,
+      virtual_model: 'route-a',
+      primary_models: ['chat-model', 'vision-model'],
+    },
+    {
+      enabled: true,
+      virtual_model: 'route-b',
+      primary_models: ['chat-model'],
+    },
+    {
+      enabled: false,
+      virtual_model: 'route-off',
+      primary_models: ['chat-model'],
+    },
+  ]
+
+  it('filters disabled routes and sorts by name', () => {
+    const result = filterPlaygroundRouteCandidates(routes, '', [chatModel, visionModel], 'chat')
+    expect(result.map((r) => r.name)).toEqual(['route-a', 'route-b'])
   })
 
-  it('filters vision models', () => {
-    const models = [
-      base({ name: 'v', selector_capabilities: { supports_vision: true } }),
-      base({ name: 't', capability: 'chat' }),
-    ]
-    expect(filterModelsByMode(models, 'vision').map((m) => m.name)).toEqual(['v'])
+  it('requires all primary models when credential filter is active', () => {
+    const result = filterPlaygroundRouteCandidates(routes, 'cred-team', [chatModel], 'chat')
+    expect(result.map((r) => r.name)).toEqual(['route-b'])
   })
 
-  it('detects image_gen via capability or model_types', () => {
-    expect(modelSupportsImageGen(base({ capability: 'image' }))).toBe(true)
-    expect(modelSupportsImageGen(base({ model_types: ['image_gen'] }))).toBe(true)
-  })
-
-  it('detects video_gen via capability or model_types', () => {
-    expect(modelSupportsVideoGen(base({ capability: 'video_generation' }))).toBe(true)
-    expect(modelSupportsVideoGen(base({ model_types: ['video'] }))).toBe(true)
+  it('filters routes by playground mode capabilities', () => {
+    const result = filterPlaygroundRouteCandidates(routes, '', [chatModel, visionModel], 'vision')
+    expect(result.map((r) => r.name)).toEqual(['route-a'])
   })
 })

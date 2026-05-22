@@ -63,6 +63,54 @@ export function filterModelsByMode(
   }
 }
 
+export function routeSupportsMode(
+  primaryModels: string[],
+  mode: PlaygroundMode,
+  modelsByName: Map<string, ModelCandidate>
+): boolean {
+  if (mode === 'chat') return true
+  for (const name of primaryModels) {
+    const candidate = modelsByName.get(name)
+    if (!candidate) continue
+    if (mode === 'vision' && modelSupportsVision(candidate)) return true
+    if (mode === 'image_gen' && modelSupportsImageGen(candidate)) return true
+    if (mode === 'video_gen' && modelSupportsVideoGen(candidate)) return true
+  }
+  return false
+}
+
+export interface PlaygroundRouteCandidate {
+  name: string
+  primaryModels: string[]
+}
+
+export function buildModelCandidateIndex(
+  candidateModels: readonly ModelCandidate[]
+): Map<string, ModelCandidate> {
+  return new Map(candidateModels.map((m) => [m.name, m]))
+}
+
+export function filterPlaygroundRouteCandidates(
+  routes:
+    | readonly { enabled: boolean; primary_models: string[]; virtual_model: string }[]
+    | undefined,
+  credentialId: string,
+  candidateModels: readonly ModelCandidate[],
+  playgroundMode: PlaygroundMode,
+  modelsByName: Map<string, ModelCandidate> = buildModelCandidateIndex(candidateModels)
+): PlaygroundRouteCandidate[] {
+  const modelNames = new Set(candidateModels.map((m) => m.name))
+  return (routes ?? [])
+    .filter((r) => r.enabled)
+    .filter((r) => {
+      if (!credentialId) return true
+      return r.primary_models.length > 0 && r.primary_models.every((name) => modelNames.has(name))
+    })
+    .filter((r) => routeSupportsMode(r.primary_models, playgroundMode, modelsByName))
+    .map((r) => ({ name: r.virtual_model, primaryModels: r.primary_models }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 export function endpointPathForMode(
   mode: PlaygroundMode,
   apiFlavor: 'openai' | 'anthropic'

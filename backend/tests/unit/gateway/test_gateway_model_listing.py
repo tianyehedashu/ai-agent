@@ -292,3 +292,80 @@ async def test_resolve_by_name_visible_prefers_tenant_over_restricted_system(
     assert registry_kind_for_merged_row(resolved) == "team"
     repo = GatewayModelRepository(db_session)
     assert await repo.get_by_name(team.id, shared_name) is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_by_name_visible_skips_disabled_tenant_for_system(
+    db_session, test_user
+) -> None:
+    """disabled 租户行不遮蔽同名可见 system 行（与 Router 仅注册 enabled 一致）。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    tenant_cred = await create_tenant_test_credential(
+        db_session, team.id, name="disabled-shadow-cred"
+    )
+    sys_cred = SystemProviderCredential(
+        provider="openai",
+        name="disabled-shadow-sys-cred",
+        api_key_encrypted="enc",
+        visibility="public",
+    )
+    db_session.add(sys_cred)
+    await db_session.flush()
+    shared_name = f"disabled-shadow-{uuid.uuid4().hex[:8]}"
+    db_session.add(
+        GatewayModel(
+            tenant_id=team.id,
+            name=shared_name,
+            capability="chat",
+            real_model="gpt-disabled-team",
+            credential_id=tenant_cred.id,
+            provider="openai",
+            enabled=False,
+        )
+    )
+    db_session.add(
+        SystemGatewayModel(
+            name=shared_name,
+            capability="chat",
+            real_model="gpt-disabled-sys",
+            credential_id=sys_cred.id,
+            provider="openai",
+            visibility="inherit",
+        )
+    )
+    await db_session.flush()
+
+    resolved = await resolve_by_name_visible(
+        db_session, team.id, shared_name, user_id=test_user.id
+    )
+    assert resolved is not None
+    assert registry_kind_for_merged_row(resolved) == "system"
+    assert resolved.real_model == "gpt-disabled-sys"
+
+
+@pytest.mark.asyncio
+async def test_resolve_by_name_visible_disabled_tenant_without_system_is_none(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred = await create_tenant_test_credential(
+        db_session, team.id, name="disabled-only-cred"
+    )
+    model_name = f"disabled-only-{uuid.uuid4().hex[:8]}"
+    db_session.add(
+        GatewayModel(
+            tenant_id=team.id,
+            name=model_name,
+            capability="chat",
+            real_model="gpt-disabled",
+            credential_id=cred.id,
+            provider="openai",
+            enabled=False,
+        )
+    )
+    await db_session.flush()
+
+    resolved = await resolve_by_name_visible(
+        db_session, team.id, model_name, user_id=test_user.id
+    )
+    assert resolved is None

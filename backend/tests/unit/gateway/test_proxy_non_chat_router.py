@@ -132,7 +132,7 @@ async def test_non_chat_uses_router_not_direct_litellm(
     monkeypatch.setattr(use_case.litellm, direct_method, block_direct)
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.get_router",
+        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         handler = getattr(use_case, method_name)
@@ -173,7 +173,7 @@ async def test_audio_speech_uses_router_aspeech(
     )
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.get_router",
+        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         result = await use_case.audio_speech(ctx, {"model": "tts-1", "input": "hi"})
@@ -214,7 +214,7 @@ async def test_non_chat_router_miss_falls_back_to_direct(
     monkeypatch.setattr(use_case.litellm, "direct_rerank", direct_rerank)
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.get_router",
+        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         result = await use_case.rerank(

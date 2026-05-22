@@ -19,6 +19,8 @@ import {
   runBatchConnectivityTests,
   runWithConcurrency,
   resolveTeamModelsRegistryScope,
+  resolvePlaygroundTeamRegistryScope,
+  playgroundTeamModelsQueryKey,
   stringArraysEqual,
   summarizeHealth,
   toggleModelSet,
@@ -322,5 +324,36 @@ describe('resolveTeamModelsRegistryScope', () => {
 
   it('uses system scope on system tab', () => {
     expect(resolveTeamModelsRegistryScope('system', '')).toBe('system')
+  })
+})
+
+describe('resolvePlaygroundTeamRegistryScope', () => {
+  it('uses requestable without credential filter', () => {
+    expect(resolvePlaygroundTeamRegistryScope('')).toBe('requestable')
+  })
+
+  it('uses callable when filtering by credential', () => {
+    expect(resolvePlaygroundTeamRegistryScope('cred-1')).toBe('callable')
+  })
+})
+
+describe('playgroundTeamModelsQueryKey', () => {
+  it('switches scope in query key when credential filter is set', () => {
+    expect(playgroundTeamModelsQueryKey('team-1', '')).toEqual([
+      'gateway',
+      'models',
+      'team-1',
+      'requestable',
+      '',
+      '',
+    ])
+    expect(playgroundTeamModelsQueryKey('team-1', 'cred-1')).toEqual([
+      'gateway',
+      'models',
+      'team-1',
+      'callable',
+      '',
+      'cred-1',
+    ])
   })
 })

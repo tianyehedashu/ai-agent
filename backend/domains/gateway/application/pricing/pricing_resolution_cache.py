@@ -77,13 +77,13 @@ def _rate_from_dict(raw: dict[str, str] | None) -> PricingRate | None:
 
 
 def _resolved_to_payload(resolved: ResolvedPricing) -> dict[str, Any]:
+    from domains.gateway.application.pricing.pricing_service import resolved_inheritance_strategy
+
     return {
         "hit_chain": resolved.hit_chain,
         "upstream": _rate_to_dict(resolved.upstream),
         "downstream": _rate_to_dict(resolved.downstream),
-        "downstream_strategy": (
-            resolved.downstream_row.inheritance_strategy if resolved.downstream_row else None
-        ),
+        "downstream_strategy": resolved_inheritance_strategy(resolved),
     }
 
 
@@ -94,12 +94,14 @@ def _payload_to_resolved(payload: dict[str, Any]) -> ResolvedPricing:
             input_cost_per_token=Decimal("0"),
             output_cost_per_token=Decimal("0"),
         )
+    strategy = payload.get("downstream_strategy")
     return ResolvedPricing(
         upstream=_rate_from_dict(payload.get("upstream")),
         downstream=downstream,
         downstream_row=None,
         upstream_row=None,
         hit_chain=list(payload.get("hit_chain") or []),
+        downstream_strategy=strategy if isinstance(strategy, str) else None,
     )
 
 

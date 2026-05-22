@@ -10,10 +10,8 @@
 import { memo, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type React from 'react'
 
-import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,10 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  GATEWAY_MODELS_STALE_MS,
-  gatewayModelsRequestableQueryKey,
-} from '@/features/gateway-models/utils'
+import { usePlaygroundFilteredModels } from '@/features/gateway-playground/use-playground-filtered-models'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { thinkingHintForModel } from '@/features/gateway-shared/thinking-param'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
@@ -42,8 +37,6 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
-
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
   return { default: mod.PlaygroundCard }
@@ -140,10 +133,11 @@ function useActiveGuideAnchor(): string {
 }
 
 export default function GatewayGuidePage(): React.JSX.Element {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const navState = (location.state ?? null) as GuideVkeyNavState | null
   const keyIdFromQuery = searchParams.get('key_id')
+  const credentialId = searchParams.get('credentialId') ?? ''
   const preferKeyId = keyIdFromQuery ?? navState?.vkeyId ?? null
   const vkeyBootstrap = useMemo(
     () => ({
@@ -198,42 +192,42 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [gatewayV1Base, displayKey, activeModel]
   )
 
-  const teamId = useGatewayTeamStore((s) => s.currentTeamId)
-
-  const { data: gatewayModels } = useQuery({
-    queryKey: teamId
-      ? gatewayModelsRequestableQueryKey(teamId)
-      : ['gateway', 'models', 'requestable', 'none'],
-    queryFn: () => {
-      if (!teamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.listModels(teamId, { registry_scope: 'requestable' })
-    },
-    enabled: Boolean(teamId),
-    staleTime: GATEWAY_MODELS_STALE_MS,
+  const playgroundFilteredModels = usePlaygroundFilteredModels({
+    credentialId,
+    includeRoutes: true,
   })
-
-  const requestableModels = useMemo(() => gatewayModels ?? [], [gatewayModels])
+  const {
+    teamId,
+    credentialById,
+    credentialsLoading,
+    candidateModels: guideModelCandidates,
+  } = playgroundFilteredModels
 
   useEffect(() => {
-    if (requestableModels.length === 0) return
-    setActiveModel((prev) => {
-      if (requestableModels.some((m) => m.name === prev)) return prev
-      return requestableModels[0]?.name ?? PLACEHOLDER_MODEL
-    })
-  }, [requestableModels])
+    if (!credentialId || credentialsLoading) return
+    if (!credentialById.has(credentialId)) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('credentialId')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [credentialId, credentialById, credentialsLoading, setSearchParams, teamId])
 
   const activeModelCapabilities = useMemo(() => {
     const name = activeModel || PLACEHOLDER_MODEL
-    const row = requestableModels.find((m) => m.name === name)
-    return row?.selector_capabilities
-  }, [requestableModels, activeModel])
+    return guideModelCandidates.find((m) => m.name === name)?.selector_capabilities
+  }, [guideModelCandidates, activeModel])
 
   const thinkingModelHint = useMemo(
     () =>
       thinkingHintForModel(activeModel || PLACEHOLDER_MODEL, apiFlavor, activeModelCapabilities, {
-        allowNameFallback: requestableModels.length === 0,
+        allowNameFallback: guideModelCandidates.length === 0,
       }),
-    [activeModel, apiFlavor, activeModelCapabilities, requestableModels.length]
+    [activeModel, apiFlavor, activeModelCapabilities, guideModelCandidates.length]
   )
   const [copy, copiedKey] = useCopyToClipboardKeyed<string>()
   const handleCopy = useCallback(
@@ -249,6 +243,20 @@ export default function GatewayGuidePage(): React.JSX.Element {
     }
     setActiveModel(next)
   }, [])
+  const handleCredentialChange = useCallback(
+    (id: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (id) next.set('credentialId', id)
+          else next.delete('credentialId')
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
 
   // 示例流式 / API 风格变化时，把典型返回 Tab 默认联动到对应组合，但仍允许独立切换
   useEffect(() => {
@@ -285,7 +293,10 @@ export default function GatewayGuidePage(): React.JSX.Element {
             <PlaygroundCard
               baseUrl={gatewayV1Base}
               onModelChange={handlePlaygroundModelChange}
+              credentialId={credentialId}
+              onCredentialChange={handleCredentialChange}
               virtualKey={virtualKey}
+              filteredModels={playgroundFilteredModels}
             />
           </Suspense>
         </section>

@@ -534,6 +534,36 @@ async def reload_router(db: AsyncSession) -> Router:
     return _router_instance
 
 
+def router_deployment_model_names(router: Any) -> frozenset[str]:
+    """返回 Router 当前 ``model_list`` 中的 ``model_name`` 集合。"""
+    model_list = getattr(router, "model_list", None) or []
+    return frozenset(
+        str(dep.get("model_name", ""))
+        for dep in model_list
+        if isinstance(dep, dict) and dep.get("model_name")
+    )
+
+
+async def ensure_router_deployment(
+    db: AsyncSession,
+    encoded_model_name: str,
+) -> Router:
+    """若内存 Router 缺少目标 deployment，从 DB 热重载一次（自愈 stale singleton）。"""
+    router = await get_router(db)
+    encoded = encoded_model_name.strip()
+    if not encoded:
+        return router
+    live_names = router_deployment_model_names(router)
+    if encoded in live_names:
+        return router
+    logger.warning(
+        "Router missing deployment %s (live=%d); hot-reloading from DB",
+        encoded,
+        len(live_names),
+    )
+    return await reload_router(db)
+
+
 def get_router_sync() -> Router | None:
     """同步获取已初始化的 Router；未初始化返回 None（用于回调中查询）"""
     return _router_instance
@@ -548,9 +578,11 @@ def reset_router() -> None:
 __all__ = [
     "PricingLookup",
     "ensure_gateway_callbacks",
+    "ensure_router_deployment",
     "filter_litellm_params_for_direct_anthropic",
     "get_router",
     "get_router_sync",
     "reload_router",
     "reset_router",
+    "router_deployment_model_names",
 ]

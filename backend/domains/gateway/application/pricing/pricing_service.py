@@ -50,6 +50,23 @@ class ResolvedPricing:
     downstream_row: DownstreamModelPricing | None
     upstream_row: UpstreamModelPricing | None
     hit_chain: list[str]
+    """与 ORM 行解耦的策略快照；缓存命中后 ``downstream_row`` 可能为 None。"""
+    downstream_strategy: str | None = None
+
+
+def resolved_inheritance_strategy(resolved: ResolvedPricing) -> str | None:
+    """成员价/API 用策略；不访问可能已 detach 的 ORM 行。"""
+    if resolved.downstream_strategy is not None:
+        return resolved.downstream_strategy
+    if resolved.downstream.inheritance_strategy is not None:
+        return resolved.downstream.inheritance_strategy
+    if "mirror" in resolved.hit_chain:
+        return "mirror"
+    if "manual" in resolved.hit_chain:
+        return "manual"
+    if "upstream_passthrough" in resolved.hit_chain:
+        return "upstream_passthrough"
+    return None
 
 
 def _row_to_rate(row: UpstreamModelPricing | DownstreamModelPricing) -> PricingRate:
@@ -232,6 +249,7 @@ class PricingService:
                 downstream_row=None,
                 upstream_row=upstream_row,
                 hit_chain=hit_chain,
+                downstream_strategy="upstream_passthrough",
             )
 
         if row.inheritance_strategy == "mirror":
@@ -244,6 +262,7 @@ class PricingService:
                 downstream_row=row,
                 upstream_row=upstream_row,
                 hit_chain=hit_chain,
+                downstream_strategy="mirror",
             )
 
         downstream_rate = _row_to_rate(row)
@@ -254,6 +273,7 @@ class PricingService:
             downstream_row=row,
             upstream_row=upstream_row,
             hit_chain=hit_chain,
+            downstream_strategy=row.inheritance_strategy,
         )
 
     async def calculate(
@@ -277,13 +297,9 @@ class PricingService:
         )
         snapshot: dict[str, object] = {
             "hit_chain": resolved.hit_chain,
-            "downstream_strategy": (
-                resolved.downstream_row.inheritance_strategy if resolved.downstream_row else None
-            ),
-            "upstream_version": resolved.upstream_row.version if resolved.upstream_row else None,
-            "downstream_version": (
-                resolved.downstream_row.version if resolved.downstream_row else None
-            ),
+            "downstream_strategy": resolved_inheritance_strategy(resolved),
+            "upstream_version": resolved.upstream.version if resolved.upstream else None,
+            "downstream_version": resolved.downstream.version,
         }
         return build_breakdown(
             upstream_cost=up_cost,
@@ -392,4 +408,5 @@ __all__ = [
     "ResolvedPricing",
     "downstream_rate_to_custom_cost",
     "reset_litellm_pricing_register_cache",
+    "resolved_inheritance_strategy",
 ]
