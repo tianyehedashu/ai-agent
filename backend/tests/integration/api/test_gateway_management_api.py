@@ -49,6 +49,32 @@ class TestGatewayManagementApi:
         assert personal.get("team_role") == "owner"
 
     @pytest.mark.asyncio
+    async def test_add_member_to_personal_team_rejected(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        personal = await TeamService(db_session).ensure_personal_team(test_user.id)
+        invitee = User(
+            email=f"invitee_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Invitee User",
+        )
+        db_session.add(invitee)
+        await db_session.commit()
+        await db_session.refresh(invitee)
+
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{personal.id}/members",
+            headers=auth_headers,
+            json={"user_id": str(invitee.id), "role": "member"},
+        )
+        assert r.status_code == 400, r.text
+        assert "Personal teams cannot have members other than the owner" in r.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_get_log_detail(
         self,
         dev_client: AsyncClient,
@@ -738,6 +764,57 @@ class TestGatewayManagementApi:
             headers=auth_headers,
         )
         assert r_del.status_code == 204, r_del.text
+
+    @pytest.mark.asyncio
+    async def test_my_models_batch_delete(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """POST /my-models/batch-delete 批量删除个人模型。"""
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"my-batch-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-my-batch-int-test-key-123456",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        model_ids: list[str] = []
+        for idx in range(2):
+            r_create = await dev_client.post(
+                "/api/v1/gateway/my-models",
+                headers=auth_headers,
+                json={
+                    "display_name": f"My Batch {idx}",
+                    "provider": "openai",
+                    "model_id": f"gpt-4o-mini-{idx}",
+                    "credential_id": cred_id,
+                    "model_types": ["text"],
+                },
+            )
+            assert r_create.status_code == 201, r_create.text
+            model_ids.append(r_create.json()[0]["id"])
+
+        r_batch = await dev_client.post(
+            "/api/v1/gateway/my-models/batch-delete",
+            headers=auth_headers,
+            json={"model_ids": model_ids},
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        body = r_batch.json()
+        assert len(body["succeeded"]) == 2
+        assert body["failed"] == []
+
+        r_list = await dev_client.get("/api/v1/gateway/my-models", headers=auth_headers)
+        assert r_list.status_code == 200, r_list.text
+        remaining_ids = {m["id"] for m in r_list.json()}
+        for mid in model_ids:
+            assert mid not in remaining_ids
 
     @pytest.mark.asyncio
     async def test_personal_my_model_listed_on_v1_models(

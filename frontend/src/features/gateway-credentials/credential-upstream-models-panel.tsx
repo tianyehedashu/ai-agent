@@ -50,7 +50,7 @@ export interface CredentialUpstreamModelsPanelProps {
   onPickModelId?: (upstreamId: string) => void
   embedded?: boolean
   autoProbe?: boolean
-  onImported?: (createdCount: number) => void
+  onImported?: (createdCount: number, modelIds?: string[]) => void
   cacheKey?: readonly unknown[]
   onProbeResult?: (result: CredentialProbeResult) => void
 }
@@ -244,7 +244,16 @@ export function CredentialUpstreamModelsPanel({
       if (!disabled && credentialId.length > 0) {
         probeMutation.mutate()
       }
-      if (res.created.length > 0) onImported?.(res.created.length)
+      if (res.created.length > 0) {
+        const modelIds =
+          scope === 'user'
+            ? res.created.flatMap((item) =>
+                'gateway_model_ids' in item ? item.gateway_model_ids : []
+              )
+            : []
+        const importedCount = modelIds.length > 0 ? modelIds.length : res.created.length
+        onImported?.(importedCount, modelIds.length > 0 ? modelIds : undefined)
+      }
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '批量导入失败', description: e.message })
@@ -253,6 +262,11 @@ export function CredentialUpstreamModelsPanel({
 
   const probeStats = useMemo(
     () => (probe?.items ? countProbeItems(probe.items) : null),
+    [probe?.items]
+  )
+
+  const probeItemsById = useMemo(
+    () => (probe?.items ? new Map(probe.items.map((it) => [it.id, it])) : null),
     [probe?.items]
   )
 
@@ -274,12 +288,14 @@ export function CredentialUpstreamModelsPanel({
   )
 
   const selectedImportableCount = useMemo(() => {
-    if (!probe?.items) return 0
-    return [...selected].filter((id) => {
-      const row = probe.items.find((it) => it.id === id)
-      return row !== undefined && isImportableUpstreamItem(row)
-    }).length
-  }, [probe?.items, selected])
+    if (!probeItemsById) return 0
+    let count = 0
+    for (const id of selected) {
+      const row = probeItemsById.get(id)
+      if (row !== undefined && isImportableUpstreamItem(row)) count++
+    }
+    return count
+  }, [probeItemsById, selected])
 
   const visibleSelectedCount = importableVisibleItems.reduce(
     (count, item) => count + (selected.has(item.id) ? 1 : 0),
@@ -290,7 +306,7 @@ export function CredentialUpstreamModelsPanel({
 
   const toggle = useCallback(
     (id: string) => {
-      const row = probe?.items.find((it) => it.id === id)
+      const row = probeItemsById?.get(id)
       if (row !== undefined && !isImportableUpstreamItem(row)) return
       setSelected((prev) => {
         const next = new Set(prev)
@@ -299,7 +315,7 @@ export function CredentialUpstreamModelsPanel({
         return next
       })
     },
-    [probe?.items]
+    [probeItemsById]
   )
 
   const toggleAllVisible = useCallback(() => {

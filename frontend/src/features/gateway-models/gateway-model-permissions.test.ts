@@ -106,9 +106,15 @@ describe('isModelBatchSelectable', () => {
     const ctx = { preferSystem: true } as const
     const deletable = model({ registry_kind: 'system' })
     const managed = model({ registry_kind: 'system', tags: { managed_by: 'config' } })
-    expect(isModelBatchSelectable(deletable, true, ctx)).toBe(true)
-    expect(isModelBatchSelectable(managed, true, ctx)).toBe(false)
-    expect(isModelBatchSelectable(deletable, false, ctx)).toBe(false)
+    expect(isModelBatchSelectable(deletable, false, true, ctx)).toBe(true)
+    expect(isModelBatchSelectable(managed, false, true, ctx)).toBe(false)
+    expect(isModelBatchSelectable(deletable, false, false, ctx)).toBe(false)
+  })
+
+  it('allows team admin to select team models', () => {
+    const teamModel = model({ registry_kind: 'team' })
+    expect(isModelBatchSelectable(teamModel, true, false)).toBe(true)
+    expect(isModelBatchSelectable(teamModel, false, false)).toBe(false)
   })
 })
 

@@ -31,6 +31,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
 export default function GatewayTeamsPage(): React.JSX.Element {
@@ -80,6 +81,9 @@ export default function GatewayTeamsPage(): React.JSX.Element {
       setOpenMember(false)
       toast({ title: '成员已添加' })
     },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '添加失败', description: e.message })
+    },
   })
   const removeMemberMutation = useMutation({
     mutationFn: ({ teamId, userId }: { teamId: string; userId: string }) =>
@@ -87,7 +91,16 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'team-members'] })
     },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '移除失败', description: e.message })
+    },
   })
+
+  const cachedTeams = useGatewayTeamStore((s) => s.teams)
+  const currentTeam =
+    teams?.find((t) => t.id === teamId) ?? cachedTeams.find((t) => t.id === teamId)
+  const isPersonalTeam = currentTeam?.kind === 'personal'
+  const canAddMember = Boolean(canWrite && teamId && currentTeam && !isPersonalTeam)
 
   return (
     <div className="space-y-4">
@@ -151,7 +164,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           <CardContent className="p-0">
             <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-xs uppercase text-muted-foreground">
               <span>当前团队成员</span>
-              {canWrite && teamId && (
+              {canAddMember ? (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -163,8 +176,13 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                   <Plus className="mr-1 h-3 w-3" />
                   添加
                 </Button>
-              )}
+              ) : null}
             </div>
+            {isPersonalTeam ? (
+              <p className="border-b px-4 py-2 text-xs text-muted-foreground">
+                个人工作区仅本人可见，个人凭据与模型不会共享给其他用户。如需协作请新建共享团队并添加成员。
+              </p>
+            ) : null}
             <table className="w-full text-sm">
               <tbody>
                 {(members ?? []).map((m: TeamMember) => {

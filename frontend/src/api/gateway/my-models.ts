@@ -58,7 +58,7 @@ export interface PersonalGatewayModelUpdateBody {
 }
 
 // 测试结果与团队侧共用类型，从 models 模块导出，避免重复声明
-import type { GatewayModelTestResult } from './models'
+import type { GatewayModelBatchDeleteResponse, GatewayModelTestResult } from './models'
 
 /** My-models 资源 API */
 export const myModelsApi = {
@@ -73,6 +73,11 @@ export const myModelsApi = {
     apiClient.patch<PersonalGatewayModel>(`${GATEWAY_API_BASE}/my-models/${id}`, body),
   /** 删除个人 Gateway 模型 */
   deleteMyModel: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/my-models/${id}`),
+  /** 批量删除个人 Gateway 模型（部分成功） */
+  batchDeleteMyModels: (modelIds: string[]) =>
+    apiClient.post<GatewayModelBatchDeleteResponse>(`${GATEWAY_API_BASE}/my-models/batch-delete`, {
+      model_ids: modelIds,
+    }),
   /** 对个人 Gateway 模型发起最小连通性测试 */
   testMyModel: (id: string) =>
     apiClient.post<GatewayModelTestResult>(`${GATEWAY_API_BASE}/my-models/${id}/test`, {}),

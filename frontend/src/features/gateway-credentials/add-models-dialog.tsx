@@ -364,12 +364,12 @@ function UserUnsupportedHint({
     >
       此提供商不支持自动列举。可在{' '}
       <Link
-        to={personalModelsRegisterHref(teamId)}
+        to={personalModelsRegisterHref(teamId, credentialId)}
         className="font-medium text-primary underline-offset-4 hover:underline"
       >
-        个人模型管理
+        个人模型注册页
       </Link>{' '}
-      中手填 model_id（选择凭据 {credentialId.slice(0, 8)}…）。
+      中手填 model_id。
     </div>
   )
 }

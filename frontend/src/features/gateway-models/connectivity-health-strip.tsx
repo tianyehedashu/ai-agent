@@ -15,6 +15,9 @@ interface ConnectivityHealthStripProps {
   canWrite: boolean
   onTestAll?: () => void
   testingAll?: boolean
+  /** 探活失败项一键删除（与当前 healthFilter 无关） */
+  onDeleteFailed?: () => void
+  deletingFailed?: boolean
 }
 
 const FILTER_OPTIONS: ReadonlyArray<{
@@ -67,6 +70,8 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
   canWrite,
   onTestAll,
   testingAll,
+  onDeleteFailed,
+  deletingFailed = false,
 }: ConnectivityHealthStripProps): React.JSX.Element {
   const counts = useMemo(() => summarizeHealth(models), [models])
 
@@ -98,19 +103,34 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
           />
         ))}
       </div>
-      {canWrite && onTestAll ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="ml-auto h-7 shrink-0 px-2 text-xs text-muted-foreground"
-          disabled={testingAll}
-          onClick={onTestAll}
-        >
-          {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-          测试全部
-        </Button>
-      ) : null}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {canWrite && counts.failed > 0 && onDeleteFailed ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+            disabled={testingAll === true || deletingFailed}
+            onClick={onDeleteFailed}
+          >
+            {deletingFailed ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            删除不可用 ({counts.failed})
+          </Button>
+        ) : null}
+        {canWrite && onTestAll ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={testingAll === true || deletingFailed}
+            onClick={onTestAll}
+          >
+            {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            测试全部
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 })

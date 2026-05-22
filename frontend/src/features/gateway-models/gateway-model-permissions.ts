@@ -53,10 +53,11 @@ export function canManageGatewayModel(
 /** 系统 Tab 批量勾选：与 canDeleteGatewayModel 一致 */
 export function isModelBatchSelectable(
   model: GatewayModel,
+  canWrite: boolean,
   isPlatformAdmin: boolean,
   context?: GatewayModelPermissionContext
 ): boolean {
-  return canDeleteGatewayModel(model, false, isPlatformAdmin, context)
+  return canDeleteGatewayModel(model, canWrite, isPlatformAdmin, context)
 }
 
 /** 团队模型：团队 admin+；系统模型：平台管理员且非配置托管 */

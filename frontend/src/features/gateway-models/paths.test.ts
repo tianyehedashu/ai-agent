@@ -75,6 +75,12 @@ describe('gateway model paths', () => {
     )
   })
 
+  it('personalModelsRegisterHref with credentialId', () => {
+    expect(personalModelsRegisterHref(TEAM, 'cred-1')).toBe(
+      '/gateway/teams/team-abc/models?tab=personal&view=register&credentialId=cred-1'
+    )
+  })
+
   it('personalModelDetailHref', () => {
     expect(personalModelDetailHref(TEAM, 'pm-1')).toBe(
       '/gateway/teams/team-abc/models/pm-1?tab=personal'

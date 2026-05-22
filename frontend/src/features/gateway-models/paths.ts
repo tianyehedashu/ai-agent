@@ -11,10 +11,13 @@ export function personalModelsIndexHref(teamId: string): string {
   return `${teamBase(teamId)}/models?${personalModelsBaseParams().toString()}`
 }
 
-/** 个人模型注册 */
-export function personalModelsRegisterHref(teamId: string): string {
+/** 个人模型注册（可选锁定凭据） */
+export function personalModelsRegisterHref(teamId: string, credentialId?: string): string {
   const params = personalModelsBaseParams()
   params.set('view', 'register')
+  if (credentialId) {
+    params.set('credentialId', credentialId)
+  }
   return `${teamBase(teamId)}/models?${params.toString()}`
 }
 

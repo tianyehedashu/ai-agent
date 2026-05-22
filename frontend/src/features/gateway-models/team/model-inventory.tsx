@@ -81,6 +81,9 @@ interface ModelInventoryProps {
   onConfirmBatchDelete?: () => void
   batchDeletePending?: boolean
   batchDeleteLabel?: string
+  batchDeleteTitle?: string
+  onDeleteFailed?: () => void
+  deletingFailed?: boolean
 }
 
 export const ModelInventory = memo(function ModelInventory({
@@ -123,6 +126,9 @@ export const ModelInventory = memo(function ModelInventory({
   onConfirmBatchDelete,
   batchDeletePending = false,
   batchDeleteLabel = '',
+  batchDeleteTitle = '批量删除模型',
+  onDeleteFailed,
+  deletingFailed = false,
 }: ModelInventoryProps): React.JSX.Element {
   const showToolbar = allModels.length > 0
   const selectableModels = batchSelectEnabled
@@ -212,6 +218,8 @@ export const ModelInventory = memo(function ModelInventory({
               canWrite={canWrite}
               onTestAll={onTestAll}
               testingAll={testingAll}
+              onDeleteFailed={onDeleteFailed}
+              deletingFailed={deletingFailed}
             />
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <div className="flex rounded-md bg-muted/50 p-0.5">
@@ -267,7 +275,7 @@ export const ModelInventory = memo(function ModelInventory({
                     allSelectableSelected ? true : someSelectableSelected ? 'indeterminate' : false
                   }
                   disabled={selectableModels.length === 0}
-                  aria-label="全选可删除的系统模型"
+                  aria-label="全选可删除的模型"
                   onCheckedChange={(checked) => {
                     onToggleSelectAll?.(checked === true)
                   }}
@@ -305,7 +313,7 @@ export const ModelInventory = memo(function ModelInventory({
         <AlertDialog open={batchDeleteOpen} onOpenChange={onBatchDeleteOpenChange}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>批量删除系统模型</AlertDialogTitle>
+              <AlertDialogTitle>{batchDeleteTitle}</AlertDialogTitle>
               <AlertDialogDescription className="whitespace-pre-wrap">
                 {batchDeleteLabel ||
                   `确定删除已选的 ${String(selectedCount)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`}

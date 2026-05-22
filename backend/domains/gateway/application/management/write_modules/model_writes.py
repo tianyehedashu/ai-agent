@@ -137,6 +137,18 @@ class ModelWritesMixin:
             deleted_names=frozenset({model_name}),
         )
 
+    async def delete_personal_models_batch(
+        self,
+        user_id: uuid.UUID,
+        model_ids: list[uuid.UUID],
+    ) -> GatewayModelBatchDeleteResult:
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
+        return await self.delete_gateway_models_batch(
+            model_ids,
+            tenant_id=tenant_id,
+            is_platform_admin=False,
+        )
+
     async def create_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
         raw_rm = str(real_model).strip()
         if not raw_rm:

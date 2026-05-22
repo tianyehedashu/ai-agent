@@ -299,6 +299,8 @@ async def batch_delete_models(
             tenant_id=team.team_id,
             is_platform_admin=team.is_platform_admin,
         )
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
     return GatewayModelBatchDeleteResponse(

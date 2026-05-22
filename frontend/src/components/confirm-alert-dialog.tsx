@@ -17,6 +17,7 @@ export interface ConfirmAlertDialogProps {
   onOpenChange: (open: boolean) => void
   title: string
   description: string
+  descriptionClassName?: string
   confirmLabel?: string
   cancelLabel?: string
   pending?: boolean
@@ -30,6 +31,7 @@ export function ConfirmAlertDialog({
   onOpenChange,
   title,
   description,
+  descriptionClassName,
   confirmLabel = '确认',
   cancelLabel = '取消',
   pending = false,
@@ -41,7 +43,9 @@ export function ConfirmAlertDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogDescription className={descriptionClassName}>
+            {description}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>

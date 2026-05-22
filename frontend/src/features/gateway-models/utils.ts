@@ -399,3 +399,75 @@ export function formatBatchDeleteConfirmLabel(names: readonly string[]): string 
       : `${names.slice(0, 8).join('、')} 以及 ${String(names.length - 8)} 个其他`
   return `确定删除以下 ${String(names.length)} 个模型？\n${listed}\n\n将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
 }
+
+/** 删除全部探活失败模型的确认文案 */
+export function formatDeleteFailedConfirmLabel(count: number, names: readonly string[]): string {
+  if (count === 0) return ''
+  const listed =
+    names.length <= 10
+      ? names.join('、')
+      : `${names.slice(0, 8).join('、')} 以及 ${String(names.length - 8)} 个其他`
+  return `确定删除 ${String(count)} 个探活失败的模型？\n${listed}\n\n将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+}
+
+export const BATCH_DELETE_MAX = 200
+
+/** 探活失败且允许删除的模型 */
+export function filterDeletableFailedModels<T extends ModelWithConnectivityStatus>(
+  models: readonly T[],
+  canDelete: (model: T) => boolean
+): T[] {
+  return models.filter((m) => m.last_test_status === 'failed' && canDelete(m))
+}
+
+/** 将 ID 列表按单次 batch-delete 上限分块 */
+export function chunkIdsForBatchDelete(ids: readonly string[], max = BATCH_DELETE_MAX): string[][] {
+  if (ids.length === 0) return []
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += max) {
+    chunks.push(ids.slice(i, i + max))
+  }
+  return chunks
+}
+
+/** 将勾选集限制在当前可见列表内（渲染期派生，避免 effect 同步） */
+export function filterSelectedIdsInView(
+  selectedIds: ReadonlySet<string>,
+  visibleIds: ReadonlySet<string>
+): Set<string> {
+  const next = new Set<string>()
+  for (const id of selectedIds) {
+    if (visibleIds.has(id)) next.add(id)
+  }
+  return next
+}
+
+export interface BatchDeleteChunkResult {
+  succeeded: string[]
+  failed: Array<{ id: string; code: string; message: string }>
+  grants_removed: number
+  budgets_removed: number
+}
+
+/** 顺序执行多批 batch-delete 并合并结果 */
+export async function runChunkedBatchDelete(
+  ids: readonly string[],
+  mutateFn: (chunk: string[]) => Promise<BatchDeleteChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchDeleteChunkResult> {
+  const chunks = chunkIdsForBatchDelete(ids, chunkSize)
+  const merged: BatchDeleteChunkResult = {
+    succeeded: [],
+    failed: [],
+    grants_removed: 0,
+    budgets_removed: 0,
+  }
+  for (const chunk of chunks) {
+    const result = await mutateFn(chunk)
+    merged.succeeded.push(...result.succeeded)
+    merged.failed.push(...result.failed)
+    merged.grants_removed += result.grants_removed
+    merged.budgets_removed += result.budgets_removed
+  }
+  return merged
+}

@@ -12,6 +12,9 @@ from domains.gateway.application.model_selector_reads import list_available_mode
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
+    GatewayModelBatchDeleteFailureItem,
+    GatewayModelBatchDeleteRequest,
+    GatewayModelBatchDeleteResponse,
     GatewayModelTestResponse,
     PersonalModelCreate,
     PersonalModelResponse,
@@ -108,6 +111,34 @@ async def delete_my_model(
         await writes.delete_personal_model(user_id, model_id)
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
+
+
+@router.post("/my-models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
+async def batch_delete_my_models(
+    payload: GatewayModelBatchDeleteRequest,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+) -> GatewayModelBatchDeleteResponse:
+    user_id = get_user_uuid(current_user)
+    try:
+        result = await writes.delete_personal_models_batch(user_id, payload.model_ids)
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return GatewayModelBatchDeleteResponse(
+        succeeded=result.succeeded,
+        failed=[
+            GatewayModelBatchDeleteFailureItem(
+                id=item.id,
+                code=item.code,
+                message=item.message,
+            )
+            for item in result.failed
+        ],
+        grants_removed=result.grants_removed,
+        budgets_removed=result.budgets_removed,
+    )
 
 
 @router.post("/my-models/{model_id}/test", response_model=GatewayModelTestResponse)
