@@ -114,7 +114,7 @@ async def list_models(
     registry_scope: Literal["team", "system", "callable", "requestable"] = Query(
         "team",
         description=(
-            "team=当前团队注册行；system=平台注册行（仅平台管理员）；"
+            "team=当前团队注册行（不含 scope=user BYOK）；system=平台注册行（仅平台管理员）；"
             "callable=租户+平台合并；requestable=enabled 且连通性未 failed（试调/请求用）"
         ),
     ),

@@ -53,6 +53,9 @@ from domains.gateway.domain.policies.budget_scope_policy import (
     normalize_budget_list_filters,
     plan_admin_budget_fetch,
 )
+from domains.gateway.domain.policies.model_registry_scope import (
+    exclude_user_scope_credentials_for_registry,
+)
 from domains.gateway.domain.types import CredentialScope, credential_api_scope
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
@@ -258,6 +261,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
                 only_enabled=only_enabled,
                 provider=provider,
                 credential_id=credential_id,
+                exclude_user_scope_credentials=exclude_user_scope_credentials_for_registry(
+                    registry_scope
+                ),
             )
         if registry_scope == "system":
             return await self._models.list_system(

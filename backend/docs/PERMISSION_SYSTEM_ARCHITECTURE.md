@@ -375,7 +375,7 @@ async def get_agent(
 **个人模型（personal team GatewayModel）**
 
 - **数据库**：`gateway_models` 中 `team_id` = 用户 personal team；须绑定 `credential_id`（user scope 凭据，见 `/my-credentials`）。
-- **管理 API**：`GET/POST/PATCH/DELETE /api/v1/gateway/my-models`（`RequiredAuthUser`，不依赖 `X-Team-Id`）。
+- **管理 API**：`GET/POST/PATCH/DELETE /api/v1/gateway/my-models`（`RequiredAuthUser`，不依赖 `X-Team-Id`）。`GET /teams/{id}/models?registry_scope=team`（管理面「团队」Tab）**不**列出 BYOK 行，仅 `scope=team` 凭据绑定；BYOK 仍在 `callable` / `requestable` / `/v1/models` 与 `/my-models` 可见。
 - **历史迁移**：原 `user_models` 表数据经 Alembic 一次性迁入 personal team 后已 DROP。
 - **Router**：创建/更新/删除个人模型后调用 `reload_litellm_router()`，与团队模型相同进入 LiteLLM Router 全局 `model_list`。
 

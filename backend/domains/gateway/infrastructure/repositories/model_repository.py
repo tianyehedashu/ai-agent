@@ -7,8 +7,13 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 
 from domains.gateway.domain.policies.model_selection import merge_named_rows_tenant_overrides_system
-from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
+from domains.gateway.domain.types import (
+    CONFIG_MANAGED_BY,
+    GATEWAY_MODEL_MANAGED_BY_TAG,
+    CredentialScope,
+)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.repositories.gateway_route_repository import (
     GatewayRouteRepository,
@@ -67,6 +72,7 @@ class GatewayModelRepository:
         capability: str | None = None,
         provider: str | None = None,
         credential_id: uuid.UUID | None = None,
+        exclude_user_scope_credentials: bool = False,
     ) -> list[GatewayModel]:
         clauses = [GatewayModel.tenant_id == tenant_id]
         if only_enabled:
@@ -77,6 +83,11 @@ class GatewayModelRepository:
             clauses.append(GatewayModel.provider == provider)
         if credential_id is not None:
             clauses.append(GatewayModel.credential_id == credential_id)
+        if exclude_user_scope_credentials:
+            user_scoped_subq = select(ProviderCredential.id).where(
+                ProviderCredential.scope == CredentialScope.USER.value
+            )
+            clauses.append(GatewayModel.credential_id.notin_(user_scoped_subq))
         stmt = select(GatewayModel).where(*clauses).order_by(GatewayModel.name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

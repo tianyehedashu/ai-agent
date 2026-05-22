@@ -805,6 +805,83 @@ class TestGatewayManagementApi:
         assert r_del.status_code == 204, r_del.text
 
     @pytest.mark.asyncio
+    async def test_byok_excluded_from_team_registry_scope_but_callable_and_v1(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """BYOK 模型不出现在 registry_scope=team；callable 与 /v1/models 仍可见。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"team-scope-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-team-scope-int-test-key-123456789",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/my-models",
+            headers=auth_headers,
+            json={
+                "display_name": "Team Scope Filter",
+                "provider": "openai",
+                "model_id": "gpt-4o-mini",
+                "credential_id": cred_id,
+                "model_types": ["text"],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        created = r_create.json()
+        registration_name = created[0]["name"]
+        model_id = created[0]["id"]
+
+        r_team = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=auth_headers,
+            params={"registry_scope": "team"},
+        )
+        assert r_team.status_code == 200, r_team.text
+        assert registration_name not in {m["name"] for m in r_team.json()}
+
+        r_callable = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=auth_headers,
+            params={"registry_scope": "callable"},
+        )
+        assert r_callable.status_code == 200, r_callable.text
+        assert registration_name in {m["name"] for m in r_callable.json()}
+
+        ck = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/keys",
+            headers=auth_headers,
+            json={"name": f"itest-team-scope-{uuid.uuid4().hex[:6]}"},
+        )
+        assert ck.status_code == 201, ck.text
+        plain_key = ck.json()["plain_key"]
+
+        r_v1 = await dev_client.get(
+            f"{openai_compat_base()}/models",
+            headers={"Authorization": f"Bearer {plain_key}"},
+        )
+        assert r_v1.status_code == 200, r_v1.text
+        assert registration_name in [m["id"] for m in r_v1.json().get("data", [])]
+
+        r_del = await dev_client.delete(
+            f"/api/v1/gateway/my-models/{model_id}",
+            headers=auth_headers,
+        )
+        assert r_del.status_code == 204, r_del.text
+
+    @pytest.mark.asyncio
     async def test_provider_and_entitlement_plan_management_apis(
         self,
         dev_client: AsyncClient,

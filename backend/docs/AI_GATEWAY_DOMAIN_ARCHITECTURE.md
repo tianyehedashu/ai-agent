@@ -420,7 +420,7 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 | **继承** | 模型 `inherit` 时有效可见性 = 凭据 `visibility`；模型可 `public` / `restricted` 覆盖凭据。 |
 | **grant 并集** | 同一模型同时可挂 model 级与 credential 级 grant；任意命中即放行。 |
 | **管理 API** | PlatformAdmin：`PATCH /api/v1/gateway/system/credentials|models/{id}/visibility`；`POST/PATCH/DELETE /api/v1/gateway/system/grants`；反查 `GET /api/v1/gateway/admin/teams|users/{id}/system-visibility`。团队路径：`DELETE /api/v1/gateway/teams/{team_id}/models/{model_id}`（单条）；`POST .../models/batch-delete`（最多 200 条，部分成功 `{succeeded, failed}`，并清理 vkey/路由引用、`system_gateway_grants`（target=model）、`gateway_budgets`（按 model_name））。`config-managed` 模型不可删。 |
-| **注册表 scope** | `registry_scope=system` **不过滤**可见性（管理员看全表）；`callable` / `requestable` 经 `gateway_model_listing.list_merged_models_for_tenant(..., user_id=...)` 过滤。 |
+| **注册表 scope** | `registry_scope=team` 仅返回 **scope=team** 凭据绑定的租户注册行（排除 `scope=user` BYOK）；`registry_scope=system` **不过滤**可见性（管理员看全表）；`callable` / `requestable` 经 `gateway_model_listing.list_merged_models_for_tenant(..., user_id=...)` 过滤，**含** BYOK 注册别名；个人模型管理走 `/my-models`。 |
 | **配额/定价** | **不**写入 grants 表；继续用 `gateway_budgets`（`target_kind` + 可选 `model_name`）与 `downstream_model_pricing`（`scope=tenant` 等）。 |
 | **catalog reload** | `config_catalog_sync` 更新 system 模型时不覆盖 `visibility` / grants。 |
 | **分层** | 纯规则：`domain/policies/system_visibility.py`；IO 编排：`application/system_visibility_filter.py`；合并列表/按名解析：`application/gateway_model_listing.py`。`GatewayModelRepository.list_for_tenant` 仅做 tenant+system 合并，**不**含可见性过滤。 |
