@@ -10,7 +10,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import {
-  AlertTriangle,
   BarChart3,
   BookOpen,
   CircleDollarSign,
@@ -136,7 +135,6 @@ export default function GatewayLayout(): React.JSX.Element {
       { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route },
       { to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt },
       { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText },
-      { to: gatewayTeamNavHref(teamId, 'alerts'), label: '告警规则', icon: AlertTriangle },
       { to: gatewayTeamNavHref(teamId, 'members'), label: '团队成员', icon: Users },
     ]
     if (isPlatformAdmin) {

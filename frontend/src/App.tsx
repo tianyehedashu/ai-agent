@@ -11,7 +11,6 @@ import LoginPage from '@/pages/auth/login'
 import RegisterPage from '@/pages/auth/register'
 import ChatPage from '@/pages/chat'
 import GatewayLayout from '@/pages/gateway/_layout'
-import GatewayAlertsPage from '@/pages/gateway/alerts'
 import GatewayBudgetsPage from '@/pages/gateway/budgets'
 import GatewayCredentialDetailPage from '@/pages/gateway/credential-detail'
 import GatewayCredentialsPage from '@/pages/gateway/credentials'
@@ -116,7 +115,10 @@ function App(): React.JSX.Element {
                       </Route>
                       <Route path="budgets" element={<GatewayBudgetsPage />} />
                       <Route path="logs" element={<GatewayLogsPage />} />
-                      <Route path="alerts" element={<GatewayAlertsPage />} />
+                      <Route
+                        path="alerts"
+                        element={<Navigate to="overview" replace relative="path" />}
+                      />
                       <Route path="members" element={<GatewayTeamsPage />} />
                     </Route>
                     {/* Legacy flat paths → GatewayTeamRedirect */}

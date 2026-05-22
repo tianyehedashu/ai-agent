@@ -16,7 +16,6 @@ const LEGACY_TEAM_SEGMENTS = new Set([
   'routes',
   'budgets',
   'logs',
-  'alerts',
   'teams',
   'pricing',
 ])
