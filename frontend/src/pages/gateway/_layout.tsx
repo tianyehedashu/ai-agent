@@ -2,11 +2,11 @@
  * AI Gateway 二级布局：左侧二级导航 + 右侧 Outlet
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { ComponentType } from 'react'
 import type React from 'react'
 
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import {
@@ -60,40 +60,104 @@ function isGatewayNavActive(pathname: string, search: string, navMatch: GatewayN
   }
 }
 
+const FLAT_GATEWAY_ROUTES = ['platform-stats', 'guide'] as const
+
+const TEAM_NAV_SEGMENTS = new Set([
+  'overview',
+  'keys',
+  'credentials',
+  'models',
+  'pricing',
+  'routes',
+  'budgets',
+  'logs',
+  'alerts',
+  'members',
+  'teams',
+])
+
+/** 团队工作区侧栏必须使用绝对路径，避免在 platform-stats 等扁平路由下相对跳转叠路径 */
+function gatewayTeamNavHref(
+  teamId: string | null | undefined,
+  segment: string,
+  search = ''
+): string {
+  if (!teamId) return '/gateway'
+  const path = `/gateway/teams/${encodeURIComponent(teamId)}/${segment}`
+  return search ? `${path}?${search}` : path
+}
+
+/** 相对侧栏链接在扁平页叠出的脏路径，回收至合法扁平入口 */
+function corruptedFlatGatewayPath(pathname: string): string | null {
+  for (const flat of FLAT_GATEWAY_ROUTES) {
+    const prefix = `/gateway/${flat}/`
+    if (!pathname.startsWith(prefix)) continue
+    const firstSegment = pathname.slice(prefix.length).split('/')[0] ?? ''
+    if (TEAM_NAV_SEGMENTS.has(firstSegment)) {
+      return `/gateway/${flat}`
+    }
+  }
+  return null
+}
+
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
+  const teamId = currentTeam?.id
   const location = useLocation()
+  const navigate = useNavigate()
   const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
+
+  useEffect(() => {
+    const target = corruptedFlatGatewayPath(location.pathname)
+    if (target) {
+      navigate(target, { replace: true })
+    }
+  }, [location.pathname, navigate])
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
-      { to: 'overview', label: '概览', icon: BarChart3, end: true },
+      { to: gatewayTeamNavHref(teamId, 'overview'), label: '概览', icon: BarChart3, end: true },
       { to: '/gateway/guide', label: '调用指南', icon: BookOpen },
-      { to: 'keys', label: '虚拟 Key', icon: Key },
-      { to: 'credentials', label: '凭据', icon: Database, navMatch: 'credentials-default' },
-      { to: 'models', label: '模型', icon: Network, navMatch: 'models-default' },
-      { to: 'pricing', label: '定价目录', icon: CircleDollarSign },
-      { to: 'routes', label: '虚拟路由', icon: Route },
-      { to: 'budgets', label: '预算配额', icon: Receipt },
-      { to: 'logs', label: '调用日志', icon: FileText },
-      { to: 'alerts', label: '告警规则', icon: AlertTriangle },
-      { to: 'members', label: '团队成员', icon: Users },
+      { to: gatewayTeamNavHref(teamId, 'keys'), label: '虚拟 Key', icon: Key },
+      {
+        to: gatewayTeamNavHref(teamId, 'credentials'),
+        label: '凭据',
+        icon: Database,
+        navMatch: 'credentials-default',
+      },
+      {
+        to: gatewayTeamNavHref(teamId, 'models'),
+        label: '模型',
+        icon: Network,
+        navMatch: 'models-default',
+      },
+      { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
+      { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route },
+      { to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt },
+      { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText },
+      { to: gatewayTeamNavHref(teamId, 'alerts'), label: '告警规则', icon: AlertTriangle },
+      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队成员', icon: Users },
     ]
     if (isPlatformAdmin) {
       base.push(
         {
-          to: 'credentials?tab=system',
+          to: gatewayTeamNavHref(teamId, 'credentials', 'tab=system'),
           label: '系统凭据',
           icon: Database,
           navMatch: 'credentials-system',
         },
-        { to: 'models?tab=system', label: '系统模型', icon: Network, navMatch: 'models-system' },
+        {
+          to: gatewayTeamNavHref(teamId, 'models', 'tab=system'),
+          label: '系统模型',
+          icon: Network,
+          navMatch: 'models-system',
+        },
         { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart }
       )
     }
     return base
-  }, [isPlatformAdmin])
+  }, [isPlatformAdmin, teamId])
 
   return (
     <div className="flex h-full min-h-0">
