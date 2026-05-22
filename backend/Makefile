@@ -103,8 +103,11 @@ lock: ## 生成/更新 uv.lock 文件
 
 # 与 Dockerfile CMD 一致：uvicorn bootstrap.main:app（生产多 worker，本地单进程）。
 # 热重载会整进程重启并重复跑 lifespan，仅改后端代码时用 dev-reload。
+# 注意：必须经 scripts/run_server.py 启动，Windows 上要在 import uvicorn 之前
+# 设置 WindowsSelectorEventLoopPolicy，否则 psycopg/langgraph 异步连接会因
+# ProactorEventLoop 而 InterfaceError（详见脚本 docstring）。
 dev: ## 启动开发服务器（与生产相同入口，无热重载）
-	$(UV) run uvicorn bootstrap.main:app --host 0.0.0.0 --port 8000
+	$(UV) run python scripts/run_server.py --host 0.0.0.0 --port 8000
 
 dev-reload: ## 启动开发服务器（热重载；Windows 用 scripts/run_dev_server.py 避免 glob 展开）
 	$(UV) run python scripts/run_dev_server.py

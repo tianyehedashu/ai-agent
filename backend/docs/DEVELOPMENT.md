@@ -36,8 +36,43 @@ cp .env.example .env
 ### 3. 启动开发服务器
 
 ```bash
-make dev
+make dev          # 与生产 Dockerfile CMD 一致，无热重载
+make dev-reload   # 仅改后端代码时用：watchfiles 热重载
 ```
+
+## Windows 原生开发提示
+
+> **强烈建议** 在 WSL2 / Devcontainer / Docker 中开发：环境与生产 Docker 一致，
+> 自动避开 Windows 原生的若干异步 I/O 兼容性问题（不仅是本节描述的 psycopg
+> ProactorEventLoop，还有 watchfiles、文件路径大小写、CRLF 等）。
+> Cursor 通过 Remote-WSL 体验与本地几乎无差。
+
+如果坚持 Windows 原生跑后端，请**只通过 `make dev` / `make dev-reload` 启动**，
+不要直接调 `uv run uvicorn bootstrap.main:app`。原因：
+
+- uvicorn ≥ 0.40 通过 `asyncio.Runner(loop_factory=...)` 创建事件循环，**完全
+  绕过** `asyncio.set_event_loop_policy()`，Windows 默认得到 `ProactorEventLoop`。
+- `psycopg` 异步连接（langgraph `AsyncPostgresSaver` 依赖）不支持 ProactorEventLoop，
+  会抛 `psycopg.InterfaceError`，导致 checkpointer 回落 MemorySaver（dev 期看不到
+  错误但生产语义已经偏离）。
+- `scripts/run_server.py` 与 `scripts/run_dev_server.py` 在 Windows 上自动给
+  `uvicorn.run` 传 `loop="bootstrap.event_loop:selector_event_loop_factory"`，
+  通过 uvicorn 官方扩展点（`Config.get_loop_factory` 的 `import_from_string`
+  分支）注入 `SelectorEventLoop` 工厂。**生产 Linux 路径完全不受影响**。
+- 机制与设计取舍详见 [`bootstrap/event_loop.py`](../bootstrap/event_loop.py)
+  模块 docstring。
+
+### 端口残留排查
+
+`make dev` 异常退出后 uvicorn 进程可能仍占着 8000：
+
+```powershell
+netstat -ano | findstr ":8000"
+taskkill /PID <PID> /F
+```
+
+`make dev-reload`（`scripts/run_dev_server.py`）启动前会自动探测端口，
+占用时给出可执行的修复指引。
 
 ## 常用命令
 
@@ -81,8 +116,12 @@ uv run <command>    # 在虚拟环境中运行命令
 # 示例
 uv run pytest
 uv run ruff check .
-uv run uvicorn app.main:app --reload
+uv run python scripts/run_server.py        # 等价于 make dev
+uv run python scripts/run_dev_server.py    # 等价于 make dev-reload
 ```
+
+> ⚠️ 不要写成 `uv run uvicorn bootstrap.main:app ...`：Windows 上会拿到
+> `ProactorEventLoop`，参见上面 [Windows 原生开发提示](#windows-原生开发提示)。
 
 ## 提交代码
 

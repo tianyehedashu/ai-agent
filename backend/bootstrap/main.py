@@ -13,8 +13,14 @@ import traceback
 from typing import Any
 import warnings
 
-# Windows 需要使用 SelectorEventLoop（psycopg 异步要求）
-# 必须在导入可能依赖事件循环的模块之前设置
+# Windows 需要使用 SelectorEventLoop（psycopg 异步要求）。
+# 注意：此 policy 设置只对 pytest / 直接 ``python -m`` 等"以本模块为入口"的
+# 场景兜底——它们通常用 ``asyncio.run()``，会读取此 policy。
+#
+# 对 uvicorn 入口此设置**无效**：uvicorn ≥ 0.40 通过
+# ``asyncio.Runner(loop_factory=...)`` 创建循环，完全绕过 policy。uvicorn
+# 入口必须由启动器（``scripts/run_server.py`` / ``scripts/run_dev_server.py``）
+# 给 ``uvicorn.run`` 传 ``loop="bootstrap.event_loop:selector_event_loop_factory"``。
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 

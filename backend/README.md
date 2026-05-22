@@ -127,10 +127,17 @@ make db-upgrade
 ### 运行开发服务器
 
 ```bash
-make dev
-# 或者使用 uv:
-# uv run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000
+make dev          # 与生产 Dockerfile CMD 一致，无热重载
+make dev-reload   # 仅改后端代码时用：watchfiles 热重载
 ```
+
+> **Windows 原生开发请勿直接调 `uv run uvicorn bootstrap.main:app`**：
+> uvicorn ≥ 0.40 默认创建 `ProactorEventLoop`，会让 psycopg / langgraph
+> `AsyncPostgresSaver` 抛 `InterfaceError` 并悄悄回落 MemorySaver。`make dev`
+> 经 `scripts/run_server.py` 自动注入 `SelectorEventLoop` 工厂。
+> 详见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#windows-原生开发提示) 与
+> [`bootstrap/event_loop.py`](bootstrap/event_loop.py)。
+> **更推荐 WSL2 / Devcontainer / Docker dev** 一次性避开此类 Windows-only 问题。
 
 ### 运行测试
 
