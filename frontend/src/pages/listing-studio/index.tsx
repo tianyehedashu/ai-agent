@@ -17,6 +17,7 @@ import { useListingStudioCapabilities } from '@/hooks/use-listing-studio-capabil
 import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio-capabilities'
 import { useToast } from '@/hooks/use-toast'
 import { Zap, Loader2, History, CheckCircle2, XCircle, Circle, Sparkles } from '@/lib/lucide-icons'
+import { deferReleaseUiOverlayLock } from '@/lib/ui-overlay'
 import { cn } from '@/lib/utils'
 import { useListingStudioStore } from '@/stores/listing-studio'
 import type { ListingStudioJob } from '@/types/listing-studio'
@@ -258,6 +259,11 @@ export default function ListingStudioPage(): React.JSX.Element {
   const inputSummary = getInputSummary(inputs)
   const completedCount = currentJob?.steps?.filter((s) => s.status === 'completed').length ?? 0
 
+  const handleStepToggle = useCallback((capId: string) => {
+    setExpandedCapId((prev) => (prev === capId ? null : capId))
+    deferReleaseUiOverlayLock()
+  }, [])
+
   return (
     <div className="listing-studio-page flex min-h-full flex-col bg-background">
       {/* 顶栏 */}
@@ -333,14 +339,10 @@ export default function ListingStudioPage(): React.JSX.Element {
                     promptByCapability={promptByCapability}
                     onPromptChange={onPromptChange}
                     localContext={localContextByCapability[capId] ?? {}}
-                    onLocalContextChange={(ctx) => {
-                      onLocalContextChange(capId, ctx)
-                    }}
+                    onLocalContextChange={onLocalContextChange}
                     ensureJob={ensureJob}
                     expanded={expandedCapId === capId}
-                    onToggle={() => {
-                      setExpandedCapId(expandedCapId === capId ? null : capId)
-                    }}
+                    onToggle={handleStepToggle}
                     capabilityConfig={caps}
                   />
                 ))}

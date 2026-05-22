@@ -3,9 +3,25 @@ import * as React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronRight, Circle } from 'lucide-react'
 
+import { useOverlayPortalReady } from '@/lib/ui-overlay/overlay-portal-ready'
+import { deferReleaseUiOverlayLock } from '@/lib/ui-overlay/release-overlay-lock'
 import { cn } from '@/lib/utils'
 
-const DropdownMenu = DropdownMenuPrimitive.Root
+/** modal=false 避免下拉未关闭时父组件卸载导致 body 无法点击 */
+const DropdownMenu = (
+  props: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>
+): React.JSX.Element => (
+  <DropdownMenuPrimitive.Root
+    {...props}
+    modal={props.modal ?? false}
+    onOpenChange={(open) => {
+      props.onOpenChange?.(open)
+      if (!open) {
+        deferReleaseUiOverlayLock()
+      }
+    }}
+  />
+)
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 
@@ -56,19 +72,27 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-        className
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-))
+>(({ className, sideOffset = 4, onCloseAutoFocus, ...props }, ref) => {
+  const { container } = useOverlayPortalReady()
+
+  return (
+    <DropdownMenuPrimitive.Portal container={container}>
+      <DropdownMenuPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+          className
+        )}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          onCloseAutoFocus?.(e)
+        }}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  )
+})
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 
 const DropdownMenuItem = React.forwardRef<

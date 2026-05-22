@@ -41,6 +41,7 @@ import {
   Sparkles,
   Plus,
 } from '@/lib/lucide-icons'
+import { OverlayScope } from '@/lib/ui-overlay'
 import { cn } from '@/lib/utils'
 import type {
   ListingStudioJob,
@@ -103,11 +104,11 @@ interface CapabilityBlockProps {
   promptByCapability: Record<string, string>
   onPromptChange: (capabilityId: string, value: string) => void
   localContext: Record<string, unknown>
-  onLocalContextChange: (ctx: Record<string, unknown>) => void
+  onLocalContextChange: (capabilityId: string, ctx: Record<string, unknown>) => void
   ensureJob?: () => Promise<string>
   disabled?: boolean
   expanded?: boolean
-  onToggle?: () => void
+  onToggle?: (capabilityId: string) => void
   capabilityConfig: ListingStudioCapabilitiesConfig
 }
 
@@ -165,6 +166,13 @@ export function CapabilityBlock({
     hasAutoFilledDefault.current = false
   }, [capabilityId])
 
+  const handleLocalContextChange = useCallback(
+    (ctx: Record<string, unknown>) => {
+      onLocalContextChange(capabilityId, ctx)
+    },
+    [capabilityId, onLocalContextChange]
+  )
+
   const buildUserInput = useCallback(() => {
     const base = inputsToUserInput(inputs)
     const result = { ...base }
@@ -184,7 +192,7 @@ export function CapabilityBlock({
   }, [inputs, localContext])
 
   const requiredInputFields = capabilityConfig.capabilityInputFields[capabilityId] ?? []
-  const missingRequiredInputs = (() => {
+  const missingRequiredInputs = useMemo(() => {
     const userInput = buildUserInput()
     for (const key of requiredInputFields) {
       const value = userInput[key]
@@ -197,7 +205,7 @@ export function CapabilityBlock({
       }
     }
     return false
-  })()
+  }, [buildUserInput, requiredInputFields])
 
   const updateJobCache = useCallback(
     (data: ListingStudioJob) => {
@@ -360,7 +368,9 @@ export function CapabilityBlock({
           expanded ? 'rounded-t-lg' : 'rounded-lg',
           !expanded && 'hover:bg-muted/30'
         )}
-        onClick={onToggle}
+        onClick={() => {
+          onToggle?.(capabilityId)
+        }}
         aria-expanded={expanded}
         aria-controls={panelId}
       >
@@ -406,241 +416,247 @@ export function CapabilityBlock({
         />
       </button>
 
-      {/* Linear pipeline content */}
-      {expanded && (
-        <div
-          id={panelId}
-          role="region"
-          aria-label={`${name} 步骤详情`}
-          className="space-y-5 border-t border-border/50 px-4 pb-4 pt-4 [content-visibility:auto]"
-        >
-          {/* Shared model selector (applies to both prompt generation & execution) */}
-          <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">模型</span>
-            <ModelSelector
-              modelType={capabilityConfig.capabilityModelTypes[capabilityId] ?? 'text'}
-              value={selectedModelId}
-              onChange={setSelectedModelId}
-              placeholder={
-                capabilityConfig.capabilityModelTypes[capabilityId] === 'image'
-                  ? '默认视觉模型'
-                  : '默认模型'
-              }
-              disabled={(disabled ?? false) || isAnyRunning}
-              className="h-8 w-[200px] text-sm"
-            />
-          </div>
-
-          {/* Section 1: Input Context */}
-          <StepContextPanel
-            capabilityId={capabilityId}
-            globalInputs={inputs}
-            job={job}
-            localContext={localContext}
-            onLocalContextChange={onLocalContextChange}
-            disabled={(disabled ?? false) || isAnyRunning}
-            capabilityConfig={capabilityConfig}
-          />
-
-          {/* Section 2: Prompt + Actions */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                提示词
-              </p>
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 rounded-md px-3 text-sm"
-                      disabled={(disabled ?? false) || isAnyRunning}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      模板
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-[180px]">
-                    <DropdownMenuItem onClick={handleRestoreDefault} disabled={disabled ?? false}>
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="ml-2">恢复默认</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {templates.length === 0 ? (
-                      <DropdownMenuItem disabled>暂无模板</DropdownMenuItem>
-                    ) : (
-                      templates.map((t) => (
-                        <DropdownMenuItem
-                          key={t.id}
-                          onClick={() => {
-                            handleLoadTemplate(t)
-                          }}
-                          disabled={disabled ?? false}
-                        >
-                          {t.name}
-                        </DropdownMenuItem>
-                      ))
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 rounded-md px-3 text-sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    optimizePromptMutation.mutate()
-                  }}
-                  disabled={(disabled ?? false) || isAnyRunning || missingRequiredInputs}
-                  title={
-                    missingRequiredInputs
-                      ? '请先填写本步骤必填参数（如图片、产品名称等）'
-                      : '使用 AI 优化当前提示词（可选）'
-                  }
-                >
-                  {optimizePromptMutation.isPending ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  优化提示词
-                </Button>
-              </div>
+      {/* 仅展开时挂载：避免多个隐藏面板内的 Select/Dropdown Portal 残留 */}
+      {expanded ? (
+        <OverlayScope>
+          <div
+            id={panelId}
+            role="region"
+            aria-label={`${name} 步骤详情`}
+            className="capability-block-panel space-y-5 border-t border-border/50 px-4 pb-4 pt-4"
+          >
+            {/* Shared model selector (applies to both prompt generation & execution) */}
+            <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
+              <span className="text-xs font-medium text-muted-foreground">模型</span>
+              <ModelSelector
+                modelType={capabilityConfig.capabilityModelTypes[capabilityId] ?? 'text'}
+                value={selectedModelId}
+                onChange={setSelectedModelId}
+                placeholder={
+                  capabilityConfig.capabilityModelTypes[capabilityId] === 'image'
+                    ? '默认视觉模型'
+                    : '默认模型'
+                }
+                disabled={(disabled ?? false) || isAnyRunning}
+                className="h-8 w-[200px] text-sm"
+              />
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium text-foreground">提示词</Label>
-                {metaPromptParams.length > 0 && (
+            {/* Section 1: Input Context */}
+            <StepContextPanel
+              capabilityId={capabilityId}
+              globalInputs={inputs}
+              job={job}
+              localContext={localContext}
+              onLocalContextChange={handleLocalContextChange}
+              disabled={(disabled ?? false) || isAnyRunning}
+              capabilityConfig={capabilityConfig}
+            />
+
+            {/* Section 2: Prompt + Actions */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  提示词
+                </p>
+                <div className="flex items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="h-7 gap-1 rounded px-2 text-xs"
+                        className="h-8 gap-1.5 rounded-md px-3 text-sm"
                         disabled={(disabled ?? false) || isAnyRunning}
                       >
-                        <Plus className="h-3 w-3" />
-                        插入参数
+                        <FileText className="h-3.5 w-3.5" />
+                        模板
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-[180px]">
-                      {metaPromptParams.map((p) => (
-                        <DropdownMenuItem
-                          key={p.key}
-                          onClick={() => {
-                            handleInsertParam(p.key)
-                          }}
-                          disabled={(disabled ?? false) || isAnyRunning}
-                        >
-                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{`{{${p.key}}}`}</code>
-                          <span className="ml-2 text-muted-foreground">{p.label}</span>
-                        </DropdownMenuItem>
-                      ))}
+                    <DropdownMenuContent align="end" className="min-w-[180px]">
+                      <DropdownMenuItem onClick={handleRestoreDefault} disabled={disabled ?? false}>
+                        <RotateCcw className="h-4 w-4" />
+                        <span className="ml-2">恢复默认</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      {templates.length === 0 ? (
+                        <DropdownMenuItem disabled>暂无模板</DropdownMenuItem>
+                      ) : (
+                        templates.map((t) => (
+                          <DropdownMenuItem
+                            key={t.id}
+                            onClick={() => {
+                              handleLoadTemplate(t)
+                            }}
+                            disabled={disabled ?? false}
+                          >
+                            {t.name}
+                          </DropdownMenuItem>
+                        ))
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    type="text"
-                    placeholder="模板名称"
-                    className="h-7 w-28 rounded text-xs"
-                    value={savingTemplateName}
-                    onChange={(e) => {
-                      setSavingTemplateName(e.target.value)
-                    }}
-                    disabled={(disabled ?? false) || isAnyRunning}
-                  />
+
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-7 rounded px-2 text-xs"
-                    onClick={handleSaveAsTemplate}
-                    disabled={(disabled ?? false) || isAnyRunning || saveTemplateMutation.isPending}
+                    className="h-8 rounded-md px-3 text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      optimizePromptMutation.mutate()
+                    }}
+                    disabled={(disabled ?? false) || isAnyRunning || missingRequiredInputs}
+                    title={
+                      missingRequiredInputs
+                        ? '请先填写本步骤必填参数（如图片、产品名称等）'
+                        : '使用 AI 优化当前提示词（可选）'
+                    }
                   >
-                    <Save className="mr-1 h-3 w-3" />
-                    保存
+                    {optimizePromptMutation.isPending ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    优化提示词
                   </Button>
                 </div>
               </div>
-              <PromptEditor
-                textareaRef={promptTextareaRef}
-                placeholder="可使用「插入参数」添加 {{product_name}} 等占位符，执行时自动替换为实际值。可选使用「优化提示词」让 AI 改进。"
-                value={metaPrompt}
-                onChange={(v) => {
-                  onPromptChange(capabilityId, v)
-                }}
-                params={metaPromptParams}
-                resolvedValues={resolvedValues}
-                disabled={(disabled ?? false) || isAnyRunning}
-                rows={14}
-              />
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium text-foreground">提示词</Label>
+                  {metaPromptParams.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1 rounded px-2 text-xs"
+                          disabled={(disabled ?? false) || isAnyRunning}
+                        >
+                          <Plus className="h-3 w-3" />
+                          插入参数
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-[180px]">
+                        {metaPromptParams.map((p) => (
+                          <DropdownMenuItem
+                            key={p.key}
+                            onClick={() => {
+                              handleInsertParam(p.key)
+                            }}
+                            disabled={(disabled ?? false) || isAnyRunning}
+                          >
+                            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{`{{${p.key}}}`}</code>
+                            <span className="ml-2 text-muted-foreground">{p.label}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="text"
+                      placeholder="模板名称"
+                      className="h-7 w-28 rounded text-xs"
+                      value={savingTemplateName}
+                      onChange={(e) => {
+                        setSavingTemplateName(e.target.value)
+                      }}
+                      disabled={(disabled ?? false) || isAnyRunning}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded px-2 text-xs"
+                      onClick={handleSaveAsTemplate}
+                      disabled={
+                        (disabled ?? false) || isAnyRunning || saveTemplateMutation.isPending
+                      }
+                    >
+                      <Save className="mr-1 h-3 w-3" />
+                      保存
+                    </Button>
+                  </div>
+                </div>
+                <PromptEditor
+                  textareaRef={promptTextareaRef}
+                  placeholder="可使用「插入参数」添加 {{product_name}} 等占位符，执行时自动替换为实际值。可选使用「优化提示词」让 AI 改进。"
+                  value={metaPrompt}
+                  onChange={(v) => {
+                    onPromptChange(capabilityId, v)
+                  }}
+                  params={metaPromptParams}
+                  resolvedValues={resolvedValues}
+                  disabled={(disabled ?? false) || isAnyRunning}
+                  rows={14}
+                />
+              </div>
+            </div>
+
+            {/* Arrow separator */}
+            <div className="flex items-center gap-2 px-2">
+              <div className="h-px flex-1 bg-border/40" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
+              <div className="h-px flex-1 bg-border/40" />
+            </div>
+
+            {/* Section 3: Execute + Result */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  执行结果
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 rounded-md px-4 text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    executeMutation.mutate()
+                  }}
+                  disabled={
+                    (disabled ?? false) ||
+                    isAnyRunning ||
+                    missingRequiredInputs ||
+                    (!job?.id && !ensureJob)
+                  }
+                  title={
+                    missingRequiredInputs
+                      ? '请先填写本步骤必填参数（如图片、产品名称等）'
+                      : undefined
+                  }
+                >
+                  {executeMutation.isPending ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  执行
+                </Button>
+              </div>
+
+              {step &&
+              step.status !== 'pending' &&
+              step.status !== 'prompt_generating' &&
+              step.status !== 'prompt_ready' ? (
+                <StepOutputView
+                  step={step}
+                  defaultExpanded={true}
+                  capabilityConfig={capabilityConfig}
+                />
+              ) : (
+                <p className="rounded-md border border-dashed border-border/40 py-8 text-center text-sm text-muted-foreground">
+                  执行后在此展示结果
+                </p>
+              )}
             </div>
           </div>
-
-          {/* Arrow separator */}
-          <div className="flex items-center gap-2 px-2">
-            <div className="h-px flex-1 bg-border/40" />
-            <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
-            <div className="h-px flex-1 bg-border/40" />
-          </div>
-
-          {/* Section 3: Execute + Result */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                执行结果
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 rounded-md px-4 text-sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  executeMutation.mutate()
-                }}
-                disabled={
-                  (disabled ?? false) ||
-                  isAnyRunning ||
-                  missingRequiredInputs ||
-                  (!job?.id && !ensureJob)
-                }
-                title={
-                  missingRequiredInputs ? '请先填写本步骤必填参数（如图片、产品名称等）' : undefined
-                }
-              >
-                {executeMutation.isPending ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                执行
-              </Button>
-            </div>
-
-            {step &&
-            step.status !== 'pending' &&
-            step.status !== 'prompt_generating' &&
-            step.status !== 'prompt_ready' ? (
-              <StepOutputView
-                step={step}
-                defaultExpanded={true}
-                capabilityConfig={capabilityConfig}
-              />
-            ) : (
-              <p className="rounded-md border border-dashed border-border/40 py-8 text-center text-sm text-muted-foreground">
-                执行后在此展示结果
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+        </OverlayScope>
+      ) : null}
     </div>
   )
 }

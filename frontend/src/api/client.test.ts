@@ -377,6 +377,53 @@ describe('ApiClient', () => {
       dispatchSpy.mockRestore()
     })
 
+    it('403 无权限不应清除 token 或派发 session-expired', async () => {
+      apiClient.setToken('valid-token')
+      setRefreshToken('valid-refresh')
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 403,
+          json: () => Promise.resolve({ detail: 'Permission denied: admin' }),
+        })
+      )
+
+      await expect(apiClient.get('/api/v1/gateway/teams/x/models')).rejects.toThrow(ApiError)
+
+      expect(getAuthToken()).toBe('valid-token')
+      expect(getRefreshToken()).toBe('valid-refresh')
+      expect(dispatchSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
+      )
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      dispatchSpy.mockRestore()
+    })
+
+    it('401 + Permission denied detail 不应清除 token（误标 401 兜底）', async () => {
+      apiClient.setToken('valid-token')
+      setRefreshToken('valid-refresh')
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Permission denied: admin' }),
+        })
+      )
+
+      await expect(apiClient.get('/api/v1/agents')).rejects.toThrow(ApiError)
+
+      expect(getAuthToken()).toBe('valid-token')
+      expect(dispatchSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'auth:session-expired' })
+      )
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      dispatchSpy.mockRestore()
+    })
+
     it('401 + 无 token 时不应尝试 refresh 也不应派发 session-expired', async () => {
       // Arrange: 匿名用户，无 token
       apiClient.setToken(null)

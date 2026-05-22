@@ -48,6 +48,10 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     staleTime: 1000 * 60 * 5,
   })
 
+  /** 仅 auth/me 的 401 表示会话无效；业务接口 403 不影响全局登录态 */
+  const isSessionInvalid = error instanceof ApiError && error.status === 401
+  const sessionUser = isSessionInvalid ? null : (currentUser ?? null)
+
   // 监听 token 过期事件（由 apiClient 在 401 + 有旧 token 时发出）
   useEffect(() => {
     const handler = (): void => {
@@ -56,6 +60,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
         title: '登录已过期',
         description: '请重新登录以恢复数据访问',
       })
+      queryClient.setQueryData(['auth', 'currentUser'], null)
       void queryClient.invalidateQueries()
       void refetch()
     }
@@ -68,9 +73,9 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   // 同步用户信息到 Zustand store
   useEffect(() => {
     if (isFetched) {
-      setCurrentUser(currentUser ?? null)
+      setCurrentUser(sessionUser)
     }
-  }, [currentUser, isFetched, setCurrentUser])
+  }, [sessionUser, isFetched, setCurrentUser])
 
   if (isLoading) {
     return (
@@ -83,11 +88,10 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     )
   }
 
-  const isAuthError = error instanceof ApiError && (error.status === 401 || error.status === 403)
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
 
-  // 严重错误状态（如服务不可用）- 401/403 是正常的未登录状态
-  if (error && !isAuthError) {
+  // 严重错误状态（如服务不可用）- auth/me 的 401 走下方登录重定向
+  if (error && !isSessionInvalid) {
     const detail =
       error instanceof ApiError && error.status === 404
         ? 'API 路径不存在，请确认后端 ROOT_PATH 与前端 VITE_APP_ROOT 一致（默认 /ai-agent），并重启 make dev'
@@ -112,7 +116,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   }
 
   // 未认证 + 不在公开页面 → 重定向到登录页（保留原始路径以便登录后跳回）
-  if (!currentUser && isFetched && !isOnPublicPath) {
+  if (!sessionUser && isFetched && !isOnPublicPath) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 

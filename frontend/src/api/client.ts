@@ -32,6 +32,7 @@
 import { ApiError } from '@/api/errors'
 import { API_V1 } from '@/api/paths'
 import { messageFromApiErrorBody } from '@/lib/fastapi-error-detail'
+import { shouldInvalidateGlobalSession } from '@/lib/session-invalidation'
 import {
   getAuthToken,
   getRefreshToken,
@@ -40,7 +41,6 @@ import {
   setRefreshToken,
   setAnonymousUserId,
   clearAuth,
-  handleUnauthorized,
 } from '@/stores/auth'
 // 开发环境为空（使用 vite proxy），生产环境按需配置
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
@@ -62,15 +62,6 @@ async function parseResponseBody<T>(response: Response): Promise<T> {
   return JSON.parse(text) as T
 }
 
-/** 401 表示未登录/匿名被拒，而非 access token 失效 */
-function isAuthenticationRequiredError(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null || !('detail' in body)) {
-    return false
-  }
-  const detail = (body as { detail: unknown }).detail
-  return typeof detail === 'string' && detail.toLowerCase().includes('authentication required')
-}
-
 class ApiClient {
   private baseUrl: string
 
@@ -79,6 +70,15 @@ class ApiClient {
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
+  }
+
+  /** refresh 已失败或重试后仍 401：清会话并通知 AuthProvider */
+  private failGlobalSession(hadToken: boolean): void {
+    if (!hadToken) {
+      return
+    }
+    clearAuth()
+    window.dispatchEvent(new Event('auth:session-expired'))
   }
 
   /**
@@ -104,7 +104,12 @@ class ApiClient {
           credentials: 'include',
         })
 
-        if (!response.ok) return false
+        if (!response.ok) {
+          if (response.status === 401) {
+            clearAuth()
+          }
+          return false
+        }
 
         const data = (await response.json()) as {
           access_token: string
@@ -228,22 +233,14 @@ class ApiClient {
 
       if (response.status === 401) {
         const hadToken = !!token
-        const authRequired = isAuthenticationRequiredError(errorBody)
-
-        // 401 且未重试过：尝试用 refresh_token 自动续期（非「须登录」类 401）
-        if (hadToken && !_retried && !authRequired) {
-          const refreshed = await this.tryRefresh()
-          if (refreshed) {
-            return this.request<T>(path, options, true)
+        if (shouldInvalidateGlobalSession(401, errorBody, hadToken) && hadToken) {
+          if (!_retried) {
+            const refreshed = await this.tryRefresh()
+            if (refreshed) {
+              return this.request<T>(path, options, true)
+            }
           }
-        }
-
-        // token 失效才清会话；「Authentication required」仅表示当前请求未授权
-        if (!authRequired) {
-          handleUnauthorized()
-          if (hadToken) {
-            window.dispatchEvent(new Event('auth:session-expired'))
-          }
+          this.failGlobalSession(true)
         }
       }
 
@@ -387,19 +384,15 @@ class ApiClient {
       if (!response.ok) {
         if (response.status === 401) {
           const hadToken = !!token
-
-          // 尝试 refresh 后重试一次
-          if (hadToken && !_retried) {
-            const refreshed = await this.tryRefresh()
-            if (refreshed) {
-              await this.stream(path, data, onEvent, onError, onComplete, signal, true)
-              return
+          if (shouldInvalidateGlobalSession(401, undefined, hadToken) && hadToken) {
+            if (!_retried) {
+              const refreshed = await this.tryRefresh()
+              if (refreshed) {
+                await this.stream(path, data, onEvent, onError, onComplete, signal, true)
+                return
+              }
             }
-          }
-
-          handleUnauthorized()
-          if (hadToken) {
-            window.dispatchEvent(new Event('auth:session-expired'))
+            this.failGlobalSession(true)
           }
         }
         throw new ApiError(response.status, `HTTP ${String(response.status)}`)

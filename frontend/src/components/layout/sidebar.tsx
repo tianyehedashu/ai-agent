@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -38,6 +38,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { groupSessionsByDate } from '@/lib/session-utils'
+import { registerSidebarNavigate } from '@/lib/ui-overlay/overlay-nav-bridge'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
@@ -130,11 +131,14 @@ export default function Sidebar(): React.JSX.Element {
     navigate('/chat')
   }
 
+  useEffect(() => registerSidebarNavigate(navigate), [navigate])
+
   return (
     <TooltipProvider delayDuration={0}>
       <div
+        data-app-sidebar=""
         className={cn(
-          'relative flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur transition-all duration-300 supports-[backdrop-filter]:bg-background/60',
+          'pointer-events-auto relative z-[60] flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur transition-all duration-300 supports-[backdrop-filter]:bg-background/60',
           isCollapsed ? 'w-16' : 'w-72'
         )}
       >

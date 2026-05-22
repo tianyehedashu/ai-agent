@@ -2,7 +2,7 @@
  * 8 图生成：模型选择（系统+用户）、参考图输入、8 槽提示词编辑、生成主图。
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -24,6 +24,7 @@ import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio-capabilities'
 import { useToast } from '@/hooks/use-toast'
 import { ImagePlus, Loader2, Copy, Check, Settings2 } from '@/lib/lucide-icons'
+import { OverlayScope } from '@/lib/ui-overlay'
 import type { ListingStudioJob, ProductImageGenTask } from '@/types/listing-studio'
 
 import { ImageUrlListEditor } from './input-panel'
@@ -81,8 +82,10 @@ export function ImageGenPanel({
 
   const outputKey = caps.outputKeys.image_gen_prompts
   const step5 = currentJob?.steps?.find((s) => s.capability_id === 'image_gen_prompts')
-  const step5Prompts = step5?.output_snapshot?.[outputKey]
-  const fromStep5 = Array.isArray(step5Prompts) ? step5Prompts.map(String).slice(0, 8) : []
+  const fromStep5 = useMemo(() => {
+    const step5Prompts = step5?.output_snapshot?.[outputKey]
+    return Array.isArray(step5Prompts) ? step5Prompts.map(String).slice(0, 8) : []
+  }, [step5?.output_snapshot, outputKey])
 
   const { data: tasksData } = useQuery({
     queryKey: ['listing-studio', 'image-gen-tasks', currentJob?.id],
@@ -138,189 +141,194 @@ export function ImageGenPanel({
     onPromptsChange(next.slice(0, 8))
   }
 
-  const currentPrompts = [...prompts]
-  while (currentPrompts.length < 8) currentPrompts.push('')
+  const paddedPrompts = useMemo(() => {
+    const next = [...prompts]
+    while (next.length < 8) next.push('')
+    return next
+  }, [prompts])
+
+  const handlePreview = useCallback((url: string) => {
+    setLightboxUrl(url)
+  }, [])
 
   return (
-    <div className="space-y-6">
-      {/* 生成设置 */}
-      <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <Label className="text-base font-semibold tracking-tight">生成设置</Label>
+    <OverlayScope>
+      <div className="space-y-6">
+        {/* 生成设置 */}
+        <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Settings2 className="h-4 w-4" />
+              </span>
+              <Label className="text-base font-semibold tracking-tight">生成设置</Label>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="rounded-lg"
+              onClick={() => {
+                setShowSettings(!showSettings)
+              }}
+            >
+              {showSettings ? '收起' : '展开'}
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="rounded-lg"
-            onClick={() => {
-              setShowSettings(!showSettings)
-            }}
-          >
-            {showSettings ? '收起' : '展开'}
-          </Button>
-        </div>
 
-        {/* 模型 + 尺寸 */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm text-muted-foreground">模型</Label>
-            <ModelSelector
-              modelType="image_gen"
-              value={modelId}
-              onChange={setModelId}
-              placeholder="默认模型"
-              className="h-9 w-[220px] rounded-lg"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm text-muted-foreground">尺寸</Label>
-            <Select value={effectiveSize} onValueChange={setSize}>
-              <SelectTrigger className="h-9 w-[150px] rounded-lg">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sizeOptions.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* 展开区域：参考图 + strength */}
-        {showSettings && (
-          <div className="mt-4 space-y-4 border-t border-border/30 pt-4">
-            <ImageUrlListEditor
-              urls={referenceImageUrls}
-              onChange={setReferenceImageUrls}
-              label="参考图片（img2img）"
-              compact
-            />
-            {referenceImageUrls.length > 0 && (
-              <div className="flex items-center gap-3">
-                <Label className="whitespace-nowrap text-sm text-muted-foreground">参考强度</Label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={strength}
-                  onChange={(e) => {
-                    setStrength(Number(e.target.value))
-                  }}
-                  className="h-2 w-48 cursor-pointer accent-primary"
-                />
-                <span className="min-w-[3rem] text-sm text-muted-foreground">
-                  {strength.toFixed(2)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 8 槽提示词 */}
-      <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ImagePlus className="h-4 w-4" />
-            </span>
-            <Label className="text-base font-semibold tracking-tight">8 张主图提示词</Label>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-lg"
-            onClick={fillFromStep5}
-            disabled={fromStep5.length === 0}
-            title="从「8 图生成提示词」步骤填充"
-          >
-            从步骤填充
-          </Button>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {SLOT_LABELS.map((label, i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">{label}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 rounded-md p-0"
-                  onClick={() => copyPrompt(currentPrompts[i] ?? '', i)}
-                >
-                  {copiedIndex === i ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </div>
-              <Textarea
-                value={currentPrompts[i] ?? ''}
-                onChange={(e) => {
-                  setPrompt(i, e.target.value)
-                }}
-                placeholder={i === 0 ? '白底产品图…' : '提示词…'}
-                rows={2}
-                className="rounded-xl border-border/60 font-mono text-sm"
+          {/* 模型 + 尺寸 */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label className="whitespace-nowrap text-sm text-muted-foreground">模型</Label>
+              <ModelSelector
+                modelType="image_gen"
+                value={modelId}
+                onChange={setModelId}
+                placeholder="默认模型"
+                className="h-9 w-[220px] rounded-lg"
               />
             </div>
-          ))}
-        </div>
-        <Button
-          className="mt-4 rounded-xl"
-          onClick={() => {
-            createMutation.mutate()
-          }}
-          disabled={createMutation.isPending}
-        >
-          {createMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <ImagePlus className="h-4 w-4" />
-          )}
-          <span className="ml-2">生成 8 张主图</span>
-        </Button>
-      </div>
+            <div className="flex items-center gap-2">
+              <Label className="whitespace-nowrap text-sm text-muted-foreground">尺寸</Label>
+              <Select value={effectiveSize} onValueChange={setSize}>
+                <SelectTrigger className="h-9 w-[150px] rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {sizeOptions.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      {/* 已生成的主图 */}
-      <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
-        <h3 className="mb-4 font-semibold tracking-tight">已生成的主图</h3>
-        {tasks.length === 0 ? (
-          <p className="py-4 text-sm text-muted-foreground">暂无记录，生成后将显示在此处</p>
-        ) : (
-          <div className="space-y-4">
-            {tasks.map((t) => (
-              <TaskResultCard
-                key={t.id}
-                task={t}
-                onPreview={(url) => {
-                  setLightboxUrl(url)
-                }}
+          {/* 展开区域：参考图 + strength */}
+          {showSettings ? (
+            <div className="mt-4 space-y-4 border-t border-border/30 pt-4">
+              <ImageUrlListEditor
+                urls={referenceImageUrls}
+                onChange={setReferenceImageUrls}
+                label="参考图片（img2img）"
+                compact
               />
+              {referenceImageUrls.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <Label className="whitespace-nowrap text-sm text-muted-foreground">
+                    参考强度
+                  </Label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={strength}
+                    onChange={(e) => {
+                      setStrength(Number(e.target.value))
+                    }}
+                    className="h-2 w-48 cursor-pointer accent-primary"
+                  />
+                  <span className="min-w-[3rem] text-sm text-muted-foreground">
+                    {strength.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* 8 槽提示词 */}
+        <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ImagePlus className="h-4 w-4" />
+              </span>
+              <Label className="text-base font-semibold tracking-tight">8 张主图提示词</Label>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-lg"
+              onClick={fillFromStep5}
+              disabled={fromStep5.length === 0}
+              title="从「8 图生成提示词」步骤填充"
+            >
+              从步骤填充
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {SLOT_LABELS.map((label, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">{label}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 rounded-md p-0"
+                    onClick={() => copyPrompt(paddedPrompts[i] ?? '', i)}
+                  >
+                    {copiedIndex === i ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <Textarea
+                  value={paddedPrompts[i] ?? ''}
+                  onChange={(e) => {
+                    setPrompt(i, e.target.value)
+                  }}
+                  placeholder={i === 0 ? '白底产品图…' : '提示词…'}
+                  rows={2}
+                  className="rounded-xl border-border/60 font-mono text-sm"
+                />
+              </div>
             ))}
           </div>
-        )}
-      </div>
+          <Button
+            className="mt-4 rounded-xl"
+            onClick={() => {
+              createMutation.mutate()
+            }}
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ImagePlus className="h-4 w-4" />
+            )}
+            <span className="ml-2">生成 8 张主图</span>
+          </Button>
+        </div>
 
-      <ImageLightbox
-        src={lightboxUrl}
-        onClose={() => {
-          setLightboxUrl(null)
-        }}
-      />
-    </div>
+        {/* 已生成的主图 */}
+        <div className="rounded-xl border border-border/50 bg-card/80 p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold tracking-tight">已生成的主图</h3>
+          {tasks.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">暂无记录，生成后将显示在此处</p>
+          ) : (
+            <div className="space-y-4">
+              {tasks.map((t) => (
+                <TaskResultCard key={t.id} task={t} onPreview={handlePreview} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <ImageLightbox
+          src={lightboxUrl}
+          onClose={() => {
+            setLightboxUrl(null)
+          }}
+        />
+      </div>
+    </OverlayScope>
   )
 }
 

@@ -212,8 +212,8 @@
   flex-shrink: 0;
 }
 
-/* Capability block expand/collapse transition */
-.listing-studio-page [data-state='open'] {
+/* Capability block expand transition（勿用 [data-state=open]，会误伤 Radix 下拉/Select） */
+.listing-studio-page .capability-block-panel {
   animation: slideDown 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 

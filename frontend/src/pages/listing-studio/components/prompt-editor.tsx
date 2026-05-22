@@ -127,7 +127,7 @@ export function PromptEditor({
 
   const PAD = 6
 
-  const handleMouseMove = useCallback(
+  const updateTooltipFromMouse = useCallback(
     (e: React.MouseEvent) => {
       const container = containerRef.current
       const bd = backdropRef.current
@@ -162,6 +162,28 @@ export function PromptEditor({
       scheduleHide()
     },
     [cancelHide, scheduleHide]
+  )
+
+  const mouseFrameRef = useRef<number | null>(null)
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (mouseFrameRef.current !== null) return
+      mouseFrameRef.current = requestAnimationFrame(() => {
+        mouseFrameRef.current = null
+        updateTooltipFromMouse(e)
+      })
+    },
+    [updateTooltipFromMouse]
+  )
+
+  useEffect(
+    () => () => {
+      if (mouseFrameRef.current !== null) {
+        cancelAnimationFrame(mouseFrameRef.current)
+      }
+    },
+    []
   )
 
   const SHARED = 'font-mono text-base leading-7 px-3 py-2 whitespace-pre-wrap break-words'

@@ -32,6 +32,7 @@ import {
   Sparkles,
   Clock,
 } from '@/lib/lucide-icons'
+import { OverlayScope } from '@/lib/ui-overlay'
 import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
 
 function makePromptSource(jobId: string): string {
@@ -206,80 +207,84 @@ export function VideoPreviewSection({
           <span>生成视频</span>
           {showCreate ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
-        {showCreate && (
-          <div className="space-y-3 rounded-lg border border-border/50 bg-muted/20 p-4">
-            <Textarea
-              placeholder={
-                defaultPrompt ? '可编辑视频描述（默认来自视频脚本）' : '描述你想创造的视频…'
-              }
-              value={promptText || defaultPrompt}
-              onChange={(e) => {
-                setPromptText(e.target.value)
-              }}
-              rows={3}
-              className="min-h-[80px] resize-none text-sm"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {VIDEO_MODELS.find((m) => m.value === model)?.label ?? model}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {VIDEO_MODELS.map((m) => (
-                    <DropdownMenuItem
-                      key={m.value}
-                      onClick={() => {
-                        setModel(m.value)
-                      }}
-                      className={model === m.value ? 'bg-accent' : undefined}
-                    >
-                      {m.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
-                    <Clock className="h-3.5 w-3.5" />
-                    {duration}s
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {getVideoDurations(model).map((d) => (
-                    <DropdownMenuItem
-                      key={d}
-                      onClick={() => {
-                        setDuration(d)
-                      }}
-                      className={duration === d ? 'bg-accent' : undefined}
-                    >
-                      {d} 秒
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                size="sm"
-                className="h-8 rounded-lg"
-                onClick={handleCreate}
-                disabled={
-                  createMutation.isPending || !jobId || (!promptText.trim() && !defaultPrompt)
+        {showCreate ? (
+          <OverlayScope>
+            <div className="space-y-3 rounded-lg border border-border/50 bg-muted/20 p-4">
+              <Textarea
+                placeholder={
+                  defaultPrompt ? '可编辑视频描述（默认来自视频脚本）' : '描述你想创造的视频…'
                 }
-              >
-                {createMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  '开始生成'
-                )}
-              </Button>
+                value={promptText || defaultPrompt}
+                onChange={(e) => {
+                  setPromptText(e.target.value)
+                }}
+                rows={3}
+                className="min-h-[80px] resize-none text-sm"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {VIDEO_MODELS.find((m) => m.value === model)?.label ?? model}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {VIDEO_MODELS.map((m) => (
+                      <DropdownMenuItem
+                        key={m.value}
+                        onClick={() => {
+                          setModel(m.value)
+                        }}
+                        className={model === m.value ? 'bg-accent' : undefined}
+                      >
+                        {m.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
+                      <Clock className="h-3.5 w-3.5" />
+                      {duration}s
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {getVideoDurations(model).map((d) => (
+                      <DropdownMenuItem
+                        key={d}
+                        onClick={() => {
+                          setDuration(d)
+                        }}
+                        className={duration === d ? 'bg-accent' : undefined}
+                      >
+                        {d} 秒
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  size="sm"
+                  className="h-8 rounded-lg"
+                  onClick={handleCreate}
+                  disabled={
+                    createMutation.isPending || !jobId || (!promptText.trim() && !defaultPrompt)
+                  }
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    '开始生成'
+                  )}
+                </Button>
+              </div>
+              {!jobId && (
+                <p className="text-xs text-muted-foreground">请先运行一次步骤以创建任务</p>
+              )}
             </div>
-            {!jobId && <p className="text-xs text-muted-foreground">请先运行一次步骤以创建任务</p>}
-          </div>
-        )}
+          </OverlayScope>
+        ) : null}
       </div>
     </div>
   )

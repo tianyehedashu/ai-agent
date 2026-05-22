@@ -27,7 +27,6 @@ ReactDOM.createRoot(rootElement).render(
       <BrowserRouter
         basename={APP_ROOT || undefined}
         future={{
-          v7_startTransition: true,
           v7_relativeSplatPath: true,
         }}
       >

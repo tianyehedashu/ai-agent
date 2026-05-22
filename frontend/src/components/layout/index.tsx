@@ -1,4 +1,9 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+
+import { useLocation } from 'react-router-dom'
+
+import { installOverlayPointerGuard } from '@/lib/ui-overlay/overlay-pointer-guard'
+import { teardownAllOverlayScopes } from '@/lib/ui-overlay/teardown-overlay-scope'
 
 import Header from './header'
 import Sidebar from './sidebar'
@@ -8,8 +13,16 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: Readonly<LayoutProps>): React.JSX.Element {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    teardownAllOverlayScopes()
+  }, [pathname])
+
+  useEffect(() => installOverlayPointerGuard(), [])
+
   return (
-    <div className="flex h-screen bg-background">
+    <div className="pointer-events-auto flex h-screen bg-background">
       {/* Sidebar */}
       <Sidebar />
 
