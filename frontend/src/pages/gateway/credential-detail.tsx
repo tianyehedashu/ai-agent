@@ -35,6 +35,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { CredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import { canEditGatewayCredential } from '@/features/gateway-credentials/credential-edit-policy'
 import { ExtraFieldsRenderer } from '@/features/gateway-credentials/credential-extra-fields'
@@ -62,6 +63,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
+import { useUserStore } from '@/stores/user'
 
 const AddModelsDialog = lazy(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
@@ -79,7 +81,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
+  const { currentUser } = useUserStore()
 
   const {
     data: cred,
@@ -311,6 +314,10 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         </Card>
 
         <ProviderPlansSection teamId={teamId} credentialId={id} />
+
+        {currentUser?.id ? (
+          <CredentialBudgetSection credentialId={id} userId={currentUser.id} isAdmin={isAdmin} />
+        ) : null}
 
         <CredentialLinkedModelsSection
           teamId={teamId}

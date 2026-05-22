@@ -33,6 +33,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { KeyBudgetInline } from '@/features/gateway-budget/key-budget-inline'
+import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -55,6 +57,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
     queryKey: ['gateway', 'keys', teamId],
     queryFn: () => gatewayApi.listKeys(teamId),
   })
+  const { data: keyBudgets = [] } = useGatewayBudgets(teamId)
 
   const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
@@ -215,6 +218,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
                 <th className="px-4 py-2 text-left font-medium">每分钟请求 / 每分钟令牌</th>
                 <th className="px-4 py-2 text-left font-medium">客户套餐</th>
+                <th className="px-4 py-2 text-left font-medium">平台预算</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
                 <th className="px-4 py-2 text-left font-medium" />
               </tr>
@@ -223,7 +227,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {isLoading && (
                 <tr>
                   <td
-                    colSpan={canManageKeys ? 8 : 7}
+                    colSpan={canManageKeys ? 9 : 8}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     加载中...
@@ -233,7 +237,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
               {!isLoading && visibleKeys.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canManageKeys ? 8 : 7}
+                    colSpan={canManageKeys ? 9 : 8}
                     className="px-4 py-6 text-center text-muted-foreground"
                   >
                     暂无虚拟 Key
@@ -268,6 +272,9 @@ export default function GatewayKeysPage(): React.JSX.Element {
                       activePlans={activeByVkeyId.get(k.id) ?? []}
                       isLoading={isLoadingByVkeyId.get(k.id) ?? false}
                     />
+                  </td>
+                  <td className="px-4 py-2 text-xs">
+                    <KeyBudgetInline keyId={k.id} budgets={keyBudgets} />
                   </td>
                   <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
                   <td className="px-4 py-2">

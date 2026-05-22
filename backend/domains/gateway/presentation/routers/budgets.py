@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from domains.gateway.presentation.deps import (
     CurrentTeam,
@@ -14,6 +14,7 @@ from domains.gateway.presentation.schemas.common import (
     BudgetResponse,
     BudgetUpsert,
 )
+from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
 
 from ._common import (
     MgmtReads,
@@ -27,8 +28,35 @@ router = APIRouter()
 async def list_budgets(
     team: CurrentTeam,
     reads: MgmtReads,
+    target_kind: str | None = Query(
+        default=None,
+        pattern="^(system|tenant|key|user)$",
+        description="Admin 可按 target_kind 过滤",
+    ),
+    model_name: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Admin 可按 model_name 精确过滤",
+    ),
 ) -> list[BudgetResponse]:
-    budgets = await reads.list_budgets_for_tenant_and_user(team.team_id, team.user_id)
+    if is_team_admin_or_platform(team):
+        budgets = await reads.list_budgets_for_team_admin(
+            team.team_id,
+            include_system=team.is_platform_admin,
+            target_kind=target_kind,
+            model_name=model_name,
+        )
+    else:
+        budgets = await reads.list_budgets_for_tenant_and_user(
+            team.team_id,
+            team.user_id,
+            actor_user_id=team.user_id,
+        )
+        if target_kind is not None:
+            budgets = [b for b in budgets if b.target_kind == target_kind]
+        normalized_model = (model_name or "").strip() or None
+        if normalized_model is not None:
+            budgets = [b for b in budgets if b.model_name == normalized_model]
     return [BudgetResponse.model_validate(b) for b in budgets]
 
 
@@ -66,8 +94,11 @@ async def delete_budget(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    _ = team
-    await writes.delete_budget(budget_id)
+    await writes.delete_budget(
+        budget_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 __all__ = ["router"]

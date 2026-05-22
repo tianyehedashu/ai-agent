@@ -79,7 +79,7 @@ const QUICK_STEPS = [
 const TROUBLESHOOTING = [
   { code: '401', title: '鉴权失败', href: '/gateway/keys', linkLabel: '虚拟 Key' },
   { code: '404', title: '模型不存在', href: '/gateway/models', linkLabel: '模型' },
-  { code: '429', title: '限流', href: '/gateway/budgets', linkLabel: '预算配额' },
+  { code: '429', title: '限流', href: '/gateway/models', linkLabel: '查看模型配额' },
   { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
 ] as const
 

@@ -44,8 +44,17 @@ export interface BudgetUpsertBody {
 /** Budgets 资源 API */
 export const budgetsApi = {
   /** 列出当前 scope 可见的预算 */
-  listBudgets: (teamId: string) =>
-    apiClient.get<GatewayBudget[]>(teamGatewayPath(teamId, '/budgets')),
+  listBudgets: (
+    teamId: string,
+    params?: { target_kind?: GatewayBudget['target_kind']; model_name?: string }
+  ) => {
+    const search = new URLSearchParams()
+    if (params?.target_kind) search.set('target_kind', params.target_kind)
+    if (params?.model_name) search.set('model_name', params.model_name)
+    const qs = search.toString()
+    const path = qs ? `/budgets?${qs}` : '/budgets'
+    return apiClient.get<GatewayBudget[]>(teamGatewayPath(teamId, path))
+  },
   /** 创建或更新预算（按 target_kind + target_id + period + model_name 主键去重） */
   upsertBudget: (teamId: string, body: BudgetUpsertBody) =>
     apiClient.put<GatewayBudget>(teamGatewayPath(teamId, '/budgets'), body),

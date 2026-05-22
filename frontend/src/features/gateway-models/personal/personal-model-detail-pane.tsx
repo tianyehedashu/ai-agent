@@ -7,10 +7,12 @@ import { gatewayApi } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { BudgetUsageCard } from '@/features/gateway-budget/budget-usage-card'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import { personalModelEditHref, personalModelsIndexHref } from '@/features/gateway-models/paths'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2, Pencil, Trash2, Zap } from '@/lib/lucide-icons'
+import { useUserStore } from '@/stores/user'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
 interface PersonalModelDetailPaneProps {
@@ -22,6 +24,7 @@ export function PersonalModelDetailPane({
 }: PersonalModelDetailPaneProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
+  const { currentUser } = useUserStore()
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['gateway', 'my-models'],
@@ -160,6 +163,17 @@ export function PersonalModelDetailPane({
             {model.last_test_reason}
           </p>
         </div>
+      ) : null}
+
+      {currentUser?.id ? (
+        <BudgetUsageCard
+          teamId={teamId}
+          context={{
+            kind: 'personal',
+            userId: currentUser.id,
+            modelNames: [model.model_id],
+          }}
+        />
       ) : null}
     </div>
   )

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { BudgetUsageCardWithAdminLink } from '@/features/gateway-budget/budget-usage-card'
 import {
   canLinkToCredentialDetail,
   credentialSummaryLabel,
@@ -54,6 +55,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Copy, ExternalLink, Info, Loader2, Trash2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { useUserStore } from '@/stores/user'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
 
@@ -95,6 +97,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const teamId = useGatewayTeamId()
   const [searchParams] = useSearchParams()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { currentUser } = useUserStore()
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const permissionContext = useMemo(() => ({ preferSystem: scopeTab === 'system' }), [scopeTab])
   const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin, permissionContext)
@@ -189,163 +192,163 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-col rounded-lg border bg-card">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4">
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-base font-semibold leading-tight">
-            {nameDirty ? modelName.trim() || model.name : model.name}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">{channelLabel(model.provider)}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ModelStatusBadge
-            status={model.last_test_status}
-            testedAt={model.last_tested_at}
-            reason={model.last_test_reason}
-            entitlementStatus={model.entitlement_status}
-            entitlementResetAt={model.entitlement_reset_at}
-          />
-          {canManage ? (
-            <>
-              <Switch
-                checked={model.enabled}
-                disabled={isSaving}
-                onCheckedChange={(checked) => {
-                  onToggleEnabled(model.id, checked)
-                }}
-                aria-label={model.enabled ? '停用模型' : '启用模型'}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!isTestable || isTesting}
-                onClick={() => {
-                  onTest(model.id)
-                }}
-              >
-                {isTesting ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Zap className="mr-1 h-3.5 w-3.5" />
-                )}
-                测试连通性
-              </Button>
-              {onDelete ? (
-                configManaged || !canDelete ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive/50"
-                          disabled
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" />
-                          删除
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">
-                      配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    disabled={isDeleting || isSaving}
-                    onClick={() => {
-                      onDelete(model.id)
-                    }}
-                  >
-                    {isDeleting ? (
-                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    删除
-                  </Button>
-                )
-              ) : null}
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {model.enabled ? '已启用' : '已禁用'}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {model.last_test_status === 'failed' && model.last_test_reason ? (
-          <Alert variant="destructive">
-            <AlertTitle>连通性不可用</AlertTitle>
-            <AlertDescription className="space-y-2">
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
-                {model.last_test_reason}
-              </pre>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7"
-                onClick={() => void copyReason()}
-              >
-                <Copy className="mr-1 h-3 w-3" />
-                {copied ? '已复制' : '复制错误'}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            能力
-          </h3>
-          <ModelCapabilityBadges model={model} />
-        </section>
-
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            定价
-          </h3>
-          <PricingBadge row={myPrice} currency={GATEWAY_DISPLAY_CURRENCY} />
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Link
-              to={`/gateway/teams/${teamId}/pricing/my-prices?model=${encodeURIComponent(model.name)}`}
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              我的价格
-            </Link>
-            {isAdmin ? (
-              <>
-                <Link
-                  to={`/gateway/teams/${teamId}/pricing/downstream?model_id=${encodeURIComponent(model.id)}`}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  下游定价
-                </Link>
-                <Link
-                  to={`/gateway/teams/${teamId}/pricing/upstream`}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  上游成本
-                </Link>
-              </>
-            ) : null}
+    <TooltipProvider delayDuration={0}>
+      <div className="flex min-h-0 flex-col rounded-lg border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-base font-semibold leading-tight">
+              {nameDirty ? modelName.trim() || model.name : model.name}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{channelLabel(model.provider)}</p>
           </div>
-        </section>
+          <div className="flex flex-wrap items-center gap-2">
+            <ModelStatusBadge
+              status={model.last_test_status}
+              testedAt={model.last_tested_at}
+              reason={model.last_test_reason}
+              entitlementStatus={model.entitlement_status}
+              entitlementResetAt={model.entitlement_reset_at}
+            />
+            {canManage ? (
+              <>
+                <Switch
+                  checked={model.enabled}
+                  disabled={isSaving}
+                  onCheckedChange={(checked) => {
+                    onToggleEnabled(model.id, checked)
+                  }}
+                  aria-label={model.enabled ? '停用模型' : '启用模型'}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!isTestable || isTesting}
+                  onClick={() => {
+                    onTest(model.id)
+                  }}
+                >
+                  {isTesting ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  测试连通性
+                </Button>
+                {onDelete ? (
+                  configManaged || !canDelete ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive/50"
+                            disabled
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                            删除
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-xs">
+                        配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      disabled={isDeleting || isSaving}
+                      onClick={() => {
+                        onDelete(model.id)
+                      }}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      删除
+                    </Button>
+                  )
+                ) : null}
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {model.enabled ? '已启用' : '已禁用'}
+              </span>
+            )}
+          </div>
+        </div>
 
-        <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            配置
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            对外 API 与虚拟 Key 白名单使用「注册别名」；实际上游厂商模型由「上游模型 ID」决定。
-          </p>
-          <TooltipProvider delayDuration={0}>
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          {model.last_test_status === 'failed' && model.last_test_reason ? (
+            <Alert variant="destructive">
+              <AlertTitle>连通性不可用</AlertTitle>
+              <AlertDescription className="space-y-2">
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+                  {model.last_test_reason}
+                </pre>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7"
+                  onClick={() => void copyReason()}
+                >
+                  <Copy className="mr-1 h-3 w-3" />
+                  {copied ? '已复制' : '复制错误'}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              能力
+            </h3>
+            <ModelCapabilityBadges model={model} />
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              定价
+            </h3>
+            <PricingBadge row={myPrice} currency={GATEWAY_DISPLAY_CURRENCY} />
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Link
+                to={`/gateway/teams/${teamId}/pricing/my-prices?model=${encodeURIComponent(model.name)}`}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                我的价格
+              </Link>
+              {isAdmin ? (
+                <>
+                  <Link
+                    to={`/gateway/teams/${teamId}/pricing/downstream?model_id=${encodeURIComponent(model.id)}`}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    下游定价
+                  </Link>
+                  <Link
+                    to={`/gateway/teams/${teamId}/pricing/upstream`}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    上游成本
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              配置
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              对外 API 与虚拟 Key 白名单使用「注册别名」；实际上游厂商模型由「上游模型 ID」决定。
+            </p>
             {nameDirty && referencingRoutes.length > 0 ? (
               <Alert>
                 <AlertTitle>将同步更新虚拟路由引用</AlertTitle>
@@ -507,113 +510,126 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 {isSaving ? '保存中…' : '保存配置'}
               </Button>
             ) : null}
-          </TooltipProvider>
-        </section>
-
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            用量 · {daysLabel}
-          </h3>
-          <UsageAggregationToggle value={usageScope} size="compact" onChange={setUsageScope} />
-          {usageLoading ? (
-            <p className="text-sm text-muted-foreground">加载用量…</p>
-          ) : (
-            <p className="text-sm tabular-nums">
-              {req} 次 · {tok} tokens · ${cost.toFixed(4)} USD
-            </p>
-          )}
-          <Link
-            to={
-              model.credential_id
-                ? `/gateway/teams/${teamId}/logs?credential_id=${encodeURIComponent(model.credential_id)}`
-                : `/gateway/teams/${teamId}/logs`
-            }
-            className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
-          >
-            在调用日志中查看 <ExternalLink className="h-3 w-3" />
-          </Link>
-        </section>
-
-        {canManage && onDelete ? (
-          <section className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-destructive">
-              危险操作
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              删除后将从注册表移除，并同步清理虚拟 Key / 路由中的模型白名单引用，不可撤销。
-            </p>
-            {configManaged || !canDelete ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>
-                    <Button size="sm" variant="destructive" disabled>
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                      删除模型
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={isDeleting || isSaving}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，此操作不可撤销。`
-                    )
-                  ) {
-                    onDelete(model.id)
-                  }
-                }}
-              >
-                {isDeleting ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-1 h-3.5 w-3.5" />
-                )}
-                删除模型
-              </Button>
-            )}
           </section>
-        ) : null}
 
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            虚拟路由引用
-          </h3>
-          {referencingRoutes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无虚拟路由引用此别名</p>
-          ) : (
-            <ul className="space-y-1">
-              {referencingRoutes.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    to={`/gateway/teams/${teamId}/routes?routeId=${encodeURIComponent(r.id)}`}
-                    className={cn(
-                      'inline-flex items-center gap-1 font-mono text-sm text-primary underline-offset-4 hover:underline'
-                    )}
-                  >
-                    {r.virtual_model}
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Link
-            to={`/gateway/teams/${teamId}/routes`}
-            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-          >
-            管理虚拟路由
-          </Link>
-        </section>
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              用量 · {daysLabel}
+            </h3>
+            <UsageAggregationToggle value={usageScope} size="compact" onChange={setUsageScope} />
+            {usageLoading ? (
+              <p className="text-sm text-muted-foreground">加载用量…</p>
+            ) : (
+              <p className="text-sm tabular-nums">
+                {req} 次 · {tok} tokens · ${cost.toFixed(4)} USD
+              </p>
+            )}
+            <Link
+              to={
+                model.credential_id
+                  ? `/gateway/teams/${teamId}/logs?credential_id=${encodeURIComponent(model.credential_id)}`
+                  : `/gateway/teams/${teamId}/logs`
+              }
+              className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+            >
+              在调用日志中查看 <ExternalLink className="h-3 w-3" />
+            </Link>
+          </section>
+
+          {canManage && onDelete ? (
+            <section className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-destructive">
+                危险操作
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                删除后将从注册表移除，并同步清理虚拟 Key / 路由中的模型白名单引用，不可撤销。
+              </p>
+              {configManaged || !canDelete ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button size="sm" variant="destructive" disabled>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        删除模型
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={isDeleting || isSaving}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，此操作不可撤销。`
+                      )
+                    ) {
+                      onDelete(model.id)
+                    }
+                  }}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  删除模型
+                </Button>
+              )}
+            </section>
+          ) : null}
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              虚拟路由引用
+            </h3>
+            {referencingRoutes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">暂无虚拟路由引用此别名</p>
+            ) : (
+              <ul className="space-y-1">
+                {referencingRoutes.map((r) => (
+                  <li key={r.id}>
+                    <Link
+                      to={`/gateway/teams/${teamId}/routes?routeId=${encodeURIComponent(r.id)}`}
+                      className={cn(
+                        'inline-flex items-center gap-1 font-mono text-sm text-primary underline-offset-4 hover:underline'
+                      )}
+                    >
+                      {r.virtual_model}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link
+              to={`/gateway/teams/${teamId}/routes`}
+              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              管理虚拟路由
+            </Link>
+          </section>
+
+          {currentUser?.id ? (
+            <BudgetUsageCardWithAdminLink
+              teamId={teamId}
+              isAdmin={isAdmin}
+              modelPrefill={model.name}
+              context={{
+                kind: 'team_model',
+                modelName: model.name,
+                userId: currentUser.id,
+              }}
+            />
+          ) : null}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 })
 

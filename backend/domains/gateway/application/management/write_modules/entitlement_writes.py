@@ -30,8 +30,21 @@ class EntitlementWritesMixin:
     async def upsert_budget(self, *, target_kind: str, target_id: uuid.UUID | None, period: str, model_name: str | None=None, limit_usd: Decimal | None, soft_limit_usd: Decimal | None=None, limit_tokens: int | None, limit_requests: int | None) -> Any:
         return await self._budgets.upsert(target_kind=target_kind, target_id=target_id, period=period, model_name=model_name, limit_usd=limit_usd, soft_limit_usd=soft_limit_usd, limit_tokens=limit_tokens, limit_requests=limit_requests)
 
-    async def delete_budget(self, budget_id: uuid.UUID) -> None:
-        await self._budgets.delete(budget_id)
+    async def delete_budget(
+        self,
+        budget_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        await self._assert_budget_in_team(
+            budget_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
+        deleted = await self._budgets.delete(budget_id)
+        if not deleted:
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
 
     async def create_alert_rule(self, *, tenant_id: uuid.UUID, name: str, description: str | None, metric: str, threshold: Decimal, window_minutes: int, channels: dict[str, Any], enabled: bool) -> GatewayAlertRule:
         return await self._alerts.create_rule(tenant_id=tenant_id, name=name, description=description, metric=metric, threshold=threshold, window_minutes=window_minutes, channels=channels, enabled=enabled)

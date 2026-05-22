@@ -35,9 +35,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { PersonalCredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
 import { useToast } from '@/hooks/use-toast'
 import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
+import { useUserStore } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
 import { ExtraFieldsRenderer } from './credential-extra-fields'
@@ -70,6 +72,7 @@ export function PersonalCredentialsPanel({
   const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
   const hasAuthSession = Boolean(token)
+  const { currentUser } = useUserStore()
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
@@ -285,70 +288,78 @@ export function PersonalCredentialsPanel({
               {rows.length > 0 ? (
                 <ul className="divide-y rounded-md border">
                   {rows.map((c) => (
-                    <li
-                      key={c.id}
-                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium">{c.name}</span>
-                        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                          {displayListApiKeyMasked(
-                            showFullMaskedInList,
-                            hasAuthSession,
-                            c.api_key_masked
-                          )}
+                    <li key={c.id} className="border-b last:border-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium">{c.name}</span>
+                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {displayListApiKeyMasked(
+                              showFullMaskedInList,
+                              hasAuthSession,
+                              c.api_key_masked
+                            )}
+                          </div>
+                          {c.api_base ? (
+                            <span className="mt-0.5 block truncate text-muted-foreground">
+                              {c.api_base}
+                            </span>
+                          ) : null}
+                          {!c.is_active ? (
+                            <Badge variant="outline" className="ml-2">
+                              已停用
+                            </Badge>
+                          ) : null}
                         </div>
-                        {c.api_base ? (
-                          <span className="mt-0.5 block truncate text-muted-foreground">
-                            {c.api_base}
-                          </span>
-                        ) : null}
-                        {!c.is_active ? (
-                          <Badge variant="outline" className="ml-2">
-                            已停用
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="flex gap-1">
-                        {hasAuthSession ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-xs"
-                            onClick={() => {
-                              setAddModelsCred(c)
-                            }}
-                          >
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            模型
-                          </Button>
-                        ) : null}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={!hasAuthSession}
-                          onClick={() => {
-                            openEdit(c)
-                          }}
-                          aria-label="编辑"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        {hasAuthSession ? (
+                        <div className="flex gap-1">
+                          {hasAuthSession ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => {
+                                setAddModelsCred(c)
+                              }}
+                            >
+                              <Plus className="mr-1 h-3.5 w-3.5" />
+                              模型
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive"
-                            disabled={deleteMutation.isPending}
+                            disabled={!hasAuthSession}
                             onClick={() => {
-                              setCredentialPendingDelete(c)
+                              openEdit(c)
                             }}
-                            aria-label="删除凭据"
+                            aria-label="编辑"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        ) : null}
+                          {hasAuthSession ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => {
+                                setCredentialPendingDelete(c)
+                              }}
+                              aria-label="删除凭据"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
+                      {currentUser?.id ? (
+                        <div className="border-t bg-muted/10 px-3 py-3">
+                          <PersonalCredentialBudgetSection
+                            credentialId={c.id}
+                            userId={currentUser.id}
+                            provider={c.provider}
+                          />
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -368,6 +379,7 @@ export function PersonalCredentialsPanel({
       onAddCredential,
       setAddModelsCred,
       deleteMutation.isPending,
+      currentUser?.id,
     ]
   )
 

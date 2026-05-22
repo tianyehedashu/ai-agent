@@ -148,6 +148,48 @@ class GatewayManagementWriteBaseMixin:
             raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
         return plan
 
+    async def _assert_budget_in_team(
+        self,
+        budget_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        budget = await self._budgets.get(budget_id)
+        if budget is None:
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
+
+        if budget.target_kind == "tenant":
+            if budget.target_id != tenant_id:
+                raise ManagementEntityNotFoundError("budget", str(budget_id))
+            return
+
+        if budget.target_kind == "user":
+            if budget.target_id is None:
+                raise ManagementEntityNotFoundError("budget", str(budget_id))
+            members = await self._teams.list_team_members(tenant_id)
+            member_ids = {m.user_id for m in members}
+            if budget.target_id not in member_ids:
+                raise ManagementEntityNotFoundError("budget", str(budget_id))
+            return
+
+        if budget.target_kind == "key":
+            if budget.target_id is None:
+                raise ManagementEntityNotFoundError("budget", str(budget_id))
+            await self._assert_vkey_in_team(
+                budget.target_id,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
+            )
+            return
+
+        if budget.target_kind == "system":
+            if not is_platform_admin:
+                raise ManagementEntityNotFoundError("budget", str(budget_id))
+            return
+
+        raise ManagementEntityNotFoundError("budget", str(budget_id))
+
     async def reload_litellm_router(self) -> None:
         from domains.gateway.infrastructure.router_singleton import reload_router
         with suppress(Exception):

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -25,6 +26,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { budgetsAdminHref } from '@/features/gateway-budget/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { ExternalLink, Loader2, Trash2 } from '@/lib/lucide-icons'
 
@@ -47,6 +50,7 @@ export function SystemGrantsPanel({
   subjectId,
   subjectLabel,
 }: SystemGrantsPanelProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [targetKind, setTargetKind] = useState<'team' | 'user'>('team')
@@ -121,10 +125,10 @@ export function SystemGrantsPanel({
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           <Button variant="outline" size="sm" className="h-7" asChild>
-            <a href="/gateway/budgets" target="_blank" rel="noreferrer">
+            <Link to={budgetsAdminHref(teamId)}>
               预算配额
               <ExternalLink className="ml-1 h-3 w-3" />
-            </a>
+            </Link>
           </Button>
           <Button variant="outline" size="sm" className="h-7" asChild>
             <a href="/gateway/pricing/downstream" target="_blank" rel="noreferrer">

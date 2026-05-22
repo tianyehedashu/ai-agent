@@ -35,6 +35,22 @@ class BudgetRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_for_target_ids(
+        self,
+        target_kind: str,
+        target_ids: list[uuid.UUID],
+    ) -> list[GatewayBudget]:
+        if not target_ids:
+            return []
+        stmt = select(GatewayBudget).where(
+            and_(
+                GatewayBudget.target_kind == target_kind,
+                GatewayBudget.target_id.in_(target_ids),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_for(
         self,
         target_kind: str,

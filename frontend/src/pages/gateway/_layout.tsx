@@ -100,7 +100,7 @@ function corruptedFlatGatewayPath(pathname: string): string | null {
 }
 
 export default function GatewayLayout(): React.JSX.Element {
-  const { isPlatformAdmin } = useGatewayPermission()
+  const { isPlatformAdmin, isAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
   const teamId = currentTeam?.id
   const location = useLocation()
@@ -133,7 +133,9 @@ export default function GatewayLayout(): React.JSX.Element {
       },
       { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
       { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route },
-      { to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt },
+      ...(isAdmin
+        ? [{ to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt }]
+        : []),
       { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText },
       { to: gatewayTeamNavHref(teamId, 'members'), label: '团队成员', icon: Users },
     ]
@@ -155,7 +157,7 @@ export default function GatewayLayout(): React.JSX.Element {
       )
     }
     return base
-  }, [isPlatformAdmin, teamId])
+  }, [isAdmin, isPlatformAdmin, teamId])
 
   return (
     <div className="flex h-full min-h-0">

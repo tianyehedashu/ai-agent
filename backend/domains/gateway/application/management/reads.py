@@ -309,12 +309,67 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         return await self._routes.list_for_tenant(tenant_id, only_enabled=only_enabled)
 
     async def list_budgets_for_tenant_and_user(
-        self, tenant_id: UUID, user_id: UUID | None
+        self,
+        tenant_id: UUID,
+        user_id: UUID | None,
+        *,
+        actor_user_id: UUID | None = None,
     ) -> list[Any]:
+        """成员读路径：团队 tenant 预算 + 当前 user 预算 + 可见 vkey 的 key 预算。"""
         budgets: list[Any] = []
         budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
         if user_id is not None:
             budgets.extend(await self._budgets.list_for_target("user", user_id))
+        keys = await self._vkeys.list_for_tenant(
+            tenant_id, include_system=False, include_inactive=False
+        )
+        visible_keys = filter_virtual_keys_visible_to_actor(
+            keys,
+            actor_user_id=actor_user_id if actor_user_id is not None else user_id,
+        )
+        key_ids = [k.id for k in visible_keys]
+        if key_ids:
+            budgets.extend(await self._budgets.list_for_target_ids("key", key_ids))
+        return budgets
+
+    async def list_budgets_for_team_admin(
+        self,
+        tenant_id: UUID,
+        *,
+        include_system: bool = False,
+        target_kind: str | None = None,
+        model_name: str | None = None,
+    ) -> list[Any]:
+        """Admin 读路径：团队 tenant + 成员 user + 团队 vkey + 可选 system。"""
+        budgets: list[Any] = []
+
+        if target_kind is None or target_kind == "tenant":
+            budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
+
+        if target_kind is None or target_kind == "user":
+            members = await self._teams.list_team_members(tenant_id)
+            user_ids = [m.user_id for m in members]
+            if user_ids:
+                budgets.extend(await self._budgets.list_for_target_ids("user", user_ids))
+
+        if target_kind is None or target_kind == "key":
+            keys = await self._vkeys.list_for_tenant(
+                tenant_id, include_system=True, include_inactive=True
+            )
+            key_ids = [k.id for k in keys]
+            if key_ids:
+                budgets.extend(await self._budgets.list_for_target_ids("key", key_ids))
+
+        if include_system and (target_kind is None or target_kind == "system"):
+            budgets.extend(await self._budgets.list_for_target("system", None))
+
+        normalized_model = (model_name or "").strip() or None
+        if normalized_model is not None:
+            budgets = [b for b in budgets if b.model_name == normalized_model]
+
+        if target_kind is not None:
+            budgets = [b for b in budgets if b.target_kind == target_kind]
+
         return budgets
 
     async def list_alert_rules(self, team_id: UUID) -> list[AlertRuleSummary]:
