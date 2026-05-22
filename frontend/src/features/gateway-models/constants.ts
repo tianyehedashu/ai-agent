@@ -1,5 +1,5 @@
 /** 与 backend GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES 一致 */
-import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway'
+import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway/_base'
 
 /**
  * 网关页面 Scope Tab（`?tab=`）。
@@ -69,6 +69,9 @@ export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
  * - 不含：`GET /models/available` 系统目录（无注册行 id，探活策略未定义）
  */
 export const BATCH_TEST_CONCURRENCY = 5
+
+/** 视频探活单条可达 120s；批量时降低并发，避免同时打满上游 */
+export const VIDEO_BATCH_TEST_CONCURRENCY = 1
 
 /** 与 backend domains.gateway.domain.types.RoutingStrategy 对齐 */
 export const ROUTING_STRATEGIES = [

@@ -14,6 +14,9 @@ interface ConnectivityHealthStripProps {
   onHealthFilterChange: (f: HealthFilter) => void
   canWrite: boolean
   onTestAll?: () => void
+  onTestUntested?: () => void
+  /** 可探活的未测试模型数量，用于按钮文案 */
+  untestedTestableCount?: number
   testingAll?: boolean
   /** 探活失败项一键删除（与当前 healthFilter 无关） */
   onDeleteFailed?: () => void
@@ -69,6 +72,8 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
   onHealthFilterChange,
   canWrite,
   onTestAll,
+  onTestUntested,
+  untestedTestableCount = 0,
   testingAll,
   onDeleteFailed,
   deletingFailed = false,
@@ -115,6 +120,19 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
           >
             {deletingFailed ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
             删除不可用 ({counts.failed})
+          </Button>
+        ) : null}
+        {canWrite && onTestUntested ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={testingAll === true || deletingFailed}
+            onClick={onTestUntested}
+          >
+            {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            测试未测试 ({untestedTestableCount})
           </Button>
         ) : null}
         {canWrite && onTestAll ? (

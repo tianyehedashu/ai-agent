@@ -220,13 +220,47 @@ async def test_image_capability_failure_persists(db_session, test_user) -> None:
 
 
 @pytest.mark.asyncio
+async def test_video_generation_capability_uses_avideo_generation(db_session, test_user) -> None:
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="video_generation",
+        real_model="sora-2",
+        provider="openai",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    fake_video = type(
+        "VideoResp",
+        (),
+        {"id": "video_abc123", "status": "queued"},
+    )()
+
+    with patch("litellm.avideo_generation", new=AsyncMock(return_value=fake_video)) as mock_video:
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+
+    assert result["success"] is True
+    assert result["status"] == "success"
+    assert result.get("response_preview") == "queued: video_abc123"
+    mock_video.assert_awaited_once()
+    call_kw = mock_video.await_args.kwargs
+    assert call_kw["prompt"] == "ping"
+    assert call_kw["seconds"] == "5"
+    assert call_kw["timeout"] == 120
+
+    refreshed = await GatewayModelRepository(db_session).get(model_id)
+    assert refreshed is not None
+    assert refreshed.last_test_status == "success"
+    assert refreshed.last_test_reason is None
+
+
+@pytest.mark.asyncio
 async def test_unsupported_capability_returns_failed(db_session, test_user) -> None:
     """非 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 仍写回 failed，避免 UI 留'未测过'。"""
     team_id, model_id = await _seed_team_credential_and_model(
         db_session,
         test_user,
-        capability="video_generation",
-        real_model="dummy",
+        capability="moderation",
+        real_model="text-moderation-latest",
         provider="openai",
     )
     writes = GatewayManagementWriteService(db_session)
@@ -318,6 +352,42 @@ async def test_volcengine_image_probe_fails_when_endpoint_missing(
     result = await writes.test_gateway_model(model.id, tenant_id=team.id)
     assert result["success"] is False
     assert "image_endpoint_id" in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_volcengine_video_probe_uses_direct_task_api(
+    db_session, test_user
+) -> None:
+    """火山 Seedance 视频探活：走方舟 ``/contents/generations/tasks``，不用 LiteLLM。"""
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="video_generation",
+        real_model="doubao-seedance-1-0-lite-t2v-250428",
+        provider="volcengine",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    captured: dict[str, str] = {}
+
+    async def fake_perform(request, *, timeout=120.0):
+        captured["model"] = request.json_body["model"]
+        captured["url"] = request.url
+        return {"id": "cgt-test", "status": "queued"}
+
+    with (
+        patch(
+            "domains.gateway.application.management.write_modules.probe.perform_volcengine_video_create",
+            new=fake_perform,
+        ),
+        patch("litellm.avideo_generation", new=AsyncMock()) as mock_video,
+    ):
+        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+
+    assert result["success"] is True
+    assert result.get("response_preview") == "queued: cgt-test"
+    assert captured["model"] == "doubao-seedance-1-0-lite-t2v-250428"
+    assert captured["url"].endswith("/contents/generations/tasks")
+    mock_video.assert_not_called()
 
 
 @pytest.mark.asyncio

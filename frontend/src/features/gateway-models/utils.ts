@@ -8,7 +8,12 @@ import { formatMoney } from '@/lib/money'
 import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
-import { BATCH_TEST_CONCURRENCY, TESTABLE_CAPABILITIES, type HealthFilter } from './constants'
+import {
+  BATCH_TEST_CONCURRENCY,
+  TESTABLE_CAPABILITIES,
+  VIDEO_BATCH_TEST_CONCURRENCY,
+  type HealthFilter,
+} from './constants'
 
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -248,30 +253,63 @@ export function filterTestableConnectivityModels<T extends ModelWithConnectivity
   return items.filter((m) => TESTABLE_CAPABILITIES.has(m.capability))
 }
 
+export function filterUntestedConnectivityModels<T extends ModelWithConnectivityStatus>(
+  items: readonly T[]
+): T[] {
+  return filterTestableConnectivityModels(
+    items.filter((m) => healthKey(m.last_test_status) === 'unknown')
+  )
+}
+
+export function batchConnectivityIncludesVideoGeneration(
+  items: readonly ModelWithConnectivityStatus[]
+): boolean {
+  return filterTestableConnectivityModels(items).some((m) => m.capability === 'video_generation')
+}
+
+function isConnectivityTestFailure(result: unknown): boolean {
+  if (result === null || typeof result !== 'object' || !('success' in result)) {
+    return false
+  }
+  return (result as { success?: boolean }).success === false
+}
+
 /** 对可探活注册行并发调用单条 test API（团队 / 个人管理面共用） */
 export async function runBatchConnectivityTests(
   items: readonly ModelWithConnectivityStatus[],
   testById: (id: string) => Promise<unknown>,
   options?: {
     signal?: AbortSignal
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number, failedIds: readonly string[]) => void
   }
-): Promise<void> {
+): Promise<string[]> {
   const testable = filterTestableConnectivityModels(items)
-  if (testable.length === 0) return
-  const total = testable.length
+  if (testable.length === 0) return []
+
+  const videoItems = testable.filter((m) => m.capability === 'video_generation')
+  const otherItems = testable.filter((m) => m.capability !== 'video_generation')
+  const failed: string[] = []
   let done = 0
-  await runWithConcurrency(
-    testable,
-    BATCH_TEST_CONCURRENCY,
-    async (m) => {
-      if (options?.signal?.aborted) return
-      await testById(m.id)
-      done += 1
-      options?.onProgress?.(done, total)
-    },
-    options?.signal
-  )
+  const total = testable.length
+
+  async function runOne(model: ModelWithConnectivityStatus): Promise<void> {
+    if (options?.signal?.aborted) return
+    try {
+      const result = await testById(model.id)
+      if (isConnectivityTestFailure(result)) {
+        failed.push(model.id)
+      }
+    } catch {
+      failed.push(model.id)
+    }
+    done += 1
+    options?.onProgress?.(done, total, failed)
+  }
+
+  await runWithConcurrency(otherItems, BATCH_TEST_CONCURRENCY, runOne, options?.signal)
+  await runWithConcurrency(videoItems, VIDEO_BATCH_TEST_CONCURRENCY, runOne, options?.signal)
+
+  return failed
 }
 
 /** 将长错误归类为清单行短标签 */
@@ -295,6 +333,7 @@ export function classifyFailureReason(reason: string | null | undefined): string
     return '凭据无效'
   }
   if (r.includes('timeout') || r.includes('timed out')) return '超时'
+  if (r.includes('暂不支持')) return '不支持探活'
   if (r.includes('rate limit') || r.includes('429')) return '限流'
   if (r.includes('not found') || r.includes('404')) return '模型不存在'
   return '连接失败'

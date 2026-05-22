@@ -17,6 +17,7 @@ from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.policies.dashscope_embedding import (
     should_use_dashscope_direct_embedding,
 )
+from domains.gateway.domain.policies.volcengine_video import should_use_volcengine_direct_video
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import get_router
 
@@ -335,16 +336,33 @@ class ProxyNonChatMixin:
         except EntitlementPlanExhaustedError:
             await self.guard.release_budget_reservations(reservations)
             raise
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
-        meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        response = await self._invoke_non_chat_with_router_fallback(
-            ctx,
-            model,
-            reservations,
-            kwargs,
-            router_call=lambda: self.litellm.router_video_generation(kwargs),
-            direct_call=lambda: self.litellm.direct_video_generation(kwargs),
+        prepared, invoke_kwargs = await self.prepare_litellm_invoke(ctx, body)
+        meta, up_c, down_c = pricing_kwargs_from_litellm(invoke_kwargs)
+        volcengine_direct = (
+            prepared.resolved is not None
+            and should_use_volcengine_direct_video(prepared.resolved.record.provider)
         )
+        try:
+            if volcengine_direct:
+                response = await self.litellm.volcengine_direct_video_generation(
+                    ctx,
+                    prepared.client_model or model,
+                    invoke_kwargs,
+                    real_model=prepared.resolved.record.real_model if prepared.resolved else None,
+                )
+            else:
+                response = await self._invoke_non_chat_with_router_fallback(
+                    ctx,
+                    model,
+                    reservations,
+                    invoke_kwargs,
+                    router_call=lambda: self.litellm.router_video_generation(invoke_kwargs),
+                    direct_call=lambda: self.litellm.direct_video_generation(invoke_kwargs),
+                )
+        except Exception:
+            await self.guard.release_budget_reservations(reservations)
+            await self.guard.release_entitlement_reservations(ctx)
+            raise
         return adapt_response(
             response,
             ctx,

@@ -10,6 +10,7 @@ import uuid
 from bootstrap.config import settings as _settings
 from domains.gateway.application.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
+    VIDEO_PROBE_TIMEOUT,
 )
 from domains.gateway.application.management.write_modules.probe_image_preview import (
     image_generation_probe_preview,
@@ -22,6 +23,9 @@ from domains.gateway.application.management.write_modules.probe_target import (
     EncryptedCredentialSnapshot,
     ProbeTarget,
 )
+from domains.gateway.application.management.write_modules.probe_video_preview import (
+    video_generation_probe_preview,
+)
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.policies.dashscope_embedding import (
@@ -31,12 +35,20 @@ from domains.gateway.domain.policies.dashscope_embedding import (
 from domains.gateway.domain.policies.volcengine_image_probe import (
     build_volcengine_image_probe_request,
 )
+from domains.gateway.domain.policies.volcengine_video import (
+    build_volcengine_video_create_request,
+    map_volcengine_video_task_to_openai,
+    should_use_volcengine_direct_video,
+)
 from domains.gateway.domain.provider_env_catalog import image_probe_size
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
 )
 from domains.gateway.infrastructure.upstream.volcengine_image_probe_client import (
     perform_volcengine_image_probe,
+)
+from domains.gateway.infrastructure.upstream.volcengine_video_client import (
+    perform_volcengine_video_create,
 )
 from libs.crypto import decrypt_value, derive_encryption_key
 from utils.logging import get_logger
@@ -116,7 +128,7 @@ class ProbeWritesMixin:
                 self._models, model_id, tested_at, msg, litellm_model, **record_kw
             )
         api_base = credential.api_base
-        from litellm import acompletion, aembedding, aimage_generation
+        from litellm import acompletion, aembedding, aimage_generation, avideo_generation
 
         try:
             if capability == "chat":
@@ -196,6 +208,41 @@ class ProbeWritesMixin:
                     )
                 return await record_gateway_model_test_success(
                     self._models, model_id, tested_at, litellm_model, **record_kw
+                )
+            if capability == "video_generation":
+                if should_use_volcengine_direct_video(target.provider):
+                    request = build_volcengine_video_create_request(
+                        api_key=api_key,
+                        api_base=api_base,
+                        model_id=target.real_model,
+                        prompt="ping",
+                        seconds="5",
+                    )
+                    task_data = await perform_volcengine_video_create(
+                        request,
+                        timeout=VIDEO_PROBE_TIMEOUT,
+                    )
+                    video_response = map_volcengine_video_task_to_openai(
+                        task_data,
+                        fallback_model=target.real_model,
+                    )
+                else:
+                    video_response = await avideo_generation(
+                        model=litellm_model,
+                        prompt="ping",
+                        seconds="5",
+                        api_key=api_key,
+                        api_base=api_base,
+                        timeout=VIDEO_PROBE_TIMEOUT,
+                    )
+                preview = video_generation_probe_preview(video_response)
+                return await record_gateway_model_test_success(
+                    self._models,
+                    model_id,
+                    tested_at,
+                    litellm_model,
+                    response_preview=preview,
+                    **record_kw,
                 )
             raise AssertionError(
                 f"test_gateway_model: capability {capability!r} missing probe branch "

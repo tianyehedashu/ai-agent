@@ -35,6 +35,7 @@ from domains.gateway.infrastructure.gateway_log_sampling import (
 from libs.db.database import get_session_context
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
+from utils.serialization import Serializer
 
 logger = get_logger(__name__)
 
@@ -195,7 +196,7 @@ def _build_pricing_snapshot(
     )
     if display > 0:
         snapshot["response_cost"] = float(display)
-    return snapshot
+    return _jsonb_safe_dict(snapshot) or snapshot
 
 
 def _truncate_str(text: str, max_len: int) -> tuple[str, bool]:
@@ -448,13 +449,20 @@ def _build_prompt_redacted(
     return out
 
 
+def _jsonb_safe_dict(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    """将 JSONB 载荷规范为可持久化 dict（处理 LiteLLM Usage 等对象）。"""
+    if not value:
+        return None
+    return Serializer.serialize_dict(value)
+
+
 def _metadata_extra_non_gateway(metadata: dict[str, Any]) -> dict[str, Any] | None:
     extra = {
         k: v
         for k, v in metadata.items()
         if not k.startswith("gateway_") and k not in {"pii_prompt_hash", "pii_redactions"}
     }
-    return extra or None
+    return _jsonb_safe_dict(extra)
 
 
 def _settlement_from_response(
@@ -626,10 +634,10 @@ async def _persist_event(
                     team_id=team_id,
                     user_id=user_id,
                     vkey_id=vkey_id,
-                    team_snapshot=team_snapshot,
+                    team_snapshot=_jsonb_safe_dict(team_snapshot),
                     user_email_snapshot=user_email_snapshot,
                     vkey_name_snapshot=vkey_name_snapshot,
-                    route_snapshot=route_snapshot,
+                    route_snapshot=_jsonb_safe_dict(route_snapshot),
                     credential_id=cred_id,
                     credential_name_snapshot=cred_name_snap,
                     entitlement_plan_id=entitlement_plan_id,
@@ -648,15 +656,15 @@ async def _persist_event(
                     cached_tokens=cached_tokens,
                     cost_usd=cost_usd,
                     revenue_usd=revenue_usd,
-                    pricing_snapshot=pricing_snapshot,
+                    pricing_snapshot=_jsonb_safe_dict(pricing_snapshot),
                     latency_ms=latency_ms,
                     ttfb_ms=ttfb_ms if isinstance(ttfb_ms, int) else None,
                     cache_hit=cache_hit,
                     fallback_chain=fallback_chain,
                     request_id=request_id_str,
                     prompt_hash=str(prompt_hash) if prompt_hash else None,
-                    prompt_redacted=prompt_redacted,
-                    response_summary=response_summary,
+                    prompt_redacted=_jsonb_safe_dict(prompt_redacted),
+                    response_summary=_jsonb_safe_dict(response_summary),
                     metadata_extra=metadata_extra,
                     client_type=client_type,
                     client_ua=client_ua,

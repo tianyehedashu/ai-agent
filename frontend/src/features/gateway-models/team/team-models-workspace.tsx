@@ -44,6 +44,7 @@ import {
   filterDeletableFailedModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
+  filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
   formatDeleteFailedConfirmLabel,
   matchesHealthFilter,
@@ -460,6 +461,16 @@ export function TeamModelsWorkspace({
     [registryItems]
   )
 
+  const untestedTestableItems = useMemo(
+    () => filterUntestedConnectivityModels(registryItems),
+    [registryItems]
+  )
+
+  const selectedTestable = useMemo(
+    () => filterTestableConnectivityModels(selectedModelsForBatch),
+    [selectedModelsForBatch]
+  )
+
   const {
     state: batchTestState,
     start: startBatchTest,
@@ -498,8 +509,18 @@ export function TeamModelsWorkspace({
 
   const handleTestAll = useCallback((): void => {
     if (testableItems.length === 0) return
-    startBatchTest(testableItems.map((m) => m.id))
+    startBatchTest(testableItems)
   }, [testableItems, startBatchTest])
+
+  const handleTestUntested = useCallback((): void => {
+    if (untestedTestableItems.length === 0) return
+    startBatchTest(untestedTestableItems)
+  }, [untestedTestableItems, startBatchTest])
+
+  const handleTestSelected = useCallback((): void => {
+    if (selectedTestable.length === 0) return
+    startBatchTest(selectedTestable)
+  }, [selectedTestable, startBatchTest])
 
   const batchTesting = batchTestState.running
 
@@ -648,6 +669,17 @@ export function TeamModelsWorkspace({
                 onTestAll={
                   canManageModels && testableItems.length > 0 && !batchTesting
                     ? handleTestAll
+                    : undefined
+                }
+                onTestUntested={
+                  canManageModels && untestedTestableItems.length > 0 && !batchTesting
+                    ? handleTestUntested
+                    : undefined
+                }
+                untestedTestableCount={untestedTestableItems.length}
+                onBatchTestSelected={
+                  canManageModels && selectedTestable.length > 0 && !batchTesting
+                    ? handleTestSelected
                     : undefined
                 }
                 testingAll={batchTesting}

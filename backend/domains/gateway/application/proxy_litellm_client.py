@@ -17,12 +17,19 @@ from domains.gateway.domain.litellm_credential_extra_keys import litellm_api_key
 from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
 )
+from domains.gateway.domain.policies.volcengine_video import (
+    build_volcengine_video_create_request,
+    map_volcengine_video_task_to_openai,
+)
 from domains.gateway.infrastructure.router_singleton import (
     ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
 )
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
+)
+from domains.gateway.infrastructure.upstream.volcengine_video_client import (
+    perform_volcengine_video_create,
 )
 
 if TYPE_CHECKING:
@@ -239,6 +246,39 @@ class ProxyLiteLLMClient:
             direct_call=lambda: self.direct_transcription(kwargs),
             kwargs=kwargs,
         )
+
+    async def volcengine_direct_video_generation(
+        self,
+        ctx: ProxyContext,
+        client_model: str,
+        kwargs: dict[str, Any],
+        *,
+        real_model: str | None = None,
+    ) -> dict[str, Any]:
+        """经 deployment 凭据直连火山方舟 ``/contents/generations/tasks``。"""
+        dep = await resolve_deployment_litellm_params(
+            self._session, ctx.team_id, client_model, user_id=ctx.user_id
+        )
+        if dep is None:
+            raise ValueError(f"no deployment for video model: {client_model}")
+        provider = "volcengine"
+        key_name = litellm_api_key_param_name(provider)
+        api_key = dep.get(key_name) or dep.get("api_key")
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("volcengine video generation requires api_key on deployment")
+        model_id = real_model or client_model
+        prompt = kwargs.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt is required for video generation")
+        request = build_volcengine_video_create_request(
+            api_key=api_key.strip(),
+            api_base=dep.get("api_base") if isinstance(dep.get("api_base"), str) else None,
+            model_id=model_id,
+            prompt=prompt.strip(),
+            seconds=kwargs.get("seconds"),
+        )
+        task_data = await perform_volcengine_video_create(request)
+        return map_volcengine_video_task_to_openai(task_data, fallback_model=model_id)
 
     async def direct_video_generation(self, kwargs: dict[str, Any]) -> Any:
         from litellm import avideo_generation

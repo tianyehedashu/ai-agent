@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { GatewayModel, GatewayRoute } from '@/api/gateway'
 
 import {
+  batchConnectivityIncludesVideoGeneration,
   classifyFailureReason,
   enabledGatewayModels,
   excludeModelsFromList,
@@ -12,6 +13,7 @@ import {
   pickInspectorModelId,
   routesReferencingModel,
   filterTestableConnectivityModels,
+  filterUntestedConnectivityModels,
   filterProxyCallableModels,
   filterRegistryRequestableModels,
   isProxyCallableModel,
@@ -164,6 +166,10 @@ describe('classifyFailureReason', () => {
   it('returns default for empty', () => {
     expect(classifyFailureReason(null)).toBe('连接失败')
   })
+
+  it('maps unsupported probe capability', () => {
+    expect(classifyFailureReason('capability=moderation 暂不支持连通性测试')).toBe('不支持探活')
+  })
 })
 
 describe('matchesHealthFilter', () => {
@@ -267,30 +273,77 @@ describe('stringArraysEqual', () => {
 })
 
 describe('filterTestableConnectivityModels', () => {
-  it('keeps only chat embedding image capabilities', () => {
+  it('keeps chat, embedding, image, and video_generation capabilities', () => {
     const items = [
       { id: '1', capability: 'chat', last_test_status: null },
       { id: '2', capability: 'video_generation', last_test_status: null },
       { id: '3', capability: 'embedding', last_test_status: null },
+      { id: '4', capability: 'moderation', last_test_status: null },
     ]
-    expect(filterTestableConnectivityModels(items).map((m) => m.id)).toEqual(['1', '3'])
+    expect(filterTestableConnectivityModels(items).map((m) => m.id)).toEqual(['1', '2', '3'])
+  })
+})
+
+describe('filterUntestedConnectivityModels', () => {
+  it('returns only testable models with unknown health', () => {
+    const items = [
+      { id: 'ok', capability: 'chat', last_test_status: null },
+      { id: 'tested', capability: 'chat', last_test_status: 'success' },
+      { id: 'failed', capability: 'chat', last_test_status: 'failed' },
+      { id: 'non-testable', capability: 'moderation', last_test_status: null },
+    ]
+    expect(filterUntestedConnectivityModels(items).map((m) => m.id)).toEqual(['ok'])
   })
 })
 
 describe('runBatchConnectivityTests', () => {
   it('invokes testById only for testable models', async () => {
     const tested: string[] = []
-    await runBatchConnectivityTests(
+    const failed = await runBatchConnectivityTests(
       [
         { id: 'a', capability: 'chat', last_test_status: null },
         { id: 'b', capability: 'video_generation', last_test_status: null },
+        { id: 'c', capability: 'moderation', last_test_status: null },
       ],
       (id) => {
         tested.push(id)
-        return Promise.resolve()
+        return Promise.resolve({ success: true })
       }
     )
-    expect(tested.sort()).toEqual(['a'])
+    expect(tested.sort()).toEqual(['a', 'b'])
+    expect(failed).toEqual([])
+  })
+
+  it('collects failed ids from unsuccessful responses and errors', async () => {
+    const failed = await runBatchConnectivityTests(
+      [
+        { id: 'ok', capability: 'chat', last_test_status: null },
+        { id: 'bad', capability: 'chat', last_test_status: null },
+        { id: 'err', capability: 'embedding', last_test_status: null },
+      ],
+      (id) => {
+        if (id === 'bad') return Promise.resolve({ success: false })
+        if (id === 'err') return Promise.reject(new Error('network'))
+        return Promise.resolve({ success: true })
+      }
+    )
+    expect(failed.sort()).toEqual(['bad', 'err'])
+  })
+})
+
+describe('batchConnectivityIncludesVideoGeneration', () => {
+  it('detects video models in testable subset', () => {
+    expect(
+      batchConnectivityIncludesVideoGeneration([
+        { id: '1', capability: 'chat', last_test_status: null },
+        { id: '2', capability: 'video_generation', last_test_status: null },
+      ])
+    ).toBe(true)
+    expect(
+      batchConnectivityIncludesVideoGeneration([
+        { id: '1', capability: 'chat', last_test_status: null },
+      ])
+    ).toBe(false)
   })
 })
 

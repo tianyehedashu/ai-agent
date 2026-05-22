@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
@@ -9,6 +10,8 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
@@ -61,6 +64,19 @@ def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
     )
 
 
+def _prepared_litellm_invoke(body: dict[str, Any]) -> tuple[PreparedLitellmKwargs, dict[str, Any]]:
+    client_model = str(body.get("model", "")).strip()
+    invoke_kwargs = {"model": client_model, "metadata": {}}
+    if "prompt" in body:
+        invoke_kwargs["prompt"] = body["prompt"]
+    prepared = PreparedLitellmKwargs(
+        kwargs={"model": client_model, "metadata": {}},
+        client_model=client_model,
+        resolved=None,
+    )
+    return prepared, invoke_kwargs
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method_name", "direct_method", "router_attr", "body"),
@@ -76,12 +92,6 @@ def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
             "direct_moderation",
             "amoderation",
             {"model": "text-moderation", "input": "hello"},
-        ),
-        (
-            "video_generation",
-            "direct_video_generation",
-            "avideo_generation",
-            {"model": "video-model", "prompt": "a cat"},
         ),
         (
             "image_generation",
@@ -141,6 +151,103 @@ async def test_non_chat_uses_router_not_direct_litellm(
     assert result == {"ok": True}
     router_fn.assert_awaited_once()
     assert direct_called is False
+
+
+@pytest.mark.asyncio
+async def test_video_generation_non_volcengine_uses_router(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"model": "video-model", "prompt": "a cat"}
+    router_fn = AsyncMock(return_value={"ok": True})
+    router = MagicMock(avideo_generation=router_fn)
+
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    ctx = _ctx()
+
+    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+        return False
+
+    async def block_direct(_kwargs: dict[str, Any]) -> dict[str, Any]:
+        raise AssertionError("direct litellm must not be called when router succeeds")
+
+    monkeypatch.setattr(
+        use_case.litellm, "should_use_internal_direct_litellm", no_direct
+    )
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(side_effect=lambda _ctx, b: _prepared_litellm_invoke(b)),
+    )
+    monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        use_case.guard, "assert_request_capability_matches_model", AsyncMock()
+    )
+    monkeypatch.setattr(use_case.litellm, "direct_video_generation", block_direct)
+    volcengine_direct = AsyncMock()
+    monkeypatch.setattr(
+        use_case.litellm, "volcengine_direct_video_generation", volcengine_direct
+    )
+
+    with patch(
+        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
+        new=AsyncMock(return_value=router),
+    ):
+        result = await use_case.video_generation(ctx, body)
+
+    assert result == {"ok": True}
+    router_fn.assert_awaited_once()
+    volcengine_direct.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_volcengine_video_generation_uses_direct_not_router(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"model": "seedance-video", "prompt": "a cat"}
+    record = SimpleNamespace(
+        provider="volcengine",
+        real_model="doubao-seedance-1-0-lite-t2v-250428",
+    )
+    prepared, invoke_kwargs = _prepared_litellm_invoke(body)
+    prepared = PreparedLitellmKwargs(
+        kwargs=prepared.kwargs,
+        client_model=prepared.client_model,
+        resolved=ResolvedModelName(record=record, route=None, via_route=None),
+    )
+
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    ctx = _ctx()
+
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(return_value=(prepared, invoke_kwargs)),
+    )
+    monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        use_case.guard, "assert_request_capability_matches_model", AsyncMock()
+    )
+    volcengine_direct = AsyncMock(
+        return_value={
+            "id": "cgt-test",
+            "object": "video",
+            "status": "queued",
+            "model": "doubao-seedance-1-0-lite-t2v-250428",
+        }
+    )
+    monkeypatch.setattr(
+        use_case.litellm, "volcengine_direct_video_generation", volcengine_direct
+    )
+    router_video = AsyncMock()
+    monkeypatch.setattr(use_case.litellm, "router_video_generation", router_video)
+
+    result = await use_case.video_generation(ctx, body)
+
+    assert result["id"] == "cgt-test"
+    volcengine_direct.assert_awaited_once()
+    router_video.assert_not_called()
 
 
 @pytest.mark.asyncio

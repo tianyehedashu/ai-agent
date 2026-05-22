@@ -42,6 +42,12 @@ async def resolve_deployment_litellm_params(
     record = resolved.record
     cred = await ProviderCredentialRepository(session).get(record.credential_id)
     if cred is None:
+        from domains.gateway.infrastructure.repositories.system_credential_repository import (
+            SystemProviderCredentialRepository,
+        )
+
+        cred = await SystemProviderCredentialRepository(session).get(record.credential_id)
+    if cred is None or not cred.is_active:
         return None
     lookup = pricing_lookup
     if lookup is None:

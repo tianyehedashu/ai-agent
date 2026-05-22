@@ -60,7 +60,10 @@ interface ModelInventoryProps {
   onHealthFilterChange: (f: HealthFilter) => void
   canWrite: boolean
   onTestAll?: () => void
+  onTestUntested?: () => void
+  untestedTestableCount?: number
   testingAll?: boolean
+  onBatchTestSelected?: () => void
   onRegister?: () => void
   onPreloadRegister?: () => void
   /** 列表行链至详情时预加载详情 chunk */
@@ -107,7 +110,10 @@ export const ModelInventory = memo(function ModelInventory({
   onHealthFilterChange,
   canWrite,
   onTestAll,
+  onTestUntested,
+  untestedTestableCount,
   testingAll,
+  onBatchTestSelected,
   onRegister,
   onPreloadRegister,
   onPreloadRowNavigate,
@@ -144,17 +150,32 @@ export const ModelInventory = memo(function ModelInventory({
       {batchSelectEnabled && selectedCount > 0 ? (
         <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
           <span className="text-sm text-muted-foreground">已选 {selectedCount} 项</span>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="h-7 text-xs"
-            onClick={() => {
-              onBatchDeleteOpenChange?.(true)
-            }}
-          >
-            <Trash2 className="mr-1 h-3 w-3" />
-            批量删除
-          </Button>
+          <div className="flex items-center gap-1">
+            {onBatchTestSelected ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={testingAll === true}
+                onClick={onBatchTestSelected}
+              >
+                {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                批量测试
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs"
+              disabled={testingAll === true}
+              onClick={() => {
+                onBatchDeleteOpenChange?.(true)
+              }}
+            >
+              <Trash2 className="mr-1 h-3 w-3" />
+              批量删除
+            </Button>
+          </div>
         </div>
       ) : null}
       <div className="space-y-2.5 border-b p-3">
@@ -217,6 +238,8 @@ export const ModelInventory = memo(function ModelInventory({
               onHealthFilterChange={onHealthFilterChange}
               canWrite={canWrite}
               onTestAll={onTestAll}
+              onTestUntested={onTestUntested}
+              untestedTestableCount={untestedTestableCount}
               testingAll={testingAll}
               onDeleteFailed={onDeleteFailed}
               deletingFailed={deletingFailed}

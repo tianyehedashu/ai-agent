@@ -19,7 +19,7 @@ export const ConnectivityBatchTestBanner = memo(function ConnectivityBatchTestBa
   onScrollToFirstFailed,
   className,
 }: ConnectivityBatchTestBannerProps): React.JSX.Element | null {
-  const { running, total, done, failedIds, cancel } = state
+  const { running, total, done, failedIds, includesVideoProbe, cancel } = state
 
   if (!running && failedIds.length === 0) {
     return null
@@ -43,6 +43,9 @@ export const ConnectivityBatchTestBanner = memo(function ConnectivityBatchTestBa
             <span className="text-xs text-rose-600 dark:text-rose-400">
               · 已失败 {failedIds.length}
             </span>
+          ) : null}
+          {includesVideoProbe ? (
+            <span className="text-xs text-muted-foreground">· 含视频模型，单条探活可能较慢</span>
           ) : null}
         </>
       ) : (

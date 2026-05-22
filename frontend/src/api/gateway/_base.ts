@@ -19,4 +19,9 @@ export function teamGatewayPath(teamId: string, suffix: string): string {
  * 与 Python 端 ``GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES`` 一致。
  * 用于决定一个 GatewayModel 是否支持「连通性测试」。
  */
-export const GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES = ['chat', 'embedding', 'image'] as const
+export const GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES = [
+  'chat',
+  'embedding',
+  'image',
+  'video_generation',
+] as const

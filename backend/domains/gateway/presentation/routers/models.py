@@ -324,7 +324,7 @@ async def test_model(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> GatewayModelTestResponse:
-    """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图）。
+    """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图 / 视频生成）。
 
     成功/失败均返回 200 + ``success`` 字段，结果同步落库（``last_test_status``
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。

@@ -40,6 +40,7 @@ import {
   filterDeletableFailedModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
+  filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
   formatDeleteFailedConfirmLabel,
   matchesHealthFilter,
@@ -187,7 +188,7 @@ export function PersonalModelsWorkspace({
             const idSet = new Set(ids)
             const testable = filterTestableConnectivityModels(models.filter((m) => idSet.has(m.id)))
             if (testable.length > 0) {
-              startBatchTest(testable.map((m) => m.id))
+              startBatchTest(testable)
             }
           })
       }
@@ -228,6 +229,7 @@ export function PersonalModelsWorkspace({
 
   const testableItems = useMemo(() => filterTestableConnectivityModels(items), [items])
   const hasTestableModels = testableItems.length > 0
+  const untestedTestableItems = useMemo(() => filterUntestedConnectivityModels(items), [items])
   const selectedCount = visibleSelectedIds.size
   const allFilteredSelected =
     filteredItems.length > 0 && filteredItems.every((m) => visibleSelectedIds.has(m.id))
@@ -236,6 +238,11 @@ export function PersonalModelsWorkspace({
   const selectedModelsForBatch = useMemo(
     () => filteredItems.filter((m) => visibleSelectedIds.has(m.id)),
     [filteredItems, visibleSelectedIds]
+  )
+
+  const selectedTestable = useMemo(
+    () => filterTestableConnectivityModels(selectedModelsForBatch),
+    [selectedModelsForBatch]
   )
 
   const batchDeleteLabel = useMemo(
@@ -365,8 +372,18 @@ export function PersonalModelsWorkspace({
 
   const handleTestAll = useCallback((): void => {
     if (!hasTestableModels) return
-    startBatchTest(testableItems.map((m) => m.id))
+    startBatchTest(testableItems)
   }, [hasTestableModels, testableItems, startBatchTest])
+
+  const handleTestUntested = useCallback((): void => {
+    if (untestedTestableItems.length === 0) return
+    startBatchTest(untestedTestableItems)
+  }, [untestedTestableItems, startBatchTest])
+
+  const handleTestSelected = useCallback((): void => {
+    if (selectedTestable.length === 0) return
+    startBatchTest(selectedTestable)
+  }, [selectedTestable, startBatchTest])
 
   if (!hasAuthSession) {
     return <p className="py-8 text-center text-sm text-muted-foreground">请先登录以管理个人模型</p>
@@ -442,6 +459,10 @@ export function PersonalModelsWorkspace({
               onHealthFilterChange={setHealthFilter}
               canWrite={hasAuthSession}
               onTestAll={hasTestableModels && !batchTesting ? handleTestAll : undefined}
+              onTestUntested={
+                untestedTestableItems.length > 0 && !batchTesting ? handleTestUntested : undefined
+              }
+              untestedTestableCount={untestedTestableItems.length}
               testingAll={batchTesting}
               onDeleteFailed={handleDeleteFailed}
               deletingFailed={batchDeleting}
@@ -491,12 +512,23 @@ export function PersonalModelsWorkspace({
                 删除当前筛选下全部（{filteredItems.length}）
               </Button>
             ) : null}
+            {selectedCount > 0 && selectedTestable.length > 0 && !batchTesting ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={batchDeleting}
+                onClick={handleTestSelected}
+              >
+                批量测试
+              </Button>
+            ) : null}
             {selectedCount > 0 ? (
               <Button
                 size="sm"
                 variant="destructive"
                 className="h-8 text-xs"
-                disabled={batchDeleting}
+                disabled={batchDeleting || batchTesting}
                 onClick={() => {
                   setBatchDeleteOpen(true)
                 }}
