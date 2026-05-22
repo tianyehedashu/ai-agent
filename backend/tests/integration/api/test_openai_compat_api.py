@@ -14,6 +14,7 @@ from libs.api.paths import openai_compat_base
 from libs.iam.permission_context import clear_permission_context
 
 _OPENAI_MODELS = f"{openai_compat_base()}/models"
+_API_KEYS = "/api/v1/api-keys/"
 
 
 @pytest.mark.integration
@@ -84,7 +85,7 @@ class TestOpenAiCompatApi:
             await db_session.commit()
 
             created = await dev_client.post(
-                "/api/v1/api-keys",
+                _API_KEYS,
                 headers=auth_headers,
                 json={
                     "name": "platform-gateway-default-personal",
@@ -139,7 +140,7 @@ class TestOpenAiCompatApi:
             await db_session.commit()
 
             created = await dev_client.post(
-                "/api/v1/api-keys",
+                _API_KEYS,
                 headers=auth_headers,
                 json={
                     "name": "platform-gateway-shared",
@@ -168,6 +169,49 @@ class TestOpenAiCompatApi:
                 },
             )
             assert selected.status_code == 200, selected.text
+        finally:
+            clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_platform_api_key_proxy_records_identity_usage(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """平台 sk-* 调用 /v1/* 后应回写 Identity usage_count。"""
+        try:
+            await TeamService(db_session).ensure_personal_team(test_user.id)
+            await db_session.commit()
+
+            created = await dev_client.post(
+                _API_KEYS,
+                headers=auth_headers,
+                json={
+                    "name": "platform-gateway-usage-log",
+                    "scopes": [ApiKeyScope.GATEWAY_PROXY.value],
+                    "expires_in_days": 30,
+                },
+            )
+            assert created.status_code == 201, created.text
+            body = created.json()
+            api_key_id = body["api_key"]["id"]
+            plain_key = body["plain_key"]
+            assert body["api_key"]["usage_count"] == 0
+
+            listed = await dev_client.get(
+                _OPENAI_MODELS,
+                headers={"Authorization": f"Bearer {plain_key}"},
+            )
+            assert listed.status_code == 200, listed.text
+
+            detail = await dev_client.get(
+                f"/api/v1/api-keys/{api_key_id}",
+                headers=auth_headers,
+            )
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["usage_count"] >= 1
         finally:
             clear_permission_context()
 

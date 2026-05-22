@@ -3,8 +3,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi } from '@/api/gateway'
+import { gatewayApi, type GatewayModelBatchDeleteFailureItem } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   canLinkToCredentialDetail,
   credentialSummaryLabel,
@@ -16,6 +24,10 @@ import {
   type UsagePeriodDays,
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
+import {
+  canDeleteGatewayModel,
+  isConfigManagedSystemModel,
+} from '@/features/gateway-models/gateway-model-permissions'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
   credentialsSystemBrowseIndexHref,
@@ -28,6 +40,7 @@ import {
   gatewayModelsListQueryKey,
   invalidateGatewayModelCaches,
   filterTestableConnectivityModels,
+  formatBatchDeleteConfirmLabel,
   matchesHealthFilter,
   resolveTeamModelsRegistryScope,
   runBatchConnectivityTests,
@@ -96,6 +109,17 @@ export function TeamModelsWorkspace({
   const [usageDays, setUsageDays] = useState<UsagePeriodDays>(7)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [testingAll, setTestingAll] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchFailedOpen, setBatchFailedOpen] = useState(false)
+  const [batchFailedItems, setBatchFailedItems] = useState<GatewayModelBatchDeleteFailureItem[]>([])
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+
+  const systemPermContext = useMemo(
+    () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),
+    [listMode]
+  )
+  const batchSelectEnabled = listMode === 'system' && isPlatformAdmin
 
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
 
@@ -223,17 +247,111 @@ export function TeamModelsWorkspace({
     })
   }, [registryItems, healthFilter, deferredSearch])
 
-  const { createMutation } = useGatewayModelMutations({
-    credentialId: credentialFilter || undefined,
-    onCreateSuccess: (created) => {
-      navigate(
-        teamModelDetailHref(teamId, created.id, {
-          credentialId: credentialFilter !== '' ? credentialFilter : undefined,
-          tab: listMode === 'system' ? 'system' : 'shared',
+  const isModelBatchSelectable = useCallback(
+    (model: (typeof registryItems)[number]) =>
+      canDeleteGatewayModel(model, false, isPlatformAdmin, systemPermContext),
+    [isPlatformAdmin, systemPermContext]
+  )
+
+  const canDeleteModel = isModelBatchSelectable
+
+  const isConfigManagedModel = useCallback(
+    (model: (typeof registryItems)[number]) => isConfigManagedSystemModel(model, systemPermContext),
+    [systemPermContext]
+  )
+
+  const { createMutation, deleteModelMutation, batchDeleteModelsMutation } =
+    useGatewayModelMutations({
+      credentialId: credentialFilter || undefined,
+      onCreateSuccess: (created) => {
+        navigate(
+          teamModelDetailHref(teamId, created.id, {
+            credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+            tab: listMode === 'system' ? 'system' : 'shared',
+          })
+        )
+      },
+      onBatchDeleteSuccess: (result) => {
+        setBatchDeleteOpen(false)
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          for (const id of result.succeeded) {
+            next.delete(id)
+          }
+          return next
         })
-      )
+        if (result.failed.length > 0) {
+          setBatchFailedItems(result.failed)
+          setBatchFailedOpen(true)
+        }
+      },
+    })
+
+  const handleToggleSelect = useCallback((id: string, selected: boolean): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (selected) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
+  const handleToggleSelectAll = useCallback(
+    (selected: boolean): void => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        for (const m of filteredModels) {
+          if (!isModelBatchSelectable(m)) continue
+          if (selected) {
+            next.add(m.id)
+          } else {
+            next.delete(m.id)
+          }
+        }
+        return next
+      })
     },
-  })
+    [filteredModels, isModelBatchSelectable]
+  )
+
+  const handleDeleteModel = useCallback(
+    (id: string): void => {
+      const target = registryItems.find((m) => m.id === id)
+      if (!target) return
+      if (
+        !window.confirm(
+          `确定删除模型「${target.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+        )
+      ) {
+        return
+      }
+      setDeletingModelId(id)
+      deleteModelMutation.mutate(id, {
+        onSettled: () => {
+          setDeletingModelId(null)
+        },
+      })
+    },
+    [registryItems, deleteModelMutation]
+  )
+
+  const selectedModelsForBatch = useMemo(
+    () => registryItems.filter((m) => selectedIds.has(m.id)),
+    [registryItems, selectedIds]
+  )
+
+  const batchDeleteLabel = useMemo(
+    (): string => formatBatchDeleteConfirmLabel(selectedModelsForBatch.map((m) => m.name)),
+    [selectedModelsForBatch]
+  )
+
+  const handleConfirmBatchDelete = useCallback((): void => {
+    if (selectedIds.size === 0) return
+    batchDeleteModelsMutation.mutate([...selectedIds])
+  }, [selectedIds, batchDeleteModelsMutation])
 
   const getModelHref = useCallback(
     (modelId: string) =>
@@ -424,11 +542,52 @@ export function TeamModelsWorkspace({
                 onPreloadRegister={preloadRegisterModelForm}
                 onPreloadRowNavigate={preloadTeamModelDetailPane}
                 showSystemAdmin={listMode === 'system' && isPlatformAdmin}
+                batchSelectEnabled={batchSelectEnabled}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onToggleSelectAll={handleToggleSelectAll}
+                isModelBatchSelectable={isModelBatchSelectable}
+                canDeleteModel={canDeleteModel}
+                isConfigManagedModel={isConfigManagedModel}
+                deletingModelId={deletingModelId}
+                onDeleteModel={handleDeleteModel}
+                batchDeleteOpen={batchDeleteOpen}
+                onBatchDeleteOpenChange={setBatchDeleteOpen}
+                onConfirmBatchDelete={handleConfirmBatchDelete}
+                batchDeletePending={batchDeleteModelsMutation.isPending}
+                batchDeleteLabel={batchDeleteLabel}
               />
             </Suspense>
           ) : null}
         </>
       )}
+
+      <Dialog open={batchFailedOpen} onOpenChange={setBatchFailedOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>部分模型未能删除</DialogTitle>
+            <DialogDescription>以下条目未删除成功，其余已处理。</DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-60 space-y-2 overflow-y-auto text-sm">
+            {batchFailedItems.map((item) => (
+              <li key={item.id} className="rounded-md border px-3 py-2">
+                <p className="font-mono text-xs text-muted-foreground">{item.id}</p>
+                <p className="mt-1 text-destructive">{item.message}</p>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => {
+                setBatchFailedOpen(false)
+              }}
+            >
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

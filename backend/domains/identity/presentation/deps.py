@@ -14,13 +14,13 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bootstrap.config import settings
 from domains.identity.application import (
     ANONYMOUS_USER_COOKIE,
     get_principal,
     get_principal_optional,
 )
 from domains.identity.application.permission_context_composer import PermissionContextComposer
+from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
 from libs.exceptions import PermissionDeniedError
@@ -131,8 +131,6 @@ async def require_auth(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """要求必须认证（非匿名）"""
-    if settings.is_development:
-        return current_user
     if current_user.is_anonymous:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -189,7 +187,18 @@ AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
 
 def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
     """从当前用户获取 UUID（用于需要注册用户 ID 的 API）"""
-    return uuid.UUID(current_user.id)
+    if current_user.is_anonymous or Principal.is_anonymous_id(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    try:
+        return uuid.UUID(current_user.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        ) from exc
 
 
 # =============================================================================

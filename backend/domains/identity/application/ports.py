@@ -7,10 +7,9 @@ identity domain to other bounded contexts.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
+import uuid
 
 if TYPE_CHECKING:
-    import uuid
-
     from domains.identity.domain.api_key_types import ApiKeyEntity
 
 
@@ -27,6 +26,19 @@ class ApiKeyVerificationPort(Protocol):
 
     async def verify_api_key(self, plain_key: str) -> ApiKeyEntity | None:
         """验证 API Key，成功返回实体（含 gateway_grants），失败返回 None。"""
+        ...
+
+    async def record_usage(
+        self,
+        api_key_id: uuid.UUID,
+        endpoint: str,
+        method: str,
+        ip_address: str | None,
+        user_agent: str | None,
+        status_code: int,
+        response_time_ms: int | None,
+    ) -> None:
+        """记录 API Key 使用（Gateway 代理完成后回写）。"""
         ...
 
 

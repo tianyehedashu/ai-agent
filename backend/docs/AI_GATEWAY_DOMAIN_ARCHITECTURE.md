@@ -463,7 +463,8 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 - `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider`）；个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
 - `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `mcp`、`account` 等）深链到对应设置子页；**模型与凭据**均在 **AI Gateway**（`/gateway/models?tab=personal|team`、`/gateway/credentials?tab=personal|team`）。旧 `?tab=credentials`、`?tab=models`、`?view=gateway` 会重定向到 Gateway 个人 Tab。**已移除**设置内嵌的 `credentials-tab` / `model-tab` / `provider-config-tab` 等组件；个人凭据 UI 复用 `features/gateway-credentials/personal-credentials-panel.tsx`（仅由 Gateway 凭据页等挂载）。
-- `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；创建 Key 时可勾选 Gateway 相关作用域。
+- `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；设置页创建/编辑 Key 时可配置 **Gateway 团队授权**（模型/能力/RPM/TPM/guardrail）。`gateway:admin` / `gateway:read` 与 Agent/Session 等 scope 在 UI 标注「预留」— 当前 HTTP 鉴权以 JWT 或 MCP/`gateway:proxy` 为准。
+- `frontend/src/features/api-key-gateway/`：Grant 策略表单与团队授权编辑器；平台 Key 经 `/v1/*` 调用后回写 Identity **`api_key_usage_logs`**。
 
 ### 6.4 已知风险
 
@@ -472,6 +473,7 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 | Router 单例 | 多 worker 依赖 Redis 一致性；改模型后需 `reload_router` 可达。 |
 | 测试覆盖 | 预算/限流/流式等以单元与手工为主，可补集成。 |
 | Pydantic V2 | MCP 相关 `Config` 弃用警告与 Gateway 无关，可择机 `ConfigDict`。 |
+| 平台 Key 预算 | 无 vkey 级 `gateway_budgets`；仅 tenant/user 预算 + grant RPM/TPM。 |
 
 ---
 

@@ -7,7 +7,7 @@ import type React from 'react'
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -41,10 +41,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  ApiKeyGrantEditor,
+  grantsToRequests,
+  type GrantDraft,
+} from '@/features/api-key-gateway/api-key-grant-editor'
 import type { ApiKeyScope } from '@/types/api-key'
 import {
   API_KEY_SCOPE_GROUPS,
   EXPIRATION_OPTIONS,
+  isReservedApiKeyScope,
   SCOPES_FOR_SELECT_ALL,
   SCOPE_DISPLAY_INFO,
 } from '@/types/api-key'
@@ -72,6 +78,7 @@ export function ApiKeyCreateDialog({
 }: ApiKeyCreateDialogProps): React.ReactElement {
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [grantDrafts, setGrantDrafts] = useState<GrantDraft[]>([])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -89,11 +96,15 @@ export function ApiKeyCreateDialog({
       description?: string
       scopes: ApiKeyScope[]
       expires_in_days: number
+      gateway_grants?: ReturnType<typeof grantsToRequests>
     }) => apiKeyApi.create(data),
     onSuccess: (response) => {
       setCreatedKey(response.plain_key)
       setCopied(false)
       toast.success('API Key 创建成功，请立即复制保存')
+      if (response.warning) {
+        toast.message(response.warning)
+      }
       onSuccess?.()
     },
     onError: (error: Error) => {
@@ -101,12 +112,18 @@ export function ApiKeyCreateDialog({
     },
   })
 
+  const scopes = useWatch({ control: form.control, name: 'scopes' })
+  const hasGatewayProxy = scopes.includes('gateway:proxy')
+
   const onSubmit = (values: FormValues): void => {
+    const gateway_grants =
+      hasGatewayProxy && grantDrafts.length > 0 ? grantsToRequests(grantDrafts) : undefined
     createMutation.mutate({
       name: values.name,
       description: values.description,
       scopes: values.scopes as ApiKeyScope[],
       expires_in_days: values.expiresIn,
+      gateway_grants,
     })
   }
 
@@ -114,12 +131,13 @@ export function ApiKeyCreateDialog({
     onOpenChange(false)
     setCreatedKey(null)
     setCopied(false)
+    setGrantDrafts([])
     form.reset()
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         {!createdKey ? (
           <>
             <DialogHeader>
@@ -196,10 +214,8 @@ export function ApiKeyCreateDialog({
                         <div>
                           <FormLabel>作用域</FormLabel>
                           <FormDescription>
-                            选择此 API Key 的权限范围。顶部「全选」不含{' '}
-                            <span className="font-mono">gateway:admin</span>
-                            （Gateway 管理写权限），需要时请单独勾选。 勾选 gateway:proxy
-                            时默认只授权 personal team；共享团队建议使用 Gateway 虚拟 Key。
+                            「全选已实现」不含预留 scope 与 gateway:admin。Gateway
+                            代理可配置团队授权。
                           </FormDescription>
                         </div>
                         <div className="flex gap-1">
@@ -212,7 +228,7 @@ export function ApiKeyCreateDialog({
                               field.onChange([...SCOPES_FOR_SELECT_ALL])
                             }}
                           >
-                            全选
+                            全选已实现
                           </Button>
                           <Button
                             type="button"
@@ -309,6 +325,11 @@ export function ApiKeyCreateDialog({
                                         className="cursor-pointer text-sm leading-none"
                                       >
                                         {SCOPE_DISPLAY_INFO[scope].label}
+                                        {isReservedApiKeyScope(scope) ? (
+                                          <Badge variant="outline" className="ml-2 text-[10px]">
+                                            预留
+                                          </Badge>
+                                        ) : null}
                                       </label>
                                       <p className="text-xs text-muted-foreground">
                                         {SCOPE_DISPLAY_INFO[scope].description}
@@ -325,6 +346,10 @@ export function ApiKeyCreateDialog({
                     </FormItem>
                   )}
                 />
+
+                {hasGatewayProxy ? (
+                  <ApiKeyGrantEditor grants={grantDrafts} onChange={setGrantDrafts} />
+                ) : null}
 
                 <DialogFooter>
                   <Button

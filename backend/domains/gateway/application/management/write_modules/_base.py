@@ -6,6 +6,9 @@ from contextlib import suppress
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.application.management.access_assertions import (
+    GatewayManagementAccessAssertions,
+)
 from domains.gateway.application.model_reference_prune import (
     prune_gateway_model_name_references,
 )
@@ -42,6 +45,7 @@ from domains.gateway.infrastructure.repositories.system_credential_repository im
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.tenancy.application.team_service import TeamService
 from utils.logging import get_logger
 
@@ -70,6 +74,12 @@ class GatewayManagementWriteBaseMixin:
         self._provider_plans = ProviderPlanRepository(session)
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._teams = TeamService(session)
+        self._access = GatewayManagementAccessAssertions(
+            creds=self._creds,
+            vkeys=self._vkeys,
+            api_key_grants=ApiKeyUseCase(session),
+            entitlement_plans=self._entitlement_plans,
+        )
 
     async def _ensure_personal_tenant_id(self, user_id: uuid.UUID) -> uuid.UUID:
         personal_team = await self._teams.ensure_personal_team(user_id)
@@ -127,15 +137,11 @@ class GatewayManagementWriteBaseMixin:
             raise VirtualKeyNotFoundError(str(vkey_id))
 
     async def _assert_apikey_grant_in_team(self, grant_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
-        from sqlalchemy import select
-
-        from domains.identity.infrastructure.models.api_key import ApiKeyGatewayGrant
-        stmt = select(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.id == grant_id)
-        row = (await self._session.execute(stmt)).scalar_one_or_none()
-        if row is None:
-            raise ManagementEntityNotFoundError('apikey_grant', str(grant_id))
-        if not is_platform_admin and row.tenant_id != tenant_id:
-            raise ManagementEntityNotFoundError('apikey_grant', str(grant_id))
+        await self._access.assert_apikey_grant_in_team(
+            grant_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
 
     async def _assert_entitlement_plan_in_team(self, plan_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> EntitlementPlan:
         plan = await self._entitlement_plans.get(plan_id)

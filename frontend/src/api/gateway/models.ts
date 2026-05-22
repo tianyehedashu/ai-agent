@@ -58,6 +58,21 @@ export interface GatewayModel {
   created_at: string
 }
 
+/** POST /models/batch-delete 单条失败项 */
+export interface GatewayModelBatchDeleteFailureItem {
+  id: string
+  code: string
+  message: string
+}
+
+/** POST /models/batch-delete 响应 */
+export interface GatewayModelBatchDeleteResponse {
+  succeeded: string[]
+  failed: GatewayModelBatchDeleteFailureItem[]
+  grants_removed: number
+  budgets_removed: number
+}
+
 /** GET /models/usage-summary 单条 route 的切片 */
 export interface GatewayModelRouteUsageSlice {
   requests: number
@@ -214,6 +229,12 @@ export const modelsApi = {
   /** 删除团队 GatewayModel */
   deleteModel: (teamId: string, id: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/models/${id}`)),
+  /** 批量删除 GatewayModel（部分成功） */
+  batchDeleteModels: (teamId: string, modelIds: string[]) =>
+    apiClient.post<GatewayModelBatchDeleteResponse>(
+      teamGatewayPath(teamId, '/models/batch-delete'),
+      { model_ids: modelIds }
+    ),
   /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */
   testModel: (teamId: string, id: string) =>
     apiClient.post<GatewayModelTestResult>(teamGatewayPath(teamId, `/models/${id}/test`), {}),

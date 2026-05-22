@@ -96,6 +96,12 @@ class ApiKey(BaseModel, TenantScopedMixin):
         index=True,
         comment="是否激活",
     )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="撤销时间；非空表示永久撤销",
+    )
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -133,10 +139,12 @@ class ApiKey(BaseModel, TenantScopedMixin):
         """状态字符串（用于数据库查询，业务逻辑在 Domain Entity）
 
         Returns:
-            'active' | 'expired' | 'revoked'
+            'active' | 'disabled' | 'expired' | 'revoked'
         """
-        if not self.is_active:
+        if self.revoked_at is not None:
             return "revoked"
+        if not self.is_active:
+            return "disabled"
         if datetime.now(UTC) > self.expires_at:
             return "expired"
         return "active"

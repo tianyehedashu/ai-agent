@@ -8,7 +8,7 @@
 // API Key Status
 // =============================================================================
 
-export type ApiKeyStatus = 'active' | 'expired' | 'revoked'
+export type ApiKeyStatus = 'active' | 'disabled' | 'expired' | 'revoked'
 
 // =============================================================================
 // API Key Scope
@@ -260,15 +260,36 @@ export const SCOPE_DISPLAY_INFO: Record<
   },
   'gateway:read': {
     label: 'Gateway 只读',
-    description: '查看 Gateway 仪表盘、日志与用量等只读能力',
+    description: '【预留】查看 Gateway 仪表盘、日志与用量；当前管理面仍使用 JWT',
     category: 'Gateway',
   },
 }
 
-/** 一键「全选」作用域（排除 gateway:admin，避免误授 Gateway 管理写权限） */
+/** 尚未在 HTTP API 落地的作用域（UI 标注预留；MCP 与 gateway:proxy 已实现） */
+export const RESERVED_API_KEY_SCOPES: ReadonlySet<ApiKeyScope> = new Set([
+  'agent:read',
+  'agent:update',
+  'agent:execute',
+  'session:read',
+  'session:create',
+  'session:delete',
+  'memory:read',
+  'memory:write',
+  'workflow:read',
+  'workflow:update',
+  'system:read',
+  'gateway:admin',
+  'gateway:read',
+])
+
+export function isReservedApiKeyScope(scope: ApiKeyScope): boolean {
+  return RESERVED_API_KEY_SCOPES.has(scope)
+}
+
+/** 一键「全选已实现」作用域（排除预留 scope 与 gateway:admin） */
 export const SCOPES_FOR_SELECT_ALL: ApiKeyScope[] = (
   Object.keys(SCOPE_DISPLAY_INFO) as ApiKeyScope[]
-).filter((s) => s !== 'gateway:admin')
+).filter((s) => s !== 'gateway:admin' && !isReservedApiKeyScope(s))
 
 // =============================================================================
 // Expiration Options
@@ -327,6 +348,8 @@ export function getStatusBadgeVariant(
   switch (status) {
     case 'active':
       return 'default'
+    case 'disabled':
+      return 'outline'
     case 'expired':
       return 'secondary'
     case 'revoked':
@@ -340,6 +363,8 @@ export function getStatusLabel(status: ApiKeyStatus): string {
   switch (status) {
     case 'active':
       return '活跃'
+    case 'disabled':
+      return '已禁用'
     case 'expired':
       return '已过期'
     case 'revoked':

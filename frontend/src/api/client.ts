@@ -62,6 +62,15 @@ async function parseResponseBody<T>(response: Response): Promise<T> {
   return JSON.parse(text) as T
 }
 
+/** 401 表示未登录/匿名被拒，而非 access token 失效 */
+function isAuthenticationRequiredError(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || !('detail' in body)) {
+    return false
+  }
+  const detail = (body as { detail: unknown }).detail
+  return typeof detail === 'string' && detail.toLowerCase().includes('authentication required')
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -215,25 +224,29 @@ class ApiClient {
     }
 
     if (!response.ok) {
+      const errorBody: unknown = await response.json().catch(() => ({ message: 'Unknown error' }))
+
       if (response.status === 401) {
         const hadToken = !!token
+        const authRequired = isAuthenticationRequiredError(errorBody)
 
-        // 401 且未重试过：尝试用 refresh_token 自动续期
-        if (hadToken && !_retried) {
+        // 401 且未重试过：尝试用 refresh_token 自动续期（非「须登录」类 401）
+        if (hadToken && !_retried && !authRequired) {
           const refreshed = await this.tryRefresh()
           if (refreshed) {
             return this.request<T>(path, options, true)
           }
         }
 
-        // refresh 失败或无 token：清除状态并通知
-        handleUnauthorized()
-        if (hadToken) {
-          window.dispatchEvent(new Event('auth:session-expired'))
+        // token 失效才清会话；「Authentication required」仅表示当前请求未授权
+        if (!authRequired) {
+          handleUnauthorized()
+          if (hadToken) {
+            window.dispatchEvent(new Event('auth:session-expired'))
+          }
         }
       }
 
-      const errorBody: unknown = await response.json().catch(() => ({ message: 'Unknown error' }))
       const fallback =
         typeof errorBody === 'object' &&
         errorBody !== null &&

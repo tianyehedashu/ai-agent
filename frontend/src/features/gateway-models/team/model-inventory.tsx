@@ -1,7 +1,18 @@
 ﻿import { memo } from 'react'
 
 import type { GatewayModel, GatewayModelRouteUsageItem } from '@/api/gateway'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -12,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Info, Loader2, Plus, Search } from '@/lib/lucide-icons'
+import { Info, Loader2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
 import { cn } from '@/lib/utils'
 
@@ -56,6 +67,20 @@ interface ModelInventoryProps {
   onPreloadRowNavigate?: () => void
   /** 系统 Tab：展示可见性 / 凭据归属 / 授权 */
   showSystemAdmin?: boolean
+  batchSelectEnabled?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string, selected: boolean) => void
+  onToggleSelectAll?: (selected: boolean) => void
+  isModelBatchSelectable?: (model: GatewayModel) => boolean
+  canDeleteModel?: (model: GatewayModel) => boolean
+  isConfigManagedModel?: (model: GatewayModel) => boolean
+  deletingModelId?: string | null
+  onDeleteModel?: (id: string) => void
+  batchDeleteOpen?: boolean
+  onBatchDeleteOpenChange?: (open: boolean) => void
+  onConfirmBatchDelete?: () => void
+  batchDeletePending?: boolean
+  batchDeleteLabel?: string
 }
 
 export const ModelInventory = memo(function ModelInventory({
@@ -84,11 +109,48 @@ export const ModelInventory = memo(function ModelInventory({
   onPreloadRegister,
   onPreloadRowNavigate,
   showSystemAdmin = false,
+  batchSelectEnabled = false,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
+  isModelBatchSelectable,
+  canDeleteModel,
+  isConfigManagedModel,
+  deletingModelId = null,
+  onDeleteModel,
+  batchDeleteOpen = false,
+  onBatchDeleteOpenChange,
+  onConfirmBatchDelete,
+  batchDeletePending = false,
+  batchDeleteLabel = '',
 }: ModelInventoryProps): React.JSX.Element {
   const showToolbar = allModels.length > 0
+  const selectableModels = batchSelectEnabled
+    ? models.filter((m) => isModelBatchSelectable?.(m) ?? false)
+    : []
+  const allSelectableSelected =
+    selectableModels.length > 0 && selectableModels.every((m) => selectedIds?.has(m.id))
+  const someSelectableSelected = selectableModels.some((m) => selectedIds?.has(m.id))
+  const selectedCount = selectedIds?.size ?? 0
 
   return (
     <div className="flex min-h-0 flex-col rounded-lg border bg-card">
+      {batchSelectEnabled && selectedCount > 0 ? (
+        <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+          <span className="text-sm text-muted-foreground">已选 {selectedCount} 项</span>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 text-xs"
+            onClick={() => {
+              onBatchDeleteOpenChange?.(true)
+            }}
+          >
+            <Trash2 className="mr-1 h-3 w-3" />
+            批量删除
+          </Button>
+        </div>
+      ) : null}
       <div className="space-y-2.5 border-b p-3">
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
@@ -198,6 +260,21 @@ export const ModelInventory = memo(function ModelInventory({
           <p className="px-3 py-12 text-center text-sm text-muted-foreground">无匹配模型</p>
         ) : (
           <ul className="divide-y">
+            {batchSelectEnabled && models.length > 0 ? (
+              <li className="flex items-center gap-2 border-b bg-muted/20 px-3 py-2">
+                <Checkbox
+                  checked={
+                    allSelectableSelected ? true : someSelectableSelected ? 'indeterminate' : false
+                  }
+                  disabled={selectableModels.length === 0}
+                  aria-label="全选可删除的系统模型"
+                  onCheckedChange={(checked) => {
+                    onToggleSelectAll?.(checked === true)
+                  }}
+                />
+                <span className="text-xs text-muted-foreground">全选可删除项</span>
+              </li>
+            ) : null}
             {models.map((m) => (
               <ModelInventoryRow
                 key={m.id}
@@ -211,11 +288,44 @@ export const ModelInventory = memo(function ModelInventory({
                 onSelect={getModelHref ? undefined : onSelect}
                 onPreloadNavigate={getModelHref ? onPreloadRowNavigate : undefined}
                 showSystemAdmin={showSystemAdmin}
+                batchSelectEnabled={batchSelectEnabled}
+                batchSelected={selectedIds?.has(m.id) ?? false}
+                batchSelectable={isModelBatchSelectable?.(m) ?? false}
+                onBatchSelectChange={onToggleSelect}
+                canDelete={canDeleteModel?.(m) ?? false}
+                configManaged={isConfigManagedModel?.(m) ?? false}
+                isDeleting={deletingModelId === m.id}
+                onDelete={onDeleteModel}
               />
             ))}
           </ul>
         )}
       </ScrollArea>
+      {batchSelectEnabled ? (
+        <AlertDialog open={batchDeleteOpen} onOpenChange={onBatchDeleteOpenChange}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>批量删除系统模型</AlertDialogTitle>
+              <AlertDialogDescription className="whitespace-pre-wrap">
+                {batchDeleteLabel ||
+                  `确定删除已选的 ${String(selectedCount)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={batchDeletePending}>取消</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={batchDeletePending || selectedCount === 0}
+                onClick={() => {
+                  onConfirmBatchDelete?.()
+                }}
+              >
+                {batchDeletePending ? '删除中…' : '确认删除'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </div>
   )
 })

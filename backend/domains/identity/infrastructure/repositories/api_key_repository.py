@@ -6,7 +6,7 @@ API Key Repository - API Key 仓储实现
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select
@@ -164,7 +164,7 @@ class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
         if not include_expired:
             query = query.where(ApiKey.expires_at > datetime.now())
         if not include_revoked:
-            query = query.where(ApiKey.is_active.is_(True))
+            query = query.where(ApiKey.revoked_at.is_(None))
 
         # 排序和分页
         query = query.order_by(ApiKey.created_at.desc())
@@ -180,6 +180,7 @@ class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
         description: str | None = None,
         scopes: set[ApiKeyScope] | None = None,
         is_active: bool | None = None,
+        mark_revoked: bool = False,
         expires_at: datetime | None = None,
     ) -> ApiKey | None:
         """更新 API Key
@@ -189,7 +190,8 @@ class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
             name: 新名称
             description: 新描述
             scopes: 新作用域
-            is_active: 激活状态
+            is_active: 激活状态（临时禁用/恢复）
+            mark_revoked: 永久撤销（设置 revoked_at 并禁用）
             expires_at: 新过期时间
 
         Returns:
@@ -207,6 +209,9 @@ class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
             api_key.scopes = [s.value for s in scopes]
         if is_active is not None:
             api_key.is_active = is_active
+        if mark_revoked:
+            api_key.is_active = False
+            api_key.revoked_at = datetime.now(UTC)
         if expires_at is not None:
             api_key.expires_at = expires_at
 

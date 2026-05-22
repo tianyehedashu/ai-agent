@@ -69,15 +69,15 @@ function App(): React.JSX.Element {
                       </RequirePlatformAdmin>
                     }
                   />
-                  <Route path="/mcp" element={<MCPPage />} />
                   <Route
-                    path="/mcp/system"
+                    path="/mcp"
                     element={
                       <RequirePlatformAdmin>
-                        <SystemMCPPage />
+                        <MCPPage />
                       </RequirePlatformAdmin>
                     }
                   />
+                  <Route path="/mcp/system" element={<SystemMCPPage />} />
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/video-tasks" element={<VideoTasksPage />} />
                   <Route path="/video-tasks/history" element={<VideoTasksHistoryPage />} />

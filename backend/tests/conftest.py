@@ -356,7 +356,8 @@ def _asgi_app_with_streaming_spec(app: object) -> object:
         if scope.get("type") == "http":
             base_asgi = dict(scope.get("asgi") or {})  # type: ignore[arg-type]
             base_asgi.setdefault("spec_version", "2.4")
-            scope = {**scope, "asgi": base_asgi}
+            # 原地更新 scope，勿 shallow-copy 整份 scope（会破坏外层 ASGI 中间件读 state）
+            scope["asgi"] = base_asgi
         await app(scope, receive, send)  # type: ignore[misc]
 
     return wrapped

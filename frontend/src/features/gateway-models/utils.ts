@@ -364,3 +364,13 @@ export function invalidateGatewayModelAliasDependents(queryClient: QueryClient):
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
 }
+
+/** 批量删除确认文案：列出模型名（>10 时折叠） */
+export function formatBatchDeleteConfirmLabel(names: readonly string[]): string {
+  if (names.length === 0) return ''
+  const listed =
+    names.length <= 10
+      ? names.join('、')
+      : `${names.slice(0, 8).join('、')} 以及 ${String(names.length - 8)} 个其他`
+  return `确定删除以下 ${String(names.length)} 个模型？\n${listed}\n\n将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+}

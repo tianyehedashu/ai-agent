@@ -2,28 +2,15 @@
  * API Key 管理标签页
  */
 
-import { useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Key, Plus, Trash2, Ban, History } from 'lucide-react'
+import { Check, Copy, Key, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { apiKeyApi } from '@/api/api-key'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -33,38 +20,82 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Switch } from '@/components/ui/switch'
-import { formatRelativeTime } from '@/lib/utils'
-import type { ApiKey } from '@/types/api-key'
 import {
-  getDaysUntilExpiry,
-  getScopeCategory,
-  getStatusBadgeVariant,
-  getStatusLabel,
-} from '@/types/api-key'
+  resolveGatewayTeamLabel,
+  useGatewayTeamNameMap,
+} from '@/features/api-key-gateway/use-gateway-teams'
+import { useUserStore } from '@/stores/user'
 
-import { ApiKeyCreateDialog } from './api-key-create-dialog'
-import { ApiKeyUsageLogsDialog } from './api-key-usage-logs-dialog'
+import { ApiKeyCard } from './api-key-card'
+
+const ApiKeyCreateDialog = lazy(async () => {
+  const mod = await import('./api-key-create-dialog')
+  return { default: mod.ApiKeyCreateDialog }
+})
+const ApiKeyEditDialog = lazy(async () => {
+  const mod = await import('./api-key-edit-dialog')
+  return { default: mod.ApiKeyEditDialog }
+})
+const ApiKeyUsageLogsDialog = lazy(async () => {
+  const mod = await import('./api-key-usage-logs-dialog')
+  return { default: mod.ApiKeyUsageLogsDialog }
+})
+
+const PAGE_SIZE = 20
+
+const apiKeyListSkeleton = (
+  <div className="space-y-4">
+    {[0, 1, 2].map((index) => (
+      <Card key={index}>
+        <CardHeader>
+          <div className="h-6 w-40 animate-pulse rounded bg-muted" />
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="h-10 animate-pulse rounded bg-muted" />
+          <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+)
 
 export function ApiKeyTab(): React.ReactElement {
   const queryClient = useQueryClient()
+  const isAnonymous = useUserStore((state) => state.currentUser?.is_anonymous ?? true)
+  const teamNameById = useGatewayTeamNameMap(!isAnonymous)
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editKeyId, setEditKeyId] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
   const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null)
   const [viewKeyId, setViewKeyId] = useState<string | null>(null)
   const [fullKey, setFullKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // 获取 API Key 列表
   const { data: apiKeys = [], isLoading } = useQuery({
-    queryKey: ['api-keys'],
-    queryFn: () => apiKeyApi.list(),
+    queryKey: ['api-keys', page],
+    queryFn: () => apiKeyApi.list({ skip: page * PAGE_SIZE, limit: PAGE_SIZE }),
+    enabled: !isAnonymous,
   })
 
-  // 删除 API Key
+  const editKey = useMemo(
+    () => (editKeyId ? (apiKeys.find((key) => key.id === editKeyId) ?? null) : null),
+    [apiKeys, editKeyId]
+  )
+
+  const resolveTeamLabel = useCallback(
+    (teamId: string) => resolveGatewayTeamLabel(teamNameById, teamId),
+    [teamNameById]
+  )
+
+  const invalidateApiKeys = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+  }, [queryClient])
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiKeyApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] }).catch(() => {})
+      invalidateApiKeys()
       toast.success('API Key 已删除')
     },
     onError: (error: Error) => {
@@ -72,11 +103,10 @@ export function ApiKeyTab(): React.ReactElement {
     },
   })
 
-  // 撤销 API Key
   const revokeMutation = useMutation({
     mutationFn: (id: string) => apiKeyApi.revoke(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] }).catch(() => {})
+      invalidateApiKeys()
       toast.success('API Key 已撤销')
     },
     onError: (error: Error) => {
@@ -84,16 +114,12 @@ export function ApiKeyTab(): React.ReactElement {
     },
   })
 
-  // 切换状态
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       apiKeyApi.update(id, { is_active: isActive }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] }).catch(() => {})
-    },
+    onSuccess: invalidateApiKeys,
   })
 
-  // 解密并显示完整密钥
   const revealMutation = useMutation({
     mutationFn: (id: string) => apiKeyApi.reveal(id),
     onSuccess: (data) => {
@@ -105,24 +131,75 @@ export function ApiKeyTab(): React.ReactElement {
     },
   })
 
-  // 处理查看完整密钥
-  const handleViewFullKey = (id: string): void => {
-    setViewKeyId(id)
-    setFullKey(null)
-    revealMutation.mutate(id)
-  }
+  const handleEdit = useCallback((id: string) => {
+    setEditKeyId(id)
+  }, [])
 
-  if (isLoading) {
-    return <div className="p-6">加载中...</div>
+  const handleToggleActive = useCallback(
+    (id: string, isActive: boolean) => {
+      toggleActiveMutation.mutate({ id, isActive })
+    },
+    [toggleActiveMutation]
+  )
+
+  const handleViewLogs = useCallback((id: string) => {
+    setSelectedKeyId(id)
+  }, [])
+
+  const handleRevoke = useCallback(
+    (id: string) => {
+      revokeMutation.mutate(id)
+    },
+    [revokeMutation]
+  )
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      deleteMutation.mutate(id)
+    },
+    [deleteMutation]
+  )
+
+  const handleRevealKey = useCallback(
+    (id: string) => {
+      setViewKeyId(id)
+      setFullKey(null)
+      revealMutation.mutate(id)
+    },
+    [revealMutation]
+  )
+
+  if (isAnonymous) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>API Key 管理</CardTitle>
+          <CardDescription>登录后可创建与管理平台 API Key</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link to="/login">登录</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
     <div className="space-y-6 p-6">
-      {/* 头部 */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">API Key 管理</h2>
-          <p className="text-muted-foreground">管理用于 API 访问的密钥</p>
+          <p className="text-muted-foreground">
+            管理平台 sk-* 密钥；Gateway 调用见{' '}
+            <Link to="/gateway/guide" className="text-primary hover:underline">
+              调用指南
+            </Link>
+            ，虚拟 Key 见{' '}
+            <Link to="/gateway/keys" className="text-primary hover:underline">
+              AI 网关 · 虚拟 Key
+            </Link>
+          </p>
         </div>
         <Button
           onClick={() => {
@@ -134,39 +211,33 @@ export function ApiKeyTab(): React.ReactElement {
         </Button>
       </div>
 
-      <Alert>
-        <AlertDescription className="text-sm leading-relaxed">
-          调用本平台的 AI Gateway（OpenAI 兼容 <code className="rounded bg-muted px-1">/v1/*</code>
-          ）有两种入站令牌：推荐在{' '}
-          <Link
-            to="/gateway/keys"
-            className="font-medium text-primary underline underline-offset-2"
-          >
-            Gateway · 虚拟 Key
-          </Link>{' '}
-          使用 <code className="rounded bg-muted px-1">sk-gw-*</code>（团队内分发、白名单与 key
-          级限流更完整）。若需「一把 <code className="rounded bg-muted px-1">sk-*</code>」同时带
-          Agent/MCP 等能力，可在创建 API Key 时勾选 <strong>Gateway 代理</strong>（
-          <code className="rounded bg-muted px-1">gateway:proxy</code>
-          ）。平台 Key 默认只授权 personal team；调用时的{' '}
-          <code className="rounded bg-muted px-1">X-Team-Id</code>
-          只能选择后端 grant 已授权团队。上游供应商的 OpenAI/Anthropic
-          等密钥属于「我的凭据」，与此处平台 API Key 不同。
-        </AlertDescription>
-      </Alert>
+      {createDialogOpen ? (
+        <Suspense fallback={null}>
+          <ApiKeyCreateDialog
+            open={createDialogOpen}
+            onOpenChange={setCreateDialogOpen}
+            onSuccess={invalidateApiKeys}
+          />
+        </Suspense>
+      ) : null}
 
-      {/* 创建对话框 */}
-      <ApiKeyCreateDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['api-keys'] }).catch(() => {})
-        }}
-      />
+      {editKeyId ? (
+        <Suspense fallback={null}>
+          <ApiKeyEditDialog
+            apiKey={editKey}
+            open
+            onOpenChange={(open) => {
+              if (!open) setEditKeyId(null)
+            }}
+            onSuccess={invalidateApiKeys}
+          />
+        </Suspense>
+      ) : null}
 
-      {/* API Key 列表 */}
       <div className="space-y-4">
-        {apiKeys.length === 0 ? (
+        {isLoading ? (
+          apiKeyListSkeleton
+        ) : apiKeys.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Key className="mb-4 h-12 w-12 text-muted-foreground" />
@@ -181,41 +252,57 @@ export function ApiKeyTab(): React.ReactElement {
             <ApiKeyCard
               key={apiKey.id}
               apiKey={apiKey}
-              onToggleActive={(isActive) => {
-                toggleActiveMutation.mutate({ id: apiKey.id, isActive })
-              }}
-              onViewLogs={() => {
-                setSelectedKeyId(apiKey.id)
-              }}
-              onRevoke={() => {
-                revokeMutation.mutate(apiKey.id)
-              }}
-              onDelete={() => {
-                deleteMutation.mutate(apiKey.id)
-              }}
-              revealKey={(id) => {
-                handleViewFullKey(id)
-              }}
+              resolveTeamLabel={resolveTeamLabel}
+              onEdit={handleEdit}
+              onToggleActive={handleToggleActive}
+              onViewLogs={handleViewLogs}
+              onRevoke={handleRevoke}
+              onDelete={handleDelete}
+              onRevealKey={handleRevealKey}
             />
           ))
         )}
       </div>
 
-      {/* 使用日志对话框 */}
-      {selectedKeyId && (
-        <ApiKeyUsageLogsDialog
-          apiKeyId={selectedKeyId}
-          open={!!selectedKeyId}
-          onOpenChange={(open) => {
-            if (!open) setSelectedKeyId(null)
+      <div className="flex items-center justify-between">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page === 0 || isLoading}
+          onClick={() => {
+            setPage((p) => Math.max(0, p - 1))
           }}
-        />
-      )}
+        >
+          上一页
+        </Button>
+        <span className="text-sm text-muted-foreground">第 {page + 1} 页</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isLoading || apiKeys.length < PAGE_SIZE}
+          onClick={() => {
+            setPage((p) => p + 1)
+          }}
+        >
+          下一页
+        </Button>
+      </div>
 
-      {/* 查看完整密钥对话框 */}
-      {viewKeyId && (
+      {selectedKeyId ? (
+        <Suspense fallback={null}>
+          <ApiKeyUsageLogsDialog
+            apiKeyId={selectedKeyId}
+            open
+            onOpenChange={(open) => {
+              if (!open) setSelectedKeyId(null)
+            }}
+          />
+        </Suspense>
+      ) : null}
+
+      {viewKeyId ? (
         <Dialog
-          open={!!viewKeyId}
+          open
           onOpenChange={(open) => {
             if (!open) {
               setViewKeyId(null)
@@ -241,7 +328,7 @@ export function ApiKeyTab(): React.ReactElement {
                         size="icon"
                         className="shrink-0"
                         onClick={() => {
-                          navigator.clipboard.writeText(fullKey).catch(() => {})
+                          void navigator.clipboard.writeText(fullKey)
                           setCopied(true)
                           setTimeout(() => {
                             setCopied(false)
@@ -259,7 +346,7 @@ export function ApiKeyTab(): React.ReactElement {
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed p-6 text-center">
-                  <div className="mx-auto mb-4 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <div className="mx-auto mb-4 h-6 w-6 animate-pulse rounded-full border-2 border-primary border-t-transparent" />
                   <p className="text-sm text-muted-foreground">正在解密 API Key...</p>
                 </div>
               )}
@@ -279,159 +366,7 @@ export function ApiKeyTab(): React.ReactElement {
             </div>
           </DialogContent>
         </Dialog>
-      )}
+      ) : null}
     </div>
-  )
-}
-
-// API Key 卡片组件
-function ApiKeyCard({
-  apiKey,
-  onToggleActive,
-  onViewLogs,
-  onRevoke,
-  onDelete,
-  revealKey,
-}: {
-  apiKey: ApiKey
-  onToggleActive: (isActive: boolean) => void
-  onViewLogs: () => void
-  onRevoke: () => void
-  onDelete: () => void
-  revealKey: (id: string) => void
-}): React.ReactElement {
-  const daysUntilExpiry = getDaysUntilExpiry(apiKey.expires_at)
-  const scopeCategories = getScopeCategory(apiKey.scopes)
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-lg">{apiKey.name}</CardTitle>
-              <Badge variant={getStatusBadgeVariant(apiKey.status)}>
-                {getStatusLabel(apiKey.status)}
-              </Badge>
-              {!apiKey.is_active && apiKey.status === 'active' && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  已禁用
-                </Badge>
-              )}
-            </div>
-            {apiKey.description && <CardDescription>{apiKey.description}</CardDescription>}
-          </div>
-          <Switch
-            checked={apiKey.is_active}
-            onCheckedChange={onToggleActive}
-            disabled={apiKey.status !== 'active'}
-          />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Key 显示 - 脱敏密钥 */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">API Key（脱敏显示）</span>
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-xs"
-              onClick={() => {
-                revealKey(apiKey.id)
-              }}
-            >
-              查看完整密钥
-            </Button>
-          </div>
-          <code className="block w-full rounded bg-muted px-3 py-2 font-mono text-sm">
-            {apiKey.masked_key}
-          </code>
-        </div>
-
-        {/* 作用域标签 */}
-        <div className="flex flex-wrap gap-1">
-          {scopeCategories.map((category) => (
-            <Badge key={category} variant="outline" className="text-xs">
-              {category}
-            </Badge>
-          ))}
-        </div>
-
-        {apiKey.gateway_grants.length > 0 && (
-          <div className="rounded border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Gateway 授权团队: {apiKey.gateway_grants.length}
-          </div>
-        )}
-
-        {/* 统计信息 */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span>使用次数: {apiKey.usage_count}</span>
-          <span>
-            过期时间:{' '}
-            {daysUntilExpiry === 0
-              ? '今天'
-              : daysUntilExpiry === 1
-                ? '明天'
-                : `${String(daysUntilExpiry)} 天后`}
-          </span>
-          {apiKey.last_used_at && <span>最后使用: {formatRelativeTime(apiKey.last_used_at)}</span>}
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onViewLogs}>
-            <History className="mr-2 h-4 w-4" />
-            查看日志
-          </Button>
-
-          {apiKey.status === 'active' && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Ban className="mr-2 h-4 w-4" />
-                  撤销
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>撤销 API Key</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    确定要撤销 API Key &quot;{apiKey.name}&quot; 吗？撤销后无法恢复。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={onRevoke}>撤销</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                删除
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>删除 API Key</AlertDialogTitle>
-                <AlertDialogDescription>
-                  确定要删除 API Key &quot;{apiKey.name}&quot; 吗？此操作无法撤销。
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete} className="bg-destructive">
-                  删除
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

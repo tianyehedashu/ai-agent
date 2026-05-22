@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayGrant
 
@@ -157,6 +157,18 @@ class SystemGatewayGrantRepository:
         await self._session.delete(row)
         await self._session.flush()
         return True
+
+    async def delete_by_target_model_ids(self, model_ids: list[uuid.UUID]) -> int:
+        """删除 target_kind=model 且 target_id 命中的 grants（模型删除后孤儿清理）。"""
+        if not model_ids:
+            return 0
+        stmt = delete(SystemGatewayGrant).where(
+            SystemGatewayGrant.target_kind == "model",
+            SystemGatewayGrant.target_id.in_(model_ids),
+        )
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
 
 __all__ = ["SystemGatewayGrantRepository"]

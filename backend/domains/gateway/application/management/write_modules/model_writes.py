@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any
 import uuid
 
@@ -12,6 +13,7 @@ from domains.gateway.application.management.multi_credential_types import (
 )
 from domains.gateway.application.model_reference_prune import (
     prune_gateway_model_name_references,
+    prune_gateway_model_orphan_records,
     rename_gateway_model_name_references,
 )
 from domains.gateway.application.routing_strategy_validation import validate_routing_strategy
@@ -27,11 +29,27 @@ from domains.gateway.domain.types import (
     PERSONAL_MODEL_PROVIDERS,
     PERSONAL_MODEL_TYPES,
 )
-from libs.exceptions import ValidationError
+from libs.exceptions import HttpMappableDomainError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_BATCH_DELETE_MAX = 200
+
+
+@dataclass(frozen=True)
+class GatewayModelBatchDeleteFailure:
+    id: uuid.UUID
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
+class GatewayModelBatchDeleteResult:
+    succeeded: list[uuid.UUID]
+    failed: list[GatewayModelBatchDeleteFailure]
+    grants_removed: int = 0
+    budgets_removed: int = 0
 
 
 class ModelWritesMixin:
@@ -314,13 +332,14 @@ class ModelWritesMixin:
         await self.reload_litellm_router()
         return updated
 
-    async def delete_gateway_model(
+    async def _delete_gateway_model_row(
         self,
         model_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
-        is_platform_admin: bool = False,
-    ) -> None:
+        is_platform_admin: bool,
+    ) -> tuple[uuid.UUID, str]:
+        """删除单行并返回 (model_id, model_name)；不触发 prune / reload。"""
         repo = self._models
         existing = await repo.get(model_id)
         if existing is not None:
@@ -328,9 +347,7 @@ class ModelWritesMixin:
                 raise ManagementEntityNotFoundError('model', str(model_id))
             model_name = existing.name
             await repo.delete(model_id)
-            await prune_gateway_model_name_references(self._session, frozenset({model_name}))
-            await self.reload_litellm_router()
-            return
+            return model_id, model_name
 
         system_existing = await repo.get_system(model_id)
         if system_existing is None:
@@ -348,5 +365,97 @@ class ModelWritesMixin:
             )
         model_name = system_existing.name
         await repo.delete_system(model_id)
-        await prune_gateway_model_name_references(self._session, frozenset({model_name}))
+        return model_id, model_name
+
+    @staticmethod
+    def _batch_delete_failure(
+        model_id: uuid.UUID,
+        exc: BaseException,
+    ) -> GatewayModelBatchDeleteFailure:
+        code = getattr(exc, 'code', None) or exc.__class__.__name__
+        message = getattr(exc, 'message', None) or str(exc)
+        return GatewayModelBatchDeleteFailure(
+            id=model_id,
+            code=str(code),
+            message=str(message),
+        )
+
+    async def _finalize_gateway_model_deletions(
+        self,
+        *,
+        deleted_ids: frozenset[uuid.UUID],
+        deleted_names: frozenset[str],
+    ) -> tuple[int, int]:
+        if not deleted_names:
+            return 0, 0
+        await prune_gateway_model_name_references(self._session, deleted_names)
+        grants_removed, budgets_removed = await prune_gateway_model_orphan_records(
+            self._session,
+            model_ids=deleted_ids,
+            model_names=deleted_names,
+        )
         await self.reload_litellm_router()
+        return grants_removed, budgets_removed
+
+    async def delete_gateway_model(
+        self,
+        model_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool = False,
+    ) -> None:
+        deleted_id, deleted_name = await self._delete_gateway_model_row(
+            model_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
+        await self._finalize_gateway_model_deletions(
+            deleted_ids=frozenset({deleted_id}),
+            deleted_names=frozenset({deleted_name}),
+        )
+
+    async def delete_gateway_models_batch(
+        self,
+        model_ids: list[uuid.UUID],
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool = False,
+    ) -> GatewayModelBatchDeleteResult:
+        if len(model_ids) > _BATCH_DELETE_MAX:
+            raise ValidationError(
+                f'单次最多删除 {_BATCH_DELETE_MAX} 个模型',
+            )
+        unique_ids = list(dict.fromkeys(model_ids))
+        succeeded: list[uuid.UUID] = []
+        failed: list[GatewayModelBatchDeleteFailure] = []
+        deleted_ids: set[uuid.UUID] = set()
+        deleted_names: set[str] = set()
+
+        for model_id in unique_ids:
+            try:
+                deleted_id, deleted_name = await self._delete_gateway_model_row(
+                    model_id,
+                    tenant_id=tenant_id,
+                    is_platform_admin=is_platform_admin,
+                )
+            except HttpMappableDomainError as exc:
+                failed.append(self._batch_delete_failure(model_id, exc))
+                continue
+            succeeded.append(deleted_id)
+            deleted_ids.add(deleted_id)
+            deleted_names.add(deleted_name)
+
+        grants_removed = 0
+        budgets_removed = 0
+        if deleted_names:
+            grants_removed, budgets_removed = await self._finalize_gateway_model_deletions(
+                deleted_ids=frozenset(deleted_ids),
+                deleted_names=frozenset(deleted_names),
+            )
+
+        return GatewayModelBatchDeleteResult(
+            succeeded=succeeded,
+            failed=failed,
+            grants_removed=grants_removed,
+            budgets_removed=budgets_removed,
+        )

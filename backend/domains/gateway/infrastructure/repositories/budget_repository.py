@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, delete, select, update
 
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 
@@ -147,6 +147,15 @@ class BudgetRepository:
         await self._session.delete(budget)
         await self._session.flush()
         return True
+
+    async def delete_by_model_names(self, model_names: list[str]) -> int:
+        """删除 model_name 命中的预算行（模型删除后孤儿清理）。"""
+        if not model_names:
+            return 0
+        stmt = delete(GatewayBudget).where(GatewayBudget.model_name.in_(model_names))
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
 
 __all__ = ["BudgetRepository"]

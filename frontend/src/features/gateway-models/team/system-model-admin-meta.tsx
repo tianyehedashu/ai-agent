@@ -11,17 +11,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { channelLabel } from '@/features/gateway-models/utils'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Shield } from '@/lib/lucide-icons'
+import { Loader2, Shield, Trash2 } from '@/lib/lucide-icons'
 
 import { SystemGrantsPanel } from './system-grants-panel'
 
+const CONFIG_MANAGED_DELETE_HINT =
+  '配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理'
+
 interface SystemModelAdminMetaProps {
   model: GatewayModel
+  canDelete?: boolean
+  configManaged?: boolean
+  isDeleting?: boolean
+  onDelete?: () => void
 }
 
-export function SystemModelAdminMeta({ model }: SystemModelAdminMetaProps): React.JSX.Element {
+export function SystemModelAdminMeta({
+  model,
+  canDelete = false,
+  configManaged = false,
+  isDeleting = false,
+  onDelete,
+}: SystemModelAdminMetaProps): React.JSX.Element {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [grantsOpen, setGrantsOpen] = useState(false)
@@ -96,6 +110,47 @@ export function SystemModelAdminMeta({ model }: SystemModelAdminMetaProps): Reac
         <Shield className="mr-1 h-3 w-3" />
         授权
       </Button>
+      {onDelete ? (
+        configManaged || !canDelete ? (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs text-destructive/50"
+                    disabled
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    删除
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs">
+                {CONFIG_MANAGED_DELETE_HINT}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs text-destructive hover:text-destructive"
+            disabled={isDeleting}
+            onClick={onDelete}
+          >
+            {isDeleting ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="mr-1 h-3 w-3" />
+            )}
+            删除
+          </Button>
+        )
+      ) : null}
       <SystemGrantsPanel
         open={grantsOpen}
         onOpenChange={setGrantsOpen}

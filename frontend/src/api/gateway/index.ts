@@ -74,6 +74,8 @@ export type {
 
 export type {
   GatewayModel,
+  GatewayModelBatchDeleteFailureItem,
+  GatewayModelBatchDeleteResponse,
   GatewayModelRouteUsageSlice,
   GatewayModelRouteUsageItem,
   GatewayModelUsageSummary,

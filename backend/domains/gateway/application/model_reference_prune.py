@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.model_repository import GatewayRouteRepository
+from domains.gateway.infrastructure.repositories.system_gateway_grant_repository import (
+    SystemGatewayGrantRepository,
+)
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 
 if TYPE_CHECKING:
@@ -29,6 +33,24 @@ async def prune_gateway_model_name_references(
     vkeys_updated = await vkeys.remove_model_names_from_all_allowed_lists(model_names)
     routes_updated = await routes.remove_model_names_from_all_routes(model_names)
     return vkeys_updated, routes_updated
+
+
+async def prune_gateway_model_orphan_records(
+    session: AsyncSession,
+    *,
+    model_ids: frozenset[uuid.UUID],
+    model_names: frozenset[str],
+) -> tuple[int, int]:
+    """删除模型后的 grants / budgets 孤儿行。
+
+    Returns:
+        (grants_removed, budgets_removed)
+    """
+    grants_repo = SystemGatewayGrantRepository(session)
+    budgets_repo = BudgetRepository(session)
+    grants_removed = await grants_repo.delete_by_target_model_ids(list(model_ids))
+    budgets_removed = await budgets_repo.delete_by_model_names(list(model_names))
+    return grants_removed, budgets_removed
 
 
 async def rename_gateway_model_name_references(
@@ -62,4 +84,8 @@ async def rename_gateway_model_name_references(
     return vkeys_updated, routes_updated
 
 
-__all__ = ["prune_gateway_model_name_references", "rename_gateway_model_name_references"]
+__all__ = [
+    "prune_gateway_model_name_references",
+    "prune_gateway_model_orphan_records",
+    "rename_gateway_model_name_references",
+]

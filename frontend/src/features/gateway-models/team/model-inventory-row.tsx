@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import type { GatewayModel, GatewayModelRouteUsageItem } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn, formatRelativeTime } from '@/lib/utils'
 
 import { channelLabel, classifyFailureReason, formatUsageLine } from '../utils'
@@ -24,6 +25,14 @@ interface ModelInventoryRowProps {
   onSelect?: (id: string) => void
   onPreloadNavigate?: () => void
   showSystemAdmin?: boolean
+  batchSelectEnabled?: boolean
+  batchSelected?: boolean
+  batchSelectable?: boolean
+  onBatchSelectChange?: (id: string, selected: boolean) => void
+  canDelete?: boolean
+  configManaged?: boolean
+  isDeleting?: boolean
+  onDelete?: (id: string) => void
 }
 
 export const ModelInventoryRow = memo(function ModelInventoryRow({
@@ -37,6 +46,14 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
   onSelect,
   onPreloadNavigate,
   showSystemAdmin = false,
+  batchSelectEnabled = false,
+  batchSelected = false,
+  batchSelectable = false,
+  onBatchSelectChange,
+  canDelete = false,
+  configManaged = false,
+  isDeleting = false,
+  onDelete,
 }: ModelInventoryRowProps): React.JSX.Element {
   const wsReq = usageRow?.workspace.requests ?? 0
   const wsTok = (usageRow?.workspace.input_tokens ?? 0) + (usageRow?.workspace.output_tokens ?? 0)
@@ -88,34 +105,72 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
       {!model.enabled ? (
         <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">已禁用</p>
       ) : null}
-      {showSystemAdmin && model.registry_kind === 'system' ? (
-        <SystemModelAdminMeta model={model} />
+      {showSystemAdmin ? (
+        <SystemModelAdminMeta
+          model={model}
+          canDelete={canDelete}
+          configManaged={configManaged}
+          isDeleting={isDeleting}
+          onDelete={
+            onDelete
+              ? () => {
+                  onDelete(model.id)
+                }
+              : undefined
+          }
+        />
       ) : null}
     </>
   )
 
+  const mainRow = href ? (
+    <Link
+      to={href}
+      className={cn(rowClassName, 'min-w-0 flex-1')}
+      onMouseEnter={onPreloadNavigate}
+      onFocus={onPreloadNavigate}
+    >
+      {rowContent}
+    </Link>
+  ) : (
+    <button
+      type="button"
+      onClick={() => {
+        onSelect?.(model.id)
+      }}
+      className={cn(rowClassName, 'min-w-0 flex-1')}
+    >
+      {rowContent}
+    </button>
+  )
+
   return (
     <li className="[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]">
-      {href ? (
-        <Link
-          to={href}
-          className={rowClassName}
-          onMouseEnter={onPreloadNavigate}
-          onFocus={onPreloadNavigate}
-        >
-          {rowContent}
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={() => {
-            onSelect?.(model.id)
-          }}
-          className={rowClassName}
-        >
-          {rowContent}
-        </button>
-      )}
+      <div className="flex items-stretch">
+        {batchSelectEnabled ? (
+          <div
+            className="flex shrink-0 items-start px-2 pt-3"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+            }}
+            role="presentation"
+          >
+            <Checkbox
+              checked={batchSelected}
+              disabled={!batchSelectable}
+              aria-label={`选择模型 ${model.name}`}
+              onCheckedChange={(checked) => {
+                onBatchSelectChange?.(model.id, checked === true)
+              }}
+            />
+          </div>
+        ) : null}
+        {mainRow}
+      </div>
     </li>
   )
 })

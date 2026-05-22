@@ -56,6 +56,9 @@ from domains.gateway.application.startup import run_gateway_shutdown, run_gatewa
 from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
+from domains.gateway.presentation.platform_api_key_usage_middleware import (
+    PlatformApiKeyUsageASGIMiddleware,
+)
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
 from domains.identity.presentation.admin_users_router import router as admin_users_router
 from domains.identity.presentation.api_key_router import router as api_key_router
@@ -206,6 +209,7 @@ app.add_middleware(
 
 # 纯 ASGI 中间件（与 SSE/StreamingResponse 兼容；勿改用 @app.middleware + BaseHTTPMiddleware）
 app.add_middleware(PermissionContextASGIMiddleware)
+app.add_middleware(PlatformApiKeyUsageASGIMiddleware)
 app.add_middleware(AnonymousCookieASGIMiddleware)
 
 

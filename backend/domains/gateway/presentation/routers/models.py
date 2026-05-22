@@ -27,6 +27,9 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
+    GatewayModelBatchDeleteFailureItem,
+    GatewayModelBatchDeleteRequest,
+    GatewayModelBatchDeleteResponse,
     GatewayModelCreate,
     GatewayModelPresetResponse,
     GatewayModelResponse,
@@ -282,6 +285,35 @@ async def delete_model(
         )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
+
+
+@router.post("/models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
+async def batch_delete_models(
+    payload: GatewayModelBatchDeleteRequest,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> GatewayModelBatchDeleteResponse:
+    try:
+        result = await writes.delete_gateway_models_batch(
+            payload.model_ids,
+            tenant_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
+    return GatewayModelBatchDeleteResponse(
+        succeeded=result.succeeded,
+        failed=[
+            GatewayModelBatchDeleteFailureItem(
+                id=item.id,
+                code=item.code,
+                message=item.message,
+            )
+            for item in result.failed
+        ],
+        grants_removed=result.grants_removed,
+        budgets_removed=result.budgets_removed,
+    )
 
 
 @router.post("/models/{model_id}/test", response_model=GatewayModelTestResponse)

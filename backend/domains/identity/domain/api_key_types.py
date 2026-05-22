@@ -140,6 +140,7 @@ class ApiKeyStatus(str, Enum):
     """API Key 状态"""
 
     ACTIVE = "active"
+    DISABLED = "disabled"
     EXPIRED = "expired"
     REVOKED = "revoked"
 
@@ -219,6 +220,7 @@ class ApiKeyEntity:
     scopes: set[ApiKeyScope]
     expires_at: datetime
     is_active: bool
+    revoked_at: datetime | None
     last_used_at: datetime | None
     usage_count: int
     created_at: datetime
@@ -232,8 +234,10 @@ class ApiKeyEntity:
     @property
     def status(self) -> ApiKeyStatus:
         """获取当前状态"""
-        if not self.is_active:
+        if self.revoked_at is not None:
             return ApiKeyStatus.REVOKED
+        if not self.is_active:
+            return ApiKeyStatus.DISABLED
         if datetime.now(UTC) > self.expires_at:
             return ApiKeyStatus.EXPIRED
         return ApiKeyStatus.ACTIVE
@@ -245,8 +249,8 @@ class ApiKeyEntity:
 
     @property
     def is_valid(self) -> bool:
-        """是否有效（激活且未过期）"""
-        return self.is_active and not self.is_expired
+        """是否有效（激活、未撤销且未过期）"""
+        return self.is_active and self.revoked_at is None and not self.is_expired
 
     @property
     def days_until_expiry(self) -> int:
@@ -351,6 +355,7 @@ class ApiKeyUpdateRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     scopes: list[ApiKeyScope] | None = None
     extend_expiry_days: int | None = Field(None, ge=1, le=365)
+    is_active: bool | None = None
     gateway_grants: list[ApiKeyGatewayGrantRequest] | None = None
 
 

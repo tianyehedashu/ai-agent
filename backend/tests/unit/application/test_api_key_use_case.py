@@ -234,7 +234,7 @@ class TestApiKeyUseCase:
         await use_case.revoke_api_key(api_key_id, user_id)
 
         # Assert
-        repo.update.assert_called_once_with(api_key_id, is_active=False)
+        repo.update.assert_called_once_with(api_key_id, mark_revoked=True)
 
     @pytest.mark.asyncio
     async def test_delete_api_key(self):
@@ -316,3 +316,79 @@ class TestApiKeyUseCase:
                     )
                 ],
             )
+
+    @pytest.mark.asyncio
+    async def test_update_api_key_is_active_toggle(self) -> None:
+        """测试: 更新 is_active 临时禁用/恢复（非 revoke）"""
+        db = AsyncMock()
+        repo = AsyncMock()
+        use_case = ApiKeyUseCase(db, repo=repo, generator=MagicMock())
+
+        api_key_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        expires = datetime.now(UTC) + timedelta(days=30)
+
+        entity = MagicMock()
+        entity.id = api_key_id
+        entity.user_id = user_id
+        entity.revoked_at = None
+        entity.is_expired = False
+        entity.expires_at = expires
+        entity.scopes = {ApiKeyScope.GATEWAY_PROXY}
+        entity.gateway_grants = ()
+        entity.is_active = True
+        entity.status = MagicMock()
+        entity.is_expired = False
+
+        from domains.identity.domain.api_key_types import ApiKeyEntity, ApiKeyUpdateRequest
+
+        domain_entity = ApiKeyEntity(
+            id=api_key_id,
+            user_id=user_id,
+            key_hash="hash",
+            key_id="kid",
+            key_prefix="sk_",
+            name="k",
+            description=None,
+            scopes={ApiKeyScope.GATEWAY_PROXY},
+            expires_at=expires,
+            is_active=True,
+            revoked_at=None,
+            last_used_at=None,
+            usage_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            gateway_grants=(),
+        )
+
+        use_case.get_api_key = AsyncMock(return_value=domain_entity)
+
+        updated_model = MagicMock()
+        updated_model.id = api_key_id
+        updated_model.user_id = user_id
+        updated_model.key_hash = "hash"
+        updated_model.key_id = "kid"
+        updated_model.key_prefix = "sk_"
+        updated_model.name = "k"
+        updated_model.description = None
+        updated_model.scopes = [ApiKeyScope.GATEWAY_PROXY.value]
+        updated_model.expires_at = expires
+        updated_model.is_active = False
+        updated_model.revoked_at = None
+        updated_model.last_used_at = None
+        updated_model.usage_count = 0
+        updated_model.created_at = datetime.now(UTC)
+        updated_model.updated_at = datetime.now(UTC)
+
+        repo.update.return_value = updated_model
+        repo.list_gateway_grants.return_value = []
+
+        result = await use_case.update_api_key(
+            api_key_id=api_key_id,
+            user_id=user_id,
+            request=ApiKeyUpdateRequest(is_active=False),
+        )
+
+        repo.update.assert_called_once()
+        assert repo.update.call_args.kwargs["is_active"] is False
+        assert result.is_active is False

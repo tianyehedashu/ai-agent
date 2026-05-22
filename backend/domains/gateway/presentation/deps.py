@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Annotated
 import uuid
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,10 @@ from domains.gateway.domain.types import (
 from domains.gateway.domain.virtual_key_access import assert_vkey_team_header_compatible
 from domains.gateway.domain.virtual_key_service import is_vkey_format
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.gateway.presentation.platform_api_key_usage_middleware import (
+    PLATFORM_API_KEY_USAGE_STATE,
+    PlatformApiKeyUsageContext,
+)
 from domains.identity.application.permission_context_composer import (
     PermissionContextComposer,
 )
@@ -202,6 +206,7 @@ class VkeyOrApikeyPrincipal:
 
 
 async def bearer_vkey_or_apikey_auth(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_optional_security)],
     db: Annotated[AsyncSession, Depends(get_db)],
     x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
@@ -259,6 +264,13 @@ async def bearer_vkey_or_apikey_auth(
             team_role=auth.team_role,
         )
     )
+
+    ctx = PlatformApiKeyUsageContext(
+        api_key_id=auth.api_key_id,
+        user_id=auth.user_id,
+    )
+    setattr(request.state, PLATFORM_API_KEY_USAGE_STATE, ctx)
+    request.scope[PLATFORM_API_KEY_USAGE_STATE] = ctx
 
     return VkeyOrApikeyPrincipal(
         via="apikey",

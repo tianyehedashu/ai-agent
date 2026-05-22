@@ -527,6 +527,23 @@ class GatewayModelTestResponse(BaseModel):
     response_preview: str | None = None
 
 
+class GatewayModelBatchDeleteRequest(BaseModel):
+    model_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=200)
+
+
+class GatewayModelBatchDeleteFailureItem(BaseModel):
+    id: uuid.UUID
+    code: str
+    message: str
+
+
+class GatewayModelBatchDeleteResponse(BaseModel):
+    succeeded: list[uuid.UUID]
+    failed: list[GatewayModelBatchDeleteFailureItem]
+    grants_removed: int = 0
+    budgets_removed: int = 0
+
+
 class GatewayModelPresetResponse(BaseModel):
     id: str
     name: str

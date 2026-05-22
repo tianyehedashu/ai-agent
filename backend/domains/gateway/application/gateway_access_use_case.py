@@ -87,6 +87,35 @@ class GatewayAccessUseCase:
     async def record_virtual_key_usage(self, vkey_id: uuid.UUID) -> None:
         await self._vkeys.touch_used(vkey_id)
 
+    async def record_platform_api_key_usage(
+        self,
+        api_key_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+        endpoint: str,
+        method: str,
+        ip_address: str | None,
+        user_agent: str | None,
+        status_code: int,
+        response_time_ms: int | None,
+    ) -> None:
+        """Gateway 代理完成后回写 Identity 使用日志。"""
+        from domains.identity.application.permission_context_composer import (
+            PermissionContextComposer,
+        )
+
+        composer = PermissionContextComposer(self._session)
+        composer.install(await composer.compose_for_user_id(user_id))
+        await self._api_keys.record_usage(
+            api_key_id=api_key_id,
+            endpoint=endpoint,
+            method=method,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status_code=status_code,
+            response_time_ms=response_time_ms,
+        )
+
     async def team_role_for_virtual_key_creator(
         self, team_id: uuid.UUID, created_by_user_id: uuid.UUID | None
     ) -> str:

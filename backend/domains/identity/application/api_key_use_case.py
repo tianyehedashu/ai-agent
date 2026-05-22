@@ -149,7 +149,13 @@ class ApiKeyUseCase:
         if not model:
             raise NotFoundError("ApiKey", str(api_key_id))
 
-        # 验证所有权（Repository 已通过 PermissionContext 自动处理）
+        from libs.iam.permission_context import get_permission_context
+
+        ctx = get_permission_context()
+        if ctx and not ctx.is_admin and model.user_id != user_id:
+            raise NotFoundError("ApiKey", str(api_key_id))
+
+        # 验证所有权（Repository 已通过 PermissionContext 自动处理 tenant）
         grants = await self.repo.list_gateway_grants(api_key_id)
         return self._to_entity(model, grants)
 
@@ -225,6 +231,15 @@ class ApiKeyUseCase:
         if request.scopes is not None:
             scopes = set(request.scopes)
 
+        is_active = request.is_active
+        if is_active is not None:
+            if current.revoked_at is not None:
+                raise ValidationError("Revoked API keys cannot be re-enabled")
+            if is_active and current.is_expired:
+                raise ValidationError("Expired API keys cannot be enabled")
+            if not is_active and current.is_expired:
+                raise ValidationError("Expired API keys cannot be disabled")
+
         # 更新
         model = await self.repo.update(
             api_key_id=api_key_id,
@@ -232,6 +247,7 @@ class ApiKeyUseCase:
             description=request.description,
             scopes=scopes,
             expires_at=expires_at,
+            is_active=is_active,
         )
 
         if model is None:
@@ -278,7 +294,9 @@ class ApiKeyUseCase:
         # 先验证所有权
         await self.get_api_key(api_key_id, user_id)
 
-        await self.repo.update(api_key_id, is_active=False)
+        model = await self.repo.update(api_key_id, mark_revoked=True)
+        if model is None:
+            raise NotFoundError("ApiKey", str(api_key_id))
 
     async def delete_api_key(
         self,
@@ -297,7 +315,9 @@ class ApiKeyUseCase:
         # 先验证所有权
         await self.get_api_key(api_key_id, user_id)
 
-        await self.repo.delete(api_key_id)
+        deleted = await self.repo.delete(api_key_id)
+        if not deleted:
+            raise NotFoundError("ApiKey", str(api_key_id))
 
     # =======================================================================
     # 验证
@@ -573,6 +593,7 @@ class ApiKeyUseCase:
             scopes={ApiKeyScope(s) for s in model.scopes},
             expires_at=model.expires_at,
             is_active=model.is_active,
+            revoked_at=model.revoked_at,
             last_used_at=model.last_used_at,
             usage_count=model.usage_count,
             created_at=model.created_at,

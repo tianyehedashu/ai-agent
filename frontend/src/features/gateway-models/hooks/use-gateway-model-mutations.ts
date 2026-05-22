@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   gatewayApi,
   type GatewayModel,
+  type GatewayModelBatchDeleteResponse,
   type GatewayModelCreateBody,
   type GatewayModelUpdateBody,
 } from '@/api/gateway'
@@ -19,6 +20,7 @@ interface UseGatewayModelMutationsOptions {
   credentialId?: string
   onCreateSuccess?: (created: GatewayModel) => void
   onDeleteSuccess?: () => void
+  onBatchDeleteSuccess?: (result: GatewayModelBatchDeleteResponse) => void
 }
 
 interface GatewayModelMutations {
@@ -29,6 +31,7 @@ interface GatewayModelMutations {
     { id: string; body: GatewayModelUpdateBody }
   >
   deleteModelMutation: UseMutationResult<void, Error, string>
+  batchDeleteModelsMutation: UseMutationResult<GatewayModelBatchDeleteResponse, Error, string[]>
   testMutation: UseMutationResult<Awaited<ReturnType<typeof gatewayApi.testModel>>, Error, string>
 }
 
@@ -104,5 +107,29 @@ export function useGatewayModelMutations(
     },
   })
 
-  return { createMutation, updateModelMutation, deleteModelMutation, testMutation }
+  const batchDeleteModelsMutation = useMutation({
+    mutationFn: (ids: string[]) => gatewayApi.batchDeleteModels(teamId, ids),
+    onSuccess: (result) => {
+      invalidateGatewayModelCaches(queryClient, {
+        credentialId: filterCredentialId,
+        usageSummary: true,
+      })
+      invalidateGatewayModelAliasDependents(queryClient)
+      options?.onBatchDeleteSuccess?.(result)
+      if (result.succeeded.length > 0) {
+        toast({ title: `已删除 ${String(result.succeeded.length)} 个模型` })
+      }
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '批量删除失败', description: e.message })
+    },
+  })
+
+  return {
+    createMutation,
+    updateModelMutation,
+    deleteModelMutation,
+    batchDeleteModelsMutation,
+    testMutation,
+  }
 }

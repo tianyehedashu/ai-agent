@@ -80,6 +80,7 @@ function ServerConfigCard({
   onManageDynamicTools,
   onManagePrompts,
 }: ServerConfigCardProps): React.JSX.Element {
+  const isAdmin = useUserStore((s) => s.currentUser?.role === 'admin')
   const snippet = { [cursorName]: config }
   const snippetJson = JSON.stringify(snippet, null, 2)
   const tools = server.tools ?? []
@@ -146,28 +147,32 @@ function ServerConfigCard({
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onManageDynamicTools(server)
-            }}
-            className="gap-1"
-          >
-            <Settings2 className="h-4 w-4" />
-            管理动态工具
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onManagePrompts(server)
-            }}
-            className="gap-1"
-          >
-            <Settings2 className="h-4 w-4" />
-            管理 Prompts
-          </Button>
+          {isAdmin ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onManageDynamicTools(server)
+                }}
+                className="gap-1"
+              >
+                <Settings2 className="h-4 w-4" />
+                管理动态工具
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onManagePrompts(server)
+                }}
+                className="gap-1"
+              >
+                <Settings2 className="h-4 w-4" />
+                管理 Prompts
+              </Button>
+            </>
+          ) : null}
         </div>
         <div>
           <p className="mb-2 text-sm font-medium">Cursor mcp.json 配置片段</p>

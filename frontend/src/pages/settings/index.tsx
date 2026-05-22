@@ -25,11 +25,12 @@ import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
 import { PlatformAdminPanel } from './components/platform-admin-panel'
 
-const BASE_SETTINGS_TABS = ['general', 'api', 'mcp', 'account'] as const
+const BASE_SETTINGS_TABS = ['general', 'api', 'account'] as const
+const MCP_SETTINGS_TAB = 'mcp' as const
 const PLATFORM_SETTINGS_TAB = 'platform' as const
 
 type BaseSettingsTab = (typeof BASE_SETTINGS_TABS)[number]
-type SettingsTab = BaseSettingsTab | typeof PLATFORM_SETTINGS_TAB
+type SettingsTab = BaseSettingsTab | typeof MCP_SETTINGS_TAB | typeof PLATFORM_SETTINGS_TAB
 
 export default function SettingsPage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -40,10 +41,12 @@ export default function SettingsPage(): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
 
   const settingsTabs = useMemo((): readonly SettingsTab[] => {
+    const tabs: SettingsTab[] = [...BASE_SETTINGS_TABS]
     if (isPlatformAdmin) {
-      return [...BASE_SETTINGS_TABS, PLATFORM_SETTINGS_TAB]
+      tabs.splice(2, 0, MCP_SETTINGS_TAB)
+      tabs.push(PLATFORM_SETTINGS_TAB)
     }
-    return BASE_SETTINGS_TABS
+    return tabs
   }, [isPlatformAdmin])
 
   const [userName, setUserName] = useState('')
@@ -164,7 +167,7 @@ export default function SettingsPage(): React.JSX.Element {
         <TabsList className="mb-6">
           <TabsTrigger value="general">通用</TabsTrigger>
           <TabsTrigger value="api">API 密钥</TabsTrigger>
-          <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>
+          {isPlatformAdmin && <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>}
           <TabsTrigger value="account">账户</TabsTrigger>
           {isPlatformAdmin && <TabsTrigger value="platform">平台管理</TabsTrigger>}
         </TabsList>
@@ -221,9 +224,11 @@ export default function SettingsPage(): React.JSX.Element {
           <ApiKeyTab />
         </TabsContent>
 
-        <TabsContent value="mcp">
-          <MCPTab />
-        </TabsContent>
+        {isPlatformAdmin && (
+          <TabsContent value="mcp">
+            <MCPTab />
+          </TabsContent>
+        )}
 
         <TabsContent value="account">
           <Card>
