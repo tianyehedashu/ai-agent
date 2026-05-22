@@ -1,4 +1,4 @@
-﻿import { Suspense, useCallback, useMemo, useState } from 'react'
+﻿import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ToastAction } from '@/components/ui/toast'
+import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import {
   FILTER_ALL,
@@ -23,6 +23,7 @@ import {
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
 import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
+import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
 import {
   invalidatePersonalModelCaches,
   usePersonalModelMutations,
@@ -42,7 +43,6 @@ import {
   formatBatchDeleteConfirmLabel,
   formatDeleteFailedConfirmLabel,
   matchesHealthFilter,
-  runBatchConnectivityTests,
   type BatchDeleteChunkResult,
 } from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -84,7 +84,6 @@ export function PersonalModelsWorkspace({
   const lockCredentialFromUrl = credentialIdFromUrl !== ''
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
-  const [testingAll, setTestingAll] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
@@ -126,34 +125,38 @@ export function PersonalModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const runImportedModelTests = useCallback(
-    async (modelIds: string[]): Promise<void> => {
-      if (modelIds.length === 0) return
-      const idSet = new Set(modelIds)
-      const models = await queryClient.fetchQuery({
-        queryKey: ['gateway', 'my-models'],
-        queryFn: () => gatewayApi.listMyModels(),
-      })
-      const targets = models.filter((m) => idSet.has(m.id))
-      const testable = filterTestableConnectivityModels(targets)
-      if (testable.length === 0) {
-        toast({ title: '没有可测试的模型' })
-        return
-      }
-      setTestingAll(true)
-      try {
-        await runBatchConnectivityTests(testable, (id) => gatewayApi.testMyModel(id))
-        invalidatePersonalModelCaches(queryClient)
-        toast({ title: '新模型测试完成' })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        toast({ variant: 'destructive', title: '测试中断', description: msg })
-      } finally {
-        setTestingAll(false)
+  const {
+    state: batchTestState,
+    start: startBatchTest,
+    retestFailed,
+  } = useConnectivityBatchTest({
+    testById: (id) => gatewayApi.testMyModel(id),
+    invalidate: () => {
+      invalidatePersonalModelCaches(queryClient)
+    },
+    onComplete: (failed) => {
+      if (failed.length === 0) {
+        toast({ title: '批量测试完成' })
+      } else {
+        toast({
+          variant: 'destructive',
+          title: '批量测试完成',
+          description: `${String(failed.length)} 个模型探活失败`,
+        })
       }
     },
-    [queryClient, toast]
-  )
+  })
+
+  const batchFailedIdsRef = useRef(batchTestState.failedIds)
+  batchFailedIdsRef.current = batchTestState.failedIds
+
+  const scrollToFirstFailed = useCallback((): void => {
+    const first = batchFailedIdsRef.current[0]
+    if (!first) return
+    document
+      .querySelector(`[data-connectivity-model-id="${first}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [])
 
   const { createMutation, deleteMutation } = usePersonalModelMutations({
     onCreateSuccess: (created) => {
@@ -172,21 +175,24 @@ export function PersonalModelsWorkspace({
       const ids = modelIds ?? []
       toast({
         title: `已导入 ${String(count)} 个模型`,
-        description: ids.length > 0 ? '可立即测试连通性，或在列表中批量清理不可用项。' : undefined,
-        action:
-          ids.length > 0 ? (
-            <ToastAction
-              altText="测试新模型"
-              onClick={() => {
-                void runImportedModelTests(ids)
-              }}
-            >
-              测试新模型
-            </ToastAction>
-          ) : undefined,
+        description: ids.length > 0 ? '正在后台测试新导入模型的连通性…' : undefined,
       })
+      if (ids.length > 0) {
+        void queryClient
+          .fetchQuery({
+            queryKey: ['gateway', 'my-models'],
+            queryFn: () => gatewayApi.listMyModels(),
+          })
+          .then((models) => {
+            const idSet = new Set(ids)
+            const testable = filterTestableConnectivityModels(models.filter((m) => idSet.has(m.id)))
+            if (testable.length > 0) {
+              startBatchTest(testable.map((m) => m.id))
+            }
+          })
+      }
     },
-    [goToList, queryClient, runImportedModelTests, toast]
+    [goToList, queryClient, startBatchTest, toast]
   )
 
   const goToRegister = useCallback((): void => {
@@ -359,20 +365,8 @@ export function PersonalModelsWorkspace({
 
   const handleTestAll = useCallback((): void => {
     if (!hasTestableModels) return
-    void (async (): Promise<void> => {
-      setTestingAll(true)
-      try {
-        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testMyModel(id))
-        invalidatePersonalModelCaches(queryClient)
-        toast({ title: '批量测试完成' })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        toast({ variant: 'destructive', title: '批量测试中断', description: msg })
-      } finally {
-        setTestingAll(false)
-      }
-    })()
-  }, [hasTestableModels, testableItems, queryClient, toast])
+    startBatchTest(testableItems.map((m) => m.id))
+  }, [hasTestableModels, testableItems, startBatchTest])
 
   if (!hasAuthSession) {
     return <p className="py-8 text-center text-sm text-muted-foreground">请先登录以管理个人模型</p>
@@ -395,8 +389,15 @@ export function PersonalModelsWorkspace({
     )
   }
 
+  const batchTesting = batchTestState.running
+
   return (
     <div className="space-y-4">
+      <ConnectivityBatchTestBanner
+        state={batchTestState}
+        onRetestFailed={retestFailed}
+        onScrollToFirstFailed={scrollToFirstFailed}
+      />
       {activeCredentials.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           尚无个人凭据，请先到{' '}
@@ -440,8 +441,8 @@ export function PersonalModelsWorkspace({
               healthFilter={healthFilter}
               onHealthFilterChange={setHealthFilter}
               canWrite={hasAuthSession}
-              onTestAll={hasTestableModels ? handleTestAll : undefined}
-              testingAll={testingAll}
+              onTestAll={hasTestableModels && !batchTesting ? handleTestAll : undefined}
+              testingAll={batchTesting}
               onDeleteFailed={handleDeleteFailed}
               deletingFailed={batchDeleting}
             />

@@ -23,6 +23,10 @@ from domains.gateway.domain.upstream_registration_match import (
     format_already_registered_reason,
     match_registered_names,
 )
+from domains.gateway.domain.upstream_type_inference import (
+    filter_valid_personal_model_types,
+    infer_upstream_model_types,
+)
 from domains.gateway.infrastructure.upstream.openai_compatible_model_list_adapter import (
     OpenAICompatibleModelListAdapter,
 )
@@ -92,12 +96,16 @@ class CredentialUpstreamCatalogService:
         enriched: list[UpstreamModelItem] = []
         for item in items:
             names = match_registered_names(prov, item.id, rows)
+            inferred = filter_valid_personal_model_types(
+                infer_upstream_model_types(prov, item.id, item.owned_by)
+            )
             enriched.append(
                 UpstreamModelItem(
                     id=item.id,
                     owned_by=item.owned_by,
                     already_registered=bool(names),
                     registered_names=names,
+                    inferred_model_types=inferred,
                 )
             )
         return tuple(enriched)
@@ -110,7 +118,16 @@ class CredentialUpstreamCatalogService:
     ) -> CredentialProbeResult:
         now = datetime.now(UTC)
         if raw.ok:
-            items = tuple(UpstreamModelItem(id=mid, owned_by=ob) for mid, ob in raw.items)
+            items = tuple(
+                UpstreamModelItem(
+                    id=mid,
+                    owned_by=ob,
+                    inferred_model_types=filter_valid_personal_model_types(
+                        infer_upstream_model_types("", mid, ob)
+                    ),
+                )
+                for mid, ob in raw.items
+            )
             return CredentialProbeResult(
                 credential_id=credential_id,
                 probe_at=now,
@@ -263,21 +280,40 @@ class CredentialUpstreamCatalogService:
         user_id: uuid.UUID,
         credential_id: uuid.UUID,
         provider: str,
-        upstream_model_ids: list[str],
-        model_types: list[str],
+        import_items: list[tuple[str, tuple[str, ...]]],
         display_name_prefix: str | None,
         enabled: bool,
         tags: dict[str, Any] | None,
+        upstream_model_ids: list[str] | None = None,
+        model_types: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        """批量导入个人模型。优先使用 ``import_items``；否则由 legacy 参数构造。"""
+        if import_items:
+            rows_to_import = list(import_items)
+        elif upstream_model_ids:
+            shared_types = tuple(model_types or ("text",))
+            rows_to_import = [(mid, shared_types) for mid in upstream_model_ids]
+        else:
+            raise ValidationError("请提供 items 或 upstream_model_ids")
+
         await self._reads.get_user_credential_for_owner(credential_id, user_id)
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
         created: list[dict[str, Any]] = []
         failed: list[dict[str, str]] = []
         reload_once = False
-        for raw_id in upstream_model_ids:
+        for raw_id, raw_types in rows_to_import:
             mid = raw_id.strip()
             if not mid:
+                continue
+            types = filter_valid_personal_model_types(raw_types)
+            if not types:
+                failed.append(
+                    {
+                        "upstream_model_id": mid,
+                        "reason": "该上游模型类型不支持个人注册（如 embedding / rerank）",
+                    }
+                )
                 continue
             existing = match_registered_names(provider_norm, mid, registered_rows)
             if existing:
@@ -296,7 +332,7 @@ class CredentialUpstreamCatalogService:
                     provider=provider,
                     model_id=mid,
                     credential_id=credential_id,
-                    model_types=list(model_types),
+                    model_types=list(types),
                     tags=tags,
                     enabled=enabled,
                     reload_router=False,

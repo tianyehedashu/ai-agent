@@ -27,6 +27,7 @@ export const GatewayTeamRedirect = lazy(() => import('@/pages/gateway/gateway-te
 export const GatewayGuidePage = lazy(() => import('@/pages/gateway/guide'))
 export const GatewayPlatformStatsPage = lazy(() => import('@/pages/gateway/platform-stats'))
 export const GatewayOverviewPage = lazy(() => import('@/pages/gateway/overview'))
+export const GatewayStatsPage = lazy(() => import('@/pages/gateway/stats'))
 export const GatewayKeysPage = lazy(() => import('@/pages/gateway/keys'))
 export const GatewayCredentialsPage = lazy(() => import('@/pages/gateway/credentials'))
 export const GatewayCredentialDetailPage = lazy(() => import('@/pages/gateway/credential-detail'))

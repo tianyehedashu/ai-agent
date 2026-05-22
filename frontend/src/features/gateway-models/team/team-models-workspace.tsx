@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useState } from 'react'
+﻿import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -11,6 +11,7 @@ import {
   credentialSummaryLabel,
 } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
+import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import {
   type HealthFilter,
   type ModelsPageView,
@@ -23,6 +24,7 @@ import {
   isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
 import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
+import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
   ModelBatchDeleteConfirmDialog,
@@ -46,7 +48,6 @@ import {
   formatDeleteFailedConfirmLabel,
   matchesHealthFilter,
   resolveTeamModelsRegistryScope,
-  runBatchConnectivityTests,
   type BatchDeleteChunkResult,
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
@@ -112,7 +113,6 @@ export function TeamModelsWorkspace({
   const deferredSearch = useDeferredValue(search)
   const [usageDays, setUsageDays] = useState<UsagePeriodDays>(7)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
-  const [testingAll, setTestingAll] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [batchFailedOpen, setBatchFailedOpen] = useState(false)
@@ -460,25 +460,48 @@ export function TeamModelsWorkspace({
     [registryItems]
   )
 
+  const {
+    state: batchTestState,
+    start: startBatchTest,
+    retestFailed,
+  } = useConnectivityBatchTest({
+    testById: (id) => gatewayApi.testModel(teamId, id),
+    invalidate: () => {
+      invalidateGatewayModelCaches(queryClient, {
+        credentialId: credentialFilter || undefined,
+        usageSummary: true,
+      })
+    },
+    onComplete: (failed) => {
+      if (failed.length === 0) {
+        toast({ title: '批量测试完成' })
+      } else {
+        toast({
+          variant: 'destructive',
+          title: '批量测试完成',
+          description: `${String(failed.length)} 个模型探活失败`,
+        })
+      }
+    },
+  })
+
+  const batchFailedIdsRef = useRef(batchTestState.failedIds)
+  batchFailedIdsRef.current = batchTestState.failedIds
+
+  const scrollToFirstFailed = useCallback((): void => {
+    const first = batchFailedIdsRef.current[0]
+    if (!first) return
+    document
+      .querySelector(`[data-connectivity-model-id="${first}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [])
+
   const handleTestAll = useCallback((): void => {
     if (testableItems.length === 0) return
-    void (async (): Promise<void> => {
-      setTestingAll(true)
-      try {
-        await runBatchConnectivityTests(testableItems, (id) => gatewayApi.testModel(teamId, id))
-        invalidateGatewayModelCaches(queryClient, {
-          credentialId: credentialFilter || undefined,
-          usageSummary: true,
-        })
-        toast({ title: '批量测试完成' })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        toast({ variant: 'destructive', title: '批量测试中断', description: msg })
-      } finally {
-        setTestingAll(false)
-      }
-    })()
-  }, [testableItems, queryClient, toast, credentialFilter, teamId])
+    startBatchTest(testableItems.map((m) => m.id))
+  }, [testableItems, startBatchTest])
+
+  const batchTesting = batchTestState.running
 
   const handleCreateSubmit = useCallback(
     (body: Parameters<typeof gatewayApi.createModel>[1]) => {
@@ -551,6 +574,11 @@ export function TeamModelsWorkspace({
   return (
     <div className="space-y-4">
       {credentialBanner}
+      <ConnectivityBatchTestBanner
+        state={batchTestState}
+        onRetestFailed={retestFailed}
+        onScrollToFirstFailed={scrollToFirstFailed}
+      />
 
       {showEmptyOnboarding ? (
         <div className="rounded-lg border border-dashed bg-muted/10 p-8">
@@ -617,8 +645,12 @@ export function TeamModelsWorkspace({
                 healthFilter={healthFilter}
                 onHealthFilterChange={setHealthFilter}
                 canWrite={canManageModels}
-                onTestAll={canManageModels && testableItems.length > 0 ? handleTestAll : undefined}
-                testingAll={testingAll}
+                onTestAll={
+                  canManageModels && testableItems.length > 0 && !batchTesting
+                    ? handleTestAll
+                    : undefined
+                }
+                testingAll={batchTesting}
                 onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
                 onPreloadRegister={preloadRegisterModelForm}
                 onPreloadRowNavigate={preloadTeamModelDetailPane}

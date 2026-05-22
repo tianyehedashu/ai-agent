@@ -23,6 +23,7 @@ import { modelsApi } from './models'
 import { myModelsApi } from './my-models'
 import { pricingApi } from './pricing'
 import { routesApi } from './routes'
+import { statsApi } from './stats'
 import { systemVisibilityApi } from './system-visibility'
 import { teamsApi } from './teams'
 
@@ -32,7 +33,7 @@ export { GATEWAY_API_BASE, GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from './_
 
 // ---------- 资源类型 re-export ----------
 
-export type { GatewayTeam, TeamMember } from './teams'
+export type { GatewayTeam, TeamMember, TeamMemberLookup } from './teams'
 
 export type {
   VirtualKey,
@@ -106,6 +107,14 @@ export type {
   DashboardSummary,
 } from './logs'
 
+export type {
+  GatewayUsageStatsGroupBy,
+  GatewayUsageStatsMetric,
+  GatewayUsageStatsItem,
+  GatewayUsageStatsResponse,
+  GatewayUsageStatsQuery,
+} from './stats'
+
 export type { AlertRule, AlertRuleCreateBody } from './alerts'
 
 export type {
@@ -154,6 +163,7 @@ export {
   routesApi,
   budgetsApi,
   logsApi,
+  statsApi,
   alertsApi,
   entitlementsApi,
   pricingApi,
@@ -176,6 +186,7 @@ export const gatewayApi = {
   ...routesApi,
   ...budgetsApi,
   ...logsApi,
+  ...statsApi,
   ...alertsApi,
   ...entitlementsApi,
   ...pricingApi,

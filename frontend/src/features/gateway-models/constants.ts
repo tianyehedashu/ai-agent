@@ -68,7 +68,7 @@ export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
  * - 个人：`GET /gateway/my-models` BYOK 行（登录用户本人）
  * - 不含：`GET /models/available` 系统目录（无注册行 id，探活策略未定义）
  */
-export const BATCH_TEST_CONCURRENCY = 3
+export const BATCH_TEST_CONCURRENCY = 5
 
 /** 与 backend domains.gateway.domain.types.RoutingStrategy 对齐 */
 export const ROUTING_STRATEGIES = [

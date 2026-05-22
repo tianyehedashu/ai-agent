@@ -251,11 +251,27 @@ export function filterTestableConnectivityModels<T extends ModelWithConnectivity
 /** 对可探活注册行并发调用单条 test API（团队 / 个人管理面共用） */
 export async function runBatchConnectivityTests(
   items: readonly ModelWithConnectivityStatus[],
-  testById: (id: string) => Promise<unknown>
+  testById: (id: string) => Promise<unknown>,
+  options?: {
+    signal?: AbortSignal
+    onProgress?: (done: number, total: number) => void
+  }
 ): Promise<void> {
   const testable = filterTestableConnectivityModels(items)
   if (testable.length === 0) return
-  await runWithConcurrency(testable, BATCH_TEST_CONCURRENCY, (m) => testById(m.id))
+  const total = testable.length
+  let done = 0
+  await runWithConcurrency(
+    testable,
+    BATCH_TEST_CONCURRENCY,
+    async (m) => {
+      if (options?.signal?.aborted) return
+      await testById(m.id)
+      done += 1
+      options?.onProgress?.(done, total)
+    },
+    options?.signal
+  )
 }
 
 /** 将长错误归类为清单行短标签 */
@@ -310,13 +326,15 @@ export function routesReferencingModel(routes: GatewayRoute[], modelName: string
 export async function runWithConcurrency<T>(
   items: readonly T[],
   concurrency: number,
-  fn: (item: T) => Promise<unknown>
+  fn: (item: T) => Promise<unknown>,
+  signal?: AbortSignal
 ): Promise<void> {
   if (items.length === 0) return
   const limit = Math.max(1, Math.min(concurrency, items.length))
   let next = 0
   async function worker(): Promise<void> {
     for (;;) {
+      if (signal?.aborted) return
       const i = next++
       if (i >= items.length) return
       await fn(items[i])
@@ -411,6 +429,27 @@ export function formatDeleteFailedConfirmLabel(count: number, names: readonly st
 }
 
 export const BATCH_DELETE_MAX = 200
+
+/** 与后端 PersonalModelBatchImportRequest.items max_length 对齐 */
+export const BATCH_IMPORT_MAX = 50
+
+export interface PersonalModelBatchImportItem {
+  upstream_model_id: string
+  model_types: string[]
+}
+
+/** 将批量导入 items 按上限分块 */
+export function chunkBatchImportItems(
+  items: readonly PersonalModelBatchImportItem[],
+  max = BATCH_IMPORT_MAX
+): PersonalModelBatchImportItem[][] {
+  if (items.length === 0) return []
+  const chunks: PersonalModelBatchImportItem[][] = []
+  for (let i = 0; i < items.length; i += max) {
+    chunks.push(items.slice(i, i + max))
+  }
+  return chunks
+}
 
 /** 探活失败且允许删除的模型 */
 export function filterDeletableFailedModels<T extends ModelWithConnectivityStatus>(

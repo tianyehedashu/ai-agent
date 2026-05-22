@@ -13,6 +13,22 @@ describe('isImportableUpstreamItem', () => {
     const item: CredentialUpstreamItem = { id: 'gpt-4', already_registered: true }
     expect(isImportableUpstreamItem(item)).toBe(false)
   })
+
+  it('treats empty inferred_model_types as not importable', () => {
+    const item: CredentialUpstreamItem = {
+      id: 'text-embedding-3',
+      inferred_model_types: [],
+    }
+    expect(isImportableUpstreamItem(item, 'openai')).toBe(false)
+  })
+
+  it('allows rows with inferred types', () => {
+    const item: CredentialUpstreamItem = {
+      id: 'gpt-4o',
+      inferred_model_types: ['text', 'image'],
+    }
+    expect(isImportableUpstreamItem(item, 'openai')).toBe(true)
+  })
 })
 
 describe('countProbeItems', () => {

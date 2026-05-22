@@ -21,6 +21,7 @@ class UpstreamModelItem:
     owned_by: str | None = None
     already_registered: bool = False
     registered_names: tuple[str, ...] = ()
+    inferred_model_types: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

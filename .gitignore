@@ -49,6 +49,7 @@ Pipfile.lock
 # IDE & Editors
 # ============================================
 .idea/
+.cursor/plans/
 # 保留 .vscode 配置文件以确保团队一致性
 # .vscode/settings.json 和 .vscode/extensions.json 应该被提交
 .vscode/*

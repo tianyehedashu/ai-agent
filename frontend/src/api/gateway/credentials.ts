@@ -130,6 +130,8 @@ export interface CredentialUpstreamItem {
   already_registered?: boolean
   /** 已注册的 Gateway 别名（route name） */
   registered_names?: string[]
+  /** 服务端推断的 personal model_types；空数组表示不可导入 */
+  inferred_model_types?: string[]
 }
 
 /** POST /credentials/{id}/probe 与 /my-credentials/{id}/probe 响应 */
@@ -143,11 +145,19 @@ export interface CredentialProbeResult {
   http_status?: number | null
 }
 
+export interface PersonalModelBatchImportItemBody {
+  upstream_model_id: string
+  model_types: string[]
+}
+
 /** /my-credentials/{id}/batch-import-models 请求体 */
 export interface PersonalModelBatchImportBody {
   provider: string
-  upstream_model_ids: string[]
-  model_types: string[]
+  /** 按条指定类型（优先） */
+  items?: PersonalModelBatchImportItemBody[]
+  /** @deprecated 与 model_types 一起使用 */
+  upstream_model_ids?: string[]
+  model_types?: string[]
   display_name_prefix?: string | null
   enabled?: boolean
   tags?: Record<string, unknown> | null

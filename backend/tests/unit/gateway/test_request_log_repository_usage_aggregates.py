@@ -15,6 +15,10 @@ import uuid
 import pytest
 
 from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage_read_model import (
+    UsageStatisticsFilters,
+    UsageStatisticsGroupBy,
+)
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )
@@ -87,9 +91,7 @@ async def test_aggregate_by_deployment_ids_user_axis_maps_by_id() -> None:
     session.execute = AsyncMock(return_value=result)
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
-    out = await repo.aggregate_by_deployment_ids_by_axis(
-        UsageAxis.user(user_id), [mid], now, now
-    )
+    out = await repo.aggregate_by_deployment_ids_by_axis(UsageAxis.user(user_id), [mid], now, now)
     assert out[mid]["requests"] == 1
     assert out[mid]["input_tokens"] == 2
 
@@ -126,3 +128,57 @@ async def test_aggregate_by_credential_global_skips_null_credential_id_rows() ->
     assert out[cid]["requests"] == 2
     assert out[cid]["success"] == 1
     assert out[cid]["failure"] == 1
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> None:
+    cid = uuid.uuid4()
+    item_row = SimpleNamespace(
+        group_key=cid,
+        label_snapshot="历史凭据",
+        requests=3,
+        success_count=2,
+        failure_count=1,
+        input_tokens=10,
+        output_tokens=20,
+        cached_tokens=4,
+        cost_usd=Decimal("0.03"),
+        avg_latency_ms=123.4,
+        cache_hit_count=1,
+    )
+    total_row = SimpleNamespace(
+        requests=3,
+        success_count=2,
+        failure_count=1,
+        input_tokens=10,
+        output_tokens=20,
+        cached_tokens=4,
+        cost_usd=Decimal("0.03"),
+        avg_latency_ms=123.4,
+        cache_hit_count=1,
+    )
+    item_result = MagicMock()
+    item_result.all.return_value = [item_row]
+    total_result = MagicMock()
+    total_result.one.return_value = total_row
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[item_result, total_result])
+
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    items, totals = await repo.aggregate_usage_statistics_by_axis(
+        UsageAxis.workspace(uuid.uuid4()),
+        now - timedelta(days=1),
+        now,
+        group_by=UsageStatisticsGroupBy.CREDENTIAL,
+        filters=UsageStatisticsFilters(provider="openai"),
+        limit=10,
+    )
+
+    assert len(items) == 1
+    assert items[0].group_key == cid
+    assert items[0].requests == 3
+    assert items[0].cost_usd == Decimal("0.03")
+    assert totals.success_count == 2
+    assert totals.cached_tokens == 4
+    assert session.execute.await_count == 2

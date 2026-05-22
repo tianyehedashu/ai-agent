@@ -21,6 +21,7 @@ import {
   GatewayPricingMyPricesPage,
   GatewayPricingUpstreamPage,
   GatewayRoutesPage,
+  GatewayStatsPage,
   GatewayTeamRedirect,
   GatewayTeamsPage,
   ListingStudioHistoryDetailPage,
@@ -82,6 +83,7 @@ const appLayoutRouteConfig: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="overview" replace /> },
           { path: 'overview', element: <GatewayOverviewPage /> },
+          { path: 'stats', element: <GatewayStatsPage /> },
           { path: 'keys', element: <GatewayKeysPage /> },
           { path: 'credentials', element: <GatewayCredentialsPage /> },
           { path: 'credentials/:credentialId', element: <GatewayCredentialDetailPage /> },
@@ -105,6 +107,7 @@ const appLayoutRouteConfig: RouteObject[] = [
         ],
       },
       { path: 'overview', element: <GatewayTeamRedirect /> },
+      { path: 'stats', element: <GatewayTeamRedirect /> },
       { path: 'keys', element: <GatewayTeamRedirect /> },
       { path: 'credentials', element: <GatewayTeamRedirect /> },
       { path: 'credentials/:credentialId', element: <GatewayTeamRedirect /> },

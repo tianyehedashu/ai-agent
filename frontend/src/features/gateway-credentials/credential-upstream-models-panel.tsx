@@ -9,7 +9,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   type CredentialProbeResult,
   type PersonalModelBatchImportBody,
+  type PersonalModelBatchImportResponse,
   type TeamGatewayModelBatchImportBody,
+  type TeamGatewayModelBatchImportResponse,
   gatewayApi,
 } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
@@ -31,16 +33,63 @@ import {
 } from '@/features/gateway-credentials/upstream-import-utils'
 import { UpstreamModelList } from '@/features/gateway-credentials/upstream-model-list'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
+import { resolveUpstreamModelTypes } from '@/features/gateway-models/infer-model-types'
+import {
+  chunkBatchImportItems,
+  type PersonalModelBatchImportItem,
+} from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, RefreshCw, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import type { ModelType } from '@/types/user-model'
-import { MODEL_TYPE_LABELS } from '@/types/user-model'
 
 export type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
 
-const IMPORT_MODEL_TYPES: ModelType[] = ['text', 'image', 'image_gen', 'video']
+async function runChunkedPersonalImport(
+  credentialId: string,
+  base: Omit<PersonalModelBatchImportBody, 'items'>,
+  items: PersonalModelBatchImportItem[]
+): Promise<PersonalModelBatchImportResponse> {
+  const chunks = chunkBatchImportItems(items)
+  const merged: PersonalModelBatchImportResponse = {
+    credential_id: credentialId,
+    created: [],
+    failed: [],
+  }
+  for (const chunk of chunks) {
+    const res = await gatewayApi.batchImportMyModelsFromUpstream(credentialId, {
+      ...base,
+      items: chunk,
+    })
+    merged.created.push(...res.created)
+    merged.failed.push(...res.failed)
+  }
+  return merged
+}
+
+async function runChunkedTeamImport(
+  teamId: string,
+  credentialId: string,
+  base: Omit<TeamGatewayModelBatchImportBody, 'items'>,
+  teamItems: TeamGatewayModelBatchImportBody['items']
+): Promise<TeamGatewayModelBatchImportResponse> {
+  const chunkSize = 50
+  const merged: TeamGatewayModelBatchImportResponse = {
+    credential_id: credentialId,
+    created: [],
+    failed: [],
+  }
+  for (let i = 0; i < teamItems.length; i += chunkSize) {
+    const chunk = teamItems.slice(i, i + chunkSize)
+    const res = await gatewayApi.batchImportTeamModelsFromUpstream(teamId, credentialId, {
+      ...base,
+      items: chunk,
+    })
+    merged.created.push(...res.created)
+    merged.failed.push(...res.failed)
+  }
+  return merged
+}
 
 export interface CredentialUpstreamModelsPanelProps {
   scope: CredentialUpstreamScope
@@ -135,7 +184,6 @@ export function CredentialUpstreamModelsPanel({
   const [displayNamePrefix, setDisplayNamePrefix] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [capability, setCapability] = useState('chat')
-  const [modelTypes, setModelTypes] = useState<ModelType[]>(['text'])
   const [hideRegistered, setHideRegistered] = useState(false)
 
   const writeProbeCache = useCallback(
@@ -198,23 +246,29 @@ export function CredentialUpstreamModelsPanel({
 
   const batchMutation = useMutation({
     mutationFn: async () => {
-      const ids = [...selected].filter((id) => {
-        const row = probe?.items.find((it) => it.id === id)
-        return row !== undefined && isImportableUpstreamItem(row)
-      })
-      if (ids.length === 0) throw new Error('请至少选择一条可导入的上游模型')
+      const selectedRows = [...selected]
+        .map((id) => probe?.items.find((it) => it.id === id))
+        .filter((row): row is NonNullable<typeof row> => row !== undefined)
+        .filter((row) => isImportableUpstreamItem(row, provider))
+      if (selectedRows.length === 0) throw new Error('请至少选择一条可导入的上游模型')
       if (scope === 'user') {
-        const body: PersonalModelBatchImportBody = {
+        const importItems: PersonalModelBatchImportItem[] = selectedRows.map((row) => ({
+          upstream_model_id: row.id,
+          model_types: resolveUpstreamModelTypes(row, provider),
+        }))
+        const base = {
           provider,
-          upstream_model_ids: ids,
-          model_types: modelTypes,
           display_name_prefix: displayNamePrefix.trim() || null,
           enabled,
           tags: null,
         }
-        return gatewayApi.batchImportMyModelsFromUpstream(credentialId, body)
+        return runChunkedPersonalImport(credentialId, base, importItems)
       }
-      const body: TeamGatewayModelBatchImportBody = {
+      const teamItems = selectedRows.map((row) => ({
+        upstream_model_id: row.id,
+        name: null as string | null,
+      }))
+      const teamBase = {
         provider,
         capability,
         weight: 1,
@@ -222,9 +276,8 @@ export function CredentialUpstreamModelsPanel({
         tpm_limit: null,
         tags: null,
         enabled,
-        items: ids.map((upstream_model_id) => ({ upstream_model_id, name: null })),
       }
-      return gatewayApi.batchImportTeamModelsFromUpstream(teamId, credentialId, body)
+      return runChunkedTeamImport(teamId, credentialId, teamBase, teamItems)
     },
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
@@ -261,8 +314,8 @@ export function CredentialUpstreamModelsPanel({
   })
 
   const probeStats = useMemo(
-    () => (probe?.items ? countProbeItems(probe.items) : null),
-    [probe?.items]
+    () => (probe?.items ? countProbeItems(probe.items, provider) : null),
+    [probe?.items, provider]
   )
 
   const probeItemsById = useMemo(
@@ -275,16 +328,16 @@ export function CredentialUpstreamModelsPanel({
     if (!probe?.items) return []
     let rows = probe.items
     if (hideRegistered) {
-      rows = rows.filter((it) => isImportableUpstreamItem(it))
+      rows = rows.filter((it) => isImportableUpstreamItem(it, provider))
     }
     const q = deferredFilter.trim().toLowerCase()
     if (!q) return rows
     return rows.filter((it) => it.id.toLowerCase().includes(q))
-  }, [probe, deferredFilter, hideRegistered])
+  }, [probe, deferredFilter, hideRegistered, provider])
 
   const importableVisibleItems = useMemo(
-    () => filteredItems.filter((it) => isImportableUpstreamItem(it)),
-    [filteredItems]
+    () => filteredItems.filter((it) => isImportableUpstreamItem(it, provider)),
+    [filteredItems, provider]
   )
 
   const selectedImportableCount = useMemo(() => {
@@ -292,10 +345,10 @@ export function CredentialUpstreamModelsPanel({
     let count = 0
     for (const id of selected) {
       const row = probeItemsById.get(id)
-      if (row !== undefined && isImportableUpstreamItem(row)) count++
+      if (row !== undefined && isImportableUpstreamItem(row, provider)) count++
     }
     return count
-  }, [probeItemsById, selected])
+  }, [probeItemsById, selected, provider])
 
   const visibleSelectedCount = importableVisibleItems.reduce(
     (count, item) => count + (selected.has(item.id) ? 1 : 0),
@@ -307,7 +360,7 @@ export function CredentialUpstreamModelsPanel({
   const toggle = useCallback(
     (id: string) => {
       const row = probeItemsById?.get(id)
-      if (row !== undefined && !isImportableUpstreamItem(row)) return
+      if (row !== undefined && !isImportableUpstreamItem(row, provider)) return
       setSelected((prev) => {
         const next = new Set(prev)
         if (next.has(id)) next.delete(id)
@@ -315,7 +368,7 @@ export function CredentialUpstreamModelsPanel({
         return next
       })
     },
-    [probeItemsById]
+    [probeItemsById, provider]
   )
 
   const toggleAllVisible = useCallback(() => {
@@ -340,13 +393,6 @@ export function CredentialUpstreamModelsPanel({
 
   const badge = probe ? supportBadge(probe.support) : null
   const canListProbeItems = probe?.support === 'full' || probe?.support === 'partial'
-
-  function toggleModelType(t: ModelType): void {
-    setModelTypes((cur) => {
-      const next = cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]
-      return next.length === 0 ? ['text'] : next
-    })
-  }
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
@@ -434,18 +480,7 @@ export function CredentialUpstreamModelsPanel({
               placeholder="输入模型 ID，如 gpt-4…"
             />
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={importableVisibleItems.length === 0}
-              onClick={toggleAllVisible}
-            >
-              {allVisibleSelected
-                ? '取消可见项'
-                : `选择可导入项（${String(importableVisibleItems.length)}）`}
-            </Button>
+          <div className="flex shrink-0 items-end">
             <Button
               type="button"
               variant="ghost"
@@ -459,14 +494,21 @@ export function CredentialUpstreamModelsPanel({
         </div>
         <UpstreamModelList
           items={filteredItems}
+          provider={provider}
           selected={selected}
           onToggle={toggle}
           onPickModelId={onPickModelId}
           isStale={filterIsStale}
+          importableCount={importableVisibleItems.length}
+          allImportableSelected={allVisibleSelected}
+          someImportableSelected={
+            visibleSelectedCount > 0 && visibleSelectedCount < importableVisibleItems.length
+          }
+          onToggleAllImportable={toggleAllVisible}
         />
-        <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+        <div className="flex flex-wrap items-end gap-3 border-t pt-4">
           {scope === 'user' ? (
-            <div className="grid gap-1.5">
+            <div className="grid min-w-[12rem] flex-1 gap-1.5">
               <Label htmlFor="disp-prefix">显示名前缀（可选）</Label>
               <Input
                 id="disp-prefix"
@@ -474,18 +516,20 @@ export function CredentialUpstreamModelsPanel({
                 onChange={(e) => {
                   setDisplayNamePrefix(e.target.value)
                 }}
-                placeholder="留空则使用上游模型 id 作为显示名"
+                placeholder="留空则使用上游模型 id"
               />
             </div>
           ) : (
-            <CapabilityField
-              id="team-cap"
-              value={capability}
-              onValueChange={setCapability}
-              showHint
-            />
+            <div className="min-w-[12rem] flex-1">
+              <CapabilityField
+                id="team-cap"
+                value={capability}
+                onValueChange={setCapability}
+                showHint
+              />
+            </div>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pb-0.5">
             <Switch
               id="import-enabled"
               checked={enabled}
@@ -497,28 +541,10 @@ export function CredentialUpstreamModelsPanel({
               导入后启用
             </Label>
           </div>
+          <p className="w-full text-xs text-muted-foreground">
+            类型按模型 ID 自动推断；多类型模型会创建多条个人记录。
+          </p>
         </div>
-        {scope === 'user' ? (
-          <div className="grid gap-1.5">
-            <Label>导入为哪些模型类型</Label>
-            <div className="flex flex-wrap gap-3">
-              {IMPORT_MODEL_TYPES.map((t) => (
-                <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
-                  <Checkbox
-                    checked={modelTypes.includes(t)}
-                    onCheckedChange={() => {
-                      toggleModelType(t)
-                    }}
-                  />
-                  {MODEL_TYPE_LABELS[t]}
-                </label>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              每选一种类型，会为同一个上游模型创建一条个人模型记录。
-            </p>
-          </div>
-        ) : null}
         <div className="flex justify-end">
           <Button
             type="button"

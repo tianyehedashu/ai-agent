@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
+from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
 
 # =============================================================================
 # Gateway features（运行时能力开关，与部署 env 对齐）
@@ -741,6 +742,34 @@ class TimeSeriesPointResponse(BaseModel):
     errors: int
 
 
+class UsageStatisticsMetricResponse(BaseModel):
+    requests: int
+    success_count: int
+    failure_count: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    total_tokens: int
+    cost_usd: Decimal
+    avg_latency_ms: float
+    cache_hit_count: int
+    success_rate: float
+    cache_hit_rate: float
+
+
+class UsageStatisticsItemResponse(UsageStatisticsMetricResponse):
+    group_key: str
+    label: str
+
+
+class UsageStatisticsResponse(BaseModel):
+    start: datetime
+    end: datetime
+    group_by: UsageStatisticsGroupBy
+    totals: UsageStatisticsMetricResponse
+    items: list[UsageStatisticsItemResponse] = Field(default_factory=list)
+
+
 # =============================================================================
 # Alert
 # =============================================================================
@@ -1028,6 +1057,9 @@ __all__ = [
     "SystemVisibilityPatch",
     "SystemVisibilityTargetSnapshot",
     "TimeSeriesPointResponse",
+    "UsageStatisticsItemResponse",
+    "UsageStatisticsMetricResponse",
+    "UsageStatisticsResponse",
     "UserCredentialCreate",
     "VirtualKeyCreate",
     "VirtualKeyCreateResponse",

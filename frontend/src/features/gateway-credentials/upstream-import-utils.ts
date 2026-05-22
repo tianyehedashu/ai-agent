@@ -3,21 +3,30 @@
  */
 
 import type { CredentialUpstreamItem } from '@/api/gateway'
+import { resolveUpstreamModelTypes } from '@/features/gateway-models/infer-model-types'
 
-export function isImportableUpstreamItem(item: CredentialUpstreamItem): boolean {
-  return item.already_registered !== true
+export function isImportableUpstreamItem(item: CredentialUpstreamItem, provider = ''): boolean {
+  if (item.already_registered === true) return false
+  if (item.inferred_model_types !== undefined) {
+    return item.inferred_model_types.length > 0
+  }
+  return resolveUpstreamModelTypes(item, provider).length > 0
 }
 
-export function countProbeItems(items: CredentialUpstreamItem[]): {
+export function countProbeItems(
+  items: CredentialUpstreamItem[],
+  provider = ''
+): {
   total: number
   registered: number
   importable: number
 } {
   const registered = items.filter((it) => it.already_registered).length
+  const importable = items.filter((it) => isImportableUpstreamItem(it, provider)).length
   return {
     total: items.length,
     registered,
-    importable: items.length - registered,
+    importable,
   }
 }
 

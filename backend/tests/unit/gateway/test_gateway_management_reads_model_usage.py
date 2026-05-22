@@ -11,6 +11,15 @@ import pytest
 
 from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage_read_model import (
+    UsageAggregation,
+    UsageStatisticsFilters,
+    UsageStatisticsGroupBy,
+)
+from domains.gateway.infrastructure.repositories.request_log_repository import (
+    RequestLogUsageAggregateRow,
+    RequestLogUsageTotals,
+)
 from domains.gateway.presentation.schemas.common import PlatformCredentialStatItem
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
@@ -170,7 +179,9 @@ async def test_aggregate_gateway_model_route_usage_no_models_returns_empty_items
 
 
 @pytest.mark.asyncio
-async def test_list_platform_credential_stats_unions_usage_only_and_count_only_credentials() -> None:
+async def test_list_platform_credential_stats_unions_usage_only_and_count_only_credentials() -> (
+    None
+):
     session = MagicMock()
     svc = GatewayManagementReadService(session)
     usage_only = uuid.uuid4()
@@ -315,3 +326,129 @@ async def test_list_platform_credential_stats_merges_usage_and_counts() -> None:
     assert rows[0]["gateway_model_count"] == 2
     assert rows[0]["requests"] == 3
     assert rows[0]["scope"] == "team"
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_statistics_resolves_credential_label() -> None:
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    credential_id = uuid.uuid4()
+    ctx = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="admin",
+        user_id=user_id,
+        is_platform_admin=False,
+    )
+    svc._logs.aggregate_usage_statistics_by_axis = AsyncMock(
+        return_value=(
+            [
+                RequestLogUsageAggregateRow(
+                    group_key=credential_id,
+                    label_snapshot="旧名称",
+                    requests=4,
+                    success_count=3,
+                    failure_count=1,
+                    input_tokens=11,
+                    output_tokens=9,
+                    cached_tokens=2,
+                    cost_usd=Decimal("0.04"),
+                    avg_latency_ms=80.0,
+                    cache_hit_count=1,
+                )
+            ],
+            RequestLogUsageTotals(
+                requests=4,
+                success_count=3,
+                failure_count=1,
+                input_tokens=11,
+                output_tokens=9,
+                cached_tokens=2,
+                cost_usd=Decimal("0.04"),
+                avg_latency_ms=80.0,
+                cache_hit_count=1,
+            ),
+        )
+    )
+    svc._creds.list_by_ids = AsyncMock(
+        return_value=[SimpleNamespace(id=credential_id, name="生产凭据")]
+    )
+    svc._system_creds.list_by_ids = AsyncMock(return_value=[])
+
+    now = MagicMock()
+    summary = await svc.aggregate_usage_statistics(
+        ctx,
+        now,
+        now,
+        usage_aggregation=UsageAggregation.WORKSPACE,
+        group_by=UsageStatisticsGroupBy.CREDENTIAL,
+        filters=UsageStatisticsFilters(provider="openai"),
+        limit=10,
+    )
+
+    assert summary.items[0].label == "生产凭据"
+    assert summary.items[0].total_tokens == 20
+    assert summary.totals.success_rate == 0.75
+    svc._logs.aggregate_usage_statistics_by_axis.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_statistics_team_group_resolves_names() -> None:
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    ctx = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="member",
+        user_id=user_id,
+        is_platform_admin=False,
+    )
+    svc._logs.aggregate_usage_statistics_by_axis = AsyncMock(
+        return_value=(
+            [
+                RequestLogUsageAggregateRow(
+                    group_key=team_id,
+                    label_snapshot=None,
+                    requests=1,
+                    success_count=1,
+                    failure_count=0,
+                    input_tokens=1,
+                    output_tokens=2,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.01"),
+                    avg_latency_ms=12.0,
+                    cache_hit_count=0,
+                )
+            ],
+            RequestLogUsageTotals(
+                requests=1,
+                success_count=1,
+                failure_count=0,
+                input_tokens=1,
+                output_tokens=2,
+                cached_tokens=0,
+                cost_usd=Decimal("0.01"),
+                avg_latency_ms=12.0,
+                cache_hit_count=0,
+            ),
+        )
+    )
+    svc._teams.get_display_names_by_ids = AsyncMock(return_value={team_id: "研发团队"})
+
+    now = MagicMock()
+    summary = await svc.aggregate_usage_statistics(
+        ctx,
+        now,
+        now,
+        usage_aggregation=UsageAggregation.USER,
+        group_by=UsageStatisticsGroupBy.TEAM,
+        filters=UsageStatisticsFilters(),
+        limit=10,
+    )
+
+    assert summary.items[0].label == "研发团队"
+    assert summary.items[0].group_key == str(team_id)

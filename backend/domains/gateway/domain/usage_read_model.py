@@ -24,7 +24,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 class UsageAggregation(StrEnum):
@@ -32,6 +37,33 @@ class UsageAggregation(StrEnum):
 
     WORKSPACE = "workspace"
     USER = "user"
+
+
+class UsageStatisticsGroupBy(StrEnum):
+    """调用统计支持的分组维度。"""
+
+    CREDENTIAL = "credential"
+    USER = "user"
+    TEAM = "team"
+    MODEL = "model"
+    VKEY = "vkey"
+    PROVIDER = "provider"
+    CAPABILITY = "capability"
+    STATUS = "status"
+
+
+@dataclass(frozen=True)
+class UsageStatisticsFilters:
+    """调用统计的可组合过滤条件（纯值对象）。"""
+
+    credential_id: UUID | None = None
+    user_id: UUID | None = None
+    team_id: UUID | None = None
+    model: str | None = None
+    provider: str | None = None
+    capability: str | None = None
+    status: str | None = None
+    vkey_id: UUID | None = None
 
 
 USAGE_AGGREGATION_QUERY_DESCRIPTION = (
@@ -43,4 +75,9 @@ USAGE_AGGREGATION_QUERY_DESCRIPTION = (
 路由层（``logs.py`` / ``dashboard.py`` 等）共享同一字符串，避免三处漂移。"""
 
 
-__all__ = ["USAGE_AGGREGATION_QUERY_DESCRIPTION", "UsageAggregation"]
+__all__ = [
+    "USAGE_AGGREGATION_QUERY_DESCRIPTION",
+    "UsageAggregation",
+    "UsageStatisticsFilters",
+    "UsageStatisticsGroupBy",
+]

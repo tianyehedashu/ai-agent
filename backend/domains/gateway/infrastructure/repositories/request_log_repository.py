@@ -7,12 +7,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.orm import defer
 
+from domains.gateway.domain.usage_read_model import (
+    UsageStatisticsFilters,
+    UsageStatisticsGroupBy,
+)
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.usage_axis_sql import usage_axis_base_clauses
 
@@ -33,8 +38,41 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql.elements import ColumnElement
 
     from domains.gateway.domain.usage_axis import UsageAxis
+
+
+@dataclass(frozen=True)
+class RequestLogUsageAggregateRow:
+    """一组调用统计聚合结果。"""
+
+    group_key: UUID | str | None
+    label_snapshot: str | None
+    requests: int
+    success_count: int
+    failure_count: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    cost_usd: Decimal
+    avg_latency_ms: float
+    cache_hit_count: int
+
+
+@dataclass(frozen=True)
+class RequestLogUsageTotals:
+    """调用统计总计。"""
+
+    requests: int
+    success_count: int
+    failure_count: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    cost_usd: Decimal
+    avg_latency_ms: float
+    cache_hit_count: int
 
 
 class RequestLogRepository:
@@ -464,5 +502,161 @@ class RequestLogRepository:
             }
         return out
 
+    @staticmethod
+    def _usage_statistics_group_expr(
+        group_by: UsageStatisticsGroupBy,
+    ) -> ColumnElement[UUID | str | None]:
+        if group_by == UsageStatisticsGroupBy.CREDENTIAL:
+            return GatewayRequestLog.credential_id
+        if group_by == UsageStatisticsGroupBy.USER:
+            return GatewayRequestLog.user_id
+        if group_by == UsageStatisticsGroupBy.TEAM:
+            return GatewayRequestLog.tenant_id
+        if group_by == UsageStatisticsGroupBy.MODEL:
+            return func.coalesce(
+                GatewayRequestLog.deployment_model_name,
+                GatewayRequestLog.route_name,
+                GatewayRequestLog.real_model,
+            )
+        if group_by == UsageStatisticsGroupBy.VKEY:
+            return GatewayRequestLog.vkey_id
+        if group_by == UsageStatisticsGroupBy.PROVIDER:
+            return GatewayRequestLog.provider
+        if group_by == UsageStatisticsGroupBy.CAPABILITY:
+            return GatewayRequestLog.capability
+        if group_by == UsageStatisticsGroupBy.STATUS:
+            return GatewayRequestLog.status
+        raise ValueError(f"Unknown usage statistics group_by: {group_by!r}")
 
-__all__ = ["RequestLogRepository"]
+    @staticmethod
+    def _usage_statistics_snapshot_expr(
+        group_by: UsageStatisticsGroupBy,
+    ) -> ColumnElement[str | None]:
+        if group_by == UsageStatisticsGroupBy.CREDENTIAL:
+            return func.max(GatewayRequestLog.credential_name_snapshot)
+        if group_by == UsageStatisticsGroupBy.USER:
+            return func.max(GatewayRequestLog.user_email_snapshot)
+        if group_by == UsageStatisticsGroupBy.VKEY:
+            return func.max(GatewayRequestLog.vkey_name_snapshot)
+        return literal(None)
+
+    @staticmethod
+    def _usage_statistics_filter_clauses(
+        filters: UsageStatisticsFilters,
+    ) -> list[ColumnElement[bool]]:
+        clauses: list[ColumnElement[bool]] = []
+        if filters.credential_id is not None:
+            clauses.append(GatewayRequestLog.credential_id == filters.credential_id)
+        if filters.user_id is not None:
+            clauses.append(GatewayRequestLog.user_id == filters.user_id)
+        if filters.team_id is not None:
+            clauses.append(GatewayRequestLog.tenant_id == filters.team_id)
+        if filters.vkey_id is not None:
+            clauses.append(GatewayRequestLog.vkey_id == filters.vkey_id)
+        if filters.model is not None:
+            clauses.append(
+                or_(
+                    GatewayRequestLog.deployment_model_name == filters.model,
+                    GatewayRequestLog.route_name == filters.model,
+                    GatewayRequestLog.real_model == filters.model,
+                )
+            )
+        if filters.provider is not None:
+            clauses.append(GatewayRequestLog.provider == filters.provider)
+        if filters.capability is not None:
+            clauses.append(GatewayRequestLog.capability == filters.capability)
+        if filters.status is not None:
+            clauses.append(GatewayRequestLog.status == filters.status)
+        return clauses
+
+    async def aggregate_usage_statistics_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        group_by: UsageStatisticsGroupBy,
+        filters: UsageStatisticsFilters,
+        limit: int = 50,
+    ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals]:
+        """按指定维度聚合调用统计，并返回同一过滤条件下的总计。"""
+        group_expr = self._usage_statistics_group_expr(group_by)
+        snapshot_expr = self._usage_statistics_snapshot_expr(group_by)
+        clauses = [
+            *usage_axis_base_clauses(axis),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+            *self._usage_statistics_filter_clauses(filters),
+        ]
+        success_case = case((GatewayRequestLog.status == "success", 1), else_=0)
+        failure_case = case((GatewayRequestLog.status != "success", 1), else_=0)
+        cache_hit_case = case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)
+
+        rows_stmt = (
+            select(
+                group_expr.label("group_key"),
+                snapshot_expr.label("label_snapshot"),
+                func.count(GatewayRequestLog.id).label("requests"),
+                func.sum(success_case).label("success_count"),
+                func.sum(failure_case).label("failure_count"),
+                func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
+                func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+                func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
+                func.sum(cache_hit_case).label("cache_hit_count"),
+            )
+            .where(and_(*clauses))
+            .group_by(group_expr)
+            .order_by(func.count(GatewayRequestLog.id).desc())
+            .limit(limit)
+        )
+        result = await self._session.execute(rows_stmt)
+        items = [
+            RequestLogUsageAggregateRow(
+                group_key=row.group_key,
+                label_snapshot=row.label_snapshot,
+                requests=int(row.requests or 0),
+                success_count=int(row.success_count or 0),
+                failure_count=int(row.failure_count or 0),
+                input_tokens=int(row.input_tokens or 0),
+                output_tokens=int(row.output_tokens or 0),
+                cached_tokens=int(row.cached_tokens or 0),
+                cost_usd=Decimal(row.cost_usd or 0),
+                avg_latency_ms=float(row.avg_latency_ms or 0),
+                cache_hit_count=int(row.cache_hit_count or 0),
+            )
+            for row in result.all()
+        ]
+
+        totals_stmt = select(
+            func.count(GatewayRequestLog.id).label("requests"),
+            func.sum(success_case).label("success_count"),
+            func.sum(failure_case).label("failure_count"),
+            func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
+            func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+            func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+            func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+            func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
+            func.sum(cache_hit_case).label("cache_hit_count"),
+        ).where(and_(*clauses))
+        total_row = (await self._session.execute(totals_stmt)).one()
+        totals = RequestLogUsageTotals(
+            requests=int(total_row.requests or 0),
+            success_count=int(total_row.success_count or 0),
+            failure_count=int(total_row.failure_count or 0),
+            input_tokens=int(total_row.input_tokens or 0),
+            output_tokens=int(total_row.output_tokens or 0),
+            cached_tokens=int(total_row.cached_tokens or 0),
+            cost_usd=Decimal(total_row.cost_usd or 0),
+            avg_latency_ms=float(total_row.avg_latency_ms or 0),
+            cache_hit_count=int(total_row.cache_hit_count or 0),
+        )
+        return items, totals
+
+
+__all__ = [
+    "RequestLogRepository",
+    "RequestLogUsageAggregateRow",
+    "RequestLogUsageTotals",
+]

@@ -46,7 +46,10 @@ export const PersonalModelListRow = memo(function PersonalModelListRow({
   onPreloadNavigate,
 }: PersonalModelListRowProps): React.JSX.Element {
   return (
-    <li className="[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]">
+    <li
+      data-connectivity-model-id={id}
+      className="[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]"
+    >
       <div className="flex items-stretch">
         <div className="flex items-center px-3">
           <Checkbox

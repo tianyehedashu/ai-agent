@@ -149,7 +149,10 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
   )
 
   return (
-    <li className="[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]">
+    <li
+      data-connectivity-model-id={model.id}
+      className="[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]"
+    >
       <div className="flex items-stretch">
         {batchSelectEnabled ? (
           <div

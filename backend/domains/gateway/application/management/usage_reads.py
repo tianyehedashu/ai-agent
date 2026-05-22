@@ -15,6 +15,7 @@ from domains.gateway.domain.margin_read_model import (
     margin_group_column_label,
     resolve_margin_group_label,
 )
+from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -53,6 +54,56 @@ class UsageLogReadModel:
     image_count: int | None
     cost_estimate: Decimal | None
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class UsageStatisticsMetric:
+    """调用统计指标，用于总计与分组行。"""
+
+    requests: int
+    success_count: int
+    failure_count: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    cost_usd: Decimal
+    avg_latency_ms: float
+    cache_hit_count: int
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def success_rate(self) -> float:
+        if self.requests == 0:
+            return 0.0
+        return self.success_count / self.requests
+
+    @property
+    def cache_hit_rate(self) -> float:
+        if self.requests == 0:
+            return 0.0
+        return self.cache_hit_count / self.requests
+
+
+@dataclass(frozen=True)
+class UsageStatisticsItem(UsageStatisticsMetric):
+    """调用统计分组行。"""
+
+    group_key: str
+    label: str
+
+
+@dataclass(frozen=True)
+class UsageStatisticsSummary:
+    """调用统计响应读模型。"""
+
+    start: datetime
+    end: datetime
+    group_by: UsageStatisticsGroupBy
+    totals: UsageStatisticsMetric
+    items: list[UsageStatisticsItem] = field(default_factory=list)
 
 
 class GatewayUsageReadService:
@@ -429,5 +480,8 @@ __all__ = [
     "MarginSummaryReadModel",
     "ProviderPlanCostReadModel",
     "UsageLogReadModel",
+    "UsageStatisticsItem",
+    "UsageStatisticsMetric",
+    "UsageStatisticsSummary",
     "UserQuotaReadModel",
 ]

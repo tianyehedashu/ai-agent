@@ -61,6 +61,7 @@ def credential_probe_to_response(result: CredentialProbeResult) -> CredentialPro
                 owned_by=i.owned_by,
                 already_registered=i.already_registered,
                 registered_names=list(i.registered_names),
+                inferred_model_types=list(i.inferred_model_types),
             )
             for i in result.items
         ],
