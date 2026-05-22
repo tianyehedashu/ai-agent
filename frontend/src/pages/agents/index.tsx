@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Bot, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 
 import { agentApi } from '@/api/agent'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +21,8 @@ import AgentDialog from './components/agent-dialog'
 export default function AgentsPage(): React.JSX.Element {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingDeleteAgent, setPendingDeleteAgent] = useState<Agent | null>(null)
   const queryClient = useQueryClient()
 
   const { data: agentsData, isLoading } = useQuery({
@@ -42,9 +45,16 @@ export default function AgentsPage(): React.JSX.Element {
   }
 
   const handleDelete = (agent: Agent): void => {
-    if (confirm(`确定要删除 Agent "${agent.name}" 吗？`)) {
-      void deleteMutation.mutateAsync(agent.id)
-    }
+    setPendingDeleteAgent(agent)
+    setDeleteOpen(true)
+  }
+
+  const handleConfirmDelete = (): void => {
+    if (!pendingDeleteAgent) return
+    const id = pendingDeleteAgent.id
+    setDeleteOpen(false)
+    setPendingDeleteAgent(null)
+    void deleteMutation.mutateAsync(id)
   }
 
   const handleDialogClose = (): void => {
@@ -121,6 +131,23 @@ export default function AgentsPage(): React.JSX.Element {
       )}
 
       <AgentDialog open={isDialogOpen} onOpenChange={handleDialogClose} agent={editingAgent} />
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setPendingDeleteAgent(null)
+        }}
+        title="删除 Agent"
+        description={
+          pendingDeleteAgent
+            ? `确定要删除 Agent「${pendingDeleteAgent.name}」吗？此操作不可撤销。`
+            : '确定要删除该 Agent 吗？'
+        }
+        confirmLabel="确认删除"
+        pending={deleteMutation.isPending}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }

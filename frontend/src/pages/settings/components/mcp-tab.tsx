@@ -10,6 +10,7 @@ import { Plus, Trash2, Power, Server } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,6 +38,8 @@ import type { MCPTemplate } from '@/types/mcp'
 export function MCPTab(): React.ReactElement {
   const queryClient = useQueryClient()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingDeleteServerId, setPendingDeleteServerId] = useState<string | null>(null)
 
   // 获取服务器列表
   const { data: serversData, isLoading } = useQuery({
@@ -163,9 +166,8 @@ export function MCPTab(): React.ReactElement {
                         variant="ghost"
                         size="icon"
                         onClick={() => {
-                          if (confirm('确定要删除这个服务器吗？')) {
-                            deleteMutation.mutate(server.id)
-                          }
+                          setPendingDeleteServerId(server.id)
+                          setDeleteOpen(true)
                         }}
                         disabled={deleteMutation.isPending}
                       >
@@ -195,6 +197,25 @@ export function MCPTab(): React.ReactElement {
           ))
         )}
       </div>
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setPendingDeleteServerId(null)
+        }}
+        title="删除 MCP 服务器"
+        description="确定要删除这个服务器吗？此操作不可撤销。"
+        confirmLabel="确认删除"
+        pending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDeleteServerId) return
+          const id = pendingDeleteServerId
+          setDeleteOpen(false)
+          setPendingDeleteServerId(null)
+          deleteMutation.mutate(id)
+        }}
+      />
     </div>
   )
 }

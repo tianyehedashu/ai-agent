@@ -9,6 +9,7 @@ import { AlertCircle, Plus, Search, Server } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { mcpApi } from '@/api/mcp'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,8 @@ export default function MCPPage(): React.JSX.Element {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [serverToEdit, setServerToEdit] = useState<MCPServerConfig | null>(null)
   const [selectedServer, setSelectedServer] = useState<MCPServerConfig | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingDeleteServer, setPendingDeleteServer] = useState<MCPServerConfig | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -153,10 +156,8 @@ export default function MCPPage(): React.JSX.Element {
                   setEditDialogOpen(true)
                 }}
                 onDelete={(s) => {
-                  if (confirm(`确定要删除服务器 "${s.display_name ?? s.name}" 吗？`)) {
-                    deleteServerMutation.mutate(s.id)
-                    setSelectedServer(null)
-                  }
+                  setPendingDeleteServer(s)
+                  setDeleteOpen(true)
                 }}
               />
             )
@@ -172,6 +173,30 @@ export default function MCPPage(): React.JSX.Element {
         onOpenChange={(open) => {
           setEditDialogOpen(open)
           if (!open) setServerToEdit(null)
+        }}
+      />
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setPendingDeleteServer(null)
+        }}
+        title="删除 MCP 服务器"
+        description={
+          pendingDeleteServer
+            ? `确定要删除服务器「${pendingDeleteServer.display_name ?? pendingDeleteServer.name}」吗？此操作不可撤销。`
+            : '确定要删除该服务器吗？'
+        }
+        confirmLabel="确认删除"
+        pending={deleteServerMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDeleteServer) return
+          const id = pendingDeleteServer.id
+          setDeleteOpen(false)
+          setPendingDeleteServer(null)
+          setSelectedServer(null)
+          deleteServerMutation.mutate(id)
         }}
       />
     </div>

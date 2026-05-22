@@ -24,6 +24,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { EditTitleDialog } from '@/components/chat/edit-title-dialog'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -340,6 +341,8 @@ function SessionItem({
 }>): React.JSX.Element {
   const [isHovered, setIsHovered] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -351,98 +354,117 @@ function SessionItem({
   // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
   const defaultTitle = (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
-  const handleDelete = async (e: React.MouseEvent): Promise<void> => {
+  const handleDeleteClick = (e: React.MouseEvent): void => {
     e.preventDefault()
     e.stopPropagation()
+    setDeleteOpen(true)
+  }
 
-    if (confirm('确定要删除这个会话吗？')) {
-      try {
-        await sessionApi.delete(session.id)
-        void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-        void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
-        toast({
-          title: '删除成功',
-          description: '会话已删除',
-        })
-        if (session.id === currentSessionId) {
-          useChatStore.getState().setCurrentSession(null)
-          useChatStore.getState().clearMessages()
-          navigate(isVideo ? '/video-tasks' : '/chat')
-        }
-      } catch (error) {
-        toast({
-          variant: 'destructive',
-          title: '删除失败',
-          description: error instanceof Error ? error.message : '未知错误',
-        })
+  const handleConfirmDelete = async (): Promise<void> => {
+    setDeleteOpen(false)
+    setDeletePending(true)
+    try {
+      await sessionApi.delete(session.id)
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
+      toast({
+        title: '删除成功',
+        description: '会话已删除',
+      })
+      if (session.id === currentSessionId) {
+        useChatStore.getState().setCurrentSession(null)
+        useChatStore.getState().clearMessages()
+        navigate(isVideo ? '/video-tasks' : '/chat')
       }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: '删除失败',
+        description: error instanceof Error ? error.message : '未知错误',
+      })
+    } finally {
+      setDeletePending(false)
     }
   }
 
   return (
-    <Link
-      to={href}
-      className={cn(
-        'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-150',
-        isActive
-          ? 'bg-secondary text-foreground'
-          : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
-      )}
-      onMouseEnter={() => {
-        setIsHovered(true)
-      }}
-      onMouseLeave={() => {
-        setIsHovered(false)
-      }}
-    >
-      <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', isVideo && 'text-purple-500')} />
-      <span className="flex-1 truncate text-[13px]">{session.title ?? defaultTitle}</span>
-      {(isHovered || isActive) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100"
-              onClick={(e) => {
-                e.preventDefault()
-              }}
-            >
-              <MoreVertical className="h-3 w-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.preventDefault()
-                setIsEditDialogOpen(true)
-              }}
-            >
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              编辑标题
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={handleDelete}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              删除
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+    <>
+      <Link
+        to={href}
+        className={cn(
+          'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-150',
+          isActive
+            ? 'bg-secondary text-foreground'
+            : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+        )}
+        onMouseEnter={() => {
+          setIsHovered(true)
+        }}
+        onMouseLeave={() => {
+          setIsHovered(false)
+        }}
+      >
+        <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', isVideo && 'text-purple-500')} />
+        <span className="flex-1 truncate text-[13px]">{session.title ?? defaultTitle}</span>
+        {(isHovered || isActive) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100"
+                onClick={(e) => {
+                  e.preventDefault()
+                }}
+              >
+                <MoreVertical className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault()
+                  setIsEditDialogOpen(true)
+                }}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                编辑标题
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={handleDeleteClick}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                删除
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
-      <EditTitleDialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        sessionId={session.id}
-        currentTitle={session.title}
-        onSuccess={() => {
-          void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-          void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
+        <EditTitleDialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          sessionId={session.id}
+          currentTitle={session.title}
+          onSuccess={() => {
+            void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+            void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
+          }}
+        />
+      </Link>
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="删除会话"
+        description="确定要删除这个会话吗？此操作不可撤销。"
+        confirmLabel="确认删除"
+        pending={deletePending}
+        onConfirm={() => {
+          void handleConfirmDelete()
         }}
       />
-    </Link>
+    </>
   )
 }

@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { gatewayApi, type EntitlementPlan, type VirtualKey } from '@/api/gateway'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +53,8 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const [createdKeyId, setCreatedKeyId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
+  const [revokeOpen, setRevokeOpen] = useState(false)
+  const [pendingRevoke, setPendingRevoke] = useState<{ id: string; name: string } | null>(null)
 
   const { data: keys, isLoading } = useQuery({
     queryKey: ['gateway', 'keys', teamId],
@@ -305,7 +308,8 @@ export default function GatewayKeysPage(): React.JSX.Element {
                           size="icon"
                           className="h-7 w-7"
                           onClick={() => {
-                            if (confirm(`确认撤销 ${k.name}?`)) revokeMutation.mutate(k.id)
+                            setPendingRevoke({ id: k.id, name: k.name })
+                            setRevokeOpen(true)
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -334,6 +338,29 @@ export default function GatewayKeysPage(): React.JSX.Element {
           createMutation.mutate(values)
         }}
         plaintext={createdKey}
+      />
+
+      <ConfirmAlertDialog
+        open={revokeOpen}
+        onOpenChange={(open) => {
+          setRevokeOpen(open)
+          if (!open) setPendingRevoke(null)
+        }}
+        title="撤销虚拟 Key"
+        description={
+          pendingRevoke
+            ? `确定撤销「${pendingRevoke.name}」？撤销后该 Key 将无法继续调用。`
+            : '确定撤销该虚拟 Key？'
+        }
+        confirmLabel="确认撤销"
+        pending={revokeMutation.isPending}
+        onConfirm={() => {
+          if (!pendingRevoke) return
+          const id = pendingRevoke.id
+          setRevokeOpen(false)
+          setPendingRevoke(null)
+          revokeMutation.mutate(id)
+        }}
       />
 
       <AlertDialog open={batchRevokeOpen} onOpenChange={setBatchRevokeOpen}>

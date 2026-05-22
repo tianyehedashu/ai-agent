@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type AlertRule, type AlertRuleCreateBody } from '@/api/gateway'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -46,6 +47,8 @@ export default function GatewayAlertsPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
   const { data: items, isLoading } = useQuery({
     queryKey: ['gateway', 'alerts', teamId],
     queryFn: () => gatewayApi.listAlerts(teamId),
@@ -133,7 +136,8 @@ export default function GatewayAlertsPage(): React.JSX.Element {
                         variant="ghost"
                         className="h-7 w-7"
                         onClick={() => {
-                          if (confirm(`删除 ${r.name}?`)) deleteMutation.mutate(r.id)
+                          setPendingDelete({ id: r.id, name: r.name })
+                          setDeleteOpen(true)
                         }}
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -152,6 +156,29 @@ export default function GatewayAlertsPage(): React.JSX.Element {
         onOpenChange={setOpen}
         onSubmit={(v) => {
           createMutation.mutate(v)
+        }}
+      />
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={(next) => {
+          setDeleteOpen(next)
+          if (!next) setPendingDelete(null)
+        }}
+        title="删除告警规则"
+        description={
+          pendingDelete
+            ? `确定删除规则「${pendingDelete.name}」？此操作不可撤销。`
+            : '确定删除该规则？'
+        }
+        confirmLabel="确认删除"
+        pending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return
+          const id = pendingDelete.id
+          setDeleteOpen(false)
+          setPendingDelete(null)
+          deleteMutation.mutate(id)
         }}
       />
     </div>

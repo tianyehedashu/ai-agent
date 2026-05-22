@@ -13,6 +13,7 @@ import {
 import { Link, useParams, useNavigate } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -164,37 +165,44 @@ function SessionItem({
   currentSessionId?: string
 }>): React.JSX.Element {
   const [isHovered, setIsHovered] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
   // 无标题时兜底：有视频任务的会话显示「新视频」，否则「新对话」
   const defaultTitle = (session.videoTaskCount ?? 0) > 0 ? '新视频' : '新对话'
 
-  const handleDelete = async (e: React.MouseEvent): Promise<void> => {
+  const handleDeleteClick = (e: React.MouseEvent): void => {
     e.preventDefault()
     e.stopPropagation()
+    setDeleteOpen(true)
+  }
 
-    if (confirm('确定要删除这个对话吗？')) {
-      try {
-        await sessionApi.delete(session.id)
-        void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-        void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
-        toast({
-          title: '删除成功',
-          description: '会话已删除',
-        })
-        if (session.id === currentSessionId) {
-          useChatStore.getState().setCurrentSession(null)
-          useChatStore.getState().clearMessages()
-          navigate('/chat')
-        }
-      } catch (error) {
-        toast({
-          variant: 'destructive',
-          title: '删除失败',
-          description: error instanceof Error ? error.message : '未知错误',
-        })
+  const handleConfirmDelete = async (): Promise<void> => {
+    setDeleteOpen(false)
+    setDeletePending(true)
+    try {
+      await sessionApi.delete(session.id)
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      void queryClient.invalidateQueries({ queryKey: ['session', session.id] })
+      toast({
+        title: '删除成功',
+        description: '会话已删除',
+      })
+      if (session.id === currentSessionId) {
+        useChatStore.getState().setCurrentSession(null)
+        useChatStore.getState().clearMessages()
+        navigate('/chat')
       }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: '删除失败',
+        description: error instanceof Error ? error.message : '未知错误',
+      })
+    } finally {
+      setDeletePending(false)
     }
   }
 
@@ -243,7 +251,7 @@ function SessionItem({
               <DropdownMenuContent align="end" className="w-40">
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onClick={handleDelete}
+                  onClick={handleDeleteClick}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   删除对话
@@ -256,16 +264,38 @@ function SessionItem({
     </Link>
   )
 
+  const deleteDialog = (
+    <ConfirmAlertDialog
+      open={deleteOpen}
+      onOpenChange={setDeleteOpen}
+      title="删除对话"
+      description="确定要删除这个对话吗？此操作不可撤销。"
+      confirmLabel="确认删除"
+      pending={deletePending}
+      onConfirm={() => {
+        void handleConfirmDelete()
+      }}
+    />
+  )
+
   if (isCollapsed) {
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>{ItemContent}</TooltipTrigger>
-        <TooltipContent side="right" className="max-w-[200px] truncate">
-          {session.title ?? defaultTitle}
-        </TooltipContent>
-      </Tooltip>
+      <>
+        <Tooltip>
+          <TooltipTrigger asChild>{ItemContent}</TooltipTrigger>
+          <TooltipContent side="right" className="max-w-[200px] truncate">
+            {session.title ?? defaultTitle}
+          </TooltipContent>
+        </Tooltip>
+        {deleteDialog}
+      </>
     )
   }
 
-  return ItemContent
+  return (
+    <>
+      {ItemContent}
+      {deleteDialog}
+    </>
+  )
 }

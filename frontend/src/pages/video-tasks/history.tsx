@@ -18,6 +18,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import { videoTaskApi } from '@/api/videoTask'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -53,6 +54,8 @@ const statusFilters = [
  */
 export default function VideoTasksHistoryPage(): React.JSX.Element {
   const [selectedTask, setSelectedTask] = useState<VideoGenTask | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [displayLimit, setDisplayLimit] = useState(12)
   const queryClient = useQueryClient()
@@ -200,9 +203,8 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
                       onSubmit={() => void submitMutation.mutateAsync(task.id)}
                       onCancel={() => void cancelMutation.mutateAsync(task.id)}
                       onDelete={() => {
-                        if (confirm('确定要删除这个任务吗？')) {
-                          void deleteMutation.mutateAsync(task.id)
-                        }
+                        setPendingDeleteTaskId(task.id)
+                        setDeleteOpen(true)
                       }}
                     />
                   </motion.div>
@@ -224,6 +226,25 @@ export default function VideoTasksHistoryPage(): React.JSX.Element {
           )}
         </AnimatePresence>
       </main>
+
+      <ConfirmAlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setPendingDeleteTaskId(null)
+        }}
+        title="删除视频任务"
+        description="确定要删除这个任务吗？此操作不可撤销。"
+        confirmLabel="确认删除"
+        pending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDeleteTaskId) return
+          const id = pendingDeleteTaskId
+          setDeleteOpen(false)
+          setPendingDeleteTaskId(null)
+          void deleteMutation.mutateAsync(id)
+        }}
+      />
 
       <VideoTaskDetailDialog
         task={selectedTask}

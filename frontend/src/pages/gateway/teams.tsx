@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type GatewayTeam, type TeamMember } from '@/api/gateway'
+import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -49,6 +50,10 @@ export default function GatewayTeamsPage(): React.JSX.Element {
 
   const [openTeam, setOpenTeam] = useState(false)
   const [openMember, setOpenMember] = useState(false)
+  const [deleteTeamOpen, setDeleteTeamOpen] = useState(false)
+  const [pendingDeleteTeam, setPendingDeleteTeam] = useState<{ id: string; name: string } | null>(
+    null
+  )
 
   const createTeamMutation = useMutation({
     mutationFn: gatewayApi.createTeam,
@@ -127,7 +132,8 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                           variant="ghost"
                           className="h-7 w-7"
                           onClick={() => {
-                            if (confirm(`删除团队 ${t.name}?`)) deleteTeamMutation.mutate(t.id)
+                            setPendingDeleteTeam({ id: t.id, name: t.name })
+                            setDeleteTeamOpen(true)
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -231,6 +237,29 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           />
         </DialogContent>
       </Dialog>
+
+      <ConfirmAlertDialog
+        open={deleteTeamOpen}
+        onOpenChange={(open) => {
+          setDeleteTeamOpen(open)
+          if (!open) setPendingDeleteTeam(null)
+        }}
+        title="删除团队"
+        description={
+          pendingDeleteTeam
+            ? `确定删除团队「${pendingDeleteTeam.name}」？此操作不可撤销。`
+            : '确定删除该团队？'
+        }
+        confirmLabel="确认删除"
+        pending={deleteTeamMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDeleteTeam) return
+          const id = pendingDeleteTeam.id
+          setDeleteTeamOpen(false)
+          setPendingDeleteTeam(null)
+          deleteTeamMutation.mutate(id)
+        }}
+      />
     </div>
   )
 }
