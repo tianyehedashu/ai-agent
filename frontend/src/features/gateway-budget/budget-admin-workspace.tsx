@@ -2,6 +2,8 @@
  * Admin 预算配额工作区：Tab 分作用域 + 内联新建/编辑（无 Dialog）。
  */
 
+import { useCallback } from 'react'
+
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -17,10 +19,18 @@ import { BudgetAdminCreatePanel } from './budget-admin-create-panel'
 import { BudgetAdminDeleteDialog } from './budget-admin-delete-dialog'
 import { BudgetAdminEditPanel } from './budget-admin-edit-panel'
 import { BudgetAdminTable } from './budget-admin-table'
+import { BudgetModelCombobox } from './budget-model-combobox'
 import { useBudgetAdminWorkspace } from './use-budget-admin-workspace'
 
 export function BudgetAdminWorkspace(): React.JSX.Element {
   const ws = useBudgetAdminWorkspace()
+
+  const handleFilterModelChange = useCallback(
+    (modelName: string): void => {
+      ws.handleModelFilterChange(modelName === '' ? '__all__' : modelName)
+    },
+    [ws.handleModelFilterChange]
+  )
 
   return (
     <div className="space-y-4">
@@ -56,27 +66,20 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
               keys={ws.keyOptions}
               members={ws.memberOptions}
               modelOptions={ws.modelOptions}
+              modelsLoading={ws.modelsLoading}
             />
 
             <div className="flex flex-wrap gap-3">
-              <div className="min-w-[160px]">
+              <div className="min-w-[200px]">
                 <Label className="text-xs text-muted-foreground">模型筛选</Label>
-                <Select
-                  value={ws.modelFilter || '__all__'}
-                  onValueChange={ws.handleModelFilterChange}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="全部模型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">全部模型</SelectItem>
-                    {ws.modelOptions.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <BudgetModelCombobox
+                  value={ws.modelFilter}
+                  onChange={handleFilterModelChange}
+                  options={ws.modelOptions}
+                  loading={ws.modelsLoading}
+                  placeholder="全部模型"
+                  className="h-9"
+                />
               </div>
               <div className="min-w-[140px]">
                 <Label className="text-xs text-muted-foreground">周期</Label>
@@ -119,6 +122,7 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
                 keys={ws.keyOptions}
                 members={ws.memberOptions}
                 modelOptions={ws.modelOptions}
+                modelsLoading={ws.modelsLoading}
               />
             ) : null}
           </TabsContent>

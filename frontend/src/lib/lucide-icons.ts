@@ -12,6 +12,7 @@ export { default as ChevronDown } from 'lucide-react/dist/esm/icons/chevron-down
 export { default as ChevronLeft } from 'lucide-react/dist/esm/icons/chevron-left'
 export { default as ChevronRight } from 'lucide-react/dist/esm/icons/chevron-right'
 export { default as ChevronUp } from 'lucide-react/dist/esm/icons/chevron-up'
+export { default as ChevronsUpDown } from 'lucide-react/dist/esm/icons/chevrons-up-down'
 export { default as Circle } from 'lucide-react/dist/esm/icons/circle'
 export { default as CircleDashed } from 'lucide-react/dist/esm/icons/circle-dashed'
 export { default as Clock } from 'lucide-react/dist/esm/icons/clock'

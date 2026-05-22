@@ -9,8 +9,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { BudgetModelCombobox, BudgetModelComboboxHint } from './budget-model-combobox'
+
 import type { BudgetAdminTab } from './budget-admin-constants'
 import type { BudgetFormValues } from './budget-form-utils'
+import type { BudgetModelOption } from './budget-model-options'
 
 export interface BudgetInlineFormProps {
   values: BudgetFormValues
@@ -21,7 +24,8 @@ export interface BudgetInlineFormProps {
   disabled: boolean
   keys: { id: string; label: string }[]
   members: { id: string; label: string }[]
-  modelOptions: string[]
+  modelOptions: BudgetModelOption[]
+  modelsLoading?: boolean
   fixedTargetKind?: BudgetAdminTab
 }
 
@@ -35,6 +39,7 @@ export function BudgetInlineForm({
   keys,
   members,
   modelOptions,
+  modelsLoading = false,
   fixedTargetKind,
 }: Readonly<BudgetInlineFormProps>): React.JSX.Element {
   const targetKind = fixedTargetKind ?? values.target_kind
@@ -134,36 +139,17 @@ export function BudgetInlineForm({
       </div>
       <div className="sm:col-span-2">
         <Label>模型（可选）</Label>
-        {modelOptions.length > 0 ? (
-          <Select
-            value={values.model_name || '__all__'}
-            onValueChange={(val: string) => {
-              onChange({ ...values, model_name: val === '__all__' ? '' : val })
-            }}
-            disabled={disabled}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="全模型汇总" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">全模型汇总</SelectItem>
-              {modelOptions.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Input
-            placeholder="与 API 请求中 model 一致；留空表示全模型汇总"
-            value={values.model_name}
-            onChange={(e) => {
-              onChange({ ...values, model_name: e.target.value })
-            }}
-            disabled={disabled}
-          />
-        )}
+        <BudgetModelCombobox
+          value={values.model_name}
+          onChange={(modelName) => {
+            onChange({ ...values, model_name: modelName })
+          }}
+          options={modelOptions}
+          disabled={disabled}
+          loading={modelsLoading}
+          placeholder="全模型汇总"
+        />
+        <BudgetModelComboboxHint loading={modelsLoading} optionsCount={modelOptions.length} />
       </div>
       <div>
         <Label>限额 USD（可选）</Label>

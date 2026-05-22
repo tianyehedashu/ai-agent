@@ -8,6 +8,7 @@ import { TAB_LABELS, type BudgetAdminTab } from './budget-admin-constants'
 import { BudgetInlineForm, type BudgetInlineFormProps } from './budget-inline-form'
 
 import type { BudgetFormValues } from './budget-form-utils'
+import type { BudgetModelOption } from './budget-model-options'
 
 export interface BudgetAdminCreatePanelProps {
   tab: BudgetAdminTab
@@ -20,7 +21,8 @@ export interface BudgetAdminCreatePanelProps {
   disabled: boolean
   keys: BudgetInlineFormProps['keys']
   members: BudgetInlineFormProps['members']
-  modelOptions: string[]
+  modelOptions: BudgetModelOption[]
+  modelsLoading?: boolean
 }
 
 export function BudgetAdminCreatePanel({
@@ -35,6 +37,7 @@ export function BudgetAdminCreatePanel({
   keys,
   members,
   modelOptions,
+  modelsLoading = false,
 }: BudgetAdminCreatePanelProps): React.JSX.Element {
   return (
     <Collapsible open={createOpen} onOpenChange={onCreateOpenChange}>
@@ -61,6 +64,7 @@ export function BudgetAdminCreatePanel({
               keys={keys}
               members={members}
               modelOptions={modelOptions}
+              modelsLoading={modelsLoading}
               fixedTargetKind={tab}
             />
           </CardContent>

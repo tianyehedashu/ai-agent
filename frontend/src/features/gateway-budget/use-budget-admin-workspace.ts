@@ -4,9 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type BudgetUpsertBody, type GatewayBudget } from '@/api/gateway'
+import { gatewayModelsListQueryKey, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { formatTeamMemberDisplay } from '@/types/permissions'
 
 import { adminTabsForPlatform, parseAdminTab, type BudgetAdminTab } from './budget-admin-constants'
 import {
@@ -15,6 +17,7 @@ import {
   DEFAULT_BUDGET_FORM_VALUES,
   type BudgetFormValues,
 } from './budget-form-utils'
+import { buildBudgetModelOptions, type BudgetModelOption } from './budget-model-options'
 import { gatewayBudgetsQueryKey } from './use-gateway-budgets'
 
 export interface BudgetAdminWorkspaceState {
@@ -35,7 +38,8 @@ export interface BudgetAdminWorkspaceState {
   formDisabled: boolean
   isLoading: boolean
   filteredItems: GatewayBudget[]
-  modelOptions: string[]
+  modelOptions: BudgetModelOption[]
+  modelsLoading: boolean
   keyOptions: { id: string; label: string }[]
   memberOptions: { id: string; label: string }[]
   upsertPending: boolean
@@ -96,15 +100,34 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     enabled: activeTab === 'user' || createValues.target_kind === 'user',
   })
 
-  const { data: models = [] } = useQuery({
-    queryKey: ['gateway', 'models', teamId, 'budget-admin'],
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'team' }),
+  const { data: models = [], isLoading: modelsQueryLoading } = useQuery({
+    queryKey: gatewayModelsListQueryKey(teamId, 'callable'),
+    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'callable' }),
+    staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const modelOptions = useMemo(
-    () => [...new Set(models.map((m) => m.name))].sort((a, b) => a.localeCompare(b)),
-    [models]
+  const { data: routes = [], isLoading: routesQueryLoading } = useQuery({
+    queryKey: ['gateway', 'routes', teamId],
+    queryFn: () => gatewayApi.listRoutes(teamId),
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const existingBudgetModelNames = useMemo(
+    () => (items ?? []).map((budget) => budget.model_name),
+    [items]
   )
+
+  const modelOptions = useMemo(
+    () =>
+      buildBudgetModelOptions({
+        models,
+        routes,
+        existingModelNames: existingBudgetModelNames,
+      }),
+    [models, routes, existingBudgetModelNames]
+  )
+
+  const modelsLoading = modelsQueryLoading || routesQueryLoading
 
   const keyOptions = useMemo(
     () =>
@@ -121,7 +144,7 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     () =>
       members.map((m) => ({
         id: m.user_id,
-        label: `${m.role} · ${m.user_id.slice(0, 8)}…`,
+        label: formatTeamMemberDisplay(m).primary,
       })),
     [members]
   )
@@ -272,6 +295,7 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     isLoading,
     filteredItems,
     modelOptions,
+    modelsLoading,
     keyOptions,
     memberOptions,
     upsertPending: upsertMutation.isPending,

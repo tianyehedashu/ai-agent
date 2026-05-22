@@ -6,6 +6,7 @@ import { formatBudgetPeriod, formatBudgetTargetKind } from './budget-progress-ut
 
 import type { BudgetAdminTab } from './budget-admin-constants'
 import type { BudgetFormValues } from './budget-form-utils'
+import type { BudgetModelOption } from './budget-model-options'
 
 export interface BudgetAdminEditPanelProps {
   budget: GatewayBudget
@@ -18,7 +19,8 @@ export interface BudgetAdminEditPanelProps {
   disabled: boolean
   keys: BudgetInlineFormProps['keys']
   members: BudgetInlineFormProps['members']
-  modelOptions: string[]
+  modelOptions: BudgetModelOption[]
+  modelsLoading?: boolean
 }
 
 export function BudgetAdminEditPanel({
@@ -33,6 +35,7 @@ export function BudgetAdminEditPanel({
   keys,
   members,
   modelOptions,
+  modelsLoading = false,
 }: BudgetAdminEditPanelProps): React.JSX.Element {
   return (
     <Card>
@@ -54,6 +57,7 @@ export function BudgetAdminEditPanel({
           keys={keys}
           members={members}
           modelOptions={modelOptions}
+          modelsLoading={modelsLoading}
           fixedTargetKind={tab}
         />
       </CardContent>
