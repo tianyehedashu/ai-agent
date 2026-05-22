@@ -30,6 +30,7 @@ import {
 } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { TESTABLE_CAPABILITIES, NO_CREDENTIAL } from '@/features/gateway-models/constants'
+import { canManageGatewayModel } from '@/features/gateway-models/gateway-model-permissions'
 import { credentialDetailHref } from '@/features/gateway-models/paths'
 import {
   channelLabel,
@@ -43,7 +44,7 @@ import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-mo
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { Copy, ExternalLink, Info, Loader2, Zap } from '@/lib/lucide-icons'
+import { Copy, ExternalLink, Info, Loader2, Trash2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
@@ -57,9 +58,12 @@ interface ModelInspectorProps {
   usageLoading: boolean
   isTesting: boolean
   isSaving: boolean
+  isDeleting?: boolean
+  canDelete?: boolean
   onTest: (id: string) => void
   onSave: (id: string, body: GatewayModelUpdateBody) => void
   onToggleEnabled: (id: string, enabled: boolean) => void
+  onDelete?: (id: string) => void
   emptyReason?: 'none' | 'filter'
   /** 无选中模型时的主/副文案（凭据详情等非侧栏场景） */
   emptyTitle?: string
@@ -75,12 +79,16 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   usageLoading,
   isTesting,
   isSaving,
+  isDeleting = false,
+  canDelete = false,
   onTest,
   onSave,
   onToggleEnabled,
+  onDelete,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin)
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const myPrice = priceByName.get(model.name)
@@ -186,7 +194,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             entitlementStatus={model.entitlement_status}
             entitlementResetAt={model.entitlement_reset_at}
           />
-          {canWrite ? (
+          {canManage ? (
             <>
               <Switch
                 checked={model.enabled}
@@ -211,6 +219,24 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 )}
                 测试连通性
               </Button>
+              {canDelete ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  disabled={isDeleting || isSaving}
+                  onClick={() => {
+                    onDelete?.(model.id)
+                  }}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  删除
+                </Button>
+              ) : null}
             </>
           ) : (
             <span className="text-xs text-muted-foreground">
@@ -316,7 +342,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 <Input
                   className="mt-0 font-mono text-sm"
                   value={modelName}
-                  readOnly={!canWrite}
+                  readOnly={!canManage}
                   onChange={(e) => {
                     setModelName(e.target.value)
                   }}
@@ -341,7 +367,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 <Input
                   className="mt-0 font-mono text-sm"
                   value={realModel}
-                  readOnly={!canWrite}
+                  readOnly={!canManage}
                   onChange={(e) => {
                     setRealModel(e.target.value)
                   }}
@@ -357,7 +383,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     该模型由平台维护，凭据由平台管理员管理。
                   </p>
                 ) : null}
-                {canWrite ? (
+                {canManage ? (
                   <Select
                     value={credentialId || NO_CREDENTIAL}
                     onValueChange={(v) => {
@@ -407,7 +433,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   className="mt-1 tabular-nums"
                   inputMode="numeric"
                   value={weight}
-                  readOnly={!canWrite}
+                  readOnly={!canManage}
                   onChange={(e) => {
                     setWeight(e.target.value)
                   }}
@@ -420,7 +446,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     inputMode="numeric"
                     placeholder="∞"
                     value={rpmLimit}
-                    readOnly={!canWrite}
+                    readOnly={!canManage}
                     onChange={(e) => {
                       setRpmLimit(e.target.value)
                     }}
@@ -429,7 +455,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     inputMode="numeric"
                     placeholder="∞"
                     value={tpmLimit}
-                    readOnly={!canWrite}
+                    readOnly={!canManage}
                     onChange={(e) => {
                       setTpmLimit(e.target.value)
                     }}
@@ -437,7 +463,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 </div>
               </div>
             </div>
-            {canWrite ? (
+            {canManage ? (
               <Button
                 size="sm"
                 className="mt-1"
@@ -520,9 +546,12 @@ export const ModelInspector = memo(function ModelInspector({
   usageLoading,
   isTesting,
   isSaving,
+  isDeleting = false,
+  canDelete = false,
   onTest,
   onSave,
   onToggleEnabled,
+  onDelete,
   emptyReason = 'none',
   emptyTitle,
   emptyDescription,
@@ -555,9 +584,12 @@ export const ModelInspector = memo(function ModelInspector({
       usageLoading={usageLoading}
       isTesting={isTesting}
       isSaving={isSaving}
+      isDeleting={isDeleting}
+      canDelete={canDelete}
       onTest={onTest}
       onSave={onSave}
       onToggleEnabled={onToggleEnabled}
+      onDelete={onDelete}
     />
   )
 })

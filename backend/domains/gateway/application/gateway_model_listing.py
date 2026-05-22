@@ -65,7 +65,11 @@ async def list_merged_models_for_tenant(
             tenant_id=tenant_id,
             user_id=user_id,
         )
-    return merge_named_rows_tenant_overrides_system(tenant_rows, system_rows)
+    return merge_named_rows_tenant_overrides_system(
+        tenant_rows,
+        system_rows,
+        only_enabled=only_enabled,
+    )
 
 
 async def resolve_by_name_visible(

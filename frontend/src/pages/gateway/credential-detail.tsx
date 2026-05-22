@@ -10,7 +10,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -19,6 +19,16 @@ import {
   type ProviderPlan,
   type ProviderPlanCost,
 } from '@/api/gateway'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,10 +53,11 @@ import {
 } from '@/features/gateway-credentials/provider-schemas'
 import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
+import { credentialsTeamListHref } from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
-import { ChevronRight, Loader2 } from '@/lib/lucide-icons'
+import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
 
 const AddModelsDialog = lazy(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
@@ -64,10 +75,12 @@ function canEditGatewayCredential(
 
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const navigate = useNavigate()
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
   const [addModelsOpen, setAddModelsOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
@@ -85,6 +98,10 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
 
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
+  const credentialsListHref =
+    cred?.scope === 'system'
+      ? `/gateway/teams/${teamId}/credentials?tab=system`
+      : credentialsTeamListHref(teamId)
   const schema = cred ? getProviderSchema(cred.provider) : undefined
 
   const addModelsFromUrl = searchParams.get('addModels') === '1'
@@ -142,6 +159,22 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       invalidateCredentialSummariesCache(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, id] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => gatewayApi.deleteCredential(teamId, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+      invalidateCredentialSummariesCache(queryClient)
+      setDeleteDialogOpen(false)
+      toast({ title: '凭据已删除', description: '关联的注册模型已一并移除' })
+      navigate(credentialsListHref)
+    },
+    onError: (e: Error) => {
+      setDeleteDialogOpen(false)
+      toast({ variant: 'destructive', title: '删除失败', description: e.message })
     },
   })
 
@@ -212,19 +245,37 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           ) : null}
         </div>
         {editable ? (
-          <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-            <Label htmlFor="cred-header-active" className="cursor-pointer text-sm font-normal">
-              {cred.is_active ? '已启用' : '已禁用'}
-            </Label>
-            <Switch
-              id="cred-header-active"
-              checked={cred.is_active}
-              disabled={toggleActiveMutation.isPending}
-              onCheckedChange={(checked) => {
-                toggleActiveMutation.mutate(checked)
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+              <Label htmlFor="cred-header-active" className="cursor-pointer text-sm font-normal">
+                {cred.is_active ? '已启用' : '已禁用'}
+              </Label>
+              <Switch
+                id="cred-header-active"
+                checked={cred.is_active}
+                disabled={toggleActiveMutation.isPending}
+                onCheckedChange={(checked) => {
+                  toggleActiveMutation.mutate(checked)
+                }}
+                aria-label={cred.is_active ? '停用凭据' : '启用凭据'}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={deleteMutation.isPending || toggleActiveMutation.isPending}
+              onClick={() => {
+                setDeleteDialogOpen(true)
               }}
-              aria-label={cred.is_active ? '停用凭据' : '启用凭据'}
-            />
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-4 w-4" />
+              )}
+              删除凭据
+            </Button>
           </div>
         ) : (
           <span className="text-sm text-muted-foreground">
@@ -269,6 +320,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           teamId={teamId}
           credentialId={id}
           canManageModels={editable}
+          modelsTab={cred.scope === 'system' ? 'system' : 'shared'}
           onAddModels={editable ? openAddModelsDialog : undefined}
         />
 
@@ -293,6 +345,31 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           </Suspense>
         ) : null}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除凭据</AlertDialogTitle>
+            <AlertDialogDescription>
+              {configManaged
+                ? `确定删除「${cred.name}」？将同时删除所有引用该凭据的注册模型；此为配置同步凭据，下次从配置重载或重启后可能自动恢复。`
+                : `确定删除「${cred.name}」？将同时删除所有引用该凭据的注册模型，并更新虚拟 Key / 路由中的模型白名单。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                deleteMutation.mutate()
+              }}
+            >
+              {deleteMutation.isPending ? '删除中…' : '删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -413,18 +490,20 @@ function CredentialLinkedModelsSection({
   teamId,
   credentialId,
   canManageModels,
+  modelsTab = 'shared',
   onAddModels,
 }: Readonly<{
   teamId: string
   credentialId: string
   canManageModels: boolean
+  modelsTab?: 'shared' | 'system'
   onAddModels?: () => void
 }>): React.JSX.Element {
   const { data: linkedModels, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', teamId, 'by-credential', credentialId],
+    queryKey: ['gateway', 'models', teamId, 'by-credential', credentialId, modelsTab],
     queryFn: () =>
       gatewayApi.listModels(teamId, {
-        registry_scope: 'callable',
+        registry_scope: modelsTab === 'system' ? 'system' : 'callable',
         credential_id: credentialId,
       }),
     enabled: credentialId.length > 0,
@@ -435,6 +514,7 @@ function CredentialLinkedModelsSection({
       models={linkedModels}
       isLoading={modelsLoading}
       canManageModels={canManageModels}
+      modelsTab={modelsTab}
       onAddModels={onAddModels}
     />
   )

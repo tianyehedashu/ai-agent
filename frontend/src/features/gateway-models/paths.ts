@@ -31,8 +31,13 @@ export function personalModelEditHref(teamId: string, modelId: string): string {
   return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${params.toString()}`
 }
 
-function teamModelsBaseParams(credentialId?: string): URLSearchParams {
-  const params = new URLSearchParams({ tab: 'shared' })
+export type TeamModelsTab = 'shared' | 'system'
+
+function teamModelsBaseParams(
+  credentialId?: string,
+  tab: TeamModelsTab = 'shared'
+): URLSearchParams {
+  const params = new URLSearchParams({ tab })
   if (credentialId) {
     params.set('credentialId', credentialId)
   }
@@ -58,20 +63,33 @@ export function systemModelsFilteredHref(teamId: string, credentialId?: string):
 }
 
 /** 团队模型注册（可选锁定凭据） */
-export function teamModelsRegisterHref(teamId: string, credentialId?: string): string {
-  const params = teamModelsBaseParams(credentialId)
+export function teamModelsRegisterHref(
+  teamId: string,
+  credentialId?: string,
+  tab: TeamModelsTab = 'shared'
+): string {
+  const params = teamModelsBaseParams(credentialId, tab)
   params.set('view', 'register')
   return `${teamBase(teamId)}/models?${params.toString()}`
 }
 
-/** 团队注册模型详情深链（可选凭据上下文） */
+/** 团队注册模型详情深链（可选凭据上下文与 Tab） */
 export function teamModelDetailHref(
   teamId: string,
   modelId: string,
-  options?: { credentialId?: string }
+  options?: { credentialId?: string; tab?: TeamModelsTab }
 ): string {
-  const params = teamModelsBaseParams(options?.credentialId)
+  const params = teamModelsBaseParams(options?.credentialId, options?.tab ?? 'shared')
   return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${params.toString()}`
+}
+
+/** 系统模型详情深链（平台管理员） */
+export function systemModelDetailHref(
+  teamId: string,
+  modelId: string,
+  credentialId?: string
+): string {
+  return teamModelDetailHref(teamId, modelId, { credentialId, tab: 'system' })
 }
 
 /** 团队模型列表首页 */

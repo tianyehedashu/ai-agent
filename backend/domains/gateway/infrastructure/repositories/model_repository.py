@@ -364,5 +364,13 @@ class GatewayModelRepository:
         await self._session.flush()
         return True
 
+    async def delete_system(self, model_id: uuid.UUID) -> bool:
+        model = await self.get_system(model_id)
+        if model is None:
+            return False
+        await self._session.delete(model)
+        await self._session.flush()
+        return True
+
 
 __all__ = ["GatewayModelRepository", "GatewayRouteRepository"]

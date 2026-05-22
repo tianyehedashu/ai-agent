@@ -29,7 +29,9 @@ import {
   filterTestableConnectivityModels,
   GATEWAY_MODELS_STALE_MS,
   matchesHealthFilter,
+  resolveTeamModelsRegistryScope,
   runBatchConnectivityTests,
+  type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -68,18 +70,6 @@ const registerFormSuspenseFallback = (
   </div>
 )
 
-/** 团队 Tab 与系统 Tab 对应后端 ``registry_scope`` */
-export type TeamModelsListMode = 'team' | 'system'
-
-function resolveRegistryScope(
-  listMode: TeamModelsListMode | undefined,
-  credentialFilter: string
-): 'team' | 'system' | 'callable' {
-  if (credentialFilter !== '') return 'callable'
-  if (listMode === 'system') return 'system'
-  return 'team'
-}
-
 interface TeamModelsWorkspaceProps {
   hideRegisterAction?: boolean
   /** 由父级传入时优先于 URL `view` */
@@ -113,7 +103,7 @@ export function TeamModelsWorkspace({
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [testingAll, setTestingAll] = useState(false)
 
-  const registryScope = resolveRegistryScope(listMode, credentialFilter)
+  const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
   const showPlatformCallablePanel = listMode === 'team' && credentialFilter === ''
 
   const goToRegister = useCallback((): void => {
@@ -258,6 +248,7 @@ export function TeamModelsWorkspace({
       navigate(
         teamModelDetailHref(teamId, created.id, {
           credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+          tab: listMode === 'system' ? 'system' : 'shared',
         })
       )
     },
@@ -267,8 +258,9 @@ export function TeamModelsWorkspace({
     (modelId: string) =>
       teamModelDetailHref(teamId, modelId, {
         credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+        tab: listMode === 'system' ? 'system' : 'shared',
       }),
-    [teamId, credentialFilter]
+    [teamId, credentialFilter, listMode]
   )
 
   const clearCredentialFilter = useCallback((): void => {

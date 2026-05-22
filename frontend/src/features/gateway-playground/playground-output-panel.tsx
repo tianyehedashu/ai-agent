@@ -2,10 +2,12 @@ import { memo, useMemo } from 'react'
 
 import type { MyPriceRow } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { estimateUsageCostDisplay } from '@/features/gateway-pricing/estimate-usage-cost'
 import { usePricingEstimate } from '@/features/gateway-pricing/use-pricing-estimate'
-import { AlertCircle, Loader2 } from '@/lib/lucide-icons'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { AlertCircle, Check, Copy, Loader2 } from '@/lib/lucide-icons'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import type { DisplayCurrency } from '@/types/money'
@@ -135,21 +137,55 @@ export const PlaygroundOutputPanel = memo(function PlaygroundOutputPanel({
           </TabsContent>
           {lastRequest ? (
             <TabsContent value="request">
-              <pre className="max-h-72 overflow-auto rounded-md border bg-background p-4 text-xs leading-relaxed">
-                <code translate="no">{requestJson}</code>
-              </pre>
+              <PlaygroundJsonBlock code={requestJson} copyLabel="复制请求" />
             </TabsContent>
           ) : null}
           <TabsContent value="response">
-            <pre className="max-h-72 overflow-auto rounded-md border bg-background p-4 text-xs leading-relaxed">
-              <code translate="no">{responseJson}</code>
-            </pre>
+            <PlaygroundJsonBlock code={responseJson} copyLabel="复制响应" />
           </TabsContent>
         </Tabs>
       ) : null}
       {metadata ? (
         <PlaygroundMetadataFooter metadata={metadata} priceRow={priceRow} currency={currency} />
       ) : null}
+    </div>
+  )
+})
+
+const PlaygroundJsonBlock = memo(function PlaygroundJsonBlock({
+  code,
+  copyLabel,
+}: Readonly<{
+  code: string
+  copyLabel: string
+}>): React.JSX.Element {
+  const [copy, copied] = useCopyToClipboard()
+
+  return (
+    <div className="relative">
+      <div className="absolute right-2 top-2 z-10">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 bg-background/80 backdrop-blur-sm"
+          aria-label={copyLabel}
+          disabled={!code}
+          onClick={() => {
+            if (!code) return
+            void copy(code)
+          }}
+        >
+          {copied ? (
+            <Check className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Copy className="h-4 w-4" aria-hidden="true" />
+          )}
+        </Button>
+      </div>
+      <pre className="max-h-[min(32rem,65vh)] min-h-80 overflow-auto rounded-md border bg-background p-4 pr-14 text-sm leading-relaxed">
+        <code translate="no">{code || '（暂无内容）'}</code>
+      </pre>
     </div>
   )
 })

@@ -328,6 +328,11 @@ def is_config_managed_system_credential(
     return name == CONFIG_MANAGED_CREDENTIAL_NAME
 
 
+def is_config_managed_system_gateway_model(*, tags: dict[str, Any] | None) -> bool:
+    """是否为配置同步托管的系统注册模型（不可删除/不可改别名）。"""
+    return (tags or {}).get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY
+
+
 # 用户 BYOK：``/my-credentials`` 所支持的提供商标识（与路由/LiteLLM 对齐，不含 custom）。
 USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
     {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
@@ -375,6 +380,7 @@ __all__ = [
     "CONFIG_MANAGED_BY",
     "CONFIG_MANAGED_CREDENTIAL_NAME",
     "GATEWAY_MODEL_MANAGED_BY_TAG",
+    "is_config_managed_system_gateway_model",
     "MANAGED_GATEWAY_CREDENTIAL_PROVIDERS",
     "PERSONAL_MODEL_PROVIDERS",
     "PERSONAL_MODEL_TYPES",

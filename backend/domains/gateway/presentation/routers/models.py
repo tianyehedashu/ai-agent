@@ -276,7 +276,11 @@ async def delete_model(
     writes: MgmtWrites,
 ) -> None:
     try:
-        await writes.delete_gateway_model(model_id, tenant_id=team.team_id)
+        await writes.delete_gateway_model(
+            model_id,
+            tenant_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
 

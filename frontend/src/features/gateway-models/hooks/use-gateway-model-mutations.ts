@@ -18,6 +18,7 @@ import type { UseMutationResult } from '@tanstack/react-query'
 interface UseGatewayModelMutationsOptions {
   credentialId?: string
   onCreateSuccess?: (created: GatewayModel) => void
+  onDeleteSuccess?: () => void
 }
 
 interface GatewayModelMutations {
@@ -27,6 +28,7 @@ interface GatewayModelMutations {
     Error,
     { id: string; body: GatewayModelUpdateBody }
   >
+  deleteModelMutation: UseMutationResult<void, Error, string>
   testMutation: UseMutationResult<Awaited<ReturnType<typeof gatewayApi.testModel>>, Error, string>
 }
 
@@ -86,5 +88,21 @@ export function useGatewayModelMutations(
     },
   })
 
-  return { createMutation, updateModelMutation, testMutation }
+  const deleteModelMutation = useMutation({
+    mutationFn: (id: string) => gatewayApi.deleteModel(teamId, id),
+    onSuccess: () => {
+      invalidateGatewayModelCaches(queryClient, {
+        credentialId: filterCredentialId,
+        usageSummary: true,
+      })
+      invalidateGatewayModelAliasDependents(queryClient)
+      options?.onDeleteSuccess?.()
+      toast({ title: '模型已删除' })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '删除失败', description: e.message })
+    },
+  })
+
+  return { createMutation, updateModelMutation, deleteModelMutation, testMutation }
 }

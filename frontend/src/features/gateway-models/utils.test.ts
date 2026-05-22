@@ -18,6 +18,7 @@ import {
   isRegistryRequestableModel,
   runBatchConnectivityTests,
   runWithConcurrency,
+  resolveTeamModelsRegistryScope,
   stringArraysEqual,
   summarizeHealth,
   toggleModelSet,
@@ -307,5 +308,19 @@ describe('runWithConcurrency', () => {
     expect(order.sort((a, b) => a - b)).toEqual(items)
     expect(maxInFlight).toBeLessThanOrEqual(2)
     expect(maxInFlight).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('resolveTeamModelsRegistryScope', () => {
+  it('uses team scope on shared tab without credential filter', () => {
+    expect(resolveTeamModelsRegistryScope('team', '')).toBe('team')
+  })
+
+  it('uses callable scope when filtering by credential', () => {
+    expect(resolveTeamModelsRegistryScope('team', 'cred-1')).toBe('callable')
+  })
+
+  it('uses system scope on system tab', () => {
+    expect(resolveTeamModelsRegistryScope('system', '')).toBe('system')
   })
 })

@@ -86,15 +86,21 @@ class GatewayManagementWriteBaseMixin:
             raise CredentialNotFoundError(str(credential_id))
 
     async def _cascade_delete_models_for_credential(self, credential_id: uuid.UUID) -> int:
-        """删除引用该凭据的全部 gateway_models，并修剪 vkey / 路由中的模型名。"""
-        models = await self._models.list_by_credential_id(credential_id)
-        if not models:
+        """删除引用该凭据的全部注册模型（租户 + 系统），并修剪 vkey / 路由中的模型名。"""
+        tenant_models = await self._models.list_by_credential_id(credential_id)
+        system_models = await self._models.list_system(
+            credential_id=credential_id,
+            only_enabled=False,
+        )
+        if not tenant_models and not system_models:
             return 0
-        model_names = frozenset(m.name for m in models)
-        for model in models:
+        model_names = frozenset(m.name for m in (*tenant_models, *system_models))
+        for model in tenant_models:
             await self._models.delete(model.id)
+        for model in system_models:
+            await self._models.delete_system(model.id)
         await prune_gateway_model_name_references(self._session, model_names)
-        return len(models)
+        return len(tenant_models) + len(system_models)
 
     async def _assert_credential_in_team(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
         """与 ``list_credentials_for_team`` 可见集合一致：team-scope 凭据 + 平台管理员可见 system。"""

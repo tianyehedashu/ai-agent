@@ -199,11 +199,18 @@ class ModelWritesMixin:
         assert route is not None
         return MultiCredentialGatewayModelResult(route=route, models=created_models)
 
-    async def update_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any]) -> Any:
+    async def _apply_gateway_model_update_fields(
+        self,
+        *,
+        model_id: uuid.UUID,
+        existing: Any,
+        owner_tenant_id: uuid.UUID | None,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+        fields: dict[str, Any],
+        block_config_managed_rename: bool,
+    ) -> dict[str, Any]:
         repo = self._models
-        existing = await repo.get(model_id)
-        if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
-            raise ManagementEntityNotFoundError('model', str(model_id))
         update_fields = dict(fields)
         if 'credential_id' in update_fields and update_fields['credential_id'] is not None:
             new_cid_raw = update_fields['credential_id']
@@ -242,10 +249,8 @@ class ModelWritesMixin:
                 raise ValidationError('注册别名不能为空')
             update_fields['name'] = new_name
             if new_name != existing.name:
-                tags = existing.tags or {}
-                if existing.tenant_id is None and tags.get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY:
+                if block_config_managed_rename:
                     raise ValidationError('配置托管的系统模型不可修改注册别名')
-                owner_tenant_id = existing.tenant_id
                 if await repo.name_exists_in_scope(owner_tenant_id, new_name, exclude_id=model_id):
                     raise ValidationError(f'注册别名已存在: {new_name}')
                 await rename_gateway_model_name_references(
@@ -254,18 +259,94 @@ class ModelWritesMixin:
                     old_name=existing.name,
                     new_name=new_name,
                 )
-        updated = await repo.update(model_id, **update_fields)
+        return update_fields
+
+    async def update_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any]) -> Any:
+        from domains.gateway.domain.policies.credential_scope import (
+            assert_system_credential_mutation_allowed,
+        )
+        from domains.gateway.domain.types import is_config_managed_system_gateway_model
+
+        repo = self._models
+        existing = await repo.get(model_id)
+        if existing is not None:
+            if existing.tenant_id is not None and existing.tenant_id != tenant_id:
+                raise ManagementEntityNotFoundError('model', str(model_id))
+            tags = existing.tags or {}
+            block_rename = (
+                existing.tenant_id is None
+                and tags.get(GATEWAY_MODEL_MANAGED_BY_TAG) == CONFIG_MANAGED_BY
+            )
+            update_fields = await self._apply_gateway_model_update_fields(
+                model_id=model_id,
+                existing=existing,
+                owner_tenant_id=existing.tenant_id,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
+                fields=fields,
+                block_config_managed_rename=block_rename,
+            )
+            updated = await repo.update(model_id, **update_fields)
+            if updated is None:
+                raise ManagementEntityNotFoundError('model', str(model_id))
+            await self.reload_litellm_router()
+            return updated
+
+        system_existing = await repo.get_system(model_id)
+        if system_existing is None:
+            raise ManagementEntityNotFoundError('model', str(model_id))
+
+        assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
+        update_fields = await self._apply_gateway_model_update_fields(
+            model_id=model_id,
+            existing=system_existing,
+            owner_tenant_id=None,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+            fields=fields,
+            block_config_managed_rename=is_config_managed_system_gateway_model(
+                tags=system_existing.tags
+            ),
+        )
+        updated = await repo.update_system(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
         await self.reload_litellm_router()
         return updated
 
-    async def delete_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
+    async def delete_gateway_model(
+        self,
+        model_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool = False,
+    ) -> None:
         repo = self._models
         existing = await repo.get(model_id)
-        if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
-            raise CredentialNotFoundError(str(model_id))
-        model_name = existing.name
-        await repo.delete(model_id)
+        if existing is not None:
+            if existing.tenant_id is not None and existing.tenant_id != tenant_id:
+                raise ManagementEntityNotFoundError('model', str(model_id))
+            model_name = existing.name
+            await repo.delete(model_id)
+            await prune_gateway_model_name_references(self._session, frozenset({model_name}))
+            await self.reload_litellm_router()
+            return
+
+        system_existing = await repo.get_system(model_id)
+        if system_existing is None:
+            raise ManagementEntityNotFoundError('model', str(model_id))
+
+        from domains.gateway.domain.policies.credential_scope import (
+            assert_system_credential_mutation_allowed,
+        )
+        from domains.gateway.domain.types import is_config_managed_system_gateway_model
+
+        assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
+        if is_config_managed_system_gateway_model(tags=system_existing.tags):
+            raise ValidationError(
+                '配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理'
+            )
+        model_name = system_existing.name
+        await repo.delete_system(model_id)
         await prune_gateway_model_name_references(self._session, frozenset({model_name}))
         await self.reload_litellm_router()

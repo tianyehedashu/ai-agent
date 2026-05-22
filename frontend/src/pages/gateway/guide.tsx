@@ -2,7 +2,6 @@
  * AI Gateway · 调用指南
  *
  * - 在线试调（PlaygroundCard）
- * - 调用配置：Base URL / 鉴权 / model / 流式字段
  * - 示例代码：OpenAI 兼容（/api/v1/openai/v1/*） + Anthropic 兼容（/api/v1/anthropic/v1/*）
  *   每个风格内支持 curl / TS / Python，流式 toggle 同步切换示例代码与典型返回默认 Tab
  * - 典型返回：4 个 Tab 横向对比（OpenAI/Anthropic × 非流式/流式），用 Badge 突出 content-type
@@ -86,7 +85,6 @@ const TROUBLESHOOTING = [
 
 const GUIDE_NAV_ITEMS = [
   ['#playground', '在线试调'],
-  ['#config', '接入配置'],
   ['#clients', '客户端集成'],
   ['#examples', '代码示例'],
   ['#reference', '能力参考'],
@@ -94,16 +92,6 @@ const GUIDE_NAV_ITEMS = [
 ] as const
 
 const GUIDE_CARD_CLASS = 'border-border/60 bg-background shadow-sm'
-
-const ANTHROPIC_NATIVE_FIELDS = [
-  'thinking',
-  'cache_control',
-  'tool_result',
-  'image',
-  'top_k',
-] as const
-
-const THINKING_OPENAI_FIELDS = ['enable_thinking', 'reasoning_content', 'extra_body'] as const
 
 type QuickStep = (typeof QUICK_STEPS)[number]
 type TroubleshootingItem = (typeof TROUBLESHOOTING)[number]
@@ -314,102 +302,6 @@ export default function GatewayGuidePage(): React.JSX.Element {
               keyHint={clientIntegrationsKeyHint}
             />
           </Suspense>
-        </section>
-
-        <section id="config" aria-labelledby="config-heading" className="scroll-mt-20">
-          <Card className={GUIDE_CARD_CLASS}>
-            <CardHeader className="pb-4">
-              <CardTitle id="config-heading" className="text-base">
-                接入配置
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-5">
-              <div className="grid gap-3 lg:grid-cols-3">
-                <ConfigRow
-                  label="Base URL"
-                  value={snippets.baseUrl}
-                  mono
-                  copyKey="baseUrl"
-                  copied={copiedKey === 'baseUrl'}
-                  onCopy={handleCopy}
-                />
-                <ConfigRow
-                  label="鉴权 Header"
-                  value={
-                    apiFlavor === 'openai'
-                      ? snippets.openai.authHeader
-                      : snippets.anthropic.authHeader
-                  }
-                  mono
-                  copyKey={`${apiFlavor}AuthHeader`}
-                  copied={copiedKey === `${apiFlavor}AuthHeader`}
-                  onCopy={handleCopy}
-                />
-                <ConfigRow label="model" value={activeModel} mono />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                使用虚拟 Key（
-                <code className="rounded bg-muted px-1 font-mono text-xs">sk-gw-*</code>
-                ）调用 OpenAI / Anthropic 兼容入口时，只需在 Header 携带{' '}
-                <code className="rounded bg-muted px-1 font-mono text-xs">
-                  Authorization: Bearer …
-                </code>
-                ，无需额外传{' '}
-                <code className="rounded bg-muted px-1 font-mono text-xs">X-Team-Id</code>
-                ——团队已在 Key 创建时绑定。
-              </p>
-              <Collapsible>
-                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
-                  更多配置
-                  <ChevronDown
-                    className="h-4 w-4 text-muted-foreground transition-transform"
-                    aria-hidden="true"
-                  />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-4 pt-4">
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <ConfigRow
-                      label="Anthropic SDK baseURL"
-                      value={snippets.anthropicBaseUrl}
-                      mono
-                      copyKey="anthropicBaseUrl"
-                      copied={copiedKey === 'anthropicBaseUrl'}
-                      onCopy={handleCopy}
-                    />
-                    <ConfigRow
-                      label="流式 stream"
-                      value="true"
-                      mono
-                      copyKey="streamHint"
-                      copyText={snippets.streamHint}
-                      copied={copiedKey === 'streamHint'}
-                      onCopy={handleCopy}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Anthropic 原生字段</p>
-                    <div className="flex flex-wrap gap-2">
-                      {ANTHROPIC_NATIVE_FIELDS.map((name) => (
-                        <Badge key={name} variant="outline" className="font-mono text-xs">
-                          {name}
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      OpenAI 兼容 · 思考相关
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {THINKING_OPENAI_FIELDS.map((name) => (
-                        <Badge key={name} variant="outline" className="font-mono text-xs">
-                          {name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </CardContent>
-          </Card>
         </section>
 
         <section
@@ -823,49 +715,6 @@ function CapabilityGuideCard({
         />
       </CollapsibleContent>
     </Collapsible>
-  )
-}
-
-function ConfigRow({
-  label,
-  value,
-  mono,
-  copyKey,
-  copyText,
-  copied,
-  onCopy,
-}: Readonly<{
-  label: string
-  value: string
-  mono?: boolean
-  copyKey?: string
-  copyText?: string
-  copied?: boolean
-  onCopy?: (key: string, text: string) => void
-}>): React.JSX.Element {
-  const textToCopy = copyText ?? value
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p
-          className={cn('mt-0.5 break-all text-sm', mono && 'font-mono')}
-          translate={mono ? 'no' : undefined}
-        >
-          {value}
-        </p>
-      </div>
-      {copyKey && onCopy ? (
-        <CopyButton
-          copied={copied ?? false}
-          label={`复制 ${label}`}
-          compact
-          onCopy={() => {
-            onCopy(copyKey, textToCopy)
-          }}
-        />
-      ) : null}
-    </div>
   )
 }
 

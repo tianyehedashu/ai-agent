@@ -64,6 +64,25 @@ const MODEL_PROVIDER_NAME_BY_ID: ReadonlyMap<string, string> = new Map(
 /** 注册表查询范围（与后端 ``registry_scope`` 对齐） */
 export type { GatewayModelRegistryScope } from '@/api/gateway/models'
 
+/** 团队模型列表模式（与 ``TeamModelsWorkspace.listMode`` 对齐） */
+export type TeamModelsListMode = 'team' | 'system'
+
+/**
+ * 团队模型列表 / 详情共用的 ``registry_scope`` 解析（与 ``TeamModelsWorkspace`` 一致）。
+ *
+ * - 凭据筛选：callable（合并列表）
+ * - 系统 Tab：system
+ * - 共享 Tab：team（租户注册表）
+ */
+export function resolveTeamModelsRegistryScope(
+  listMode: TeamModelsListMode | undefined,
+  credentialFilter: string
+): GatewayModelRegistryScope {
+  if (credentialFilter !== '') return 'callable'
+  if (listMode === 'system') return 'system'
+  return 'team'
+}
+
 /** 无 channel 筛选的个人模型列表 */
 export const GATEWAY_MY_MODELS_ALL_QUERY_KEY = ['gateway', 'my-models'] as const
 

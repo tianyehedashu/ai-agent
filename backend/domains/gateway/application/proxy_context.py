@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
+import uuid
 
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia, VirtualKeyPrincipal
