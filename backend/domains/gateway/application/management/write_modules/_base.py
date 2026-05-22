@@ -14,6 +14,11 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
     VirtualKeyNotFoundError,
 )
+from domains.gateway.domain.policies.budget_scope_policy import (
+    BudgetTeamContext,
+    budget_target_allowed,
+)
+from domains.gateway.domain.types import BudgetScope
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
@@ -148,6 +153,47 @@ class GatewayManagementWriteBaseMixin:
             raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
         return plan
 
+    async def _assert_budget_target_in_team(
+        self,
+        target_kind: str,
+        target_id: uuid.UUID | None,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> None:
+        member_user_ids: frozenset[uuid.UUID] = frozenset()
+        if target_kind == BudgetScope.USER.value:
+            members = await self._teams.list_team_members(tenant_id)
+            member_user_ids = frozenset(m.user_id for m in members)
+
+        ctx = BudgetTeamContext(
+            tenant_id=tenant_id,
+            member_user_ids=member_user_ids,
+            is_platform_admin=is_platform_admin,
+        )
+        key_belongs_to_team: bool | None = None
+        if target_kind == "key":
+            if target_id is None:
+                raise ManagementEntityNotFoundError("budget", str(target_id))
+            try:
+                await self._assert_vkey_in_team(
+                    target_id,
+                    tenant_id=tenant_id,
+                    is_platform_admin=is_platform_admin,
+                )
+                key_belongs_to_team = True
+            except VirtualKeyNotFoundError as exc:
+                raise ManagementEntityNotFoundError("budget", str(target_id)) from exc
+
+        if not budget_target_allowed(
+            target_kind,
+            target_id,
+            ctx,
+            key_belongs_to_team=key_belongs_to_team,
+        ):
+            detail = str(target_id) if target_id is not None else target_kind
+            raise ManagementEntityNotFoundError("budget", detail)
+
     async def _assert_budget_in_team(
         self,
         budget_id: uuid.UUID,
@@ -158,37 +204,12 @@ class GatewayManagementWriteBaseMixin:
         budget = await self._budgets.get(budget_id)
         if budget is None:
             raise ManagementEntityNotFoundError("budget", str(budget_id))
-
-        if budget.target_kind == "tenant":
-            if budget.target_id != tenant_id:
-                raise ManagementEntityNotFoundError("budget", str(budget_id))
-            return
-
-        if budget.target_kind == "user":
-            if budget.target_id is None:
-                raise ManagementEntityNotFoundError("budget", str(budget_id))
-            members = await self._teams.list_team_members(tenant_id)
-            member_ids = {m.user_id for m in members}
-            if budget.target_id not in member_ids:
-                raise ManagementEntityNotFoundError("budget", str(budget_id))
-            return
-
-        if budget.target_kind == "key":
-            if budget.target_id is None:
-                raise ManagementEntityNotFoundError("budget", str(budget_id))
-            await self._assert_vkey_in_team(
-                budget.target_id,
-                tenant_id=tenant_id,
-                is_platform_admin=is_platform_admin,
-            )
-            return
-
-        if budget.target_kind == "system":
-            if not is_platform_admin:
-                raise ManagementEntityNotFoundError("budget", str(budget_id))
-            return
-
-        raise ManagementEntityNotFoundError("budget", str(budget_id))
+        await self._assert_budget_target_in_team(
+            budget.target_kind,
+            budget.target_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
 
     async def reload_litellm_router(self) -> None:
         from domains.gateway.infrastructure.router_singleton import reload_router

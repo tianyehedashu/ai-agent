@@ -58,6 +58,16 @@ export default function GatewayKeysPage(): React.JSX.Element {
     queryFn: () => gatewayApi.listKeys(teamId),
   })
   const { data: keyBudgets = [] } = useGatewayBudgets(teamId)
+  const budgetsByKeyId = useMemo(() => {
+    const map = new Map<string, typeof keyBudgets>()
+    for (const b of keyBudgets) {
+      if (b.target_kind !== 'key' || b.target_id === null) continue
+      const list = map.get(b.target_id) ?? []
+      list.push(b)
+      map.set(b.target_id, list)
+    }
+    return map
+  }, [keyBudgets])
 
   const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
@@ -274,7 +284,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
                     />
                   </td>
                   <td className="px-4 py-2 text-xs">
-                    <KeyBudgetInline keyId={k.id} budgets={keyBudgets} />
+                    <KeyBudgetInline budgets={budgetsByKeyId.get(k.id) ?? []} />
                   </td>
                   <td className="px-4 py-2 text-xs">{k.is_active ? '可用' : '已撤销'}</td>
                   <td className="px-4 py-2">

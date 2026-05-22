@@ -392,7 +392,7 @@ long_term_importance_threshold = 6.0
 
 ## 八、多技术整合规划
 
-> 详细整合方案见：[最新论文对照分析](./LATEST_PAPERS_ALIGNMENT.md)
+> 详细整合方案见：[archive/context/LATEST_PAPERS_ALIGNMENT.md](./archive/context/LATEST_PAPERS_ALIGNMENT.md)
 
 ### 8.1 整合架构概览
 
@@ -428,10 +428,9 @@ Layer 5: 混合检索 (SimpleMem)     ← ✅ 已有
 
 ## 九、相关文档
 
-- [上下文管理最佳实践](./CONTEXT_MANAGEMENT_BEST_PRACTICES.md) - 业界研究综述
+- [上下文管理最佳实践](./archive/context/CONTEXT_MANAGEMENT_BEST_PRACTICES.md) - 业界研究综述（归档）
 - [上下文管理实施方案](./CONTEXT_MANAGEMENT_IMPLEMENTATION.md) - 本项目实施指南
-- [Token 优化策略](./TOKEN_OPTIMIZATION_STRATEGY.md) - 成本优化
-- [记忆和会话功能整合文档](../../记忆和会话功能整合文档.md) - 历史设计文档
+- [Token 优化策略](./archive/context/TOKEN_OPTIMIZATION_STRATEGY.md) - 成本优化（归档，状态表可能已过时）
 
 ---
 

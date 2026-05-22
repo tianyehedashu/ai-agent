@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gateway 费用计算与 LiteLLM 集成说明</title>
+  <link rel="icon" href="./assets/favicon.ico" sizes="48x48" />
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png" />
+  <meta name="theme-color" content="#18181b" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ee;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --upstream: #0d9488;
+      --upstream-soft: #ccfbf1;
+      --downstream: #7c3aed;
+      --downstream-soft: #ede9fe;
+      --warn-soft: #fffbeb;
+      --warn-border: #f59e0b;
+      --code-bg: #f1f5f9;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1117;
+        --surface: #181b24;
+        --text: #e8eaef;
+        --muted: #9aa3b2;
+        --border: #2a3142;
+        --accent: #60a5fa;
+        --accent-soft: #1e3a5f;
+        --upstream: #2dd4bf;
+        --upstream-soft: #134e4a;
+        --downstream: #a78bfa;
+        --downstream-soft: #4c1d95;
+        --warn-soft: #422006;
+        --code-bg: #232836;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      max-width: 1280px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav.sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+    nav.sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 1.25rem 1rem 2rem;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+    nav.sidebar h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 0.75rem 0.5rem;
+    }
+    nav.sidebar a {
+      display: block;
+      padding: 0.35rem 0.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border-radius: 6px;
+    }
+    nav.sidebar a:hover { color: var(--accent); background: var(--accent-soft); }
+    nav.sidebar a.sub { padding-left: 1.25rem; font-size: 0.8125rem; }
+    main {
+      padding: 2rem 2.5rem 4rem;
+      max-width: 820px;
+    }
+    header.hero {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header.hero h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    header.hero p { margin: 0; color: var(--muted); }
+    header.hero .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .badge-upstream { background: var(--upstream-soft); color: var(--upstream); }
+    .badge-downstream { background: var(--downstream-soft); color: var(--downstream); }
+    .badge-accent { background: var(--accent-soft); color: var(--accent); }
+    section { margin-bottom: 2.5rem; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 2rem 0 1rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+    section:first-of-type h2 { border-top: none; margin-top: 0; }
+    h3 { font-size: 1.05rem; margin: 1.5rem 0 0.75rem; }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); }
+    ul, ol { margin: 0.5rem 0; padding-left: 1.35rem; }
+    li { margin: 0.35rem 0; }
+    strong { font-weight: 600; }
+    .callout {
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      border-left: 4px solid var(--warn-border);
+      background: var(--warn-soft);
+      margin: 1rem 0;
+      font-size: 0.9375rem;
+    }
+    .callout-title { font-weight: 600; margin-bottom: 0.35rem; }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 640px) { .compare-grid { grid-template-columns: 1fr; } }
+    .compare-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .compare-card h4 {
+      margin: 0 0 0.5rem;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .compare-card.litellm h4 { color: var(--accent); }
+    .compare-card.project h4 { color: var(--downstream); }
+    .flow-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+      margin: 1rem 0;
+    }
+    .flow-columns {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+      text-align: center;
+      margin: 1.25rem 0;
+    }
+    @media (max-width: 640px) {
+      .flow-columns { grid-template-columns: 1fr; }
+      .flow-arrow { transform: rotate(90deg); }
+    }
+    .flow-box {
+      padding: 1rem;
+      border-radius: 10px;
+      border: 2px solid;
+    }
+    .flow-box.up { border-color: var(--upstream); background: var(--upstream-soft); }
+    .flow-box.down { border-color: var(--downstream); background: var(--downstream-soft); }
+    .flow-box h4 { margin: 0 0 0.35rem; font-size: 0.9rem; }
+    .flow-box p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+    .flow-center {
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      font-size: 0.8125rem;
+    }
+    .flow-arrow { font-size: 1.5rem; color: var(--muted); }
+    .priority-list {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    .priority-list li {
+      counter-increment: step;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .priority-list li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 1.75rem;
+      height: 1.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.8125rem;
+      border-radius: 50%;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin: 1rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.6rem 0.85rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      background: var(--code-bg);
+      font-weight: 600;
+      font-size: 0.8125rem;
+    }
+    tr:last-child td { border-bottom: none; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.15rem;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      margin: 1rem 0;
+    }
+    pre code { background: none; padding: 0; font-size: inherit; }
+    .diagram-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin: 1.25rem 0;
+      overflow: hidden;
+    }
+    .diagram-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--code-bg);
+      font-size: 0.8125rem;
+    }
+    .diagram-toolbar .diagram-title {
+      font-weight: 600;
+      margin-right: auto;
+      color: var(--text);
+    }
+    .diagram-toolbar button {
+      font-family: var(--font);
+      font-size: 0.8125rem;
+      padding: 0.3rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .diagram-toolbar button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .diagram-toolbar .zoom-label {
+      min-width: 3.25rem;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    .diagram-viewport {
+      position: relative;
+      min-height: 420px;
+      max-height: 72vh;
+      overflow: auto;
+      padding: 1rem;
+      cursor: grab;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 8px,
+        color-mix(in srgb, var(--border) 35%, transparent) 8px,
+        color-mix(in srgb, var(--border) 35%, transparent) 9px
+      );
+    }
+    .diagram-viewport.is-panning { cursor: grabbing; user-select: none; }
+    .diagram-canvas {
+      display: inline-block;
+      transform-origin: 0 0;
+      transition: transform 0.12s ease-out;
+    }
+    .diagram-canvas svg {
+      display: block;
+      max-width: none;
+      height: auto;
+    }
+    .diagram-hint {
+      margin: 0;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+    .diagram-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: color-mix(in srgb, var(--bg) 92%, black);
+      flex-direction: column;
+    }
+    .diagram-modal.is-open { display: flex; }
+    .diagram-modal .diagram-toolbar { flex-shrink: 0; }
+    .diagram-modal .diagram-viewport {
+      flex: 1;
+      max-height: none;
+      min-height: 0;
+    }
+    .diagram-modal-close { margin-left: 0.25rem; }
+    .refs { list-style: none; padding: 0; }
+    .refs li { margin: 0.5rem 0; }
+    .opt-list { list-style: none; padding: 0; margin: 1rem 0; }
+    .opt-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.15rem;
+      margin-bottom: 0.85rem;
+    }
+    .opt-card h4 {
+      margin: 0 0 0.4rem;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .opt-card p { margin: 0.35rem 0; font-size: 0.9375rem; color: var(--text); }
+    .opt-card .why { color: var(--muted); font-size: 0.875rem; margin-top: 0.5rem; }
+    .prio {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+    }
+    .prio-high { background: #fef2f2; color: #b91c1c; }
+    .prio-mid { background: #fffbeb; color: #b45309; }
+    .prio-low { background: var(--accent-soft); color: var(--accent); }
+    @media (prefers-color-scheme: dark) {
+      .prio-high { background: #450a0a; color: #fca5a5; }
+      .prio-mid { background: #422006; color: #fcd34d; }
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar" aria-label="目录">
+      <h2>目录</h2>
+      <a href="#intro">概述</a>
+      <a href="#s1">1. 概念对照</a>
+      <a href="#s2">2. LiteLLM 机制</a>
+      <a href="#s2-1" class="sub">2.1 model_cost</a>
+      <a href="#s2-3" class="sub">2.3 response_cost</a>
+      <a href="#s2-6" class="sub">2.6 能力对照</a>
+      <a href="#litellm-vs">LiteLLM vs 本项目</a>
+      <a href="#s3">3. 定价架构</a>
+      <a href="#s3-1" class="sub">3.1 双账架构图</a>
+      <a href="#s3-3" class="sub">3.3 命中链</a>
+      <a href="#s4">4. 端到端链路</a>
+      <a href="#s4-1" class="sub">4.1 同步流程</a>
+      <a href="#s4-3" class="sub">4.3 结算分支</a>
+      <a href="#s4-3" class="sub">4.3 回调结算</a>
+      <a href="#s5">5. API 与权限</a>
+      <a href="#s6">6. 前端</a>
+      <a href="#s7">7. 运维排障</a>
+      <a href="#optimizations">8. 可优化方向</a>
+      <a href="#s8">9. 代码索引</a>
+      <a href="#s9">10. 参考链接</a>
+    </nav>
+
+    <main>
+      <header class="hero" id="intro">
+        <h1>Gateway 费用计算与 LiteLLM 集成</h1>
+        <p>
+          说明 <a href="https://docs.litellm.ai/" target="_blank" rel="noopener">LiteLLM</a>
+          如何计算单次调用的 <strong>USD 成本</strong>，以及本仓库 <strong>AI Gateway</strong>
+          如何在 LiteLLM 之上实现「上游成本 / 下游收入」分离、持久化与展示。
+        </p>
+        <div class="badge-row">
+          <span class="badge badge-upstream">上游 cost_usd</span>
+          <span class="badge badge-downstream">下游 revenue_usd</span>
+          <span class="badge badge-accent">库内 USD · 展示 CNY/USD</span>
+        </div>
+        <p style="margin-top:1rem;font-size:0.9rem;">
+          域边界详见
+          <a href="../AI_GATEWAY_DOMAIN_ARCHITECTURE.md">AI_GATEWAY_DOMAIN_ARCHITECTURE.md</a>
+          第 4.8 节 · 源文档
+          <a href="./GATEWAY_PRICING_AND_LITELLM_COST.md">GATEWAY_PRICING_AND_LITELLM_COST.md</a>
+        </p>
+        <figure class="hero-figure" style="margin-top:1.25rem;">
+          <img
+            src="./assets/gateway-pricing-overview.svg"
+            alt="Gateway 上下游双账：上游成本表、LiteLLM 计价、下游售价表与请求日志 cost_usd / revenue_usd"
+            width="880"
+            height="280"
+            loading="lazy"
+            style="max-width:100%;height:auto;border-radius:10px;border:1px solid var(--border);"
+          />
+          <figcaption style="margin-top:0.5rem;font-size:0.8125rem;color:var(--muted);text-align:center;">
+            双账总览（矢量图，离线可读）
+          </figcaption>
+        </figure>
+      </header>
+
+      <section id="s1">
+        <h2>1. 概念对照</h2>
+        <table>
+          <thead>
+            <tr><th>概念</th><th>LiteLLM</th><th>本项目</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>单价注册表</td>
+              <td><code>litellm.model_cost</code> / <code>register_model()</code></td>
+              <td><code>upstream_model_pricing</code> + <code>sync_to_litellm_registry()</code></td>
+            </tr>
+            <tr>
+              <td>单次调用成本</td>
+              <td><code>response_cost</code>（<code>_hidden_params</code>）</td>
+              <td>请求日志 <code>cost_usd</code>（上游成本）</td>
+            </tr>
+            <tr>
+              <td>对客户计费</td>
+              <td>margin 叠在一条 cost 上（见下文）</td>
+              <td><code>downstream_model_pricing</code> → <code>revenue_usd</code></td>
+            </tr>
+            <tr>
+              <td>用量字段</td>
+              <td><code>usage.prompt_tokens</code> / <code>completion_tokens</code></td>
+              <td>同左 + <code>gateway_request_logs</code></td>
+            </tr>
+            <tr>
+              <td>估算</td>
+              <td><code>completion_cost()</code></td>
+              <td><code>PricingService.calculate()</code>；前端 <code>estimateUsageCostDisplay()</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <p><strong>币种约定</strong>：数据库与结算逻辑一律 <strong>USD</strong>；API / 前端经 <code>MoneyProjector</code> + <code>FxRatePort</code> 投影为 CNY 或 USD 展示。</p>
+      </section>
+
+      <section id="litellm-vs">
+        <h2>LiteLLM 是否「天然」上下游分开计费？</h2>
+        <div class="callout">
+          <div class="callout-title">结论：不完全是</div>
+          LiteLLM 强在 <strong>一条成本线</strong>（<code>response_cost</code>）+ 可选
+          <a href="https://docs.litellm.ai/docs/proxy/provider_margins" target="_blank" rel="noopener">Provider Margin</a>
+          （百分比或固定费叠在 base cost 上）。本项目则是 <strong>两张价目表</strong>，日志中同时存 <code>cost_usd</code> 与 <code>revenue_usd</code>，支持 team / entitlement / 按模型定价。
+        </div>
+        <div class="compare-grid">
+          <div class="compare-card litellm">
+            <h4>LiteLLM</h4>
+            <ul>
+              <li>base cost → discount → margin → <strong>一个最终 cost</strong></li>
+              <li>粒度多为 provider / global</li>
+              <li>Lago 等外接账单用 <code>response_cost</code></li>
+            </ul>
+          </div>
+          <div class="compare-card project">
+            <h4>本项目 Gateway</h4>
+            <ul>
+              <li><code>cost_usd</code> ≈ 厂商成本（LiteLLM）</li>
+              <li><code>revenue_usd</code> = 下游价 × token</li>
+              <li>毛利 = revenue − cost；管理员可见上游</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2>2. LiteLLM 费用计算机制</h2>
+
+        <h3 id="s2-1">2.1 内置价目表 <code>model_cost</code></h3>
+        <p>全局字典，键为模型 ID，值为单价字段（与 OpenAI 风格对齐）：</p>
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><code>input_cost_per_token</code></td><td>输入 token 单价（USD）</td></tr>
+            <tr><td><code>output_cost_per_token</code></td><td>输出 token 单价（USD）</td></tr>
+            <tr><td><code>cache_creation_input_token_cost</code></td><td>Prompt 缓存写入（可选）</td></tr>
+            <tr><td><code>cache_read_input_token_cost</code></td><td>Prompt 缓存读取（可选）</td></tr>
+            <tr><td><code>input_cost_per_image</code> 等</td><td>图像 / 音频等非 token 计费</td></tr>
+          </tbody>
+        </table>
+        <p>虚拟模型名（如 <code>team/foo</code>）常不在内置表中，需 <code>register_model()</code>。</p>
+
+        <h3>2.2 注册与覆盖</h3>
+        <pre><code>import litellm
+
+litellm.register_model({
+    "my-virtual-model": {
+        "input_cost_per_token": 0.00000015,
+        "output_cost_per_token": 0.0000006,
+    }
+})</code></pre>
+        <p>本项目在 <code>PricingService.sync_to_litellm_registry()</code> 统一注册；Router deployment 不必再带单价。</p>
+
+        <h3 id="s2-3">2.3 响应阶段 <code>response_cost</code></h3>
+        <pre><code>response._hidden_params["response_cost"]  # float，USD</code></pre>
+        <p>同时进入 <code>standard_logging_object["response_cost"]</code>。等价公式：</p>
+        <pre><code>cost = Σ (token_count × 单价) + 按请求固定费（若配置）</code></pre>
+
+        <h3>2.4 事后计算 <code>completion_cost()</code></h3>
+        <pre><code>from litellm import completion_cost
+usd = completion_cost(completion_response=response, model="gpt-4o")</code></pre>
+        <table>
+          <thead><tr><th>调用点</th><th>策略</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>custom_logger._calc_cost</code></td>
+              <td><code>_hidden_params</code> → <code>standard_logging_object</code> → <code>completion_cost()</code></td>
+            </tr>
+            <tr>
+              <td><code>proxy_use_case._calc_cost</code></td>
+              <td>直接 <code>completion_cost()</code>（预算 Redis）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>2.5 标准日志与排障</h3>
+        <p>
+          <strong>StandardLoggingPayload</strong> 含 <code>response_cost</code>、<code>model_map_information</code>、<code>custom_pricing</code>。
+          与厂商账单不一致时：
+          <a href="https://docs.litellm.ai/docs/troubleshoot/cost_discrepancy" target="_blank" rel="noopener">先核对 token，再核对单价映射</a>。
+        </p>
+
+        <h3 id="s2-6">2.6 相关能力（未全部启用）</h3>
+        <table>
+          <thead><tr><th>LiteLLM 能力</th><th>说明</th><th>本项目</th></tr></thead>
+          <tbody>
+            <tr><td>Pricing Calculator UI</td><td>预估月费</td><td>前端 <code>estimate-usage-cost.ts</code></td></tr>
+            <tr><td><code>custom_cost_per_token</code></td><td>单次覆盖单价</td><td>metadata 注入，日志重算 <code>revenue_usd</code></td></tr>
+            <tr><td>Proxy Budget</td><td>内置预算</td><td><code>BudgetService</code> + <code>gateway_budgets</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s3">
+        <h2>3. 本项目定价架构</h2>
+
+        <h3 id="s3-1">3.1 上下游分离</h3>
+        <div class="flow-columns">
+          <div class="flow-box up">
+            <h4>upstream_model_pricing</h4>
+            <p>平台成本价</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-box down">
+            <h4>downstream_model_pricing</h4>
+            <p>对客户售价</p>
+          </div>
+        </div>
+        <div class="flow-center" style="text-align:center;margin-bottom:1rem;">
+          <code>register_model</code> → LiteLLM <code>response_cost</code> → 日志 <code>cost_usd</code><br />
+          resolve 命中链 → <code>revenue_usd</code> · 毛利 = revenue − cost
+        </div>
+        <ul>
+          <li><strong>cost_usd</strong>：对齐 LiteLLM <code>response_cost</code>（厂商成本）</li>
+          <li><strong>revenue_usd</strong>：下游单价 × token；无下游价时收入 = 成本</li>
+          <li><strong>毛利</strong>：仅管理员在 UI / API 可见完整上游字段</li>
+        </ul>
+
+        <div class="diagram-block" data-diagram id="diagram-dual-ledger">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">上下游双账数据流</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>100%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="上下游双账架构图">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-dual-ledger">
+flowchart LR
+  subgraph upstream_tbl [upstream_model_pricing]
+    U[平台成本价]
+  end
+  subgraph litellm_layer [LiteLLM]
+    R[register_model]
+    RC[response_cost]
+  end
+  subgraph downstream_tbl [downstream_model_pricing]
+    D[对客户售价]
+  end
+  subgraph logs [gateway_request_logs]
+    C[cost_usd]
+    V[revenue_usd]
+  end
+  U --> R --> RC --> C
+  D -->|resolve| V
+  RC -.->|透传| V
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移</p>
+        </div>
+
+        <h3>3.2 数据表</h3>
+        <table>
+          <thead><tr><th>表</th><th>要点</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>upstream_model_pricing</code></td>
+              <td>键：provider + upstream_model + capability + effective_from；<code>source</code>：toml / manual</td>
+            </tr>
+            <tr>
+              <td><code>downstream_model_pricing</code></td>
+              <td>scope：global | team | entitlement_plan；<code>mirror</code> / <code>manual</code></td>
+            </tr>
+            <tr>
+              <td><code>gateway_request_logs</code></td>
+              <td><code>cost_usd</code>、<code>revenue_usd</code>、<code>pricing_snapshot</code>（JSONB）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="s3-3">3.3 下游价解析优先级</h3>
+        <p><code>PricingService.resolve_downstream_rate()</code> 命中顺序（记录 <code>hit_chain</code>）：</p>
+        <ol class="priority-list">
+          <li><code>entitlement_plan</code>（先精确 gateway_model_id，再 scope 默认）</li>
+          <li><code>team</code></li>
+          <li><code>global</code></li>
+          <li>无下游行 → <strong>upstream_passthrough</strong></li>
+          <li><code>mirror</code>：下游单价 = 上游</li>
+          <li><code>manual</code>：使用下游表内单价</li>
+        </ol>
+
+        <div class="diagram-block" data-diagram id="diagram-downstream-resolve">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">下游价解析命中链</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>100%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="下游价解析流程图">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-downstream-resolve">
+flowchart TD
+  Start([resolve_downstream_rate]) --> E{entitlement_plan?}
+  E -->|精确 model 或 scope 默认| Hit[记录 hit_chain]
+  E -->|否| T{team 价?}
+  T -->|命中| Hit
+  T -->|否| G{global 价?}
+  G -->|命中| Hit
+  G -->|否| U{存在上游价?}
+  U -->|是| Pass[upstream_passthrough]
+  U -->|否| Miss[无下游价]
+  Hit --> Strat{mirror / manual}
+  Strat -->|mirror| M[下游 = 上游]
+  Strat -->|manual| Man[表内单价]
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移</p>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2>4. 端到端计费链路</h2>
+        <div class="diagram-block" data-diagram id="diagram-billing-flow">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">端到端计费时序图</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>125%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="可缩放流程图，Ctrl+滚轮缩放，拖动画布平移">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-billing-flow">
+sequenceDiagram
+    participant Client
+    participant Proxy as ProxyUseCase
+    participant Meta as pricing_metadata
+    participant Router as LiteLLM Router
+    participant LLM as 上游厂商
+    participant CB as CustomLogger
+    participant DB as request_logs
+
+    Client->>Proxy: chat/completions
+    Proxy->>Meta: 解析下游价 → metadata
+    Proxy->>Router: acompletion(...)
+    Router->>LLM: API
+    LLM-->>Router: usage + body
+    Router-->>Proxy: response_cost
+    Proxy-->>Client: JSON 响应
+    Note over Proxy: 预算 completion_cost
+    Router->>CB: log_success_event
+    CB->>CB: settle 结算
+    CB->>DB: cost / revenue / snapshot
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移 · 「适应」按宽度 fit · 「全屏」更清晰阅读</p>
+        </div>
+
+        <div class="diagram-modal" id="diagram-modal" aria-hidden="true">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">端到端计费时序图（全屏）</span>
+            <button type="button" data-action="zoom-out">−</button>
+            <span class="zoom-label" data-zoom-label>125%</span>
+            <button type="button" data-action="zoom-in">+</button>
+            <button type="button" data-action="zoom-reset">重置</button>
+            <button type="button" data-action="zoom-fit">适应</button>
+            <button type="button" class="diagram-modal-close" data-action="close-modal">关闭 Esc</button>
+          </div>
+          <div class="diagram-viewport" data-viewport data-modal-viewport></div>
+        </div>
+
+        <h3 id="s4-1">4.1 目录同步 → 上游价 + LiteLLM 注册</h3>
+        <ol>
+          <li><code>config_catalog_sync</code>：app.toml → <code>upstream_model_pricing</code>（source=toml）</li>
+          <li>启动 <code>bootstrap/main.py</code>：<code>sync_to_litellm_registry()</code></li>
+          <li>管理面写上游价后同样 sync + <code>reload_router()</code></li>
+        </ol>
+
+        <div class="diagram-block" data-diagram id="diagram-sync-startup">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">上游价同步与 LiteLLM 注册</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>100%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="上游价同步流程图">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-sync-startup">
+flowchart TD
+  TOML[app.toml catalog] --> SYNC[config_catalog_sync]
+  SYNC --> UP[(upstream_model_pricing)]
+  BOOT[bootstrap/main.py] --> REG[sync_to_litellm_registry]
+  UP --> REG
+  REG --> LM[litellm.model_cost + 活跃上游键]
+  ADMIN[管理面写上游价] --> REG
+  REG --> RELOAD[reload_router]
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移</p>
+        </div>
+
+        <h3>4.2 代理调用前：metadata</h3>
+        <table>
+          <thead><tr><th>metadata 键</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>gateway_pricing_downstream</code></td><td>下游单价 dict</td></tr>
+            <tr><td><code>gateway_pricing_hit_chain</code></td><td>命中路径</td></tr>
+            <tr><td><code>gateway_billing_package</code></td><td>entitlement / provider → 本次不计费</td></tr>
+            <tr><td><code>gateway_gateway_model_id</code> 等</td><td>归因与排障</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="s4-3">4.3 回调落库：成本与收入</h3>
+        <p><strong>_calc_cost 优先级</strong>：</p>
+        <ol>
+          <li><code>_hidden_params["response_cost"]</code></li>
+          <li><code>standard_logging_object["response_cost"]</code></li>
+          <li><code>litellm.completion_cost(...)</code></li>
+        </ol>
+
+        <div class="diagram-block" data-diagram id="diagram-calc-cost">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">上游成本解析优先级</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>100%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="上游成本解析流程图">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-calc-cost">
+flowchart LR
+  A[_calc_cost] --> H{hidden_params<br/>response_cost?}
+  H -->|有| OK[litellm_cost]
+  H -->|无| S{standard_logging_object?}
+  S -->|有| OK
+  S -->|无| C[completion_cost]
+  C --> OK
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移</p>
+        </div>
+
+        <p><strong>settle_request_log_amounts</strong>：</p>
+        <table>
+          <thead><tr><th>条件</th><th>cost_usd</th><th>revenue_usd</th></tr></thead>
+          <tbody>
+            <tr><td>billing_package = entitlement / provider</td><td>0</td><td>0</td></tr>
+            <tr><td>有 gateway_pricing_downstream</td><td>litellm_cost</td><td>下游价 × usage</td></tr>
+            <tr><td>无下游价</td><td>litellm_cost</td><td>litellm_cost</td></tr>
+          </tbody>
+        </table>
+
+        <div class="diagram-block" data-diagram id="diagram-settlement">
+          <div class="diagram-toolbar">
+            <span class="diagram-title">日志结算分支</span>
+            <button type="button" data-action="zoom-out" title="缩小">−</button>
+            <span class="zoom-label" data-zoom-label>100%</span>
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-reset" title="重置缩放">重置</button>
+            <button type="button" data-action="zoom-fit" title="适应宽度">适应</button>
+            <button type="button" data-action="fullscreen" title="全屏查看">全屏</button>
+          </div>
+          <div class="diagram-viewport" data-viewport tabindex="0" aria-label="日志结算分支流程图">
+            <div class="diagram-canvas" data-canvas>
+              <pre class="mermaid" id="mermaid-settlement">
+flowchart TD
+  S([settle_request_log_amounts]) --> P{gateway_billing_package}
+  P -->|entitlement 或 provider| Z[cost=0 revenue=0]
+  P -->|其他| D{有 gateway_pricing_downstream?}
+  D -->|是| DR[cost=litellm_cost<br/>revenue=下游×usage]
+  D -->|否| PT[cost=revenue=litellm_cost]
+              </pre>
+            </div>
+          </div>
+          <p class="diagram-hint">Ctrl + 滚轮缩放 · 拖动画布平移</p>
+        </div>
+
+        <h3>4.4 域内计价公式</h3>
+        <pre><code>total = input_cost_per_token * input_tokens
+      + output_cost_per_token * output_tokens
+      + cache_creation_input_token_cost * cache_creation_tokens
+      + cache_read_input_token_cost * cache_read_tokens
+      + per_request_usd * requests</code></pre>
+
+        <h3>4.5 预算与套餐（与日志分离）</h3>
+        <table>
+          <thead><tr><th>机制</th><th>扣减依据</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>BudgetService</td><td>completion_cost（上游）</td><td>Redis / gateway_budgets</td></tr>
+            <tr><td>Entitlement</td><td>同上</td><td>日志可双零，额度仍可能扣 token</td></tr>
+            <tr><td>ProviderPlan</td><td>—</td><td>日志 billing_package=provider 时双零</td></tr>
+          </tbody>
+        </table>
+        <p class="callout" style="border-left-color: var(--accent);">
+          <strong>对账以 <code>gateway_request_logs</code> 为准</strong>；预算扣减与 <code>revenue_usd</code> 来源不同。
+        </p>
+      </section>
+
+      <section id="s5">
+        <h2>5. 读侧 API 与权限</h2>
+        <p>路由：<code>/api/v1/gateway/pricing/*</code></p>
+        <table>
+          <thead><tr><th>能力</th><th>管理员</th><th>普通成员</th></tr></thead>
+          <tbody>
+            <tr><td>上游价 CRUD</td><td>✓</td><td>✗</td></tr>
+            <tr><td>下游价 / bulk mirror</td><td>✓</td><td>只读「我的价格」</td></tr>
+            <tr><td>日志 cost_usd</td><td>✓</td><td>强制为 0</td></tr>
+            <tr><td>pricing_snapshot</td><td>完整</td><td>掩码上游字段</td></tr>
+          </tbody>
+        </table>
+        <p>汇率：<code>GET /pricing/fx</code> · 投影：<code>MoneyProjector</code> → <code>*_display</code></p>
+      </section>
+
+      <section id="s6">
+        <h2>6. 前端</h2>
+        <table>
+          <thead><tr><th>路径 / 模块</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td><code>/gateway/pricing/upstream</code></td><td>上游价维护</td></tr>
+            <tr><td><code>/gateway/pricing/downstream</code>、<code>my-prices</code></td><td>下游价与成员视图</td></tr>
+            <tr><td><code>estimate-usage-cost.ts</code></td><td>按每百万 token 估算单次费用</td></tr>
+            <tr><td><code>log-pricing-breakdown.tsx</code></td><td>日志：下游 / 上游 / 毛利</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s7">
+        <h2>7. 运维与排障</h2>
+        <h3>7.1 成本为 0 或偏差大</h3>
+        <ul>
+          <li>检查 <code>upstream_model</code> 是否已 <code>register_model</code></li>
+          <li>对比 <code>pricing_snapshot.response_cost</code> 与 <code>cost_usd</code></li>
+          <li>补全上游价后重启 sync</li>
+          <li>厂商账单：先 token，后单价</li>
+        </ul>
+        <h3>7.2 收入 = 成本</h3>
+        <p>未配下游价，或 mirror / upstream_passthrough；查 <code>hit_chain</code> 与生效期。</p>
+        <h3>7.3 套餐内调用</h3>
+        <p><code>gateway_billing_package=entitlement</code>：日志双零；报表需区分日志费用与套餐额度。</p>
+        <h3>7.4 相关测试</h3>
+        <pre><code>cd backend
+uv run pytest tests/unit/gateway/test_pricing_calculator.py \
+  tests/unit/gateway/test_pricing_settlement.py \
+  tests/unit/gateway/test_custom_logger_pricing_settlement.py -q</code></pre>
+      </section>
+
+      <section id="optimizations">
+        <h2>8. 计费这块，还有哪些值得优化？</h2>
+        <p>
+          下面按「<strong>先修会算错钱的</strong> → <strong>再省运维力气</strong> → <strong>最后做体验</strong>」排列。
+          说的是现状里比较实在的改进点，不是画大饼。
+        </p>
+
+        <ul class="opt-list">
+          <li class="opt-card">
+            <h4><span class="prio prio-high">优先</span> 预算扣款和日志金额，最好同源</h4>
+            <p>
+              现在：<strong>预算</strong>走 <code>proxy</code> 里的 <code>completion_cost()</code>；
+              <strong>日志里的 cost_usd</strong> 优先用 LiteLLM 写在响应里的 <code>response_cost</code>。
+              多数情况一样，但边缘场景（虚拟模型没注册、流式没带好 usage）可能<strong>预算扣了 A、日志记了 B</strong>。
+            </p>
+            <p class="why">建议：抽一个「算上游成本」的小函数，预算和 <code>custom_logger</code> 共用；算不出来时统一打标 <code>pricing_snapshot.cost_estimated=true</code>，方便对账。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-high">优先</span> 上游单价和 LiteLLM 注册键要对齐</h4>
+            <p>
+              LiteLLM 按 <code>upstream_model</code> 查价。键对不上时，<code>response_cost</code> 经常是 <strong>0</strong>，
+              看起来像「这次调用免费」，其实是<strong>没价目</strong>。
+            </p>
+            <p class="why">建议：启动/改价后做一次自检（哪些模型有 deployment 但没有 upstream 行）；管理面保存上游价时提示「将注册为 xxx 键」。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-high">优先</span> 流式请求的成本别含糊</h4>
+            <p>
+              非流式响应能拿到完整 <code>response_cost</code>；流式主要靠末帧 <code>usage</code> 再调 <code>completion_cost</code>，
+              和回调里那条链路不完全一样，<strong>长连接、中断、只回了半截 usage</strong> 时更容易偏。
+            </p>
+            <p class="why">建议：以 callback 落库为准做「最终账单」；Proxy 侧预算可先按 token 粗估，回调后再修正（或流式也尽量透传 LiteLLM 的 hidden cost）。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-mid">中等</span> 上游价目别全靠手填</h4>
+            <p>
+              现在主要靠 <code>app.toml</code> 同步 + 管理员维护。LiteLLM 官方价表会更新，新模型也层出不穷。
+            </p>
+            <p class="why">
+              建议：定期从 LiteLLM 内置 <code>model_cost</code> 拉增量（类似官方
+              <code>POST /reload/model_cost_map</code> 思路），人工只改「和厂商谈好的特价」；
+              变更留 <code>effective_from</code>，避免历史日志对不上。
+            </p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-mid">中等</span> 每次请求都查下游价，可以缓存</h4>
+            <p>
+              <code>attach_downstream_pricing_metadata</code> 每次调用会解析 team / 套餐 / 模型价，要打数据库。
+              价目表变更不频繁，高 QPS 时这是纯开销。
+            </p>
+            <p class="why">建议：按 <code>(team_id, gateway_model_id, entitlement_plan_id)</code> 短 TTL 缓存解析结果；改价时发事件清缓存。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-mid">中等</span> 套餐内「日志为 0」要让人看得懂</h4>
+            <p>
+              命中 entitlement / provider 套餐时，<code>cost_usd</code> 和 <code>revenue_usd</code> 都记 0，
+              但预算、套餐额度可能还在扣。运营看报表容易问：「为什么用量有、钱没有？」
+            </p>
+            <p class="why">建议：日志里固定带 <code>billing_package</code> +「影子金额」（仅管理员可见的上游成本），或单独「套餐消耗」报表，和「按量计费」分开。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-mid">中等</span> 图 / 视频 / embedding 等非 chat 能力</h4>
+            <p>
+              域内公式以 <strong>token × 单价</strong> 为主；复杂计费（按张图、按秒、按次）在 <code>extra</code> 里，
+              下游 <code>revenue_usd</code> 是否每次都按同一套规则算齐，需要逐能力验收。
+            </p>
+            <p class="why">建议：按 capability 列一张「是否已对齐 LiteLLM 计价」清单；缺的支持 <code>per_request_usd</code> 或单独 settlement 分支。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-low">体验</span> 展示汇率别永远写死</h4>
+            <p>现在用静态 <code>gateway_fx_usd_cny</code>，前端 CNY 展示好看，但和财务月结汇率可能对不上。</p>
+            <p class="why">建议：配置日汇率或「仅展示用 / 结算用」分离；日志 <code>pricing_snapshot.fx_rate_used</code> 已有，可再标明来源与日期。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-low">体验</span> 下游价配置与排障</h4>
+            <p>
+              收入等于成本，多半是 mirror / 没配下游价；要靠 <code>hit_chain</code> 和 DBA 查表，对非开发不友好。
+            </p>
+            <p class="why">建议：管理面「这条请求为什么是这个价」可视化；bulk mirror 后预览毛利；生效期临近发提醒。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-low">体验</span> 前端「预估费用」和账单对齐</h4>
+            <p>
+              Playground / 我的价格页用「每百万 token」估算；真实账单走 callback 结算，含 cache、套餐、按次费等。
+            </p>
+            <p class="why">建议：估算接口直接复用 <code>PricingService.calculate</code> 或返回「估算 / 实际可能偏差」说明，减少用户信任落差。</p>
+          </li>
+
+          <li class="opt-card">
+            <h4><span class="prio prio-low">体验</span> 对账与导出</h4>
+            <p>排障步骤已写在 §7，但缺「一键导出团队某月 cost / revenue / 毛利」和与厂商账单 diff 的小工具。</p>
+            <p class="why">建议：按 team + 月聚合（rollup 已有基础的话接上）；对标 LiteLLM 排障：先 token、后单价，自动生成差异 Top 模型。</p>
+          </li>
+        </ul>
+
+        <div class="callout">
+          <div class="callout-title">和 LiteLLM 自带 margin 的关系</div>
+          我们刻意用<strong>两张价目表</strong>做上下游，而不用 LiteLLM 的「在 cost 上加 margin」。
+          运维上要避免：又在 LiteLLM 配 margin、又在下游表加价，<strong>重复计费</strong>。
+          文档和配置检查里写死一句即可。
+        </div>
+      </section>
+
+      <section id="s8">
+        <h2>9. 代码索引</h2>
+        <table>
+          <thead><tr><th>主题</th><th>路径</th></tr></thead>
+          <tbody>
+            <tr><td>计价纯函数</td><td><code>domains/gateway/domain/pricing_calculator.py</code></td></tr>
+            <tr><td>价目解析 / LiteLLM 注册</td><td><code>application/pricing/pricing_service.py</code></td></tr>
+            <tr><td>日志结算</td><td><code>application/pricing/pricing_settlement.py</code></td></tr>
+            <tr><td>代理 metadata</td><td><code>application/pricing/pricing_proxy_metadata.py</code></td></tr>
+            <tr><td>回调写库</td><td><code>infrastructure/callbacks/custom_logger.py</code></td></tr>
+            <tr><td>启动注册</td><td><code>bootstrap/main.py</code></td></tr>
+            <tr><td>预算扣减</td><td><code>application/proxy_use_case.py</code></td></tr>
+            <tr><td>迁移</td><td><code>alembic/versions/20260518_gateway_model_pricing.py</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s9">
+        <h2>10. 参考链接</h2>
+        <ul class="refs">
+          <li><a href="https://docs.litellm.ai/docs/proxy/cost_tracking" target="_blank" rel="noopener">LiteLLM Cost Tracking</a></li>
+          <li><a href="https://docs.litellm.ai/docs/proxy/pricing_calculator" target="_blank" rel="noopener">Pricing Calculator</a></li>
+          <li><a href="https://docs.litellm.ai/docs/proxy/provider_margins" target="_blank" rel="noopener">Provider Margins</a></li>
+          <li><a href="https://docs.litellm.ai/docs/troubleshoot/cost_discrepancy" target="_blank" rel="noopener">Cost discrepancy troubleshooting</a></li>
+          <li><a href="../AI_GATEWAY_DOMAIN_ARCHITECTURE.md">AI_GATEWAY_DOMAIN_ARCHITECTURE.md</a></li>
+        </ul>
+      </section>
+
+      <footer>
+        由 GATEWAY_PRICING_AND_LITELLM_COST.md 生成 · 含 6 张可缩放流程图 · Mermaid 需联网加载
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const MERMAID_THEME = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: MERMAID_THEME,
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: "basis",
+        padding: 16,
+      },
+      sequence: {
+        actorMargin: 72,
+        messageMargin: 36,
+        boxMargin: 12,
+        noteMargin: 12,
+        mirrorActors: false,
+        useMaxWidth: false,
+      },
+      themeVariables: {
+        fontSize: "15px",
+        fontFamily: "Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
+      },
+    });
+
+    const ZOOM_MIN = 0.5;
+    const ZOOM_MAX = 3;
+    const ZOOM_STEP = 0.15;
+    const DEFAULT_ZOOM = 1.25;
+
+    function createDiagramController(blockEl, modalEl) {
+      const viewport = blockEl.querySelector("[data-viewport]");
+      const canvas = blockEl.querySelector("[data-canvas]");
+      const label = blockEl.querySelector(".diagram-toolbar [data-zoom-label]");
+      let naturalW = 0;
+      let naturalH = 0;
+      let zoom = DEFAULT_ZOOM;
+
+      function measure() {
+        const svg = canvas && canvas.querySelector("svg");
+        if (!svg || !canvas) return false;
+        const saved = canvas.style.transform;
+        canvas.style.transform = "none";
+        const box = svg.getBBox();
+        const w = box.width || svg.getBoundingClientRect().width;
+        const h = box.height || svg.getBoundingClientRect().height;
+        canvas.style.transform = saved;
+        if (w > 0 && h > 0) {
+          naturalW = w;
+          naturalH = h;
+          return true;
+        }
+        return false;
+      }
+
+      function applyZoom(nextZoom, opts = {}) {
+        zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextZoom));
+        canvas.style.transform = "scale(" + zoom + ")";
+        canvas.style.width = naturalW * zoom + "px";
+        canvas.style.height = naturalH * zoom + "px";
+        if (label) label.textContent = Math.round(zoom * 100) + "%";
+        if (opts.center && viewport) {
+          requestAnimationFrame(function () {
+            viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2);
+            viewport.scrollTop = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 4);
+          });
+        }
+      }
+
+      function zoomBy(delta) {
+        if (!measure()) return;
+        applyZoom(zoom + delta);
+      }
+
+      function zoomFit() {
+        if (!measure() || !viewport) return;
+        const pad = 24;
+        const scaleW = (viewport.clientWidth - pad) / naturalW;
+        applyZoom(Math.min(Math.max(scaleW, ZOOM_MIN), ZOOM_MAX), { center: true });
+      }
+
+      function bindPan() {
+        if (!viewport) return;
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let scrollL = 0;
+        let scrollT = 0;
+
+        viewport.addEventListener("mousedown", function (e) {
+          if (e.button !== 0) return;
+          dragging = true;
+          viewport.classList.add("is-panning");
+          startX = e.clientX;
+          startY = e.clientY;
+          scrollL = viewport.scrollLeft;
+          scrollT = viewport.scrollTop;
+        });
+
+        window.addEventListener("mousemove", function (e) {
+          if (!dragging) return;
+          viewport.scrollLeft = scrollL - (e.clientX - startX);
+          viewport.scrollTop = scrollT - (e.clientY - startY);
+        });
+
+        window.addEventListener("mouseup", function () {
+          dragging = false;
+          viewport.classList.remove("is-panning");
+        });
+
+        viewport.addEventListener(
+          "wheel",
+          function (e) {
+            if (!e.ctrlKey && !e.metaKey) return;
+            e.preventDefault();
+            if (!measure()) return;
+            const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+            applyZoom(zoom + delta);
+          },
+          { passive: false }
+        );
+      }
+
+      blockEl.querySelectorAll("[data-action]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const action = btn.getAttribute("data-action");
+          if (action === "zoom-in") zoomBy(ZOOM_STEP);
+          else if (action === "zoom-out") zoomBy(-ZOOM_STEP);
+          else if (action === "zoom-reset") {
+            if (measure()) applyZoom(DEFAULT_ZOOM, { center: true });
+          } else if (action === "zoom-fit") zoomFit();
+          else if (action === "fullscreen" && modalEl) openDiagramModal(blockEl, modalEl);
+          else if (action === "close-modal") closeDiagramModal();
+        });
+      });
+
+      bindPan();
+
+      return {
+        refresh: function () {
+          if (measure()) applyZoom(zoom, { center: true });
+        },
+        setZoom: applyZoom,
+        fit: zoomFit,
+        getCanvas: function () { return canvas; },
+      };
+    }
+
+    let modalController = null;
+
+    function openDiagramModal(sourceBlock, modalEl) {
+      const srcCanvas = sourceBlock.querySelector("[data-canvas]");
+      const svg = srcCanvas && srcCanvas.querySelector("svg");
+      const modalCanvas = modalEl.querySelector("[data-canvas]");
+      if (!svg || !modalCanvas) return;
+
+      modalCanvas.innerHTML = "";
+      modalCanvas.appendChild(svg.cloneNode(true));
+
+      modalEl.classList.add("is-open");
+      modalEl.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+
+      requestAnimationFrame(function () {
+        if (!modalController) return;
+        modalController.refresh();
+        modalController.fit();
+        modalController.setZoom(Math.min(1.75, ZOOM_MAX), { center: true });
+      });
+    }
+
+    function closeDiagramModal() {
+      const modal = document.getElementById("diagram-modal");
+      if (!modal) return;
+      modal.classList.remove("is-open");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeDiagramModal();
+    });
+
+    document.addEventListener("DOMContentLoaded", async function () {
+      const modal = document.getElementById("diagram-modal");
+      const modalViewport = modal ? modal.querySelector("[data-modal-viewport]") : null;
+
+      try {
+        await mermaid.run({ querySelector: "pre.mermaid" });
+      } catch (err) {
+        console.error("Mermaid render failed:", err);
+        return;
+      }
+
+      if (modal && modalViewport) {
+        const modalCanvas = document.createElement('div');
+        modalCanvas.className = "diagram-canvas";
+        modalCanvas.setAttribute("data-canvas", "");
+        modalViewport.appendChild(modalCanvas);
+        modalController = createDiagramController(modal, null);
+        modal.addEventListener("click", function (e) {
+          if (e.target === modal) closeDiagramModal();
+        });
+      }
+
+      document.querySelectorAll(".diagram-block[data-diagram]").forEach(function (block) {
+        const ctrl = createDiagramController(block, modal);
+        requestAnimationFrame(function () {
+          ctrl.fit();
+          ctrl.setZoom(Math.min(1.2, ZOOM_MAX), { center: true });
+        });
+      });
+    });
+  </script>
+</body>
+</html>

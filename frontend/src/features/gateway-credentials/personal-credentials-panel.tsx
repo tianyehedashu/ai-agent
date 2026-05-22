@@ -35,7 +35,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { PersonalCredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
+import { PersonalCredentialBudgetInline } from '@/features/gateway-budget/personal-credential-budget-inline'
+import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
@@ -72,6 +74,7 @@ export function PersonalCredentialsPanel({
   const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
   const hasAuthSession = Boolean(token)
+  const teamId = useGatewayTeamId()
   const { currentUser } = useUserStore()
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -89,6 +92,12 @@ export function PersonalCredentialsPanel({
   const { data: credentials = [], isLoading } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
     queryFn: () => gatewayApi.listMyCredentials(),
+    enabled: hasAuthSession,
+  })
+  const { data: personalBudgets = [] } = useGatewayBudgets(teamId)
+  const { data: myModels = [] } = useQuery({
+    queryKey: ['gateway', 'my-models'],
+    queryFn: () => gatewayApi.listMyModels(),
     enabled: hasAuthSession,
   })
 
@@ -352,11 +361,13 @@ export function PersonalCredentialsPanel({
                         </div>
                       </div>
                       {currentUser?.id ? (
-                        <div className="border-t bg-muted/10 px-3 py-3">
-                          <PersonalCredentialBudgetSection
+                        <div className="border-t bg-muted/10 px-3 py-2">
+                          <p className="mb-1 text-[11px] text-muted-foreground">平台预算</p>
+                          <PersonalCredentialBudgetInline
                             credentialId={c.id}
                             userId={currentUser.id}
-                            provider={c.provider}
+                            budgets={personalBudgets}
+                            myModels={myModels}
                           />
                         </div>
                       ) : null}
@@ -380,6 +391,8 @@ export function PersonalCredentialsPanel({
       setAddModelsCred,
       deleteMutation.isPending,
       currentUser?.id,
+      personalBudgets,
+      myModels,
     ]
   )
 

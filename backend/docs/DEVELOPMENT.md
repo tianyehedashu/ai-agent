@@ -176,4 +176,4 @@ backend/
 - [代码规范](./CODE_STANDARDS.md) — 代码与 DDD 分层约定
 - [后端架构](./ARCHITECTURE.md) — 现行目录与模块索引
 - [API 文档](http://localhost:8000/docs) — 启动服务后访问
-- 根目录 `AI-Agent系统架构设计文档.md` 等为产品/需求向历史材料，**实现以 `domains/` 代码为准**
+- [docs/AI-Agent系统架构设计文档.md](../../docs/archive/AI-Agent系统架构设计文档.md) 等为产品/需求向材料（归档），**实现以 `domains/` 代码为准**

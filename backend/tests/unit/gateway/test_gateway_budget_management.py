@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 import uuid
@@ -70,7 +71,7 @@ async def test_list_budgets_for_team_admin_merges_all_scopes() -> None:
         return_value=[SimpleNamespace(id=key_id)]
     )
     svc._budgets.list_for_target_ids = AsyncMock(
-        side_effect=lambda kind, ids: {
+        side_effect=lambda kind, _ids: {
             "user": [user_budget],
             "key": [key_budget],
         }.get(kind, [])
@@ -121,6 +122,7 @@ async def test_delete_budget_rejects_cross_tenant() -> None:
             target_id=other_tenant,
         )
     )
+    writes._teams.list_team_members = AsyncMock(return_value=[])
     writes._budgets.delete = AsyncMock(return_value=True)
 
     with pytest.raises(ManagementEntityNotFoundError):
@@ -131,6 +133,7 @@ async def test_delete_budget_rejects_cross_tenant() -> None:
         )
 
     writes._budgets.delete.assert_not_called()
+    writes._teams.list_team_members.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -147,6 +150,7 @@ async def test_delete_budget_allows_tenant_budget() -> None:
             target_id=tenant_id,
         )
     )
+    writes._teams.list_team_members = AsyncMock(return_value=[])
     writes._budgets.delete = AsyncMock(return_value=True)
 
     await writes.delete_budget(
@@ -156,3 +160,62 @@ async def test_delete_budget_allows_tenant_budget() -> None:
     )
 
     writes._budgets.delete.assert_awaited_once_with(budget_id)
+    writes._teams.list_team_members.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_upsert_budget_rejects_cross_tenant_user_target() -> None:
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    tenant_id = uuid.uuid4()
+    outsider_id = uuid.uuid4()
+
+    writes._teams.list_team_members = AsyncMock(
+        return_value=[SimpleNamespace(user_id=uuid.uuid4())]
+    )
+    writes._budgets.upsert = AsyncMock()
+
+    with pytest.raises(ManagementEntityNotFoundError):
+        await writes.upsert_budget(
+            target_kind="user",
+            target_id=outsider_id,
+            period="monthly",
+            model_name=None,
+            limit_usd=None,
+            soft_limit_usd=None,
+            limit_tokens=None,
+            limit_requests=None,
+            tenant_id=tenant_id,
+            is_platform_admin=False,
+        )
+
+    writes._budgets.upsert.assert_not_called()
+    writes._teams.list_team_members.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_budget_allows_tenant_target() -> None:
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    tenant_id = uuid.uuid4()
+    saved = SimpleNamespace(id=uuid.uuid4())
+
+    writes._teams.list_team_members = AsyncMock(return_value=[])
+    writes._budgets.upsert = AsyncMock(return_value=saved)
+
+    result = await writes.upsert_budget(
+        target_kind="tenant",
+        target_id=tenant_id,
+        period="monthly",
+        model_name=None,
+        limit_usd=Decimal("10"),
+        soft_limit_usd=None,
+        limit_tokens=None,
+        limit_requests=None,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+    )
+
+    assert result is saved
+    writes._budgets.upsert.assert_awaited_once()
+    writes._teams.list_team_members.assert_not_called()

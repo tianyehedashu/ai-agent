@@ -6,15 +6,21 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from domains.gateway.domain.policies.budget_scope_policy import (
+    filter_budget_rows,
+    normalize_budget_list_filters,
+)
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
+from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     BudgetResponse,
     BudgetUpsert,
 )
 from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
+from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
     MgmtReads,
@@ -31,12 +37,12 @@ async def list_budgets(
     target_kind: str | None = Query(
         default=None,
         pattern="^(system|tenant|key|user)$",
-        description="Admin 可按 target_kind 过滤",
+        description="按 target_kind 过滤；Admin 全量列表，成员仅作用于其可见预算子集",
     ),
     model_name: str | None = Query(
         default=None,
         max_length=200,
-        description="Admin 可按 model_name 精确过滤",
+        description="按 model_name 精确过滤；Admin 与成员均可用，成员仅作用于其可见预算",
     ),
 ) -> list[BudgetResponse]:
     if is_team_admin_or_platform(team):
@@ -52,11 +58,8 @@ async def list_budgets(
             team.user_id,
             actor_user_id=team.user_id,
         )
-        if target_kind is not None:
-            budgets = [b for b in budgets if b.target_kind == target_kind]
-        normalized_model = (model_name or "").strip() or None
-        if normalized_model is not None:
-            budgets = [b for b in budgets if b.model_name == normalized_model]
+        filters = normalize_budget_list_filters(target_kind, model_name)
+        budgets = filter_budget_rows(budgets, filters)
     return [BudgetResponse.model_validate(b) for b in budgets]
 
 
@@ -75,16 +78,21 @@ async def upsert_budget(
     if body.target_kind == "system" and not team.is_platform_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only platform admin can set system budget")
     model_name = (body.model_name or "").strip() or None
-    budget = await writes.upsert_budget(
-        target_kind=body.target_kind,
-        target_id=body.target_id,
-        period=body.period,
-        model_name=model_name,
-        limit_usd=body.limit_usd,
-        soft_limit_usd=body.soft_limit_usd,
-        limit_tokens=body.limit_tokens,
-        limit_requests=body.limit_requests,
-    )
+    try:
+        budget = await writes.upsert_budget(
+            target_kind=body.target_kind,
+            target_id=body.target_id,
+            period=body.period,
+            model_name=model_name,
+            limit_usd=body.limit_usd,
+            soft_limit_usd=body.soft_limit_usd,
+            limit_tokens=body.limit_tokens,
+            limit_requests=body.limit_requests,
+            tenant_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
     return BudgetResponse.model_validate(budget)
 
 
@@ -94,11 +102,14 @@ async def delete_budget(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    await writes.delete_budget(
-        budget_id,
-        tenant_id=team.team_id,
-        is_platform_admin=team.is_platform_admin,
-    )
+    try:
+        await writes.delete_budget(
+            budget_id,
+            tenant_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
+    except HttpMappableDomainError as exc:
+        raise http_exception_from_gateway_domain(exc) from exc
 
 
 __all__ = ["router"]

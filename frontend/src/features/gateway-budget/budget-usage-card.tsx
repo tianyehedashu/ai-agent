@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+
 import { Link } from 'react-router-dom'
 
 import type { GatewayBudget } from '@/api/gateway/budgets'
@@ -20,6 +22,8 @@ export interface BudgetUsageCardProps {
   /** Admin 在资源详情页可链到专页 */
   adminManageHref?: string
   className?: string
+  /** 关联模型列表加载中（凭据详情页避免闪「暂无预算」） */
+  modelsLoading?: boolean
 }
 
 function BudgetUsageRow({ budget }: { budget: GatewayBudget }): React.JSX.Element {
@@ -73,9 +77,11 @@ export function BudgetUsageCard({
   context,
   adminManageHref,
   className,
+  modelsLoading = false,
 }: BudgetUsageCardProps): React.JSX.Element {
-  const { data: budgets, isLoading } = useGatewayBudgets(teamId)
-  const matched = matchBudgetsForContext(budgets ?? [], context)
+  const { data: budgets, isLoading: budgetsLoading } = useGatewayBudgets(teamId)
+  const matched = useMemo(() => matchBudgetsForContext(budgets ?? [], context), [budgets, context])
+  const isLoading = budgetsLoading || modelsLoading
 
   return (
     <Card className={className}>

@@ -1,23 +1,15 @@
 import type { GatewayBudget } from '@/api/gateway/budgets'
 import { Badge } from '@/components/ui/badge'
 
-import { matchBudgetsForContext } from './budget-match'
 import { computeBudgetUsageMetrics, formatBudgetPeriod } from './budget-progress-utils'
 
-export function KeyBudgetInline({
-  keyId,
-  budgets,
-}: {
-  keyId: string
-  budgets: GatewayBudget[]
-}): React.JSX.Element {
-  const matched = matchBudgetsForContext(budgets, { kind: 'virtual_key', keyId })
-  if (matched.length === 0) {
+export function KeyBudgetInline({ budgets }: { budgets: GatewayBudget[] }): React.JSX.Element {
+  if (budgets.length === 0) {
     return <span className="text-muted-foreground">—</span>
   }
   return (
     <div className="flex flex-wrap gap-1">
-      {matched.map((b) => {
+      {budgets.map((b) => {
         const { ratio } = computeBudgetUsageMetrics(b)
         const variant = ratio >= 1 ? 'destructive' : ratio >= 0.9 ? 'secondary' : 'outline'
         return (

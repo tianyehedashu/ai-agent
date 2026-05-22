@@ -3,16 +3,19 @@
  *
  * 用量 KPI（与 GET /dashboard/summary 对齐；usage_aggregation=user|workspace）。
  * 切片产品文案：workspace=团队（按当前选中团队），user=我（跨团队按当前账号）。
+ *
+ * 注：套餐毛利（margin）属于平台经营数据,**仅平台管理员**可见;
+ *     已从概览页移除独立卡片;如需查看请走平台管理员专属入口
+ *     （后端 API `/dashboard/margin` 仍受 platform admin 守护）。
  */
 
 import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { gatewayApi, type GatewayUsageAggregation, type MarginSummary } from '@/api/gateway'
+import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { marginGroupRowTitle } from '@/features/gateway-usage/credential-display'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -35,7 +38,7 @@ function coalesceNumber(value: unknown): number {
 
 export default function GatewayOverviewPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { isAdmin, canViewMargin } = useGatewayPermission()
+  const { isAdmin } = useGatewayPermission()
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
@@ -43,11 +46,6 @@ export default function GatewayOverviewPage(): React.JSX.Element {
   const { data, isLoading } = useQuery({
     queryKey: ['gateway', 'dashboard', teamId, usageAggregation, days],
     queryFn: () => gatewayApi.dashboard(teamId, { days, usage_aggregation: usageAggregation }),
-  })
-  const { data: margin, isLoading: marginLoading } = useQuery({
-    queryKey: ['gateway', 'dashboard', 'margin', teamId, days, 'credential'],
-    queryFn: () => gatewayApi.dashboardMargin(teamId, { days, group_by: 'credential' }),
-    enabled: canViewMargin,
   })
 
   const totalTokens = useMemo(() => {
@@ -115,8 +113,6 @@ export default function GatewayOverviewPage(): React.JSX.Element {
           {data?.total_input_tokens ?? '—'} · 输出 Token {data?.total_output_tokens ?? '—'}
         </CardContent>
       </Card>
-
-      {canViewMargin ? <MarginSummaryCard margin={margin} loading={marginLoading} /> : null}
     </div>
   )
 }
@@ -150,87 +146,5 @@ function Kpi({
         <div className="text-2xl font-semibold tabular-nums">{loading ? '—' : display}</div>
       </CardContent>
     </Card>
-  )
-}
-
-function MarginSummaryCard({
-  margin,
-  loading,
-}: Readonly<{
-  margin: MarginSummary | undefined
-  loading?: boolean
-}>): React.JSX.Element {
-  const revenue = coalesceNumber(margin?.total_revenue_usd)
-  const cost = coalesceNumber(margin?.total_cost_usd)
-  const gross = coalesceNumber(margin?.total_margin_usd)
-  const rate = revenue > 0 ? gross / revenue : 0
-  const topItems = margin?.items.slice(0, 5) ?? []
-  const groupColumnLabel = margin?.group_column_label ?? '凭据'
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">套餐毛利</CardTitle>
-        <CardDescription>
-          按客户套餐收入与厂商套餐成本对齐，帮助识别高成本凭据或低毛利模型。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MiniKpi title="收入" value={loading ? '—' : `$${revenue.toFixed(4)}`} />
-          <MiniKpi title="成本" value={loading ? '—' : `$${cost.toFixed(4)}`} />
-          <MiniKpi title="毛利" value={loading ? '—' : `$${gross.toFixed(4)}`} />
-          <MiniKpi title="毛利率" value={loading ? '—' : `${(rate * 100).toFixed(2)}%`} />
-        </div>
-        {topItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {loading ? '加载中…' : '暂无套餐收入/成本数据。'}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-2 text-left font-medium">{groupColumnLabel}</th>
-                  <th className="py-2 text-right font-medium">收入</th>
-                  <th className="py-2 text-right font-medium">成本</th>
-                  <th className="py-2 text-right font-medium">毛利</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topItems.map((item) => (
-                  <tr key={item.group_key || '__unlinked__'} className="border-b last:border-0">
-                    <td
-                      className="py-2 text-sm"
-                      title={marginGroupRowTitle(item.label, item.group_key)}
-                    >
-                      {item.label}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">
-                      ${coalesceNumber(item.revenue_usd).toFixed(4)}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">
-                      ${coalesceNumber(item.cost_usd).toFixed(4)}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">
-                      ${coalesceNumber(item.margin_usd).toFixed(4)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function MiniKpi({ title, value }: Readonly<{ title: string; value: string }>): React.JSX.Element {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground">{title}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
-    </div>
   )
 }

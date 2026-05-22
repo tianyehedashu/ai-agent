@@ -308,21 +308,30 @@ ls frontend/coverage/lcov.info
 
 ## 快速参考
 
-### 本地扫描命令
-
 ```bash
 # Windows
-.\scripts\sonar-scan.ps1 -Target all
+.\scripts\sonarcloud-scan.ps1
 
 # Linux/Mac
-./scripts/sonar-scan.sh all
+./scripts/sonarcloud-scan.sh
 
-# 只扫描后端
-./scripts/sonar-scan.sh backend
-
-# 只扫描前端
-./scripts/sonar-scan.sh frontend
+# 纯 API 拉取报告（无需本地 sonar-scanner）
+python scripts/sonarcloud_api.py
 ```
+
+Makefile 目标 `make sonar` 需系统安装 `sonar-scanner` 并配置 `SONAR_TOKEN`；详见 [archive/sonar/SONARCLOUD_MAKEFILE_FIX.md](./archive/sonar/SONARCLOUD_MAKEFILE_FIX.md)。
+
+更完整的脚本说明、API 参数与历史修复记录见 [archive/sonar/README.md](./archive/sonar/README.md)。
+
+---
+
+## 附录：脚本与归档文档
+
+| 文档 | 说明 |
+|------|------|
+| [archive/sonar/SONARCLOUD_SCRIPTS.md](./archive/sonar/SONARCLOUD_SCRIPTS.md) | 扫描脚本详细说明 |
+| [archive/sonar/SONARCLOUD_API_USAGE.md](./archive/sonar/SONARCLOUD_API_USAGE.md) | `sonarcloud_api.py` API 用法 |
+| [archive/sonar/SONARCLOUD_MAKEFILE_FIX.md](./archive/sonar/SONARCLOUD_MAKEFILE_FIX.md) | Makefile `sonar` 目标修复记录 |
 
 ### 查看 SonarCloud 报告
 

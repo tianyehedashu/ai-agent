@@ -228,7 +228,7 @@ def process_message(
 - Pylint 配置：`backend/pyproject.toml` ([tool.pylint] 部分)
 - 代码规则检查：`.cursor/agents/code-rule-check.md`
 - 类型定义：`backend/core/types.py`
-- 项目架构：`AI-Agent系统架构设计文档.md`
+- 项目架构：`backend/docs/ARCHITECTURE.md`（实现权威）；早期愿景见 `docs/archive/AI-Agent系统架构设计文档.md`
 
 ---
 

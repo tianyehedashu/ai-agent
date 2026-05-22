@@ -1,7 +1,7 @@
 # AI Gateway 领域架构与工程实践
 
 > **适用范围**：`domains/gateway`、`domains/tenancy`（团队/成员权威）、`domains/gateway/application`（内部桥接端口与辅助）、**OpenAI 兼容（`/api/v1/openai/v1/*`）与 Anthropic Messages（`/api/v1/anthropic/v1/*`）** 对外入口、管理 API、内部 LLM 桥接及相关前端。可选 **`ROOT_PATH`**（如 `/ai-agent`）作为服务级前缀。  
-> **更新说明**：LiteLLM 选型见 [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)；**能力矩阵（已用/未用）**见 [LITELLM_CAPABILITY_MATRIX.md](./LITELLM_CAPABILITY_MATRIX.md)；兼容性见 [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)；Claude Code / Cursor 适配见 [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md)。
+> **更新说明**：LiteLLM 选型见 [gateway/LLM_GATEWAY_ARCHITECTURE.md](./gateway/LLM_GATEWAY_ARCHITECTURE.md)；**能力矩阵**见 [gateway/LITELLM_CAPABILITY_MATRIX.md](./gateway/LITELLM_CAPABILITY_MATRIX.md)；Claude Code / Cursor 适配见 [gateway/GATEWAY_CURSOR_CLAUDE_CODE.md](./gateway/GATEWAY_CURSOR_CLAUDE_CODE.md)。完整索引见 [gateway/README.md](./gateway/README.md)。
 
 ---
 
@@ -439,7 +439,7 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 | 集成 | `tests/integration/api/test_gateway_bridge_attribution.py` | 内部桥归因、并发 vkey、桥接失败不静默回退 |
 | 集成 | `tests/integration/api/test_gateway_management_api.py` | JWT、`GET /teams`、`X-Team-Id` |
 
-CI：`.github/workflows/backend-architecture.yml` 强制跑架构守门 + 核心 gateway 单测。详见 `backend/docs/refactor-baseline.md`。
+CI：`.github/workflows/backend-architecture.yml` 强制跑架构守门 + 核心 gateway 单测。测试基线快照见 [archive/refactor-baseline.md](./archive/refactor-baseline.md)。
 
 ```bash
 uv run pytest tests/architecture/ tests/unit/gateway/domain/ -q --noconftest
@@ -500,9 +500,10 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ## 9. 相关文档
 
-- [GATEWAY_CURSOR_CLAUDE_CODE.md](./GATEWAY_CURSOR_CLAUDE_CODE.md) — Claude Code / Cursor 第三方客户端适配（能力、别名、部署、代码索引）
-- [GATEWAY_THIRDPARTY_CLIENT_GUIDE.md](./GATEWAY_THIRDPARTY_CLIENT_GUIDE.md) — 第三方客户端速查配置
-- [GATEWAY_DEPLOYMENT_CHECKLIST.md](./GATEWAY_DEPLOYMENT_CHECKLIST.md) — 生产部署（SSE / 长连接）
-- [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md)
-- [GATEWAY_COMPATIBILITY_CHECK.md](./GATEWAY_COMPATIBILITY_CHECK.md)
+专题文档见 [gateway/README.md](./gateway/README.md)：
+
+- [GATEWAY_CURSOR_CLAUDE_CODE.md](./gateway/GATEWAY_CURSOR_CLAUDE_CODE.md) — Claude Code / Cursor 适配
+- [GATEWAY_THIRDPARTY_CLIENT_GUIDE.md](./gateway/GATEWAY_THIRDPARTY_CLIENT_GUIDE.md) — 第三方客户端速查
+- [GATEWAY_DEPLOYMENT_CHECKLIST.md](./gateway/GATEWAY_DEPLOYMENT_CHECKLIST.md) — 生产部署
+- [LLM_GATEWAY_ARCHITECTURE.md](./gateway/LLM_GATEWAY_ARCHITECTURE.md) — LiteLLM 选型
 - [PERMISSION_SYSTEM_ARCHITECTURE.md](./PERMISSION_SYSTEM_ARCHITECTURE.md)

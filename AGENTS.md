@@ -1,5 +1,7 @@
 # AI Agent 项目规范
 
+> 本文件为 Cursor、Claude 及其他 AI Agent 的统一项目规范（原 `CLAUDE.md` 已合并至此）。
+
 ## 架构概览
 
 ```

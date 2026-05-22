@@ -75,12 +75,24 @@ ai-agent/
 │       └── types/           # 类型定义
 │
 ├── deploy/                  # 部署脚本与配置
-├── docs/                    # 项目级文档
+├── docs/                    # 项目级文档（需求、架构、部署、调研）
+├── AGENTS.md                # AI Agent 统一工作规范
 ├── scripts/                 # 项目级脚本
 ├── Makefile                 # 前后端统一管理命令
 ├── docker-compose.yml       # 开发环境
 └── docker-compose.prod.yml  # 生产环境
 ```
+
+## 📚 文档导航
+
+| 目录 | 说明 |
+|------|------|
+| [AGENTS.md](./AGENTS.md) | Cursor / Claude 等 AI Agent 的统一项目规范 |
+| [docs/README.md](./docs/README.md) | 项目级：需求、选型、部署、TDD |
+| [backend/docs/README.md](./backend/docs/README.md) | 后端：Gateway、Agent、MCP、权限、运维 |
+| [frontend/docs/README.md](./frontend/docs/README.md) | 前端：代码规范、设计系统、开发指南 |
+
+历史/过时文档见 [backend/docs/archive/](./backend/docs/archive/README.md) 与 [docs/archive/](./docs/archive/README.md)。
 
 ## 🚀 快速开始
 

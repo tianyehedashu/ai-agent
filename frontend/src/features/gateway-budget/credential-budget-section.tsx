@@ -15,14 +15,14 @@ export interface CredentialBudgetSectionProps {
   isAdmin: boolean
 }
 
-/** 团队/个人凭据详情：按关联模型名匹配 tenant/user 预算。 */
+/** 团队凭据详情：按 credential_id 关联模型匹配 tenant/user 预算。 */
 export function CredentialBudgetSection({
   credentialId,
   userId,
   isAdmin,
 }: CredentialBudgetSectionProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { data: models = [] } = useQuery({
+  const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'models', teamId, 'credential-budget', credentialId],
     queryFn: () =>
       gatewayApi.listModels(teamId, {
@@ -34,17 +34,22 @@ export function CredentialBudgetSection({
 
   const linkedModelNames = useMemo(() => models.map((m) => m.name), [models])
   const modelPrefill = linkedModelNames[0]
+  const budgetContext = useMemo(
+    () => ({
+      kind: 'credential' as const,
+      userId,
+      linkedModelNames,
+    }),
+    [userId, linkedModelNames]
+  )
 
   return (
     <BudgetUsageCardWithAdminLink
       teamId={teamId}
       isAdmin={isAdmin}
       modelPrefill={modelPrefill}
-      context={{
-        kind: 'credential',
-        userId,
-        linkedModelNames,
-      }}
+      context={budgetContext}
+      modelsLoading={modelsLoading}
     />
   )
 }
@@ -52,34 +57,31 @@ export function CredentialBudgetSection({
 export interface PersonalCredentialBudgetSectionProps {
   credentialId: string
   userId: string
-  provider: string
 }
 
-/** 个人凭据：仅展示当前用户的 user 级预算。 */
+/** 个人凭据详情：按 credential_id 关联模型匹配 user 级预算。 */
 export function PersonalCredentialBudgetSection({
   credentialId,
   userId,
-  provider,
 }: PersonalCredentialBudgetSectionProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { data: myModels = [] } = useQuery({
+  const { data: myModels = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['gateway', 'my-models'],
     queryFn: () => gatewayApi.listMyModels(),
   })
 
-  const linkedModelNames = useMemo(() => {
-    void credentialId
-    return myModels.filter((m) => m.provider === provider).map((m) => m.model_id)
-  }, [myModels, provider, credentialId])
-
-  return (
-    <BudgetUsageCard
-      teamId={teamId}
-      context={{
-        kind: 'personal',
-        userId,
-        modelNames: linkedModelNames,
-      }}
-    />
+  const linkedModelNames = useMemo(
+    () => myModels.filter((m) => m.credential_id === credentialId).map((m) => m.model_id),
+    [myModels, credentialId]
   )
+  const budgetContext = useMemo(
+    () => ({
+      kind: 'personal' as const,
+      userId,
+      modelNames: linkedModelNames,
+    }),
+    [userId, linkedModelNames]
+  )
+
+  return <BudgetUsageCard teamId={teamId} context={budgetContext} modelsLoading={modelsLoading} />
 }

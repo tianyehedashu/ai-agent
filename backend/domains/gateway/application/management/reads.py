@@ -48,11 +48,17 @@ from domains.gateway.domain.errors import (
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.policies.budget_scope_policy import (
+    filter_budget_rows,
+    normalize_budget_list_filters,
+    plan_admin_budget_fetch,
+)
 from domains.gateway.domain.types import CredentialScope, credential_api_scope
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     filter_virtual_keys_visible_to_actor,
 )
+from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayModel,
@@ -339,20 +345,24 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         include_system: bool = False,
         target_kind: str | None = None,
         model_name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[GatewayBudget]:
         """Admin 读路径：团队 tenant + 成员 user + 团队 vkey + 可选 system。"""
-        budgets: list[Any] = []
+        plan = plan_admin_budget_fetch(
+            target_kind=target_kind,
+            include_system=include_system,
+        )
+        budgets: list[GatewayBudget] = []
 
-        if target_kind is None or target_kind == "tenant":
+        if plan.fetch_tenant:
             budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
 
-        if target_kind is None or target_kind == "user":
+        if plan.fetch_user:
             members = await self._teams.list_team_members(tenant_id)
             user_ids = [m.user_id for m in members]
             if user_ids:
                 budgets.extend(await self._budgets.list_for_target_ids("user", user_ids))
 
-        if target_kind is None or target_kind == "key":
+        if plan.fetch_key:
             keys = await self._vkeys.list_for_tenant(
                 tenant_id, include_system=True, include_inactive=True
             )
@@ -360,17 +370,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             if key_ids:
                 budgets.extend(await self._budgets.list_for_target_ids("key", key_ids))
 
-        if include_system and (target_kind is None or target_kind == "system"):
+        if plan.fetch_system:
             budgets.extend(await self._budgets.list_for_target("system", None))
 
-        normalized_model = (model_name or "").strip() or None
-        if normalized_model is not None:
-            budgets = [b for b in budgets if b.model_name == normalized_model]
-
-        if target_kind is not None:
-            budgets = [b for b in budgets if b.target_kind == target_kind]
-
-        return budgets
+        filters = normalize_budget_list_filters(target_kind, model_name)
+        return filter_budget_rows(budgets, filters)
 
     async def list_alert_rules(self, team_id: UUID) -> list[AlertRuleSummary]:
         rows = await self._alerts.list_rules_for_tenant(team_id)

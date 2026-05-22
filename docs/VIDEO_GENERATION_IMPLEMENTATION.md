@@ -306,8 +306,8 @@ GIIKIN_BASE_URL=https://openapi.giikin.com
 
 ## 十、相关文档
 
-- **AMAZON_VIDEO_INTEGRATION.md**（backend/docs）：集成概述与使用流程，与本实现文档互补。
-- **CODE_CHECK_REPORT.md**（docs）：代码检查中与视频任务相关的结论与修复记录。
+- 全栈实现说明见本文档；早期集成概述见 [backend/docs/archive/AMAZON_VIDEO_INTEGRATION.md](../../backend/docs/archive/AMAZON_VIDEO_INTEGRATION.md)（归档）。
+- **FRONTEND_CODE_CHECK.md**（frontend/docs）：前端代码检查清单。
 
 ---
 

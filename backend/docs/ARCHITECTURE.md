@@ -184,11 +184,12 @@ Gateway 外部调用：`Client → /v1/* 或管理 API → Gateway 应用层与 
 | [AGENTS.md](../../AGENTS.md) | 仓库级域划分与导入规范 |
 | [CODE_STANDARDS.md](./CODE_STANDARDS.md) | 后端代码规范与 DDD 目录 |
 | [AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./AI_GATEWAY_DOMAIN_ARCHITECTURE.md) | Gateway 域与 CQRS |
-| [LLM_GATEWAY_ARCHITECTURE.md](./LLM_GATEWAY_ARCHITECTURE.md) | LiteLLM 选型说明 |
-| [DIRECTORY_STRUCTURE_ANALYSIS.md](./DIRECTORY_STRUCTURE_ANALYSIS.md) | 旧版目录分析报告**归档页**（勿作现行树来源） |
+| [LLM_GATEWAY_ARCHITECTURE.md](./gateway/LLM_GATEWAY_ARCHITECTURE.md) | LiteLLM 选型说明 |
+| [archive/README.md](./archive/README.md) | 历史/过时文档归档目录 |
+| [archive/refactor-baseline.md](./archive/refactor-baseline.md) | Agent–Gateway 解耦测试基线（快照） |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 本地开发与提交约定 |
 
-根目录 `AI-Agent*.md` 等为产品/需求侧历史文档，**实现以本仓库 `domains/` 代码为准**。
+[docs/](../../docs/README.md) 下产品/需求文档与 [archive/](../../docs/archive/README.md) 早期架构为参考材料，**实现以本仓库 `domains/` 代码为准**。
 
 ---
 

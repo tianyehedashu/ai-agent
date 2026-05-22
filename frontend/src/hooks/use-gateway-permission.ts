@@ -35,7 +35,7 @@ export interface GatewayPermissionFlags {
   canWrite: boolean
   /** 是否可看跨团队仪表盘：仅平台 admin */
   canViewCrossTeam: boolean
-  /** 套餐毛利大盘：平台 admin 或共享团队 admin+；个人工作区不可见 */
+  /** 套餐毛利大盘：**仅平台管理员**可见（涉及平台经营数据，不暴露给任何团队角色） */
   canViewMargin: boolean
 }
 
@@ -53,7 +53,7 @@ export function useGatewayPermission(): GatewayPermissionFlags {
     const isOwner = teamRole === TeamRole.OWNER || isPlatformAdmin
     const isAdmin = isPlatformAdmin || teamRole === TeamRole.OWNER || teamRole === TeamRole.ADMIN
     const isMember = isAdmin || teamRole === TeamRole.MEMBER
-    const canViewMargin = isPlatformAdmin || (isAdmin && team?.kind === 'shared')
+    const canViewMargin = isPlatformAdmin
     return {
       isAuthenticated: !(currentUser?.is_anonymous ?? true),
       isPlatformAdmin,

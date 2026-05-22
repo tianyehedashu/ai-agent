@@ -339,7 +339,7 @@ uv run python test_network.py
 ## 相关文档
 
 - [执行环境配置](./README.md)
-- [沙箱安全设计](../docs/sandbox-security.md)
+- [沙箱资源管理设计](../docs/沙箱资源管理设计文档.md)
 - [Docker 镜像构建](../docker/sandbox/README.md)
 
 ---

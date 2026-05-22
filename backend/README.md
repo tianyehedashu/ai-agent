@@ -38,7 +38,7 @@ backend/
 └── tests/                # 测试文件
 ```
 
-**规范与域文档**：仓库根 [AGENTS.md](../AGENTS.md)；后端分层见 [docs/CODE_STANDARDS.md](./docs/CODE_STANDARDS.md)；Gateway 见 [docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)。`docs/DIRECTORY_STRUCTURE_ANALYSIS.md` 为旧版目录归档说明，勿作现行树来源。
+**规范与域文档**：仓库根 [AGENTS.md](../AGENTS.md)；后端分层见 [docs/CODE_STANDARDS.md](./docs/CODE_STANDARDS.md)；Gateway 见 [docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md](./docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)。完整索引见 [docs/README.md](./docs/README.md)；历史文档见 [docs/archive/](./docs/archive/README.md)。
 
 ### Listing Studio / Chat 默认模型
 
@@ -150,11 +150,8 @@ make test-cov  # 带覆盖率
 
 ## 架构文档（节选）
 
-- [AI Gateway 领域架构与工程实践](docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md) — `domains/gateway` 分层、认证、数据要点、测试与前后端契约
-- [Claude Code / Cursor 适配说明](docs/GATEWAY_CURSOR_CLAUDE_CODE.md) — 能力清单、模型别名、架构落点、排错与 SOP
-- [第三方协议客户端接入指南](docs/GATEWAY_THIRDPARTY_CLIENT_GUIDE.md) — 速查配置（Claude Code / Cursor / SDK）
-- [Gateway 生产部署清单](docs/GATEWAY_DEPLOYMENT_CHECKLIST.md) — SSE、长连接、nginx/uvicorn
-- [LLM Gateway 架构设计说明](docs/LLM_GATEWAY_ARCHITECTURE.md) — LiteLLM 选型与本项目 Gateway 抽象
+- [AI Gateway 领域架构与工程实践](docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md) — `domains/gateway` 分层、认证、数据要点
+- [Gateway 专题文档索引](docs/gateway/README.md) — LiteLLM、Claude Code/Cursor 接入、部署、定价
 
 ## API 文档
 

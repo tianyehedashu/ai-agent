@@ -27,8 +27,36 @@ logger = get_logger(__name__)
 class EntitlementWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
-    async def upsert_budget(self, *, target_kind: str, target_id: uuid.UUID | None, period: str, model_name: str | None=None, limit_usd: Decimal | None, soft_limit_usd: Decimal | None=None, limit_tokens: int | None, limit_requests: int | None) -> Any:
-        return await self._budgets.upsert(target_kind=target_kind, target_id=target_id, period=period, model_name=model_name, limit_usd=limit_usd, soft_limit_usd=soft_limit_usd, limit_tokens=limit_tokens, limit_requests=limit_requests)
+    async def upsert_budget(
+        self,
+        *,
+        target_kind: str,
+        target_id: uuid.UUID | None,
+        period: str,
+        model_name: str | None = None,
+        limit_usd: Decimal | None,
+        soft_limit_usd: Decimal | None = None,
+        limit_tokens: int | None,
+        limit_requests: int | None,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> Any:
+        await self._assert_budget_target_in_team(
+            target_kind,
+            target_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
+        return await self._budgets.upsert(
+            target_kind=target_kind,
+            target_id=target_id,
+            period=period,
+            model_name=model_name,
+            limit_usd=limit_usd,
+            soft_limit_usd=soft_limit_usd,
+            limit_tokens=limit_tokens,
+            limit_requests=limit_requests,
+        )
 
     async def delete_budget(
         self,
