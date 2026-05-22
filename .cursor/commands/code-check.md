@@ -1,92 +1,92 @@
-对当前改动做 **规范 + DDD 分层 + 重复/遗留** 审核，并给出可执行建议。
+对当前改动做 **规范 + DDD 分层 + 重复/遗留** 审核，输出可执行建议。
 
-## 必读
+> 规则真源：
+>
+> - `backend/docs/CODE_STANDARDS.md`（结构 / 反退化 / Gateway 分层 / 读路径）
+> - `backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界 / `ProxyUseCase` 拆分）
+> - `backend/docs/ARCHITECTURE.md`、仓库根 `AGENTS.md`
+>
+> 可勾选 checklist：`.cursor/agents/code-rule-check.md`
+>
+> 本命令只规定**流程、专项问法与输出格式**，不再重复罗列所有规则。
 
-- `backend/docs/CODE_STANDARDS.md`（目录、`libs` vs `domains`、**应用端口**在 `application/` 不在 `libs`）
-- 仓库根 `AGENTS.md`（导入路径与分层）
-- 架构补充：`backend/docs/ARCHITECTURE.md`、`backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界 / `ProxyUseCase` 门面拆分）
+## 审查流程（按顺序）
 
-## 检查维度
+1. **改动盘点**：列出本次新增/修改的文件，标出归属域与层（presentation / application / domain / infrastructure / bootstrap / libs）。
+2. **应用 checklist**：对每个改动文件勾选 `.cursor/agents/code-rule-check.md` §1–§13，记录违反项。
+3. **专项问法**（按改动类型分流，至少回答触发的那一类）：
 
-### 1. 架构（DDD 分层）
+   - **Gateway `/v1/*` 代理改动** → 回答 §A
+   - **新增/扩展业务规则** → 回答 §B
+   - **API / 读路径 / 字段扩展** → 回答 §C
+   - **跨域调用 / 端口** → 回答 §D
+   - **前端 BYOK / 模型 UI** → 回答 §E
 
-- 调用方向严格 `Presentation → Application → Domain ← Infrastructure`；同层之间禁止环依赖。
-- 跨域契约（**Protocol / DTO**）由 **提供方域** 的 `application/ports.py` 声明（如
-  `SessionApplicationPort`、`GatewayProxyProtocol`、`UpstreamModelListPort`），**禁止**
-  在 `libs/` 堆业务契约或在消费方临时复刻。
-- `presentation/` 只做 HTTP 适配 + 鉴权 + Schema 校验；任何分支判断只要涉及业务概念，
-  必须下沉到 `application/` 或 `domain/`。
-- `infrastructure/` 实现 `domain/ports` 与 `application/ports`，禁止反向依赖
-  application；ORM 模型不得跨域被直接 import 用作 DTO。
-- `bootstrap/` 只装配工厂、生命周期、回调；任何 `if env == ...` 类业务策略要回到 domain。
+4. **静态与测试**：在 `backend/` 下跑：
 
-### 2. 拒绝 Domain 退化（Anemic Domain）
+   ```powershell
+   uv run ruff check .
+   uv run pyright <相关包路径>
+   uv run pytest tests/unit/<相关目录> -q --tb=short
+   uv run pytest tests/integration/ -q --tb=short  # 涉及 HTTP/DB
+   ```
 
-- 新增「业务规则 / 不变量 / 策略」必须落在 `domains/<域>/domain/`：值对象、领域服务、
-  policy 函数、错误类型；不允许只在 application 私有方法里写裸 `if/elif` 判定。
-- Domain 模块**禁止**导入 SQLAlchemy `Session`、ORM 实体（除非该域定义的 `domain/types.py`
-  里的纯数据类）、Redis、LiteLLM、FastAPI、httpx 等基础设施符号。如果策略需要这些数据，
-  Application 层先查出**纯值快照**，再传入 Domain policy 函数。
-- 「该查哪些 budget 行 / 该限流哪个 token / 该走哪个套餐」这种**计划性**逻辑要做成
-  domain 的纯函数（如 `build_budget_check_plan`、`rate_limit_target`、
-  `assert_registered_model_capability`），让 application 只负责**按计划执行 IO**。
-- 当一个 application 方法出现 ≥3 个重复的 `if scope == "team" / elif scope == "user"`
-  分支时，多半应抽成 domain 值对象或 policy；写 PR 描述时显式说明「为什么没下沉」。
+5. **输出**：按「问题 → 依据（真源锚点）→ 建议修改」分条列出；无问题时简要说明已核对项。
 
-### 3. 拒绝 Application 层加重（Fat Use Case）
+## 专项问法
 
-- 单个 `*UseCase` 类不应同时承担：白名单校验、限流、预算、metadata 拼装、外部 SDK 调用、
-  响应适配、结算 —— 这些应**按变化原因**拆成独立 application 模块（`*_metadata_builder`
-  / `*_litellm_client` / `*_response_adapter` / `*_deferred_tasks` 等），UseCase 只做编排。
-- UseCase 内部允许的「变化原因」是**编排顺序**变化；如果是「换 LLM SDK / 换响应字段 /
-  换归因 metadata 来源」这类变化触发 UseCase 修改，说明拆分不到位。
-- 一个 application 文件超过 800 行、或一个类的私有方法超过 15 个，必须在 PR 中给出
-  拆分说明或 follow-up todo；不允许用「以后再拆」无限延期。
-- Application 服务之间**禁止跨模块调用 `_` 前缀方法**；公开行为必须有显式 `__all__`
-  或不带前缀的命名。
+### §A. Gateway 热路径
 
-### 4. Gateway 热路径专项（`/v1/*` 代理）
+每条 Gateway 改动**必须**显式回答（→ CODE_STANDARDS §Gateway 热路径分层约束）：
 
-- `ProxyUseCase` 只能是 `/v1/*` 代理编排门面；新增模型 / 能力 / 预算 / 套餐 / 限流 /
-  归因策略一律先加到 `domains/gateway/domain/proxy_policy.py`（或同类 domain 模块）。
-- 应用协作模块按职责落位：
-  - `proxy_metadata_builder.py` —— Gateway metadata、归因、下游定价 kwargs。
-  - `proxy_litellm_client.py` —— LiteLLM Router / 直连技术适配。
-  - `proxy_response_adapter.py` —— 响应适配、`response_cost` 注入、预算/套餐结算。
-  - `proxy_deferred_tasks.py` —— fire-and-forget 结算任务登记与 shutdown 收口。
-  - `proxy_chat_pipeline.py` / `proxy_stream_settlement.py` —— Chat/Anthropic 共享流水线。
-- 禁止在 `proxy_use_case.py` 顶层重新加「兼容再导出」别名（如 `_settle_usage`
-  `_enrich_*`）；旧调用方一律改到正确模块。
+- 新规则落在了 **domain 还是 application**？为什么不下沉到 `domains/gateway/domain/proxy_policy.py`（或同类 domain 模块）？
+- 是否触碰 `proxy_use_case.py`？只允许编排顺序变化；其他原因（换 SDK、改字段映射、改归因来源）说明拆分不到位。
+- 是否在 `proxy_use_case.py` 顶层加了兼容再导出别名（`_settle_usage` / `_enrich_*` 等）？必须删除，调用方改到正确模块。
+- 应用协作模块是否落到对应职责文件：`proxy_metadata_builder` / `proxy_litellm_client` / `proxy_response_adapter` / `proxy_deferred_tasks` / `proxy_chat_pipeline` / `proxy_stream_settlement`？
 
-### 5. 遗留与重复
+### §B. Domain 反退化
 
-- 禁止再引入已移除路径（如历史 `libs/gateway`、旧 `proxy_use_case` 内部下划线再导出）。
-- 兼容分支必须有明确**到期条件**或被立即清理；不允许「兼容里又写新逻辑」。
-- 同一行为禁止跨域重复实现（典型：团队解析、租户 provisioning、Session 写入只能有一个权威）。
+（→ CODE_STANDARDS §DDD 反退化约束）
 
-### 6. 类型与风格
+- 新「不变量 / 白名单 / 策略选择 / 计划生成」是否在 `domains/<bc>/domain/`？
+- application 中是否出现 ≥3 个 `if scope == "team" / elif scope == "user"` 同概念分支？若是，说明为什么没抽成 domain policy。
+- domain 模块是否误 import SQLAlchemy `Session` / ORM 实体 / Redis / LiteLLM / FastAPI / httpx？
+- application 文件 > 800 行 或 类私有方法 > 15 个 → 必须给拆分说明或 follow-up todo。
 
-- 与 `pyproject.toml` 中 Ruff / Pyright 约定一致；禁止无必要的 `Any`、`# type: ignore`、
-  字符串包裹的类型注解（已通过 `from __future__ import annotations` 全局生效）。
-- 公开领域错误从 `libs/exceptions` 或域 `domain/errors.py` 复用，禁止在 application
-  内部重新定义业务异常类型。
+### §C. API / 读路径 / 字段扩展
 
-### 7. 测试
+（→ CODE_STANDARDS §读路径 / 字段扩展）
 
-- 改动涉及行为时，补充或更新 `tests/unit/<域>/` 或 `tests/integration/`；
-  domain policy 必须有**纯函数**单测（不连 DB / Redis / HTTP）。
-- 单测的 `monkeypatch.setattr` 目标应指向**真正实现所在模块**，而不是经由再导出别名
-  的 facade（避免拆分后测试失效却不暴露问题）。
+- 加字段是否走标准链路 `migration → ORM → ReadModel/端口 DTO → *_read_mappers.py → Schema → 测试`？多出一处即偏离。
+- list / detail / dashboard 是否复用同一 repository 或 `*ReadMixin` 入口，仅 projection / 过滤参数不同？
+- 是否在 router 直接 `{"new_field": row.new_field}` 拼 response？需改走 mapper。
+- 业务过滤（可见性 / team axis / scope）是否在 domain policy 决策（如 `usage_log_visibility`、`pricing_visibility`）？
+- 集成测试是否断言新字段？前端调用是否经单一 adapter 而非每个调用点各拼一份？
 
-## 建议本地命令（`backend/` 下）
+### §D. 跨域调用 / 端口
 
-```powershell
-uv run ruff check .
-uv run pyright <涉及的路径或包>
-uv run pytest tests/unit/<相关目录> -q --tb=short
-# 有 HTTP/DB 行为时：
-uv run pytest tests/integration/ -q --tb=short
+- 是否依赖了**提供方**的 `application/ports.py` 而非具体实现 / ORM？
+- 是否在 `libs/` 新增了业务 Protocol（**禁止**）？业务端口必须落 `domains/<bc>/application/ports.py`。
+- 是否新增 `libs/llm/` 或 `libs/gateway/` 的 `.py`（**禁止**，两个目录已废弃）。
+
+### §E. 前端 BYOK / 模型 UI
+
+- 凭据 / 模型 Tab 是否回流到 `pages/settings`？必须停留在 `/gateway/*` + `features/gateway-*`（→ AGENTS.md「前端」原则）。
+- 是否使用 `@/types` 已有类型而非 `any` 重写？
+
+## 遗留与重复（每次必检）
+
+- 是否引入已移除路径（`libs/gateway`、`libs/llm`、`domains/studio`）？
+- 兼容分支是否有明确到期条件？「兼容里又写新逻辑」直接拒绝。
+- 同一行为是否跨域重复实现（团队解析 / 租户 provisioning / Session 写入只有一个权威）？
+
+## 输出格式示例
+
+```
+[问题] domains/gateway/application/foo_use_case.py:42 出现 5 处 if scope == ... 分支
+[依据] CODE_STANDARDS §DDD 反退化约束 §拒绝 Domain 退化（Anemic Domain Model）
+[建议] 抽成 domains/gateway/domain/foo_scope_policy.py 中的枚举驱动 policy；
+      use case 仅按 plan 调度 IO；补 tests/unit/gateway/domain/test_foo_scope_policy.py
 ```
 
-输出：按 **问题 → 依据（文档/原则）→ 建议修改** 列出；无问题时简要说明已核对项。
-特别注意 §2 / §3 / §4：每条 Gateway 改动都要回答「新规则落在了 domain 还是 application」。
+无问题时简要列出已核对的 checklist 与专项问法编号即可。

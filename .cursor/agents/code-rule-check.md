@@ -6,265 +6,132 @@ description: 对修改的代码进行全面检查,确保符合项目规范和质
 
 # 代码规则检查清单
 
-对修改的代码进行全面检查,确保符合项目规范和质量标准。
+> **真源**：所有规则细节以下列文档为准；本清单只做可勾选项 + 锚点：
+>
+> - `backend/docs/CODE_STANDARDS.md`（结构 / 导入 / 反退化 / Gateway 分层 / 读路径）
+> - `backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界、ProxyUseCase 拆分）
+> - 仓库根 `AGENTS.md`（导入路径速查）
+>
+> 如本清单与真源冲突，以真源为准；发现冲突立即在 PR 中指出。
 
-## 1. 架构符合性检查 (DDD 4层架构)
+## 1. 架构（DDD 4 层）
 
-### 1.1 分层架构规范
-- [ ] **表示层** (`domains/*/presentation/`): HTTP 路由、请求/响应 Schema,不包含业务逻辑
-- [ ] **应用层** (`domains/*/application/`): UseCase 业务编排,事务协调
-- [ ] **领域层** (`domains/*/domain/`): 实体、值对象、领域服务、仓储接口
-- [ ] **基础设施层** (`domains/*/infrastructure/`): 仓储实现、ORM 模型、外部系统适配
-- [ ] **纯技术层** (`libs/`): 跨领域共享的技术基础设施(非业务)
+- [ ] 调用方向：Presentation → Application → Domain ← Infrastructure（→ CODE_STANDARDS §项目结构）
+- [ ] `domain/` 不 import SQLAlchemy `Session` / ORM 实体 / Redis / LiteLLM / FastAPI / httpx（→ §DDD 反退化约束）
+- [ ] `presentation/` 仅做 HTTP 适配 + 鉴权 + Schema；业务分支下沉到 application/domain
+- [ ] `infrastructure/` 实现 `domain/` 与 `application/` 端口，禁止反向依赖 application
+- [ ] ORM 模型不跨域 import 当 DTO；跨域用提供方 `application/ports.py`
+- [ ] `bootstrap/` 只装配工厂、生命周期、回调；业务策略不放 bootstrap
+- [ ] 跨域 FastAPI 依赖工厂落 `bootstrap/composition/<bc>_services.py`，不散落到各域 `presentation/deps.py`
 
-### 1.2 依赖方向检查
-- [ ] 依赖方向正确: Presentation → Application → Domain ← Infrastructure
-- [ ] 无循环依赖: 使用 `TYPE_CHECKING` 处理类型引用
-- [ ] 领域层不依赖基础设施层具体实现(依赖倒置)
-- [ ] 表示层不直接访问基础设施层
-- [ ] 业务类型在 `domains/`,纯技术基础设施在 `libs/`
+## 2. 域与目录归属
 
-### 1.3 模块职责检查
-- [ ] 启动/配置代码放在 `bootstrap/`（FastAPI 入口、配置加载）
-- [ ] Agent 引擎代码放在 `domains/agent/infrastructure/llm/`
-- [ ] 推理策略代码放在 `domains/agent/infrastructure/reasoning/`
-- [ ] 工具相关代码放在 `domains/agent/infrastructure/tools/`
-- [ ] 记忆相关代码放在 `domains/agent/infrastructure/memory/`
-- [ ] 认证相关代码放在 `domains/identity/domain/types.py` 和 `presentation/deps.py`
-- [ ] 会话应用端口 `SessionApplicationPort` 在 `domains/session/application/ports.py`（**不在** `libs/`）
-- [ ] Gateway 内部桥接端口 `GatewayProxyProtocol`、`GatewayCallContext` 等在 `domains/gateway/application/ports.py`；工厂 `get_gateway_proxy` 在 `gateway_proxy_factory.py`（**不在** `libs/gateway`，该路径已废弃）
-- [ ] 团队/成员权威在 `domains/tenancy/`；Gateway 管理面经 `TeamService` / 仓储访问团队，不复制 tenancy 规则
-- [ ] ORM 模型放在 `domains/*/infrastructure/models/`
-- [ ] Pydantic Schema 放在 `domains/*/presentation/schemas.py` 或 `presentation/schemas/` 分包
-- [ ] 数据库连接/会话工厂放在 `libs/db/`
-- [ ] 通用类型定义放在 `libs/types/`
-- [ ] 配置管理放在 `libs/config/`
-- [ ] API 服务工厂/依赖注入放在 `libs/api/deps.py`
-- [ ] 跨域 IAM 抽象（如 `MembershipPort`）在 `libs/iam/`，业务团队规则不在 `libs`
+- [ ] 现存域：`identity / session / tenancy / gateway / agent / evaluation`
+      （`studio` 为历史占位空壳，**禁止**新增内容；listing studio 等子用例落 `agent/application/`）
+- [ ] 启动 / 配置代码 → `bootstrap/`（`main.py` / `config.py` / `composition/`）
+- [ ] Agent 引擎 / 工具 / 记忆 / 推理 → `domains/agent/infrastructure/{llm,tools,memory,reasoning}/`
+- [ ] 团队/成员权威只在 `domains/tenancy/`；Gateway 管理面经 `TeamService` / 仓储访问，不复制规则
+- [ ] ORM 模型 → `domains/*/infrastructure/models/`
+- [ ] Pydantic Schema → `domains/*/presentation/schemas.py` 或 `presentation/schemas/` 分包
+- [ ] 跨域 IAM 抽象（`MembershipPort` 等）落 `libs/iam/`；业务团队规则不进 `libs/`
 
-## 2. 目录规范检查
+## 3. 跨域应用端口（Protocol + DTO）
 
-### 2.1 文件命名规范
-- [ ] 模块文件: `snake_case.py` (如 `user_use_case.py`)
-- [ ] 路由文件: `*_router.py` (如 `session_router.py`)
-- [ ] 测试文件: `test_<module>.py`,放在 `tests/` 对应目录
+- [ ] 由**提供方域**在 `domains/<bc>/application/ports.py` 声明，**不放 `libs/`**
+- [ ] Session：`SessionApplicationPort` @ `domains/session/application/ports.py`
+- [ ] Identity：`MembershipPort` 等 @ `domains/identity/application/ports.py`
+- [ ] Gateway：`GatewayProxyProtocol` / `GatewayCallContext` / `GatewayResponse` 等 @
+      `domains/gateway/application/ports.py`；工厂 `get_gateway_proxy` @ `gateway_proxy_factory.py`
+- [ ] **禁止**在 `libs/llm/` 与 `libs/gateway/` 新增 `.py`（两个目录已废弃）
 
-### 2.2 目录结构规范
+## 4. 命名
 
-（细目以 `backend/docs/CODE_STANDARDS.md` 为准；下列为检查用缩略树。）
+- [ ] 模块：`snake_case.py`；类：`PascalCase`；常量：`UPPER_SNAKE`；私有：`_` 前缀
+- [ ] 路由文件：单文件域用 `*_router.py`（如 `session_router.py`）；
+      Gateway 这类大域走 `presentation/routers/<sub>.py` 分包（无 `_router` 后缀），在 `routers/__init__.py` 聚合
+- [ ] 测试：`test_<scenario>_<expected>`；放在镜像 domain 路径的 `tests/unit|integration|e2e/` 下
 
+## 5. 类型与风格（→ CODE_STANDARDS §类型安全 / §代码风格）
+
+- [ ] 全量类型注解；通过 `uv run pyright`
+- [ ] 禁止 `Any` / `dict` 无类型 / `# type: ignore`（除非必要并写明原因）
+- [ ] 字符串注解类型已通过全局 `from __future__ import annotations` 失效，**不要**再加引号
+- [ ] 业务类型从 `domains.*.domain.types` 导入；通用类型从 `libs.types` 导入
+- [ ] 行宽 ≤ 100；用 `pathlib.Path` 与 f-string；通过 `uv run ruff check .`
+
+## 6. 错误处理（→ CODE_STANDARDS §错误处理）
+
+- [ ] 可失败操作返回 `Result[T]`（来自 `libs.types`）
+- [ ] 业务异常继承 `libs.exceptions.AIAgentError`（或 `HttpMappableDomainError`），
+      **不在 application 内**重新定义业务异常类型
+- [ ] 复用既有：`ValidationError` / `NotFoundError` / `PermissionDeniedError` /
+      `AuthenticationError` / `TokenError` / `ToolExecutionError` / `ExternalServiceError`
+- [ ] 异步操作有合适的异常处理 + 取消传播
+
+## 7. DDD 反退化（→ CODE_STANDARDS §DDD 反退化约束）
+
+- [ ] 新增「不变量 / 白名单 / 策略选择 / 计划生成」纯逻辑落在 `domains/<bc>/domain/`，
+      不允许只写在 application 私有方法里
+- [ ] application 中出现 ≥3 个对同一概念的 `if scope == ... / elif ...` 分支 → 抽成 domain policy
+- [ ] 单个 `*UseCase` 不同时承担「校验 + 限流 + 预算 + metadata + 外部 SDK + 响应适配 + 结算」；
+      按变化原因拆 `*_metadata_builder` / `*_litellm_client` / `*_response_adapter` / `*_deferred_tasks` 等
+- [ ] application 文件 > 800 行 或 类的私有方法 > 15 个 → PR 给出拆分说明或 follow-up todo
+- [ ] application 服务之间禁止 import 对方 `_` 前缀符号；公开 API 显式 `__all__` 或不带前缀
+
+## 8. Gateway 热路径专项（→ CODE_STANDARDS §Gateway 热路径分层约束）
+
+> 每条 Gateway 改动须在 PR 描述里答：「新增规则落在了 domain 还是 application？为什么不下沉？」
+
+- [ ] 模型 / 能力 / 预算 / 套餐 / 限流 / 归因 等纯规则先落 `domains/gateway/domain/proxy_policy.py`（或同类 domain 模块）
+- [ ] `proxy_use_case.py` 仅作 `/v1/*` 编排门面，不包含业务分支
+- [ ] 应用协作模块按职责落位：`proxy_metadata_builder` / `proxy_litellm_client` /
+      `proxy_response_adapter` / `proxy_deferred_tasks` / `proxy_chat_pipeline` / `proxy_stream_settlement`
+- [ ] **禁止**在 `proxy_use_case.py` 顶层重新加兼容再导出别名（`_settle_usage` / `_enrich_*` 等）
+
+## 9. 读路径 / 字段扩展（CQRS）（→ CODE_STANDARDS §读路径 / 字段扩展）
+
+- [ ] 同一资源的 list / detail / dashboard 共用 repository 或 `*ReadMixin` 入口；
+      不复制 `select(...)` 列清单到多处
+- [ ] 加字段链路收敛为：`migration → ORM → ReadModel/端口 DTO → *_read_mappers.py → Schema → 测试`
+- [ ] 禁止在 router 直接 `{"new_field": row.new_field}` 拼 response dict
+- [ ] 业务过滤（可见性 / team axis / scope）在 domain policy 决策；application 按 plan 查一次
+- [ ] 跨域消费方依赖端口 DTO，不复制字段结构
+- [ ] 集成测试断言新字段；前端 `@/types` 或 `features/<bc>/*` 内单一 adapter 同步
+
+## 10. 遗留与重复
+
+- [ ] 不再引入 `libs/gateway` / `libs/llm` 等已废弃路径
+- [ ] 兼容分支有明确**到期条件**或被立即清理；不允许在兼容里又写新逻辑
+- [ ] 同一行为不跨域重复实现（团队解析 / 租户 provisioning / Session 写入只能有一个权威）
+
+## 11. 测试
+
+- [ ] 行为变更补 `tests/unit/<bc>/` 或 `tests/integration/`
+- [ ] domain policy 必须有**纯函数**单测（不连 DB / Redis / HTTP）
+- [ ] `monkeypatch.setattr` 指向真正实现所在模块，不指向再导出 facade
+
+## 12. 性能与安全
+
+- [ ] DB 查询走索引字段；批量用批量 API；避免 N+1
+- [ ] 输入用 Pydantic Schema 校验；敏感操作用 `check_session_ownership` / `check_tenant_access`
+- [ ] 用 ORM 防 SQL 注入；用 `pathlib` 规范化路径防遍历
+
+## 13. 前端（TypeScript）
+
+- [ ] 全量类型注解；禁止 `any` / `as any` / `@ts-ignore`；禁止直接操作 `localStorage`
+- [ ] 业务类型从对应 feature 模块或 `@/types` 导入；项目内用 `@/` 别名
+- [ ] API 调用经单一 hook / adapter（如 `features/gateway-*`），不在多处重写 fetch / 字段映射
+- [ ] BYOK 凭据 / 个人模型 UI 在 `/gateway/*` 与 `frontend/src/features/gateway-*`，**不**回到 `pages/settings`
+
+## 14. 静态检查命令（`backend/` 下）
+
+```powershell
+uv run ruff check .
+uv run pyright <相关包路径>
+uv run pytest tests/unit/<相关目录> -q --tb=short
+uv run pytest tests/integration/ -q --tb=short  # 涉及 HTTP/DB
 ```
-backend/
-├── domains/                      # 业务限界上下文
-│   ├── identity/                 # 身份、JWT、API Key
-│   ├── session/                  # 会话；application/ports.py = SessionApplicationPort
-│   ├── tenancy/                  # 团队与成员权威
-│   ├── gateway/                  # AI Gateway；application/ports.py = GatewayProxyProtocol 等
-│   │   └── application/
-│   │       ├── ports.py
-│   │       ├── gateway_proxy_factory.py
-│   │       ├── internal_bridge.py
-│   │       ├── management/       # 管理面 CQRS 读写
-│   │       └── ...
-│   ├── agent/                    # Agent 核心
-│   │   ├── application/
-│   │   ├── infrastructure/llm/   # 可依赖 domains.gateway.application.ports（不依赖 gateway 实现细节）
-│   │   └── presentation/
-│   └── evaluation/
-├── libs/                         # 纯技术：db、config、api、exceptions、iam、middleware、observability、orm…
-├── bootstrap/
-└── tests/                        # unit / integration / e2e
-```
-
-**目录说明**：
-
-- `domains/*/`：每域四层齐全时，保持 **presentation → application → domain ← infrastructure**。
-- **`application/ports.py`**：跨域 **应用端口（Protocol）** 的默认落点之一（与 gateway 分散的 `ports.py` + 桥接辅助模块同属应用层约定）。
-- `libs/`：无业务规则；**不**新增「某 BC 的业务协议包」到 `libs/`。
-- `bootstrap/`：组装与进程生命周期。
-
-### 2.3 导入规范
-
-#### 2.3.1 导入顺序
-- [ ] 导入顺序: 标准库 → 第三方库 → 本地模块
-
-#### 2.3.2 业务类型导入
-```python
-# 身份类型 (从 identity 域)
-from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
-
-# 认证依赖 (从 identity 域)
-from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_session_ownership
-from domains.identity.presentation.schemas import CurrentUser
-
-# Agent 域类型
-from domains.agent.domain.types import Message, AgentEvent, EventType, ToolCall
-```
-
-#### 2.3.3 业务组件导入
-```python
-# Agent 域组件（Chat/Video 依赖 SessionApplicationPort，组合根注入 SessionUseCase）
-from domains.agent.application import ChatUseCase
-from domains.session.application import SessionUseCase
-from domains.session.application.ports import SessionApplicationPort
-from domains.agent.infrastructure.llm import AgentLlmFacade
-from domains.agent.infrastructure.tools import ConfiguredToolRegistry
-
-# 内部 LLM 走 Gateway 桥接时（端口在 gateway 应用层）
-from domains.gateway.application.ports import GatewayCallContext, GatewayProxyProtocol
-from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
-```
-
-#### 2.3.4 技术基础设施导入
-```python
-# 配置管理
-from libs.config import ExecutionConfig
-
-# 服务工厂/依赖注入
-from libs.api.deps import get_db, get_session_service
-
-# 通用类型
-from libs.types import Result
-```
-
-#### 2.3.5 导入规范
-- [ ] 使用绝对导入: `from domains.identity.application import UserUseCase`
-- [ ] 避免 `from X import *`
-- [ ] 类型检查时使用 `TYPE_CHECKING` 避免循环依赖
-- [ ] 业务类型从 `domains.*.domain.types` 导入
-- [ ] 认证依赖从 `domains.identity.presentation.deps` 导入
-- [ ] 技术类型从 `libs.*` 导入
-
-## 3. 软件工程最佳实践
-
-### 3.1 类型安全
-- [ ] 所有函数参数和返回值有完整类型注解
-- [ ] 类属性有类型注解(使用 `Mapped[T]` 用于 SQLAlchemy)
-- [ ] 通过 `pyright --strict` 类型检查
-- [ ] 禁止使用:
-  - `Any`
-  - `dict` 无类型注解
-  - `# type: ignore` (除非绝对必要)
-- [ ] 优先使用已定义的类型:
-  - `domains.*.domain.types` 中的业务类型
-  - `libs.types` 中的通用类型 (如 `Result[T]`)
-
-### 3.2 代码风格
-- [ ] 符合 Ruff 配置(已在 `pyproject.toml`)
-- [ ] 行长度不超过 100 字符
-- [ ] 使用 `pathlib.Path` 而非 `os.path`
-- [ ] 使用 f-string 而非 `.format()` 或 `%` 格式化
-
-### 3.3 错误处理
-- [ ] 使用 `Result[T]` 类型处理可能失败的操作
-- [ ] 自定义异常继承自 `AIAgentError`（定义在 `libs/exceptions`）
-- [ ] 常用异常类型:
-  - `ValidationError` - 验证失败
-  - `NotFoundError` - 资源不存在
-  - `PermissionDeniedError` - 权限不足
-  - `AuthenticationError` / `TokenError` - 认证问题
-  - `ToolExecutionError` - 工具执行失败
-  - `ExternalServiceError` - 外部服务错误
-- [ ] API 层将业务异常转换为 HTTP 异常
-- [ ] 异步操作有适当的异常处理
-
-### 3.4 异步编程
-- [ ] 数据库操作使用 `AsyncSession`
-- [ ] I/O 操作使用 `async/await`
-- [ ] 并发操作使用 `asyncio.gather()` 或 `asyncio.Semaphore`
-- [ ] 流式响应使用 `AsyncGenerator`
-
-### 3.5 文档与注释
-- [ ] 模块有文档字符串说明用途
-- [ ] 公共函数/方法有 Google 风格文档字符串
-- [ ] 复杂逻辑有行内注释(解释"为什么"而非"是什么")
-- [ ] 类型注解足够清晰,减少注释需求
-
-## 4. 设计合理性检查
-
-### 4.1 避免过度设计
-- [ ] 不引入不必要的抽象层
-- [ ] 不创建"未来可能用到"的接口
-- [ ] 不添加未使用的配置项
-- [ ] 不实现超出当前需求的复杂模式
-
-### 4.2 单一职责原则
-- [ ] 每个函数只做一件事
-- [ ] 每个类有明确的单一职责
-- [ ] 模块职责边界清晰
-
-### 4.3 开闭原则
-- [ ] 对扩展开放: 使用 Protocol 定义接口
-- [ ] 对修改封闭: 核心逻辑稳定,通过配置扩展
-
-### 4.4 业务/技术分离
-- [ ] 业务逻辑放在 `domains/`
-- [ ] 纯技术工具放在 `libs/`
-- [ ] `libs/` 中不包含业务概念；**跨域应用端口（Protocol + 业务相关 DTO）** 放在 **`domains/<provider>/application/`**，不放入 `libs/` 以免与「纯技术」混淆
-- [ ] `domains/` 中避免复制 `libs` 已有能力（DB 会话、通用 Result 等应复用 `libs`）
-
-## 5. 代码复用检查
-
-### 5.1 避免重复造轮子
-- [ ] 优先使用 `domains.*.domain.types` 中的业务类型
-- [ ] 复用 `domains/*/application/` 中的 UseCase
-- [ ] 使用 `domains/agent/infrastructure/tools/` 中的工具而非重新实现
-- [ ] 复用 `libs/` 中的技术组件:
-  - `libs/types/` - 通用类型
-  - `libs/config/` - 配置管理
-  - `libs/db/` - 数据库组件
-  - `libs/api/` - API 工具
-
-### 5.2 抽象复用
-- [ ] 相似逻辑提取为公共函数/类
-- [ ] 使用基类/Protocol 定义通用接口
-- [ ] 配置化而非硬编码
-- [ ] ORM 模型继承自基类(如果存在)
-- [ ] 使用统一的 LLM 网关
-
-### 5.3 依赖检查
-- [ ] 检查是否有现成的第三方库可用
-- [ ] 避免实现标准库已有的功能
-- [ ] 优先使用项目已集成的库
-
-## 6. 质量检查工具验证
-
-### 6.1 静态检查
-- [ ] 通过 `ruff check` 代码检查
-- [ ] 通过 `pyright` 类型检查
-- [ ] 通过 `mypy` 类型检查(如果启用)
-
-### 6.2 测试覆盖
-- [ ] 新功能有对应的单元测试
-- [ ] 关键路径有集成测试
-- [ ] 测试命名清晰: `test_<scenario>_<expected_result>`
-
-## 7. 性能与安全
-
-### 7.1 性能考虑
-- [ ] 数据库查询使用索引字段
-- [ ] 避免 N+1 查询问题
-- [ ] 批量操作使用批量 API
-- [ ] 异步操作正确使用 `await`
-
-### 7.2 安全考虑
-- [ ] 用户输入有验证(使用 Pydantic Schema)
-- [ ] 敏感操作有权限检查(使用 `check_session_ownership`)
-- [ ] 无 SQL 注入风险(使用 ORM 查询)
-- [ ] 无路径遍历风险(使用 `pathlib` 规范化路径)
-
-## 8. 前端代码检查 (TypeScript)
-
-### 8.1 类型安全
-- [ ] 所有变量/函数/参数有类型注解
-- [ ] 禁止使用 `any`, `as any`, `@ts-ignore`
-- [ ] 优先使用 `@/types` 中的类型定义
-
-### 8.2 导入规范
-- [ ] 业务类型从对应的域导入
-- [ ] 通用类型从 `@/types` 导入
-- [ ] 使用相对路径 `@/` 导入项目模块
 
 ---
 
-**检查原则**: 优先复用、符合 DDD 架构、类型安全、业务/技术分离、避免过度设计
+**检查原则**：先看真源，本清单只是 reviewer 的 keystroke 入口；发现条目过时 → 改清单 + 真源同步。

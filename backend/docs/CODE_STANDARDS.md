@@ -176,6 +176,32 @@ backend/
 - Code review / `code-check` 遇到 Gateway 代理改动时，必须显式回答：
   「新增规则落在了 domain 还是 application？为什么不下沉？」
 
+### 读路径 / 字段扩展（CQRS）
+
+> 适用于所有 `domains/*`；目标是「加一个字段不要改 5 处」「列表/详情不要写两套 SQL」。
+
+- **读模型单点**：同一资源的 list / detail / dashboard / 大盘**共用** repository 或
+  `*ReadMixin` / `*ReadService` 入口；仅 projection、过滤参数不同，禁止复制 `select(...)`
+  列清单到多个 application 方法。
+- **加字段最小改动面**：扩展字段时按下列固定链路改动，多一处即视为偏离：
+
+  ```
+  alembic migration → ORM 列 → application ReadModel / 端口 DTO
+                     → *_read_mappers.py → presentation Schema → 测试
+  ```
+
+  不允许跳过 ReadModel 或 mapper 在 router 内直接 `{"new_field": row.new_field}` 拼装。
+- **跨域只看端口 DTO**：消费方依赖提供方 `application/ports.py` 的 DTO，不复制字段结构；
+  ORM 实体不得跨域 import 当作返回类型。
+- **业务过滤下沉**：可见性 / team axis / scope 等过滤规则在 domain policy 决策（如
+  `usage_log_visibility`、`pricing_visibility`、`system_visibility_filter`），application 按
+  policy 计划查一次；禁止 presentation 为补字段再开第二条 IO。
+- **测试同步**：新字段必须在 `tests/integration/api/` 断言；前端改 API 消费处时核对
+  `@/types` 或 `frontend/src/features/<bc>/*` 内单一 adapter，避免每个调用点各拼一份。
+- **典型参照（Gateway 管理面）**：`application/management/credential_read_mappers.py`、
+  `application/management/*_read_model.py`、`application/management/reads.py` 已落地此模式，
+  新代码遵循同形态。
+
 ## 共享组件库 (`libs/`)
 
 | 子模块 | 职责 |
