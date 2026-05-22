@@ -92,7 +92,9 @@ export function useGatewayModelMutations(
   })
 
   const deleteModelMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.deleteModel(teamId, id),
+    mutationFn: async (id: string): Promise<void> => {
+      await gatewayApi.deleteModel(teamId, id)
+    },
     onSuccess: () => {
       invalidateGatewayModelCaches(queryClient, {
         credentialId: filterCredentialId,
@@ -117,7 +119,17 @@ export function useGatewayModelMutations(
       invalidateGatewayModelAliasDependents(queryClient)
       options?.onBatchDeleteSuccess?.(result)
       if (result.succeeded.length > 0) {
-        toast({ title: `已删除 ${String(result.succeeded.length)} 个模型` })
+        const cleanupParts: string[] = []
+        if (result.grants_removed > 0) {
+          cleanupParts.push(`${String(result.grants_removed)} 条授权`)
+        }
+        if (result.budgets_removed > 0) {
+          cleanupParts.push(`${String(result.budgets_removed)} 条预算`)
+        }
+        const cleanupHint = cleanupParts.length > 0 ? `，已清理 ${cleanupParts.join('、')}` : ''
+        toast({
+          title: `已删除 ${String(result.succeeded.length)} 个模型${cleanupHint}`,
+        })
       }
     },
     onError: (e: Error) => {

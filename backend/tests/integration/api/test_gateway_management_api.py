@@ -12,16 +12,18 @@ from httpx import AsyncClient
 import pytest
 
 from bootstrap.config import settings
+from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.identity.application import UserUseCase
-from libs.crypto import derive_encryption_key, encrypt_value
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.api.paths import openai_compat_base
+from libs.crypto import derive_encryption_key, encrypt_value
 
 
 @pytest.mark.integration
@@ -1464,6 +1466,75 @@ class TestGatewayManagementApi:
             headers=member_headers,
         )
         assert r_sys_detail.status_code == 403, r_sys_detail.text
+
+    @pytest.mark.asyncio
+    async def test_batch_delete_system_models_partial_success(
+        self,
+        dev_client: AsyncClient,
+        db_session,
+    ) -> None:
+        """POST /models/batch-delete：可删行成功，config-managed 进 failed[]。"""
+        platform_admin = User(
+            email=f"padmin_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Platform Admin",
+            role="admin",
+        )
+        db_session.add(platform_admin)
+        await db_session.commit()
+        await db_session.refresh(platform_admin)
+
+        team = await TeamService(db_session).ensure_personal_team(platform_admin.id)
+        encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+        cred = await SystemProviderCredentialRepository(db_session).create(
+            provider="openai",
+            name=f"batch-del-cred-{uuid.uuid4().hex[:6]}",
+            api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+            api_base=None,
+        )
+        await db_session.flush()
+        deletable = SystemGatewayModel(
+            name=f"batch-api-del-{uuid.uuid4().hex[:6]}",
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+        )
+        managed = SystemGatewayModel(
+            name=f"batch-api-managed-{uuid.uuid4().hex[:6]}",
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+            tags={GATEWAY_MODEL_MANAGED_BY_TAG: CONFIG_MANAGED_BY},
+        )
+        db_session.add_all([deletable, managed])
+        await db_session.commit()
+
+        uc = UserUseCase(db_session)
+        admin_token = await uc.create_token(platform_admin)
+        headers = {"Authorization": f"Bearer {admin_token.access_token}"}
+
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models/batch-delete",
+            headers=headers,
+            json={"model_ids": [str(deletable.id), str(managed.id)]},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert str(deletable.id) in body["succeeded"]
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["id"] == str(managed.id)
+
+        r_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"registry_scope": "system"},
+        )
+        assert r_list.status_code == 200, r_list.text
+        ids = {m["id"] for m in r_list.json()}
+        assert str(deletable.id) not in ids
+        assert str(managed.id) in ids
 
 
 @pytest.mark.integration

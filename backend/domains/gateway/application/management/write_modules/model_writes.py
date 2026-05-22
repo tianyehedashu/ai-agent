@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 import uuid
 
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
 from domains.gateway.application.management.multi_credential_types import (
     MultiCredentialGatewayModelResult,
@@ -22,7 +23,6 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
-from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -132,8 +132,10 @@ class ModelWritesMixin:
             raise ManagementEntityNotFoundError('model', str(model_id))
         model_name = existing.name
         await self._models.delete(model_id)
-        await prune_gateway_model_name_references(self._session, frozenset({model_name}))
-        await self.reload_litellm_router()
+        await self._finalize_gateway_model_deletions(
+            deleted_ids=frozenset({model_id}),
+            deleted_names=frozenset({model_name}),
+        )
 
     async def create_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
         raw_rm = str(real_model).strip()
@@ -438,7 +440,7 @@ class ModelWritesMixin:
                     tenant_id=tenant_id,
                     is_platform_admin=is_platform_admin,
                 )
-            except HttpMappableDomainError as exc:
+            except (HttpMappableDomainError, ValidationError) as exc:
                 failed.append(self._batch_delete_failure(model_id, exc))
                 continue
             succeeded.append(deleted_id)

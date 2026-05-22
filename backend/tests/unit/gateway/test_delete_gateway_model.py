@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import uuid
 
 import pytest
@@ -9,8 +10,7 @@ import pytest
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.domain.errors import SystemCredentialAdminRequiredError
-from decimal import Decimal
-
+from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayGrant,
@@ -18,11 +18,11 @@ from domains.gateway.infrastructure.models.system_gateway import (
 )
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
-from domains.gateway.infrastructure.repositories.system_gateway_grant_repository import (
-    SystemGatewayGrantRepository,
-)
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
+)
+from domains.gateway.infrastructure.repositories.system_gateway_grant_repository import (
+    SystemGatewayGrantRepository,
 )
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
@@ -116,7 +116,6 @@ async def test_delete_system_model_prunes_grants_and_budgets(db_session, test_us
 
 @pytest.mark.asyncio
 async def test_delete_config_managed_system_model_rejected(db_session, test_user) -> None:
-    from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
 
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())

@@ -564,13 +564,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   variant="destructive"
                   disabled={isDeleting || isSaving}
                   onClick={() => {
-                    if (
-                      window.confirm(
-                        `确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，此操作不可撤销。`
-                      )
-                    ) {
-                      onDelete(model.id)
-                    }
+                    onDelete(model.id)
                   }}
                 >
                   {isDeleting ? (

@@ -1,10 +1,20 @@
-﻿import { useCallback, useMemo } from 'react'
+﻿import { useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BudgetUsageCard } from '@/features/gateway-budget/budget-usage-card'
@@ -25,6 +35,7 @@ export function PersonalModelDetailPane({
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
   const { currentUser } = useUserStore()
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['gateway', 'my-models'],
@@ -43,15 +54,13 @@ export function PersonalModelDetailPane({
     if (model) testMutation.mutate(model.id)
   }, [model, testMutation])
 
-  const handleDelete = useCallback((): void => {
+  const handleDeleteClick = useCallback((): void => {
+    setDeleteOpen(true)
+  }, [])
+
+  const handleConfirmDelete = useCallback((): void => {
     if (!model) return
-    if (
-      !window.confirm(
-        `\u786e\u5b9a\u5220\u9664\u300c${model.display_name}\u300d\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\u3002`
-      )
-    ) {
-      return
-    }
+    setDeleteOpen(false)
     deleteMutation.mutate(model.id)
   }, [model, deleteMutation])
 
@@ -122,7 +131,7 @@ export function PersonalModelDetailPane({
             variant="outline"
             size="sm"
             className="text-destructive"
-            onClick={handleDelete}
+            onClick={handleDeleteClick}
             disabled={deleteMutation.isPending}
           >
             <Trash2 className="mr-1 h-4 w-4" />
@@ -175,6 +184,27 @@ export function PersonalModelDetailPane({
           }}
         />
       ) : null}
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除个人模型</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`确定删除「${model.display_name}」？将同步清理相关授权与预算行。此操作不可撤销。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={handleConfirmDelete}
+            >
+              {deleteMutation.isPending ? '删除中…' : '确认删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

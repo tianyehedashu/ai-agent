@@ -4,6 +4,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelBatchDeleteFailureItem } from '@/api/gateway'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,6 +37,7 @@ import {
 import {
   canDeleteGatewayModel,
   isConfigManagedSystemModel,
+  isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
@@ -114,6 +125,8 @@ export function TeamModelsWorkspace({
   const [batchFailedOpen, setBatchFailedOpen] = useState(false)
   const [batchFailedItems, setBatchFailedItems] = useState<GatewayModelBatchDeleteFailureItem[]>([])
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+  const [rowDeleteOpen, setRowDeleteOpen] = useState(false)
+  const [pendingRowDeleteId, setPendingRowDeleteId] = useState<string | null>(null)
 
   const systemPermContext = useMemo(
     () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),
@@ -247,13 +260,17 @@ export function TeamModelsWorkspace({
     })
   }, [registryItems, healthFilter, deferredSearch])
 
-  const isModelBatchSelectable = useCallback(
+  const checkModelBatchSelectable = useCallback(
+    (model: (typeof registryItems)[number]) =>
+      isModelBatchSelectable(model, isPlatformAdmin, systemPermContext),
+    [isPlatformAdmin, systemPermContext]
+  )
+
+  const canDeleteModel = useCallback(
     (model: (typeof registryItems)[number]) =>
       canDeleteGatewayModel(model, false, isPlatformAdmin, systemPermContext),
     [isPlatformAdmin, systemPermContext]
   )
-
-  const canDeleteModel = isModelBatchSelectable
 
   const isConfigManagedModel = useCallback(
     (model: (typeof registryItems)[number]) => isConfigManagedSystemModel(model, systemPermContext),
@@ -304,7 +321,7 @@ export function TeamModelsWorkspace({
       setSelectedIds((prev) => {
         const next = new Set(prev)
         for (const m of filteredModels) {
-          if (!isModelBatchSelectable(m)) continue
+          if (!checkModelBatchSelectable(m)) continue
           if (selected) {
             next.add(m.id)
           } else {
@@ -314,29 +331,34 @@ export function TeamModelsWorkspace({
         return next
       })
     },
-    [filteredModels, isModelBatchSelectable]
+    [filteredModels, checkModelBatchSelectable]
   )
 
-  const handleDeleteModel = useCallback(
-    (id: string): void => {
-      const target = registryItems.find((m) => m.id === id)
-      if (!target) return
-      if (
-        !window.confirm(
-          `确定删除模型「${target.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        )
-      ) {
-        return
-      }
-      setDeletingModelId(id)
-      deleteModelMutation.mutate(id, {
-        onSettled: () => {
-          setDeletingModelId(null)
-        },
-      })
-    },
-    [registryItems, deleteModelMutation]
+  const pendingRowDeleteModel = useMemo(
+    () =>
+      pendingRowDeleteId !== null
+        ? (registryItems.find((m) => m.id === pendingRowDeleteId) ?? null)
+        : null,
+    [registryItems, pendingRowDeleteId]
   )
+
+  const handleDeleteModel = useCallback((id: string): void => {
+    setPendingRowDeleteId(id)
+    setRowDeleteOpen(true)
+  }, [])
+
+  const handleConfirmRowDelete = useCallback((): void => {
+    if (!pendingRowDeleteId) return
+    const id = pendingRowDeleteId
+    setRowDeleteOpen(false)
+    setPendingRowDeleteId(null)
+    setDeletingModelId(id)
+    deleteModelMutation.mutate(id, {
+      onSettled: () => {
+        setDeletingModelId(null)
+      },
+    })
+  }, [pendingRowDeleteId, deleteModelMutation])
 
   const selectedModelsForBatch = useMemo(
     () => registryItems.filter((m) => selectedIds.has(m.id)),
@@ -546,7 +568,7 @@ export function TeamModelsWorkspace({
                 selectedIds={selectedIds}
                 onToggleSelect={handleToggleSelect}
                 onToggleSelectAll={handleToggleSelectAll}
-                isModelBatchSelectable={isModelBatchSelectable}
+                isModelBatchSelectable={checkModelBatchSelectable}
                 canDeleteModel={canDeleteModel}
                 isConfigManagedModel={isConfigManagedModel}
                 deletingModelId={deletingModelId}
@@ -561,6 +583,37 @@ export function TeamModelsWorkspace({
           ) : null}
         </>
       )}
+
+      <AlertDialog
+        open={rowDeleteOpen}
+        onOpenChange={(open) => {
+          setRowDeleteOpen(open)
+          if (!open) {
+            setPendingRowDeleteId(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除系统模型</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRowDeleteModel
+                ? `确定删除模型「${pendingRowDeleteModel.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+                : '确定删除该模型？'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteModelMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteModelMutation.isPending || !pendingRowDeleteId}
+              onClick={handleConfirmRowDelete}
+            >
+              {deleteModelMutation.isPending ? '删除中…' : '确认删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={batchFailedOpen} onOpenChange={setBatchFailedOpen}>
         <DialogContent className="max-w-lg">

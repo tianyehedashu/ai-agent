@@ -6,6 +6,7 @@ import {
   canDeleteGatewayModel,
   canManageGatewayModel,
   isConfigManagedSystemModel,
+  isModelBatchSelectable,
   resolveGatewayModelRegistryKind,
 } from './gateway-model-permissions'
 
@@ -97,6 +98,17 @@ describe('canDeleteGatewayModel', () => {
         true
       )
     ).toBe(false)
+  })
+})
+
+describe('isModelBatchSelectable', () => {
+  it('matches canDeleteGatewayModel for system tab', () => {
+    const ctx = { preferSystem: true } as const
+    const deletable = model({ registry_kind: 'system' })
+    const managed = model({ registry_kind: 'system', tags: { managed_by: 'config' } })
+    expect(isModelBatchSelectable(deletable, true, ctx)).toBe(true)
+    expect(isModelBatchSelectable(managed, true, ctx)).toBe(false)
+    expect(isModelBatchSelectable(deletable, false, ctx)).toBe(false)
   })
 })
 

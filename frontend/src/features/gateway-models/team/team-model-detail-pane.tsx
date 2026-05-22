@@ -4,6 +4,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
 import { parseModelsScopeTab } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
@@ -36,6 +46,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const listMode = scopeTab === 'system' ? 'system' : 'team'
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
   const [usageDays] = useState<UsagePeriodDays>(7)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: items, isLoading } = useQuery({
     queryKey: gatewayModelsListQueryKey(teamId, registryScope, '', credentialFilter),
@@ -131,20 +142,14 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     [updateModelMutation]
   )
 
-  const handleDelete = useCallback(
-    (id: string): void => {
-      if (!model) return
-      if (
-        !window.confirm(
-          `确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，此操作不可撤销。`
-        )
-      ) {
-        return
-      }
-      deleteModelMutation.mutate(id)
-    },
-    [model, deleteModelMutation]
-  )
+  const handleDelete = useCallback((_id: string): void => {
+    setDeleteOpen(true)
+  }, [])
+
+  const handleConfirmDelete = useCallback((): void => {
+    setDeleteOpen(false)
+    deleteModelMutation.mutate(modelId)
+  }, [modelId, deleteModelMutation])
 
   if (isLoading || (trySystemFallback && systemFallbackLoading && !model)) {
     return (
@@ -164,20 +169,43 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   }
 
   return (
-    <ModelInspector
-      model={model}
-      credentials={credentials ?? []}
-      routes={routes ?? []}
-      usageDays={usageDays}
-      usageRow={usageByRouteName.get(model.name)}
-      usageLoading={usageLoading}
-      isTesting={testMutation.isPending && testMutation.variables === model.id}
-      isSaving={updateModelMutation.isPending}
-      isDeleting={deleteModelMutation.isPending}
-      onTest={handleTest}
-      onSave={handleSave}
-      onToggleEnabled={handleToggleEnabled}
-      onDelete={handleDelete}
-    />
+    <>
+      <ModelInspector
+        model={model}
+        credentials={credentials ?? []}
+        routes={routes ?? []}
+        usageDays={usageDays}
+        usageRow={usageByRouteName.get(model.name)}
+        usageLoading={usageLoading}
+        isTesting={testMutation.isPending && testMutation.variables === model.id}
+        isSaving={updateModelMutation.isPending}
+        isDeleting={deleteModelMutation.isPending}
+        onTest={handleTest}
+        onSave={handleSave}
+        onToggleEnabled={handleToggleEnabled}
+        onDelete={handleDelete}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除模型</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteModelMutation.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteModelMutation.isPending}
+              onClick={handleConfirmDelete}
+            >
+              {deleteModelMutation.isPending ? '删除中…' : '确认删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import type { GatewayModel, GatewayModelRouteUsageItem } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, formatRelativeTime } from '@/lib/utils'
 
 import { channelLabel, classifyFailureReason, formatUsageLine } from '../utils'
@@ -12,6 +13,9 @@ import { ModelCapabilityBadges } from './model-capability-badges'
 import { SystemModelAdminMeta } from './system-model-admin-meta'
 
 import type { UsagePeriodDays } from '../constants'
+
+const CONFIG_MANAGED_BATCH_HINT =
+  '配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理'
 
 interface ModelInventoryRowProps {
   model: GatewayModel
@@ -159,14 +163,28 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
             }}
             role="presentation"
           >
-            <Checkbox
-              checked={batchSelected}
-              disabled={!batchSelectable}
-              aria-label={`选择模型 ${model.name}`}
-              onCheckedChange={(checked) => {
-                onBatchSelectChange?.(model.id, checked === true)
-              }}
-            />
+            {batchSelectable ? (
+              <Checkbox
+                checked={batchSelected}
+                aria-label={`选择模型 ${model.name}`}
+                onCheckedChange={(checked) => {
+                  onBatchSelectChange?.(model.id, checked === true)
+                }}
+              />
+            ) : (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Checkbox checked={false} disabled aria-label={`不可选择 ${model.name}`} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    {configManaged ? CONFIG_MANAGED_BATCH_HINT : '无删除权限'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         ) : null}
         {mainRow}
