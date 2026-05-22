@@ -85,7 +85,7 @@ async def dashboard_margin(
     if not can_view_margin_dashboard(team):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="margin dashboard requires platform admin or shared team admin",
+            detail="margin dashboard requires platform admin",
         )
     end = datetime.now(UTC)
     start = end - timedelta(days=days)

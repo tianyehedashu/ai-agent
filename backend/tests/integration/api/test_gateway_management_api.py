@@ -1221,23 +1221,31 @@ class TestGatewayManagementApi:
         assert r_owner_reveal_member.status_code == 404, r_owner_reveal_member.text
 
     @pytest.mark.asyncio
-    async def test_dashboard_margin_and_cost_admin_only(
+    async def test_dashboard_margin_platform_admin_only(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
         db_session,
         test_user: User,
     ) -> None:
-        """套餐毛利仅共享团队 admin+ / 平台 admin；个人工作区不可见；成员 summary cost 遮罩为 0。"""
+        """套餐毛利**仅平台管理员**可见；共享团队 owner/admin、个人工作区均不可见；
+        成员调用 summary 时成本字段仍按 admin+ 遮罩（团队 owner 可见）。"""
         owner = test_user
         member = User(
             email=f"member_{uuid.uuid4()}@example.com",
             hashed_password="hashed_password",
             name="Member User",
         )
-        db_session.add(member)
+        platform_admin = User(
+            email=f"padmin_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Platform Admin",
+            role="admin",
+        )
+        db_session.add_all([member, platform_admin])
         await db_session.commit()
         await db_session.refresh(member)
+        await db_session.refresh(platform_admin)
 
         ts = TeamService(db_session)
         shared = await ts.create_team(name="Dashboard Margin Team", owner_user_id=owner.id)
@@ -1269,9 +1277,11 @@ class TestGatewayManagementApi:
         await db_session.commit()
 
         owner_headers = auth_headers
-        member_uc = UserUseCase(db_session)
-        member_token = await member_uc.create_token(member)
+        uc = UserUseCase(db_session)
+        member_token = await uc.create_token(member)
         member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+        admin_token = await uc.create_token(platform_admin)
+        admin_headers = {"Authorization": f"Bearer {admin_token.access_token}"}
 
         r_member_margin = await dev_client.get(
             f"/api/v1/gateway/teams/{shared.id}/dashboard/margin?days=7&group_by=credential",
@@ -1286,19 +1296,28 @@ class TestGatewayManagementApi:
         assert r_member_summary.status_code == 200, r_member_summary.text
         assert Decimal(str(r_member_summary.json()["total_cost_usd"])) == Decimal("0")
 
+        # 共享团队 owner 也**不可见**套餐毛利（属平台经营数据，仅平台管理员可见）
         r_owner_margin = await dev_client.get(
             f"/api/v1/gateway/teams/{shared.id}/dashboard/margin?days=7&group_by=credential",
             headers=owner_headers,
         )
-        assert r_owner_margin.status_code == 200, r_owner_margin.text
-        assert "total_cost_usd" in r_owner_margin.json()
+        assert r_owner_margin.status_code == 403, r_owner_margin.text
 
+        # 但 summary 成本字段仍对团队 owner 可见（团队经营视图）
         r_owner_summary = await dev_client.get(
             f"/api/v1/gateway/teams/{shared.id}/dashboard/summary?days=7",
             headers=owner_headers,
         )
         assert r_owner_summary.status_code == 200, r_owner_summary.text
         assert Decimal(str(r_owner_summary.json()["total_cost_usd"])) == Decimal("0.01")
+
+        # 平台管理员可见（即便不是该团队成员）
+        r_admin_margin = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/margin?days=7&group_by=credential",
+            headers=admin_headers,
+        )
+        assert r_admin_margin.status_code == 200, r_admin_margin.text
+        assert "total_cost_usd" in r_admin_margin.json()
 
         personal = await ts.ensure_personal_team(owner.id)
         r_personal_margin = await dev_client.get(
