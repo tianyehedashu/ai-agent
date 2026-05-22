@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -176,6 +177,9 @@ export function CreateCredentialDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>新增凭据</DialogTitle>
+          <DialogDescription>
+            填写提供商与 API Key，保存后可在模型列表中绑定使用。
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
           {scopeOptions.length > 1 ? (

@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -179,6 +180,7 @@ function CreateAlertDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>新建告警规则</DialogTitle>
+          <DialogDescription>配置指标阈值与通知方式，超限时触发告警。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>

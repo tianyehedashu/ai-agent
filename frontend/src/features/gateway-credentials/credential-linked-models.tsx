@@ -10,7 +10,9 @@ import type { GatewayModel } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
+import type { TeamModelsTab } from '@/features/gateway-models/paths'
 import {
+  systemModelsFilteredHref,
   teamModelDetailHref,
   teamModelsFilteredHref,
   teamModelsRegisterHref,
@@ -28,6 +30,8 @@ interface CredentialModelsCardProps {
   models: GatewayModel[] | undefined
   isLoading: boolean
   canManageModels: boolean
+  /** 系统凭据走 `tab=system` 深链 */
+  modelsTab?: TeamModelsTab
   /** 打开就地「添加模型」弹窗；未提供时退回链接跳转 */
   onAddModels?: () => void
 }
@@ -37,15 +41,19 @@ export const CredentialModelsCard = memo(function CredentialModelsCard({
   models,
   isLoading,
   canManageModels,
+  modelsTab = 'shared',
   onAddModels,
 }: CredentialModelsCardProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const manageAllHref = teamModelsFilteredHref(teamId, credentialId)
-  const registerHref = teamModelsRegisterHref(teamId, credentialId)
+  const manageAllHref =
+    modelsTab === 'system'
+      ? systemModelsFilteredHref(teamId, credentialId)
+      : teamModelsFilteredHref(teamId, credentialId)
+  const registerHref = teamModelsRegisterHref(teamId, credentialId, modelsTab)
 
   const getModelHref = useCallback(
-    (modelId: string) => teamModelDetailHref(teamId, modelId, { credentialId }),
-    [teamId, credentialId]
+    (modelId: string) => teamModelDetailHref(teamId, modelId, { credentialId, tab: modelsTab }),
+    [teamId, credentialId, modelsTab]
   )
 
   const modelRows = useMemo(

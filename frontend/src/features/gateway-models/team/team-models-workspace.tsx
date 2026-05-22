@@ -18,16 +18,16 @@ import {
 } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
+  credentialsSystemBrowseIndexHref,
   credentialDetailAddModelsHref,
   credentialDetailHref,
+  credentialsTeamListHref,
   teamModelDetailHref,
 } from '@/features/gateway-models/paths'
 import {
   gatewayModelsListQueryKey,
-  gatewayModelsRequestableQueryKey,
   invalidateGatewayModelCaches,
   filterTestableConnectivityModels,
-  GATEWAY_MODELS_STALE_MS,
   matchesHealthFilter,
   resolveTeamModelsRegistryScope,
   runBatchConnectivityTests,
@@ -44,12 +44,6 @@ import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
 const ModelInventory = lazy(() =>
   import('./model-inventory').then((m) => ({ default: m.ModelInventory }))
-)
-
-const PlatformCallableModelsPanel = lazy(() =>
-  import('./platform-callable-models-panel').then((m) => ({
-    default: m.PlatformCallableModelsPanel,
-  }))
 )
 
 const RegisterModelForm = lazy(() =>
@@ -104,7 +98,6 @@ export function TeamModelsWorkspace({
   const [testingAll, setTestingAll] = useState(false)
 
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
-  const showPlatformCallablePanel = listMode === 'team' && credentialFilter === ''
 
   const goToRegister = useCallback((): void => {
     preloadRegisterModelForm()
@@ -139,19 +132,7 @@ export function TeamModelsWorkspace({
       }),
   })
 
-  const { data: requestableItems = [] } = useQuery({
-    queryKey: gatewayModelsRequestableQueryKey(teamId),
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'requestable' }),
-    enabled: showPlatformCallablePanel,
-    staleTime: GATEWAY_MODELS_STALE_MS,
-  })
-
-  const platformRequestableModels = useMemo(
-    () => requestableItems.filter((m) => m.registry_kind === 'system'),
-    [requestableItems]
-  )
-
-  const registryItems = items ?? []
+  const registryItems = useMemo(() => items ?? [], [items])
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
@@ -308,11 +289,7 @@ export function TeamModelsWorkspace({
   )
 
   const showEmptyOnboarding =
-    !isRegisterView &&
-    !isLoading &&
-    registryItems.length === 0 &&
-    !credentialFilter &&
-    platformRequestableModels.length === 0
+    !isRegisterView && !isLoading && registryItems.length === 0 && !credentialFilter
 
   const credentialBanner = credentialFilter ? (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
@@ -387,8 +364,8 @@ export function TeamModelsWorkspace({
               <Link
                 to={
                   listMode === 'system'
-                    ? '/gateway/credentials?tab=system'
-                    : '/gateway/credentials?tab=shared'
+                    ? credentialsSystemBrowseIndexHref(teamId)
+                    : credentialsTeamListHref(teamId)
                 }
                 className="text-primary underline"
               >
@@ -448,11 +425,6 @@ export function TeamModelsWorkspace({
                 onPreloadRowNavigate={preloadTeamModelDetailPane}
                 showSystemAdmin={listMode === 'system' && isPlatformAdmin}
               />
-            </Suspense>
-          ) : null}
-          {showPlatformCallablePanel && platformRequestableModels.length > 0 ? (
-            <Suspense fallback={inventorySuspenseFallback}>
-              <PlatformCallableModelsPanel models={platformRequestableModels} />
             </Suspense>
           ) : null}
         </>

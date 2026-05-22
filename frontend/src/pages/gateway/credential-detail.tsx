@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
+import { canEditGatewayCredential } from '@/features/gateway-credentials/credential-edit-policy'
 import { ExtraFieldsRenderer } from '@/features/gateway-credentials/credential-extra-fields'
 import {
   compactExtra,
@@ -53,7 +54,10 @@ import {
 } from '@/features/gateway-credentials/provider-schemas'
 import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
-import { credentialsTeamListHref } from '@/features/gateway-models/paths'
+import {
+  credentialsSystemBrowseIndexHref,
+  credentialsTeamListHref,
+} from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -64,14 +68,6 @@ const AddModelsDialog = lazy(() =>
     default: m.AddModelsDialog,
   }))
 )
-
-function canEditGatewayCredential(
-  c: ProviderCredential,
-  canWrite: boolean,
-  isPlatformAdmin: boolean
-): boolean {
-  return (c.scope === 'team' && canWrite) || (c.scope === 'system' && isPlatformAdmin)
-}
 
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
@@ -100,7 +96,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
   const credentialsListHref =
     cred?.scope === 'system'
-      ? `/gateway/teams/${teamId}/credentials?tab=system`
+      ? credentialsSystemBrowseIndexHref(teamId)
       : credentialsTeamListHref(teamId)
   const schema = cred ? getProviderSchema(cred.provider) : undefined
 

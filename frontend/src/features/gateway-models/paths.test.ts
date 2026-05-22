@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseScopeTab } from './constants'
+import { parseModelsScopeTab, parseScopeTab } from './constants'
 import {
   credentialDetailAddModelsHref,
   credentialDetailHref,
+  credentialsSystemBrowseIndexHref,
   credentialsTeamListHref,
   personalModelDetailHref,
   personalModelEditHref,
@@ -12,6 +13,7 @@ import {
   teamModelDetailHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
+  systemModelsBrowseIndexHref,
   teamModelsRegisterHref,
 } from './paths'
 
@@ -37,6 +39,12 @@ describe('gateway model paths', () => {
   it('teamModelDetailHref includes credential context', () => {
     expect(teamModelDetailHref(TEAM, 'model-1', { credentialId: 'cred-1' })).toBe(
       '/gateway/teams/team-abc/models/model-1?tab=shared&credentialId=cred-1'
+    )
+  })
+
+  it('teamModelDetailHref supports system tab', () => {
+    expect(teamModelDetailHref(TEAM, 'model-1', { tab: 'system' })).toBe(
+      '/gateway/teams/team-abc/models/model-1?tab=system'
     )
   })
 
@@ -78,6 +86,16 @@ describe('gateway model paths', () => {
       '/gateway/teams/team-abc/models/pm-1?tab=personal&view=edit'
     )
   })
+
+  it('systemModelsBrowseIndexHref', () => {
+    expect(systemModelsBrowseIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=system')
+  })
+
+  it('credentialsSystemBrowseIndexHref', () => {
+    expect(credentialsSystemBrowseIndexHref(TEAM)).toBe(
+      '/gateway/teams/team-abc/credentials?tab=system'
+    )
+  })
 })
 
 describe('parseScopeTab', () => {
@@ -101,5 +119,10 @@ describe('parseScopeTab', () => {
   it('returns system only when allowSystem', () => {
     expect(parseScopeTab('system')).toBe('shared')
     expect(parseScopeTab('system', { allowSystem: true })).toBe('system')
+  })
+
+  it('parseModelsScopeTab always resolves system', () => {
+    expect(parseModelsScopeTab('system')).toBe('system')
+    expect(parseModelsScopeTab(null)).toBe('shared')
   })
 })

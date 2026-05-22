@@ -212,7 +212,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const requestableModels = gatewayModels ?? []
+  const requestableModels = useMemo(() => gatewayModels ?? [], [gatewayModels])
 
   useEffect(() => {
     if (requestableModels.length === 0) return

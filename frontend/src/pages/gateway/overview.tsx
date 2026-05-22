@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { marginGroupRowTitle } from '@/features/gateway-usage/credential-display'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 const RANGE_DAYS: { value: '1d' | '7d' | '30d'; days: number; label: string }[] = [
@@ -34,6 +35,7 @@ function coalesceNumber(value: unknown): number {
 
 export default function GatewayOverviewPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const { isAdmin, canViewMargin } = useGatewayPermission()
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
@@ -45,6 +47,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
   const { data: margin, isLoading: marginLoading } = useQuery({
     queryKey: ['gateway', 'dashboard', 'margin', teamId, days, 'credential'],
     queryFn: () => gatewayApi.dashboardMargin(teamId, { days, group_by: 'credential' }),
+    enabled: canViewMargin,
   })
 
   const totalTokens = useMemo(() => {
@@ -76,15 +79,19 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+      <div
+        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+      >
         <Kpi title="请求总数" value={data?.total_requests ?? 0} loading={isLoading} />
         <Kpi title="Token 总数" value={totalTokens} loading={isLoading} format="kmb" />
-        <Kpi
-          title="累计成本（USD）"
-          value={data?.total_cost_usd}
-          loading={isLoading}
-          format="money"
-        />
+        {isAdmin ? (
+          <Kpi
+            title="累计成本（USD）"
+            value={data?.total_cost_usd}
+            loading={isLoading}
+            format="money"
+          />
+        ) : null}
         <Kpi title="成功率" value={data?.success_rate ?? 0} loading={isLoading} format="percent" />
         <Kpi
           title="平均延迟（ms）"
@@ -109,7 +116,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         </CardContent>
       </Card>
 
-      <MarginSummaryCard margin={margin} loading={marginLoading} />
+      {canViewMargin ? <MarginSummaryCard margin={margin} loading={marginLoading} /> : null}
     </div>
   )
 }

@@ -2,13 +2,12 @@
 import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway'
 
 /**
- * 网关页面通用 Scope Tab：与后端 `Team.kind` 字面量对齐。
+ * 网关页面 Scope Tab（`?tab=`）。
  *
- * - `personal`：个人团队（每用户一个，单成员）
- * - `shared`：共享团队（多人协作）
+ * - `personal` / `shared`：与后端 `Team.kind` 对齐（个人团队 / 共享团队）
+ * - `system`：系统注册表 UI（成员只读 requestable；平台管理员 CRUD），**不是** `Team.kind`
  *
- * 与 `BudgetScope.team`、`CredentialScope.team`（写入归属层级）正交，
- * URL 字面量虽不同（`shared` vs `team`），语义相互独立。
+ * 与 `BudgetScope.team`、`CredentialScope.team`（写入归属层级）正交。
  */
 export type GatewayScopeTab = 'personal' | 'shared' | 'system'
 
@@ -109,7 +108,7 @@ export const USAGE_PERIOD_DAYS = [1, 7, 30] as const
 export type UsagePeriodDays = (typeof USAGE_PERIOD_DAYS)[number]
 
 export interface ParseScopeTabOptions {
-  /** 平台管理员可解析 `?tab=system` */
+  /** 为 true 时解析 `?tab=system`（模型页、凭据页均全员可见系统 Tab） */
   allowSystem?: boolean
 }
 
@@ -122,6 +121,11 @@ export function parseScopeTab(
   if (raw === 'shared') return 'shared'
   if (raw === 'team') return 'shared'
   return 'shared'
+}
+
+/** 模型列表 / 详情 / Inspector：系统 Tab 对全员可见 */
+export function parseModelsScopeTab(raw: string | null): GatewayScopeTab {
+  return parseScopeTab(raw, { allowSystem: true })
 }
 
 export function isGatewayScopeTabValue(

@@ -1,5 +1,5 @@
 ﻿/**
- * AI Gateway · 模型（个人 / 团队）
+ * AI Gateway · 模型（个人 / 团队 / 系统）
  */
 
 import { Suspense, lazy, startTransition, useCallback, useEffect } from 'react'
@@ -15,7 +15,9 @@ import {
 } from '@/features/gateway-models/constants'
 import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
 import {
+  credentialsSystemBrowseIndexHref,
   personalModelsIndexHref,
+  systemModelsBrowseIndexHref,
   systemModelsFilteredHref,
   teamModelsFilteredHref,
 } from '@/features/gateway-models/paths'
@@ -38,6 +40,12 @@ const TeamModelsWorkspace = lazy(() =>
   }))
 )
 
+const SystemModelsBrowseWorkspace = lazy(() =>
+  import('@/features/gateway-models/system/system-models-browse-workspace').then((m) => ({
+    default: m.SystemModelsBrowseWorkspace,
+  }))
+)
+
 function ModelsPanelFallback(): React.JSX.Element {
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -50,15 +58,22 @@ function ModelsPanelFallback(): React.JSX.Element {
 export default function GatewayModelsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
-  const mutateParamsOnTabChange = useCallback((next: GatewayScopeTab, params: URLSearchParams) => {
-    params.delete('view')
-    if (next === 'personal') {
-      params.delete('credentialId')
-      params.delete('modelId')
-    }
-  }, [])
+  const mutateParamsOnTabChange = useCallback(
+    (next: GatewayScopeTab, params: URLSearchParams) => {
+      params.delete('view')
+      if (next === 'personal') {
+        params.delete('credentialId')
+        params.delete('modelId')
+      }
+      if (next === 'system' && !isPlatformAdmin) {
+        params.delete('credentialId')
+        params.delete('modelId')
+      }
+    },
+    [isPlatformAdmin]
+  )
   const { scopeTab, setScopeTab, searchParams, setSearchParams } = useGatewayScopeTab({
-    allowSystemTab: isPlatformAdmin,
+    allowSystemTab: true,
     mutateParamsOnTabChange,
   })
   const pageView = parseModelsPageView(searchParams.get('view'))
@@ -69,13 +84,13 @@ export default function GatewayModelsPage(): React.JSX.Element {
 
   const handleScopeTabsChange = useCallback(
     (v: string): void => {
-      if (isGatewayScopeTabValue(v, { allowSystem: isPlatformAdmin })) {
+      if (isGatewayScopeTabValue(v, { allowSystem: true })) {
         startTransition(() => {
           setScopeTab(v)
         })
       }
     },
-    [setScopeTab, isPlatformAdmin]
+    [setScopeTab]
   )
 
   useEffect(() => {
@@ -116,26 +131,53 @@ export default function GatewayModelsPage(): React.JSX.Element {
         <h2 className="text-2xl font-semibold tracking-tight">模型</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {scopeTab === 'system' ? (
-            <>
-              系统级模型挂载在平台{' '}
-              <Link
-                to="/gateway/credentials?tab=system"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                系统凭据
-              </Link>
-              上；对外暴露名在{' '}
-              <Link
-                to="/gateway/routes"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                虚拟路由
-              </Link>{' '}
-              编排。
-            </>
+            isPlatformAdmin ? (
+              <>
+                系统级模型挂载在{' '}
+                <Link
+                  to={credentialsSystemBrowseIndexHref(teamId)}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  系统凭据
+                </Link>
+                上；对外暴露名在{' '}
+                <Link
+                  to="/gateway/routes"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  虚拟路由
+                </Link>{' '}
+                编排。
+              </>
+            ) : (
+              <>
+                系统预置、当前工作区可请求的模型（只读）。通过{' '}
+                <Link
+                  to="/gateway/keys"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  虚拟 Key
+                </Link>{' '}
+                或{' '}
+                <Link
+                  to="/gateway/guide"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  调用指南
+                </Link>{' '}
+                调用；团队自注册别名见「团队」Tab。
+              </>
+            )
           ) : scopeTab === 'shared' ? (
             <>
-              团队自注册别名映射至 LiteLLM 上游；平台预置模型见下方「平台可用模型」或{' '}
+              团队自注册别名映射至 LiteLLM 上游；系统预置模型见{' '}
+              <Link
+                to={systemModelsBrowseIndexHref(teamId)}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                系统
+              </Link>{' '}
+              Tab 或{' '}
               <Link to="/gateway/guide" className="text-primary underline-offset-4 hover:underline">
                 调用指南
               </Link>
@@ -176,7 +218,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
 
       <Tabs value={scopeTab} onValueChange={handleScopeTabsChange}>
         <TabsList>
-          <GatewayScopeTabTriggers showSystemTab={isPlatformAdmin} />
+          <GatewayScopeTabTriggers showSystemTab />
         </TabsList>
 
         {scopeTab === 'personal' ? (
@@ -203,27 +245,35 @@ export default function GatewayModelsPage(): React.JSX.Element {
               </Suspense>
             </TabsContent>
           )
-        ) : scopeTab === 'system' && isPlatformAdmin ? (
-          isSystemRegister ? (
-            <TabsContent value="system" className="mt-4 space-y-4 focus-visible:outline-none">
-              <Button variant="ghost" size="sm" className="h-8" asChild>
-                <Link
-                  to={teamListBackHref}
-                  onMouseEnter={preloadTeamModelsWorkspace}
-                  onFocus={preloadTeamModelsWorkspace}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
-                  返回模型列表
-                </Link>
-              </Button>
-              <Suspense fallback={<ModelsPanelFallback />}>
-                <TeamModelsWorkspace pageView="register" hideRegisterAction listMode="system" />
-              </Suspense>
-            </TabsContent>
+        ) : scopeTab === 'system' ? (
+          isPlatformAdmin ? (
+            isSystemRegister ? (
+              <TabsContent value="system" className="mt-4 space-y-4 focus-visible:outline-none">
+                <Button variant="ghost" size="sm" className="h-8" asChild>
+                  <Link
+                    to={teamListBackHref}
+                    onMouseEnter={preloadTeamModelsWorkspace}
+                    onFocus={preloadTeamModelsWorkspace}
+                  >
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    返回模型列表
+                  </Link>
+                </Button>
+                <Suspense fallback={<ModelsPanelFallback />}>
+                  <TeamModelsWorkspace pageView="register" hideRegisterAction listMode="system" />
+                </Suspense>
+              </TabsContent>
+            ) : (
+              <TabsContent value="system" className="mt-4 focus-visible:outline-none">
+                <Suspense fallback={<ModelsPanelFallback />}>
+                  <TeamModelsWorkspace listMode="system" />
+                </Suspense>
+              </TabsContent>
+            )
           ) : (
             <TabsContent value="system" className="mt-4 focus-visible:outline-none">
               <Suspense fallback={<ModelsPanelFallback />}>
-                <TeamModelsWorkspace listMode="system" />
+                <SystemModelsBrowseWorkspace />
               </Suspense>
             </TabsContent>
           )

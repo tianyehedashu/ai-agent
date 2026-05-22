@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -264,6 +265,7 @@ function CreateBudgetDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>新增预算</DialogTitle>
+          <DialogDescription>为租户、用户或模型设置用量与费用上限。</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div>

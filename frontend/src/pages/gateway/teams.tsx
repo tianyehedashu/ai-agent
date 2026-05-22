@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -201,6 +202,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建团队</DialogTitle>
+            <DialogDescription>创建团队后可添加成员并分配 Gateway 权限。</DialogDescription>
           </DialogHeader>
           <CreateTeamForm
             onSubmit={(v) => {
@@ -214,6 +216,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>添加成员</DialogTitle>
+            <DialogDescription>输入用户 ID 并选择角色，将其加入当前团队。</DialogDescription>
           </DialogHeader>
           <AddMemberForm
             onSubmit={(v) => {

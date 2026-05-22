@@ -1,5 +1,5 @@
 ﻿/**
- * AI Gateway · 凭据（个人 / 团队）
+ * AI Gateway · 凭据（个人 / 团队 / 系统）
  */
 
 import { lazy, Suspense, startTransition, useCallback, useMemo, useState } from 'react'
@@ -35,6 +35,7 @@ import {
   CreateCredentialDialog,
   type CreateCredentialValues,
 } from '@/features/gateway-credentials/create-credential-dialog'
+import { canEditGatewayCredential } from '@/features/gateway-credentials/credential-edit-policy'
 import { PersonalCredentialsPanel } from '@/features/gateway-credentials/personal-credentials-panel'
 import {
   defaultApiBaseForProvider,
@@ -46,8 +47,10 @@ import { invalidateCredentialSummariesCache } from '@/features/gateway-credentia
 import { isGatewayScopeTabValue } from '@/features/gateway-models/constants'
 import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
 import {
+  credentialsSystemBrowseIndexHref,
   credentialDetailAddModelsHref,
   credentialDetailHref,
+  systemModelsBrowseIndexHref,
 } from '@/features/gateway-models/paths'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
@@ -61,20 +64,27 @@ const AddModelsDialog = lazy(() =>
   }))
 )
 
+const SystemCredentialsBrowseWorkspace = lazy(() =>
+  import('@/features/gateway-credentials/system/system-credentials-browse-workspace').then((m) => ({
+    default: m.SystemCredentialsBrowseWorkspace,
+  }))
+)
+
+function CredentialsPanelFallback(): React.JSX.Element {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      加载中…
+    </div>
+  )
+}
+
 interface JustCreatedCredential {
   id: string
   provider: string
   name: string
   scope: CredentialUpstreamScope
   is_active: boolean
-}
-
-function canEditGatewayCredential(
-  c: ProviderCredential,
-  canWrite: boolean,
-  isPlatformAdmin: boolean
-): boolean {
-  return (c.scope === 'team' && canWrite) || (c.scope === 'system' && isPlatformAdmin)
 }
 
 interface ManagedCredentialsTableProps {
@@ -278,14 +288,14 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   }, [])
 
   const { scopeTab: activeTab, setScopeTab: setActiveTab } = useGatewayScopeTab({
-    allowSystemTab: isPlatformAdmin,
+    allowSystemTab: true,
     onBeforeTabChange: closeCreateUi,
   })
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['gateway', 'credentials', teamId],
     queryFn: () => gatewayApi.listCredentials(teamId),
-    enabled: activeTab === 'shared' || activeTab === 'system',
+    enabled: activeTab === 'shared' || (activeTab === 'system' && isPlatformAdmin),
   })
 
   const teamCredentials = useMemo(() => (items ?? []).filter((c) => c.scope !== 'system'), [items])
@@ -400,10 +410,9 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   }
 
   const allowedScopes = useMemo<ReadonlyArray<CredentialFormScope>>(() => {
-    if (activeTab === 'system') return ['system']
+    if (activeTab === 'system' && isPlatformAdmin) return ['system']
     const scopes: CredentialFormScope[] = ['user']
     if (canWrite) scopes.push('team')
-    if (isPlatformAdmin) scopes.push('system')
     return scopes
   }, [activeTab, canWrite, isPlatformAdmin])
   // 注意：此处 'team' 是 `CredentialScope.team`（凭据写入归属），
@@ -424,10 +433,54 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">凭据</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {activeTab === 'system' ? (
+            isPlatformAdmin ? (
+              <>
+                系统级上游凭据；挂载的模型见{' '}
+                <Link
+                  to={systemModelsBrowseIndexHref(teamId)}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  系统模型
+                </Link>
+                。配置同步项在重启或重载后可能自动恢复。
+              </>
+            ) : (
+              <>
+                系统凭据由平台配置（只读，不含 API Key）。挂载模型见{' '}
+                <Link
+                  to={systemModelsBrowseIndexHref(teamId)}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  系统模型
+                </Link>
+                ；团队自管凭据见「团队」Tab。
+              </>
+            )
+          ) : activeTab === 'shared' ? (
+            <>
+              团队共享上游凭据；系统预置凭据见{' '}
+              <Link
+                to={credentialsSystemBrowseIndexHref(teamId)}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                系统
+              </Link>{' '}
+              Tab。
+            </>
+          ) : (
+            <>个人 BYOK 凭据，仅本人可见；注册个人模型前需先配置。</>
+          )}
+        </p>
+      </div>
+
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
-          if (isGatewayScopeTabValue(v, { allowSystem: isPlatformAdmin })) {
+          if (isGatewayScopeTabValue(v, { allowSystem: true })) {
             startTransition(() => {
               setActiveTab(v)
             })
@@ -436,7 +489,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TabsList>
-            <GatewayScopeTabTriggers showSystemTab={isPlatformAdmin} />
+            <GatewayScopeTabTriggers showSystemTab />
           </TabsList>
           <div className="flex flex-wrap gap-2">
             {activeTab === 'shared' && canWrite ? (
@@ -485,19 +538,25 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
           <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
             <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
           </TabsContent>
-        ) : activeTab === 'system' && isPlatformAdmin ? (
+        ) : activeTab === 'system' ? (
           <TabsContent value="system" className="mt-4 focus-visible:outline-none">
-            <ManagedCredentialsTable
-              items={systemCredentials}
-              isLoading={isLoading}
-              teamId={teamId}
-              canWrite={false}
-              isPlatformAdmin={isPlatformAdmin}
-              emptyHint="暂无系统凭据"
-              onAdd={handleOpenCreate}
-              onDelete={setCredentialPendingDelete}
-              updateMutation={updateMutation}
-            />
+            {isPlatformAdmin ? (
+              <ManagedCredentialsTable
+                items={systemCredentials}
+                isLoading={isLoading}
+                teamId={teamId}
+                canWrite={false}
+                isPlatformAdmin={isPlatformAdmin}
+                emptyHint="暂无系统凭据"
+                onAdd={handleOpenCreate}
+                onDelete={setCredentialPendingDelete}
+                updateMutation={updateMutation}
+              />
+            ) : (
+              <Suspense fallback={<CredentialsPanelFallback />}>
+                <SystemCredentialsBrowseWorkspace />
+              </Suspense>
+            )}
           </TabsContent>
         ) : (
           <TabsContent value="shared" className="mt-4 focus-visible:outline-none">

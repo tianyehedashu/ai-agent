@@ -1,6 +1,6 @@
 ﻿import { memo, useEffect, useMemo, useState } from 'react'
 
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import type {
   GatewayModel,
@@ -29,8 +29,16 @@ import {
   credentialSummaryLabel,
 } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
-import { TESTABLE_CAPABILITIES, NO_CREDENTIAL } from '@/features/gateway-models/constants'
-import { canManageGatewayModel } from '@/features/gateway-models/gateway-model-permissions'
+import {
+  NO_CREDENTIAL,
+  parseModelsScopeTab,
+  TESTABLE_CAPABILITIES,
+} from '@/features/gateway-models/constants'
+import {
+  canDeleteGatewayModel,
+  canManageGatewayModel,
+  isConfigManagedSystemModel,
+} from '@/features/gateway-models/gateway-model-permissions'
 import { credentialDetailHref } from '@/features/gateway-models/paths'
 import {
   channelLabel,
@@ -59,7 +67,6 @@ interface ModelInspectorProps {
   isTesting: boolean
   isSaving: boolean
   isDeleting?: boolean
-  canDelete?: boolean
   onTest: (id: string) => void
   onSave: (id: string, body: GatewayModelUpdateBody) => void
   onToggleEnabled: (id: string, enabled: boolean) => void
@@ -80,15 +87,19 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   isTesting,
   isSaving,
   isDeleting = false,
-  canDelete = false,
   onTest,
   onSave,
   onToggleEnabled,
   onDelete,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const [searchParams] = useSearchParams()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
-  const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin)
+  const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
+  const permissionContext = useMemo(() => ({ preferSystem: scopeTab === 'system' }), [scopeTab])
+  const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin, permissionContext)
+  const canDelete = canDeleteGatewayModel(model, canWrite, isPlatformAdmin, permissionContext)
+  const configManaged = isConfigManagedSystemModel(model, permissionContext)
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const myPrice = priceByName.get(model.name)
@@ -219,23 +230,44 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 )}
                 测试连通性
               </Button>
-              {canDelete ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  disabled={isDeleting || isSaving}
-                  onClick={() => {
-                    onDelete?.(model.id)
-                  }}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  删除
-                </Button>
+              {onDelete ? (
+                configManaged || !canDelete ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive/50"
+                          disabled
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" />
+                          删除
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    disabled={isDeleting || isSaving}
+                    onClick={() => {
+                      onDelete(model.id)
+                    }}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    删除
+                  </Button>
+                )
               ) : null}
             </>
           ) : (
@@ -502,6 +534,54 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           </Link>
         </section>
 
+        {canManage && onDelete ? (
+          <section className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-destructive">
+              危险操作
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              删除后将从注册表移除，并同步清理虚拟 Key / 路由中的模型白名单引用，不可撤销。
+            </p>
+            {configManaged || !canDelete ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button size="sm" variant="destructive" disabled>
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      删除模型
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isDeleting || isSaving}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，此操作不可撤销。`
+                    )
+                  ) {
+                    onDelete(model.id)
+                  }
+                }}
+              >
+                {isDeleting ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                )}
+                删除模型
+              </Button>
+            )}
+          </section>
+        ) : null}
+
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             虚拟路由引用
@@ -547,7 +627,6 @@ export const ModelInspector = memo(function ModelInspector({
   isTesting,
   isSaving,
   isDeleting = false,
-  canDelete = false,
   onTest,
   onSave,
   onToggleEnabled,
@@ -585,7 +664,6 @@ export const ModelInspector = memo(function ModelInspector({
       isTesting={isTesting}
       isSaving={isSaving}
       isDeleting={isDeleting}
-      canDelete={canDelete}
       onTest={onTest}
       onSave={onSave}
       onToggleEnabled={onToggleEnabled}

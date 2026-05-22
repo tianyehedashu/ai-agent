@@ -37,7 +37,6 @@ from domains.gateway.presentation.schemas.common import (
     MultiCredentialGatewayModelResponse,
     PlatformCredentialStatItem,
 )
-from domains.gateway.presentation.tenant_scoped_response import tenant_scoped_orm_dict
 from domains.identity.presentation.deps import AdminUser
 from libs.db.database import get_db
 from libs.exceptions import HttpMappableDomainError, ValidationError
@@ -136,7 +135,7 @@ async def list_models(
     credentials_by_id = None
     if include_cred:
         cred_ids = {
-            getattr(m, "credential_id")
+            m.credential_id
             for m in models
             if registry_kind_for_merged_row(m) == "system"
         }
@@ -203,7 +202,7 @@ async def create_model(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return GatewayModelResponse.model_validate(tenant_scoped_orm_dict(model))
+    return build_gateway_model_response(model)
 
 
 @router.post(
@@ -266,7 +265,7 @@ async def update_model(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     except HttpMappableDomainError as exc:
         raise http_exception_from_gateway_domain(exc) from exc
-    return GatewayModelResponse.model_validate(tenant_scoped_orm_dict(updated))
+    return build_gateway_model_response(updated)
 
 
 @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)

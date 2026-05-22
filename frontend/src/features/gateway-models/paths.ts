@@ -57,6 +57,11 @@ function systemModelsBaseParams(credentialId?: string): URLSearchParams {
   return params
 }
 
+/** 系统 Tab 首页（成员只读浏览；管理员无凭据筛选时同此 URL） */
+export function systemModelsBrowseIndexHref(teamId: string): string {
+  return `${teamBase(teamId)}/models?tab=system`
+}
+
 /** 系统模型列表（平台管理员；可选按凭据筛选） */
 export function systemModelsFilteredHref(teamId: string, credentialId?: string): string {
   return `${teamBase(teamId)}/models?${systemModelsBaseParams(credentialId).toString()}`
@@ -100,6 +105,11 @@ export function teamModelsIndexHref(teamId: string): string {
 /** 凭据管理（团队 Tab；URL 字面量与后端 `Team.kind='shared'` 对齐） */
 export function credentialsTeamListHref(teamId: string): string {
   return `${teamBase(teamId)}/credentials?tab=shared`
+}
+
+/** 系统凭据 Tab 首页（成员只读浏览；管理员无筛选时同此 URL） */
+export function credentialsSystemBrowseIndexHref(teamId: string): string {
+  return `${teamBase(teamId)}/credentials?tab=system`
 }
 
 /** 凭据详情 */

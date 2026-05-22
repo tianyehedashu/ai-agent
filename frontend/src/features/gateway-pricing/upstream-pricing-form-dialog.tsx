@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -89,6 +90,11 @@ export function UpstreamPricingFormDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{row ? '调整上游成本' : '新增上游成本'}</DialogTitle>
+          <DialogDescription>
+            {row
+              ? '更新该提供商模型的输入/输出单价。'
+              : '为已接入提供商登记上游模型的 token 成本。'}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
           <div className="space-y-2">

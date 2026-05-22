@@ -12,13 +12,14 @@ import {
   credentialSummaryLabel,
 } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
-import { parseScopeTab, parseModelsPageView } from '@/features/gateway-models/constants'
+import { parseModelsPageView, parseModelsScopeTab } from '@/features/gateway-models/constants'
 import { useGatewayModelLabel } from '@/features/gateway-models/hooks/use-gateway-model-label'
 import { usePersonalModelLabel } from '@/features/gateway-models/hooks/use-personal-model-label'
 import {
   credentialDetailHref,
   credentialsTeamListHref,
   personalModelsIndexHref,
+  systemModelsFilteredHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
 } from '@/features/gateway-models/paths'
@@ -58,12 +59,13 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const { modelId } = useParams<{ modelId: string }>()
   const id = modelId ?? ''
   const [searchParams] = useSearchParams()
-  const scopeTab = parseScopeTab(searchParams.get('tab'))
+  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''
   const isPersonal = scopeTab === 'personal'
+  const isSystem = scopeTab === 'system' && isPlatformAdmin
   const isEdit = isPersonal && pageView === 'edit'
-  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const credentialSummary =
     !isPersonal && credentialId.length > 0 ? credentialSummariesById.get(credentialId) : undefined
@@ -81,8 +83,16 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
     ? personalModelsIndexHref(teamId)
     : credentialId.length > 0
       ? credentialDetailHref(teamId, credentialId)
-      : teamModelsIndexHref(teamId)
-  const backLabel = isPersonal ? '全部个人模型' : credentialId.length > 0 ? '返回凭据' : '全部模型'
+      : isSystem
+        ? systemModelsFilteredHref(teamId)
+        : teamModelsIndexHref(teamId)
+  const backLabel = isPersonal
+    ? '全部个人模型'
+    : credentialId.length > 0
+      ? '返回凭据'
+      : isSystem
+        ? '全部系统模型'
+        : '全部模型'
 
   const listPreload = isPersonal ? preloadPersonalModelsWorkspace : preloadTeamModelsWorkspace
 
@@ -128,12 +138,12 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         ) : (
           <>
             <Link
-              to={teamModelsIndexHref(teamId)}
+              to={isSystem ? systemModelsFilteredHref(teamId) : teamModelsIndexHref(teamId)}
               className="hover:text-foreground"
               onMouseEnter={listPreload}
               onFocus={listPreload}
             >
-              团队模型
+              {isSystem ? '系统模型' : '团队模型'}
             </Link>
             <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
             <span className="font-medium text-foreground">{modelLabel}</span>
@@ -151,7 +161,11 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         {!isPersonal && credentialId.length > 0 ? (
           <Button variant="ghost" size="sm" className="h-8" asChild>
             <Link
-              to={teamModelsFilteredHref(teamId, credentialId)}
+              to={
+                isSystem
+                  ? systemModelsFilteredHref(teamId, credentialId)
+                  : teamModelsFilteredHref(teamId, credentialId)
+              }
               onMouseEnter={preloadTeamModelsWorkspace}
               onFocus={preloadTeamModelsWorkspace}
             >

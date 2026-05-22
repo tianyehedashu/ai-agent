@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -399,6 +400,7 @@ export function PersonalCredentialsPanel({
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>编辑凭据</DialogTitle>
+            <DialogDescription>修改账号名称、启用状态或 API Key。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="flex items-center justify-between rounded-md border px-3 py-2">

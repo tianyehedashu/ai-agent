@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -298,11 +299,11 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>从 LiteLLM 同步默认价格</DialogTitle>
+              <DialogDescription>
+                选择要同步的提供商；仅会处理当前已配置凭据的提供商，已手动维护的价格不会被覆盖。
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <p className="text-sm text-muted-foreground">
-                选择要同步的提供商；仅会处理当前已配置凭据的提供商，已手动维护的价格不会被覆盖。
-              </p>
               <div className="grid gap-2">
                 {effectiveProviders.map((provider) => (
                   <Label key={provider.provider} className="flex items-center gap-2">

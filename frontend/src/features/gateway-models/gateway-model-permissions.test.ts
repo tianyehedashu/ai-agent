@@ -6,6 +6,7 @@ import {
   canDeleteGatewayModel,
   canManageGatewayModel,
   isConfigManagedSystemModel,
+  resolveGatewayModelRegistryKind,
 } from './gateway-model-permissions'
 
 function model(partial: Partial<GatewayModel>): GatewayModel {
@@ -29,6 +30,26 @@ function model(partial: Partial<GatewayModel>): GatewayModel {
   }
 }
 
+describe('resolveGatewayModelRegistryKind', () => {
+  it('prefers explicit registry_kind', () => {
+    expect(resolveGatewayModelRegistryKind(model({ registry_kind: 'system' }))).toBe('system')
+  })
+
+  it('uses preferSystem when registry_kind missing', () => {
+    expect(
+      resolveGatewayModelRegistryKind(model({ registry_kind: undefined }), { preferSystem: true })
+    ).toBe('system')
+  })
+
+  it('infers system from visibility', () => {
+    expect(
+      resolveGatewayModelRegistryKind(
+        model({ team_id: null, tenant_id: null, visibility: 'public' })
+      )
+    ).toBe('system')
+  })
+})
+
 describe('canManageGatewayModel', () => {
   it('allows team admin to manage team models', () => {
     expect(canManageGatewayModel(model({ registry_kind: 'team' }), true, false)).toBe(true)
@@ -36,6 +57,14 @@ describe('canManageGatewayModel', () => {
 
   it('allows platform admin to manage system models', () => {
     expect(canManageGatewayModel(model({ registry_kind: 'system' }), false, true)).toBe(true)
+  })
+
+  it('allows platform admin on system tab when registry_kind missing', () => {
+    expect(
+      canManageGatewayModel(model({ registry_kind: undefined }), false, true, {
+        preferSystem: true,
+      })
+    ).toBe(true)
   })
 
   it('blocks non-admin from managing system models', () => {
@@ -50,6 +79,14 @@ describe('canDeleteGatewayModel', () => {
 
   it('allows platform admin to delete non-managed system models', () => {
     expect(canDeleteGatewayModel(model({ registry_kind: 'system' }), false, true)).toBe(true)
+  })
+
+  it('allows platform admin to delete on system tab without registry_kind', () => {
+    expect(
+      canDeleteGatewayModel(model({ registry_kind: undefined }), false, true, {
+        preferSystem: true,
+      })
+    ).toBe(true)
   })
 
   it('blocks platform admin from deleting config-managed system models', () => {

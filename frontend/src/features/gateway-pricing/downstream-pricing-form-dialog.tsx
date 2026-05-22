@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -75,6 +76,7 @@ export function DownstreamPricingFormDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>调整下游售价</DialogTitle>
+          <DialogDescription>设置租户或模型的对外计费策略与单价。</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
           <div className="space-y-2">

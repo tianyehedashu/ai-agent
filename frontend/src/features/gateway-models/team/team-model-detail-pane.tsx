@@ -5,8 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
-import { parseScopeTab } from '@/features/gateway-models/constants'
-import { canDeleteGatewayModel } from '@/features/gateway-models/gateway-model-permissions'
+import { parseModelsScopeTab } from '@/features/gateway-models/constants'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
   systemModelsFilteredHref,
@@ -33,7 +32,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const [searchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
-  const scopeTab = parseScopeTab(searchParams.get('tab'), { allowSystem: isPlatformAdmin })
+  const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const listMode = scopeTab === 'system' ? 'system' : 'team'
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
   const [usageDays] = useState<UsagePeriodDays>(7)
@@ -47,8 +46,17 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
       }),
   })
 
+  const primaryModel = useMemo(
+    () => (items ?? []).find((m) => m.id === modelId) ?? null,
+    [items, modelId]
+  )
+
   const trySystemFallback =
-    !isLoading && isPlatformAdmin && registryScope !== 'system' && modelId !== ''
+    !isLoading &&
+    primaryModel === null &&
+    isPlatformAdmin &&
+    registryScope !== 'system' &&
+    modelId !== ''
 
   const { data: systemFallbackItems, isLoading: systemFallbackLoading } = useQuery({
     queryKey: gatewayModelsListQueryKey(teamId, 'system', '', ''),
@@ -91,10 +99,9 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   }, [usageSummary])
 
   const model = useMemo(() => {
-    const fromPrimary = (items ?? []).find((m) => m.id === modelId)
-    if (fromPrimary) return fromPrimary
+    if (primaryModel) return primaryModel
     return (systemFallbackItems ?? []).find((m) => m.id === modelId) ?? null
-  }, [items, systemFallbackItems, modelId])
+  }, [primaryModel, systemFallbackItems, modelId])
 
   const { updateModelMutation, testMutation, deleteModelMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
@@ -139,8 +146,6 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     [model, deleteModelMutation]
   )
 
-  const canDelete = model ? canDeleteGatewayModel(model, canWrite, isPlatformAdmin) : false
-
   if (isLoading || (trySystemFallback && systemFallbackLoading && !model)) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -169,7 +174,6 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
       isTesting={testMutation.isPending && testMutation.variables === model.id}
       isSaving={updateModelMutation.isPending}
       isDeleting={deleteModelMutation.isPending}
-      canDelete={canDelete}
       onTest={handleTest}
       onSave={handleSave}
       onToggleEnabled={handleToggleEnabled}

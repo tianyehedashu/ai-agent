@@ -920,16 +920,7 @@ class TestGatewayManagementApi:
             f"/api/v1/gateway/teams/{team.id}/dashboard/margin?days=7&group_by=credential",
             headers=headers,
         )
-        assert r_margin.status_code == 200, r_margin.text
-        margin = r_margin.json()
-        assert "total_revenue_usd" in margin
-        assert "total_cost_usd" in margin
-        assert margin["group_by"] == "credential"
-        assert margin["group_column_label"] == "凭据"
-        assert isinstance(margin["items"], list)
-        for row in margin["items"]:
-            assert "label" in row
-            assert row["label"] != "(unknown)"
+        assert r_margin.status_code == 403, r_margin.text
 
     @pytest.mark.asyncio
     async def test_plan_apis_reject_cross_team_access(
@@ -1198,6 +1189,93 @@ class TestGatewayManagementApi:
             headers=owner_headers,
         )
         assert r_owner_reveal_member.status_code == 404, r_owner_reveal_member.text
+
+    @pytest.mark.asyncio
+    async def test_dashboard_margin_and_cost_admin_only(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """套餐毛利仅共享团队 admin+ / 平台 admin；个人工作区不可见；成员 summary cost 遮罩为 0。"""
+        owner = test_user
+        member = User(
+            email=f"member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Member User",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Dashboard Margin Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+
+        now = datetime.now(UTC)
+        db_session.add(
+            GatewayRequestLog(
+                id=uuid.uuid4(),
+                created_at=now,
+                tenant_id=shared.id,
+                user_id=owner.id,
+                vkey_id=None,
+                capability="chat",
+                route_name=None,
+                real_model="gpt-4",
+                provider="openai",
+                status="success",
+                input_tokens=10,
+                output_tokens=5,
+                cached_tokens=0,
+                cost_usd=Decimal("0.01"),
+                latency_ms=100,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id=f"margin-test-{uuid.uuid4().hex[:8]}",
+            )
+        )
+        await db_session.commit()
+
+        owner_headers = auth_headers
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        r_member_margin = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/margin?days=7&group_by=credential",
+            headers=member_headers,
+        )
+        assert r_member_margin.status_code == 403, r_member_margin.text
+
+        r_member_summary = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/summary?days=7",
+            headers=member_headers,
+        )
+        assert r_member_summary.status_code == 200, r_member_summary.text
+        assert Decimal(str(r_member_summary.json()["total_cost_usd"])) == Decimal("0")
+
+        r_owner_margin = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/margin?days=7&group_by=credential",
+            headers=owner_headers,
+        )
+        assert r_owner_margin.status_code == 200, r_owner_margin.text
+        assert "total_cost_usd" in r_owner_margin.json()
+
+        r_owner_summary = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/summary?days=7",
+            headers=owner_headers,
+        )
+        assert r_owner_summary.status_code == 200, r_owner_summary.text
+        assert Decimal(str(r_owner_summary.json()["total_cost_usd"])) == Decimal("0.01")
+
+        personal = await ts.ensure_personal_team(owner.id)
+        r_personal_margin = await dev_client.get(
+            f"/api/v1/gateway/teams/{personal.id}/dashboard/margin?days=7&group_by=credential",
+            headers=owner_headers,
+        )
+        assert r_personal_margin.status_code == 403, r_personal_margin.text
 
     @pytest.mark.asyncio
     async def test_batch_revoke_virtual_keys(
