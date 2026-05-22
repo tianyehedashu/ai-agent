@@ -14,6 +14,7 @@ def test_should_use_dashscope_direct_embedding() -> None:
     assert should_use_dashscope_direct_embedding("dashscope") is True
     assert should_use_dashscope_direct_embedding("DashScope") is True
     assert should_use_dashscope_direct_embedding("openai") is False
+    assert should_use_dashscope_direct_embedding("dashscope", force_litellm=True) is False
 
 
 def test_normalize_strips_provider_prefix() -> None:

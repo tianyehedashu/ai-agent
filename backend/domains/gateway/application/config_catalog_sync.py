@@ -10,7 +10,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.catalog.litellm_capability_hint import merge_litellm_reasoning_hint
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.gateway_catalog_seed import resolve_catalog_seed_models
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
@@ -29,11 +29,6 @@ from domains.gateway.domain.provider_env_catalog import (
     provider_env_snapshot_from_settings,
     resolve_provider_credentials,
     volcengine_extra_from_snapshot,
-)
-from domains.gateway.domain.thinking_param import (
-    THINKING_PARAM_NONE,
-    effective_supports_reasoning,
-    enrich_gateway_model_tags,
 )
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
@@ -75,6 +70,17 @@ def _config_managed_credential_extra(provider: str) -> dict[str, Any]:
     return extra
 
 
+def _merge_config_managed_credential_extra(
+    provider: str,
+    existing_extra: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """合并 sync 托管字段；保留 ``force_env_sync`` 等管理面写入的 extra 键。"""
+    sync_extra = _config_managed_credential_extra(provider)
+    if not existing_extra:
+        return sync_extra
+    return {**existing_extra, **sync_extra}
+
+
 async def _ensure_system_credential(
     session: AsyncSession,
     *,
@@ -89,13 +95,14 @@ async def _ensure_system_credential(
 
     existing = await repo.find_config_managed(provider)
     encrypted = encrypt_value(plain_key, encryption_key)
-    extra = _config_managed_credential_extra(provider)
+    existing_extra = existing.extra if existing is not None else None
+    extra = _merge_config_managed_credential_extra(provider, existing_extra)
     resolved_base = resolve_bootstrap_api_base(
         provider=provider,
         env_base=api_base,
         existing_base=existing.api_base if existing is not None else None,
         is_new_credential=existing is None,
-        force_env_sync=credential_force_env_sync(existing.extra if existing else None),
+        force_env_sync=credential_force_env_sync(existing_extra),
     )
     if existing is not None:
         await repo.update(
@@ -148,19 +155,16 @@ def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
     if int(model.max_reference_images or 0) > 0:
         tags["max_reference_images"] = int(model.max_reference_images)
 
-    tags = merge_litellm_reasoning_hint(
-        tags, provider=model.provider, real_model=real_model
-    )
-    hint_tp = tags.pop("_litellm_hint_thinking_param", None)
-    if hint_tp and "thinking_param" not in tags:
-        logger.warning(
+    tags = build_gateway_model_tags(
+        tags,
+        provider=model.provider,
+        real_model=real_model,
+        on_hint_thinking_param=lambda hint_tp: logger.warning(
             "catalog seed %s: litellm hint thinking_param=%s (no explicit seed value)",
             model.id,
             hint_tp,
-        )
-    tags = enrich_gateway_model_tags(tags, provider=model.provider, real_model=real_model)
-    thinking_param = str(tags.get("thinking_param") or THINKING_PARAM_NONE)
-    tags["supports_reasoning"] = effective_supports_reasoning(tags, thinking_param)
+        ),
+    )
 
     # 计费用单价写入 upstream_model_pricing（见 _upsert_upstream_pricing_from_model），不再写入 tags。
     return tags
@@ -284,9 +288,8 @@ async def sync_gateway_catalog_from_seed(
 
 
 async def sync_app_config_gateway_catalog(session: AsyncSession) -> dict[str, int]:
-    """将 ``gateway-catalog.seed.json`` 同步到全局 ``GatewayModel``（兼容旧名）。"""
-    models = resolve_catalog_seed_models()
-    return await _sync_catalog_models(session, models)
+    """兼容旧名：等同 ``sync_gateway_catalog_from_seed``（不含价目注册与审计）。"""
+    return await sync_gateway_catalog_from_seed(session)
 
 
 async def _sync_catalog_models(

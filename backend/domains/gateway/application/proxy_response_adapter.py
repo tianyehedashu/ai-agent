@@ -127,6 +127,33 @@ async def adapt_anthropic_stream(
     )
 
 
+def adapt_binary_response(
+    response: bytes,
+    ctx: ProxyContext,
+    budget: BudgetService,
+    entitlement_guard: EntitlementGuard | None = None,
+    *,
+    metadata: dict[str, Any],
+    upstream_custom: dict[str, float] | None,
+) -> bytes:
+    """二进制响应（如 TTS）结算：无 usage 时依赖 metadata 中的 per_request / extra 单价。"""
+    _ = upstream_custom
+    from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
+
+    upstream = _calc_upstream_cost(None, metadata=metadata, model=ctx.budget_model, requests=1)
+    cost = proxy_budget_cost_usd(metadata, upstream)
+    schedule_settle_usage(
+        ctx,
+        budget,
+        tokens=0,
+        cost=cost,
+        requests=1,
+        entitlement_guard=entitlement_guard,
+        request_id=ctx.request_id,
+    )
+    return response
+
+
 def adapt_response(
     response: Any,
     ctx: ProxyContext,
@@ -306,6 +333,7 @@ def _calc_upstream_cost(
     *,
     metadata: dict[str, Any],
     model: str | None,
+    requests: int = 1,
 ) -> Decimal:
     from domains.gateway.application.pricing.upstream_cost_resolver import (
         resolve_upstream_cost_usd,
@@ -315,6 +343,7 @@ def _calc_upstream_cost(
         response=response,
         model=model,
         metadata=metadata,
+        requests=requests,
     )
     return amount
 
@@ -390,6 +419,7 @@ def enrich_anthropic_response_cost(
 __all__ = [
     "adapt_anthropic_response",
     "adapt_anthropic_stream",
+    "adapt_binary_response",
     "adapt_response",
     "adapt_stream",
     "enrich_anthropic_response_cost",

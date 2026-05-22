@@ -17,7 +17,7 @@ import uuid
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL, e2e_service_health_path
+from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL, e2e_api_v1_path, e2e_service_health_path
 
 
 def _require_e2e_credentials() -> tuple[str, str]:
@@ -45,14 +45,14 @@ class TestGatewayCredentialProbeE2E:
         self, http: httpx.Client
     ) -> None:
         email, password = _require_e2e_credentials()
-        tr = http.post("/api/v1/auth/token", json={"email": email, "password": password})
+        tr = http.post(e2e_api_v1_path("auth", "token"), json={"email": email, "password": password})
         assert tr.status_code == 200, tr.text
         token = tr.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
         name = f"e2e-ant-{uuid.uuid4().hex[:8]}"
         cr = http.post(
-            "/api/v1/gateway/my-credentials",
+            e2e_api_v1_path("gateway", "my-credentials"),
             headers=headers,
             json={
                 "provider": "anthropic",
@@ -65,7 +65,7 @@ class TestGatewayCredentialProbeE2E:
         cid = cr.json()["id"]
 
         pr = http.post(
-            f"/api/v1/gateway/my-credentials/{cid}/probe",
+            e2e_api_v1_path("gateway", "my-credentials", cid, "probe"),
             headers=headers,
             json={},
         )
@@ -76,5 +76,5 @@ class TestGatewayCredentialProbeE2E:
         assert body["items"] == []
         assert body.get("message")
 
-        dl = http.delete(f"/api/v1/gateway/my-credentials/{cid}", headers=headers)
+        dl = http.delete(e2e_api_v1_path("gateway", "my-credentials", cid), headers=headers)
         assert dl.status_code == 204

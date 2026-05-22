@@ -83,6 +83,18 @@ def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
             "avideo_generation",
             {"model": "video-model", "prompt": "a cat"},
         ),
+        (
+            "image_generation",
+            "_direct_image_generation",
+            "aimage_generation",
+            {"model": "dall-e-3", "prompt": "a cat"},
+        ),
+        (
+            "audio_transcription",
+            "_direct_transcription",
+            "atranscription",
+            {"model": "whisper-1", "file": "audio.wav"},
+        ),
     ],
 )
 async def test_non_chat_uses_router_not_direct_litellm(
@@ -152,7 +164,7 @@ async def test_audio_speech_uses_router_aspeech(
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_non_chat_pipeline.schedule_settle_usage",
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
         lambda *_a, **_k: None,
     )
 

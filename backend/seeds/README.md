@@ -19,7 +19,11 @@ make seed-gateway
 uv run python scripts/run_seed_gateway.py
 ```
 
-启动时可选：`GATEWAY_CATALOG_SYNC_ON_STARTUP=true`（开发方便，生产建议 `false` + 显式 seed）。
+启动时可选：
+
+- `GATEWAY_CATALOG_SYNC_ON_STARTUP=true`：完整目录维护（写 DB + 审计 + 重载 Router）；仅建议在改 seed 联调时短期开启，勿与 `uvicorn --reload` 长期同开。
+- 默认 `false`：启动**不**做 LiteLLM 价目同步。`litellm.model_cost` 在 `import litellm` 时已就绪；DB 上游价由管理面写入路径（`PricingService.sync_to_litellm_registry(only_keys=...)`) 按 key 增量注册，进程内指纹缓存避免重复。
+- 生产：保持 `false`，用 `make seed-gateway` 或 `POST /catalog/reload-from-config`。
 
 ## 与迁移的区别
 

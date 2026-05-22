@@ -44,7 +44,7 @@ class PricingWritesMixin:
             version = existing.version + 1
         row = await repo.create(provider=provider, upstream_model=upstream_model, capability=capability, input_cost_per_token=inp, output_cost_per_token=out, cache_creation_input_token_cost=cc, cache_read_input_token_cost=cr, extra=extra, source='manual', effective_from=now, version=version)
         svc = PricingService(repo, DownstreamPricingRepository(self._session))
-        await svc.sync_to_litellm_registry()
+        await svc.sync_to_litellm_registry(only_keys={upstream_model})
         from domains.gateway.application.pricing.pricing_resolution_cache import (
             invalidate_pricing_resolution_cache,
         )
@@ -73,7 +73,10 @@ class PricingWritesMixin:
         gateway_models = [(m.provider, m.real_model, str(m.capability or 'chat')) for m in models if m.real_model]
         report = await LitellmUpstreamPriceSyncService(upstream_repo).sync_from_litellm_model_cost(gateway_models=gateway_models, allowed_providers=allowed_providers)
         pricing_svc = PricingService(upstream_repo, DownstreamPricingRepository(self._session))
-        await pricing_svc.sync_to_litellm_registry()
+        # 仅刷新本次涉及的模型键，避免再做全表 register_model。
+        touched = {m for _, m, _ in gateway_models if m}
+        if touched:
+            await pricing_svc.sync_to_litellm_registry(only_keys=touched)
         await invalidate_pricing_resolution_cache()
         return report
 

@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
 import os
-from pathlib import Path
 
-from dotenv import load_dotenv
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL
+from tests.e2e.config import E2E_API_BASE_URL, e2e_api_v1_path
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+# .env 由 tests.e2e.config 加载；勿在此重复 load_dotenv，以免 ROOT_PATH 与 get_settings 缓存不一致
 
 
 def _e2e_backend_reachable() -> bool:
@@ -62,7 +60,7 @@ def e2e_auth_headers() -> dict[str, str]:
     email, password = creds
     with httpx.Client(base_url=E2E_API_BASE_URL, timeout=30.0) as client:
         response = client.post(
-            "/api/v1/auth/token",
+            e2e_api_v1_path("auth", "token"),
             json={"email": email, "password": password},
         )
     assert response.status_code == 200, response.text

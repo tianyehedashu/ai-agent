@@ -2,7 +2,10 @@
 
 from decimal import Decimal
 
-from domains.gateway.application.pricing.pricing_settlement import settle_request_log_amounts
+from domains.gateway.application.pricing.pricing_settlement import (
+    pricing_rate_from_metadata,
+    settle_request_log_amounts,
+)
 
 
 def test_entitlement_package_zeros_both_amounts() -> None:
@@ -35,3 +38,11 @@ def test_downstream_rate_computes_revenue() -> None:
     )
     assert cost == Decimal("0.001")
     assert revenue == Decimal("0.004")
+
+
+def test_pricing_rate_from_metadata_per_request_only() -> None:
+    rate = pricing_rate_from_metadata({"per_request_usd": 0.015})
+    assert rate is not None
+    assert rate.input_cost_per_token == Decimal("0")
+    assert rate.output_cost_per_token == Decimal("0")
+    assert rate.per_request_usd == Decimal("0.015")

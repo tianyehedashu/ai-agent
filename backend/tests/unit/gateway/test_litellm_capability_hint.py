@@ -1,5 +1,6 @@
 """LiteLLM capability hint 单测。"""
 
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.catalog.litellm_capability_hint import merge_litellm_reasoning_hint
 from domains.gateway.domain.thinking_param import THINKING_PARAM_ANTHROPIC
 
@@ -32,3 +33,14 @@ def test_hint_raises_supports_reasoning() -> None:
         hint_port=_FakeHint(True),
     )
     assert out.get("supports_reasoning") is True
+
+
+def test_build_gateway_model_tags_applies_enrich_after_hint() -> None:
+    tags = build_gateway_model_tags(
+        {},
+        provider="openai",
+        real_model="o3-mini",
+        hint_port=_FakeHint(True),
+    )
+    assert tags.get("supports_reasoning") is True
+    assert "thinking_param" in tags

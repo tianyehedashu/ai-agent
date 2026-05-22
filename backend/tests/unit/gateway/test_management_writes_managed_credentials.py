@@ -13,18 +13,35 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     SystemCredentialAdminRequiredError,
 )
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from domains.gateway.domain.provider_api_base import get_default_api_base
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+
+
+@pytest.mark.asyncio
+async def test_create_team_credential_backfills_default_api_base(db_session, test_user) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    writes = GatewayManagementWriteService(db_session)
+    row = await writes.create_team_credential(
+        tenant_id=team.id,
+        provider="zhipuai",
+        name="zhipu-default-base",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+        extra=None,
+    )
+    assert row.api_base == get_default_api_base("zhipuai")
 
 
 @pytest.mark.asyncio
@@ -136,7 +153,6 @@ async def test_delete_user_credential_cascades_personal_models(db_session, test_
 @pytest.mark.asyncio
 async def test_update_managed_wrong_team_returns_not_found(db_session, test_user) -> None:
     team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
-    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred = await create_tenant_test_credential(db_session, team_a.id, name="other-team-cred")
     await db_session.flush()
     fake_team = uuid.uuid4()

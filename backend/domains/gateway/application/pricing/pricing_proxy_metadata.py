@@ -20,6 +20,7 @@ _CUSTOM_PRICING_FIELD_NAMES: frozenset[str] = frozenset(
         "output_cost_per_token",
         "cache_creation_input_token_cost",
         "cache_read_input_token_cost",
+        "per_request_usd",
     }
 )
 
@@ -27,6 +28,8 @@ _CUSTOM_PRICING_FIELD_NAMES: frozenset[str] = frozenset(
 def _custom_cost_from_metadata_field(
     metadata: dict[str, Any] | None,
     field: str,
+    *,
+    require_token_rates: bool = True,
 ) -> dict[str, float] | None:
     if not isinstance(metadata, dict):
         return None
@@ -38,9 +41,18 @@ def _custom_cost_from_metadata_field(
         val = raw.get(key)
         if val is not None:
             out[key] = float(val)
-    if "input_cost_per_token" not in out or "output_cost_per_token" not in out:
-        return None
-    return out
+    from domains.gateway.domain.policies.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
+
+    for key in NON_TOKEN_LITELLM_EXTRA_KEYS:
+        val = raw.get(key)
+        if val is not None:
+            out[key] = float(val)
+    if require_token_rates and (
+        "input_cost_per_token" not in out or "output_cost_per_token" not in out
+    ):
+        if "per_request_usd" not in out and not any(k in out for k in NON_TOKEN_LITELLM_EXTRA_KEYS):
+            return None
+    return out or None
 
 
 def downstream_custom_from_metadata(metadata: dict[str, Any] | None) -> dict[str, float] | None:
@@ -50,7 +62,11 @@ def downstream_custom_from_metadata(metadata: dict[str, Any] | None) -> dict[str
 
 def upstream_custom_from_metadata(metadata: dict[str, Any] | None) -> dict[str, float] | None:
     """从 metadata 读取上游单价 dict（供预算 / cost_usd 计算）。"""
-    return _custom_cost_from_metadata_field(metadata, "gateway_pricing_upstream")
+    return _custom_cost_from_metadata_field(
+        metadata,
+        "gateway_pricing_upstream",
+        require_token_rates=False,
+    )
 
 
 def apply_downstream_custom_pricing_kwargs(kwargs: dict[str, Any]) -> None:
@@ -114,7 +130,15 @@ async def attach_downstream_pricing_metadata(
 
     meta["gateway_pricing_downstream"] = downstream_rate_to_custom_cost(resolved.downstream)
     if resolved.upstream is not None:
-        meta["gateway_pricing_upstream"] = downstream_rate_to_custom_cost(resolved.upstream)
+        upstream_extra = (
+            resolved.upstream_row.extra
+            if resolved.upstream_row is not None and resolved.upstream_row.extra
+            else None
+        )
+        meta["gateway_pricing_upstream"] = downstream_rate_to_custom_cost(
+            resolved.upstream,
+            extra=upstream_extra,
+        )
     meta["gateway_pricing_hit_chain"] = resolved.hit_chain
 
 

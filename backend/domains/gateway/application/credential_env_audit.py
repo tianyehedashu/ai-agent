@@ -5,7 +5,9 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import Settings
+from domains.gateway.domain.provider_api_base import get_default_api_base
 from domains.gateway.domain.provider_env_catalog import (
+    ProviderEnvSnapshot,
     provider_env_snapshot_from_settings,
     resolve_provider_credentials,
 )
@@ -24,6 +26,16 @@ _BOOTSTRAP_PROVIDERS: tuple[str, ...] = (
     "zhipuai",
     "volcengine",
 )
+
+
+def _raw_env_api_base(snapshot: ProviderEnvSnapshot, provider: str) -> str | None:
+    """Settings 快照中的原始 base（未套用 domain 默认）。"""
+    attr = f"{provider}_api_base"
+    raw = getattr(snapshot, attr, None)
+    if not isinstance(raw, str):
+        return None
+    stripped = raw.strip()
+    return stripped or None
 
 
 async def log_config_managed_api_base_drift(session: AsyncSession, settings: Settings) -> None:
@@ -48,12 +60,14 @@ async def log_config_managed_api_base_drift(session: AsyncSession, settings: Set
             continue
 
         db_base = (row.api_base or "").strip()
-        if not db_base and env_base:
+        raw_env_base = _raw_env_api_base(snapshot, provider)
+        default_base = get_default_api_base(provider)
+        if not db_base and raw_env_base and raw_env_base != (default_base or ""):
             logger.warning(
-                "Gateway credential %s: DB api_base empty but env/bootstrap has %s; "
+                "Gateway credential %s: DB api_base empty but env has non-default %s; "
                 "run catalog sync or set base in management UI",
                 provider,
-                env_base,
+                raw_env_base,
             )
             continue
 

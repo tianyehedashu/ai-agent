@@ -8,12 +8,16 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bootstrap.config import settings
 from domains.gateway.application.config_catalog_sync import (
     MANAGED_BY_KEY,
     MANAGED_CONFIG,
     model_types_for_gateway_registration,
     selector_capabilities_from_tags,
-    sync_gateway_catalog_from_seed,
+)
+from domains.gateway.application.gateway_catalog_maintenance import (
+    log_gateway_catalog_maintenance_report,
+    run_gateway_catalog_maintenance,
 )
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
@@ -94,10 +98,11 @@ async def reload_gateway_catalog_from_config(
     writes: MgmtWrites,
 ) -> dict[str, Any]:
     """平台管理员：从 gateway-catalog.seed.json 重新同步全局模型目录并重载 LiteLLM Router。"""
-    stats = await sync_gateway_catalog_from_seed(db)
+    report = await run_gateway_catalog_maintenance(db, settings=settings)
+    log_gateway_catalog_maintenance_report(report)
     await db.commit()
     await writes.reload_litellm_router()
-    return {"ok": True, **stats}
+    return {"ok": True, **report.to_api_dict()}
 
 
 @router.get("/models", response_model=list[GatewayModelResponse])

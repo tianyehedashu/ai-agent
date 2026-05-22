@@ -10,8 +10,10 @@ from domains.gateway.application.config_catalog_sync import (
     SYSTEM_CREDENTIAL_NAME,
     _config_managed_credential_extra,
     _ensure_system_credential,
+    _merge_config_managed_credential_extra,
     sync_app_config_gateway_catalog,
 )
+from domains.gateway.domain.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
@@ -168,3 +170,44 @@ async def test_sync_backfills_empty_api_base_from_env(db_session, monkeypatch: p
     row = await cred_repo.get(created_id)
     assert row is not None
     assert row.api_base == CODING_ZHIPU_BASE
+
+
+def test_merge_config_managed_extra_preserves_force_env_sync() -> None:
+    merged = _merge_config_managed_credential_extra(
+        "openai",
+        {FORCE_ENV_SYNC_EXTRA_KEY: True, "custom_flag": "keep"},
+    )
+    assert merged[FORCE_ENV_SYNC_EXTRA_KEY] is True
+    assert merged["custom_flag"] == "keep"
+    assert merged["managed_by"] == MANAGED_CONFIG
+
+
+@pytest.mark.asyncio
+async def test_sync_force_env_sync_overwrites_managed_base(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """extra.force_env_sync=true 时 catalog sync 用 env 覆盖已有 api_base。"""
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = SystemProviderCredentialRepository(db_session)
+
+    monkeypatch.setattr(
+        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
+    )
+    created_id = await _ensure_system_credential(
+        db_session, provider="zhipuai", encryption_key=encryption_key
+    )
+    assert created_id is not None
+    await cred_repo.update(
+        created_id,
+        api_base=MANAGED_ZHIPU_BASE,
+        extra={"managed_by": MANAGED_CONFIG, FORCE_ENV_SYNC_EXTRA_KEY: True},
+    )
+    await db_session.flush()
+
+    await _ensure_system_credential(db_session, provider="zhipuai", encryption_key=encryption_key)
+    await db_session.flush()
+
+    row = await cred_repo.get(created_id)
+    assert row is not None
+    assert row.api_base == CODING_ZHIPU_BASE
+    assert row.extra is not None
+    assert row.extra.get(FORCE_ENV_SYNC_EXTRA_KEY) is True

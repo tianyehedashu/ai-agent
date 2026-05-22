@@ -764,12 +764,12 @@ function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>):
     <div className="rounded-lg border p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium">
+          <div className="text-sm font-medium">
             <Badge variant="outline" className="mr-2 font-mono" translate="no">
               {item.code}
             </Badge>
             {item.title}
-          </p>
+          </div>
         </div>
         <Link
           to={item.href}

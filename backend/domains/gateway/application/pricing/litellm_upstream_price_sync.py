@@ -8,6 +8,7 @@ from decimal import Decimal
 import logging
 from typing import Any
 
+from domains.gateway.domain.policies.non_token_cost import merge_non_token_extra_from_litellm
 from domains.gateway.infrastructure.repositories.pricing_repository import UpstreamPricingRepository
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,21 @@ def _entry_to_rates(entry: dict[str, Any]) -> tuple[Decimal, Decimal] | None:
     return Decimal(str(inp)), Decimal(str(out))
 
 
+def _entry_to_sync_payload(
+    entry: dict[str, Any],
+) -> tuple[Decimal, Decimal, dict[str, Any] | None] | None:
+    """Token 价、纯 extra 价或二者兼有均可同步。"""
+    rates = _entry_to_rates(entry)
+    extra = merge_non_token_extra_from_litellm(entry)
+    extra_dict: dict[str, Any] | None = extra or None
+    if rates is not None:
+        inp_rate, out_rate = rates
+        return inp_rate, out_rate, extra_dict
+    if extra_dict:
+        return Decimal("0"), Decimal("0"), extra_dict
+    return None
+
+
 class LitellmUpstreamPriceSyncService:
     def __init__(self, upstream_repo: UpstreamPricingRepository) -> None:
         self._upstream = upstream_repo
@@ -59,6 +75,7 @@ class LitellmUpstreamPriceSyncService:
         capability: str,
         inp_rate: Decimal,
         out_rate: Decimal,
+        extra: dict[str, Any] | None,
         now: datetime,
     ) -> tuple[int, int, int]:
         existing = await self._upstream.get_active(
@@ -73,6 +90,7 @@ class LitellmUpstreamPriceSyncService:
             if (
                 existing.input_cost_per_token == inp_rate
                 and existing.output_cost_per_token == out_rate
+                and existing.extra == extra
                 and existing.source == "litellm_fallback"
             ):
                 return 0, 0, 0
@@ -83,6 +101,7 @@ class LitellmUpstreamPriceSyncService:
                 capability=capability,
                 input_cost_per_token=inp_rate,
                 output_cost_per_token=out_rate,
+                extra=extra,
                 source="litellm_fallback",
                 effective_from=now,
                 version=existing.version + 1,
@@ -94,6 +113,7 @@ class LitellmUpstreamPriceSyncService:
             capability=capability,
             input_cost_per_token=inp_rate,
             output_cost_per_token=out_rate,
+            extra=extra,
             source="litellm_fallback",
             effective_from=now,
         )
@@ -117,14 +137,14 @@ class LitellmUpstreamPriceSyncService:
         seen: set[tuple[str, str, str]] = set()
 
         for model_id, entry in model_cost.items():
-            rates = _entry_to_rates(entry)
-            if rates is None:
+            payload = _entry_to_sync_payload(entry)
+            if payload is None:
                 continue
             provider, upstream_model = _parse_litellm_model_key(model_id)
             if allowed_providers is not None and provider not in allowed_providers:
                 skipped_provider += 1
                 continue
-            inp_rate, out_rate = rates
+            inp_rate, out_rate, extra = payload
             key = (provider, upstream_model, _DEFAULT_CAPABILITY)
             if key in seen:
                 continue
@@ -135,6 +155,7 @@ class LitellmUpstreamPriceSyncService:
                 capability=_DEFAULT_CAPABILITY,
                 inp_rate=inp_rate,
                 out_rate=out_rate,
+                extra=extra,
                 now=now,
             )
             created += c
@@ -148,20 +169,21 @@ class LitellmUpstreamPriceSyncService:
             entry = model_cost.get(upstream_model)
             if entry is None:
                 continue
-            rates = _entry_to_rates(entry)
-            if rates is None:
+            payload = _entry_to_sync_payload(entry)
+            if payload is None:
                 continue
             key = (provider, upstream_model, capability)
             if key in seen:
                 continue
             seen.add(key)
-            inp_rate, out_rate = rates
+            inp_rate, out_rate, extra = payload
             c, u, s = await self._upsert_rate(
                 provider=provider,
                 upstream_model=upstream_model,
                 capability=capability,
                 inp_rate=inp_rate,
                 out_rate=out_rate,
+                extra=extra,
                 now=now,
             )
             created += c

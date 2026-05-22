@@ -18,22 +18,32 @@ _BILLING_PACKAGE_PROVIDER = "provider"
 def pricing_rate_from_metadata(custom: dict[str, Any]) -> PricingRate | None:
     inp = custom.get("input_cost_per_token")
     out = custom.get("output_cost_per_token")
-    if inp is None or out is None:
-        return None
-    return PricingRate(
-        input_cost_per_token=Decimal(str(inp)),
-        output_cost_per_token=Decimal(str(out)),
-        cache_creation_input_token_cost=(
-            Decimal(str(custom["cache_creation_input_token_cost"]))
-            if custom.get("cache_creation_input_token_cost") is not None
-            else None
-        ),
-        cache_read_input_token_cost=(
-            Decimal(str(custom["cache_read_input_token_cost"]))
-            if custom.get("cache_read_input_token_cost") is not None
-            else None
-        ),
-    )
+    per_request = custom.get("per_request_usd")
+    if inp is not None and out is not None:
+        return PricingRate(
+            input_cost_per_token=Decimal(str(inp)),
+            output_cost_per_token=Decimal(str(out)),
+            cache_creation_input_token_cost=(
+                Decimal(str(custom["cache_creation_input_token_cost"]))
+                if custom.get("cache_creation_input_token_cost") is not None
+                else None
+            ),
+            cache_read_input_token_cost=(
+                Decimal(str(custom["cache_read_input_token_cost"]))
+                if custom.get("cache_read_input_token_cost") is not None
+                else None
+            ),
+            per_request_usd=(
+                Decimal(str(per_request)) if per_request is not None else None
+            ),
+        )
+    if per_request is not None:
+        return PricingRate(
+            input_cost_per_token=Decimal("0"),
+            output_cost_per_token=Decimal("0"),
+            per_request_usd=Decimal(str(per_request)),
+        )
+    return None
 
 
 def settle_request_log_amounts(

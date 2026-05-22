@@ -215,7 +215,7 @@ sequenceDiagram
 flowchart TD
   SEED[gateway-catalog.seed.json] --> SYNC[config_catalog_sync]
   SYNC --> UP[(upstream_model_pricing<br/>source=toml)]
-  BOOT[bootstrap/main.py 启动] --> REG[sync_to_litellm_registry]
+  BOOT[run_gateway_startup] --> REG[sync_to_litellm_registry]
   UP --> REG
   REG --> LM[litellm.model_cost + 活跃上游键]
   ADMIN[管理面写上游价] --> REG
@@ -223,10 +223,12 @@ flowchart TD
 ```
 
 1. **`config_catalog_sync`**：从 `gateway-catalog.seed.json` 同步 `GatewayModel`，并对带单价的模型调用 `_upsert_upstream_pricing_from_model()` 写入 `upstream_model_pricing`（`source=seed`）。单价 **不再** 写入 model `tags`。
-2. **应用启动**（`bootstrap/main.py`）：`build_pricing_service(session).sync_to_litellm_registry()`：
-   - `litellm.register_model(dict(litellm.model_cost))` 保留内置价
-   - 将所有 **活跃** 上游行的 `upstream_model` 键注册进 LiteLLM
-3. **管理面写上游价**（`GatewayManagementWriteService`）：保存后同样调用 `sync_to_litellm_registry()` 并 `reload_router()`。
+2. **应用启动**（`domains/gateway/application/startup.py`）：
+   - 默认**不再**做 LiteLLM 价目同步——内置 `litellm.model_cost` 在 `import litellm` 时已就绪；
+     代理调用经 `attach_downstream_pricing_metadata` 把上下游单价注入 `metadata`，`upstream_cost_resolver` 优先读 metadata。
+   - 仅当 `gateway_catalog_sync_on_startup=true` 时跑 `run_gateway_catalog_maintenance()`（catalog + `sync_to_litellm_registry` + 审计 + `reload_router`）。
+   - DB 行的 LiteLLM 注册改由管理面写入路径增量执行：`sync_to_litellm_registry(only_keys=...)` + 进程内指纹缓存，避免每次写一行都做全表 `register_model`。
+3. **管理面**：`POST /catalog/reload-from-config` 与完整启动维护共用 `run_gateway_catalog_maintenance()`；写上游价后 `GatewayManagementWriteService` 亦调用 `sync_to_litellm_registry()` + `reload_router()`。
 
 ### 4.2 代理调用前：注入 metadata
 

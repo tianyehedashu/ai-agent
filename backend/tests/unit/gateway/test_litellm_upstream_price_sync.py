@@ -59,3 +59,29 @@ async def test_litellm_sync_filters_to_allowed_providers(monkeypatch: pytest.Mon
     assert report.skipped_manual == 0
     assert [row["provider"] for row in repo.created] == ["openai"]
     assert repo.created[0]["input_cost_per_token"] == Decimal("1.5E-7")
+
+
+@pytest.mark.asyncio
+async def test_litellm_sync_extra_only_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "litellm",
+        SimpleNamespace(
+            model_cost={
+                "openai/dall-e-3": {
+                    "input_cost_per_image": 0.04,
+                },
+            }
+        ),
+    )
+    repo = FakeUpstreamPricingRepository()
+
+    report = await LitellmUpstreamPriceSyncService(repo).sync_from_litellm_model_cost(
+        allowed_providers={"openai"},
+    )
+
+    assert report.created == 1
+    row = repo.created[0]
+    assert row["input_cost_per_token"] == Decimal("0")
+    assert row["output_cost_per_token"] == Decimal("0")
+    assert row["extra"] == {"input_cost_per_image": 0.04}

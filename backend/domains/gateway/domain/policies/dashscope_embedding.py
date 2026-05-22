@@ -29,8 +29,14 @@ class DashscopeEmbeddingRequest:
     json_body: dict[str, Any]
 
 
-def should_use_dashscope_direct_embedding(provider: str) -> bool:
+def should_use_dashscope_direct_embedding(
+    provider: str,
+    *,
+    force_litellm: bool = False,
+) -> bool:
     """是否应绕过 LiteLLM Router / ``aembedding``，改走兼容端点直连。"""
+    if force_litellm:
+        return False
     return (provider or "").strip().lower() == "dashscope"
 
 

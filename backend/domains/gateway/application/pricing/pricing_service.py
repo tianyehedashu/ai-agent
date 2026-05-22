@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -25,6 +26,17 @@ from domains.gateway.infrastructure.repositories.pricing_repository import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# 进程内已注册键的版本指纹缓存。
+# value = (version, input, output, cache_creation, cache_read, extra_repr)；
+# 与 DB 当前活跃行不一致才再 register，避免启动/管理面/运行时重复写同一条。
+_REGISTERED_FINGERPRINTS: dict[str, tuple[Any, ...]] = {}
+
+
+def reset_litellm_pricing_register_cache() -> None:
+    """测试用：清空已注册指纹缓存。"""
+    _REGISTERED_FINGERPRINTS.clear()
 
 
 class RateUnavailableError(Exception):
@@ -279,41 +291,81 @@ class PricingService:
             rate_snapshot=snapshot,
         )
 
-    async def sync_to_litellm_registry(self) -> int:
-        """将活跃上游价目注册到 LiteLLM；返回注册模型数。"""
+    async def sync_to_litellm_registry(
+        self,
+        *,
+        only_keys: Iterable[str] | None = None,
+    ) -> int:
+        """将 DB 活跃上游价目注册到 LiteLLM；返回**本次实际写入** LiteLLM 的模型数。
+
+        设计原则：
+        - 内置价目随 ``import litellm`` 已在 ``litellm.model_cost``，**不**重复注册全表副本；
+        - 只 register「与上次指纹不同」的行，避免管理面写一次、启动一次都做全量写；
+        - ``only_keys`` 用于「写一行后只刷一行」（管理面写入路径），不传则扫全表。
+        """
         import litellm
 
-        try:
-            litellm.register_model(dict(litellm.model_cost))
-        except Exception as exc:
-            logger.warning("litellm.register_model(model_cost) failed: %s", exc)
-
         rows = await self._upstream.list_active()
+        wanted: set[str] | None = None
+        if only_keys is not None:
+            wanted = {k for k in only_keys if k}
+            if not wanted:
+                return 0
+
         payload: dict[str, dict[str, Any]] = {}
         for row in rows:
             key = row.upstream_model
             if not key:
                 continue
-            entry: dict[str, Any] = {
-                "input_cost_per_token": float(row.input_cost_per_token),
-                "output_cost_per_token": float(row.output_cost_per_token),
-            }
-            if row.cache_creation_input_token_cost is not None:
-                entry["cache_creation_input_token_cost"] = float(
-                    row.cache_creation_input_token_cost
-                )
-            if row.cache_read_input_token_cost is not None:
-                entry["cache_read_input_token_cost"] = float(row.cache_read_input_token_cost)
-            if row.extra:
-                entry.update(row.extra)
+            if wanted is not None and key not in wanted:
+                continue
+            entry = _build_litellm_pricing_entry(row)
+            fingerprint = _pricing_fingerprint(row)
+            if _REGISTERED_FINGERPRINTS.get(key) == fingerprint:
+                continue
             payload[key] = entry
+            _REGISTERED_FINGERPRINTS[key] = fingerprint
         if payload:
             litellm.register_model(payload)
+            logger.info(
+                "LiteLLM pricing registered: %d entries (keys=%s)",
+                len(payload),
+                sorted(payload.keys())[:5],
+            )
         return len(payload)
 
 
-def downstream_rate_to_custom_cost(rate: PricingRate) -> dict[str, float]:
-    """供 ``litellm.completion_cost(custom_cost_per_token=...)`` 使用。"""
+def _build_litellm_pricing_entry(row: UpstreamModelPricing) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "input_cost_per_token": float(row.input_cost_per_token),
+        "output_cost_per_token": float(row.output_cost_per_token),
+    }
+    if row.cache_creation_input_token_cost is not None:
+        entry["cache_creation_input_token_cost"] = float(row.cache_creation_input_token_cost)
+    if row.cache_read_input_token_cost is not None:
+        entry["cache_read_input_token_cost"] = float(row.cache_read_input_token_cost)
+    if row.extra:
+        entry.update(row.extra)
+    return entry
+
+
+def _pricing_fingerprint(row: UpstreamModelPricing) -> tuple[Any, ...]:
+    return (
+        getattr(row, "version", None),
+        str(row.input_cost_per_token),
+        str(row.output_cost_per_token),
+        str(row.cache_creation_input_token_cost) if row.cache_creation_input_token_cost else None,
+        str(row.cache_read_input_token_cost) if row.cache_read_input_token_cost else None,
+        repr(row.extra) if row.extra else None,
+    )
+
+
+def downstream_rate_to_custom_cost(
+    rate: PricingRate,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, float]:
+    """供 ``litellm.completion_cost(custom_cost_per_token=...)`` 与 metadata 注入使用。"""
     out: dict[str, float] = {
         "input_cost_per_token": float(rate.input_cost_per_token),
         "output_cost_per_token": float(rate.output_cost_per_token),
@@ -322,6 +374,15 @@ def downstream_rate_to_custom_cost(rate: PricingRate) -> dict[str, float]:
         out["cache_creation_input_token_cost"] = float(rate.cache_creation_input_token_cost)
     if rate.cache_read_input_token_cost is not None:
         out["cache_read_input_token_cost"] = float(rate.cache_read_input_token_cost)
+    if rate.per_request_usd is not None:
+        out["per_request_usd"] = float(rate.per_request_usd)
+    if extra:
+        from domains.gateway.domain.policies.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
+
+        for key in NON_TOKEN_LITELLM_EXTRA_KEYS:
+            raw = extra.get(key)
+            if raw is not None:
+                out[key] = float(raw)
     return out
 
 
@@ -330,4 +391,5 @@ __all__ = [
     "RateUnavailableError",
     "ResolvedPricing",
     "downstream_rate_to_custom_cost",
+    "reset_litellm_pricing_register_cache",
 ]

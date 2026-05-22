@@ -4,7 +4,7 @@ E2E 测试共享配置。
 通过环境变量覆盖默认地址，便于 CI 或自定义端口：
 
 - ``E2E_API_BASE_URL``：后端根 URL，默认 ``http://localhost:8000``（无尾部斜杠）。
-- ``E2E_ROOT_PATH`` / ``ROOT_PATH``：服务级前缀，须与后端进程一致（默认 ``/ai-agent``）。
+- ``ROOT_PATH``：与 ``backend/.env`` 中一致（默认 ``/ai-agent``），E2E 直连 .env 读取，不另设变量。
 - ``E2E_USER_EMAIL`` / ``E2E_USER_PASSWORD``：可选；用于需登录的 E2E。
 """
 
@@ -13,40 +13,64 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+_E2E_ENV = Path(__file__).resolve().parents[2] / ".env"
+_DOTENV = dotenv_values(_E2E_ENV)
 
-# 与后端 ROOT_PATH 对齐后再导入 paths（清除 settings 缓存）
-_e2e_root = os.environ.get("E2E_ROOT_PATH", os.environ.get("ROOT_PATH", "/ai-agent")).strip()
-if _e2e_root:
-    os.environ["ROOT_PATH"] = _e2e_root
 
-from bootstrap.config import get_settings  # noqa: E402
+def _e2e_root_path() -> str:
+    """与 backend 进程相同：读 ``.env`` 的 ``ROOT_PATH``（根 conftest 会置空进程 env 以跑集成测试）。"""
+    raw = _DOTENV.get("ROOT_PATH")
+    if raw is not None:
+        return str(raw).strip()
+    return "/ai-agent"
 
-get_settings.cache_clear()
 
-from libs.api.paths import (  # noqa: E402
-    anthropic_compat_base,
-    api_v1_path,
-    openai_compat_base,
-    service_path,
-)
+def _e2e_api_prefix() -> str:
+    raw = _DOTENV.get("API_PREFIX")
+    if raw is not None:
+        return str(raw).strip()
+    return "/api/v1"
+
+
+def _normalize_segments(*parts: str) -> list[str]:
+    segments: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        for piece in part.strip("/").split("/"):
+            if piece:
+                segments.append(piece)
+    return segments
+
+
+def _service_path(*segments: str) -> str:
+    combined = _normalize_segments(_e2e_root_path(), *segments)
+    if not combined:
+        return "/"
+    return "/" + "/".join(combined)
+
+
+def _api_v1_path(*segments: str) -> str:
+    combined = _normalize_segments(_e2e_root_path(), _e2e_api_prefix(), *segments)
+    return "/" + "/".join(combined)
+
 
 E2E_API_BASE_URL = os.environ.get("E2E_API_BASE_URL", "http://localhost:8000").rstrip("/")
 
 
 def e2e_service_health_path() -> str:
-    return service_path("health")
+    return _service_path("health")
 
 
 def e2e_openai_models_path() -> str:
-    return f"{openai_compat_base()}/models"
+    return f"{_api_v1_path('openai', 'v1')}/models"
 
 
 def e2e_anthropic_messages_path() -> str:
-    return f"{anthropic_compat_base()}/v1/messages"
+    return f"{_api_v1_path('anthropic')}/v1/messages"
 
 
 def e2e_api_v1_path(*segments: str) -> str:
-    return api_v1_path(*segments)
+    return _api_v1_path(*segments)

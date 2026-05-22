@@ -21,6 +21,7 @@ from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.types import GatewayCapability
 
 if TYPE_CHECKING:
+    from domains.gateway.application.proxy_guard import BudgetReservation
     from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 
 BodyValidator = Callable[[dict[str, Any]], None]
@@ -93,13 +94,9 @@ async def prepare_chat_proxy_request(
     )
 
 
-invoke_litellm_with_direct_fallback = invoke_router_with_direct_fallback
-
-
 __all__ = [
     "ChatProxyPrepared",
     "apply_stream_cost_defer_flag",
-    "invoke_litellm_with_direct_fallback",
     "invoke_router_with_direct_fallback",
     "prepare_chat_proxy_request",
 ]

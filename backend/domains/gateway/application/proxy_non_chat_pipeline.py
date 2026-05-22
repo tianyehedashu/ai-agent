@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from bootstrap.config import settings
 from domains.gateway.application.proxy_response_adapter import (
+    adapt_binary_response,
     adapt_response,
     pricing_kwargs_from_litellm,
-    schedule_settle_usage,
 )
 from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
@@ -76,9 +76,9 @@ class ProxyNonChatMixin:
         prepared = await self._metadata_builder.prepare_litellm_kwargs(ctx, body)
         kwargs = self._kwargs_from_prepared(prepared)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        dashscope_direct = (
-            prepared.resolved is not None
-            and should_use_dashscope_direct_embedding(prepared.resolved.record.provider)
+        dashscope_direct = prepared.resolved is not None and should_use_dashscope_direct_embedding(
+            prepared.resolved.record.provider,
+            force_litellm=settings.gateway_dashscope_embedding_via_litellm,
         )
         try:
             if dashscope_direct:
@@ -129,8 +129,14 @@ class ProxyNonChatMixin:
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
-            router = await get_router(self._session)
-            response = await router.aimage_generation(**kwargs)
+            response = await self._invoke_non_chat_with_router_fallback(
+                ctx,
+                ctx.budget_model,
+                reservations,
+                kwargs,
+                router_call=lambda: self._router_image_generation(kwargs),
+                direct_call=lambda: self._direct_image_generation(kwargs),
+            )
         except Exception:
             await self._guard.release_budget_reservations(reservations)
             await self._guard.release_entitlement_reservations(ctx)
@@ -163,8 +169,14 @@ class ProxyNonChatMixin:
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
-            router = await get_router(self._session)
-            response = await router.atranscription(**kwargs)
+            response = await self._invoke_non_chat_with_router_fallback(
+                ctx,
+                ctx.budget_model,
+                reservations,
+                kwargs,
+                router_call=lambda: self._router_transcription(kwargs),
+                direct_call=lambda: self._direct_transcription(kwargs),
+            )
         except Exception:
             await self._guard.release_budget_reservations(reservations)
             await self._guard.release_entitlement_reservations(ctx)
@@ -195,6 +207,7 @@ class ProxyNonChatMixin:
             await self._guard.release_budget_reservations(reservations)
             raise
         kwargs = await self._prepare_litellm_kwargs(ctx, body)
+        meta, up_c, _down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             result = await self._invoke_non_chat_with_router_fallback(
                 ctx,
@@ -208,15 +221,23 @@ class ProxyNonChatMixin:
             await self._guard.release_budget_reservations(reservations)
             await self._guard.release_entitlement_reservations(ctx)
             raise
-        schedule_settle_usage(
+        if isinstance(result, bytes):
+            return adapt_binary_response(
+                result,
+                ctx,
+                self._budget,
+                self._entitlement_guard,
+                metadata=meta,
+                upstream_custom=up_c,
+            )
+        return adapt_binary_response(
+            bytes(result) if result is not None else b"",
             ctx,
             self._budget,
-            tokens=0,
-            cost=Decimal("0"),
-            requests=1,
-            entitlement_guard=self._entitlement_guard,
+            self._entitlement_guard,
+            metadata=meta,
+            upstream_custom=up_c,
         )
-        return result
 
     async def rerank(
         self: ProxyUseCase,

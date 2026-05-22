@@ -20,7 +20,7 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
-from domains.gateway.domain.thinking_param import enrich_gateway_model_tags
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -70,7 +70,7 @@ class ModelWritesMixin:
             mtags['display_name'] = display_name
             if tags:
                 mtags.update({k: v for k, v in tags.items() if v is not None})
-            mtags = enrich_gateway_model_tags(mtags, provider=provider, real_model=real_model)
+            mtags = build_gateway_model_tags(mtags, provider=provider, real_model=real_model)
             row = await self._models.create(tenant_id=tenant_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
             created.append(row)
         if reload_router:
@@ -133,7 +133,7 @@ class ModelWritesMixin:
         if prefix_msg:
             raise ValidationError(prefix_msg)
         normalized_rm = build_litellm_model_id(provider, raw_rm)
-        enriched_tags = enrich_gateway_model_tags(tags, provider=provider, real_model=normalized_rm)
+        enriched_tags = build_gateway_model_tags(tags, provider=provider, real_model=normalized_rm)
         row = await self._models.create(
             tenant_id=tenant_id,
             name=name,
@@ -230,7 +230,7 @@ class ModelWritesMixin:
             real_for_tags = str(
                 update_fields.get('real_model') or existing.real_model
             ).strip()
-            update_fields['tags'] = enrich_gateway_model_tags(
+            update_fields['tags'] = build_gateway_model_tags(
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,

@@ -25,10 +25,7 @@ from domains.gateway.application.anthropic_native_adapt import (
 from domains.gateway.application.budget_service import BudgetService
 from domains.gateway.application.entitlement_guard import EntitlementGuard
 from domains.gateway.application.prompt_cache_middleware import get_prompt_cache_middleware
-from domains.gateway.application.proxy_chat_pipeline import (
-    invoke_litellm_with_direct_fallback,
-    prepare_chat_proxy_request,
-)
+from domains.gateway.application.proxy_chat_pipeline import prepare_chat_proxy_request
 from domains.gateway.application.proxy_guard import (
     ProxyGuard,
 )
@@ -44,6 +41,7 @@ from domains.gateway.application.proxy_response_adapter import (
     adapt_response,
     adapt_stream,
 )
+from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
@@ -289,6 +287,18 @@ class ProxyUseCase(ProxyNonChatMixin):
     async def _router_video_generation(self, kwargs: dict[str, Any]) -> Any:
         return await self._litellm.router_video_generation(kwargs)
 
+    async def _direct_image_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_image_generation(kwargs)
+
+    async def _router_image_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_image_generation(kwargs)
+
+    async def _direct_transcription(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.direct_transcription(kwargs)
+
+    async def _router_transcription(self, kwargs: dict[str, Any]) -> Any:
+        return await self._litellm.router_transcription(kwargs)
+
     # ---------------------------------------------------------------------
     # 主入口
     # ---------------------------------------------------------------------
@@ -318,7 +328,7 @@ class ProxyUseCase(ProxyNonChatMixin):
             router = await get_router(self._session)
             return await router.acompletion(**prepared.kwargs)
 
-        response = await invoke_litellm_with_direct_fallback(
+        response = await invoke_router_with_direct_fallback(
             self,
             ctx,
             prepared.model,
@@ -371,7 +381,7 @@ class ProxyUseCase(ProxyNonChatMixin):
         async def _router() -> Any:
             return await self._router_anthropic_messages(prepared.kwargs)
 
-        response = await invoke_litellm_with_direct_fallback(
+        response = await invoke_router_with_direct_fallback(
             self,
             ctx,
             prepared.model,

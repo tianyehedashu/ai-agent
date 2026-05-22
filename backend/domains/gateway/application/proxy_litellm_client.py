@@ -201,6 +201,40 @@ class ProxyLiteLLMClient:
             kwargs=kwargs,
         )
 
+    async def direct_image_generation(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import aimage_generation
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await aimage_generation(**kwargs)
+
+    async def router_image_generation(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="aimage_generation",
+            direct_call=lambda: self.direct_image_generation(kwargs),
+            kwargs=kwargs,
+        )
+
+    async def direct_transcription(self, kwargs: dict[str, Any]) -> Any:
+        from litellm import atranscription
+
+        from domains.gateway.infrastructure.router_singleton import (
+            ensure_gateway_callbacks,
+        )
+
+        ensure_gateway_callbacks()
+        return await atranscription(**kwargs)
+
+    async def router_transcription(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="atranscription",
+            direct_call=lambda: self.direct_transcription(kwargs),
+            kwargs=kwargs,
+        )
+
     async def direct_video_generation(self, kwargs: dict[str, Any]) -> Any:
         from litellm import avideo_generation
 

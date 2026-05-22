@@ -101,11 +101,19 @@ lock: ## 生成/更新 uv.lock 文件
 # 开发服务器
 # ==============================================================================
 
-dev: ## 启动开发服务器 (带热重载)
-	$(UV) run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000
+# 与 Dockerfile CMD 一致：uvicorn bootstrap.main:app（生产多 worker，本地单进程）。
+# 热重载会整进程重启并重复跑 lifespan，仅改后端代码时用 dev-reload。
+dev: ## 启动开发服务器（与生产相同入口，无热重载）
+	$(UV) run uvicorn bootstrap.main:app --host 0.0.0.0 --port 8000
 
-dev-debug: ## 启动开发服务器 (调试模式)
-	$(UV) run uvicorn bootstrap.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
+dev-reload: ## 启动开发服务器（热重载；Windows 用 scripts/run_dev_server.py 避免 glob 展开）
+	$(UV) run python scripts/run_dev_server.py
+
+dev-stable: ## 同 make dev（保留别名）
+	@$(MAKE) dev
+
+dev-debug: ## 启动开发服务器 (热重载 + debug 日志)
+	$(UV) run python scripts/run_dev_server.py --log-level debug
 
 # ==============================================================================
 # 代码质量检查

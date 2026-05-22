@@ -19,6 +19,16 @@ from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bootstrap.config_loader import app_config
+from domains.gateway.domain.provider_api_base import get_default_api_base
+
+
+def _default_provider_api_base(provider: str) -> str:
+    """Settings 字段默认 base；权威定义在 ``domain/provider_api_base``。"""
+    base = get_default_api_base(provider)
+    if base is None:
+        msg = f"provider {provider!r} has no default api_base for Settings"
+        raise ValueError(msg)
+    return base
 
 
 class Settings(BaseSettings):
@@ -84,29 +94,29 @@ class Settings(BaseSettings):
     # ========================================================================
     # OpenAI
     openai_api_key: SecretStr | None = None
-    openai_api_base: str = "https://api.openai.com/v1"
+    openai_api_base: str = Field(default_factory=lambda: _default_provider_api_base("openai"))
 
     # Anthropic (Claude)
     anthropic_api_key: SecretStr | None = None
 
     # 阿里云通义千问 (DashScope)
     dashscope_api_key: SecretStr | None = None
-    dashscope_api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    dashscope_api_base: str = Field(default_factory=lambda: _default_provider_api_base("dashscope"))
 
     # DeepSeek
     deepseek_api_key: SecretStr | None = None
-    deepseek_api_base: str = "https://api.deepseek.com"
+    deepseek_api_base: str = Field(default_factory=lambda: _default_provider_api_base("deepseek"))
 
     # 火山引擎 (字节跳动豆包)
     volcengine_api_key: SecretStr | None = None
-    volcengine_api_base: str = "https://ark.cn-beijing.volces.com/api/v3"
+    volcengine_api_base: str = Field(default_factory=lambda: _default_provider_api_base("volcengine"))
     volcengine_endpoint_id: str | None = None  # 通用接入点 (兼容旧配置)
     volcengine_chat_endpoint_id: str | None = None  # 对话模型接入点 (Doubao-pro/lite)
     volcengine_image_endpoint_id: str | None = None  # 图像生成接入点 (Seedream)
 
-    # 智谱AI (GLM) — 默认 base 权威见 domains/gateway/domain/provider_api_base.py
+    # 智谱AI (GLM) — 默认 base 见 domains/gateway/domain/provider_api_base.py
     zhipuai_api_key: SecretStr | None = None
-    zhipuai_api_base: str = "https://open.bigmodel.cn/api/paas/v4"
+    zhipuai_api_base: str = Field(default_factory=lambda: _default_provider_api_base("zhipuai"))
 
     # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"
@@ -292,7 +302,9 @@ class Settings(BaseSettings):
     # ========================================================================
     # AI Gateway 配置
     # ========================================================================
-    # 启动时是否将 gateway-catalog.seed.json 幂等同步到 gateway_models（生产建议 false，用 make seed-gateway）
+    # 启动时是否从 gateway-catalog.seed.json 跑完整目录维护（含 DB 写入 + 审计 + Router 重载）
+    # 默认 False：代理调用每次注入下游/上游单价至 metadata，``litellm.model_cost`` 内置项已足够兜底，
+    # DB 行的 LiteLLM 注册随管理面写入路径增量进行（``PricingService.sync_to_litellm_registry``）。
     gateway_catalog_sync_on_startup: bool = False
     # 同步时是否用配置覆盖 tags（GitOps：配置声明优先于 UI 对托管行的修改）
     gateway_catalog_config_overwrites_managed: bool = True
@@ -300,6 +312,10 @@ class Settings(BaseSettings):
     gateway_catalog_prune_vkey_allowed_models: bool = False
     # system vkey 是否禁止在 Router 无部署时走 LiteLLM 直连兜底（True=强制经 Router，便于统计一致）
     gateway_proxy_disable_internal_direct_litellm: bool = True
+    # DashScope embedding 经 LiteLLM Router/aembedding（默认 False=兼容端点直连）
+    gateway_dashscope_embedding_via_litellm: bool = False
+    # 文档化版本门槛（可选；probe 脚本可读取）
+    gateway_dashscope_embedding_litellm_min_version: str | None = None
     # 无 PermissionContext.user_id 时用于 Gateway 归因的委派用户（如系统账号 UUID）
     gateway_internal_proxy_delegate_user_id: uuid.UUID | None = None
     # 是否在 LiteLLM 注册 PII Guardrail 回调（False=暂不启用；True 时仍受 vkey.guardrail_enabled 控制）
