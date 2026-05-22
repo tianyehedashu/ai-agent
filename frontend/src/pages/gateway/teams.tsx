@@ -30,6 +30,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
+import { formatTeamMemberDisplay } from '@/types/permissions'
 
 export default function GatewayTeamsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
@@ -160,31 +161,34 @@ export default function GatewayTeamsPage(): React.JSX.Element {
             </div>
             <table className="w-full text-sm">
               <tbody>
-                {(members ?? []).map((m: TeamMember) => (
-                  <tr key={m.user_id} className="border-b last:border-0">
-                    <td className="px-4 py-2">
-                      <div className="font-mono text-xs">{m.user_id}</div>
-                      <div className="text-xs text-muted-foreground">{m.role}</div>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {canWrite && m.role !== 'owner' && teamId && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            removeMemberMutation.mutate({
-                              teamId: teamId,
-                              userId: m.user_id,
-                            })
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {(members ?? []).map((m: TeamMember) => {
+                  const display = formatTeamMemberDisplay(m)
+                  return (
+                    <tr key={m.user_id} className="border-b last:border-0">
+                      <td className="px-4 py-2">
+                        <div className="font-medium">{display.primary}</div>
+                        <div className="text-xs text-muted-foreground">{display.secondary}</div>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {canWrite && m.role !== 'owner' && teamId && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              removeMemberMutation.mutate({
+                                teamId: teamId,
+                                userId: m.user_id,
+                              })
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {(members ?? []).length === 0 ? (
                   <tr>
                     <td className="px-4 py-6 text-center text-muted-foreground" colSpan={2}>

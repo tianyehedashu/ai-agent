@@ -41,6 +41,11 @@ class UserRepository(ABC):
         ...
 
     @abstractmethod
+    async def list_by_ids(self, user_ids: Sequence[uuid.UUID]) -> list[UserEntity]:
+        """批量按 ID 获取用户（顺序不保证与入参一致）。"""
+        ...
+
+    @abstractmethod
     async def get_by_email(self, email: str) -> UserEntity | None:
         """通过邮箱获取用户"""
         ...

@@ -35,6 +35,8 @@ export interface TeamMember {
   user_id: string
   role: string
   created_at: string
+  user_email?: string | null
+  user_name?: string | null
 }
 
 /** Teams 资源 API */

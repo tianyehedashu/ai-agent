@@ -47,6 +47,8 @@ class TeamMemberResponse(BaseModel):
     user_id: uuid.UUID
     role: str
     created_at: datetime
+    user_email: str | None = None
+    user_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

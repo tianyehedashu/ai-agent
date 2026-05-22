@@ -46,6 +46,13 @@ class SQLAlchemyUserRepository(UserRepository):
         result = await self.db.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
+    async def list_by_ids(self, user_ids: Sequence[uuid.UUID]) -> list[User]:
+        """批量按 ID 获取用户"""
+        if not user_ids:
+            return []
+        result = await self.db.execute(select(User).where(User.id.in_(user_ids)))
+        return list(result.scalars().all())
+
     async def get_by_email(self, email: str) -> User | None:
         """通过邮箱获取用户"""
         result = await self.db.execute(select(User).where(User.email == email))

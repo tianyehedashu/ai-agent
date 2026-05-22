@@ -8,8 +8,10 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
 from domains.identity.presentation.deps import RequiredAuthUser
 from domains.tenancy.application.team_service import TeamService
+from domains.tenancy.infrastructure.models.team import TeamMember
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamMemberAdd,
@@ -34,6 +36,25 @@ def _team_service(db: Annotated[AsyncSession, Depends(get_db)]) -> TeamService:
 
 
 TeamSvc = Annotated[TeamService, Depends(_team_service)]
+
+
+async def _team_member_responses(
+    db: AsyncSession,
+    members: list[TeamMember],
+) -> list[TeamMemberResponse]:
+    if not members:
+        return []
+    users = await SQLAlchemyUserRepository(db).list_by_ids([m.user_id for m in members])
+    users_by_id = {user.id: user for user in users}
+    out: list[TeamMemberResponse] = []
+    for member in members:
+        resp = TeamMemberResponse.model_validate(member)
+        user = users_by_id.get(member.user_id)
+        if user is not None:
+            resp.user_email = user.email
+            resp.user_name = user.name
+        out.append(resp)
+    return out
 
 
 @router.get("/teams", response_model=list[TeamResponse])
@@ -103,9 +124,10 @@ async def list_team_members(
     team_id: uuid.UUID,
     team: RequiredTeamMember,
     svc: TeamSvc,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[TeamMemberResponse]:
     members = await svc.list_team_members(team_id)
-    return [TeamMemberResponse.model_validate(m) for m in members]
+    return await _team_member_responses(db, members)
 
 
 @router.post("/teams/{team_id}/members", response_model=TeamMemberResponse)
@@ -127,7 +149,8 @@ async def add_team_member(
         raise mapped from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return TeamMemberResponse.model_validate(member)
+    enriched = await _team_member_responses(db, [member])
+    return enriched[0]
 
 
 @router.delete(
