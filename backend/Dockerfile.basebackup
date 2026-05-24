@@ -3,7 +3,6 @@
 # 构建: docker build -f backend/Dockerfile.base -t ai-agent-backend-base:latest ./backend
 # 更新时机: Python 版本升级、uv 版本升级、系统依赖变更时重新构建
 
-
 ARG REGISTRY_PREFIX=""
 FROM ${REGISTRY_PREFIX}python:3.11-slim
 
