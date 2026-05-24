@@ -5,6 +5,7 @@
 #
 #
 #
+#
 ARG REGISTRY_PREFIX=""
 FROM ${REGISTRY_PREFIX}python:3.11-slim
 
