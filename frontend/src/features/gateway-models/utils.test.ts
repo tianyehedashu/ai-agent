@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 
 import type { GatewayModel, GatewayRoute } from '@/api/gateway'
@@ -5,11 +6,14 @@ import type { GatewayModel, GatewayRoute } from '@/api/gateway'
 import {
   batchConnectivityIncludesVideoGeneration,
   classifyFailureReason,
+  connectivityFieldsFromTestResult,
+  createBatchConnectivityCachePatcher,
   enabledGatewayModels,
   excludeModelsFromList,
   formatUsageLine,
   matchesHealthFilter,
   moveOrderedModelList,
+  patchModelConnectivityInCache,
   pickInspectorModelId,
   routesReferencingModel,
   filterTestableConnectivityModels,
@@ -298,6 +302,15 @@ describe('filterUntestedConnectivityModels', () => {
 })
 
 describe('runBatchConnectivityTests', () => {
+  const fullTestResult = {
+    success: true,
+    message: 'ok',
+    model: 'gpt-4',
+    status: 'success' as const,
+    tested_at: '2026-01-01T00:00:00Z',
+    reason: null,
+  }
+
   it('invokes testById only for testable models', async () => {
     const tested: string[] = []
     const failed = await runBatchConnectivityTests(
@@ -329,6 +342,168 @@ describe('runBatchConnectivityTests', () => {
       }
     )
     expect(failed.sort()).toEqual(['bad', 'err'])
+  })
+
+  it('calls onItemComplete for each successful API response', async () => {
+    const completed: string[] = []
+    await runBatchConnectivityTests(
+      [{ id: 'a', capability: 'chat', last_test_status: null }],
+      () => Promise.resolve(fullTestResult),
+      {
+        onItemComplete: (id, result) => {
+          completed.push(id)
+          expect(result).toEqual(fullTestResult)
+        },
+      }
+    )
+    expect(completed).toEqual(['a'])
+  })
+
+  it('skips onItemComplete when API throws', async () => {
+    const completed: string[] = []
+    await runBatchConnectivityTests(
+      [{ id: 'a', capability: 'chat', last_test_status: null }],
+      () => Promise.reject(new Error('network')),
+      {
+        onItemComplete: (id) => {
+          completed.push(id)
+        },
+      }
+    )
+    expect(completed).toEqual([])
+  })
+})
+
+describe('connectivityFieldsFromTestResult', () => {
+  it('maps success response', () => {
+    expect(
+      connectivityFieldsFromTestResult({
+        success: true,
+        message: 'ok',
+        model: 'gpt-4',
+        status: 'success',
+        tested_at: '2026-01-01T00:00:00Z',
+        reason: null,
+      })
+    ).toEqual({
+      last_test_status: 'success',
+      last_tested_at: '2026-01-01T00:00:00Z',
+      last_test_reason: null,
+    })
+  })
+
+  it('maps failed response', () => {
+    expect(
+      connectivityFieldsFromTestResult({
+        success: false,
+        message: 'fail',
+        model: 'gpt-4',
+        status: 'failed',
+        tested_at: '2026-01-01T00:00:00Z',
+        reason: 'timeout',
+      })
+    ).toEqual({
+      last_test_status: 'failed',
+      last_tested_at: '2026-01-01T00:00:00Z',
+      last_test_reason: 'timeout',
+    })
+  })
+})
+
+describe('patchModelConnectivityInCache', () => {
+  it('patches only matching model in team list cache', () => {
+    const queryClient = new QueryClient()
+    const key = ['gateway', 'models', 'team-1', 'team', '', ''] as const
+    queryClient.setQueryData(key, [
+      { id: 'a', last_test_status: null, last_tested_at: null, last_test_reason: null },
+      { id: 'b', last_test_status: null, last_tested_at: null, last_test_reason: null },
+    ])
+    patchModelConnectivityInCache(
+      queryClient,
+      'b',
+      {
+        last_test_status: 'success',
+        last_tested_at: '2026-01-01T00:00:00Z',
+        last_test_reason: null,
+      },
+      'team'
+    )
+    const data = queryClient.getQueryData<
+      Array<{
+        id: string
+        last_test_status: string | null
+      }>
+    >(key)
+    expect(data?.[0]?.last_test_status).toBe(null)
+    expect(data?.[1]?.last_test_status).toBe('success')
+  })
+
+  it('patches personal model list cache', () => {
+    const queryClient = new QueryClient()
+    const key = ['gateway', 'my-models', 'all'] as const
+    queryClient.setQueryData(key, [
+      { id: 'x', last_test_status: null, last_tested_at: null, last_test_reason: null },
+    ])
+    patchModelConnectivityInCache(
+      queryClient,
+      'x',
+      {
+        last_test_status: 'failed',
+        last_tested_at: '2026-01-02T00:00:00Z',
+        last_test_reason: 'timeout',
+      },
+      'personal'
+    )
+    const data = queryClient.getQueryData<
+      Array<{
+        id: string
+        last_test_status: string | null
+        last_test_reason: string | null
+      }>
+    >(key)
+    expect(data?.[0]?.last_test_status).toBe('failed')
+    expect(data?.[0]?.last_test_reason).toBe('timeout')
+  })
+
+  it('leaves non-model-list cache entries unchanged', () => {
+    const queryClient = new QueryClient()
+    const key = ['gateway', 'models', 'usage-summary', 'team-1', '', 7] as const
+    const summary = { items: [] }
+    queryClient.setQueryData(key, summary)
+    patchModelConnectivityInCache(
+      queryClient,
+      'b',
+      {
+        last_test_status: 'success',
+        last_tested_at: '2026-01-01T00:00:00Z',
+        last_test_reason: null,
+      },
+      'team'
+    )
+    expect(queryClient.getQueryData(key)).toEqual(summary)
+  })
+
+  it('createBatchConnectivityCachePatcher maps test result into list cache', () => {
+    const queryClient = new QueryClient()
+    const key = ['gateway', 'my-models'] as const
+    queryClient.setQueryData(key, [
+      { id: 'm1', last_test_status: null, last_tested_at: null, last_test_reason: null },
+    ])
+    const patch = createBatchConnectivityCachePatcher(queryClient, 'personal')
+    patch('m1', {
+      success: true,
+      message: 'ok',
+      model: 'gpt-4',
+      status: 'success',
+      tested_at: '2026-03-01T00:00:00Z',
+      reason: null,
+    })
+    const data =
+      queryClient.getQueryData<
+        Array<{ id: string; last_test_status: string | null; last_tested_at: string | null }>
+      >(key)
+    expect(data?.[0]?.last_test_status).toBe('success')
+    expect(data?.[0]?.last_tested_at).toBe('2026-03-01T00:00:00Z')
   })
 })
 

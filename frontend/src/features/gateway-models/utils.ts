@@ -1,7 +1,10 @@
+import { startTransition } from 'react'
+
 import type {
   GatewayModel,
   GatewayModelPreset,
   GatewayModelRegistryScope,
+  GatewayModelTestResult,
 } from '@/api/gateway/models'
 import type { GatewayRoute } from '@/api/gateway/routes'
 import { formatMoney } from '@/lib/money'
@@ -275,6 +278,92 @@ function isConnectivityTestFailure(result: unknown): boolean {
   return (result as { success?: boolean }).success === false
 }
 
+function isGatewayModelTestResult(result: unknown): result is GatewayModelTestResult {
+  return (
+    result !== null &&
+    typeof result === 'object' &&
+    'success' in result &&
+    'status' in result &&
+    'tested_at' in result
+  )
+}
+
+/** 批量探活完成后写入列表 cache 的连通性字段 */
+export interface ModelConnectivityPatchFields {
+  last_test_status: ModelTestStatus
+  last_tested_at: string | null
+  last_test_reason: string | null
+}
+
+/** POST /models/{id}/test 响应 → 列表行 last_test_* 字段 */
+export function connectivityFieldsFromTestResult(
+  result: GatewayModelTestResult
+): ModelConnectivityPatchFields {
+  const last_test_status: ModelTestStatus =
+    result.status === 'success' || result.status === 'failed'
+      ? result.status
+      : result.success
+        ? 'success'
+        : 'failed'
+  return {
+    last_test_status,
+    last_tested_at: result.tested_at,
+    last_test_reason: result.reason ?? null,
+  }
+}
+
+function isModelListConnectivityCache(data: unknown): data is Array<{ id: string }> {
+  return (
+    Array.isArray(data) &&
+    data.every(
+      (item) =>
+        item !== null && typeof item === 'object' && 'id' in item && 'last_test_status' in item
+    )
+  )
+}
+
+function patchModelListConnectivity<T extends { id: string }>(
+  models: readonly T[],
+  modelId: string,
+  fields: ModelConnectivityPatchFields
+): T[] {
+  return models.map((m) => (m.id === modelId ? { ...m, ...fields } : m))
+}
+
+export type ModelListCacheScope = 'team' | 'personal'
+
+/** 批量探活逐条完成后局部更新 React Query 中的模型列表 cache */
+export function patchModelConnectivityInCache(
+  queryClient: QueryClient,
+  modelId: string,
+  fields: ModelConnectivityPatchFields,
+  scope: ModelListCacheScope
+): void {
+  const queryKey =
+    scope === 'team' ? (['gateway', 'models'] as const) : (['gateway', 'my-models'] as const)
+  startTransition(() => {
+    queryClient.setQueriesData({ queryKey }, (old) => {
+      if (!isModelListConnectivityCache(old)) return old
+      return patchModelListConnectivity(old, modelId, fields)
+    })
+  })
+}
+
+/** 批量探活 `onItemComplete`：将 test 响应 patch 到 team / personal 列表 cache */
+export function createBatchConnectivityCachePatcher(
+  queryClient: QueryClient,
+  scope: ModelListCacheScope
+): (modelId: string, result: GatewayModelTestResult) => void {
+  return (modelId, result) => {
+    patchModelConnectivityInCache(
+      queryClient,
+      modelId,
+      connectivityFieldsFromTestResult(result),
+      scope
+    )
+  }
+}
+
 /** 对可探活注册行并发调用单条 test API（团队 / 个人管理面共用） */
 export async function runBatchConnectivityTests(
   items: readonly ModelWithConnectivityStatus[],
@@ -282,6 +371,7 @@ export async function runBatchConnectivityTests(
   options?: {
     signal?: AbortSignal
     onProgress?: (done: number, total: number, failedIds: readonly string[]) => void
+    onItemComplete?: (modelId: string, result: GatewayModelTestResult) => void
   }
 ): Promise<string[]> {
   const testable = filterTestableConnectivityModels(items)
@@ -297,6 +387,9 @@ export async function runBatchConnectivityTests(
     if (options?.signal?.aborted) return
     try {
       const result = await testById(model.id)
+      if (isGatewayModelTestResult(result)) {
+        options?.onItemComplete?.(model.id, result)
+      }
       if (isConnectivityTestFailure(result)) {
         failed.push(model.id)
       }

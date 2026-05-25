@@ -37,6 +37,7 @@ import {
   personalModelsRegisterHref,
 } from '@/features/gateway-models/paths'
 import {
+  createBatchConnectivityCachePatcher,
   filterDeletableFailedModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
@@ -126,12 +127,18 @@ export function PersonalModelsWorkspace({
     )
   }, [setSearchParams])
 
+  const onBatchItemComplete = useMemo(
+    () => createBatchConnectivityCachePatcher(queryClient, 'personal'),
+    [queryClient]
+  )
+
   const {
     state: batchTestState,
     start: startBatchTest,
     retestFailed,
   } = useConnectivityBatchTest({
     testById: (id) => gatewayApi.testMyModel(id),
+    onItemComplete: onBatchItemComplete,
     invalidate: () => {
       invalidatePersonalModelCaches(queryClient)
     },

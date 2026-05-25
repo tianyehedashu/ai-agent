@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelBatchDeleteFailureItem } from '@/api/gateway'
+import type { GatewayModel } from '@/api/gateway/models'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,6 +39,7 @@ import {
   teamModelDetailHref,
 } from '@/features/gateway-models/paths'
 import {
+  createBatchConnectivityCachePatcher,
   gatewayModelsListQueryKey,
   invalidateGatewayModelAliasDependents,
   invalidateGatewayModelCaches,
@@ -82,6 +84,8 @@ const registerFormSuspenseFallback = (
     加载注册表单…
   </div>
 )
+
+const EMPTY_REGISTRY_ITEMS: GatewayModel[] = []
 
 interface TeamModelsWorkspaceProps {
   hideRegisterAction?: boolean
@@ -165,7 +169,7 @@ export function TeamModelsWorkspace({
       }),
   })
 
-  const registryItems = useMemo(() => items ?? [], [items])
+  const registryItems = items ?? EMPTY_REGISTRY_ITEMS
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
@@ -471,12 +475,18 @@ export function TeamModelsWorkspace({
     [selectedModelsForBatch]
   )
 
+  const onBatchItemComplete = useMemo(
+    () => createBatchConnectivityCachePatcher(queryClient, 'team'),
+    [queryClient]
+  )
+
   const {
     state: batchTestState,
     start: startBatchTest,
     retestFailed,
   } = useConnectivityBatchTest({
     testById: (id) => gatewayApi.testModel(teamId, id),
+    onItemComplete: onBatchItemComplete,
     invalidate: () => {
       invalidateGatewayModelCaches(queryClient, {
         credentialId: credentialFilter || undefined,

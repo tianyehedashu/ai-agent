@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useRef, useState } from 'react'
 
+import type { GatewayModelTestResult } from '@/api/gateway/models'
 import {
   batchConnectivityIncludesVideoGeneration,
   filterTestableConnectivityModels,
@@ -16,13 +17,10 @@ export interface ConnectivityBatchTestState {
   cancel: () => void
 }
 
-interface TestResultLike {
-  success?: boolean
-}
-
 interface UseConnectivityBatchTestOptions {
-  testById: (id: string) => Promise<TestResultLike>
+  testById: (id: string) => Promise<GatewayModelTestResult>
   invalidate: () => void
+  onItemComplete?: (modelId: string, result: GatewayModelTestResult) => void
   onComplete?: (failedIds: string[]) => void
 }
 
@@ -90,6 +88,9 @@ export function useConnectivityBatchTest(
             signal: controller.signal,
             onProgress: (completed, _total, failedSnapshot) => {
               publishProgress(completed, failedSnapshot)
+            },
+            onItemComplete: (modelId, result) => {
+              optionsRef.current.onItemComplete?.(modelId, result)
             },
           }
         )
