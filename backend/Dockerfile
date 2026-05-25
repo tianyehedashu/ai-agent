@@ -5,6 +5,7 @@ ARG RUNTIME_IMAGE=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/common/py
 # 直接使用已经构建好的依赖镜像
 # ============================================
 
+
 FROM ${DEPS_IMAGE} AS dependencies
 # ============================================
 # Stage 2: Production
