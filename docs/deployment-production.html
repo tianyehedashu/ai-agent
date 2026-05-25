@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agent 生产环境部署指南（前后端分离 · Nginx）</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface-2: #243044;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-2: #3fb950;
+      --warn: #d29922;
+      --danger: #f85149;
+      --border: #30363d;
+      --code-bg: #161b22;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 1.5rem 1rem;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    nav h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 1rem;
+    }
+
+    nav a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0.35rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin-bottom: 2px;
+    }
+
+    nav a:hover { background: var(--surface-2); color: var(--text); }
+
+    main {
+      max-width: 920px;
+      padding: 2.5rem 3rem 4rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin-bottom: 2rem;
+    }
+
+    h2 {
+      font-size: 1.45rem;
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      margin: 1.75rem 0 0.75rem;
+      color: var(--accent);
+    }
+
+    h4 {
+      font-size: 1rem;
+      margin: 1.25rem 0 0.5rem;
+    }
+
+    p, li { color: #c9d1d9; }
+
+    ul, ol { padding-left: 1.4rem; }
+
+    li { margin-bottom: 0.35rem; }
+
+    a { color: var(--accent); }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--accent-2);
+      border: 1px solid var(--border);
+      margin-right: 0.35rem;
+    }
+
+    .callout {
+      padding: 1rem 1.15rem;
+      border-radius: var(--radius);
+      margin: 1rem 0;
+      border-left: 4px solid var(--accent);
+      background: var(--surface);
+    }
+
+    .callout.warn {
+      border-left-color: var(--warn);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+    }
+
+    .callout strong { color: var(--text); }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.15rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin: 0.75rem 0 1.25rem;
+    }
+
+    code {
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+      font-size: 0.88em;
+    }
+
+    p code, li code, td code {
+      background: var(--code-bg);
+      padding: 0.12rem 0.35rem;
+      border-radius: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    td { background: var(--code-bg); }
+
+    .diagram {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+    }
+
+    .steps > li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 2.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .steps > li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0.1rem;
+      width: 1.6rem;
+      height: 1.6rem;
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 1.5rem; }
+    }
+
+    @media print {
+      body { background: #fff; color: #000; }
+      nav { display: none; }
+      .layout { grid-template-columns: 1fr; }
+      pre, .diagram, td, th { background: #f6f8fa; color: #000; border-color: #ddd; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <h2>目录</h2>
+      <a href="#overview">概述</a>
+      <a href="#architecture">架构</a>
+      <a href="#requirements">环境要求</a>
+      <a href="#infra">基础设施</a>
+      <a href="#backend">后端部署</a>
+      <a href="#frontend">前端构建</a>
+      <a href="#nginx">Nginx 配置</a>
+      <a href="#https">HTTPS</a>
+      <a href="#env">环境变量</a>
+      <a href="#migrate">数据库迁移</a>
+      <a href="#verify">验证清单</a>
+      <a href="#ops">日常运维</a>
+      <a href="#troubleshoot">故障排查</a>
+      <a href="#appendix">附录：Docker Compose</a>
+    </nav>
+
+    <main>
+      <h1>AI Agent 生产环境部署指南</h1>
+      <p class="subtitle">
+        <span class="badge">生产</span>
+        <span class="badge">前后端分离</span>
+        <span class="badge">Nginx 静态托管</span>
+        本文描述前后端独立部署的标准流程：前端由 Nginx 提供静态资源并反代 API，后端以 Docker 运行 FastAPI。
+      </p>
+
+      <section id="overview">
+        <h2>概述</h2>
+        <p>
+          推荐的生产拓扑为<strong>三层分离</strong>：用户仅访问前端 Nginx；Nginx 托管 SPA 并将
+          <code>/ai-agent/api/</code> 转发至后端；后端连接 PostgreSQL、Redis、Qdrant。
+          默认服务路径前缀为 <code>/ai-agent</code>（与 <code>ROOT_PATH</code>、<code>VITE_APP_ROOT</code> 一致）。
+        </p>
+        <div class="callout">
+          <strong>同域反代（推荐）</strong>：前端与 API 共用同一域名，浏览器请求走相对路径，无需配置 CORS，Cookie 鉴权可正常工作。
+        </div>
+        <div class="callout warn">
+          <strong>跨域分离（备选）</strong>：前端 <code>app.example.com</code>、后端 <code>api.example.com</code> 时，需设置
+          <code>CORS_ORIGINS</code> 与 <code>VITE_API_URL</code>，并评估 Cookie 策略。
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>架构</h2>
+        <div class="diagram">                    ┌─────────────────────────────────────┐
+  用户浏览器 ──HTTPS──▶│  前端服务器 (Nginx)                  │
+                    │  · 静态文件  /ai-agent/*             │
+                    │  · 反代 API  /ai-agent/api/* ────────┼──┐
+                    └─────────────────────────────────────┘  │
+                                                             │ HTTP（内网）
+                    ┌─────────────────────────────────────┐  │
+                    │  后端服务器 (Docker / FastAPI)       │◀─┘
+                    │  · uvicorn :8000                     │
+                    │  · ROOT_PATH=/ai-agent               │
+                    └──────────┬──────────┬───────────────┘
+                               │          │
+              ┌────────────────┼──────────┼────────────────┐
+              ▼                ▼          ▼                ▼
+        ┌──────────┐    ┌──────────┐  ┌──────────┐  (可选)
+        │PostgreSQL│    │  Redis   │  │  Qdrant  │  对象存储
+        │  :5432   │    │  :6379   │  │  :6333   │
+        └──────────┘    └──────────┘  └──────────┘</div>
+
+        <table>
+          <thead>
+            <tr><th>组件</th><th>技术栈</th><th>部署位置</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Frontend</td><td>React + Vite 构建产物</td><td>前端 Nginx 服务器</td><td>仅 <code>dist/</code> 静态文件</td></tr>
+            <tr><td>Backend</td><td>FastAPI + uvicorn (4 workers)</td><td>后端应用服务器</td><td>Docker 容器或直接运行</td></tr>
+            <tr><td>PostgreSQL</td><td>15+</td><td>数据库服务器 / 容器</td><td>主库，Alembic 迁移</td></tr>
+            <tr><td>Redis</td><td>7+</td><td>缓存服务器 / 容器</td><td>会话、缓存</td></tr>
+            <tr><td>Qdrant</td><td>latest</td><td>向量库 / 容器</td><td>Embedding 检索</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="requirements">
+        <h2>环境要求</h2>
+        <h3>前端服务器</h3>
+        <ul>
+          <li>Ubuntu 22.04+ / Debian 12+ / 任意 Linux</li>
+          <li>Nginx 1.20+</li>
+          <li>Node.js 20+（仅构建阶段，生产机可不安装）</li>
+          <li>磁盘 ≥ 2 GB（静态资源 + 日志）</li>
+        </ul>
+        <h3>后端服务器</h3>
+        <ul>
+          <li>Ubuntu 22.04+，Docker Engine 24+（含 Compose V2）</li>
+          <li>内存 ≥ 4 GB，磁盘 ≥ 20 GB</li>
+          <li>开放内网端口：8000（API，不对公网暴露时可仅监听内网）</li>
+        </ul>
+        <h3>构建机（可选，与 CI 相同）</h3>
+        <ul>
+          <li>Git、Node.js 20+、npm</li>
+          <li>用于 <code>npm run build</code>，产物上传至前端服务器</li>
+        </ul>
+      </section>
+
+      <section id="infra">
+        <h2>基础设施部署</h2>
+        <p>可在后端服务器上用 Docker Compose 仅启动基础设施，或对接已有托管数据库。</p>
+
+        <h3>方式 A：Compose 启动 DB / Redis / Qdrant</h3>
+        <p>在项目根目录创建 <code>.env.production</code>（参考 <code>.env.production.example</code>），然后：</p>
+        <pre><code># 仅启动基础设施（不启动前后端应用容器）
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d db redis qdrant</code></pre>
+
+        <h3>方式 B：托管服务</h3>
+        <p>将 <code>backend/.env</code> 中的连接串改为实际地址，例如：</p>
+        <pre><code>DATABASE_URL=postgresql+asyncpg://user:pass@db-host:5432/ai_agent
+REDIS_URL=redis://:password@redis-host:6379/0
+QDRANT_URL=http://qdrant-host:6333</code></pre>
+      </section>
+
+      <section id="backend">
+        <h2>后端部署</h2>
+        <ol class="steps">
+          <li>
+            <strong>准备环境变量</strong>
+            <p>复制模板并修改敏感项：</p>
+            <pre><code>cp deploy/backend.env.production backend/.env
+# 必改：JWT_SECRET、POSTGRES_PASSWORD、REDIS_PASSWORD、各 LLM API Key</code></pre>
+            <p>前后端分离且数据库不在 Docker 网络内时，将 <code>db</code>、<code>redis</code>、<code>qdrant</code> 主机名改为实际 IP/域名。</p>
+          </li>
+          <li>
+            <strong>构建并启动后端容器</strong>
+            <pre><code># 首次：构建依赖基础镜像（若使用 Dockerfile.base 流程）
+docker build -f backend/Dockerfile.base -t ai-agent-backend-base:latest backend/
+
+# 构建并启动后端（含迁移见下文）
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d db redis qdrant
+docker compose -f docker-compose.prod.yml --env-file .env.production build backend
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend</code></pre>
+            <p>若仅部署后端、不使用 Compose 中的 frontend 服务，可只 up backend 及其 depends_on 服务。</p>
+          </li>
+          <li>
+            <strong>健康检查</strong>
+            <pre><code>curl -sf http://127.0.0.1:8000/health
+curl -sf http://127.0.0.1:8000/ai-agent/health</code></pre>
+          </li>
+          <li>
+            <strong>防火墙</strong>
+            <p>后端 8000 端口仅对前端 Nginx 服务器内网 IP 开放，勿对公网全网开放（API 经 Nginx 反代对外）。</p>
+          </li>
+        </ol>
+
+        <h3>后端更新流程</h3>
+        <pre><code>git pull
+docker compose -f docker-compose.prod.yml --env-file .env.production build backend
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm backend alembic upgrade head
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend</code></pre>
+      </section>
+
+      <section id="frontend">
+        <h2>前端构建与发布</h2>
+        <ol class="steps">
+          <li>
+            <strong>配置构建变量</strong>
+            <p>在 <code>frontend/.env.production</code>（或构建时 export）设置：</p>
+            <pre><code># 与后端 ROOT_PATH 一致；根路径部署则设为空
+VITE_APP_ROOT=/ai-agent
+
+# 同域 Nginx 反代时留空（默认）；跨域时才设置完整 API 根
+# VITE_API_URL=https://api.example.com</code></pre>
+          </li>
+          <li>
+            <strong>本地/CI 构建</strong>
+            <pre><code>cd frontend
+npm ci
+npm run build
+# 产物目录：frontend/dist/</code></pre>
+          </li>
+          <li>
+            <strong>上传到前端服务器</strong>
+            <pre><code># 示例：同步到 Nginx 站点目录
+rsync -avz --delete frontend/dist/ deploy@frontend-host:/var/www/ai-agent/</code></pre>
+            <p>确保 <code>dist/index.html</code> 对应 URL 为 <code>/ai-agent/</code>（由 <code>VITE_APP_ROOT</code> 与 Vite <code>base</code> 决定）。</p>
+          </li>
+        </ol>
+      </section>
+
+      <section id="nginx">
+        <h2>Nginx 配置</h2>
+        <p>以下为<strong>前后端分离 + 同域反代</strong>的推荐配置。后端地址替换为实际内网 IP 或域名。</p>
+
+        <h3>完整站点配置示例</h3>
+        <p>保存为 <code>/etc/nginx/sites-available/ai-agent.conf</code>，并软链至 <code>sites-enabled</code>。</p>
+        <p>完整示例亦见 <code>deploy/nginx/ai-agent.bare-metal.conf.example</code>。</p>
+        <pre><code>upstream ai_agent_backend {
+    server 10.0.0.20:8000;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name app.example.com;
+
+    root /var/www/ai-agent;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    location /ai-agent/api/ {
+        proxy_pass http://ai_agent_backend/ai-agent/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+    # Vite base=/ai-agent/：磁盘上 index.html 在 root 根目录，URL 带 /ai-agent 前缀
+    location ^~ /ai-agent/assets/ {
+        rewrite ^/ai-agent/(.*)$ /$1 break;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location ^~ /ai-agent/ {
+        rewrite ^/ai-agent/(.*)$ /$1 break;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location = / {
+        return 302 /ai-agent/;
+    }
+}</code></pre>
+
+        <h3>根路径部署（无前缀）</h3>
+        <p>若 <code>ROOT_PATH=</code> 且 <code>VITE_APP_ROOT=</code> 为空，改用：</p>
+        <pre><code>location /api/ {
+    proxy_pass http://ai_agent_backend/api/;
+    # ... 同上 proxy_set_header
+}
+location / {
+    try_files $uri $uri/ /index.html;
+}</code></pre>
+
+        <h3>启用配置</h3>
+        <pre><code>sudo nginx -t
+sudo systemctl reload nginx</code></pre>
+
+        <div class="callout warn">
+          <strong>常见错误</strong>：勿使用 <code>try_files ... /ai-agent/index.html</code> 配合 <code>root</code>——Vite 产物在
+          <code>dist/index.html</code>，URL 才是 <code>/ai-agent/</code>。须 <code>rewrite</code> 去前缀或改用
+          <code>alias</code>，见 <code>deploy/nginx/README.md</code>。
+        </div>
+        <div class="callout">
+          Docker 场景用 <code>frontend/nginx.conf</code>（上游 <code>backend:8000</code>）；裸机分离用
+          <code>deploy/nginx/ai-agent.bare-metal.conf.example</code>。
+        </div>
+      </section>
+
+      <section id="https">
+        <h2>HTTPS</h2>
+        <pre><code># Ubuntu / Debian + Certbot
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d app.example.com
+
+# 生产环境建议同步修改 backend/.env
+COOKIE_SECURE=true</code></pre>
+        <p>证书自动续期由 certbot 定时任务处理。反代场景下务必设置 <code>X-Forwarded-Proto</code>，以便后端识别 HTTPS。</p>
+      </section>
+
+      <section id="env">
+        <h2>环境变量说明</h2>
+
+        <h3>Docker Compose（<code>.env.production</code>）</h3>
+        <table>
+          <thead><tr><th>变量</th><th>说明</th><th>示例</th></tr></thead>
+          <tbody>
+            <tr><td><code>BACKEND_PORT</code></td><td>后端宿主机映射端口</td><td><code>8000</code></td></tr>
+            <tr><td><code>POSTGRES_PASSWORD</code></td><td>数据库密码</td><td>强密码</td></tr>
+            <tr><td><code>REDIS_PASSWORD</code></td><td>Redis 密码</td><td>强密码</td></tr>
+            <tr><td><code>ROOT_PATH</code></td><td>与前端一致的服务前缀</td><td><code>/ai-agent</code></td></tr>
+            <tr><td><code>REGISTRY_PREFIX</code></td><td>国内 Docker 镜像加速（可选）</td><td><code>docker.m.daocloud.io/</code></td></tr>
+            <tr><td><code>UV_INDEX_URL</code></td><td>PyPI 镜像（构建时）</td><td>清华源 URL</td></tr>
+            <tr><td><code>NPM_REGISTRY</code></td><td>npm 镜像（构建时）</td><td>npmmirror URL</td></tr>
+          </tbody>
+        </table>
+
+        <h3>后端应用（<code>backend/.env</code>）</h3>
+        <table>
+          <thead><tr><th>变量</th><th>必填</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>APP_ENV</code></td><td>是</td><td><code>production</code></td></tr>
+            <tr><td><code>ROOT_PATH</code></td><td>是</td><td>默认 <code>/ai-agent</code></td></tr>
+            <tr><td><code>DATABASE_URL</code></td><td>是</td><td>asyncpg 连接串</td></tr>
+            <tr><td><code>REDIS_URL</code></td><td>是</td><td>含密码的 Redis URL</td></tr>
+            <tr><td><code>QDRANT_URL</code></td><td>是</td><td>向量库地址</td></tr>
+            <tr><td><code>JWT_SECRET</code></td><td>是</td><td>生产必须更换为随机强密钥</td></tr>
+            <tr><td><code>COOKIE_SECURE</code></td><td>HTTPS 时</td><td><code>true</code></td></tr>
+            <tr><td><code>CORS_ORIGINS</code></td><td>跨域时</td><td>JSON 数组，如 <code>["https://app.example.com"]</code></td></tr>
+            <tr><td><code>DASHSCOPE_API_KEY</code> 等</td><td>按需</td><td>LLM 提供商密钥</td></tr>
+          </tbody>
+        </table>
+
+        <h3>前端构建（<code>frontend/.env.production</code>）</h3>
+        <table>
+          <thead><tr><th>变量</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>VITE_APP_ROOT</code></td><td>与 <code>ROOT_PATH</code> 一致，默认 <code>/ai-agent</code></td></tr>
+            <tr><td><code>VITE_API_URL</code></td><td>同域反代留空；跨域填后端完整 origin</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="migrate">
+        <h2>数据库迁移</h2>
+        <pre><code># 查看当前版本
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm backend alembic current
+
+# 升级到最新
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm backend alembic upgrade head</code></pre>
+        <p>每次后端发版、schema 有变更时，在重启 backend 前执行 <code>upgrade head</code>。</p>
+      </section>
+
+      <section id="verify">
+        <h2>验证清单</h2>
+        <table>
+          <thead><tr><th>检查项</th><th>命令 / 地址</th><th>期望</th></tr></thead>
+          <tbody>
+            <tr><td>后端健康</td><td><code>curl backend:8000/health</code></td><td><code>{"status":"healthy"}</code></td></tr>
+            <tr><td>带前缀健康</td><td><code>curl .../ai-agent/health</code></td><td>200 OK</td></tr>
+            <tr><td>前端首页</td><td><code>https://app.example.com/ai-agent/</code></td><td>SPA 加载</td></tr>
+            <tr><td>API 反代</td><td><code>https://app.example.com/ai-agent/api/v1/system/health</code></td><td>200 OK</td></tr>
+            <tr><td>静态资源</td><td>浏览器 Network 面板</td><td>JS/CSS 200，带缓存头</td></tr>
+            <tr><td>登录 / 会话</td><td>完成一次登录流程</td><td>Cookie 或 JWT 正常</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="ops">
+        <h2>日常运维</h2>
+
+        <h3>前端发版</h3>
+        <pre><code>cd frontend && npm ci && npm run build
+rsync -avz --delete dist/ deploy@frontend-host:/var/www/ai-agent/
+# 静态资源变更后无需 reload nginx（除非改配置）</code></pre>
+
+        <h3>后端发版</h3>
+        <pre><code>git pull
+docker compose -f docker-compose.prod.yml --env-file .env.production build backend
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm backend alembic upgrade head
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend</code></pre>
+
+        <h3>日志</h3>
+        <pre><code># 后端容器日志
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f backend
+
+# Nginx 访问 / 错误日志
+sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log</code></pre>
+
+        <h3>回滚</h3>
+        <pre><code>git checkout &lt;commit&gt;
+# 重新构建并部署前后端（同上）</code></pre>
+
+        <h3>远程一键部署（开发机 → 服务器）</h3>
+        <p>项目亦提供 Makefile 封装（Docker Compose 全栈）：</p>
+        <pre><code>make deploy          # 标准部署
+make deploy-quick    # 仅同步 + 重启
+make deploy-rebuild  # 强制无缓存重建
+make deploy-logs     # 查看远程日志</code></pre>
+        <p>详见 Markdown 版 <code>docs/DEPLOYMENT.md</code>。</p>
+      </section>
+
+      <section id="troubleshoot">
+        <h2>故障排查</h2>
+
+        <h3>502 Bad Gateway（Nginx）</h3>
+        <ul>
+          <li>确认后端 <code>8000</code> 可达：<code>curl http://&lt;backend-ip&gt;:8000/health</code></li>
+          <li>检查 <code>proxy_pass</code> 是否包含正确的 <code>/ai-agent/api/</code> 前缀</li>
+          <li>查看 <code>error.log</code> 中 upstream 连接失败原因</li>
+        </ul>
+
+        <h3>404 on SPA 子路由</h3>
+        <ul>
+          <li>确认 <code>try_files</code> 回退到 <code>/ai-agent/index.html</code></li>
+          <li>确认 <code>root</code> 目录结构与 <code>VITE_APP_ROOT</code> 一致</li>
+        </ul>
+
+        <h3>API 路径 404</h3>
+        <ul>
+          <li>前后端 <code>ROOT_PATH</code> / <code>VITE_APP_ROOT</code> 必须一致</li>
+          <li>前端请求路径为 <code>/ai-agent/api/v1/...</code>，不是裸 <code>/api/v1</code></li>
+        </ul>
+
+        <h3>CORS 错误（跨域部署）</h3>
+        <ul>
+          <li>在 <code>backend/.env</code> 设置 <code>CORS_ORIGINS=["https://你的前端域名"]</code></li>
+          <li>前端构建设置 <code>VITE_API_URL=https://后端域名</code></li>
+        </ul>
+
+        <h3>迁移失败</h3>
+        <pre><code>docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm backend alembic history
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm backend alembic upgrade head</code></pre>
+
+        <h3>国内构建慢</h3>
+        <p>在 <code>.env.production</code> 配置 <code>REGISTRY_PREFIX</code>、<code>UV_INDEX_URL</code>、<code>NPM_REGISTRY</code>。</p>
+      </section>
+
+      <section id="appendix">
+        <h2>附录：Docker Compose 一体化部署</h2>
+        <p>
+          若前后端与 Nginx 均运行在 Docker 内（非裸机分离），可使用仓库自带编排：
+        </p>
+        <pre><code>cp .env.production.example .env.production
+cp deploy/backend.env.production backend/.env
+# 编辑上述文件后：
+./deploy/deploy.sh          # 或 make deploy</code></pre>
+        <p>此时 Nginx 配置见 <code>frontend/nginx.conf</code>，上游为 Compose 服务名 <code>backend:8000</code>。</p>
+      </section>
+
+      <footer>
+        <p>AI Agent 项目 · 生产部署文档 · 生成自仓库 <code>docs/</code> 与 <code>deploy/</code> 配置</p>
+        <p>相关文件：<code>docs/DEPLOYMENT.md</code> · <code>docker-compose.prod.yml</code> · <code>frontend/nginx.conf</code> · <code>deploy/backend.env.production</code></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,51 @@
+# AI Agent — 前后端分离 · 裸机 Nginx 示例
+# 用法：
+#   1. 将 frontend/dist/ 同步至 /var/www/ai-agent/（dist 根目录内容，不是 dist 文件夹本身）
+#   2. 将 BACKEND_UPSTREAM 替换为后端内网地址
+#   3. 复制到 /etc/nginx/sites-available/ 并 enable
+
+upstream ai_agent_backend {
+    server 10.0.0.20:8000;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name app.example.com;
+
+    root /var/www/ai-agent;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    location /ai-agent/api/ {
+        proxy_pass http://ai_agent_backend/ai-agent/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+    location ^~ /ai-agent/assets/ {
+        rewrite ^/ai-agent/(.*)$ /$1 break;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location ^~ /ai-agent/ {
+        rewrite ^/ai-agent/(.*)$ /$1 break;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location = / {
+        return 302 /ai-agent/;
+    }
+}
