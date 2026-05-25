@@ -27,6 +27,7 @@ import {
   summarizeHealth,
   toggleModelSet,
   toggleOrderedModelList,
+  type ModelWithConnectivityStatus,
 } from './utils'
 
 import type { HealthFilter } from './constants'
@@ -286,7 +287,7 @@ describe('filterTestableConnectivityModels', () => {
 
 describe('filterUntestedConnectivityModels', () => {
   it('returns only testable models with unknown health', () => {
-    const items = [
+    const items: ModelWithConnectivityStatus[] = [
       { id: 'ok', capability: 'chat', last_test_status: null },
       { id: 'tested', capability: 'chat', last_test_status: 'success' },
       { id: 'failed', capability: 'chat', last_test_status: 'failed' },

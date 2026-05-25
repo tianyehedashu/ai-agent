@@ -18,6 +18,7 @@ import {
   type GatewayUsageStatsQuery,
 } from '@/api/gateway/stats'
 import { teamsApi } from '@/api/gateway/teams'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -27,11 +28,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { LineChart, RefreshCw } from '@/lib/lucide-icons'
+import { LineChart, RefreshCw, Settings2, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -57,19 +65,20 @@ const GROUP_OPTIONS: { value: GatewayUsageStatsGroupBy; label: string }[] = [
 ]
 
 const STATUS_OPTIONS = [
-  { value: 'success', label: 'success' },
-  { value: 'failed', label: 'failed' },
-  { value: 'rate_limited', label: 'rate_limited' },
-  { value: 'budget_exceeded', label: 'budget_exceeded' },
-  { value: 'guardrail_blocked', label: 'guardrail_blocked' },
+  { value: 'success', label: '成功' },
+  { value: 'failed', label: '失败' },
+  { value: 'rate_limited', label: '限流' },
+  { value: 'budget_exceeded', label: '预算超限' },
+  { value: 'guardrail_blocked', label: '安全拦截' },
 ]
 
 const CAPABILITY_OPTIONS = [
-  { value: 'chat', label: 'chat' },
-  { value: 'embedding', label: 'embedding' },
-  { value: 'image', label: 'image' },
-  { value: 'audio', label: 'audio' },
-  { value: 'video', label: 'video' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'embedding', label: 'Embedding' },
+  { value: 'image', label: 'Image' },
+  { value: 'audio_transcription', label: 'Audio STT' },
+  { value: 'audio_speech', label: 'Audio TTS' },
+  { value: 'rerank', label: 'Rerank' },
 ]
 
 type StatsFilterSource = 'credential' | 'user' | 'team' | 'model' | 'vkey' | 'provider'
@@ -115,6 +124,11 @@ function uniqueSorted(values: string[]): SelectOption[] {
     .map((value) => ({ value, label: value }))
 }
 
+function selectedOptionLabel(options: SelectOption[], value: string): string {
+  if (value === ALL_VALUE) return ''
+  return options.find((option) => option.value === value)?.label ?? value
+}
+
 function modelOptionValues(models: GatewayModel[]): string[] {
   const values: string[] = []
   for (const model of models) {
@@ -138,6 +152,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const [capability, setCapability] = useState(ALL_VALUE)
   const [status, setStatus] = useState(ALL_VALUE)
   const [vkeyId, setVkeyId] = useState(ALL_VALUE)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [loadedFilters, setLoadedFilters] = useState<ReadonlySet<StatsFilterSource>>(
     () => new Set()
   )
@@ -198,6 +213,42 @@ export default function GatewayStatsPage(): React.JSX.Element {
       provider !== ALL_VALUE,
   })
 
+  const credentialOptions = useMemo<SelectOption[]>(
+    () =>
+      (credentialsQuery.data ?? []).map((credential) => ({
+        value: credential.id,
+        label: credential.name,
+        meta: credential.provider,
+      })),
+    [credentialsQuery.data]
+  )
+  const memberOptions = useMemo<SelectOption[]>(
+    () =>
+      (membersQuery.data ?? []).map((member) => ({
+        value: member.user_id,
+        label: member.user_name ?? member.user_email ?? member.user_id,
+        meta: member.role,
+      })),
+    [membersQuery.data]
+  )
+  const teamOptions = useMemo<SelectOption[]>(
+    () =>
+      (teamsQuery.data ?? []).map((team) => ({
+        value: team.id,
+        label: team.name,
+        meta: team.kind,
+      })),
+    [teamsQuery.data]
+  )
+  const keyOptions = useMemo<SelectOption[]>(
+    () =>
+      (keysQuery.data ?? []).map((key) => ({
+        value: key.id,
+        label: key.name,
+        meta: key.masked_key,
+      })),
+    [keysQuery.data]
+  )
   const modelOptions = useMemo(
     () => uniqueSorted(modelOptionValues(modelsQuery.data ?? [])),
     [modelsQuery.data]
@@ -247,6 +298,25 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const items = statsQuery.data?.items ?? []
   const maxRequests = Math.max(...items.map((item) => item.requests), 1)
   const totals = statsQuery.data?.totals
+  const activeFilters = [
+    {
+      key: 'credential',
+      label: '凭据',
+      value: selectedOptionLabel(credentialOptions, credentialId),
+    },
+    { key: 'user', label: '人员', value: selectedOptionLabel(memberOptions, userId) },
+    { key: 'team', label: '团队', value: selectedOptionLabel(teamOptions, teamFilterId) },
+    { key: 'model', label: '模型', value: selectedOptionLabel(modelOptions, model) },
+    { key: 'vkey', label: '虚拟 Key', value: selectedOptionLabel(keyOptions, vkeyId) },
+    { key: 'provider', label: '提供商', value: selectedOptionLabel(providerOptions, provider) },
+    {
+      key: 'capability',
+      label: '能力',
+      value: selectedOptionLabel(CAPABILITY_OPTIONS, capability),
+    },
+    { key: 'status', label: '状态', value: selectedOptionLabel(STATUS_OPTIONS, status) },
+  ].filter((filter) => filter.value.length > 0)
+  const activeFilterCount = activeFilters.length
 
   function clearFilters(): void {
     setCredentialId(ALL_VALUE)
@@ -291,123 +361,208 @@ export default function GatewayStatsPage(): React.JSX.Element {
               </Button>
             ))}
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={activeFilterCount > 0 ? 'default' : 'outline'}
+            className="h-9 gap-2"
+            onClick={() => {
+              setFiltersOpen(true)
+            }}
+          >
+            <Settings2 className="h-4 w-4" />
+            筛选
+            {activeFilterCount > 0 ? (
+              <Badge variant="secondary" className="ml-0.5 px-1.5">
+                {activeFilterCount}
+              </Badge>
+            ) : null}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9"
+            title="刷新"
+            aria-label="刷新统计"
+            disabled={statsQuery.isFetching}
+            onClick={() => {
+              void statsQuery.refetch()
+            }}
+          >
+            <RefreshCw className={cn('h-4 w-4', statsQuery.isFetching ? 'animate-spin' : '')} />
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div className="flex flex-wrap gap-1">
-            {GROUP_OPTIONS.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={groupBy === option.value ? 'default' : 'outline'}
-                className="h-8 px-3 text-xs"
-                onClick={() => {
-                  setGroupBy(option.value)
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <FilterSelect
-              label="凭据"
-              value={credentialId}
-              onValueChange={setCredentialId}
-              onRequestOptions={() => {
-                requestFilter('credential')
-              }}
-              options={(credentialsQuery.data ?? []).map((credential) => ({
-                value: credential.id,
-                label: credential.name,
-                meta: credential.provider,
-              }))}
-            />
-            <FilterSelect
-              label="人员"
-              value={userId}
-              onValueChange={setUserId}
-              onRequestOptions={() => {
-                requestFilter('user')
-              }}
-              options={(membersQuery.data ?? []).map((member) => ({
-                value: member.user_id,
-                label: member.user_name ?? member.user_email ?? member.user_id,
-                meta: member.role,
-              }))}
-            />
-            <FilterSelect
-              label="团队"
-              value={teamFilterId}
-              onValueChange={setTeamFilterId}
-              onRequestOptions={() => {
-                requestFilter('team')
-              }}
-              options={(teamsQuery.data ?? []).map((team) => ({
-                value: team.id,
-                label: team.name,
-                meta: team.kind,
-              }))}
-            />
-            <FilterSelect
-              label="模型"
-              value={model}
-              onValueChange={setModel}
-              onRequestOptions={() => {
-                requestFilter('model')
-              }}
-              options={modelOptions}
-            />
-            <FilterSelect
-              label="虚拟 Key"
-              value={vkeyId}
-              onValueChange={setVkeyId}
-              onRequestOptions={() => {
-                requestFilter('vkey')
-              }}
-              options={(keysQuery.data ?? []).map((key) => ({
-                value: key.id,
-                label: key.name,
-                meta: key.masked_key,
-              }))}
-            />
-            <FilterSelect
-              label="提供商"
-              value={provider}
-              onValueChange={setProvider}
-              onRequestOptions={requestProviderFilters}
-              options={providerOptions}
-            />
-            <FilterSelect
-              label="能力"
-              value={capability}
-              onValueChange={setCapability}
-              options={CAPABILITY_OPTIONS}
-            />
-            <FilterSelect
-              label="状态"
-              value={status}
-              onValueChange={setStatus}
-              options={STATUS_OPTIONS}
-            />
-          </div>
-          <div className="flex justify-end">
+      <div className="space-y-3 rounded-lg border bg-background p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-medium text-muted-foreground">分析维度</div>
+          {activeFilterCount > 0 ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="gap-2"
+              className="h-7 gap-1.5 px-2 text-xs"
               onClick={clearFilters}
             >
-              <RefreshCw className="h-4 w-4" />
-              清除筛选
+              <X className="h-3.5 w-3.5" />
+              清空筛选
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {GROUP_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={groupBy === option.value ? 'default' : 'outline'}
+              className="h-8 px-3 text-xs"
+              onClick={() => {
+                setGroupBy(option.value)
+              }}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        {activeFilterCount > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {activeFilters.map((filter) => (
+              <Badge
+                key={filter.key}
+                variant="outline"
+                className="max-w-[240px] gap-1 truncate font-normal"
+                title={`${filter.label}: ${filter.value}`}
+              >
+                <span className="text-muted-foreground">{filter.label}</span>
+                <span className="truncate">{filter.value}</span>
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent className="flex max-h-[100vh] w-full flex-col p-0 sm:max-w-xl">
+          <SheetHeader className="shrink-0 border-b px-5 pb-4 pt-5 text-left">
+            <SheetTitle className="flex items-center gap-2 pr-8 text-base">
+              <Settings2 className="h-4 w-4" />
+              筛选调用统计
+            </SheetTitle>
+            <SheetDescription>
+              {usageAggregation === 'user' ? '我的跨团队调用' : '当前团队调用'} ·{' '}
+              {RANGE_DAYS.find((range) => range.value === days)?.label}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground">对象</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FilterSelect
+                  label="凭据"
+                  value={credentialId}
+                  onValueChange={setCredentialId}
+                  onRequestOptions={() => {
+                    requestFilter('credential')
+                  }}
+                  options={credentialOptions}
+                />
+                <FilterSelect
+                  label="人员"
+                  value={userId}
+                  onValueChange={setUserId}
+                  onRequestOptions={() => {
+                    requestFilter('user')
+                  }}
+                  options={memberOptions}
+                />
+                <FilterSelect
+                  label="团队"
+                  value={teamFilterId}
+                  onValueChange={setTeamFilterId}
+                  onRequestOptions={() => {
+                    requestFilter('team')
+                  }}
+                  options={teamOptions}
+                />
+                <FilterSelect
+                  label="虚拟 Key"
+                  value={vkeyId}
+                  onValueChange={setVkeyId}
+                  onRequestOptions={() => {
+                    requestFilter('vkey')
+                  }}
+                  options={keyOptions}
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground">模型</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FilterSelect
+                  label="模型"
+                  value={model}
+                  onValueChange={setModel}
+                  onRequestOptions={() => {
+                    requestFilter('model')
+                  }}
+                  options={modelOptions}
+                />
+                <FilterSelect
+                  label="提供商"
+                  value={provider}
+                  onValueChange={setProvider}
+                  onRequestOptions={requestProviderFilters}
+                  options={providerOptions}
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground">调用</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FilterSelect
+                  label="能力"
+                  value={capability}
+                  onValueChange={setCapability}
+                  options={CAPABILITY_OPTIONS}
+                />
+                <FilterSelect
+                  label="状态"
+                  value={status}
+                  onValueChange={setStatus}
+                  options={STATUS_OPTIONS}
+                />
+              </div>
+            </section>
+          </div>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t px-5 py-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              disabled={activeFilterCount === 0}
+              onClick={clearFilters}
+            >
+              <X className="h-4 w-4" />
+              清空
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setFiltersOpen(false)
+              }}
+            >
+              完成
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </SheetContent>
+      </Sheet>
 
       <div
         className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
