@@ -42,7 +42,10 @@ from domains.gateway.application.management.usage_reads import (
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
-from domains.gateway.application.system_visibility_filter import load_system_credentials_by_ids
+from domains.gateway.application.system_visibility_filter import (
+    filter_visible_system_provider_credentials,
+    load_system_credentials_by_ids,
+)
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     VirtualKeyNotFoundError,
@@ -94,6 +97,8 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort
 from domains.tenancy.application.team_service import TeamService
+from domains.identity.application.ports import UserSummaryQueryPort
+from domains.identity.application.user_use_case import UserUseCase
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from libs.iam.tenancy import MembershipPort
 
@@ -111,12 +116,14 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         *,
         membership: MembershipPort | None = None,
         api_key_grants: ApiKeyGatewayGrantQueryPort | None = None,
+        user_summaries: UserSummaryQueryPort | None = None,
     ) -> None:
         self._session = session
         self._membership = membership or TenancyMembershipAdapter()
         self._api_key_grants: ApiKeyGatewayGrantQueryPort = (
             api_key_grants or ApiKeyUseCase(session)
         )
+        self._user_summaries: UserSummaryQueryPort = user_summaries or UserUseCase(session)
         self._teams = TeamService(session, membership=self._membership)
         self._vkeys = VirtualKeyRepository(session)
         self._creds = ProviderCredentialRepository(session)
@@ -174,23 +181,41 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         return virtual_key_from_orm(record)
 
     async def list_credentials_for_team(
-        self, team_id: UUID, *, include_system: bool
+        self,
+        team_id: UUID,
+        *,
+        include_system: bool,
+        encryption_key: str | None = None,
     ) -> list[CredentialReadModel]:
         rows = await self._creds.list_for_tenant(team_id)
-        out = [credential_from_orm(c) for c in rows]
+        out = [credential_from_orm(c, encryption_key=encryption_key) for c in rows]
         if include_system:
             system_rows = await self._system_creds.list_all()
-            out.extend(system_credential_from_orm(c) for c in system_rows)
+            out.extend(
+                system_credential_from_orm(c, encryption_key=encryption_key)
+                for c in system_rows
+            )
         return out
 
     async def list_credential_summaries_for_team(
-        self, team_id: UUID
+        self,
+        team_id: UUID,
+        *,
+        user_id: UUID | None = None,
+        is_platform_admin: bool = False,
     ) -> list[CredentialReadModel]:
-        """团队凭据 + 全部 system 凭据（仅摘要字段，无密钥）。"""
+        """团队凭据 + 可见 system 凭据（仅摘要字段，无密钥）。"""
         rows = await self._creds.list_for_tenant(team_id)
         out = [credential_from_orm(c) for c in rows]
         system_rows = await self._system_creds.list_all()
-        out.extend(system_credential_from_orm(c) for c in system_rows)
+        visible_system = await filter_visible_system_provider_credentials(
+            self._session,
+            system_rows,
+            tenant_id=team_id,
+            user_id=user_id,
+            is_platform_admin=is_platform_admin,
+        )
+        out.extend(system_credential_from_orm(c) for c in visible_system)
         return out
 
     async def get_managed_credential_for_team(
@@ -227,9 +252,14 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             raise CredentialNotFoundError(str(credential_id))
         return credential_from_orm(row)
 
-    async def list_user_credentials(self, user_id: UUID) -> list[CredentialReadModel]:
+    async def list_user_credentials(
+        self,
+        user_id: UUID,
+        *,
+        encryption_key: str | None = None,
+    ) -> list[CredentialReadModel]:
         rows = await self._creds.list_for_user(user_id)
-        return [credential_from_orm(c) for c in rows]
+        return [credential_from_orm(c, encryption_key=encryption_key) for c in rows]
 
     async def list_personal_gateway_models(
         self,

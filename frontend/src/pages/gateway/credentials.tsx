@@ -411,6 +411,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
   const allowedScopes = useMemo<ReadonlyArray<CredentialFormScope>>(() => {
     if (activeTab === 'system' && isPlatformAdmin) return ['system']
+    if (activeTab === 'personal') return ['user']
     const scopes: CredentialFormScope[] = ['user']
     if (canWrite) scopes.push('team')
     return scopes

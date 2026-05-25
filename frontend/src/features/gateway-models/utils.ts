@@ -14,6 +14,7 @@ import {
   VIDEO_BATCH_TEST_CONCURRENCY,
   type HealthFilter,
 } from './constants'
+import { gatewayModelsByCredentialInvalidatePrefix } from './query-keys'
 
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -433,7 +434,7 @@ export function invalidateGatewayModelCaches(
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
   if (options?.credentialId) {
     void queryClient.invalidateQueries({
-      queryKey: ['gateway', 'models', 'by-credential', options.credentialId],
+      queryKey: gatewayModelsByCredentialInvalidatePrefix(options.credentialId),
     })
   }
   if (options?.usageSummary) {

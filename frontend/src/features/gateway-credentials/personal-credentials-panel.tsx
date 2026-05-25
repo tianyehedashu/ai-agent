@@ -10,7 +10,11 @@ import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { gatewayApi, type ProviderCredential } from '@/api/gateway'
+import {
+  gatewayApi,
+  type GatewayCredentialUpdateBody,
+  type ProviderCredential,
+} from '@/api/gateway'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,28 +36,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PersonalCredentialBudgetInline } from '@/features/gateway-budget/personal-credential-budget-inline'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
-import { Eye, EyeOff, Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
+import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
-import { ExtraFieldsRenderer } from './credential-extra-fields'
-import {
-  compactExtra,
-  extraToFormValues,
-  type CredentialExtraValues,
-} from './credential-extra-utils'
+import { CredentialEditFields } from './credential-edit-fields'
 import { invalidateCredentialProbeCache } from './credential-probe-cache'
 import { displayListApiKeyMasked } from './mask-display'
-import { apiKeyLabelForProvider, extraFieldsForProvider } from './provider-schemas'
 import { invalidateCredentialSummariesCache } from './use-credential-directory'
+import { useCredentialEditForm } from './use-credential-edit-form'
 
 const AddModelsDialog = lazy(() =>
   import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
@@ -76,18 +74,12 @@ export function PersonalCredentialsPanel({
   const hasAuthSession = Boolean(token)
   const teamId = useGatewayTeamId()
   const { currentUser } = useUserStore()
-  const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
-  const [showKey, setShowKey] = useState(false)
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
   const [addModelsCred, setAddModelsCred] = useState<ProviderCredential | null>(null)
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
     null
   )
-  const [formName, setFormName] = useState('')
-  const [formApiKey, setFormApiKey] = useState('')
-  const [formApiBase, setFormApiBase] = useState('')
-  const [formExtra, setFormExtra] = useState<CredentialExtraValues>({})
-  const [formIsActive, setFormIsActive] = useState(true)
+  const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
 
   const { data: credentials = [], isLoading } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
@@ -127,54 +119,9 @@ export function PersonalCredentialsPanel({
     invalidateCredentialSummariesCache(queryClient)
   }, [queryClient])
 
-  const resetEditForm = useCallback((): void => {
-    setFormName('')
-    setFormApiKey('')
-    setFormApiBase('')
-    setFormExtra({})
-    setFormIsActive(true)
-    setShowKey(false)
-  }, [])
-
   const openEdit = useCallback((c: ProviderCredential): void => {
     setEditCred(c)
-    setFormName(c.name)
-    setFormApiKey('')
-    setFormApiBase(c.api_base ?? '')
-    setFormExtra(extraToFormValues(c.extra))
-    setFormIsActive(c.is_active)
-    setShowKey(false)
   }, [])
-
-  const editProvider = editCred?.provider ?? ''
-  const editExtraFields = useMemo(() => extraFieldsForProvider(editProvider), [editProvider])
-  const editApiKeyLabel = apiKeyLabelForProvider(editProvider)
-
-  const updateMutation = useMutation({
-    mutationFn: () => {
-      if (!editCred) throw new Error('no credential')
-      const compactedExtra = compactExtra(formExtra)
-      return gatewayApi.updateMyCredential(editCred.id, {
-        name: formName.trim() || editCred.name,
-        ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
-        api_base: formApiBase.trim() || null,
-        extra: Object.keys(compactedExtra).length > 0 ? compactedExtra : undefined,
-        is_active: formIsActive,
-      })
-    },
-    onSuccess: () => {
-      if (editCred) {
-        invalidateCredentialProbeCache(queryClient, 'user', editCred.id)
-      }
-      invalidate()
-      setEditCred(null)
-      resetEditForm()
-      toast({ title: '已保存' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '保存失败', description: e.message })
-    },
-  })
 
   const deleteMutation = useMutation({
     mutationFn: gatewayApi.deleteMyCredential,
@@ -184,7 +131,6 @@ export function PersonalCredentialsPanel({
       setCredentialPendingDelete(null)
       if (editCred?.id === credentialId) {
         setEditCred(null)
-        resetEditForm()
       }
       if (addModelsCred?.id === credentialId) {
         setAddModelsCred(null)
@@ -214,25 +160,6 @@ export function PersonalCredentialsPanel({
     },
   })
   const { isPending: testIsPending, mutate: testMutate } = testMutation
-
-  const submitEdit = (): void => {
-    if (!editCred) return
-    const nameUnchanged = formName.trim() === editCred.name
-    const baseUnchanged = formApiBase.trim() === (editCred.api_base ?? '').trim()
-    const keyEmpty = !formApiKey.trim()
-    const activeUnchanged = formIsActive === editCred.is_active
-    const extraChanged =
-      JSON.stringify(compactExtra(formExtra)) !==
-      JSON.stringify(compactExtra(extraToFormValues(editCred.extra)))
-    if (keyEmpty && nameUnchanged && baseUnchanged && activeUnchanged && !extraChanged) {
-      toast({
-        variant: 'destructive',
-        title: '请至少修改名称、Base、扩展字段、启用状态或填写新 API Key',
-      })
-      return
-    }
-    updateMutation.mutate()
-  }
 
   const outerClass = 'space-y-4'
 
@@ -416,92 +343,23 @@ export function PersonalCredentialsPanel({
       <Dialog
         open={editCred !== null}
         onOpenChange={(o) => {
-          if (!o) {
-            setEditCred(null)
-            resetEditForm()
-          }
+          if (!o) setEditCred(null)
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>编辑凭据</DialogTitle>
-            <DialogDescription>修改账号名称、启用状态或 API Key。</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <Label htmlFor="my-cred-active" className="cursor-pointer font-normal">
-                启用该账号
-              </Label>
-              <Switch
-                id="my-cred-active"
-                checked={formIsActive}
-                onCheckedChange={setFormIsActive}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>账号名称</Label>
-              <Input
-                value={formName}
-                onChange={(e) => {
-                  setFormName(e.target.value)
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>新 {editApiKeyLabel}（留空则不变）</Label>
-              <div className="relative">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={formApiKey}
-                  onChange={(e) => {
-                    setFormApiKey(e.target.value)
-                  }}
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                  onClick={() => {
-                    setShowKey((v) => !v)
-                  }}
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>API Base</Label>
-              <Input
-                type="url"
-                value={formApiBase}
-                onChange={(e) => {
-                  setFormApiBase(e.target.value)
-                }}
-              />
-            </div>
-            <ExtraFieldsRenderer
-              fields={editExtraFields}
-              values={formExtra}
-              onChange={setFormExtra}
-              idPrefix="edit-cred-extra"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditCred(null)
-              }}
-            >
-              取消
-            </Button>
-            <Button onClick={submitEdit} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? '保存中…' : '保存'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+        {editCred ? (
+          <PersonalCredentialEditDialog
+            key={editCred.id}
+            cred={editCred}
+            onClose={() => {
+              setEditCred(null)
+            }}
+            onSaved={() => {
+              invalidateCredentialProbeCache(queryClient, 'user', editCred.id)
+              invalidate()
+              setEditCred(null)
+            }}
+          />
+        ) : null}
       </Dialog>
 
       <AlertDialog
@@ -566,5 +424,64 @@ export function PersonalCredentialsPanel({
         </Suspense>
       ) : null}
     </div>
+  )
+}
+
+function PersonalCredentialEditDialog({
+  cred,
+  onClose,
+  onSaved,
+}: Readonly<{
+  cred: ProviderCredential
+  onClose: () => void
+  onSaved: () => void
+}>): React.ReactElement {
+  const { toast } = useToast()
+  const form = useCredentialEditForm({ cred, trackIsActive: true })
+
+  const revealFn = useCallback(() => gatewayApi.revealMyCredential(cred.id), [cred.id])
+
+  const updateMutation = useMutation({
+    mutationFn: (body: GatewayCredentialUpdateBody) => gatewayApi.updateMyCredential(cred.id, body),
+    onSuccess: () => {
+      toast({ title: '已保存' })
+      onSaved()
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '保存失败', description: e.message })
+    },
+  })
+
+  const handleSave = (): void => {
+    if (!form.canSave) return
+    updateMutation.mutate(form.buildUpdateBody())
+  }
+
+  return (
+    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>编辑凭据</DialogTitle>
+        <DialogDescription>
+          修改账号名称、启用状态或轮换 {form.apiKeyLabel}；当前密钥可按需查看完整明文。
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-3 py-2">
+        <CredentialEditFields
+          cred={cred}
+          idPrefix="my-cred"
+          form={form}
+          showActiveSwitch
+          revealFn={revealFn}
+        />
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          取消
+        </Button>
+        <Button onClick={handleSave} disabled={updateMutation.isPending || !form.canSave}>
+          {updateMutation.isPending ? '保存中…' : '保存'}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   )
 }

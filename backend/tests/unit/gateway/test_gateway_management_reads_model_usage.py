@@ -22,6 +22,7 @@ from domains.gateway.infrastructure.repositories.request_log_repository import (
 )
 from domains.gateway.presentation.schemas.common import PlatformCredentialStatItem
 from domains.tenancy.domain.management_context import ManagementTeamContext
+from domains.identity.application.ports import UserSummaryView
 
 
 @pytest.mark.asyncio
@@ -452,3 +453,70 @@ async def test_aggregate_usage_statistics_team_group_resolves_names() -> None:
 
     assert summary.items[0].label == "研发团队"
     assert summary.items[0].group_key == str(team_id)
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_statistics_user_group_resolves_names() -> None:
+    session = MagicMock()
+    team_id = uuid.uuid4()
+    actor_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+    user_summaries = MagicMock()
+    user_summaries.list_summary_views_by_ids = AsyncMock(
+        return_value={
+            member_id: UserSummaryView(name="张三", email="zhang@example.com"),
+        }
+    )
+    svc = GatewayManagementReadService(session, user_summaries=user_summaries)
+    ctx = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="admin",
+        user_id=actor_id,
+        is_platform_admin=False,
+    )
+    svc._logs.aggregate_usage_statistics_by_axis = AsyncMock(
+        return_value=(
+            [
+                RequestLogUsageAggregateRow(
+                    group_key=member_id,
+                    label_snapshot=None,
+                    requests=2,
+                    success_count=2,
+                    failure_count=0,
+                    input_tokens=10,
+                    output_tokens=8,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.02"),
+                    avg_latency_ms=50.0,
+                    cache_hit_count=0,
+                )
+            ],
+            RequestLogUsageTotals(
+                requests=2,
+                success_count=2,
+                failure_count=0,
+                input_tokens=10,
+                output_tokens=8,
+                cached_tokens=0,
+                cost_usd=Decimal("0.02"),
+                avg_latency_ms=50.0,
+                cache_hit_count=0,
+            ),
+        )
+    )
+
+    now = MagicMock()
+    summary = await svc.aggregate_usage_statistics(
+        ctx,
+        now,
+        now,
+        usage_aggregation=UsageAggregation.WORKSPACE,
+        group_by=UsageStatisticsGroupBy.USER,
+        filters=UsageStatisticsFilters(),
+        limit=10,
+    )
+
+    user_summaries.list_summary_views_by_ids.assert_awaited_once()
+    assert summary.items[0].label == "张三"
+    assert summary.items[0].group_key == str(member_id)

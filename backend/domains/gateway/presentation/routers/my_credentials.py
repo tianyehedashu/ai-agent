@@ -46,7 +46,7 @@ async def list_my_credentials(
     reads: MgmtReads,
 ) -> list[CredentialResponse]:
     user_id = get_user_uuid(current_user)
-    creds = await reads.list_user_credentials(user_id)
+    creds = await reads.list_user_credentials(user_id, encryption_key=encryption_key())
     return [build_credential_response(c, encryption_key=encryption_key()) for c in creds]
 
 

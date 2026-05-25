@@ -7,6 +7,9 @@ import uuid
 import pytest
 
 from domains.gateway.application.management import GatewayManagementReadService
+from domains.gateway.application.system_visibility_filter import (
+    system_credential_visible_to_subject,
+)
 from domains.gateway.domain.policies.system_visibility import (
     SystemModelVisibilitySnapshot,
     visible_system_model_ids,
@@ -22,6 +25,15 @@ from domains.gateway.infrastructure.repositories.system_gateway_grant_repository
     SystemGatewayGrantRepository,
 )
 from domains.tenancy.application.team_service import TeamService
+
+
+def test_system_credential_visible_to_subject_pure() -> None:
+    cid = uuid.uuid4()
+    assert system_credential_visible_to_subject(cid, "public", set()) is True
+    assert system_credential_visible_to_subject(cid, "restricted", set()) is False
+    assert system_credential_visible_to_subject(
+        cid, "restricted", {("credential", cid)}
+    ) is True
 
 
 def test_visible_system_model_ids_pure_policy() -> None:
@@ -275,6 +287,70 @@ async def test_registry_scope_system_skips_visibility_filter(db_session, test_us
         user_id=test_user.id,
     )
     assert model.name not in {r.name for r in callable_rows}
+
+
+@pytest.mark.asyncio
+async def test_credential_summaries_hide_restricted_system_without_grant(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    public_cred = SystemProviderCredential(
+        provider="openai",
+        name="summary-public-cred",
+        api_key_encrypted="enc",
+        visibility="public",
+    )
+    restricted_cred = SystemProviderCredential(
+        provider="anthropic",
+        name="summary-restricted-cred",
+        api_key_encrypted="enc",
+        visibility="restricted",
+    )
+    db_session.add_all([public_cred, restricted_cred])
+    await db_session.flush()
+
+    reads = GatewayManagementReadService(db_session)
+    summaries = await reads.list_credential_summaries_for_team(
+        team.id,
+        user_id=test_user.id,
+        is_platform_admin=False,
+    )
+    ids = {row.id for row in summaries}
+    assert public_cred.id in ids
+    assert restricted_cred.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_credential_summaries_include_restricted_system_with_grant(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    restricted_cred = SystemProviderCredential(
+        provider="anthropic",
+        name="summary-granted-cred",
+        api_key_encrypted="enc",
+        visibility="restricted",
+    )
+    db_session.add(restricted_cred)
+    await db_session.flush()
+    db_session.add(
+        SystemGatewayGrant(
+            subject_kind="credential",
+            subject_id=restricted_cred.id,
+            target_kind="team",
+            target_id=team.id,
+            granted_by=test_user.id,
+        )
+    )
+    await db_session.flush()
+
+    reads = GatewayManagementReadService(db_session)
+    summaries = await reads.list_credential_summaries_for_team(
+        team.id,
+        user_id=test_user.id,
+        is_platform_admin=False,
+    )
+    assert restricted_cred.id in {row.id for row in summaries}
 
 
 @pytest.mark.asyncio

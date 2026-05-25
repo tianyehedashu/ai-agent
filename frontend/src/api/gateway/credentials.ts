@@ -12,6 +12,10 @@
 import { apiClient } from '@/api/client'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
+import { normalizeCredential, type ProviderCredentialWire } from './credential-normalize'
+
+export { normalizeCredential, normalizeCredentialScope } from './credential-normalize'
+export type { ProviderCredentialWire } from './credential-normalize'
 
 /** 凭据摘要（无密钥 / api_base / extra），供 member 解析模型上的 credential_id */
 export interface CredentialSummary {
@@ -21,49 +25,6 @@ export interface CredentialSummary {
   scope: 'user' | 'team' | 'system' | null
   is_active: boolean
   is_config_managed: boolean
-}
-
-/** 后端 wire 形态（租户行 scope 可为 null，以 tenant_id 标识归属） */
-interface ProviderCredentialWire {
-  id: string
-  tenant_id?: string | null
-  scope: 'system' | 'team' | 'user' | null
-  scope_id: string | null
-  provider: string
-  name: string
-  api_base: string | null
-  is_active: boolean
-  is_config_managed?: boolean
-  extra: Record<string, unknown> | null
-  created_at: string
-  api_key_masked: string
-}
-
-function normalizeCredentialScope(
-  scope: ProviderCredentialWire['scope'],
-  tenantId: string | null | undefined
-): ProviderCredential['scope'] {
-  if (scope === 'system' || scope === 'user') return scope
-  if (scope === 'team' || (tenantId !== null && tenantId !== undefined)) return 'team'
-  return 'user'
-}
-
-function normalizeCredential(raw: ProviderCredentialWire): ProviderCredential {
-  const tenant_id = raw.tenant_id ?? null
-  return {
-    id: raw.id,
-    tenant_id,
-    scope: normalizeCredentialScope(raw.scope, tenant_id),
-    scope_id: raw.scope_id,
-    provider: raw.provider,
-    name: raw.name,
-    api_base: raw.api_base,
-    is_active: raw.is_active,
-    is_config_managed: raw.is_config_managed,
-    extra: raw.extra,
-    created_at: raw.created_at,
-    api_key_masked: raw.api_key_masked,
-  }
 }
 
 /** 上游凭据列表项（不含明文） */

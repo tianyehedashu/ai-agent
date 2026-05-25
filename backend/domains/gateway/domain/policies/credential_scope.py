@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 from domains.gateway.domain.errors import SystemCredentialAdminRequiredError
 
 
@@ -12,18 +10,6 @@ def assert_system_credential_mutation_allowed(*, is_platform_admin: bool) -> Non
         raise SystemCredentialAdminRequiredError()
 
 
-def credential_visible_in_tenant(
-    *,
-    record_tenant_id: uuid.UUID | None,
-    request_tenant_id: uuid.UUID,
-    is_platform_admin: bool,
-) -> bool:
-    if is_platform_admin:
-        return True
-    return record_tenant_id == request_tenant_id
-
-
 __all__ = [
     "assert_system_credential_mutation_allowed",
-    "credential_visible_in_tenant",
 ]

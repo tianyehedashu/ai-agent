@@ -41,6 +41,7 @@ from domains.gateway.presentation.platform_api_key_usage_middleware import (
 from domains.identity.application.permission_context_composer import (
     PermissionContextComposer,
 )
+from domains.identity.application.user_display import resolve_user_display_snapshot
 from domains.tenancy.presentation.team_dependencies import (
     CurrentTeam,
     RequiredGatewayAdmin,
@@ -203,6 +204,7 @@ class VkeyOrApikeyPrincipal:
     vkey: VirtualKeyPrincipal | None = None
     platform_api_key_id: uuid.UUID | None = None
     api_key_grant: ApiKeyGatewayGrantPrincipal | None = None
+    user_display_snapshot: str | None = None
 
 
 async def bearer_vkey_or_apikey_auth(
@@ -226,12 +228,14 @@ async def bearer_vkey_or_apikey_auth(
             assert_vkey_team_header_compatible(gp.team_id, x_team_id)
         except HttpMappableDomainError as exc:
             raise http_exception_from_gateway_domain(exc) from exc
+        user_display_snapshot = await resolve_user_display_snapshot(db, gp.user_id)
         return VkeyOrApikeyPrincipal(
             via="vkey",
             user_id=gp.user_id,
             team_id=gp.team_id,
             vkey=gp.vkey,
             platform_api_key_id=None,
+            user_display_snapshot=user_display_snapshot,
         )
 
     from domains.gateway.application.gateway_access_factory import (
@@ -272,11 +276,13 @@ async def bearer_vkey_or_apikey_auth(
     setattr(request.state, PLATFORM_API_KEY_USAGE_STATE, ctx)
     request.scope[PLATFORM_API_KEY_USAGE_STATE] = ctx
 
+    user_display_snapshot = await resolve_user_display_snapshot(db, auth.user_id)
     return VkeyOrApikeyPrincipal(
         via="apikey",
         user_id=auth.user_id,
         team_id=auth.team_id,
         platform_api_key_id=auth.api_key_id,
+        user_display_snapshot=user_display_snapshot,
         api_key_grant=ApiKeyGatewayGrantPrincipal(
             grant_id=auth.grant_id,
             api_key_id=auth.api_key_id,

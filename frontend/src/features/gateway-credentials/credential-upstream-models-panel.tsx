@@ -26,7 +26,10 @@ import {
   invalidateCredentialProbeCache,
   isProbeCacheFresh,
 } from '@/features/gateway-credentials/credential-probe-cache'
-import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import {
+  type CredentialUpstreamScope,
+  isPersonalUpstreamScope,
+} from '@/features/gateway-credentials/types'
 import {
   countProbeItems,
   isImportableUpstreamItem,
@@ -34,6 +37,7 @@ import {
 import { UpstreamModelList } from '@/features/gateway-credentials/upstream-model-list'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { resolveUpstreamModelTypes } from '@/features/gateway-models/infer-model-types'
+import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-models/query-keys'
 import {
   chunkBatchImportItems,
   type PersonalModelBatchImportItem,
@@ -203,7 +207,7 @@ export function CredentialUpstreamModelsPanel({
 
   const probeMutation = useMutation({
     mutationFn: async () =>
-      scope === 'user'
+      isPersonalUpstreamScope(scope)
         ? gatewayApi.probeMyCredential(credentialId)
         : gatewayApi.probeTeamCredential(teamId, credentialId),
     onSuccess: (data) => {
@@ -251,7 +255,7 @@ export function CredentialUpstreamModelsPanel({
         .filter((row): row is NonNullable<typeof row> => row !== undefined)
         .filter((row) => isImportableUpstreamItem(row, provider))
       if (selectedRows.length === 0) throw new Error('请至少选择一条可导入的上游模型')
-      if (scope === 'user') {
+      if (isPersonalUpstreamScope(scope)) {
         const importItems: PersonalModelBatchImportItem[] = selectedRows.map((row) => ({
           upstream_model_id: row.id,
           model_types: resolveUpstreamModelTypes(row, provider),
@@ -283,7 +287,7 @@ export function CredentialUpstreamModelsPanel({
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
       void queryClient.invalidateQueries({
-        queryKey: ['gateway', 'models', 'by-credential', credentialId],
+        queryKey: gatewayModelsByCredentialInvalidatePrefix(credentialId, teamId),
       })
       const dupFailed = res.failed.filter((f) => f.reason.includes('已注册'))
       toast({
@@ -298,12 +302,11 @@ export function CredentialUpstreamModelsPanel({
         probeMutation.mutate()
       }
       if (res.created.length > 0) {
-        const modelIds =
-          scope === 'user'
-            ? res.created.flatMap((item) =>
-                'gateway_model_ids' in item ? item.gateway_model_ids : []
-              )
-            : []
+        const modelIds = isPersonalUpstreamScope(scope)
+          ? res.created.flatMap((item) =>
+              'gateway_model_ids' in item ? item.gateway_model_ids : []
+            )
+          : []
         const importedCount = modelIds.length > 0 ? modelIds.length : res.created.length
         onImported?.(importedCount, modelIds.length > 0 ? modelIds : undefined)
       }

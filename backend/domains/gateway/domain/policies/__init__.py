@@ -11,7 +11,6 @@ from domains.gateway.domain.policies.budget_scope_policy import (
 )
 from domains.gateway.domain.policies.credential_scope import (
     assert_system_credential_mutation_allowed,
-    credential_visible_in_tenant,
 )
 from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
@@ -46,7 +45,6 @@ __all__ = [
     "budget_target_allowed",
     "can_view_margin_dashboard",
     "can_view_pricing_cost_fields",
-    "credential_visible_in_tenant",
     "filter_budget_rows",
     "member_can_view_request_log_record",
     "member_requires_request_log_detail_filter",

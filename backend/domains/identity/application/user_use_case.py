@@ -11,6 +11,7 @@ import uuid
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.application.ports import UserSummaryView
 from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
@@ -165,6 +166,16 @@ class UserUseCase:
             return {}
         users = await self.user_repo.list_by_ids(user_ids)
         return {user.id: _user_to_summary(user) for user in users}
+
+    async def list_summary_views_by_ids(
+        self, user_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, UserSummaryView]:
+        """``UserSummaryQueryPort``：跨域批量摘要（不含敏感字段）。"""
+        summaries = await self.list_summaries_by_ids(user_ids)
+        return {
+            uid: UserSummaryView(name=summary.name, email=summary.email)
+            for uid, summary in summaries.items()
+        }
 
     async def bootstrap_set_admin_by_email(self, email: str, *, revoke: bool = False) -> UserSummary:
         """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""

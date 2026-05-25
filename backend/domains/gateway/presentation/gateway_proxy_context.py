@@ -43,6 +43,7 @@ def proxy_context_from_gateway_principal(
         tpm_limit=vkey.tpm_limit if vkey else grant.tpm_limit if grant else None,
         client_ua=client_ua,
         client_type=client_type,
+        user_display_snapshot=principal.user_display_snapshot,
     )
 
 

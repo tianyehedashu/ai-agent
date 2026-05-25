@@ -26,6 +26,7 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsGroupBy,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
+from domains.identity.application.ports import UserSummaryQueryPort, user_display_label
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.repositories.request_log_repository import (
@@ -196,11 +197,27 @@ class GatewayUsageLogReadMixin:
                 labels.setdefault(key, "未知团队" if key else "未关联团队")
             return labels
 
+        if group_by == UsageStatisticsGroupBy.USER:
+            user_ids = [row.group_key for row in rows if isinstance(row.group_key, UUID)]
+            resolved: dict[str, str] = {}
+            if user_ids:
+                summaries = await self._user_summaries.list_summary_views_by_ids(user_ids)
+                for uid, summary in summaries.items():
+                    display = user_display_label(summary)
+                    if display:
+                        resolved[str(uid)] = display
+            for row in rows:
+                key = self._group_key_to_str(row.group_key)
+                labels[key] = (
+                    row.label_snapshot
+                    or resolved.get(key)
+                    or ("未知人员" if key else "未关联人员")
+                )
+            return labels
+
         for row in rows:
             key = self._group_key_to_str(row.group_key)
-            if group_by == UsageStatisticsGroupBy.USER:
-                labels[key] = row.label_snapshot or ("未知人员" if key else "未关联人员")
-            elif group_by == UsageStatisticsGroupBy.VKEY:
+            if group_by == UsageStatisticsGroupBy.VKEY:
                 labels[key] = row.label_snapshot or (
                     "平台 Key / 内部调用" if not key else "已删除 Key"
                 )

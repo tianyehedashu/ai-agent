@@ -306,6 +306,29 @@ async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
 
 
 @pytest.mark.asyncio
+async def test_build_metadata_uses_ctx_user_display_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Any,
+) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        AsyncMock(return_value=MagicMock(name="t", kind="personal")),
+    )
+    ctx = ProxyContext(
+        team_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=False,
+        user_display_snapshot="alice@example.com",
+    )
+    meta = await ProxyMetadataBuilder(db_session).build(ctx)
+    assert meta["gateway_user_email_snapshot"] == "alice@example.com"
+
+
+@pytest.mark.asyncio
 async def test_platform_api_key_grant_policy_checks_model_and_capability(db_session: Any) -> None:
     tid = uuid.uuid4()
     uid = uuid.uuid4()

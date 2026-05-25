@@ -34,6 +34,12 @@ describe('credentialProbeCacheKey', () => {
       'team',
       'cred-1',
     ])
+    expect(credentialProbeCacheKey('system', 'cred-sys')).toEqual([
+      'gateway',
+      'credential-probe',
+      'system',
+      'cred-sys',
+    ])
   })
 })
 

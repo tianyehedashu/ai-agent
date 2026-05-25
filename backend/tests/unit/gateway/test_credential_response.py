@@ -78,6 +78,43 @@ async def test_build_credential_response_from_read_model(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_credential_response_uses_prefilled_masked_without_decrypt(
+    db_session,
+) -> None:
+    """read model 已含 api_key_masked 时 build 不再调用 decrypt。"""
+    from unittest.mock import patch
+
+    from domains.gateway.application.management.credential_read_model import CredentialReadModel
+    from datetime import UTC, datetime
+
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_id = uuid.uuid4()
+    read_model = CredentialReadModel(
+        id=cred_id,
+        tenant_id=uuid.uuid4(),
+        scope="team",
+        scope_id=None,
+        provider="openai",
+        name="prefilled-mask",
+        api_base=None,
+        extra=None,
+        is_active=True,
+        created_at=datetime.now(UTC),
+        api_key_encrypted="encrypted-placeholder",
+        visibility=None,
+        api_key_masked="sk-p…fill",
+    )
+
+    with patch(
+        "domains.gateway.presentation.credential_response.decrypt_value",
+    ) as decrypt_mock:
+        resp = build_credential_response(read_model, encryption_key=encryption_key)
+
+    decrypt_mock.assert_not_called()
+    assert resp.api_key_masked == "sk-p…fill"
+
+
+@pytest.mark.asyncio
 async def test_build_credential_summary_response(db_session, test_user) -> None:
     from domains.tenancy.application.team_service import TeamService
 

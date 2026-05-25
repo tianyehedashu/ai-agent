@@ -34,6 +34,7 @@ from domains.gateway.domain.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
+from domains.identity.application.user_display import resolve_user_display_snapshot
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.db.database import get_session_context
@@ -129,6 +130,43 @@ def _to_gateway_response(data: dict[str, Any]) -> GatewayResponse:
     )
 
 
+async def _resolve_bridge_team_id(
+    session: AsyncSession,
+    ctx: GatewayCallContext,
+) -> uuid.UUID:
+    """解析 bridge 调用的 team_id（缺省时 ensure personal team）。"""
+    team_id = ctx.team_id
+    if team_id is None:
+        team = await TeamService(session).ensure_personal_team(ctx.user_id)
+        team_id = team.id
+    return team_id
+
+
+async def _build_bridge_proxy_context(
+    session: AsyncSession,
+    ctx: GatewayCallContext,
+    *,
+    team_id: uuid.UUID,
+    vkey: VirtualKeyPrincipal,
+    capability: GatewayCapability,
+    store_full_messages: bool,
+) -> ProxyContext:
+    """chat/embedding 共用的 ProxyContext 构建（含 user display snapshot）。"""
+    user_display_snapshot = await resolve_user_display_snapshot(session, ctx.user_id)
+    return ProxyContext(
+        team_id=team_id,
+        user_id=ctx.user_id,
+        vkey=vkey,
+        inbound_via="vkey",
+        platform_api_key_id=None,
+        capability=capability,
+        request_id=ctx.request_id or str(uuid.uuid4()),
+        store_full_messages=store_full_messages,
+        guardrail_enabled=vkey.guardrail_enabled,
+        user_display_snapshot=user_display_snapshot,
+    )
+
+
 class GatewayBridge:
     """``GatewayProxyProtocol`` 的具体实现（见 ``application.ports``）。"""
 
@@ -164,10 +202,7 @@ class GatewayBridge:
         _merge_gateway_ctx_metadata(body, ctx)
 
         async with get_session_context() as session:
-            team_id = ctx.team_id
-            if team_id is None:
-                team = await TeamService(session).ensure_personal_team(ctx.user_id)
-                team_id = team.id
+            team_id = await _resolve_bridge_team_id(session, ctx)
             if ctx.invocation_overrides is not None and model:
                 snap = await resolve_capabilities_for_bridge(
                     session, model_id=model, billing_team_id=team_id
@@ -178,20 +213,18 @@ class GatewayBridge:
                     capabilities=snap,
                 )
             vkey = await _ensure_system_vkey(session, team_id)
-            proxy_ctx = ProxyContext(
+            store_full_messages = (
+                ctx.store_full_messages
+                if ctx.store_full_messages is not None
+                else vkey.store_full_messages
+            )
+            proxy_ctx = await _build_bridge_proxy_context(
+                session,
+                ctx,
                 team_id=team_id,
-                user_id=ctx.user_id,
                 vkey=vkey,
-                inbound_via="vkey",
-                platform_api_key_id=None,
                 capability=GatewayCapability.CHAT,
-                request_id=ctx.request_id or str(uuid.uuid4()),
-                store_full_messages=(
-                    ctx.store_full_messages
-                    if ctx.store_full_messages is not None
-                    else vkey.store_full_messages
-                ),
-                guardrail_enabled=vkey.guardrail_enabled,
+                store_full_messages=store_full_messages,
             )
             result = await ProxyUseCase(session).chat_completion(proxy_ctx, body)
 
@@ -237,21 +270,15 @@ class GatewayBridge:
         _merge_gateway_ctx_metadata(body, ctx)
 
         async with get_session_context() as session:
-            team_id = ctx.team_id
-            if team_id is None:
-                team = await TeamService(session).ensure_personal_team(ctx.user_id)
-                team_id = team.id
+            team_id = await _resolve_bridge_team_id(session, ctx)
             vkey = await _ensure_system_vkey(session, team_id)
-            proxy_ctx = ProxyContext(
+            proxy_ctx = await _build_bridge_proxy_context(
+                session,
+                ctx,
                 team_id=team_id,
-                user_id=ctx.user_id,
                 vkey=vkey,
-                inbound_via="vkey",
-                platform_api_key_id=None,
                 capability=GatewayCapability.EMBEDDING,
-                request_id=ctx.request_id or str(uuid.uuid4()),
                 store_full_messages=False,
-                guardrail_enabled=vkey.guardrail_enabled,
             )
             result = await ProxyUseCase(session).embedding(proxy_ctx, body)
         if isinstance(result, dict):

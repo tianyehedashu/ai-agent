@@ -107,6 +107,7 @@ class ProxyMetadataBuilder:
             "gateway_capability": ctx.capability.value,
             "gateway_request_id": ctx.request_id,
             "gateway_team_snapshot": ({"name": team.name, "kind": team.kind} if team else None),
+            "gateway_user_email_snapshot": ctx.user_display_snapshot,
             "gateway_vkey_name_snapshot": ctx.vkey.vkey_name if ctx.vkey else None,
             "guardrail_enabled": effective_guardrail_enabled(
                 global_guardrail_enabled=settings.gateway_default_guardrail_enabled,

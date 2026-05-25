@@ -9,7 +9,7 @@ from domains.gateway.domain.policies.system_visibility import (
     snapshots_need_grant_lookup,
     visible_system_model_ids,
 )
-from domains.gateway.domain.visibility import Visibility
+from domains.gateway.domain.visibility import Visibility, credential_visibility_for_api
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
@@ -86,7 +86,54 @@ async def filter_visible_system_gateway_models(
     return [row for row in rows if row.id in allowed_ids]
 
 
+def system_credential_visible_to_subject(
+    credential_id: uuid.UUID,
+    credential_visibility: str,
+    granted_keys: set[tuple[str, uuid.UUID]],
+) -> bool:
+    """凭据级 restricted 需 credential grant；public / 缺省对全员可见。"""
+    if credential_visibility_for_api(credential_visibility) != "restricted":
+        return True
+    return ("credential", credential_id) in granted_keys
+
+
+def system_credentials_need_grant_lookup(
+    rows: list[SystemProviderCredential],
+) -> bool:
+    return any(
+        credential_visibility_for_api(row.visibility) == "restricted" for row in rows
+    )
+
+
+async def filter_visible_system_provider_credentials(
+    session: AsyncSession,
+    rows: list[SystemProviderCredential],
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+    is_platform_admin: bool,
+) -> list[SystemProviderCredential]:
+    """按凭据 visibility + grants 过滤 system 凭据摘要/列表。"""
+    if is_platform_admin or not rows:
+        return list(rows)
+    if not system_credentials_need_grant_lookup(rows):
+        return list(rows)
+    grant_rows = await SystemGatewayGrantRepository(session).list_enabled_for_targets(
+        team_id=tenant_id,
+        user_id=user_id,
+    )
+    granted_keys = {(g.subject_kind, g.subject_id) for g in grant_rows}
+    return [
+        row
+        for row in rows
+        if system_credential_visible_to_subject(row.id, row.visibility or Visibility.PUBLIC.value, granted_keys)
+    ]
+
+
 __all__ = [
     "filter_visible_system_gateway_models",
+    "filter_visible_system_provider_credentials",
     "load_system_credentials_by_ids",
+    "system_credential_visible_to_subject",
+    "system_credentials_need_grant_lookup",
 ]

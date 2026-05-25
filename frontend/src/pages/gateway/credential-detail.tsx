@@ -32,33 +32,27 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
+import { CredentialEditFields } from '@/features/gateway-credentials/credential-edit-fields'
 import { canEditGatewayCredential } from '@/features/gateway-credentials/credential-edit-policy'
-import { ExtraFieldsRenderer } from '@/features/gateway-credentials/credential-extra-fields'
-import {
-  compactExtra,
-  extraToFormValues,
-  type CredentialExtraValues,
-} from '@/features/gateway-credentials/credential-extra-utils'
 import { CredentialModelsCard } from '@/features/gateway-credentials/credential-linked-models'
 import { invalidateCredentialProbeCache } from '@/features/gateway-credentials/credential-probe-cache'
-import {
-  apiKeyLabelForProvider,
-  defaultApiBaseForProvider,
-  extraFieldsForProvider,
-  getProviderSchema,
-  providerLabel,
-} from '@/features/gateway-credentials/provider-schemas'
+import { getProviderSchema, providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
+import { managedCredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
+import { useCredentialEditForm } from '@/features/gateway-credentials/use-credential-edit-form'
 import {
   credentialsSystemBrowseIndexHref,
   credentialsTeamListHref,
 } from '@/features/gateway-models/paths'
+import {
+  gatewayModelsByCredentialInvalidatePrefix,
+  gatewayModelsByCredentialQueryKey,
+} from '@/features/gateway-models/query-keys'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -97,6 +91,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
 
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
+  const upstreamScope = cred ? managedCredentialUpstreamScope(cred.scope) : 'team'
   const credentialsListHref =
     cred?.scope === 'system'
       ? credentialsSystemBrowseIndexHref(teamId)
@@ -154,7 +149,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
     onSettled: () => {
-      invalidateCredentialProbeCache(queryClient, 'team', id)
+      invalidateCredentialProbeCache(queryClient, upstreamScope, id)
       invalidateCredentialSummariesCache(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, id] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
@@ -182,7 +177,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       <div className="text-sm text-muted-foreground">
         无效的凭据 ID。
         <Link
-          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
+          to={credentialsTeamListHref(teamId)}
           className="ml-2 text-primary underline-offset-4 hover:underline"
         >
           返回列表
@@ -202,7 +197,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           {error instanceof Error ? error.message : '无法加载凭据'}
         </p>
         <Link
-          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
+          to={credentialsTeamListHref(teamId)}
           className="text-primary underline-offset-4 hover:underline"
         >
           返回凭据列表
@@ -214,10 +209,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link
-          to={`/gateway/teams/${teamId}/credentials?tab=shared`}
-          className="hover:text-foreground"
-        >
+        <Link to={credentialsListHref} className="hover:text-foreground">
           凭据管理
         </Link>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
@@ -306,7 +298,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               editable={editable}
               configManaged={configManaged}
               onSaved={() => {
-                invalidateCredentialProbeCache(queryClient, 'team', id)
+                invalidateCredentialProbeCache(queryClient, upstreamScope, id)
                 invalidateCredentialSummariesCache(queryClient)
               }}
             />
@@ -339,7 +331,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             <AddModelsDialog
               open
               onOpenChange={handleAddModelsOpenChange}
-              scope="team"
+              scope={upstreamScope}
               credentialId={id}
               provider={cred.provider}
               credentialName={cred.name}
@@ -503,7 +495,7 @@ function CredentialLinkedModelsSection({
   onAddModels?: () => void
 }>): React.JSX.Element {
   const { data: linkedModels, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', teamId, 'by-credential', credentialId, modelsTab],
+    queryKey: gatewayModelsByCredentialQueryKey(teamId, credentialId, modelsTab),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
         registry_scope: modelsTab === 'system' ? 'system' : 'callable',
@@ -542,30 +534,10 @@ function CredentialEditForm({
 }>): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
-
-  const [name, setName] = useState<string>(() => cred.name)
-  const [apiBase, setApiBase] = useState<string>(() => cred.api_base ?? '')
-  const [apiKey, setApiKey] = useState<string>('')
-  const [extra, setExtra] = useState<CredentialExtraValues>(() => extraToFormValues(cred.extra))
-  const [showFullCurrentKey, setShowFullCurrentKey] = useState(false)
-  const [revealedCurrentKey, setRevealedCurrentKey] = useState<string | null>(null)
-
+  const form = useCredentialEditForm({ cred, configManaged })
   const credId = cred.id
 
-  const revealKeyMutation = useMutation({
-    mutationFn: () => gatewayApi.revealCredential(teamId, credId),
-    onSuccess: (data) => {
-      setRevealedCurrentKey(data.api_key)
-    },
-    onError: (e: Error) => {
-      toast({
-        variant: 'destructive',
-        title: '无法显示完整密钥',
-        description: e.message,
-      })
-      setShowFullCurrentKey(false)
-    },
-  })
+  const revealFn = useCallback(() => gatewayApi.revealCredential(teamId, credId), [teamId, credId])
 
   const updateMutation = useMutation({
     mutationFn: (body: GatewayCredentialUpdateBody) =>
@@ -577,9 +549,9 @@ function CredentialEditForm({
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
       void queryClient.invalidateQueries({
-        queryKey: ['gateway', 'models', 'by-credential', credId],
+        queryKey: gatewayModelsByCredentialInvalidatePrefix(credId, teamId),
       })
-      setApiKey('')
+      form.clearApiKey()
       toast({ title: '凭据已更新' })
     },
     onError: (e: Error) => {
@@ -587,194 +559,32 @@ function CredentialEditForm({
     },
   })
 
-  const provider = cred.provider
-  const schema = getProviderSchema(provider)
-  const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
-  const apiKeyLabel = apiKeyLabelForProvider(provider)
-  const defaultApiBase = defaultApiBaseForProvider(provider)
-  const baseIsDefault = defaultApiBase.length > 0 && apiBase === defaultApiBase
-  const apiBasePlaceholder =
-    schema?.apiBasePlaceholder ??
-    (defaultApiBase.length > 0 ? defaultApiBase : 'https://example.com/v1')
-  const apiBaseRequired = schema?.apiBaseRequired ?? false
-  const apiBaseMissing = apiBaseRequired && !apiBase.trim()
-  const requiredExtraMissing = extraFields.some((f) => f.required && !(extra[f.key] ?? '').trim())
-
-  const compactedNow = useMemo(() => compactExtra(extra), [extra])
-  const compactedOrig = useMemo(() => compactExtra(extraToFormValues(cred.extra)), [cred.extra])
-  const synced =
-    name === cred.name &&
-    (apiBase.trim() || '') === (cred.api_base ?? '') &&
-    apiKey === '' &&
-    JSON.stringify(compactedNow) === JSON.stringify(compactedOrig)
-
-  const canSave = Boolean(name.trim()) && !apiBaseMissing && !requiredExtraMissing && !synced
-
-  const credExtra = cred.extra
-  const hasUnknownExtra =
-    extraFields.length === 0 && credExtra !== null && Object.keys(credExtra).length > 0
-
   function handleSave(): void {
-    if (!editable || !name.trim()) return
-    const body: GatewayCredentialUpdateBody = {
-      api_base: apiBase.trim() || null,
-      extra: Object.keys(compactedNow).length > 0 ? compactedNow : null,
-    }
-    if (!configManaged) body.name = name.trim()
-    if (apiKey.trim()) body.api_key = apiKey.trim()
-    updateMutation.mutate(body)
+    if (!editable || !form.canSave) return
+    updateMutation.mutate(form.buildUpdateBody())
   }
 
   return (
     <>
-      <div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <Label htmlFor="cred-current-key">当前 {apiKeyLabel}</Label>
-          {editable ? (
-            <div className="flex items-center gap-2 sm:pb-0.5">
-              <Label
-                htmlFor="cred-show-full-key"
-                className="cursor-pointer text-xs font-normal text-muted-foreground"
-              >
-                显示完整密钥
-              </Label>
-              <Switch
-                id="cred-show-full-key"
-                checked={showFullCurrentKey}
-                disabled={revealKeyMutation.isPending}
-                onCheckedChange={(checked) => {
-                  setShowFullCurrentKey(checked)
-                  if (!checked) {
-                    setRevealedCurrentKey(null)
-                    revealKeyMutation.reset()
-                    return
-                  }
-                  revealKeyMutation.mutate()
-                }}
-              />
-            </div>
-          ) : null}
-        </div>
-        <Input
-          id="cred-current-key"
-          readOnly
-          className="mt-1.5 font-mono text-xs"
-          value={
-            showFullCurrentKey
-              ? revealKeyMutation.isPending && revealedCurrentKey === null
-                ? '加载中…'
-                : (revealedCurrentKey ?? '')
-              : cred.api_key_masked
-          }
-        />
-      </div>
+      <CredentialEditFields
+        cred={cred}
+        idPrefix="cred-detail"
+        form={form}
+        configManaged={configManaged}
+        revealFn={revealFn}
+        canReveal={editable}
+        editable={editable}
+      />
       {editable ? (
-        <>
-          <div>
-            <Label htmlFor="cred-detail-name">名称</Label>
-            <Input
-              id="cred-detail-name"
-              className="mt-1.5"
-              value={name}
-              readOnly={configManaged}
-              disabled={configManaged}
-              onChange={(e) => {
-                setName(e.target.value)
-              }}
-            />
-            {configManaged ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                该凭据由 app.toml / 环境变量同步维护，重命名会导致重复凭据。
-              </p>
-            ) : null}
-          </div>
-          <div>
-            <Label htmlFor="cred-detail-new-key">新 {apiKeyLabel}（留空则不变）</Label>
-            <Input
-              id="cred-detail-new-key"
-              type="password"
-              autoComplete="new-password"
-              className="mt-1.5"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value)
-              }}
-              placeholder={schema?.apiKeyPlaceholder}
-            />
-            {schema?.apiKeyHelpText ? (
-              <p className="mt-1 text-xs text-muted-foreground">{schema.apiKeyHelpText}</p>
-            ) : null}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="cred-detail-base">
-                api_base
-                {apiBaseRequired ? (
-                  <span className="ml-1 text-destructive">*</span>
-                ) : (
-                  <span className="ml-1 text-[11px] text-muted-foreground">（可选）</span>
-                )}
-              </Label>
-              {baseIsDefault ? (
-                <Badge variant="outline" className="px-1 py-0 text-[10px]">
-                  默认
-                </Badge>
-              ) : null}
-            </div>
-            <Input
-              id="cred-detail-base"
-              className="mt-1.5"
-              value={apiBase}
-              onChange={(e) => {
-                setApiBase(e.target.value)
-              }}
-              placeholder={apiBasePlaceholder}
-            />
-            {defaultApiBase.length > 0 && !baseIsDefault ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                该 provider 的默认地址：
-                <button
-                  type="button"
-                  className="ml-1 font-mono text-primary underline-offset-2 hover:underline"
-                  onClick={() => {
-                    setApiBase(defaultApiBase)
-                  }}
-                >
-                  {defaultApiBase}
-                </button>
-              </p>
-            ) : null}
-          </div>
-          {extraFields.length > 0 ? (
-            <ExtraFieldsRenderer
-              fields={extraFields}
-              values={extra}
-              onChange={setExtra}
-              idPrefix="cred-detail-extra"
-            />
-          ) : hasUnknownExtra ? (
-            <div>
-              <Label>extra（未知字段，只读）</Label>
-              <pre className="mt-1.5 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed">
-                {JSON.stringify(credExtra, null, 2)}
-              </pre>
-              <p className="mt-1 text-xs text-muted-foreground">
-                当前 provider 未声明 extra schema；如需编辑请在 schema 中追加字段。
-              </p>
-            </div>
-          ) : null}
-          <Button
-            disabled={updateMutation.isPending || !canSave}
-            onClick={() => {
-              handleSave()
-            }}
-          >
-            {updateMutation.isPending ? '保存中…' : '保存更改'}
-          </Button>
-        </>
-      ) : (
-        <p className="text-sm text-muted-foreground">你无权编辑此凭据（系统凭据需平台管理员）。</p>
-      )}
+        <Button
+          disabled={updateMutation.isPending || !form.canSave}
+          onClick={() => {
+            handleSave()
+          }}
+        >
+          {updateMutation.isPending ? '保存中…' : '保存更改'}
+        </Button>
+      ) : null}
     </>
   )
 }

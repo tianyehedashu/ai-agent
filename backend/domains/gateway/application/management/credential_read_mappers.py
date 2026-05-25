@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from binascii import Error as BinasciiError
 from typing import TYPE_CHECKING
 
+from cryptography.fernet import InvalidToken
+
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.presentation.credential_response import mask_plain_secret_for_display
+from libs.crypto import decrypt_value
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
@@ -17,7 +22,24 @@ else:
     CredentialReadSource = CredentialReadModel
 
 
-def credential_from_orm(cred: ProviderCredential) -> CredentialReadModel:
+def _mask_api_key_encrypted(api_key_encrypted: str, encryption_key: str) -> str:
+    try:
+        plain = decrypt_value(api_key_encrypted, encryption_key)
+        return mask_plain_secret_for_display(plain)
+    except (InvalidToken, BinasciiError, UnicodeDecodeError, ValueError):
+        return "（无法展示）"
+
+
+def credential_from_orm(
+    cred: ProviderCredential,
+    *,
+    encryption_key: str | None = None,
+) -> CredentialReadModel:
+    api_key_masked = (
+        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key)
+        if encryption_key
+        else None
+    )
     return CredentialReadModel(
         id=cred.id,
         tenant_id=cred.tenant_id,
@@ -31,10 +53,20 @@ def credential_from_orm(cred: ProviderCredential) -> CredentialReadModel:
         created_at=cred.created_at,
         api_key_encrypted=cred.api_key_encrypted,
         visibility=None,
+        api_key_masked=api_key_masked,
     )
 
 
-def system_credential_from_orm(cred: SystemProviderCredential) -> CredentialReadModel:
+def system_credential_from_orm(
+    cred: SystemProviderCredential,
+    *,
+    encryption_key: str | None = None,
+) -> CredentialReadModel:
+    api_key_masked = (
+        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key)
+        if encryption_key
+        else None
+    )
     return CredentialReadModel(
         id=cred.id,
         tenant_id=None,
@@ -48,6 +80,7 @@ def system_credential_from_orm(cred: SystemProviderCredential) -> CredentialRead
         created_at=cred.created_at,
         api_key_encrypted=cred.api_key_encrypted,
         visibility=cred.visibility,
+        api_key_masked=api_key_masked,
     )
 
 

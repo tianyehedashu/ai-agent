@@ -50,7 +50,9 @@ async def list_credentials(
     reads: MgmtReads,
 ) -> list[CredentialResponse]:
     creds = await reads.list_credentials_for_team(
-        team.team_id, include_system=team.is_platform_admin
+        team.team_id,
+        include_system=team.is_platform_admin,
+        encryption_key=encryption_key(),
     )
     return [build_credential_response(c, encryption_key=encryption_key()) for c in creds]
 
@@ -61,7 +63,11 @@ async def list_credential_summaries(
     reads: MgmtReads,
 ) -> list[CredentialSummaryResponse]:
     """团队 member 可读：解析模型 credential_id → 显示名（含 system，无密钥）。"""
-    rows = await reads.list_credential_summaries_for_team(team.team_id)
+    rows = await reads.list_credential_summaries_for_team(
+        team.team_id,
+        user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     return [build_credential_summary_response(r) for r in rows]
 
 

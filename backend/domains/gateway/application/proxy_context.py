@@ -58,6 +58,8 @@ class ProxyContext:
     entitlement_state: EntitlementReservationState | None = None
     client_ua: str | None = None
     client_type: str = "unknown"
+    user_display_snapshot: str | None = None
+    """调用者展示名（name 或 email）；在鉴权/桥接层解析一次，metadata 构建不再查库。"""
 
 
 __all__ = ["EntitlementReservationState", "ProxyContext"]

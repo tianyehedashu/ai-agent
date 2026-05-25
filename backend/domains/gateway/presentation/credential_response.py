@@ -55,16 +55,19 @@ def build_credential_response(
     *,
     encryption_key: str,
 ) -> CredentialResponse:
-    try:
-        plain = decrypt_value(cred.api_key_encrypted, encryption_key)
-        api_key_masked = mask_plain_secret_for_display(plain)
-    except (InvalidToken, BinasciiError, UnicodeDecodeError, ValueError) as exc:
-        logger.warning(
-            "credential api_key_masked decrypt failed credential_id=%s exc_type=%s",
-            cred.id,
-            type(exc).__name__,
-        )
-        api_key_masked = "（无法展示）"
+    if cred.api_key_masked is not None:
+        api_key_masked = cred.api_key_masked
+    else:
+        try:
+            plain = decrypt_value(cred.api_key_encrypted, encryption_key)
+            api_key_masked = mask_plain_secret_for_display(plain)
+        except (InvalidToken, BinasciiError, UnicodeDecodeError, ValueError) as exc:
+            logger.warning(
+                "credential api_key_masked decrypt failed credential_id=%s exc_type=%s",
+                cred.id,
+                type(exc).__name__,
+            )
+            api_key_masked = "（无法展示）"
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     vis = credential_visibility_for_api(cred.visibility) if api_scope == "system" else None
     return CredentialResponse(

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeVar
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.application.management.ports import (
     RawUpstreamListResult,
     UpstreamModelListPort,
@@ -35,6 +37,57 @@ from libs.exceptions import HttpMappableDomainError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+_ImportItemT = TypeVar("_ImportItemT")
+
+
+def _append_import_failure(
+    failed: list[dict[str, str]], upstream_id: str, reason: str
+) -> None:
+    failed.append({"upstream_model_id": upstream_id, "reason": reason})
+
+
+async def _run_batch_import_loop(
+    items: list[_ImportItemT],
+    *,
+    provider_norm: str,
+    registered_rows: list[tuple[str, str]],
+    upstream_id_of: Callable[[_ImportItemT], str],
+    import_one: Callable[[str, _ImportItemT], Awaitable[dict[str, Any] | None]],
+    log_tag: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]], bool]:
+    created: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+    reload_once = False
+    for item in items:
+        mid = upstream_id_of(item).strip()
+        if not mid:
+            continue
+        existing = match_registered_names(provider_norm, mid, registered_rows)
+        if existing:
+            _append_import_failure(
+                failed, mid, format_already_registered_reason(existing)
+            )
+            continue
+        try:
+            entry = await import_one(mid, item)
+        except ValidationError as exc:
+            _append_import_failure(failed, mid, exc.message)
+            continue
+        except HttpMappableDomainError as exc:
+            _append_import_failure(failed, mid, exc.message)
+            continue
+        except Exception:
+            logger.exception("%s unexpected error upstream_model_id=%s", log_tag, mid)
+            _append_import_failure(
+                failed, mid, "导入失败（内部错误），请稍后重试。"
+            )
+            continue
+        if entry is None:
+            continue
+        created.append(entry)
+        reload_once = True
+    return created, failed, reload_once
 
 
 def _encryption_key() -> str:
@@ -147,13 +200,12 @@ class CredentialUpstreamCatalogService:
             http_status=raw.http_status,
         )
 
-    async def probe_user_credential(
+    async def _probe_credential_row(
         self,
         *,
-        user_id: uuid.UUID,
         credential_id: uuid.UUID,
+        row: CredentialReadModel,
     ) -> CredentialProbeResult:
-        row = await self._reads.get_user_credential_for_owner(credential_id, user_id)
         if not row.is_active:
             return CredentialProbeResult(
                 credential_id=credential_id,
@@ -208,6 +260,15 @@ class CredentialUpstreamCatalogService:
             http_status=base.http_status,
         )
 
+    async def probe_user_credential(
+        self,
+        *,
+        user_id: uuid.UUID,
+        credential_id: uuid.UUID,
+    ) -> CredentialProbeResult:
+        row = await self._reads.get_user_credential_for_owner(credential_id, user_id)
+        return await self._probe_credential_row(credential_id=credential_id, row=row)
+
     async def probe_managed_credential(
         self,
         *,
@@ -220,59 +281,7 @@ class CredentialUpstreamCatalogService:
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
-        if not row.is_active:
-            return CredentialProbeResult(
-                credential_id=credential_id,
-                probe_at=datetime.now(UTC),
-                support="error",
-                upstream="none",
-                items=(),
-                message="凭据已禁用，无法探测。",
-                http_status=None,
-            )
-        st, url, reason = resolve_openai_compatible_models_list_url(
-            provider=row.provider, api_base=row.api_base
-        )
-        if st == "unsupported":
-            return CredentialProbeResult(
-                credential_id=credential_id,
-                probe_at=datetime.now(UTC),
-                support="unsupported",
-                upstream="none",
-                items=(),
-                message=reason,
-                http_status=None,
-            )
-        assert url is not None
-        api_key = _decrypt_api_key_for_probe(row.api_key_encrypted)
-        if api_key is None:
-            return CredentialProbeResult(
-                credential_id=credential_id,
-                probe_at=datetime.now(UTC),
-                support="error",
-                upstream="none",
-                items=(),
-                message="无法解密凭据中的 API Key，请检查服务端密钥配置或重新保存凭据。",
-                http_status=None,
-            )
-        raw = await self._port.fetch_models(list_url=url, api_key=api_key)
-        base = self._map_raw_to_probe_result(credential_id=credential_id, raw=raw)
-        if base.support not in ("full", "partial") or not base.items:
-            return base
-        items = await self._enrich_probe_items(
-            credential_id=credential_id,
-            provider=row.provider,
-            items=base.items,
-        )
-        return CredentialProbeResult(
-            credential_id=base.credential_id,
-            probe_at=base.probe_at,
-            support=base.support,
-            upstream=base.upstream,
-            items=items,
-            message=base.message,
-            http_status=base.http_status,
-        )
+        return await self._probe_credential_row(credential_id=credential_id, row=row)
 
     async def batch_import_personal_models(
         self,
@@ -299,70 +308,50 @@ class CredentialUpstreamCatalogService:
         await self._reads.get_user_credential_for_owner(credential_id, user_id)
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
-        created: list[dict[str, Any]] = []
-        failed: list[dict[str, str]] = []
-        reload_once = False
+        work_items: list[tuple[str, tuple[str, ...]]] = []
+        pre_failed: list[dict[str, str]] = []
         for raw_id, raw_types in rows_to_import:
             mid = raw_id.strip()
             if not mid:
                 continue
             types = filter_valid_personal_model_types(raw_types)
             if not types:
-                failed.append(
-                    {
-                        "upstream_model_id": mid,
-                        "reason": "该上游模型类型不支持个人注册（如 embedding / rerank）",
-                    }
-                )
-                continue
-            existing = match_registered_names(provider_norm, mid, registered_rows)
-            if existing:
-                failed.append(
-                    {
-                        "upstream_model_id": mid,
-                        "reason": format_already_registered_reason(existing),
-                    }
-                )
-                continue
-            display = f"{display_name_prefix} {mid}".strip() if display_name_prefix else mid
-            try:
-                rows = await self._writes.create_personal_models(
-                    user_id,
-                    display_name=display,
-                    provider=provider,
-                    model_id=mid,
-                    credential_id=credential_id,
-                    model_types=list(types),
-                    tags=tags,
-                    enabled=enabled,
-                    reload_router=False,
-                )
-                reload_once = True
-            except ValidationError as exc:
-                failed.append({"upstream_model_id": mid, "reason": exc.message})
-                continue
-            except HttpMappableDomainError as exc:
-                failed.append({"upstream_model_id": mid, "reason": exc.message})
-                continue
-            except Exception:
-                logger.exception(
-                    "batch_import_personal_models unexpected error upstream_model_id=%s",
+                _append_import_failure(
+                    pre_failed,
                     mid,
-                )
-                failed.append(
-                    {
-                        "upstream_model_id": mid,
-                        "reason": "导入失败（内部错误），请稍后重试。",
-                    }
+                    "该上游模型类型不支持个人注册（如 embedding / rerank）",
                 )
                 continue
-            created.append(
-                {
-                    "upstream_model_id": mid,
-                    "gateway_model_ids": [r.id for r in rows],
-                }
+            work_items.append((mid, types))
+
+        async def import_one(
+            mid: str, payload: tuple[str, tuple[str, ...]]
+        ) -> dict[str, Any] | None:
+            _mid, types = payload
+            display = f"{display_name_prefix} {mid}".strip() if display_name_prefix else mid
+            rows = await self._writes.create_personal_models(
+                user_id,
+                display_name=display,
+                provider=provider,
+                model_id=mid,
+                credential_id=credential_id,
+                model_types=list(types),
+                tags=tags,
+                enabled=enabled,
+                reload_router=False,
             )
             registered_rows.extend((r.name, r.real_model) for r in rows)
+            return {"upstream_model_id": mid, "gateway_model_ids": [r.id for r in rows]}
+
+        created, failed, reload_once = await _run_batch_import_loop(
+            work_items,
+            provider_norm=provider_norm,
+            registered_rows=registered_rows,
+            upstream_id_of=lambda payload: payload[0],
+            import_one=import_one,
+            log_tag="batch_import_personal_models",
+        )
+        failed = pre_failed + failed
         if reload_once:
             await self._writes.reload_litellm_router()
         return created, failed
@@ -389,62 +378,40 @@ class CredentialUpstreamCatalogService:
         )
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
+        work_items = list(items)
 
-        created: list[dict[str, Any]] = []
-        failed: list[dict[str, str]] = []
-        reload_once = False
-        for upstream_id, name_override in items:
-            mid = upstream_id.strip()
-            if not mid:
-                continue
-            existing = match_registered_names(provider_norm, mid, registered_rows)
-            if existing:
-                failed.append(
-                    {
-                        "upstream_model_id": mid,
-                        "reason": format_already_registered_reason(existing),
-                    }
-                )
-                continue
+        async def import_one(
+            mid: str, payload: tuple[str, str | None]
+        ) -> dict[str, Any] | None:
+            _upstream_id, name_override = payload
             base_name = (name_override or "").strip() or _slugify_alias(mid)
-            try:
-                unique_name = await self._unique_team_model_name(tenant_id, base_name)
-                m = await self._writes.create_gateway_model(
-                    tenant_id=tenant_id,
-                    name=unique_name,
-                    capability=capability,
-                    real_model=mid,
-                    credential_id=credential_id,
-                    provider=provider,
-                    weight=weight,
-                    rpm_limit=rpm_limit,
-                    tpm_limit=tpm_limit,
-                    tags=tags,
-                    is_platform_admin=is_platform_admin,
-                    enabled=enabled,
-                    reload_router=False,
-                )
-                reload_once = True
-            except ValidationError as exc:
-                failed.append({"upstream_model_id": mid, "reason": exc.message})
-                continue
-            except HttpMappableDomainError as exc:
-                failed.append({"upstream_model_id": mid, "reason": exc.message})
-                continue
-            except Exception:
-                logger.exception(
-                    "batch_import_team_models unexpected error upstream_model_id=%s",
-                    mid,
-                )
-                failed.append(
-                    {
-                        "upstream_model_id": mid,
-                        "reason": "导入失败（内部错误），请稍后重试。",
-                    }
-                )
-                continue
-            created.append({"upstream_model_id": mid, "gateway_model_id": m.id})
+            unique_name = await self._unique_team_model_name(tenant_id, base_name)
+            m = await self._writes.create_gateway_model(
+                tenant_id=tenant_id,
+                name=unique_name,
+                capability=capability,
+                real_model=mid,
+                credential_id=credential_id,
+                provider=provider,
+                weight=weight,
+                rpm_limit=rpm_limit,
+                tpm_limit=tpm_limit,
+                tags=tags,
+                is_platform_admin=is_platform_admin,
+                enabled=enabled,
+                reload_router=False,
+            )
             registered_rows.append((m.name, m.real_model))
+            return {"upstream_model_id": mid, "gateway_model_id": m.id}
+
+        created, failed, reload_once = await _run_batch_import_loop(
+            work_items,
+            provider_norm=provider_norm,
+            registered_rows=registered_rows,
+            upstream_id_of=lambda payload: payload[0],
+            import_one=import_one,
+            log_tag="batch_import_team_models",
+        )
         if reload_once:
             await self._writes.reload_litellm_router()
         return created, failed

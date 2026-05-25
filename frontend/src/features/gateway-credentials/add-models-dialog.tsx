@@ -21,7 +21,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { credentialProbeCacheKey } from '@/features/gateway-credentials/credential-probe-cache'
 import { CredentialUpstreamModelsPanel } from '@/features/gateway-credentials/credential-upstream-models-panel'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
-import type { CredentialUpstreamScope } from '@/features/gateway-credentials/types'
+import {
+  type CredentialUpstreamScope,
+  isPersonalUpstreamScope,
+} from '@/features/gateway-credentials/types'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { credentialDetailHref, personalModelsRegisterHref } from '@/features/gateway-models/paths'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -159,7 +162,7 @@ export function AddModelsDialog({
   const handleProbeResult = useCallback(
     (result: CredentialProbeResult) => {
       setLastProbe(result)
-      if (result.support === 'unsupported' && scope === 'team') {
+      if (result.support === 'unsupported' && !isPersonalUpstreamScope(scope)) {
         setTeamTab('manual')
       }
     },
@@ -174,7 +177,7 @@ export function AddModelsDialog({
   )
 
   const showUnsupportedBanner =
-    scope === 'team' && lastProbe?.support === 'unsupported' && teamTab === 'import'
+    !isPersonalUpstreamScope(scope) && lastProbe?.support === 'unsupported' && teamTab === 'import'
 
   const titleName = credentialName?.trim() ? credentialName : '凭据'
   const probeWhenActive = open && isActive
@@ -201,7 +204,7 @@ export function AddModelsDialog({
               credentialId={credentialId}
               onEditPersonalCredential={onEditPersonalCredential}
             />
-          ) : scope === 'team' ? (
+          ) : !isPersonalUpstreamScope(scope) ? (
             <Tabs
               value={teamTab}
               onValueChange={(v) => {
@@ -227,7 +230,7 @@ export function AddModelsDialog({
               <TabsContent value="import" className="mt-0 focus-visible:outline-none">
                 {teamTab === 'import' ? (
                   <CredentialUpstreamModelsPanel
-                    scope="team"
+                    scope={scope}
                     credentialId={credentialId}
                     provider={provider}
                     embedded
@@ -309,7 +312,7 @@ function InactiveCredentialBanner({
       <p className="font-medium">凭据已禁用</p>
       <p className="mt-1 text-muted-foreground">请先启用凭据后再探测上游或添加模型。</p>
       <div>
-        {scope === 'team' ? (
+        {!isPersonalUpstreamScope(scope) ? (
           <Button type="button" variant="link" className="mt-2 h-auto p-0" asChild>
             <Link to={credentialDetailHref(teamId, credentialId)}>前往凭据详情启用</Link>
           </Button>
