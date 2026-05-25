@@ -252,7 +252,8 @@
     <nav>
       <h2>目录</h2>
       <a href="#overview">概述</a>
-      <a href="#architecture">架构</a>
+      <a href="#k8s">阿里云 K8s（生产）</a>
+      <a href="#architecture">架构（裸机参考）</a>
       <a href="#requirements">环境要求</a>
       <a href="#infra">基础设施</a>
       <a href="#backend">后端部署</a>
@@ -265,35 +266,90 @@
       <a href="#ops">日常运维</a>
       <a href="#troubleshoot">故障排查</a>
       <a href="#appendix">附录：Docker Compose</a>
+      <a href="#refs">相关文档</a>
     </nav>
 
     <main>
       <h1>AI Agent 生产环境部署指南</h1>
       <p class="subtitle">
-        <span class="badge">生产</span>
+        <span class="badge">生产 · 阿里云 ACK</span>
         <span class="badge">前后端分离</span>
-        <span class="badge">Nginx 静态托管</span>
-        本文描述前后端独立部署的标准流程：前端由 Nginx 提供静态资源并反代 API，后端以 Docker 运行 FastAPI。
+        <span class="badge">Nginx 反代</span>
+        当前生产：`wuhan-ali` / namespace <code>test</code> / 公网 <code>121.40.54.65</code>。下文亦含裸机与 Docker Compose 参考。
       </p>
 
       <section id="overview">
         <h2>概述</h2>
         <p>
-          推荐的生产拓扑为<strong>三层分离</strong>：用户仅访问前端 Nginx；Nginx 托管 SPA 并将
-          <code>/ai-agent/api/</code> 转发至后端；后端连接 PostgreSQL、Redis、Qdrant。
-          默认服务路径前缀为 <code>/ai-agent</code>（与 <code>ROOT_PATH</code>、<code>VITE_APP_ROOT</code> 一致）。
+          <strong>生产环境</strong>运行在阿里云 ACK：frontend Deployment（LoadBalancer + 内置 Nginx）反代
+          <code>/ai-agent/api/</code> 至 backend ClusterIP；PostgreSQL / Redis 使用阿里云托管，Qdrant 在集群内。
+          默认路径前缀 <code>/ai-agent</code>（<code>ROOT_PATH</code>、<code>VITE_APP_ROOT</code>、Secret 须一致且无尾随空格）。
         </p>
         <div class="callout">
-          <strong>同域反代（推荐）</strong>：前端与 API 共用同一域名，浏览器请求走相对路径，无需配置 CORS，Cookie 鉴权可正常工作。
+          <strong>K8s 详细步骤</strong>：<code>deploy/k8s/README.md</code> ·
+          故障排查 Skill：<code>.agents/skills/k8s-production-debug/SKILL.md</code>
+        </div>
+        <div class="callout">
+          <strong>同域反代</strong>：前端与 API 共用 LoadBalancer 入口，浏览器走相对路径，无需 CORS。
+        </div>
+      </section>
+
+      <section id="k8s">
+        <h2>阿里云 K8s（当前生产）</h2>
+        <div class="diagram">  用户浏览器
+       │
+       ▼  http://121.40.54.65/ai-agent/
+  ┌────────────────────────────────────┐
+  │  frontend Pod (Nginx + SPA)         │
+  │  Service: LoadBalancer :80          │
+  │  · /ai-agent/          → 静态文件    │
+  │  · /ai-agent/api/*     → 反代       │
+  └──────────────┬─────────────────────┘
+                 │  backend:8000 (ClusterIP，非公网)
+  ┌──────────────▼─────────────────────┐
+  │  backend Pod (FastAPI / uvicorn)      │
+  │  envFrom: Secret ai-agent-backend-env│
+  └──────────────┬─────────────────────┘
+                 │
+     ┌───────────┼───────────┐
+     ▼           ▼           ▼
+  阿里云 RDS   阿里云 Redis   qdrant Pod</div>
+
+        <table>
+          <thead><tr><th>项</th><th>值</th></tr></thead>
+          <tbody>
+            <tr><td>运维 SSH</td><td><code>ssh wuhan-ali</code></td></tr>
+            <tr><td>Namespace</td><td><code>test</code></td></tr>
+            <tr><td>公网入口</td><td><code>http://121.40.54.65/ai-agent/</code></td></tr>
+            <tr><td>Secret</td><td><code>ai-agent-backend-env</code></td></tr>
+            <tr><td>镜像</td><td><code>giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-{backend,frontend}</code></td></tr>
+            <tr><td>清单</td><td><code>backend/Deployment.yaml</code>、<code>frontend/Deployment.yaml</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>发版</h3>
+        <pre><code># 构建 push 镜像后（ACR）
+kubectl -n test set image deployment/backend backend=.../ai-agent-backend:NEW_TAG
+kubectl -n test set image deployment/frontend frontend=.../ai-agent-frontend:NEW_TAG
+kubectl -n test exec deploy/backend -- alembic upgrade head   # schema 变更时
+kubectl -n test rollout status deployment/backend</code></pre>
+
+        <h3>验证</h3>
+        <pre><code>curl -s -o /dev/null -w '%{http_code}\n' http://121.40.54.65/ai-agent/api/v1/system/health
+curl -s http://121.40.54.65/ai-agent/api/v1/auth/me   # 401/200，非 404</code></pre>
+
+        <div class="callout warn">
+          <strong>ROOT_PATH Secret</strong>：必须为 <code>/ai-agent</code>（无尾随空格）。用
+          <code>echo -n '/ai-agent' | base64</code> 编码；错误值会导致 OpenAPI 路径含空格、全 API 404。
         </div>
         <div class="callout warn">
-          <strong>跨域分离（备选）</strong>：前端 <code>app.example.com</code>、后端 <code>api.example.com</code> 时，需设置
-          <code>CORS_ORIGINS</code> 与 <code>VITE_API_URL</code>，并评估 Cookie 策略。
+          勿用 <code>/ai-agent/health</code> 测后端——Nginx 会返回 SPA 的 <code>index.html</code>。
         </div>
       </section>
 
       <section id="architecture">
-        <h2>架构</h2>
+        <h2>架构（裸机 / Compose 参考）</h2>
+        <p>以下为<strong>非 K8s</strong>场景（单机 Nginx + 后端 VM 或 Docker Compose）的拓扑参考；当前生产见上一节。</p>
         <div class="diagram">                    ┌─────────────────────────────────────┐
   用户浏览器 ──HTTPS──▶│  前端服务器 (Nginx)                  │
                     │  · 静态文件  /ai-agent/*             │
@@ -581,8 +637,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
         <table>
           <thead><tr><th>检查项</th><th>命令 / 地址</th><th>期望</th></tr></thead>
           <tbody>
-            <tr><td>后端健康</td><td><code>curl backend:8000/health</code></td><td><code>{"status":"healthy"}</code></td></tr>
-            <tr><td>带前缀健康</td><td><code>curl .../ai-agent/health</code></td><td>200 OK</td></tr>
+            <tr><td>后端探针 / 健康</td><td><code>curl backend:8000/health</code>（Pod 内）</td><td><code>{"status":"healthy"}</code></td></tr>
+            <tr><td>API 经入口</td><td><code>/ai-agent/api/v1/system/health</code></td><td>200 OK（非 SPA HTML）</td></tr>
+            <tr><td>auth/me</td><td><code>/ai-agent/api/v1/auth/me</code></td><td>401 或 200，<strong>非 404</strong></td></tr>
             <tr><td>前端首页</td><td><code>https://app.example.com/ai-agent/</code></td><td>SPA 加载</td></tr>
             <tr><td>API 反代</td><td><code>https://app.example.com/ai-agent/api/v1/system/health</code></td><td>200 OK</td></tr>
             <tr><td>静态资源</td><td>浏览器 Network 面板</td><td>JS/CSS 200，带缓存头</td></tr>
@@ -644,6 +701,7 @@ make deploy-logs     # 查看远程日志</code></pre>
         <h3>API 路径 404</h3>
         <ul>
           <li>前后端 <code>ROOT_PATH</code> / <code>VITE_APP_ROOT</code> 必须一致</li>
+          <li>K8s Secret 中 <code>ROOT_PATH</code> 无尾随空格（见 <code>.agents/skills/k8s-production-debug</code>）</li>
           <li>前端请求路径为 <code>/ai-agent/api/v1/...</code>，不是裸 <code>/api/v1</code></li>
         </ul>
 
@@ -664,9 +722,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
       </section>
 
       <section id="appendix">
-        <h2>附录：Docker Compose 一体化部署</h2>
+        <h2>附录：Docker Compose 单机（web01）</h2>
         <p>
-          若前后端与 Nginx 均运行在 Docker 内（非裸机分离），可使用仓库自带编排：
+          内网/备选环境：前后端与 Nginx 均运行在单机 Docker Compose 内（<strong>非当前阿里云生产</strong>）：
         </p>
         <pre><code>cp .env.production.example .env.production
 cp deploy/backend.env.production backend/.env
@@ -675,9 +733,20 @@ cp deploy/backend.env.production backend/.env
         <p>此时 Nginx 配置见 <code>frontend/nginx.conf</code>，上游为 Compose 服务名 <code>backend:8000</code>。</p>
       </section>
 
+      <section id="refs">
+        <h2>相关文档</h2>
+        <ul>
+          <li><code>deploy/k8s/README.md</code> — 阿里云 ACK 生产部署（主文档）</li>
+          <li><code>docs/DEPLOYMENT.md</code> — Markdown 版（含 K8s + Compose）</li>
+          <li><code>.agents/skills/k8s-production-debug/SKILL.md</code> — K8s 线上故障排查</li>
+          <li><code>frontend/nginx.conf</code> — 前端 Pod / Compose 内置 Nginx</li>
+          <li><code>deploy/nginx/</code> — 裸机 Nginx 示例</li>
+        </ul>
+      </section>
+
       <footer>
-        <p>AI Agent 项目 · 生产部署文档 · 生成自仓库 <code>docs/</code> 与 <code>deploy/</code> 配置</p>
-        <p>相关文件：<code>docs/DEPLOYMENT.md</code> · <code>docker-compose.prod.yml</code> · <code>frontend/nginx.conf</code> · <code>deploy/backend.env.production</code></p>
+        <p>AI Agent 项目 · 生产部署文档</p>
+        <p>生产：阿里云 ACK · <code>deploy/k8s/README.md</code> · 备选：<code>docker-compose.prod.yml</code></p>
       </footer>
     </main>
   </div>

@@ -15,7 +15,7 @@ from functools import lru_cache
 from typing import Literal
 import uuid
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bootstrap.config_loader import app_config
@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     root_path: str = "/ai-agent"  # 服务级前缀（环境变量 ROOT_PATH；设为空字符串可关闭）
     cookie_secure: bool | None = None  # None = 自动（生产 HTTPS 时 True）；内网 HTTP 部署设为 False
+
+    @field_validator("root_path", mode="before")
+    @classmethod
+    def normalize_root_path(cls, value: object) -> object:
+        """去除 ROOT_PATH 首尾空白，避免 Secret/.env 误写空格导致路由 404。"""
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
     # ========================================================================
     # 服务器配置

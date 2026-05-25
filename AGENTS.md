@@ -1,6 +1,6 @@
 # AI Agent 项目规范
 
-> 本文件为 Cursor、Claude 及其他 AI Agent 的统一项目规范（原 `CLAUDE.md` 已合并至此）。
+> 本文件为 Cursor、Claude 及其他 AI Agent 的统一项目规范
 
 ## 架构概览
 
@@ -95,4 +95,4 @@ from libs.types import Result
 
 ## 详细规范
 
-[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md) | 数据库 **Schema 设计 + 迁移**：Skill [`.agents/skills/database-schema/SKILL.md`](.agents/skills/database-schema/SKILL.md)（`basemodel.md` / `design.md` / `reference.md`）
+[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md) | 生产部署（阿里云 K8s）：[deploy/k8s/README.md](deploy/k8s/README.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | K8s 故障排查 Skill：[`.agents/skills/k8s-production-debug/SKILL.md`](.agents/skills/k8s-production-debug/SKILL.md) | 数据库 **Schema 设计 + 迁移**：Skill [`.agents/skills/database-schema/SKILL.md`](.agents/skills/database-schema/SKILL.md)（`basemodel.md` / `design.md` / `reference.md`）

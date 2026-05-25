@@ -1,20 +1,79 @@
 # AI Agent 部署与安装指南
 
+> **当前生产环境**：阿里云 ACK（运维 `ssh wuhan-ali`，namespace `test`，公网 `http://121.40.54.65/ai-agent/`）。  
+> **备选/内网**：Docker Compose 单机（`web01`，`make deploy`）。
+
 ## 目录
 
-- [架构概览](#架构概览)
-- [环境要求](#环境要求)
-- [首次部署](#首次部署)
-- [日常部署](#日常部署)
-- [部署模式说明](#部署模式说明)
-- [配置文件说明](#配置文件说明)
-- [性能优化](#性能优化)
-- [常见问题](#常见问题)
-- [服务管理](#服务管理)
+- [生产环境：阿里云 K8s](#生产环境阿里云-k8s)
+- [附录：Docker Compose 单机](#附录docker-compose-单机)
+  - [架构概览](#架构概览)
+  - [环境要求](#环境要求)
+  - [首次部署](#首次部署)
+  - [日常部署](#日常部署)
+  - [部署模式说明](#部署模式说明)
+  - [配置文件说明](#配置文件说明)
+  - [性能优化](#性能优化)
+  - [常见问题](#常见问题)
+  - [服务管理](#服务管理)
 
 ---
 
-## 架构概览
+## 生产环境：阿里云 K8s
+
+完整步骤见 **[deploy/k8s/README.md](../deploy/k8s/README.md)**。  
+线上故障排查见 Skill **[`.agents/skills/k8s-production-debug/SKILL.md`](../.agents/skills/k8s-production-debug/SKILL.md)**。
+
+### 架构
+
+```
+浏览器 → frontend LB (121.40.54.65:80)
+           └─ Pod: Nginx + SPA，反代 /ai-agent/api/ → backend:8000 (ClusterIP)
+                  └─ RDS PostgreSQL / 阿里云 Redis / qdrant Pod
+```
+
+| 项 | 值 |
+|----|-----|
+| 运维 SSH | `wuhan-ali` |
+| Namespace | `test` |
+| 公网入口 | `http://121.40.54.65/ai-agent/` |
+| 后端 Secret | `ai-agent-backend-env` |
+| 镜像 | `giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-{backend,frontend}:v1.0.0` |
+| K8s 清单 | `backend/Deployment.yaml`、`frontend/Deployment.yaml` |
+| Nginx（Pod 内） | `frontend/nginx.conf` |
+
+### 快速发版
+
+```bash
+ssh wuhan-ali
+# 更新镜像 tag 后
+kubectl -n test set image deployment/backend backend=.../ai-agent-backend:NEW_TAG
+kubectl -n test set image deployment/frontend frontend=.../ai-agent-frontend:NEW_TAG
+kubectl -n test exec deploy/backend -- alembic upgrade head   # 有 schema 变更时
+kubectl -n test rollout status deployment/backend
+```
+
+### 验证
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://121.40.54.65/ai-agent/api/v1/system/health  # 200
+curl -s http://121.40.54.65/ai-agent/api/v1/auth/me   # 401/200，非 404
+```
+
+**注意**：`ROOT_PATH` 在 Secret 中必须为 `/ai-agent`（**无尾随空格**），否则 API 路由会注册成 `/ai-agent /api/...` 导致全站 404。
+
+### 相关文档
+
+- HTML 版：[docs/deployment-production.html](deployment-production.html)
+- 裸机 Nginx 参考：[deploy/nginx/](../deploy/nginx/)（K8s 内已内置 `frontend/nginx.conf`）
+
+---
+
+## 附录：Docker Compose 单机
+
+以下适用于 **web01 单机 Docker Compose** 部署，非当前阿里云生产路径。
+
+### 架构概览
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -46,23 +105,23 @@
 | Redis | 7-alpine | 缓存 + 会话 |
 | Qdrant | latest | 向量数据库 |
 
-## 环境要求
+### 环境要求
 
-### 本地开发机（Windows）
+#### 本地开发机（Windows）
 
 - Git、SSH 客户端
 - `tar` 命令（Git Bash 自带）
 - PowerShell 5.1+
 - SSH 配置好 `web01` 别名（`~/.ssh/config`）
 
-### 远程服务器
+#### 远程服务器
 
 - Ubuntu 20.04+
 - Docker Engine 24+（含 Docker Compose V2）
 - 至少 4GB RAM、20GB 磁盘
 - 开放端口：3000（前端）、8000（后端）
 
-## 首次部署
+### 首次部署
 
 ### 1. 初始化远程环境
 
