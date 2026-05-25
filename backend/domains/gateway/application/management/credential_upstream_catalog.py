@@ -18,6 +18,9 @@ from domains.gateway.domain.credential_probe import (
     CredentialProbeResult,
     UpstreamModelItem,
 )
+from domains.gateway.domain.policies.credential_scope import (
+    registry_target_for_credential_scope,
+)
 from domains.gateway.domain.upstream_catalog_policy import (
     resolve_openai_compatible_models_list_url,
 )
@@ -371,11 +374,53 @@ class CredentialUpstreamCatalogService:
         enabled: bool,
         items: list[tuple[str, str | None]],
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-        await self._reads.get_managed_credential_for_team(
+        cred = await self._reads.get_managed_credential_for_team(
             credential_id,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
+        if registry_target_for_credential_scope(cred.scope) == "system":
+            return await self._batch_import_system_models(
+                is_platform_admin=is_platform_admin,
+                credential_id=credential_id,
+                provider=provider,
+                capability=capability,
+                weight=weight,
+                rpm_limit=rpm_limit,
+                tpm_limit=tpm_limit,
+                tags=tags,
+                enabled=enabled,
+                items=items,
+            )
+        return await self._batch_import_team_models_for_tenant(
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+            credential_id=credential_id,
+            provider=provider,
+            capability=capability,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=tags,
+            enabled=enabled,
+            items=items,
+        )
+
+    async def _batch_import_team_models_for_tenant(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+        credential_id: uuid.UUID,
+        provider: str,
+        capability: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        enabled: bool,
+        items: list[tuple[str, str | None]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items = list(items)
@@ -416,6 +461,59 @@ class CredentialUpstreamCatalogService:
             await self._writes.reload_litellm_router()
         return created, failed
 
+    async def _batch_import_system_models(
+        self,
+        *,
+        is_platform_admin: bool,
+        credential_id: uuid.UUID,
+        provider: str,
+        capability: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        enabled: bool,
+        items: list[tuple[str, str | None]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        provider_norm = provider.strip().lower()
+        registered_rows = await self._registered_rows_for_credential(credential_id)
+        work_items = list(items)
+
+        async def import_one(
+            mid: str, payload: tuple[str, str | None]
+        ) -> dict[str, Any] | None:
+            _upstream_id, name_override = payload
+            base_name = (name_override or "").strip() or _slugify_alias(mid)
+            unique_name = await self._unique_system_model_name(base_name)
+            m = await self._writes.create_system_gateway_model(
+                name=unique_name,
+                capability=capability,
+                real_model=mid,
+                credential_id=credential_id,
+                provider=provider,
+                weight=weight,
+                rpm_limit=rpm_limit,
+                tpm_limit=tpm_limit,
+                tags=tags,
+                is_platform_admin=is_platform_admin,
+                enabled=enabled,
+                reload_router=False,
+            )
+            registered_rows.append((m.name, m.real_model))
+            return {"upstream_model_id": mid, "gateway_model_id": m.id}
+
+        created, failed, reload_once = await _run_batch_import_loop(
+            work_items,
+            provider_norm=provider_norm,
+            registered_rows=registered_rows,
+            upstream_id_of=lambda payload: payload[0],
+            import_one=import_one,
+            log_tag="batch_import_system_models",
+        )
+        if reload_once:
+            await self._writes.reload_litellm_router()
+        return created, failed
+
     async def _unique_team_model_name(self, team_id: uuid.UUID, base: str) -> str:
         from domains.gateway.infrastructure.repositories.model_repository import (
             GatewayModelRepository,
@@ -431,6 +529,22 @@ class CredentialUpstreamCatalogService:
             if not await repo.name_exists_for_tenant(team_id, candidate):
                 return candidate
         raise ValidationError("无法生成唯一注册别名")
+
+    async def _unique_system_model_name(self, base: str) -> str:
+        from domains.gateway.infrastructure.repositories.model_repository import (
+            GatewayModelRepository,
+        )
+
+        repo = GatewayModelRepository(self._session)
+        name = base[:200]
+        if not await repo.name_exists_in_scope(None, name):
+            return name
+        for i in range(2, 10_000):
+            suffix = f"-{i}"
+            candidate = (base[: 200 - len(suffix)] + suffix).strip("-") or f"model-{i}"
+            if not await repo.name_exists_in_scope(None, candidate):
+                return candidate
+        raise ValidationError("无法生成唯一系统模型注册别名")
 
 
 def _slugify_alias(model_id: str) -> str:

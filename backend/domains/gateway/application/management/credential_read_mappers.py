@@ -84,6 +84,18 @@ def system_credential_from_orm(
     )
 
 
+def bindable_credential_scope(cred: object) -> str:
+    """团队模型写侧 bindable 凭据 → API scope（system / team / user）。"""
+    from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+    from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
+
+    if isinstance(cred, SystemProviderCredential):
+        return "system"
+    if isinstance(cred, ProviderCredential):
+        return cred.scope or "team"
+    raise TypeError(f"unsupported bindable credential type: {type(cred)!r}")
+
+
 def ensure_credential_read_model(cred: CredentialReadSource) -> CredentialReadModel:
     """ORM 或已映射的只读模型统一为 CredentialReadModel（写侧返回 ORM 时 presentation 复用）。"""
     if isinstance(cred, CredentialReadModel):
@@ -100,6 +112,7 @@ def ensure_credential_read_model(cred: CredentialReadSource) -> CredentialReadMo
 
 __all__ = [
     "CredentialReadSource",
+    "bindable_credential_scope",
     "credential_from_orm",
     "ensure_credential_read_model",
     "system_credential_from_orm",

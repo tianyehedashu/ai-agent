@@ -9,6 +9,9 @@ import uuid
 
 from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
+from domains.gateway.application.management.credential_read_mappers import (
+    bindable_credential_scope,
+)
 from domains.gateway.application.management.multi_credential_types import (
     MultiCredentialGatewayModelResult,
 )
@@ -23,6 +26,11 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.policies.credential_scope import (
+    assert_system_credential_mutation_allowed,
+    registry_target_for_credential_scope,
+    team_model_credential_scope_allowed,
+)
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -50,6 +58,40 @@ class GatewayModelBatchDeleteResult:
     failed: list[GatewayModelBatchDeleteFailure]
     grants_removed: int = 0
     budgets_removed: int = 0
+
+
+@dataclass(frozen=True)
+class _PreparedGatewayModelWrite:
+    normalized_real_model: str
+    enriched_tags: dict[str, Any]
+
+
+def _prepare_gateway_model_write_fields(
+    *,
+    provider: str,
+    real_model: str,
+    tags: dict[str, Any] | None,
+    credential_provider: str,
+) -> _PreparedGatewayModelWrite:
+    raw_rm = str(real_model).strip()
+    if not raw_rm:
+        raise ValidationError("上游模型 ID 不能为空")
+    prov_norm = provider.strip().lower()
+    if credential_provider.strip().lower() != prov_norm:
+        raise ValidationError(
+            f"凭据提供商为 {credential_provider}，与请求的 provider {provider} 不一致"
+        )
+    prefix_msg = litellm_prefix_violation_message(provider, raw_rm)
+    if prefix_msg:
+        raise ValidationError(prefix_msg)
+    normalized_rm = build_litellm_model_id(provider, raw_rm)
+    enriched_tags = build_gateway_model_tags(
+        tags, provider=provider, real_model=normalized_rm
+    )
+    return _PreparedGatewayModelWrite(
+        normalized_real_model=normalized_rm,
+        enriched_tags=enriched_tags,
+    )
 
 
 class ModelWritesMixin:
@@ -150,38 +192,130 @@ class ModelWritesMixin:
         )
 
     async def create_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
-        raw_rm = str(real_model).strip()
-        if not raw_rm:
-            raise ValidationError('上游模型 ID 不能为空')
         cred = await self._creds.get_bindable_for_team_gateway_model(
             credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
         )
         if cred is None:
             raise CredentialNotFoundError(str(credential_id))
-        prov_norm = provider.strip().lower()
-        if cred.provider.strip().lower() != prov_norm:
-            raise ValidationError(f'凭据提供商为 {cred.provider}，与请求的 provider {provider} 不一致')
-        prefix_msg = litellm_prefix_violation_message(provider, raw_rm)
-        if prefix_msg:
-            raise ValidationError(prefix_msg)
-        normalized_rm = build_litellm_model_id(provider, raw_rm)
-        enriched_tags = build_gateway_model_tags(tags, provider=provider, real_model=normalized_rm)
+        if not team_model_credential_scope_allowed(bindable_credential_scope(cred)):
+            raise ValidationError(
+                '系统凭据注册的模型应写入 system_gateway_models；'
+                '请使用 create_system_gateway_model 或系统凭据批量导入'
+            )
+        prepared = _prepare_gateway_model_write_fields(
+            provider=provider,
+            real_model=real_model,
+            tags=tags,
+            credential_provider=cred.provider,
+        )
         row = await self._models.create(
             tenant_id=tenant_id,
             name=name,
             capability=capability,
-            real_model=normalized_rm,
+            real_model=prepared.normalized_real_model,
             credential_id=credential_id,
             provider=provider,
             weight=weight,
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
-            tags=enriched_tags,
+            tags=prepared.enriched_tags,
             enabled=enabled,
         )
         if reload_router:
             await self.reload_litellm_router()
         return row
+
+    async def create_system_gateway_model(
+        self,
+        *,
+        name: str,
+        capability: str,
+        real_model: str,
+        credential_id: uuid.UUID,
+        provider: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        is_platform_admin: bool,
+        enabled: bool = True,
+        reload_router: bool = True,
+    ) -> Any:
+        assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
+        cred = await self._system_creds.get(credential_id)
+        if cred is None:
+            raise CredentialNotFoundError(str(credential_id))
+        prepared = _prepare_gateway_model_write_fields(
+            provider=provider,
+            real_model=real_model,
+            tags=tags,
+            credential_provider=cred.provider,
+        )
+        row = await self._models.create_system(
+            name=name,
+            capability=capability,
+            real_model=prepared.normalized_real_model,
+            credential_id=credential_id,
+            provider=provider,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=prepared.enriched_tags,
+            enabled=enabled,
+        )
+        if reload_router:
+            await self.reload_litellm_router()
+        return row
+
+    async def create_managed_gateway_model(
+        self,
+        *,
+        credential_scope: str | None,
+        tenant_id: uuid.UUID,
+        name: str,
+        capability: str,
+        real_model: str,
+        credential_id: uuid.UUID,
+        provider: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        is_platform_admin: bool,
+        enabled: bool = True,
+        reload_router: bool = True,
+    ) -> Any:
+        """按凭据 scope 写入 team 或 system 注册表（管理面统一入口）。"""
+        if registry_target_for_credential_scope(credential_scope) == "system":
+            return await self.create_system_gateway_model(
+                name=name,
+                capability=capability,
+                real_model=real_model,
+                credential_id=credential_id,
+                provider=provider,
+                weight=weight,
+                rpm_limit=rpm_limit,
+                tpm_limit=tpm_limit,
+                tags=tags,
+                is_platform_admin=is_platform_admin,
+                enabled=enabled,
+                reload_router=reload_router,
+            )
+        return await self.create_gateway_model(
+            tenant_id=tenant_id,
+            name=name,
+            capability=capability,
+            real_model=real_model,
+            credential_id=credential_id,
+            provider=provider,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=tags,
+            is_platform_admin=is_platform_admin,
+            enabled=enabled,
+            reload_router=reload_router,
+        )
 
     async def create_multi_credential_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, provider: str, credential_ids: list[uuid.UUID], is_platform_admin: bool, strategy: str='simple-shuffle', weight: int=1, rpm_limit: int | None=None, tpm_limit: int | None=None, tags: dict[str, Any] | None=None, enabled: bool=True) -> MultiCredentialGatewayModelResult:
         """为同一 ``(provider, real_model)`` 在多个凭据上一键注册并生成 ``GatewayRoute``。
@@ -207,6 +341,16 @@ class ModelWritesMixin:
         existing_route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
         if existing_route is not None:
             raise ValidationError(f'虚拟模型名 {cleaned_name} 已存在 GatewayRoute')
+        for cid in credential_ids:
+            bindable = await self._creds.get_bindable_for_team_gateway_model(
+                cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+            )
+            if bindable is None:
+                raise CredentialNotFoundError(str(cid))
+            if not team_model_credential_scope_allowed(bindable_credential_scope(bindable)):
+                raise ValidationError(
+                    '多凭据注册不支持系统凭据；请使用系统模型单独注册或批量导入'
+                )
         from domains.gateway.infrastructure.models.gateway_model import GatewayModel
         created_models: list[GatewayModel] = []
         route = None
@@ -252,6 +396,10 @@ class ModelWritesMixin:
             )
             if cred is None:
                 raise CredentialNotFoundError(str(new_cid))
+            if owner_tenant_id is not None and not team_model_credential_scope_allowed(
+                bindable_credential_scope(cred)
+            ):
+                raise ValidationError('团队模型不可绑定系统凭据')
             if cred.provider.strip().lower() != existing.provider.strip().lower():
                 raise ValidationError(f'凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致')
         if 'real_model' in update_fields and update_fields['real_model'] is not None:

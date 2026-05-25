@@ -184,10 +184,17 @@ async def admin_credential_stats(
 async def create_model(
     body: GatewayModelCreate,
     team: RequiredTeamAdmin,
+    reads: MgmtReads,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
     try:
-        model = await writes.create_gateway_model(
+        cred = await reads.get_managed_credential_for_team(
+            body.credential_id,
+            tenant_id=team.team_id,
+            is_platform_admin=team.is_platform_admin,
+        )
+        model = await writes.create_managed_gateway_model(
+            credential_scope=cred.scope,
             tenant_id=team.team_id,
             name=body.name,
             capability=body.capability,

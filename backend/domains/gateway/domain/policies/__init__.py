@@ -10,7 +10,11 @@ from domains.gateway.domain.policies.budget_scope_policy import (
     plan_admin_budget_fetch,
 )
 from domains.gateway.domain.policies.credential_scope import (
+    GatewayModelRegistryTarget,
     assert_system_credential_mutation_allowed,
+    is_system_credential_scope,
+    registry_target_for_credential_scope,
+    team_model_credential_scope_allowed,
 )
 from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
@@ -41,7 +45,11 @@ __all__ = [
     "UsageLogAccessSnapshot",
     "actor_owns_non_system_vkey",
     "assert_platform_admin",
+    "GatewayModelRegistryTarget",
     "assert_system_credential_mutation_allowed",
+    "is_system_credential_scope",
+    "registry_target_for_credential_scope",
+    "team_model_credential_scope_allowed",
     "budget_target_allowed",
     "can_view_margin_dashboard",
     "can_view_pricing_cost_fields",

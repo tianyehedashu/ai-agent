@@ -303,6 +303,48 @@ async def test_probe_system_credential_marks_system_model_already_registered(
 
 
 @pytest.mark.asyncio
+async def test_batch_import_system_success_writes_system_gateway_models(
+    db_session, test_user: User
+) -> None:
+    port = AsyncMock()
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await SystemProviderCredentialRepository(db_session).create(
+        provider="openai",
+        name=f"sys-import-{uuid.uuid4().hex[:8]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    await db_session.commit()
+
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    svc = CredentialUpstreamCatalogService(db_session, port=port)
+    created, failed = await svc.batch_import_team_models(
+        tenant_id=team.id,
+        is_platform_admin=True,
+        credential_id=cred.id,
+        provider="openai",
+        capability="chat",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        enabled=True,
+        items=[("gpt-system-new", "sys-alias")],
+    )
+    assert failed == []
+    assert len(created) == 1
+    model_id = created[0]["gateway_model_id"]
+
+    models = GatewayModelRepository(db_session)
+    system_row = await models.get_system(model_id)
+    assert system_row is not None
+    assert system_row.name == "sys-alias"
+    assert system_row.credential_id == cred.id
+    tenant_row = await models.get(model_id)
+    assert tenant_row is None
+
+
+@pytest.mark.asyncio
 async def test_batch_import_system_duplicate_fails_when_in_system_gateway_models(
     db_session, test_user: User
 ) -> None:

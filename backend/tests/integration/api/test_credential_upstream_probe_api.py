@@ -261,3 +261,78 @@ class TestCredentialUpstreamProbeApi:
 
         await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{gid}", headers=headers)
         await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+
+    @pytest.mark.asyncio
+    async def test_system_credential_batch_import_lists_as_system_registry(
+        self,
+        dev_client: AsyncClient,
+        admin_user: User,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        """系统凭据批量导入应写入 system_gateway_models，列表 registry_scope=system 可见。"""
+        team = await TeamService(db_session).ensure_personal_team(admin_user.id)
+        await db_session.commit()
+        headers = admin_headers
+        cred_name = f"sys-batch-{uuid.uuid4().hex[:8]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-system-batch-integration-test-key",
+                "api_base": None,
+                "scope": "system",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        alias = f"sys-alias-{uuid.uuid4().hex[:6]}"
+
+        with patch.object(
+            OpenAICompatibleModelListAdapter,
+            "fetch_models",
+            new=AsyncMock(return_value=_mock_models_list()),
+        ):
+            br = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/credentials/{cid}/batch-import-models",
+                headers=headers,
+                json={
+                    "provider": "openai",
+                    "capability": "chat",
+                    "weight": 1,
+                    "enabled": True,
+                    "items": [{"upstream_model_id": "e2e-model-b", "name": alias}],
+                },
+            )
+        assert br.status_code == 201, br.text
+        batch = br.json()
+        assert len(batch["created"]) == 1
+        gid = batch["created"][0]["gateway_model_id"]
+
+        r_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"registry_scope": "system"},
+        )
+        assert r_list.status_code == 200, r_list.text
+        by_id = {item["id"]: item for item in r_list.json()}
+        assert gid in by_id
+        assert by_id[gid]["registry_kind"] == "system"
+        assert by_id[gid]["name"] == alias
+
+        r_team = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"registry_scope": "team"},
+        )
+        assert r_team.status_code == 200, r_team.text
+        team_ids = {item["id"] for item in r_team.json()}
+        assert gid not in team_ids
+
+        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{gid}", headers=headers)
+        await dev_client.delete(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}",
+            headers=headers,
+        )
