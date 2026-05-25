@@ -84,6 +84,11 @@ class DownstreamPricingResponse(BaseModel):
     scope: str
     scope_id: uuid.UUID | None
     gateway_model_id: uuid.UUID | None
+    model_name: str | None = None
+    provider: str | None = None
+    credential_id: uuid.UUID | None = None
+    credential_name: str | None = None
+    registry_kind: Literal["team", "system"] | None = None
     inheritance_strategy: str
     input_cost_per_token_usd: str | None = None
     output_cost_per_token_usd: str | None = None
@@ -116,6 +121,8 @@ class PricingRateMemberView(BaseModel):
 
     gateway_model_id: uuid.UUID | None
     model_name: str | None
+    provider: str | None = None
+    credential_name: str | None = None
     input_cost_per_million_display: MoneyDisplaySchema | None = None
     output_cost_per_million_display: MoneyDisplaySchema | None = None
     inheritance_strategy: str | None = None

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
+import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils'
 
 const columns: readonly PricingTableColumn[] = [
   { key: 'model', label: '模型', className: 'px-3 py-2' },
+  { key: 'credential', label: '凭据', className: 'px-3 py-2' },
   { key: 'rate', label: '单价（/ 1M tokens）', className: 'px-3 py-2' },
   { key: 'source', label: '来源', className: 'px-3 py-2' },
 ]
@@ -57,7 +59,12 @@ export default function GatewayPricingMyPricesPage(): React.JSX.Element {
             key={row.gateway_model_id ?? row.model_name}
             className={cn('cv-auto-row border-t', highlighted ? 'bg-primary/5' : undefined)}
           >
-            <td className="px-3 py-2 font-mono">{row.model_name}</td>
+            <td className="px-3 py-2 font-medium">{row.model_name}</td>
+            <td className="px-3 py-2 text-sm text-muted-foreground">
+              {row.provider && row.credential_name
+                ? `${providerLabel(row.provider)} · ${row.credential_name}`
+                : (row.credential_name ?? row.provider ?? '—')}
+            </td>
             <td className="px-3 py-2 tabular-nums">
               {formatRateLine(
                 row.input_cost_per_million_display,

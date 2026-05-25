@@ -58,6 +58,11 @@ export interface DownstreamPricingRow {
   scope: string
   scope_id: string | null
   gateway_model_id: string | null
+  model_name?: string | null
+  provider?: string | null
+  credential_id?: string | null
+  credential_name?: string | null
+  registry_kind?: 'team' | 'system' | null
   inheritance_strategy: string
   input_cost_per_token_usd?: string | null
   output_cost_per_token_usd?: string | null
@@ -83,6 +88,8 @@ export interface DownstreamPricingUpsertBody {
 export interface MyPriceRow {
   gateway_model_id: string | null
   model_name: string | null
+  provider?: string | null
+  credential_name?: string | null
   input_cost_per_million_display?: MoneyDisplay | null
   output_cost_per_million_display?: MoneyDisplay | null
   inheritance_strategy?: string | null

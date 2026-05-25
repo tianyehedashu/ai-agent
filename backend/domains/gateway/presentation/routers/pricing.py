@@ -267,7 +267,8 @@ async def create_downstream_pricing(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     cur = _parse_currency(body.currency)
-    payload = await _catalog_reads(db).list_downstream(
+    reads = _catalog_reads(db)
+    payload = await reads.list_downstream(
         scope=row.scope,
         scope_id=row.scope_id,
         currency=cur,
@@ -275,16 +276,16 @@ async def create_downstream_pricing(
     match = next((p for p in payload if p.get("id") == row.id), None)
     if match is not None:
         return DownstreamPricingResponse.model_validate(match)
-    return DownstreamPricingResponse(
-        id=row.id,
-        scope=row.scope,
-        scope_id=row.scope_id,
-        gateway_model_id=row.gateway_model_id,
-        inheritance_strategy=row.inheritance_strategy,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        version=row.version,
-    )
+    tenant_id = team.team_id if scope_norm == "tenant" else None
+    try:
+        enriched = await reads.downstream_row_to_enriched_response(
+            row,
+            currency=cur,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return DownstreamPricingResponse.model_validate(enriched)
 
 
 @router.post("/downstream/sync", response_model=SyncReportResponse)

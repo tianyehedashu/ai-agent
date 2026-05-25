@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
+import { useQuery } from '@tanstack/react-query'
+
 import type { DownstreamPricingRow, DownstreamPricingUpsertBody } from '@/api/gateway'
+import { modelsApi, type GatewayModel } from '@/api/gateway/models'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
+import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { Loader2 } from '@/lib/lucide-icons'
 import type { DisplayCurrency } from '@/types/money'
 
@@ -40,10 +45,39 @@ function initialValues(row: DownstreamPricingRow | null): DownstreamPricingFormV
   }
 }
 
+function ModelContextReadonly({ row }: Readonly<{ row: DownstreamPricingRow }>): React.JSX.Element {
+  const trimmed = row.model_name?.trim()
+  const displayName = trimmed && trimmed.length > 0 ? trimmed : '未知模型'
+  const provider = row.provider ? providerLabel(row.provider) : null
+  const cred = row.credential_name?.trim()
+
+  return (
+    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+      <div className="font-medium">{displayName}</div>
+      {row.gateway_model_id ? (
+        <div className="mt-0.5 font-mono text-xs text-muted-foreground">{row.gateway_model_id}</div>
+      ) : null}
+      {provider || cred ? (
+        <div className="mt-1 text-muted-foreground">
+          {provider && cred ? `${provider} · ${cred}` : (provider ?? cred)}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function modelSelectLabel(model: GatewayModel, credentialName: string | undefined): string {
+  const provider = providerLabel(model.provider)
+  const cred = credentialName ?? model.system_credential?.name
+  if (cred) return `${model.name} · ${provider} · ${cred}`
+  return `${model.name} · ${provider}`
+}
+
 export function DownstreamPricingFormDialog({
   open,
   onOpenChange,
   row,
+  teamId,
   currency,
   submitting,
   onSubmit,
@@ -51,11 +85,21 @@ export function DownstreamPricingFormDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   row: DownstreamPricingRow | null
+  teamId: string
   currency: DisplayCurrency
   submitting?: boolean
   onSubmit: (body: DownstreamPricingUpsertBody) => void
 }>): React.JSX.Element {
   const [values, setValues] = useState<DownstreamPricingFormValues>(() => initialValues(row))
+  const { byId: credentialById } = useGatewayCredentialDirectory()
+
+  const modelsQuery = useQuery({
+    queryKey: ['gateway-models-for-downstream-pricing', teamId],
+    queryFn: () => modelsApi.listModels(teamId),
+    enabled: open && !row?.gateway_model_id,
+  })
+
+  const modelOptions = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data])
 
   useEffect(() => {
     if (!open) return
@@ -71,6 +115,8 @@ export function DownstreamPricingFormDialog({
     setValues((current) => ({ ...current, [key]: value }))
   }
 
+  const editingExistingModel = Boolean(row?.gateway_model_id)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -80,15 +126,28 @@ export function DownstreamPricingFormDialog({
         </DialogHeader>
         <div className="grid gap-3 py-2">
           <div className="space-y-2">
-            <Label>模型 ID</Label>
-            <Input
-              value={values.gateway_model_id}
-              disabled={Boolean(row?.gateway_model_id)}
-              onChange={(event) => {
-                update('gateway_model_id', event.target.value)
-              }}
-              placeholder="留空仅用于 scope 默认价；模型调价需填写模型 ID"
-            />
+            <Label>模型</Label>
+            {editingExistingModel && row ? (
+              <ModelContextReadonly row={row} />
+            ) : (
+              <Select
+                value={values.gateway_model_id || undefined}
+                onValueChange={(value) => {
+                  update('gateway_model_id', value)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择要调价的模型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {modelSelectLabel(model, credentialById.get(model.credential_id)?.name)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-2">

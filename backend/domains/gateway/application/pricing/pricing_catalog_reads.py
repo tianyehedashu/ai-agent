@@ -8,13 +8,23 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.pricing.fx_port import FxRatePort
 from domains.gateway.application.pricing.money_projector import MoneyProjector
 from domains.gateway.application.pricing.pricing_management import (
-    _MILLION,
     build_money_projector,
     build_pricing_service,
     upstream_row_to_response,
+)
+from domains.gateway.application.pricing.pricing_model_enrichment import (
+    PricingModelRef,
+    build_credential_name_map_for_models,
+    build_pricing_model_ref_map,
+    resolve_pricing_model_ref,
+)
+from domains.gateway.application.pricing.pricing_read_mappers import (
+    downstream_row_to_response_dict,
+    rate_to_member_price_dict,
 )
 from domains.gateway.application.pricing.pricing_service import (
     PricingService,
@@ -24,13 +34,11 @@ from domains.gateway.application.pricing.pricing_service import (
 )
 from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay
 from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
-from domains.gateway.domain.pricing_calculator import PricingRate
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.models.pricing_downstream import DownstreamModelPricing
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
-from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.infrastructure.repositories.pricing_repository import (
     DownstreamPricingRepository,
 )
@@ -41,94 +49,13 @@ def is_pricing_admin(team: ManagementTeamContext) -> bool:
     return can_view_pricing_cost_fields(team)
 
 
-def _rate_to_million_displays(
-    rate: PricingRate,
-    *,
-    projector: MoneyProjector,
-    currency: DisplayCurrency,
-) -> tuple[dict[str, str], dict[str, str]]:
-    inp_d = projector.project(rate.input_cost_per_token, target=currency)
-    out_d = projector.project(rate.output_cost_per_token, target=currency)
-    inp_m = MoneyDisplay(
-        amount=inp_d.amount * _MILLION,
-        currency=inp_d.currency,
-        fx_rate_used=inp_d.fx_rate_used,
-    )
-    out_m = MoneyDisplay(
-        amount=out_d.amount * _MILLION,
-        currency=out_d.currency,
-        fx_rate_used=out_d.fx_rate_used,
-    )
-    return inp_m.to_api_dict(), out_m.to_api_dict()
-
-
-def rate_to_member_price_dict(
-    *,
-    gateway_model_id: uuid.UUID | None,
-    model_name: str | None,
-    rate: PricingRate,
-    inheritance_strategy: str | None,
-    projector: MoneyProjector,
-    currency: DisplayCurrency,
-) -> dict[str, Any]:
-    inp_api, out_api = _rate_to_million_displays(rate, projector=projector, currency=currency)
-    return {
-        "gateway_model_id": gateway_model_id,
-        "model_name": model_name,
-        "input_cost_per_million_display": inp_api,
-        "output_cost_per_million_display": out_api,
-        "inheritance_strategy": inheritance_strategy,
-        "display_currency": currency,
-    }
-
-
-def downstream_row_to_response_dict(
-    row: DownstreamModelPricing,
-    *,
-    projector: MoneyProjector,
-    currency: DisplayCurrency,
-    fx: FxRatePort,
-) -> dict[str, Any]:
-    if row.inheritance_strategy == "mirror":
-        return {
-            "id": row.id,
-            "scope": row.scope,
-            "scope_id": row.scope_id,
-            "gateway_model_id": row.gateway_model_id,
-            "inheritance_strategy": row.inheritance_strategy,
-            "effective_from": row.effective_from,
-            "effective_to": row.effective_to,
-            "version": row.version,
-            "display_currency": currency,
-        }
-    if row.input_cost_per_token is None or row.output_cost_per_token is None:
-        raise ValueError("manual downstream row missing token rates")
-    inp_d = projector.project(row.input_cost_per_token, target=currency)
-    out_d = projector.project(row.output_cost_per_token, target=currency)
-    return {
-        "id": row.id,
-        "scope": row.scope,
-        "scope_id": row.scope_id,
-        "gateway_model_id": row.gateway_model_id,
-        "inheritance_strategy": row.inheritance_strategy,
-        "input_cost_per_token_usd": str(row.input_cost_per_token),
-        "output_cost_per_token_usd": str(row.output_cost_per_token),
-        "input_cost_per_million_display": MoneyDisplay(
-            amount=inp_d.amount * _MILLION,
-            currency=inp_d.currency,
-            fx_rate_used=inp_d.fx_rate_used,
-        ).to_api_dict(),
-        "output_cost_per_million_display": MoneyDisplay(
-            amount=out_d.amount * _MILLION,
-            currency=out_d.currency,
-            fx_rate_used=out_d.fx_rate_used,
-        ).to_api_dict(),
-        "effective_from": row.effective_from,
-        "effective_to": row.effective_to,
-        "version": row.version,
-        "display_currency": currency,
-        "fx_rate_used": str(fx.get_rate("USD", currency)),
-    }
+def _tenant_id_for_scope(
+    scope: Literal["global", "tenant", "entitlement_plan"],
+    scope_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    if scope == "tenant" and scope_id is not None:
+        return scope_id
+    return None
 
 
 def resolved_to_admin_view_dict(
@@ -139,6 +66,7 @@ def resolved_to_admin_view_dict(
     currency: DisplayCurrency,
     fx: FxRatePort,
     projector: MoneyProjector,
+    model_ref: PricingModelRef | None = None,
 ) -> dict[str, Any]:
     upstream = (
         upstream_row_to_response(
@@ -157,17 +85,27 @@ def resolved_to_admin_view_dict(
             projector=projector,
             currency=currency,
             fx=fx,
+            model_ref=model_ref,
         )
     else:
-        inp_api, out_api = _rate_to_million_displays(
-            resolved.downstream, projector=projector, currency=currency
-        )
+        from domains.gateway.application.pricing.pricing_management import _MILLION
+
+        inp_d = projector.project(resolved.downstream.input_cost_per_token, target=currency)
+        out_d = projector.project(resolved.downstream.output_cost_per_token, target=currency)
         downstream = {
             "gateway_model_id": gateway_model_id,
             "inheritance_strategy": resolved_inheritance_strategy(resolved)
             or "upstream_passthrough",
-            "input_cost_per_million_display": inp_api,
-            "output_cost_per_million_display": out_api,
+            "input_cost_per_million_display": MoneyDisplay(
+                amount=inp_d.amount * _MILLION,
+                currency=inp_d.currency,
+                fx_rate_used=inp_d.fx_rate_used,
+            ).to_api_dict(),
+            "output_cost_per_million_display": MoneyDisplay(
+                amount=out_d.amount * _MILLION,
+                currency=out_d.currency,
+                fx_rate_used=out_d.fx_rate_used,
+            ).to_api_dict(),
             "display_currency": currency,
         }
     margin_display: dict[str, str] | None = None
@@ -215,6 +153,31 @@ class PricingCatalogReadService:
             for s in summaries
         ]
 
+    async def downstream_row_to_enriched_response(
+        self,
+        row: DownstreamModelPricing,
+        *,
+        currency: DisplayCurrency,
+        tenant_id: uuid.UUID | None = None,
+    ) -> dict[str, Any]:
+        fx = build_static_fx_adapter()
+        projector = build_money_projector(fx)
+        model_ref: PricingModelRef | None = None
+        if row.gateway_model_id is not None:
+            ref_map = await build_pricing_model_ref_map(
+                self.session,
+                {row.gateway_model_id},
+                tenant_id=tenant_id,
+            )
+            model_ref = ref_map.get(row.gateway_model_id)
+        return downstream_row_to_response_dict(
+            row,
+            projector=projector,
+            currency=currency,
+            fx=fx,
+            model_ref=model_ref,
+        )
+
     async def list_downstream(
         self,
         *,
@@ -225,16 +188,32 @@ class PricingCatalogReadService:
         from domains.gateway.domain.types import normalize_downstream_pricing_scope
 
         scope_key = normalize_downstream_pricing_scope(scope)
+        tenant_id = _tenant_id_for_scope(scope_key, scope_id)
         fx = build_static_fx_adapter()
         projector = build_money_projector(fx)
         repo = DownstreamPricingRepository(self.session)
         rows = await repo.list_for_scope(scope=scope_key, scope_id=scope_id)
+        model_ids = {r.gateway_model_id for r in rows if r.gateway_model_id is not None}
+        ref_map = await build_pricing_model_ref_map(
+            self.session,
+            model_ids,
+            tenant_id=tenant_id,
+        )
         out: list[dict[str, Any]] = []
         for row in rows:
             try:
+                model_ref = (
+                    ref_map.get(row.gateway_model_id)
+                    if row.gateway_model_id is not None
+                    else None
+                )
                 out.append(
                     downstream_row_to_response_dict(
-                        row, projector=projector, currency=currency, fx=fx
+                        row,
+                        projector=projector,
+                        currency=currency,
+                        fx=fx,
+                        model_ref=model_ref,
                     )
                 )
             except ValueError:
@@ -257,6 +236,7 @@ class PricingCatalogReadService:
             only_enabled=True,
             user_id=user_id,
         )
+        cred_names = await build_credential_name_map_for_models(self.session, models)
         out: list[dict[str, Any]] = []
         for model in models:
             try:
@@ -279,6 +259,8 @@ class PricingCatalogReadService:
                     inheritance_strategy=strategy,
                     projector=projector,
                     currency=currency,
+                    provider=model.provider,
+                    credential_name=cred_names.get(model.credential_id),
                 )
             )
         return out
@@ -290,36 +272,43 @@ class PricingCatalogReadService:
         gateway_model_id: uuid.UUID,
         currency: DisplayCurrency,
     ) -> dict[str, Any]:
-        model = await GatewayModelRepository(self.session).get(gateway_model_id)
-        if model is None:
+        model_ref = await resolve_pricing_model_ref(
+            self.session,
+            gateway_model_id,
+            tenant_id=team.team_id,
+        )
+        if model_ref is None:
             raise LookupError("model not found")
         resolved = await self._svc().resolve_downstream_rate(
             tenant_id=team.team_id,
             entitlement_plan_id=None,
             gateway_model_id=gateway_model_id,
-            provider=model.provider,
-            upstream_model=model.real_model,
-            capability=model.capability,
+            provider=model_ref.provider,
+            upstream_model=model_ref.real_model,
+            capability=model_ref.capability,
         )
         fx = build_static_fx_adapter()
         projector = build_money_projector(fx)
         if is_pricing_admin(team):
             return resolved_to_admin_view_dict(
                 gateway_model_id=gateway_model_id,
-                model_name=model.name,
+                model_name=model_ref.model_name,
                 resolved=resolved,
                 currency=currency,
                 fx=fx,
                 projector=projector,
+                model_ref=model_ref,
             )
         strategy = resolved_inheritance_strategy(resolved)
         return rate_to_member_price_dict(
             gateway_model_id=gateway_model_id,
-            model_name=model.name,
+            model_name=model_ref.model_name,
             rate=resolved.downstream,
             inheritance_strategy=strategy,
             projector=projector,
             currency=currency,
+            provider=model_ref.provider,
+            credential_name=model_ref.credential_name,
         )
 
 

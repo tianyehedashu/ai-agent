@@ -1,7 +1,8 @@
 import type React from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import type { DownstreamPricingRow, DownstreamPricingUpsertBody } from '@/api/gateway'
@@ -10,12 +11,18 @@ import { Button } from '@/components/ui/button'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { DownstreamPricingFormDialog } from '@/features/gateway-pricing/downstream-pricing-form-dialog'
 import { formatRateLine } from '@/features/gateway-pricing/format'
+import {
+  PricingCredentialLabel,
+  PricingModelLabel,
+} from '@/features/gateway-pricing/pricing-model-label'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Pencil, RefreshCw, RotateCcw } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 
 const columns: readonly PricingTableColumn[] = [
-  { key: 'model', label: '模型 ID', className: 'px-3 py-2' },
+  { key: 'model', label: '模型', className: 'px-3 py-2' },
+  { key: 'credential', label: '凭据', className: 'px-3 py-2' },
   { key: 'strategy', label: '策略', className: 'px-3 py-2' },
   { key: 'rate', label: '生效价', className: 'px-3 py-2' },
   { key: 'version', label: '版本', className: 'px-3 py-2' },
@@ -26,6 +33,8 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const currency = GATEWAY_DISPLAY_CURRENCY
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const targetModelId = searchParams.get('model_id')?.trim() ?? ''
   const [editingRow, setEditingRow] = useState<DownstreamPricingRow | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
@@ -72,7 +81,16 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
     })
   }
 
-  const rows = downstreamQuery.data ?? []
+  const rows = useMemo(() => {
+    const raw = downstreamQuery.data ?? []
+    if (!targetModelId) return raw
+    return [...raw].sort((left, right) => {
+      const leftHit = left.gateway_model_id === targetModelId
+      const rightHit = right.gateway_model_id === targetModelId
+      if (leftHit === rightHit) return 0
+      return leftHit ? -1 : 1
+    })
+  }, [downstreamQuery.data, targetModelId])
 
   return (
     <div className="space-y-4">
@@ -101,58 +119,70 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
           void downstreamQuery.refetch()
         }}
       >
-        {rows.map((row) => (
-          <tr key={row.id} className="cv-auto-row border-t">
-            <td className="px-3 py-2 font-mono text-xs">{row.gateway_model_id ?? '默认'}</td>
-            <td className="px-3 py-2">
-              {row.inheritance_strategy === 'mirror' ? '跟随上游' : '自定义'}
-            </td>
-            <td className="px-3 py-2 tabular-nums">
-              {row.inheritance_strategy === 'mirror'
-                ? '= 上游'
-                : formatRateLine(
-                    row.input_cost_per_million_display,
-                    row.output_cost_per_million_display,
-                    currency
-                  )}
-            </td>
-            <td className="px-3 py-2 text-muted-foreground">v{row.version}</td>
-            <td className="px-3 py-2 text-right">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingRow(row)
-                  setFormOpen(true)
-                }}
-              >
-                <Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                调价
-              </Button>
-              {row.inheritance_strategy !== 'mirror' && row.gateway_model_id ? (
+        {rows.map((row) => {
+          const highlighted = Boolean(targetModelId) && row.gateway_model_id === targetModelId
+          return (
+            <tr
+              key={row.id}
+              className={cn('cv-auto-row border-t', highlighted ? 'bg-primary/5' : undefined)}
+            >
+              <td className="px-3 py-2">
+                <PricingModelLabel row={row} />
+              </td>
+              <td className="px-3 py-2 text-sm">
+                <PricingCredentialLabel row={row} />
+              </td>
+              <td className="px-3 py-2">
+                {row.inheritance_strategy === 'mirror' ? '跟随上游' : '自定义'}
+              </td>
+              <td className="px-3 py-2 tabular-nums">
+                {row.inheritance_strategy === 'mirror'
+                  ? '= 上游'
+                  : formatRateLine(
+                      row.input_cost_per_million_display,
+                      row.output_cost_per_million_display,
+                      currency
+                    )}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">v{row.version}</td>
+              <td className="px-3 py-2 text-right">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={upsertMut.isPending}
                   onClick={() => {
-                    restoreMirror(row)
+                    setEditingRow(row)
+                    setFormOpen(true)
                   }}
                 >
-                  <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  跟随上游
+                  <Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  调价
                 </Button>
-              ) : null}
-            </td>
-          </tr>
-        ))}
+                {row.inheritance_strategy !== 'mirror' && row.gateway_model_id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={upsertMut.isPending}
+                    onClick={() => {
+                      restoreMirror(row)
+                    }}
+                  >
+                    <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    跟随上游
+                  </Button>
+                ) : null}
+              </td>
+            </tr>
+          )
+        })}
       </PricingTable>
 
       <DownstreamPricingFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
         row={editingRow}
+        teamId={teamId}
         currency={currency}
         submitting={upsertMut.isPending}
         onSubmit={(body) => {
