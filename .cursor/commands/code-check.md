@@ -3,6 +3,8 @@
 > 规则真源：
 >
 > - `backend/docs/CODE_STANDARDS.md`（结构 / 反退化 / Gateway 分层 / 读路径）
+> - `docs/PAGINATION.md`（列表 API 分页 envelope）
+> - `docs/API_RESPONSE.md`（API 成功/错误响应 + 异常处理）
 > - `backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界 / `ProxyUseCase` 拆分）
 > - `backend/docs/ARCHITECTURE.md`、仓库根 `AGENTS.md`
 >
@@ -13,7 +15,7 @@
 ## 审查流程（按顺序）
 
 1. **改动盘点**：列出本次新增/修改的文件，标出归属域与层（presentation / application / domain / infrastructure / bootstrap / libs）。
-2. **应用 checklist**：对每个改动文件勾选 `.cursor/agents/code-rule-check.md` §1–§13，记录违反项。
+2. **应用 checklist**：对每个改动文件勾选 `.cursor/agents/code-rule-check.md` §1–§16，记录违反项。
 3. **专项问法**（按改动类型分流，至少回答触发的那一类）：
 
    - **Gateway `/v1/*` 代理改动** → 回答 §A
@@ -21,6 +23,8 @@
    - **API / 读路径 / 字段扩展** → 回答 §C
    - **跨域调用 / 端口** → 回答 §D
    - **前端 BYOK / 模型 UI** → 回答 §E
+   - **新增/改动 list endpoint 或分页 UI** → 回答 §F，并勾选 checklist **§15**
+   - **异常处理 / 错误响应格式** → 回答 §G，并勾选 checklist **§16**
 
 4. **静态与测试**：在 `backend/` 下跑：
 
@@ -73,6 +77,26 @@
 
 - 凭据 / 模型 Tab 是否回流到 `pages/settings`？必须停留在 `/gateway/*` + `features/gateway-*`（→ AGENTS.md「前端」原则）。
 - 是否使用 `@/types` 已有类型而非 `any` 重写？
+
+### §F. 列表分页
+
+（→ `docs/PAGINATION.md`、checklist §15）
+
+- Query 是否为 `page` + `page_size`（非 `skip/limit`）？响应是否含 `items/total/page/page_size/has_next/has_prev`？
+- 是否使用 `libs.api.pagination`（`PageParams` / `build_page` / `slice_page`）而非 router 手拼 envelope？
+- SQL 分页是否经 repository，application 是否避免直接列表 SQL？
+- 前端是否经 `@/lib/pagination` + `@/components/pagination-controls`？批量 id 是否处理 `truncated`？
+- 集成测试是否断言 envelope 字段？
+
+### §G. API 响应 / 异常处理
+
+（→ `docs/API_RESPONSE.md`、checklist §16）
+
+- 成功响应是否为 Schema 直出（非 `{ code, message, data }`）？
+- 错误是否走 `AIAgentError` + 全局 RFC 7807 handler（非 router 手写 HTTPException）？
+- 新错误码是否登记 `libs/exceptions/codes.py`？
+- OpenAI/Anthropic `/v1/*` 是否仍走各自 compat mapper（未包 Problem Details）？
+- 前端是否经 `parseApiErrorBody` / 结构化 `ApiError`？
 
 ## 遗留与重复（每次必检）
 

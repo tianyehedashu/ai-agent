@@ -9,7 +9,8 @@ from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
-    from domains.gateway.application.proxy_guard import BudgetReservation, ProxyGuard
+    from domains.gateway.application.proxy_guard import ProxyGuard
+    from domains.gateway.domain.proxy_policy import BudgetReservation
 
 
 async def invoke_router_with_direct_fallback(

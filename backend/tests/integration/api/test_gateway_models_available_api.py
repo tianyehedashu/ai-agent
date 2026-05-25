@@ -13,6 +13,10 @@ import pytest
 _AVAILABLE = "/api/v1/gateway/models/available"
 
 
+def _paginated_items(section: dict) -> list:
+    return section.get("items", section) if isinstance(section, dict) else section
+
+
 @pytest.mark.integration
 class TestGatewayModelsAvailableApi:
     """可用模型列表 API（系统 + 用户合并）"""
@@ -54,9 +58,11 @@ class TestGatewayModelsAvailableApi:
         data = r.json()
         assert "system_models" in data
         assert "user_models" in data
-        assert isinstance(data["system_models"], list)
-        assert isinstance(data["user_models"], list)
-        assert len(data["user_models"]) >= 1
+        assert isinstance(data["system_models"], dict)
+        assert isinstance(data["user_models"], dict)
+        assert "items" in data["system_models"]
+        assert "items" in data["user_models"]
+        assert len(_paginated_items(data["user_models"])) >= 1
 
     @pytest.mark.asyncio
     async def test_available_system_models_are_flagged(
@@ -66,7 +72,7 @@ class TestGatewayModelsAvailableApi:
     ):
         """系统模型 is_system=True"""
         r = await dev_client.get(_AVAILABLE, headers=auth_headers)
-        for sm in r.json()["system_models"]:
+        for sm in _paginated_items(r.json()["system_models"]):
             assert sm["is_system"] is True
 
     @pytest.mark.asyncio
@@ -82,7 +88,7 @@ class TestGatewayModelsAvailableApi:
             headers=auth_headers,
         )
         assert r.status_code == status.HTTP_200_OK
-        for sm in r.json()["system_models"]:
+        for sm in _paginated_items(r.json()["system_models"]):
             assert "text" in sm["model_types"]
 
     @pytest.mark.asyncio
@@ -136,9 +142,9 @@ class TestGatewayModelsAvailableApi:
         )
         assert r.status_code == status.HTTP_200_OK
         data = r.json()
-        for sm in data["system_models"]:
+        for sm in _paginated_items(data["system_models"]):
             assert sm["provider"] == "deepseek"
-        for um in data["user_models"]:
+        for um in _paginated_items(data["user_models"]):
             assert um["provider"] == "deepseek"
 
     @pytest.mark.asyncio
@@ -152,11 +158,12 @@ class TestGatewayModelsAvailableApi:
         data = r.json()
         assert "system_models" in data
         assert "user_models" in data
-        assert isinstance(data["system_models"], list)
-        assert isinstance(data["user_models"], list)
-        assert len(data["user_models"]) == 0
-        if data["system_models"]:
-            for sm in data["system_models"]:
+        assert isinstance(data["system_models"], dict)
+        assert isinstance(data["user_models"], dict)
+        assert len(_paginated_items(data["user_models"])) == 0
+        system_items = _paginated_items(data["system_models"])
+        if system_items:
+            for sm in system_items:
                 assert sm.get("is_system") is True
                 assert "display_name" in sm
                 assert "id" in sm

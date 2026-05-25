@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.entitlement_model_status import resolve_entitlement_scope
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
+from domains.gateway.application.proxy_timing import timing_response_headers
 from domains.gateway.application.proxy_use_case import ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
@@ -80,6 +81,7 @@ async def chat_completions(
         raise openai_http_exception_from_proxy_business_error(exc) from exc
 
     rate_headers = await rate_limit_headers_for_context(ctx, flavor="openai")
+    response_headers = {**rate_headers, **timing_response_headers(ctx.proxy_timing)}
 
     if proxy_body.get("stream"):
         stream = cast("AsyncIterator[dict[str, Any]]", result)
@@ -92,12 +94,12 @@ async def chat_completions(
         return StreamingResponse(
             _sse(),
             media_type="text/event-stream",
-            headers=rate_headers,
+            headers=response_headers,
         )
     return Response(
         content=orjson.dumps(result),
         media_type="application/json",
-        headers=rate_headers,
+        headers=response_headers,
     )
 
 

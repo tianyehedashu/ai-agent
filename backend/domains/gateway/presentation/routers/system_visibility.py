@@ -13,7 +13,6 @@ from domains.gateway.application.management.system_visibility import (
 )
 from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
 from domains.gateway.presentation.deps import CurrentTeam
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.routers._common import MgmtReads
 from domains.gateway.presentation.schemas.common import (
     SystemGatewayGrantCreate,
@@ -24,7 +23,6 @@ from domains.gateway.presentation.schemas.common import (
     SystemVisibilityTargetSnapshot,
 )
 from libs.db.database import get_db
-from libs.exceptions import HttpMappableDomainError
 
 router = APIRouter(prefix="/system", tags=["AI Gateway / System Visibility"])
 
@@ -36,10 +34,7 @@ def _visibility_svc(
 
 
 def _require_platform_admin_team(team: CurrentTeam) -> None:
-    try:
-        assert_platform_admin(is_platform_admin=team.is_platform_admin)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    assert_platform_admin(is_platform_admin=team.is_platform_admin)
 
 
 def _grant_to_response(row: object) -> SystemGatewayGrantResponse:
@@ -54,14 +49,11 @@ async def patch_credential_visibility(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> dict[str, str]:
     _require_platform_admin_team(team)
-    try:
-        row = await svc.set_credential_visibility(
-            credential_id,
-            visibility=body.visibility,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await svc.set_credential_visibility(
+        credential_id,
+        visibility=body.visibility,
+        is_platform_admin=team.is_platform_admin,
+    )
     return {"id": str(row.id), "visibility": row.visibility}
 
 
@@ -73,14 +65,11 @@ async def patch_model_visibility(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> dict[str, str]:
     _require_platform_admin_team(team)
-    try:
-        row = await svc.set_model_visibility(
-            model_id,
-            visibility=body.visibility,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await svc.set_model_visibility(
+        model_id,
+        visibility=body.visibility,
+        is_platform_admin=team.is_platform_admin,
+    )
     return {"id": str(row.id), "visibility": row.visibility}
 
 
@@ -91,12 +80,9 @@ async def list_credential_grants(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> list[SystemGatewayGrantResponse]:
     _require_platform_admin_team(team)
-    try:
-        rows = await svc.list_grants_for_subject(
-            "credential", credential_id, is_platform_admin=team.is_platform_admin
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    rows = await svc.list_grants_for_subject(
+        "credential", credential_id, is_platform_admin=team.is_platform_admin
+    )
     return [_grant_to_response(r) for r in rows]
 
 
@@ -107,12 +93,9 @@ async def list_model_grants(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> list[SystemGatewayGrantResponse]:
     _require_platform_admin_team(team)
-    try:
-        rows = await svc.list_grants_for_subject(
-            "model", model_id, is_platform_admin=team.is_platform_admin
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    rows = await svc.list_grants_for_subject(
+        "model", model_id, is_platform_admin=team.is_platform_admin
+    )
     return [_grant_to_response(r) for r in rows]
 
 
@@ -123,18 +106,15 @@ async def create_grant(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> SystemGatewayGrantResponse:
     _require_platform_admin_team(team)
-    try:
-        row = await svc.create_grant(
-            subject_kind=body.subject_kind,
-            subject_id=body.subject_id,
-            target_kind=body.target_kind,
-            target_id=body.target_id,
-            granted_by=team.user_id,
-            note=body.note,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await svc.create_grant(
+        subject_kind=body.subject_kind,
+        subject_id=body.subject_id,
+        target_kind=body.target_kind,
+        target_id=body.target_id,
+        granted_by=team.user_id,
+        note=body.note,
+        is_platform_admin=team.is_platform_admin,
+    )
     return _grant_to_response(row)
 
 
@@ -146,15 +126,12 @@ async def update_grant(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> SystemGatewayGrantResponse:
     _require_platform_admin_team(team)
-    try:
-        row = await svc.update_grant(
-            grant_id,
-            enabled=body.enabled,
-            note=body.note,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await svc.update_grant(
+        grant_id,
+        enabled=body.enabled,
+        note=body.note,
+        is_platform_admin=team.is_platform_admin,
+    )
     return _grant_to_response(row)
 
 
@@ -165,10 +142,7 @@ async def delete_grant(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> None:
     _require_platform_admin_team(team)
-    try:
-        await svc.delete_grant(grant_id, is_platform_admin=team.is_platform_admin)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await svc.delete_grant(grant_id, is_platform_admin=team.is_platform_admin)
 
 
 admin_router = APIRouter(prefix="/admin", tags=["AI Gateway / System Visibility Admin"])
@@ -185,12 +159,9 @@ async def team_system_visibility(
     svc: Annotated[GatewaySystemVisibilityService, Depends(_visibility_svc)],
 ) -> SystemVisibilityTargetSnapshot:
     _require_platform_admin_team(team)
-    try:
-        grants = await svc.list_grants_for_target(
-            "team", team_id, is_platform_admin=team.is_platform_admin
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    grants = await svc.list_grants_for_target(
+        "team", team_id, is_platform_admin=team.is_platform_admin
+    )
     visible_names = await reads.list_callable_system_model_names(
         team_id,
         user_id=None,
@@ -215,12 +186,9 @@ async def user_system_visibility(
 ) -> SystemVisibilityTargetSnapshot:
     _require_platform_admin_team(team)
     personal_team_id = await reads.personal_team_id_for_user(user_id)
-    try:
-        grants = await svc.list_grants_for_target(
-            "user", user_id, is_platform_admin=team.is_platform_admin
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    grants = await svc.list_grants_for_target(
+        "user", user_id, is_platform_admin=team.is_platform_admin
+    )
     visible_names = await reads.list_callable_system_model_names(
         personal_team_id,
         user_id=user_id,

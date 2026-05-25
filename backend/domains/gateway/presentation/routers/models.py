@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
@@ -24,13 +24,20 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
+from domains.gateway.presentation.gateway_model_list_response import (
+    build_gateway_model_list_response,
+)
 from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     GatewayModelBatchDeleteFailureItem,
     GatewayModelBatchDeleteRequest,
     GatewayModelBatchDeleteResponse,
+    GatewayModelBatchResyncCapabilitiesRequest,
+    GatewayModelBatchResyncCapabilitiesResponse,
     GatewayModelCreate,
+    GatewayModelIdsResponse,
+    GatewayModelListResponse,
     GatewayModelPresetResponse,
     GatewayModelResponse,
     GatewayModelTestResponse,
@@ -42,7 +49,7 @@ from domains.gateway.presentation.schemas.common import (
 )
 from domains.identity.presentation.deps import AdminUser
 from libs.db.database import get_db
-from libs.exceptions import HttpMappableDomainError, ValidationError
+from libs.exceptions import NotFoundError, PermissionDeniedError
 
 from ._common import (
     MgmtReads,
@@ -107,10 +114,11 @@ async def reload_gateway_catalog_from_config(
     return {"ok": True, **report.to_api_dict()}
 
 
-@router.get("/models", response_model=list[GatewayModelResponse])
+@router.get("/models", response_model=GatewayModelListResponse)
 async def list_models(
     team: CurrentTeam,
     reads: MgmtReads,
+    query: ModelListQueryDep,
     registry_scope: Literal["team", "system", "callable", "requestable"] = Query(
         "team",
         description=(
@@ -118,20 +126,17 @@ async def list_models(
             "callable=租户+平台合并；requestable=enabled 且连通性未 failed（试调/请求用）"
         ),
     ),
-    provider: str | None = Query(None, min_length=1, max_length=50),
-    credential_id: uuid.UUID | None = Query(None),
-) -> list[GatewayModelResponse]:
+) -> GatewayModelListResponse:
     if registry_scope == "system" and not team.is_platform_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform admin can list system registry models",
+        raise PermissionDeniedError(
+            message="Only platform admin can list system registry models",
+            resource="system registry models",
         )
-    models = await reads.list_gateway_models(
+    page = await reads.list_gateway_models_page(
         team.team_id,
+        query,
         registry_scope=registry_scope,
         only_enabled=False,
-        provider=provider,
-        credential_id=credential_id,
         user_id=team.user_id,
     )
     include_cred = registry_scope == "system" and team.is_platform_admin
@@ -139,18 +144,37 @@ async def list_models(
     if include_cred:
         cred_ids = {
             m.credential_id
-            for m in models
+            for m in page.items
             if registry_kind_for_merged_row(m) == "system"
         }
         credentials_by_id = await reads.map_system_credentials_by_id(cred_ids)
-    return [
-        build_gateway_model_response(
-            m,
-            include_system_credential=include_cred,
-            credentials_by_id=credentials_by_id if include_cred else None,
+    return build_gateway_model_list_response(
+        page,
+        include_system_credential=include_cred,
+        credentials_by_id=credentials_by_id if include_cred else None,
+    )
+
+
+@router.get("/models/ids", response_model=GatewayModelIdsResponse)
+async def list_model_ids(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    query: ModelListQueryDep,
+    registry_scope: Literal["team", "system", "callable", "requestable"] = Query("team"),
+) -> GatewayModelIdsResponse:
+    if registry_scope == "system" and not team.is_platform_admin:
+        raise PermissionDeniedError(
+            message="Only platform admin can list system registry models",
+            resource="system registry models",
         )
-        for m in models
-    ]
+    result = await reads.list_gateway_model_ids(
+        team.team_id,
+        query,
+        registry_scope=registry_scope,
+        only_enabled=False,
+        user_id=team.user_id,
+    )
+    return GatewayModelIdsResponse(ids=result.ids, truncated=result.truncated)
 
 
 @router.get("/models/usage-summary", response_model=GatewayModelUsageSummaryResponse)
@@ -165,6 +189,31 @@ async def models_usage_summary(
     return GatewayModelUsageSummaryResponse.model_validate(raw)
 
 
+@router.get("/models/{model_id}", response_model=GatewayModelResponse)
+async def get_model(
+    model_id: uuid.UUID,
+    team: CurrentTeam,
+    reads: MgmtReads,
+    registry_scope: Literal["team", "system", "callable", "requestable"] = Query("team"),
+) -> GatewayModelResponse:
+    row = await reads.get_gateway_registry_model(
+        model_id,
+        team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    if row is None:
+        raise NotFoundError("Model")
+    include_cred = registry_scope == "system" and team.is_platform_admin
+    credentials_by_id = None
+    if include_cred and registry_kind_for_merged_row(row) == "system":
+        credentials_by_id = await reads.map_system_credentials_by_id({row.credential_id})
+    return build_gateway_model_response(
+        row,
+        include_system_credential=include_cred,
+        credentials_by_id=credentials_by_id,
+    )
+
+
 @router.get("/admin/credential-stats", response_model=list[PlatformCredentialStatItem])
 async def admin_credential_stats(
     team: CurrentTeam,
@@ -172,9 +221,9 @@ async def admin_credential_stats(
     days: int = Query(7, ge=1, le=90),
 ) -> list[PlatformCredentialStatItem]:
     if not team.is_platform_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform admin can view credential stats",
+        raise PermissionDeniedError(
+            message="Only platform admin can view credential stats",
+            resource="credential stats",
         )
     rows = await reads.list_platform_credential_stats(days=days)
     return [PlatformCredentialStatItem.model_validate(r) for r in rows]
@@ -187,31 +236,26 @@ async def create_model(
     reads: MgmtReads,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
-    try:
-        cred = await reads.get_managed_credential_for_team(
-            body.credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        model = await writes.create_managed_gateway_model(
-            credential_scope=cred.scope,
-            tenant_id=team.team_id,
-            name=body.name,
-            capability=body.capability,
-            real_model=body.real_model,
-            credential_id=body.credential_id,
-            provider=body.provider,
-            weight=body.weight,
-            rpm_limit=body.rpm_limit,
-            tpm_limit=body.tpm_limit,
-            tags=body.tags,
-            is_platform_admin=team.is_platform_admin,
-            enabled=body.enabled,
-        )
-    except ValidationError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    cred = await reads.get_managed_credential_for_team(
+        body.credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    model = await writes.create_managed_gateway_model(
+        credential_scope=cred.scope,
+        tenant_id=team.team_id,
+        name=body.name,
+        capability=body.capability,
+        real_model=body.real_model,
+        credential_id=body.credential_id,
+        provider=body.provider,
+        weight=body.weight,
+        rpm_limit=body.rpm_limit,
+        tpm_limit=body.tpm_limit,
+        tags=body.tags,
+        is_platform_admin=team.is_platform_admin,
+        enabled=body.enabled,
+    )
     return build_gateway_model_response(model)
 
 
@@ -226,26 +270,21 @@ async def create_multi_credential_model(
     writes: MgmtWrites,
 ) -> MultiCredentialGatewayModelResponse:
     """同 ``(provider, real_model)`` 多凭据一键注册 + 自动 ``GatewayRoute``，启用 Router 负载均衡。"""
-    try:
-        result = await writes.create_multi_credential_gateway_model(
-            tenant_id=team.team_id,
-            name=body.name,
-            capability=body.capability,
-            real_model=body.real_model,
-            provider=body.provider,
-            credential_ids=list(body.credential_ids),
-            is_platform_admin=team.is_platform_admin,
-            strategy=body.strategy.value,
-            weight=body.weight,
-            rpm_limit=body.rpm_limit,
-            tpm_limit=body.tpm_limit,
-            tags=body.tags,
-            enabled=body.enabled,
-        )
-    except ValidationError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    result = await writes.create_multi_credential_gateway_model(
+        tenant_id=team.team_id,
+        name=body.name,
+        capability=body.capability,
+        real_model=body.real_model,
+        provider=body.provider,
+        credential_ids=list(body.credential_ids),
+        is_platform_admin=team.is_platform_admin,
+        strategy=body.strategy.value,
+        weight=body.weight,
+        rpm_limit=body.rpm_limit,
+        tpm_limit=body.tpm_limit,
+        tags=body.tags,
+        enabled=body.enabled,
+    )
     route = result.route
     models = result.models
     return MultiCredentialGatewayModelResponse(
@@ -264,17 +303,12 @@ async def update_model(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
-    try:
-        updated = await writes.update_gateway_model(
-            model_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            fields=body.model_dump(exclude_unset=True, exclude_none=True),
-        )
-    except ValidationError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    updated = await writes.update_gateway_model(
+        model_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        fields=body.model_dump(exclude_unset=True, exclude_none=True),
+    )
     return build_gateway_model_response(updated)
 
 
@@ -284,14 +318,11 @@ async def delete_model(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_gateway_model(
-            model_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_gateway_model(
+        model_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 @router.post("/models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
@@ -300,16 +331,11 @@ async def batch_delete_models(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> GatewayModelBatchDeleteResponse:
-    try:
-        result = await writes.delete_gateway_models_batch(
-            payload.model_ids,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except ValidationError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    result = await writes.delete_gateway_models_batch(
+        payload.model_ids,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     return GatewayModelBatchDeleteResponse(
         succeeded=result.succeeded,
         failed=[
@@ -325,6 +351,33 @@ async def batch_delete_models(
     )
 
 
+@router.post(
+    "/models/batch-resync-capabilities",
+    response_model=GatewayModelBatchResyncCapabilitiesResponse,
+)
+async def batch_resync_model_capabilities(
+    payload: GatewayModelBatchResyncCapabilitiesRequest,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> GatewayModelBatchResyncCapabilitiesResponse:
+    result = await writes.resync_gateway_models_capabilities_batch(
+        payload.model_ids,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    return GatewayModelBatchResyncCapabilitiesResponse(
+        succeeded=result.succeeded,
+        failed=[
+            GatewayModelBatchDeleteFailureItem(
+                id=item.id,
+                code=item.code,
+                message=item.message,
+            )
+            for item in result.failed
+        ],
+    )
+
+
 @router.post("/models/{model_id}/test", response_model=GatewayModelTestResponse)
 async def test_model(
     model_id: uuid.UUID,
@@ -336,10 +389,7 @@ async def test_model(
     成功/失败均返回 200 + ``success`` 字段，结果同步落库（``last_test_status``
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。
     """
-    try:
-        result = await writes.test_gateway_model(model_id, tenant_id=team.team_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    result = await writes.test_gateway_model(model_id, tenant_id=team.team_id)
     return GatewayModelTestResponse.model_validate(result)
 
 

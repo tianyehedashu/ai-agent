@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from 'react'
+﻿import { useCallback, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -37,12 +37,11 @@ export function PersonalModelDetailPane({
   const { currentUser } = useUserStore()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ['gateway', 'my-models'],
-    queryFn: () => gatewayApi.listMyModels(),
+  const { data: model, isLoading } = useQuery({
+    queryKey: ['gateway', 'my-models', modelId],
+    queryFn: () => gatewayApi.getMyModel(modelId),
+    enabled: modelId !== '',
   })
-
-  const model = useMemo(() => items.find((m) => m.id === modelId) ?? null, [items, modelId])
 
   const { deleteMutation, testMutation } = usePersonalModelMutations({
     onDeleteSuccess: () => {

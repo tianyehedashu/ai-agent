@@ -53,7 +53,7 @@ import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-mo
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { Copy, ExternalLink, Info, Loader2, Trash2, Zap } from '@/lib/lucide-icons'
+import { Copy, ExternalLink, Info, Loader2, RefreshCw, Trash2, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
@@ -71,6 +71,7 @@ interface ModelInspectorProps {
   isDeleting?: boolean
   onTest: (id: string) => void
   onSave: (id: string, body: GatewayModelUpdateBody) => void
+  onResyncCapabilities?: (id: string) => void
   onToggleEnabled: (id: string, enabled: boolean) => void
   onDelete?: (id: string) => void
   emptyReason?: 'none' | 'filter'
@@ -91,6 +92,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   isDeleting = false,
   onTest,
   onSave,
+  onResyncCapabilities,
   onToggleEnabled,
   onDelete,
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
@@ -234,6 +236,23 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   )}
                   测试连通性
                 </Button>
+                {onResyncCapabilities && !configManaged ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isSaving}
+                    onClick={() => {
+                      onResyncCapabilities(model.id)
+                    }}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    从 LiteLLM 同步能力
+                  </Button>
+                ) : null}
                 {onDelete ? (
                   configManaged || !canDelete ? (
                     <Tooltip>
@@ -639,6 +658,7 @@ export const ModelInspector = memo(function ModelInspector({
   isDeleting = false,
   onTest,
   onSave,
+  onResyncCapabilities,
   onToggleEnabled,
   onDelete,
   emptyReason = 'none',
@@ -676,6 +696,7 @@ export const ModelInspector = memo(function ModelInspector({
       isDeleting={isDeleting}
       onTest={onTest}
       onSave={onSave}
+      onResyncCapabilities={onResyncCapabilities}
       onToggleEnabled={onToggleEnabled}
       onDelete={onDelete}
     />

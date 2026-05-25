@@ -10,12 +10,11 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from fastapi import HTTPException, status
-
 from domains.identity.domain.rbac import (
     Permission,
     has_permission,
 )
+from libs.exceptions import AuthenticationError, PermissionDeniedError
 
 
 def require_permission(permission: Permission):
@@ -32,17 +31,14 @@ def require_permission(permission: Permission):
         @wraps(func)
         async def wrapper(*args, current_user: dict | None = None, **kwargs):
             if current_user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required",
-                )
+                raise AuthenticationError("Authentication required")
 
             user_role = current_user.get("role", "user")
 
             if not has_permission(user_role, permission):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission denied: {permission.value}",
+                raise PermissionDeniedError(
+                    message=f"Permission denied: {permission.value}",
+                    action=permission.value,
                 )
 
             return await func(*args, current_user=current_user, **kwargs)

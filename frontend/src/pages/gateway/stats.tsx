@@ -2,7 +2,7 @@
  * AI Gateway · 调用统计
  */
 
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useQuery } from '@tanstack/react-query'
@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { credentialsApi } from '@/api/gateway/credentials'
 import { keysApi } from '@/api/gateway/keys'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
-import { type GatewayModel, modelsApi } from '@/api/gateway/models'
+import type { GatewayModel } from '@/api/gateway/models'
 import {
   statsApi,
   type GatewayUsageStatsGroupBy,
@@ -35,6 +35,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -157,16 +158,39 @@ export default function GatewayStatsPage(): React.JSX.Element {
     () => new Set()
   )
 
-  const requestFilter = useCallback((source: StatsFilterSource): void => {
-    setLoadedFilters((prev) => {
-      if (prev.has(source)) return prev
-      const next = new Set(prev)
-      next.add(source)
-      return next
-    })
-  }, [])
+  const needsModelOptions =
+    loadedFilters.has('model') ||
+    loadedFilters.has('provider') ||
+    model !== ALL_VALUE ||
+    provider !== ALL_VALUE
+
+  const {
+    items: modelItems,
+    onPickerOpenChange: onModelPickerOpenChange,
+    ensureModelName,
+  } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'callable' },
+    { enabled: needsModelOptions, prefetchMode: 'open' }
+  )
+
+  const requestFilter = useCallback(
+    (source: StatsFilterSource): void => {
+      if (source === 'model' || source === 'provider') {
+        onModelPickerOpenChange(true)
+      }
+      setLoadedFilters((prev) => {
+        if (prev.has(source)) return prev
+        const next = new Set(prev)
+        next.add(source)
+        return next
+      })
+    },
+    [onModelPickerOpenChange]
+  )
 
   const requestProviderFilters = useCallback((): void => {
+    onModelPickerOpenChange(true)
     setLoadedFilters((prev) => {
       const next = new Set(prev)
       next.add('credential')
@@ -175,7 +199,13 @@ export default function GatewayStatsPage(): React.JSX.Element {
       if (next.size === prev.size) return prev
       return next
     })
-  }, [])
+  }, [onModelPickerOpenChange])
+
+  useEffect(() => {
+    if (model !== ALL_VALUE) {
+      ensureModelName(model)
+    }
+  }, [model, ensureModelName])
 
   const needsCredentialOptions =
     loadedFilters.has('credential') ||
@@ -203,16 +233,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
     queryFn: () => keysApi.listKeys(teamId),
     enabled: loadedFilters.has('vkey') || vkeyId !== ALL_VALUE,
   })
-  const modelsQuery = useQuery({
-    queryKey: ['gateway', 'models', teamId, 'callable'],
-    queryFn: () => modelsApi.listModels(teamId, { registry_scope: 'callable' }),
-    enabled:
-      loadedFilters.has('model') ||
-      loadedFilters.has('provider') ||
-      model !== ALL_VALUE ||
-      provider !== ALL_VALUE,
-  })
-
   const credentialOptions = useMemo<SelectOption[]>(
     () =>
       (credentialsQuery.data ?? []).map((credential) => ({
@@ -249,17 +269,14 @@ export default function GatewayStatsPage(): React.JSX.Element {
       })),
     [keysQuery.data]
   )
-  const modelOptions = useMemo(
-    () => uniqueSorted(modelOptionValues(modelsQuery.data ?? [])),
-    [modelsQuery.data]
-  )
+  const modelOptions = useMemo(() => uniqueSorted(modelOptionValues(modelItems)), [modelItems])
   const providerOptions = useMemo(() => {
     const values = [
       ...(credentialsQuery.data ?? []).map((credential) => credential.provider),
-      ...(modelsQuery.data ?? []).map((gatewayModel) => gatewayModel.provider),
+      ...modelItems.map((gatewayModel) => gatewayModel.provider),
     ]
     return uniqueSorted(values)
-  }, [credentialsQuery.data, modelsQuery.data])
+  }, [credentialsQuery.data, modelItems])
 
   const queryParams = useMemo((): GatewayUsageStatsQuery => {
     return {

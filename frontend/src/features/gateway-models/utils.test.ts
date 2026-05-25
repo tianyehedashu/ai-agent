@@ -411,6 +411,37 @@ describe('connectivityFieldsFromTestResult', () => {
 })
 
 describe('patchModelConnectivityInCache', () => {
+  it('patches paginated team list cache envelope', () => {
+    const queryClient = new QueryClient()
+    const key = ['gateway', 'models', 'team-1', 'team', '', '', 1, 20, '', 'all'] as const
+    queryClient.setQueryData(key, {
+      items: [
+        { id: 'a', last_test_status: null, last_tested_at: null, last_test_reason: null },
+        { id: 'b', last_test_status: null, last_tested_at: null, last_test_reason: null },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+      has_next: false,
+      has_prev: false,
+    })
+    patchModelConnectivityInCache(
+      queryClient,
+      'b',
+      {
+        last_test_status: 'success',
+        last_tested_at: '2026-01-01T00:00:00Z',
+        last_test_reason: null,
+      },
+      'team'
+    )
+    const data = queryClient.getQueryData<{
+      items: Array<{ id: string; last_test_status: string | null }>
+    }>(key)
+    expect(data?.items[0]?.last_test_status).toBe(null)
+    expect(data?.items[1]?.last_test_status).toBe('success')
+  })
+
   it('patches only matching model in team list cache', () => {
     const queryClient = new QueryClient()
     const key = ['gateway', 'models', 'team-1', 'team', '', ''] as const
@@ -575,6 +606,10 @@ describe('playgroundTeamModelsQueryKey', () => {
       'requestable',
       '',
       '',
+      1,
+      20,
+      '',
+      'all',
     ])
     expect(playgroundTeamModelsQueryKey('team-1', 'cred-1')).toEqual([
       'gateway',
@@ -583,6 +618,10 @@ describe('playgroundTeamModelsQueryKey', () => {
       'callable',
       '',
       'cred-1',
+      1,
+      20,
+      '',
+      'all',
     ])
   })
 })

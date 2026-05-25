@@ -191,8 +191,8 @@ export function CapabilityBlock({
     return result
   }, [inputs, localContext])
 
-  const requiredInputFields = capabilityConfig.capabilityInputFields[capabilityId] ?? []
   const missingRequiredInputs = useMemo(() => {
+    const requiredInputFields = capabilityConfig.capabilityInputFields[capabilityId] ?? []
     const userInput = buildUserInput()
     for (const key of requiredInputFields) {
       const value = userInput[key]
@@ -205,7 +205,7 @@ export function CapabilityBlock({
       }
     }
     return false
-  }, [buildUserInput, requiredInputFields])
+  }, [buildUserInput, capabilityConfig.capabilityInputFields, capabilityId])
 
   const updateJobCache = useCallback(
     (data: ListingStudioJob) => {

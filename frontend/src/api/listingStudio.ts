@@ -19,6 +19,7 @@ import type {
 } from '@/types/listing-studio'
 
 import { apiClient } from './client'
+import { uploadUserImage } from './userImageUpload'
 
 const PREFIX = apiV1Path('/listing-studio')
 
@@ -121,12 +122,7 @@ export const listingStudioApi = {
   },
 
   async upload(file: File): Promise<{ url: string; content_type: string; size_bytes: number }> {
-    const form = new FormData()
-    form.append('file', file)
-    return apiClient.upload<{ url: string; content_type: string; size_bytes: number }>(
-      `${PREFIX}/upload`,
-      form
-    )
+    return uploadUserImage(file)
   },
 
   async createImageGenTask(body: {

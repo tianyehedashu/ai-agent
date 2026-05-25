@@ -1,8 +1,7 @@
 """Chat / Anthropic Messages 代理入站公共流水线（校验、预算、kwargs 准备）。
 
-校验/限流/预算/entitlement 经 :class:`ProxyGuard` 公开 API 完成（``check_*`` /
-``release_*``）；LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_kwargs`` 拼装。
-本模块仅做入站编排穿透。
+校验/限流/预算/entitlement 经 :func:`run_proxy_inbound_preflight` 完成；
+LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_kwargs`` 拼装。
 """
 
 from __future__ import annotations
@@ -15,12 +14,11 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     downstream_custom_from_metadata,
     upstream_custom_from_metadata,
 )
-from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
-from domains.gateway.domain.errors import EntitlementPlanExhaustedError
+from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
+from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 
 if TYPE_CHECKING:
-    from domains.gateway.application.proxy_guard import BudgetReservation
     from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 
 BodyValidator = Callable[[dict[str, Any]], None]
@@ -58,23 +56,16 @@ async def prepare_chat_proxy_request(
     if body_validator is not None:
         body_validator(body)
 
-    ctx.capability = GatewayCapability.CHAT
     model = str(body.get("model", "")).strip()
-    if require_model and not model:
-        raise ValueError("model is required")
-    ctx.budget_model = model
-
-    guard = use_case.guard
-    guard.check_model(model, ctx)
-    guard.check_capability(ctx)
-    await guard.assert_request_capability_matches_model(ctx, model)
-    await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
-    reservations = await guard.check_budget(ctx)
-    try:
-        await guard.check_entitlement(ctx, model, estimate_tokens=estimate_tokens)
-    except EntitlementPlanExhaustedError:
-        await guard.release_budget_reservations(reservations)
-        raise
+    preflight = await run_proxy_inbound_preflight(
+        use_case.guard,
+        ctx,
+        capability=GatewayCapability.CHAT,
+        model=model,
+        require_model=require_model,
+        estimate_tokens=estimate_tokens,
+    )
+    assert preflight.model is not None
 
     kwargs = await use_case.prepare_litellm_kwargs(ctx, body)
     meta = kwargs.get("metadata")
@@ -83,8 +74,8 @@ async def prepare_chat_proxy_request(
     apply_stream_cost_defer_flag(metadata, stream=stream)
 
     return ChatProxyPrepared(
-        model=model,
-        reservations=reservations,
+        model=preflight.model,
+        reservations=preflight.reservations,
         kwargs=kwargs,
         metadata=metadata,
         downstream_custom=downstream_custom_from_metadata(metadata),

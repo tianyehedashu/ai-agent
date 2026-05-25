@@ -40,7 +40,7 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_expired_token_returns_401_in_dev_mode(self):
         """测试: 开发模式下过期 token 返回 401（不再降级）"""
-        from fastapi import HTTPException
+        from libs.exceptions import TokenError
 
         from domains.identity.application.principal_service import get_principal
 
@@ -62,15 +62,15 @@ class TestTokenExpiry:
         ):
             mock_settings.is_development = True
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(TokenError) as exc_info:
                 await get_principal(request, credentials, mock_db, None)
 
-            assert exc_info.value.status_code == 401
+            assert exc_info.value.code == "TOKEN_ERROR"
 
     @pytest.mark.asyncio
     async def test_expired_token_returns_401_in_production(self):
         """测试: 生产模式下过期 token 返回 401"""
-        from fastapi import HTTPException
+        from libs.exceptions import TokenError
 
         from domains.identity.application.principal_service import get_principal
 
@@ -92,15 +92,15 @@ class TestTokenExpiry:
         ):
             mock_settings.is_development = False
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(TokenError) as exc_info:
                 await get_principal(request, credentials, mock_db, None)
 
-            assert exc_info.value.status_code == 401
+            assert exc_info.value.code == "TOKEN_ERROR"
 
     @pytest.mark.asyncio
     async def test_expired_token_does_not_set_degraded_flag(self):
         """测试: 过期 token 不再设置 token_degraded 标记"""
-        from fastapi import HTTPException
+        from libs.exceptions import TokenError
 
         from domains.identity.application.principal_service import get_principal
 
@@ -122,7 +122,7 @@ class TestTokenExpiry:
         ):
             mock_settings.is_development = True
 
-            with pytest.raises(HTTPException):
+            with pytest.raises(TokenError):
                 await get_principal(request, credentials, mock_db, None)
 
         # 不应设置 token_degraded 或 anonymous_user_id
@@ -198,7 +198,7 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_no_token_returns_401_in_production(self):
         """测试: 生产模式下无 token 返回 401"""
-        from fastapi import HTTPException
+        from libs.exceptions import AuthenticationError
 
         from domains.identity.application.principal_service import get_principal
 
@@ -208,7 +208,7 @@ class TestTokenExpiry:
         with patch("domains.identity.application.principal_service.settings") as mock_settings:
             mock_settings.is_development = False
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await get_principal(request, None, mock_db, None)
 
-            assert exc_info.value.status_code == 401
+            assert exc_info.value.code == "AUTHENTICATION_ERROR"

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Info, Loader2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { Info, Loader2, Plus, RefreshCw, Search, Trash2 } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
 import { cn } from '@/lib/utils'
 
@@ -58,12 +58,23 @@ interface ModelInventoryProps {
   highlightModelId?: string
   healthFilter: HealthFilter
   onHealthFilterChange: (f: HealthFilter) => void
+  connectivitySummary?: {
+    total: number
+    success: number
+    failed: number
+    unknown: number
+  }
   canWrite: boolean
   onTestAll?: () => void
   onTestUntested?: () => void
+  onResyncAll?: () => void
   untestedTestableCount?: number
   testingAll?: boolean
   onBatchTestSelected?: () => void
+  onBatchResyncSelected?: () => void
+  resyncingAll?: boolean
+  /** 任意批量操作进行中时禁用批量工具栏 */
+  batchBusy?: boolean
   onRegister?: () => void
   onPreloadRegister?: () => void
   /** 列表行链至详情时预加载详情 chunk */
@@ -108,12 +119,17 @@ export const ModelInventory = memo(function ModelInventory({
   highlightModelId,
   healthFilter,
   onHealthFilterChange,
+  connectivitySummary,
   canWrite,
   onTestAll,
   onTestUntested,
+  onResyncAll,
   untestedTestableCount,
   testingAll,
   onBatchTestSelected,
+  onBatchResyncSelected,
+  resyncingAll = false,
+  batchBusy = false,
   onRegister,
   onPreloadRegister,
   onPreloadRowNavigate,
@@ -136,7 +152,6 @@ export const ModelInventory = memo(function ModelInventory({
   onDeleteFailed,
   deletingFailed = false,
 }: ModelInventoryProps): React.JSX.Element {
-  const showToolbar = allModels.length > 0
   const selectableModels = batchSelectEnabled
     ? models.filter((m) => isModelBatchSelectable?.(m) ?? false)
     : []
@@ -156,18 +171,34 @@ export const ModelInventory = memo(function ModelInventory({
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                disabled={testingAll === true}
+                disabled={batchBusy}
                 onClick={onBatchTestSelected}
               >
                 {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
                 批量测试
               </Button>
             ) : null}
+            {onBatchResyncSelected ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={batchBusy}
+                onClick={onBatchResyncSelected}
+              >
+                {resyncingAll ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                )}
+                同步能力
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="destructive"
               className="h-7 text-xs"
-              disabled={testingAll === true}
+              disabled={batchBusy}
               onClick={() => {
                 onBatchDeleteOpenChange?.(true)
               }}
@@ -230,56 +261,58 @@ export const ModelInventory = memo(function ModelInventory({
           </TooltipProvider>
         </div>
 
-        {showToolbar ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <ConnectivityHealthStrip
-              models={allModels}
-              healthFilter={healthFilter}
-              onHealthFilterChange={onHealthFilterChange}
-              canWrite={canWrite}
-              onTestAll={onTestAll}
-              onTestUntested={onTestUntested}
-              untestedTestableCount={untestedTestableCount}
-              testingAll={testingAll}
-              onDeleteFailed={onDeleteFailed}
-              deletingFailed={deletingFailed}
-            />
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <div className="flex rounded-md bg-muted/50 p-0.5">
-                {USAGE_PERIOD_DAYS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      usageDays === d
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                    onClick={() => {
-                      onUsageDaysChange(d)
-                    }}
-                  >
-                    {d === 1 ? '24h' : d === 7 ? '7d' : '30d'}
-                  </button>
-                ))}
-              </div>
-              {canWrite && onRegister ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs sm:hidden"
-                  onMouseEnter={onPreloadRegister}
-                  onFocus={onPreloadRegister}
-                  onClick={onRegister}
+        <div className="flex flex-wrap items-center gap-2">
+          <ConnectivityHealthStrip
+            models={allModels}
+            connectivitySummary={connectivitySummary}
+            healthFilter={healthFilter}
+            onHealthFilterChange={onHealthFilterChange}
+            canWrite={canWrite}
+            onTestAll={onTestAll}
+            onTestUntested={onTestUntested}
+            onResyncAll={onResyncAll}
+            resyncingAll={resyncingAll}
+            batchBusy={batchBusy}
+            untestedTestableCount={untestedTestableCount}
+            testingAll={testingAll}
+            onDeleteFailed={onDeleteFailed}
+            deletingFailed={deletingFailed}
+          />
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="flex rounded-md bg-muted/50 p-0.5">
+              {USAGE_PERIOD_DAYS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={cn(
+                    'rounded px-2 py-1 text-xs font-medium transition-colors',
+                    usageDays === d
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  onClick={() => {
+                    onUsageDaysChange(d)
+                  }}
                 >
-                  <Plus className="mr-1 h-3 w-3" />
-                  注册
-                </Button>
-              ) : null}
+                  {d === 1 ? '24h' : d === 7 ? '7d' : '30d'}
+                </button>
+              ))}
             </div>
+            {canWrite && onRegister ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs sm:hidden"
+                onMouseEnter={onPreloadRegister}
+                onFocus={onPreloadRegister}
+                onClick={onRegister}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                注册
+              </Button>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
       <ScrollArea className="min-h-[280px] flex-1">
         {isLoading ? (

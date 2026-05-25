@@ -5,7 +5,6 @@ Identity API - 用户认证接口
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Request, Response, status
-from fastapi.exceptions import HTTPException
 from pydantic import BaseModel, Field
 
 from domains.identity.application import UserUseCase
@@ -28,7 +27,6 @@ from domains.identity.presentation.schemas import (
     UserRead,
     UserUpdate,
 )
-from libs.exceptions import AuthenticationError
 from libs.identity_bridge_deps import get_login_services, get_user_use_case
 from utils.logging import get_logger
 
@@ -138,13 +136,7 @@ async def login_for_token_pair(
     """
     user_use_case, reassignment_service = services
 
-    try:
-        user = await user_use_case.authenticate(login_data.email, login_data.password)
-    except AuthenticationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        ) from exc
+    user = await user_use_case.authenticate(login_data.email, login_data.password)
 
     # 创建 token pair
     token_pair = await user_use_case.create_token(user)
@@ -180,13 +172,7 @@ async def refresh_token(
     前端可调用此端点静默续期，无需用户重新登录。
     """
 
-    try:
-        token_pair = await user_use_case.refresh_token(data.refresh_token)
-    except AuthenticationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
-        ) from exc
+    token_pair = await user_use_case.refresh_token(data.refresh_token)
 
     return TokenResponse(
         access_token=token_pair.access_token,

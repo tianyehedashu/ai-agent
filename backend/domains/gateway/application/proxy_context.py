@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import uuid
 
+from domains.gateway.application.proxy_timing import GatewayProxyTiming
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia, VirtualKeyPrincipal
 
@@ -60,6 +61,8 @@ class ProxyContext:
     client_type: str = "unknown"
     user_display_snapshot: str | None = None
     """调用者展示名（name 或 email）；在鉴权/桥接层解析一次，metadata 构建不再查库。"""
+    proxy_timing: GatewayProxyTiming | None = None
+    """``chat_completion`` 写入的网关内耗时，供 OpenAI 兼容面响应头透出。"""
 
 
 __all__ = ["EntitlementReservationState", "ProxyContext"]

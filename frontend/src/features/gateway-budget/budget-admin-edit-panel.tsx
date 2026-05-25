@@ -21,6 +21,7 @@ export interface BudgetAdminEditPanelProps {
   members: BudgetInlineFormProps['members']
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
+  onModelPickerOpenChange?: (open: boolean) => void
 }
 
 export function BudgetAdminEditPanel({
@@ -36,6 +37,7 @@ export function BudgetAdminEditPanel({
   members,
   modelOptions,
   modelsLoading = false,
+  onModelPickerOpenChange,
 }: BudgetAdminEditPanelProps): React.JSX.Element {
   return (
     <Card>
@@ -58,6 +60,7 @@ export function BudgetAdminEditPanel({
           members={members}
           modelOptions={modelOptions}
           modelsLoading={modelsLoading}
+          onModelPickerOpenChange={onModelPickerOpenChange}
           fixedTargetKind={tab}
         />
       </CardContent>

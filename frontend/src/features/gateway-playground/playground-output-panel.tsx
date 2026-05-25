@@ -322,7 +322,16 @@ function MetadataRow({
     items.push({ label: 'HTTP', value: String(metadata.httpStatus) })
   }
   if (metadata.elapsedMs !== undefined) {
-    items.push({ label: '耗时', value: `${String(metadata.elapsedMs)} ms` })
+    items.push({ label: '总耗时', value: `${String(metadata.elapsedMs)} ms` })
+  }
+  if (metadata.ttftMs !== undefined) {
+    items.push({ label: '首 token', value: `${String(metadata.ttftMs)} ms` })
+  }
+  if (metadata.preflightMs !== undefined) {
+    items.push({ label: '预检', value: `${String(metadata.preflightMs)} ms` })
+  }
+  if (metadata.upstreamMs !== undefined) {
+    items.push({ label: '上游', value: `${String(metadata.upstreamMs)} ms` })
   }
   if (metadata.totalTokens !== undefined) {
     items.push({ label: 'Tokens', value: String(metadata.totalTokens) })

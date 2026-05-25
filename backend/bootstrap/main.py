@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 import inspect
 import sys
 import traceback
-from typing import Any
 import warnings
 
 # Windows 需要使用 SelectorEventLoop（psycopg 异步要求）。
@@ -27,6 +26,7 @@ if sys.platform == "win32":
 # pylint: disable=wrong-import-position
 # 这些导入必须在事件循环设置之后，以确保 Windows 平台上的异步操作正常工作
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import RedirectResponse
@@ -67,6 +67,12 @@ from domains.identity.presentation.usage_router import router as usage_router
 from domains.session.presentation import session_router
 from domains.tenancy.presentation.teams_router import router as tenancy_teams_router
 from libs.api.paths import anthropic_compat_base, api_v1_path, openai_compat_base, service_path
+from libs.api.problem_details import (
+    problem_response_from_agent_error,
+    problem_response_from_http_mappable,
+    problem_response_from_request_validation,
+    problem_response_internal,
+)
 from libs.background_tasks import init_background_tasks, shutdown_app_background_tasks
 from libs.db.database import init_db
 from libs.db.redis import close_redis, init_redis
@@ -76,6 +82,7 @@ from libs.exceptions import (
     CheckpointError,
     ConflictError,
     ExternalServiceError,
+    HttpMappableDomainError,
     NotFoundError,
     PermissionDeniedError,
     RateLimitError,
@@ -83,6 +90,7 @@ from libs.exceptions import (
     ToolExecutionError,
     ValidationError,
 )
+from libs.exceptions.codes import INTERNAL_ERROR
 from libs.middleware.anonymous_cookie_asgi import AnonymousCookieASGIMiddleware
 from libs.middleware.permission import PermissionContextASGIMiddleware
 from utils.logging import get_logger, setup_logging
@@ -204,6 +212,8 @@ app.add_middleware(
         "anthropic-ratelimit-tokens-limit",
         "anthropic-ratelimit-tokens-remaining",
         "anthropic-ratelimit-tokens-reset",
+        "X-Gateway-Preflight-Ms",
+        "X-Gateway-Upstream-Ms",
     ],
 )
 
@@ -214,211 +224,154 @@ app.add_middleware(AnonymousCookieASGIMiddleware)
 
 
 # =============================================================================
-# 全局异常处理器
+# 全局异常处理器（RFC 7807 Problem Details）
 # =============================================================================
 
 
-def _error_response(
-    status_code: int,
-    message: str,
-    code: str | None = None,
-    details: dict[str, Any] | None = None,
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    request: Request,
+    exc: RequestValidationError,
 ) -> JSONResponse:
-    """构建错误响应"""
-    content: dict[str, Any] = {"detail": message}
-    if code:
-        content["code"] = code
-    if details:
-        content["details"] = details
-    return JSONResponse(status_code=status_code, content=content)
+    logger.warning("Request validation error: %s", exc.errors())
+    return problem_response_from_request_validation(request, exc)
+
+
+@app.exception_handler(HttpMappableDomainError)
+async def http_mappable_domain_error_handler(
+    request: Request,
+    exc: HttpMappableDomainError,
+) -> JSONResponse:
+    logger.warning("Domain error: %s", exc)
+    return problem_response_from_http_mappable(request, exc)
 
 
 @app.exception_handler(ValidationError)
 async def validation_error_handler(
-    _request: Request,
+    request: Request,
     exc: ValidationError,
 ) -> JSONResponse:
-    """处理验证错误"""
     logger.warning("Validation error: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_400_BAD_REQUEST)
 
 
 @app.exception_handler(NotFoundError)
 async def not_found_error_handler(
-    _request: Request,
+    request: Request,
     exc: NotFoundError,
 ) -> JSONResponse:
-    """处理资源不存在错误"""
     logger.warning("Resource not found: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_404_NOT_FOUND,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_404_NOT_FOUND)
 
 
 @app.exception_handler(PermissionDeniedError)
 async def permission_denied_error_handler(
-    _request: Request,
+    request: Request,
     exc: PermissionDeniedError,
 ) -> JSONResponse:
-    """处理权限不足错误"""
     logger.warning("Permission denied: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_403_FORBIDDEN,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_403_FORBIDDEN)
 
 
 @app.exception_handler(AuthenticationError)
 async def authentication_error_handler(
-    _request: Request,
+    request: Request,
     exc: AuthenticationError,
 ) -> JSONResponse:
-    """处理认证错误"""
     logger.warning("Authentication failed: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        message=exc.message,
-        code=exc.code,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_401_UNAUTHORIZED)
 
 
 @app.exception_handler(TokenError)
 async def token_error_handler(
-    _request: Request,
+    request: Request,
     exc: TokenError,
 ) -> JSONResponse:
-    """处理 Token 错误"""
     logger.warning("Token error: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        message=exc.message,
-        code=exc.code,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_401_UNAUTHORIZED)
 
 
 @app.exception_handler(ConflictError)
 async def conflict_error_handler(
-    _request: Request,
+    request: Request,
     exc: ConflictError,
 ) -> JSONResponse:
-    """处理资源冲突错误"""
     logger.warning("Resource conflict: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_409_CONFLICT,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_409_CONFLICT)
 
 
 @app.exception_handler(RateLimitError)
 async def rate_limit_error_handler(
-    _request: Request,
+    request: Request,
     exc: RateLimitError,
 ) -> JSONResponse:
-    """处理速率限制错误"""
     logger.warning("Rate limit exceeded: %s", exc.message)
-    headers = {}
-    if exc.retry_after:
-        headers["Retry-After"] = str(exc.retry_after)
-    return JSONResponse(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content={"detail": exc.message, "code": exc.code},
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+    return problem_response_from_agent_error(
+        request,
+        exc,
+        status.HTTP_429_TOO_MANY_REQUESTS,
         headers=headers,
     )
 
 
 @app.exception_handler(ExternalServiceError)
 async def external_service_error_handler(
-    _request: Request,
+    request: Request,
     exc: ExternalServiceError,
 ) -> JSONResponse:
-    """处理外部服务错误"""
     logger.error("External service error: %s - %s", exc.service, exc.message)
-    return _error_response(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_502_BAD_GATEWAY)
 
 
 @app.exception_handler(ToolExecutionError)
 async def tool_execution_error_handler(
-    _request: Request,
+    request: Request,
     exc: ToolExecutionError,
 ) -> JSONResponse:
-    """处理工具执行错误"""
     logger.error("Tool execution error: %s - %s", exc.tool_name, exc.message)
-    return _error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
+    return problem_response_from_agent_error(
+        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
 
 @app.exception_handler(CheckpointError)
 async def checkpoint_error_handler(
-    _request: Request,
+    request: Request,
     exc: CheckpointError,
 ) -> JSONResponse:
-    """处理检查点错误"""
     logger.error("Checkpoint error: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
+    return problem_response_from_agent_error(
+        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
 
 @app.exception_handler(AIAgentError)
 async def ai_agent_error_handler(
-    _request: Request,
+    request: Request,
     exc: AIAgentError,
 ) -> JSONResponse:
-    """处理通用 AI Agent 错误"""
     logger.error("AI Agent error: %s", exc.message)
-    return _error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message=exc.message,
-        code=exc.code,
-        details=exc.details,
+    return problem_response_from_agent_error(
+        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(
-    _request: Request,
+    request: Request,
     exc: Exception,
 ) -> JSONResponse:
     """处理未捕获的异常"""
-    # 确保异常日志被输出（使用 exception 会自动包含堆栈）
     logger.exception("Unhandled exception: %s", exc)
 
-    # 开发环境下也输出到 stderr，确保能看到
     if settings.is_development:
         print("=" * 80, file=sys.stderr)
         print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         print("=" * 80, file=sys.stderr)
 
-    return _error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message="Internal server error",
-        code="INTERNAL_ERROR",
-    )
+    return problem_response_internal(request, code=INTERNAL_ERROR)
 
 
 # =============================================================================

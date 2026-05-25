@@ -40,12 +40,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ApiKeyGrantEditor, type GrantDraft } from '@/features/api-key-gateway/api-key-grant-editor'
 import {
-  ApiKeyGrantEditor,
   gatewayGrantsToDrafts,
   grantsToRequests,
-  type GrantDraft,
-} from '@/features/api-key-gateway/api-key-grant-editor'
+} from '@/features/api-key-gateway/api-key-grant-editor-utils'
+import { applyApiFieldErrors, apiErrorFormMessage } from '@/lib/api-form-errors'
 import type { ApiKey, ApiKeyScope } from '@/types/api-key'
 import {
   EXPIRATION_OPTIONS,
@@ -110,7 +110,11 @@ export function ApiKeyEditDialog({
       onOpenChange(false)
     },
     onError: (error: Error) => {
-      toast.error(`更新失败: ${error.message}`)
+      if (!applyApiFieldErrors(error, form.setError)) {
+        toast.error(apiErrorFormMessage(error, '更新失败'))
+      } else {
+        toast.error(apiErrorFormMessage(error, '请检查表单字段'))
+      }
     },
   })
 

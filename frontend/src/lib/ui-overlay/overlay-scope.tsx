@@ -12,7 +12,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { OverlayScopeProvider, useOverlayScopeId } from './overlay-scope-context'
+import { OverlayScopeProvider } from './overlay-scope-context'
+import { useOverlayScopeId } from './overlay-scope-hooks'
 import { teardownOverlayScope } from './teardown-overlay-scope'
 
 export interface OverlayScopeProps {

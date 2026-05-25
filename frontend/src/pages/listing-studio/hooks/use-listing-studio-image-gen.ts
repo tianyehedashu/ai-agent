@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { gatewayApi } from '@/api/gateway'
 import { listingStudioApi } from '@/api/listingStudio'
 import { useToast } from '@/hooks/use-toast'
+import { MAX_PAGE_SIZE } from '@/lib/pagination'
 import type { ProductImageGenTask } from '@/types/listing-studio'
 
 import { mergedImagesToSlotArray, pickLatestEightImages } from '../components/output-preview-shared'
@@ -24,6 +25,26 @@ const PROVIDER_SIZE_MAP: Record<string, string[]> = {
 }
 const DEFAULT_SIZES = ['1024x1024', '1920x1920']
 const EMPTY_TASKS: ProductImageGenTask[] = []
+
+async function resolveAvailableModelProvider(modelId: string): Promise<string> {
+  let page = 1
+  for (;;) {
+    const res = await gatewayApi.listAvailableModels('image_gen', undefined, {
+      mode: 'image_gen',
+      page,
+      page_size: MAX_PAGE_SIZE,
+    })
+    for (const item of res.system_models.items) {
+      if (item.id === modelId) return item.provider
+    }
+    for (const item of res.user_models.items) {
+      if (item.id === modelId) return item.provider
+    }
+    if (!res.system_models.has_next && !res.user_models.has_next) break
+    page += 1
+  }
+  return 'volcengine'
+}
 
 export interface UseListingStudioImageGenParams {
   jobId: string | null
@@ -75,20 +96,17 @@ export function useListingStudioImageGen({
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
-  const { data: availableData } = useQuery({
-    queryKey: ['gateway-models-available', 'image_gen'],
-    queryFn: () => gatewayApi.listAvailableModels('image_gen'),
-    staleTime: 30_000,
+  const { data: selectedProvider = 'volcengine' } = useQuery({
+    queryKey: ['gateway-models-available', 'image_gen', 'provider', modelId],
+    queryFn: () => {
+      if (modelId === null) {
+        throw new Error('modelId is required')
+      }
+      return resolveAvailableModelProvider(modelId)
+    },
+    enabled: modelId !== null,
+    staleTime: 60_000,
   })
-
-  const selectedProvider = useMemo(() => {
-    if (!modelId || !availableData) return 'volcengine'
-    const sys = availableData.system_models.find((m) => m.id === modelId)
-    if (sys) return sys.provider
-    const user = availableData.user_models.find((m) => m.id === modelId)
-    if (user) return user.provider
-    return 'volcengine'
-  }, [modelId, availableData])
 
   const sizeOptions = PROVIDER_SIZE_MAP[selectedProvider] ?? DEFAULT_SIZES
   const effectiveSize = size && sizeOptions.includes(size) ? size : sizeOptions[0]

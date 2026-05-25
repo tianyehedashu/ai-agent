@@ -49,6 +49,7 @@ export interface PlaygroundModelFieldProps {
   currency: DisplayCurrency
   playgroundMode: PlaygroundMode
   modelsLoading: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function PlaygroundModelField({
@@ -68,6 +69,7 @@ export function PlaygroundModelField({
   currency,
   playgroundMode,
   modelsLoading,
+  onOpenChange,
 }: Readonly<PlaygroundModelFieldProps>): React.JSX.Element {
   const handleSelectChange = (value: string): void => {
     if (value === CUSTOM_MODEL_SENTINEL) {
@@ -109,7 +111,7 @@ export function PlaygroundModelField({
           </Button>
         </div>
       ) : (
-        <Select value={model} onValueChange={handleSelectChange}>
+        <Select value={model} onValueChange={handleSelectChange} onOpenChange={onOpenChange}>
           <SelectTrigger id={modelSelectId} className="font-mono">
             <SelectValue
               placeholder={

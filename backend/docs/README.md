@@ -8,6 +8,8 @@ FastAPI / `domains/` 分层架构的实现与设计文档。项目级文档见 [
 |------|------|
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 后端开发快速入门 |
 | [CODE_STANDARDS.md](./CODE_STANDARDS.md) | 代码规范与分层约定 |
+| [PAGINATION.md](../../docs/PAGINATION.md) | 列表 API 分页 envelope（跨栈） |
+| [API_RESPONSE.md](../../docs/API_RESPONSE.md) | API 响应 / RFC 7807 异常（跨栈） |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 后端架构概览（**实现权威**） |
 | [CONFIGURATION.md](./CONFIGURATION.md) | 配置说明 |
 | [LINT_CONFIGURATION.md](./LINT_CONFIGURATION.md) | Lint 配置 |

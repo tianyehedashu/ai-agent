@@ -7,6 +7,18 @@
 from typing import TYPE_CHECKING, Any
 
 from libs.exceptions.base import AIAgentError, HttpMappableDomainError
+from libs.exceptions.codes import (
+    AUTHENTICATION_ERROR,
+    CHECKPOINT_ERROR,
+    CONFLICT,
+    EXTERNAL_SERVICE_ERROR,
+    NOT_FOUND,
+    PERMISSION_DENIED,
+    RATE_LIMIT,
+    TOKEN_ERROR,
+    TOOL_EXECUTION_ERROR,
+    VALIDATION_ERROR,
+)
 
 if TYPE_CHECKING:
     from domains.tenancy.domain.errors import (
@@ -25,7 +37,7 @@ class ValidationError(AIAgentError):
     def __init__(
         self,
         message: str = "Validation failed",
-        code: str = "VALIDATION_ERROR",
+        code: str = VALIDATION_ERROR,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, code, details)
@@ -41,7 +53,7 @@ class NotFoundError(AIAgentError):
         self,
         resource: str,
         resource_id: str | None = None,
-        code: str = "NOT_FOUND",
+        code: str = NOT_FOUND,
     ) -> None:
         message = f"{resource} not found"
         if resource_id:
@@ -60,7 +72,7 @@ class PermissionDeniedError(AIAgentError):
     def __init__(
         self,
         message: str = "Permission denied",
-        code: str = "PERMISSION_DENIED",
+        code: str = PERMISSION_DENIED,
         action: str | None = None,
         resource: str | None = None,
     ) -> None:
@@ -81,7 +93,7 @@ class AuthenticationError(AIAgentError):
     def __init__(
         self,
         message: str = "Authentication failed",
-        code: str = "AUTHENTICATION_ERROR",
+        code: str = AUTHENTICATION_ERROR,
     ) -> None:
         super().__init__(message, code)
 
@@ -95,7 +107,7 @@ class TokenError(AuthenticationError):
     def __init__(
         self,
         message: str = "Invalid token",
-        code: str = "TOKEN_ERROR",
+        code: str = TOKEN_ERROR,
         expired: bool = False,
     ) -> None:
         super().__init__(message, code)
@@ -111,7 +123,7 @@ class ConflictError(AIAgentError):
     def __init__(
         self,
         message: str = "Resource conflict",
-        code: str = "CONFLICT",
+        code: str = CONFLICT,
         resource: str | None = None,
     ) -> None:
         details = {"resource": resource} if resource else {}
@@ -127,7 +139,7 @@ class RateLimitError(AIAgentError):
     def __init__(
         self,
         message: str = "Rate limit exceeded",
-        code: str = "RATE_LIMIT",
+        code: str = RATE_LIMIT,
         retry_after: int | None = None,
     ) -> None:
         details = {"retry_after": retry_after} if retry_after else {}
@@ -145,7 +157,7 @@ class ExternalServiceError(AIAgentError):
         self,
         service: str,
         message: str | None = None,
-        code: str = "EXTERNAL_SERVICE_ERROR",
+        code: str = EXTERNAL_SERVICE_ERROR,
         original_error: Exception | None = None,
     ) -> None:
         msg = message or f"External service error: {service}"
@@ -164,7 +176,7 @@ class ToolExecutionError(AIAgentError):
         self,
         tool_name: str,
         message: str | None = None,
-        code: str = "TOOL_EXECUTION_ERROR",
+        code: str = TOOL_EXECUTION_ERROR,
         original_error: Exception | None = None,
     ) -> None:
         msg = message or f"Tool execution failed: {tool_name}"
@@ -182,7 +194,7 @@ class CheckpointError(AIAgentError):
     def __init__(
         self,
         message: str = "Checkpoint operation failed",
-        code: str = "CHECKPOINT_ERROR",
+        code: str = CHECKPOINT_ERROR,
         checkpoint_id: str | None = None,
     ) -> None:
         details = {"checkpoint_id": checkpoint_id} if checkpoint_id else {}

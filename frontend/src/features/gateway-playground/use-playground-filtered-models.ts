@@ -2,9 +2,9 @@
  * Playground / 调用指南共用的凭据筛选 + 模型候选查询
  */
 
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useQueries } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
 
 import type { CredentialSummary } from '@/api/gateway'
 import { gatewayApi } from '@/api/gateway'
@@ -15,6 +15,7 @@ import {
   resolvePlaygroundTeamRegistryScope,
 } from '@/features/gateway-models/utils'
 import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { MAX_PAGE_SIZE } from '@/lib/pagination'
 
 import {
   isPersonalPlaygroundCredential,
@@ -47,6 +48,10 @@ export interface UsePlaygroundFilteredModelsResult {
   modelsLoading: boolean
   teamModelsLoaded: boolean
   myModelsLoaded: boolean
+  /** 模型下拉打开时继续翻页；关闭后仅保留已加载页 */
+  onModelPickerOpenChange: (open: boolean) => void
+  /** 选中模型名不在已加载页时，按需拉取下一页直至命中或耗尽 */
+  ensureModelNameLoaded: (modelName: string) => void
 }
 
 /** 父级注入 PlaygroundCard 的快照，避免同页重复跑 hook */
@@ -62,6 +67,8 @@ export function usePlaygroundFilteredModels(
   const fetchRoutes = options.includeRoutes ?? false
 
   const teamId = useResolvedGatewayTeamId()
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [pendingModelName, setPendingModelName] = useState<string | null>(null)
 
   const {
     grouped: credentialGroups,
@@ -77,28 +84,37 @@ export function usePlaygroundFilteredModels(
   const includeMyModels = !credentialId || isPersonalCredential
   const includeRoutes = fetchRoutes && Boolean(teamId) && !(credentialId && isPersonalCredential)
 
-  const [teamModelsQuery, myModelsQuery, routesQuery] = useQueries({
+  const teamModelsQuery = useInfiniteQuery({
+    queryKey: teamId
+      ? [...playgroundTeamModelsQueryKey(teamId, teamCredentialFilter), 'infinite']
+      : ['gateway', 'models', 'requestable', 'none'],
+    queryFn: ({ pageParam }) => {
+      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.listModels(teamId, {
+        registry_scope: teamRegistryScope,
+        ...(teamCredentialFilter ? { credential_id: teamCredentialFilter } : {}),
+        page: pageParam,
+        page_size: MAX_PAGE_SIZE,
+      })
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    enabled: includeTeamModels,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const myModelsQuery = useInfiniteQuery({
+    queryKey: [...GATEWAY_MY_MODELS_ALL_QUERY_KEY, 'infinite'],
+    queryFn: ({ pageParam }) =>
+      gatewayApi.listMyModels({ page: pageParam, page_size: MAX_PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    enabled: includeMyModels,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const [routesQuery] = useQueries({
     queries: [
-      {
-        queryKey: teamId
-          ? playgroundTeamModelsQueryKey(teamId, teamCredentialFilter)
-          : ['gateway', 'models', 'requestable', 'none'],
-        queryFn: () => {
-          if (!teamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listModels(teamId, {
-            registry_scope: teamRegistryScope,
-            ...(teamCredentialFilter ? { credential_id: teamCredentialFilter } : {}),
-          })
-        },
-        enabled: includeTeamModels,
-        staleTime: GATEWAY_MODELS_STALE_MS,
-      },
-      {
-        queryKey: GATEWAY_MY_MODELS_ALL_QUERY_KEY,
-        queryFn: () => gatewayApi.listMyModels(),
-        enabled: includeMyModels,
-        staleTime: GATEWAY_MODELS_STALE_MS,
-      },
       {
         queryKey: ['gateway', 'routes', teamId, credentialId],
         queryFn: () => {
@@ -111,22 +127,106 @@ export function usePlaygroundFilteredModels(
     ],
   })
 
+  const {
+    fetchNextPage: fetchNextTeamPage,
+    hasNextPage: teamHasNextPage,
+    isFetchingNextPage: isFetchingNextTeamPage,
+    data: teamData,
+    isLoading: teamModelsLoading,
+    isSuccess: teamModelsSuccess,
+  } = teamModelsQuery
+
+  const {
+    fetchNextPage: fetchNextMyPage,
+    hasNextPage: myHasNextPage,
+    isFetchingNextPage: isFetchingNextMyPage,
+    data: myData,
+    isLoading: myModelsLoading,
+    isSuccess: myModelsSuccess,
+  } = myModelsQuery
+
+  const teamModels = useMemo(() => teamData?.pages.flatMap((page) => page.items) ?? [], [teamData])
+  const myModels = useMemo(() => myData?.pages.flatMap((page) => page.items) ?? [], [myData])
+
+  const shouldLoadMoreTeam = includeTeamModels && teamHasNextPage && !isFetchingNextTeamPage
+  const shouldLoadMoreMy = includeMyModels && myHasNextPage && !isFetchingNextMyPage
+
+  // 下拉打开时串行翻页，避免 mount 拉全量
+  useEffect(() => {
+    if (!modelPickerOpen) return
+    if (shouldLoadMoreTeam) {
+      void fetchNextTeamPage()
+      return
+    }
+    if (shouldLoadMoreMy) {
+      void fetchNextMyPage()
+    }
+  }, [
+    modelPickerOpen,
+    shouldLoadMoreTeam,
+    shouldLoadMoreMy,
+    fetchNextTeamPage,
+    fetchNextMyPage,
+    teamData?.pages.length,
+    myData?.pages.length,
+  ])
+
   const candidateModels = useMemo<ModelCandidate[]>(
     () =>
       buildPlaygroundCandidateModels({
         credentialId,
         isPersonalCredential,
-        teamModels: teamModelsQuery.data,
-        myModels: myModelsQuery.data,
+        teamModels,
+        myModels,
       }),
-    [credentialId, isPersonalCredential, teamModelsQuery.data, myModelsQuery.data]
+    [credentialId, isPersonalCredential, teamModels, myModels]
   )
 
+  const candidateNames = useMemo(
+    () => new Set(candidateModels.map((m) => m.name)),
+    [candidateModels]
+  )
+
+  const ensureModelNameLoaded = useCallback((modelName: string): void => {
+    const trimmed = modelName.trim()
+    if (!trimmed) return
+    setPendingModelName(trimmed)
+  }, [])
+
+  // 选中模型可能在后续页：按需翻页直至命中或耗尽
+  useEffect(() => {
+    if (!pendingModelName || candidateNames.has(pendingModelName)) {
+      if (pendingModelName && candidateNames.has(pendingModelName)) {
+        setPendingModelName(null)
+      }
+      return
+    }
+    if (shouldLoadMoreTeam) {
+      void fetchNextTeamPage()
+      return
+    }
+    if (shouldLoadMoreMy) {
+      void fetchNextMyPage()
+      return
+    }
+    setPendingModelName(null)
+  }, [
+    pendingModelName,
+    candidateNames,
+    shouldLoadMoreTeam,
+    shouldLoadMoreMy,
+    fetchNextTeamPage,
+    fetchNextMyPage,
+    teamData?.pages.length,
+    myData?.pages.length,
+  ])
+
+  const onModelPickerOpenChange = useCallback((open: boolean): void => {
+    setModelPickerOpen(open)
+  }, [])
+
   const modelsLoading =
-    teamModelsQuery.isLoading ||
-    myModelsQuery.isLoading ||
-    routesQuery.isLoading ||
-    credentialsLoading
+    teamModelsLoading || myModelsLoading || routesQuery.isLoading || credentialsLoading
 
   return {
     teamId,
@@ -142,7 +242,9 @@ export function usePlaygroundFilteredModels(
     candidateModels,
     routes: routesQuery.data,
     modelsLoading,
-    teamModelsLoaded: !includeTeamModels || teamModelsQuery.isSuccess,
-    myModelsLoaded: !includeMyModels || myModelsQuery.isSuccess,
+    teamModelsLoaded: !includeTeamModels || teamModelsSuccess,
+    myModelsLoaded: !includeMyModels || myModelsSuccess,
+    onModelPickerOpenChange,
+    ensureModelNameLoaded,
   }
 }

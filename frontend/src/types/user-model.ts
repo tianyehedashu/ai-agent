@@ -2,6 +2,8 @@
  * Model selector types - 模型选择器类型（系统 + personal gateway_models）
  */
 
+import type { PaginatedList } from '@/types'
+
 export type ModelType = 'text' | 'image' | 'image_gen' | 'video'
 
 export interface UserModelConfig {
@@ -73,15 +75,26 @@ export interface DefaultModelInfo {
   display_name: string
 }
 
+/** 模型列表连通性汇总（与后端 ModelConnectivitySummary 对齐） */
+export interface ModelConnectivitySummary {
+  total: number
+  available: number
+  unavailable: number
+  success: number
+  failed: number
+  unknown: number
+}
+
 export interface AvailableModelsResponse {
-  system_models: SystemModel[]
-  user_models: UserModel[]
+  system_models: PaginatedList<SystemModel>
+  user_models: PaginatedList<UserModel>
   /** 文本能力默认模型（未选时展示） */
   default_for_text?: DefaultModelInfo
   /** 视觉能力默认模型（未选时展示） */
   default_for_vision?: DefaultModelInfo
   /** 图像生成默认模型（未选时展示） */
   default_for_image_gen?: DefaultModelInfo
+  connectivity_summary?: ModelConnectivitySummary
 }
 
 export interface TestConnectionResult {

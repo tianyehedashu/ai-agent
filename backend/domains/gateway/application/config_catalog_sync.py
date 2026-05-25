@@ -159,6 +159,7 @@ def build_tags_from_seed_model(model: CatalogSeedModel) -> dict[str, Any]:
         tags,
         provider=model.provider,
         real_model=real_model,
+        skip_hints=True,
         on_hint_thinking_param=lambda hint_tp: logger.warning(
             "catalog seed %s: litellm hint thinking_param=%s (no explicit seed value)",
             model.id,

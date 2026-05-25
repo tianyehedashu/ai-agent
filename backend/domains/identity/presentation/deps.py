@@ -10,7 +10,7 @@ Identity Presentation Dependencies - 身份认证依赖注入
 from typing import Annotated
 import uuid
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,7 @@ from domains.identity.application.permission_context_composer import PermissionC
 from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
-from libs.exceptions import PermissionDeniedError
+from libs.exceptions import AuthenticationError, PermissionDeniedError
 from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
 from libs.iam.permission_context import get_permission_context
 
@@ -107,10 +107,8 @@ async def get_current_user_optional_with_anonymous(
     """
     try:
         principal = await get_principal(request, credentials, db, anonymous_user_id)
-    except HTTPException as e:
-        if e.status_code == status.HTTP_401_UNAUTHORIZED:
-            return None
-        raise
+    except AuthenticationError:
+        return None
 
     current_user = CurrentUser(
         id=principal.id,
@@ -132,10 +130,7 @@ async def require_auth(
 ) -> CurrentUser:
     """要求必须认证（非匿名）"""
     if current_user.is_anonymous:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
+        raise AuthenticationError("Authentication required")
     return current_user
 
 
@@ -188,17 +183,11 @@ AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
 def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
     """从当前用户获取 UUID（用于需要注册用户 ID 的 API）"""
     if current_user.is_anonymous or Principal.is_anonymous_id(current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
+        raise AuthenticationError("Authentication required")
     try:
         return uuid.UUID(current_user.id)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        ) from exc
+        raise AuthenticationError("Authentication required") from exc
 
 
 # =============================================================================

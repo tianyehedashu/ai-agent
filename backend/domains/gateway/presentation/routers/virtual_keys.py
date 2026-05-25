@@ -15,7 +15,6 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamMember,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     VirtualKeyBatchRevokeFailureItem,
     VirtualKeyBatchRevokeRequest,
@@ -26,7 +25,6 @@ from domains.gateway.presentation.schemas.common import (
     VirtualKeyRevealResponse,
 )
 from libs.crypto import encrypt_value
-from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
     MgmtReads,
@@ -91,17 +89,14 @@ async def reveal_key(
     reads: MgmtReads,
 ) -> VirtualKeyRevealResponse:
     """解密并返回当前用户可见 vkey 的完整明文（与 revoke 同权限模型）。"""
-    try:
-        record = await reads.get_virtual_key_for_team_member(
-            key_id,
-            tenant_id=team.team_id,
-            actor_user_id=team.user_id,
-            team_role=team.team_role,
-            is_platform_admin=team.is_platform_admin,
-        )
-        plain = decrypt_vkey_for_reveal(record, encryption_key=encryption_key())
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    record = await reads.get_virtual_key_for_team_member(
+        key_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
+        is_platform_admin=team.is_platform_admin,
+    )
+    plain = decrypt_vkey_for_reveal(record, encryption_key=encryption_key())
     return VirtualKeyRevealResponse(plain_key=plain)
 
 
@@ -133,16 +128,13 @@ async def revoke_key(
     team: RequiredTeamMember,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.revoke_virtual_key(
-            key_id,
-            tenant_id=team.team_id,
-            actor_user_id=team.user_id,
-            team_role=team.team_role,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.revoke_virtual_key(
+        key_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 __all__ = ["router"]

@@ -1,9 +1,10 @@
 export { OverlayScope, type OverlayScopeProps } from './overlay-scope'
+export { OverlayScopeProvider } from './overlay-scope-context'
 export {
-  OverlayScopeProvider,
   useOverlayScope,
   useOverlayPortalContainer,
-} from './overlay-scope-context'
+  useOverlayScopeId,
+} from './overlay-scope-hooks'
 export {
   releaseUiOverlayLock,
   dismissOpenRadixLayers,

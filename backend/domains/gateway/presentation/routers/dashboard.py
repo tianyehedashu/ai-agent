@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from domains.gateway.application.management.usage_reads import (
     UsageStatisticsItem,
@@ -36,6 +36,8 @@ from domains.gateway.presentation.schemas.common import (
     UsageStatisticsMetricResponse,
     UsageStatisticsResponse,
 )
+
+from libs.exceptions import PermissionDeniedError
 
 from ._common import MgmtReads
 
@@ -191,9 +193,9 @@ async def dashboard_margin(
     group_by: MarginGroupBy = Query("credential"),
 ) -> MarginSummaryResponse:
     if not can_view_margin_dashboard(team):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="margin dashboard requires platform admin",
+        raise PermissionDeniedError(
+            message="margin dashboard requires platform admin",
+            resource="margin dashboard",
         )
     end = datetime.now(UTC)
     start = end - timedelta(days=days)

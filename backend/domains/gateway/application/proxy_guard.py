@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
@@ -35,6 +36,7 @@ from domains.gateway.application.model_or_route_resolution import (
 )
 from domains.gateway.domain.errors import BudgetExceededError
 from domains.gateway.domain.proxy_policy import (
+    BudgetReservation,
     assert_capability_allowed,
     assert_model_allowed,
     assert_registered_model_capability,
@@ -51,7 +53,8 @@ if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
 
 
-BudgetReservation = tuple[str, str | None, str, str | None]
+def _default_budget_repository_factory(session: AsyncSession) -> BudgetRepository:
+    return BudgetRepository(session)
 
 
 class ProxyGuard:
@@ -62,10 +65,15 @@ class ProxyGuard:
         session: AsyncSession,
         budget_service: BudgetService,
         entitlement_guard: EntitlementGuard,
+        *,
+        budget_repository_factory: Callable[[AsyncSession], BudgetRepository] | None = None,
     ) -> None:
         self._session = session
         self._budget = budget_service
         self._entitlement_guard = entitlement_guard
+        self._budget_repo_factory = (
+            budget_repository_factory or _default_budget_repository_factory
+        )
 
     # ---------------------------------------------------------------------
     # 模型与能力校验
@@ -107,7 +115,10 @@ class ProxyGuard:
     # ---------------------------------------------------------------------
 
     async def check_limits(self, ctx: ProxyContext, *, estimate_tokens: int = 0) -> None:
-        """vkey + team 维度限流；按 ctx 显式 rpm/tpm > vkey 默认 rpm/tpm 顺序。"""
+        """vkey 或 platform API Key grant 维度 RPM/TPM 限流。
+
+        按 ctx 显式 ``rpm_limit`` / ``tpm_limit`` 优先于 vkey 默认配置。
+        """
         if ctx.rpm_limit is not None or ctx.tpm_limit is not None:
             target = rate_limit_target(
                 vkey_id=ctx.vkey.vkey_id if ctx.vkey is not None else None,
@@ -144,7 +155,7 @@ class ProxyGuard:
         ``domains.gateway.domain.proxy_policy.build_budget_check_plan`` 决定，
         本方法只负责按计划查仓储、调用 ``BudgetService``、抛错与累积请求级预扣。
         """
-        repo = BudgetRepository(self._session)
+        repo = self._budget_repo_factory(self._session)
         targets = budget_targets(
             tenant_id=ctx.team_id,
             user_id=ctx.user_id,
@@ -268,4 +279,4 @@ class ProxyGuard:
         ctx.entitlement_state = None
 
 
-__all__ = ["BudgetReservation", "ProxyGuard"]
+__all__ = ["ProxyGuard"]

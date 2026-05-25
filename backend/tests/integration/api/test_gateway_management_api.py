@@ -26,6 +26,14 @@ from libs.api.paths import openai_compat_base
 from libs.crypto import derive_encryption_key, encrypt_value
 
 
+def _model_list_items(payload: dict | list) -> list:
+    if isinstance(payload, dict) and "items" in payload:
+        return payload["items"]
+    if isinstance(payload, list):
+        return payload
+    raise TypeError(f"unexpected models list payload: {type(payload)!r}")
+
+
 @pytest.mark.integration
 class TestGatewayManagementApi:
     @pytest.mark.asyncio
@@ -565,8 +573,90 @@ class TestGatewayManagementApi:
             params={"credential_id": cid},
         )
         assert r_models.status_code == 200, r_models.text
-        models = r_models.json()
+        models = _model_list_items(r_models.json())
         assert all(m["credential_id"] == cid for m in models)
+
+    @pytest.mark.asyncio
+    async def test_list_models_returns_paginated_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 5},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for key in ("items", "total", "page", "page_size", "has_next", "has_prev", "connectivity_summary"):
+            assert key in body
+        assert body["page"] == 1
+        assert body["page_size"] == 5
+        assert isinstance(body["items"], list)
+        summary = body["connectivity_summary"]
+        assert summary["total"] == body["total"]
+        assert summary["available"] + summary["unavailable"] == summary["total"]
+
+    @pytest.mark.asyncio
+    async def test_list_system_models_connectivity_summary_matches_total(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/gateway/system/models",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 20},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        summary = body["connectivity_summary"]
+        assert summary["total"] == body["total"]
+        assert summary["success"] + summary["failed"] + summary["unknown"] == summary["total"]
+    async def test_list_model_ids_returns_ids_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/ids",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 5},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "ids" in body
+        assert "truncated" in body
+        assert isinstance(body["ids"], list)
+        assert body["truncated"] is False
+
+    @pytest.mark.asyncio
+    async def test_list_my_models_returns_paginated_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/gateway/my-models",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 5},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for key in ("items", "total", "page", "page_size", "has_next", "has_prev", "connectivity_summary"):
+            assert key in body
+        assert body["page"] == 1
+        assert body["page_size"] == 5
+        assert isinstance(body["items"], list)
 
     @pytest.mark.asyncio
     async def test_delete_managed_credential_cascades_models(
@@ -622,7 +712,7 @@ class TestGatewayManagementApi:
             params={"credential_id": cid},
         )
         assert r_models_after.status_code == 200, r_models_after.text
-        assert not any(m["id"] == mid for m in r_models_after.json())
+        assert not any(m["id"] == mid for m in _model_list_items(r_models_after.json()))
 
     @pytest.mark.asyncio
     async def test_team_create_model_normalizes_dashscope_real_model(
@@ -791,7 +881,7 @@ class TestGatewayManagementApi:
         db_session,
         test_user: User,
     ) -> None:
-        """未在 MANAGED_GATEWAY_CREDENTIAL_PROVIDERS 白名单内的 provider → 422。"""
+        """未在 MANAGED_GATEWAY_CREDENTIAL_PROVIDERS 白名单内的 provider → 400 ValidationError。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
         headers = auth_headers
@@ -805,7 +895,7 @@ class TestGatewayManagementApi:
                 "scope": "team",
             },
         )
-        assert r.status_code == 422, r.text
+        assert r.status_code == 400, r.text
         assert "nonexistent-vendor" in r.json().get("detail", "")
 
     @pytest.mark.asyncio
@@ -845,7 +935,7 @@ class TestGatewayManagementApi:
 
         r_list = await dev_client.get("/api/v1/gateway/my-models", headers=auth_headers)
         assert r_list.status_code == 200, r_list.text
-        assert any(m["id"] == model_id for m in r_list.json())
+        assert any(m["id"] == model_id for m in _model_list_items(r_list.json()))
 
         r_del = await dev_client.delete(
             f"/api/v1/gateway/my-models/{model_id}",
@@ -900,7 +990,7 @@ class TestGatewayManagementApi:
 
         r_list = await dev_client.get("/api/v1/gateway/my-models", headers=auth_headers)
         assert r_list.status_code == 200, r_list.text
-        remaining_ids = {m["id"] for m in r_list.json()}
+        remaining_ids = {m["id"] for m in _model_list_items(r_list.json())}
         for mid in model_ids:
             assert mid not in remaining_ids
 
@@ -1015,7 +1105,7 @@ class TestGatewayManagementApi:
             params={"registry_scope": "team"},
         )
         assert r_team.status_code == 200, r_team.text
-        assert registration_name not in {m["name"] for m in r_team.json()}
+        assert registration_name not in {m["name"] for m in _model_list_items(r_team.json())}
 
         r_callable = await dev_client.get(
             f"/api/v1/gateway/teams/{team.id}/models",
@@ -1023,7 +1113,7 @@ class TestGatewayManagementApi:
             params={"registry_scope": "callable"},
         )
         assert r_callable.status_code == 200, r_callable.text
-        assert registration_name in {m["name"] for m in r_callable.json()}
+        assert registration_name in {m["name"] for m in _model_list_items(r_callable.json())}
 
         ck = await dev_client.post(
             f"/api/v1/gateway/teams/{team.id}/keys",
@@ -1807,9 +1897,201 @@ class TestGatewayManagementApi:
             params={"registry_scope": "system"},
         )
         assert r_list.status_code == 200, r_list.text
-        ids = {m["id"] for m in r_list.json()}
+        ids = {m["id"] for m in _model_list_items(r_list.json())}
         assert str(deletable.id) not in ids
         assert str(managed.id) in ids
+
+    @pytest.mark.asyncio
+    async def test_resync_capabilities_updates_model_tags(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+            LitellmCapabilityHintAdapter,
+        )
+
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"resync-cred-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-resync-int-test-key-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        model_name = f"resync-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+                "tags": {"supports_vision": False},
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+
+        def _vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
+            _ = provider, real_model
+            return LitellmModelInfoHints(supports_vision=True)
+
+        monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _vision_hints)
+
+        r_patch = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/models/{mid}",
+            headers=headers,
+            json={"resync_capabilities": True},
+        )
+        assert r_patch.status_code == 200, r_patch.text
+        body = r_patch.json()
+        assert body["tags"]["supports_vision"] is True
+        assert "image" in body["model_types"]
+
+        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{mid}", headers=headers)
+        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+
+    @pytest.mark.asyncio
+    async def test_resync_capabilities_rejects_config_managed_system_model(
+        self,
+        dev_client: AsyncClient,
+        db_session,
+    ) -> None:
+        platform_admin = User(
+            email=f"resync_admin_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Resync Admin",
+            role="admin",
+        )
+        db_session.add(platform_admin)
+        await db_session.commit()
+        await db_session.refresh(platform_admin)
+
+        team = await TeamService(db_session).ensure_personal_team(platform_admin.id)
+        encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+        cred = await SystemProviderCredentialRepository(db_session).create(
+            provider="openai",
+            name=f"resync-managed-cred-{uuid.uuid4().hex[:6]}",
+            api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+            api_base=None,
+        )
+        await db_session.flush()
+        managed = SystemGatewayModel(
+            name=f"resync-managed-{uuid.uuid4().hex[:6]}",
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+            tags={GATEWAY_MODEL_MANAGED_BY_TAG: CONFIG_MANAGED_BY},
+        )
+        db_session.add(managed)
+        await db_session.commit()
+        await db_session.refresh(managed)
+
+        uc = UserUseCase(db_session)
+        admin_token = await uc.create_token(platform_admin)
+        headers = {"Authorization": f"Bearer {admin_token.access_token}"}
+
+        r_patch = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/models/{managed.id}",
+            headers=headers,
+            json={"resync_capabilities": True},
+        )
+        assert r_patch.status_code == 400, r_patch.text
+        assert "配置托管" in r_patch.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_batch_resync_capabilities_partial_success(
+        self,
+        dev_client: AsyncClient,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """POST /models/batch-resync-capabilities：可 resync 行成功，config-managed 进 failed[]。"""
+        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+            LitellmCapabilityHintAdapter,
+        )
+
+        platform_admin = User(
+            email=f"batch_resync_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Batch Resync Admin",
+            role="admin",
+        )
+        db_session.add(platform_admin)
+        await db_session.commit()
+        await db_session.refresh(platform_admin)
+
+        team = await TeamService(db_session).ensure_personal_team(platform_admin.id)
+        encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+        cred = await SystemProviderCredentialRepository(db_session).create(
+            provider="openai",
+            name=f"batch-resync-cred-{uuid.uuid4().hex[:6]}",
+            api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+            api_base=None,
+        )
+        await db_session.flush()
+        resyncable = SystemGatewayModel(
+            name=f"batch-resync-ok-{uuid.uuid4().hex[:6]}",
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+            tags={"supports_vision": False},
+        )
+        managed = SystemGatewayModel(
+            name=f"batch-resync-managed-{uuid.uuid4().hex[:6]}",
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+            tags={GATEWAY_MODEL_MANAGED_BY_TAG: CONFIG_MANAGED_BY},
+        )
+        db_session.add_all([resyncable, managed])
+        await db_session.commit()
+
+        def _vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
+            _ = provider, real_model
+            return LitellmModelInfoHints(supports_vision=True)
+
+        monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _vision_hints)
+
+        uc = UserUseCase(db_session)
+        admin_token = await uc.create_token(platform_admin)
+        headers = {"Authorization": f"Bearer {admin_token.access_token}"}
+
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models/batch-resync-capabilities",
+            headers=headers,
+            json={"model_ids": [str(resyncable.id), str(managed.id)]},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert str(resyncable.id) in body["succeeded"]
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["id"] == str(managed.id)
+
+        r_get = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/{resyncable.id}",
+            headers=headers,
+        )
+        assert r_get.status_code == 200, r_get.text
+        assert r_get.json()["tags"]["supports_vision"] is True
 
 
 @pytest.mark.integration

@@ -72,3 +72,13 @@ export function canDeleteGatewayModel(
   }
   return canWrite || isPlatformAdmin
 }
+
+/** 从 LiteLLM 同步能力：与 canDeleteGatewayModel 一致（config 托管不可 resync） */
+export function canResyncGatewayModelCapabilities(
+  model: GatewayModel,
+  canWrite: boolean,
+  isPlatformAdmin: boolean,
+  context?: GatewayModelPermissionContext
+): boolean {
+  return canDeleteGatewayModel(model, canWrite, isPlatformAdmin, context)
+}

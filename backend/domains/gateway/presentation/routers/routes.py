@@ -12,14 +12,12 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     RouteCreate,
     RouteResponse,
     RouteUpdate,
 )
 from domains.gateway.presentation.tenant_scoped_response import tenant_scoped_orm_dict
-from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
     MgmtReads,
@@ -75,14 +73,11 @@ async def update_route(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> RouteResponse:
-    try:
-        updated = await writes.update_gateway_route(
-            route_id,
-            tenant_id=team.team_id,
-            fields=body.model_dump(exclude_unset=True, exclude_none=True),
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    updated = await writes.update_gateway_route(
+        route_id,
+        tenant_id=team.team_id,
+        fields=body.model_dump(exclude_unset=True, exclude_none=True),
+    )
     return _route_to_response(updated)
 
 
@@ -92,10 +87,7 @@ async def delete_route(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_gateway_route(route_id, tenant_id=team.team_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_gateway_route(route_id, tenant_id=team.team_id)
 
 
 __all__ = ["router"]

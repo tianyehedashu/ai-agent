@@ -237,6 +237,9 @@ ignore = [
 "tests/**" = ["TC001", "TC002", "TC003"]
 # SQLAlchemy Mapped[uuid.UUID] 等需在模块 globals 中可解析；uuid/datetime 非「仅类型」导入
 "domains/gateway/infrastructure/models/*.py" = ["TC003"]
+# 列表 SQL / 读仓储：ORM 与 domain 枚举在运行时作为参数传递
+"domains/gateway/infrastructure/repositories/model_list_sql.py" = ["TC001", "TC002", "TC003"]
+"domains/gateway/infrastructure/repositories/model_list_read_repository.py" = ["TC001", "TC002", "TC003"]
 # FastAPI Depends、Protocol 实现等需在运行时解析签名；TCH 与框架冲突
 "domains/gateway/presentation/**/*.py" = ["TC001", "TC002", "TC003"]
 "domains/gateway/infrastructure/iam/**/*.py" = ["TC001", "TC002", "TC003"]
@@ -244,6 +247,7 @@ ignore = [
 "domains/tenancy/**/*.py" = ["TC001", "TC002", "TC003"]
 "domains/identity/infrastructure/default_tenant_lifecycle.py" = ["TC001", "TC002", "TC003"]
 "libs/api/deps.py" = ["TC001", "TC002", "TC003"]
+"libs/api/problem_details.py" = ["TC001", "TC002", "TC003"]
 "libs/iam/**/*.py" = ["TC001", "TC002", "TC003"]
 
 [tool.ruff.lint.isort]

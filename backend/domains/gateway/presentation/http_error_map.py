@@ -1,14 +1,11 @@
-"""将 Gateway 领域异常映射为 HTTP 响应（仅 Presentation 层使用）
-
-适用范围：管理 API 路由（``management_router`` / proxy 鉴权 deps）。
-ProxyUseCase 业务错误另由 ``gateway_proxy_business_error_classify`` 转换为 SDK 兼容载荷。
-"""
+"""将 Gateway / 团队领域异常映射为 RFC 7807 ProblemContext（Presentation 层）。"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, status
+from fastapi import status
 
 from domains.gateway.domain.errors import (
     ApiKeyGatewayGrantDeniedError,
@@ -31,21 +28,50 @@ from domains.gateway.domain.errors import (
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
 )
-from libs.iam.authz_http import map_authz_error_to_http
+from libs.api.problem_details import ProblemContext, default_title_for_status
+from libs.exceptions import PermissionDeniedError
+from libs.exceptions.codes import (
+    API_KEY_GATEWAY_GRANT_DENIED,
+    API_KEY_GATEWAY_GRANT_REQUIRED,
+    CREDENTIAL_API_KEY_DECRYPT_ERROR,
+    CREDENTIAL_NAME_CONFLICT,
+    CREDENTIAL_NOT_FOUND,
+    GATEWAY_DOMAIN_ERROR,
+    GATEWAY_ENTITLEMENT_EXHAUSTED,
+    GATEWAY_TEAM_HEADER_INVALID,
+    GATEWAY_TEAM_HEADER_REQUIRED,
+    GATEWAY_VKEY_TEAM_HEADER_MISMATCH,
+    INVALID_SYSTEM_VISIBILITY,
+    MANAGEMENT_ENTITY_NOT_FOUND,
+    NO_PERSONAL_TEAM_FOR_PROXY,
+    PERMISSION_DENIED,
+    PLATFORM_API_KEY_INVALID,
+    PLATFORM_API_KEY_MISSING_GATEWAY_PROXY_SCOPE,
+    SYSTEM_CREDENTIAL_ADMIN_REQUIRED,
+    SYSTEM_VIRTUAL_KEY_FORBIDDEN,
+    VIRTUAL_KEY_DECRYPT_ERROR,
+    VIRTUAL_KEY_INVALID,
+    VIRTUAL_KEY_NOT_FOUND,
+)
+from libs.iam.team_http import map_team_access_exception_to_problem
 
-_GatewayHttpBuilder = Callable[[Exception], HTTPException]
+if TYPE_CHECKING:
+    from libs.exceptions.base import HttpMappableDomainError
+
+_ProblemBuilder = Callable[[Exception], ProblemContext]
 
 
-def _entitlement_exhausted_http(exc: Exception) -> HTTPException:
+def _entitlement_exhausted_problem(exc: Exception) -> ProblemContext:
     assert isinstance(exc, EntitlementPlanExhaustedError)
     headers: dict[str, str] = {}
     if exc.retry_at:
         headers["X-Plan-Retry-At"] = exc.retry_at
-    return HTTPException(
+    return ProblemContext(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail={
-            "code": "gateway/entitlement_exhausted",
-            "message": str(exc),
+        detail=str(exc),
+        title=default_title_for_status(status.HTTP_429_TOO_MANY_REQUESTS),
+        code=GATEWAY_ENTITLEMENT_EXHAUSTED,
+        extra={
             "plan_id": exc.plan_id,
             "quota_label": exc.quota_label,
             "reason": exc.reason,
@@ -55,76 +81,193 @@ def _entitlement_exhausted_http(exc: Exception) -> HTTPException:
     )
 
 
-_GATEWAY_DOMAIN_HTTP: list[tuple[tuple[type[Exception], ...], _GatewayHttpBuilder]] = [
+def _permission_denied_problem(exc: Exception) -> ProblemContext:
+    assert isinstance(exc, PermissionDeniedError)
+    return ProblemContext(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=exc.message,
+        title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+        code=exc.code or PERMISSION_DENIED,
+        extra=exc.details or None,
+    )
+
+
+_DOMAIN_PROBLEM_BUILDERS: list[tuple[tuple[type[Exception], ...], _ProblemBuilder]] = [
+    ((PermissionDeniedError,), _permission_denied_problem),
     (
         (VirtualKeyInvalidError, PlatformApiKeyInvalidError),
-        lambda exc: HTTPException(
+        lambda exc: ProblemContext(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
+            title=default_title_for_status(status.HTTP_401_UNAUTHORIZED),
+            code=VIRTUAL_KEY_INVALID
+            if isinstance(exc, VirtualKeyInvalidError)
+            else PLATFORM_API_KEY_INVALID,
             headers={"WWW-Authenticate": "Bearer"},
         ),
     ),
     (
         (PlatformApiKeyMissingGatewayProxyScopeError,),
-        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+            code=PLATFORM_API_KEY_MISSING_GATEWAY_PROXY_SCOPE,
+        ),
     ),
     (
         (NoPersonalTeamForProxyError,),
-        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=NO_PERSONAL_TEAM_FOR_PROXY,
+        ),
     ),
     (
-        (GatewayTeamHeaderInvalidError, GatewayTeamHeaderRequiredError, GatewayVkeyTeamHeaderMismatchError),
-        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+        (GatewayTeamHeaderInvalidError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=GATEWAY_TEAM_HEADER_INVALID,
+        ),
     ),
     (
-        (ApiKeyGatewayGrantDeniedError, ApiKeyGatewayGrantRequiredError),
-        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+        (GatewayTeamHeaderRequiredError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=GATEWAY_TEAM_HEADER_REQUIRED,
+        ),
     ),
-    ((VirtualKeyNotFoundError,), lambda exc: HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))),
+    (
+        (GatewayVkeyTeamHeaderMismatchError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=GATEWAY_VKEY_TEAM_HEADER_MISMATCH,
+        ),
+    ),
+    (
+        (ApiKeyGatewayGrantDeniedError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+            code=API_KEY_GATEWAY_GRANT_DENIED,
+        ),
+    ),
+    (
+        (ApiKeyGatewayGrantRequiredError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+            code=API_KEY_GATEWAY_GRANT_REQUIRED,
+        ),
+    ),
+    (
+        (VirtualKeyNotFoundError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_404_NOT_FOUND),
+            code=VIRTUAL_KEY_NOT_FOUND,
+        ),
+    ),
     (
         (SystemVirtualKeyForbiddenError,),
-        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+            code=SYSTEM_VIRTUAL_KEY_FORBIDDEN,
+        ),
     ),
     (
-        (CredentialApiKeyDecryptError, VirtualKeyDecryptError),
-        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+        (CredentialApiKeyDecryptError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=CREDENTIAL_API_KEY_DECRYPT_ERROR,
+        ),
     ),
     (
-        (CredentialNotFoundError, ManagementEntityNotFoundError),
-        lambda exc: HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)),
+        (VirtualKeyDecryptError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=VIRTUAL_KEY_DECRYPT_ERROR,
+        ),
+    ),
+    (
+        (CredentialNotFoundError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_404_NOT_FOUND),
+            code=CREDENTIAL_NOT_FOUND,
+        ),
+    ),
+    (
+        (ManagementEntityNotFoundError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_404_NOT_FOUND),
+            code=MANAGEMENT_ENTITY_NOT_FOUND,
+        ),
     ),
     (
         (CredentialNameConflictError,),
-        lambda exc: HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_409_CONFLICT),
+            code=CREDENTIAL_NAME_CONFLICT,
+        ),
     ),
     (
         (InvalidSystemVisibilityError,),
-        lambda exc: HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=INVALID_SYSTEM_VISIBILITY,
+        ),
     ),
     (
         (SystemCredentialAdminRequiredError,),
-        lambda exc: HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_403_FORBIDDEN),
+            code=SYSTEM_CREDENTIAL_ADMIN_REQUIRED,
+        ),
     ),
-    ((EntitlementPlanExhaustedError,), _entitlement_exhausted_http),
+    ((EntitlementPlanExhaustedError,), _entitlement_exhausted_problem),
 ]
 
 
-def _http_exception_for_gateway_domain(exc: Exception) -> HTTPException | None:
-    """将已知的 Gateway 领域异常映射为 ``HTTPException``；未知类型返回 ``None``。"""
-    for types, builder in _GATEWAY_DOMAIN_HTTP:
+def problem_context_from_gateway_domain(exc: HttpMappableDomainError) -> ProblemContext:
+    """将已知领域异常映射为 ProblemContext；未知 HttpMappable 走 500。"""
+    team_ctx = map_team_access_exception_to_problem(exc)
+    if team_ctx is not None:
+        return team_ctx
+    for types, builder in _DOMAIN_PROBLEM_BUILDERS:
         if isinstance(exc, types):
             return builder(exc)
-    return None
+    return ProblemContext(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=str(exc),
+        title=default_title_for_status(status.HTTP_500_INTERNAL_SERVER_ERROR),
+        code=GATEWAY_DOMAIN_ERROR,
+    )
 
 
-def http_exception_from_gateway_domain(exc: Exception) -> HTTPException:
-    authz_http = map_authz_error_to_http(exc)
-    if authz_http is not None:
-        return authz_http
-    mapped = _http_exception_for_gateway_domain(exc)
-    if mapped is not None:
-        return mapped
-    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
-
-
-__all__ = ["http_exception_from_gateway_domain"]
+__all__ = ["problem_context_from_gateway_domain"]

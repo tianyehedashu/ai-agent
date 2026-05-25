@@ -10,6 +10,12 @@ export type PlaygroundApiFlavor = 'openai' | 'anthropic'
 export interface PlaygroundMetadata {
   httpStatus?: number
   elapsedMs?: number
+  /** 网关预检（鉴权/限流/预算/kwargs），来自 X-Gateway-Preflight-Ms */
+  preflightMs?: number
+  /** 网关 → LiteLLM → 厂商 API；非流式来自响应头，流式可估算 */
+  upstreamMs?: number
+  /** 首 token 时间（流式首个正文 chunk；非流式 ≈ 总耗时） */
+  ttftMs?: number
   promptTokens?: number
   completionTokens?: number
   totalTokens?: number

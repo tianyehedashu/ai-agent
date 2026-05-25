@@ -10,6 +10,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { PageQuery, PaginatedList } from '@/types'
 import type { AvailableModelsResponse, ModelTestStatus, ModelType } from '@/types/user-model'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
@@ -71,6 +72,12 @@ export interface GatewayModelBatchDeleteResponse {
   failed: GatewayModelBatchDeleteFailureItem[]
   grants_removed: number
   budgets_removed: number
+}
+
+/** POST /models/batch-resync-capabilities 响应 */
+export interface GatewayModelBatchResyncCapabilitiesResponse {
+  succeeded: string[]
+  failed: GatewayModelBatchDeleteFailureItem[]
 }
 
 /** GET /models/usage-summary 单条 route 的切片 */
@@ -167,9 +174,169 @@ export interface GatewayModelUpdateBody {
   tpm_limit?: number | null
   enabled?: boolean | null
   tags?: Record<string, unknown> | null
+  /** 为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化） */
+  resync_capabilities?: boolean
 }
 
 export type GatewayModelRegistryScope = 'team' | 'system' | 'callable' | 'requestable'
+
+export interface ModelConnectivitySummary {
+  total: number
+  available: number
+  unavailable: number
+  success: number
+  failed: number
+  unknown: number
+}
+
+export interface GatewayModelListQuery extends PageQuery {
+  registry_scope?: GatewayModelRegistryScope
+  q?: string
+  connectivity?: 'all' | 'success' | 'failed' | 'unknown'
+  sort?: 'name' | 'created_at' | 'provider' | 'last_tested_at'
+  order?: 'asc' | 'desc'
+  provider?: string
+  credential_id?: string
+  capability?: string
+  enabled?: boolean
+}
+
+export interface GatewayModelListResponse extends PaginatedList<GatewayModel> {
+  connectivity_summary: ModelConnectivitySummary
+}
+
+export interface GatewayModelIdsResponse {
+  ids: string[]
+  /** 命中 max_ids 上限时为 true，调用方应提示或分批处理 */
+  truncated?: boolean
+}
+
+export interface AvailableModelsListQuery extends PageQuery {
+  q?: string
+  connectivity?: 'all' | 'success' | 'failed' | 'unknown'
+  sort?: 'name' | 'created_at' | 'provider' | 'last_tested_at'
+  order?: 'asc' | 'desc'
+  provider?: string
+}
+
+function buildModelListSearch(params?: GatewayModelListQuery): Record<string, string> {
+  const search: Record<string, string> = {}
+  if (!params) return search
+  if (params.registry_scope) search.registry_scope = params.registry_scope
+  if (params.page !== undefined) search.page = String(params.page)
+  if (params.page_size !== undefined) search.page_size = String(params.page_size)
+  if (params.q) search.q = params.q
+  if (params.connectivity && params.connectivity !== 'all')
+    search.connectivity = params.connectivity
+  if (params.sort) search.sort = params.sort
+  if (params.order) search.order = params.order
+  if (params.provider) search.provider = params.provider
+  if (params.credential_id) search.credential_id = params.credential_id
+  if (params.capability) search.capability = params.capability
+  if (params.enabled !== undefined) search.enabled = String(params.enabled)
+  return search
+}
+
+function buildAvailableModelsSearch(
+  type?: ModelType,
+  provider?: string,
+  options?: { mode?: 'chat' | 'image_gen' | 'video' } & AvailableModelsListQuery
+): Record<string, string> {
+  const search: Record<string, string> = {}
+  if (type) search.type = type
+  if (provider) search.provider = provider
+  if (options?.mode) search.mode = options.mode
+  if (options?.page !== undefined) search.page = String(options.page)
+  if (options?.page_size !== undefined) search.page_size = String(options.page_size)
+  if (options?.q) search.q = options.q
+  if (options?.connectivity && options.connectivity !== 'all') {
+    search.connectivity = options.connectivity
+  }
+  if (options?.sort) search.sort = options.sort
+  if (options?.order) search.order = options.order
+  return search
+}
+
+/** 拉取 available 模型全部分页（选择器/Studio 等需跨页查找时使用） */
+export async function fetchAllAvailableGatewayModels(
+  type?: ModelType,
+  provider?: string,
+  options?: { mode?: 'chat' | 'image_gen' | 'video' } & Omit<
+    AvailableModelsListQuery,
+    'page' | 'page_size'
+  >
+): Promise<AvailableModelsResponse> {
+  const pageSize = 200
+  let page = 1
+  const systemItems: AvailableModelsResponse['system_models']['items'] = []
+  const userItems: AvailableModelsResponse['user_models']['items'] = []
+  let connectivitySummary = {
+    total: 0,
+    available: 0,
+    unavailable: 0,
+    success: 0,
+    failed: 0,
+    unknown: 0,
+  }
+  for (;;) {
+    const res = await modelsApi.listAvailableModels(type, provider, {
+      ...options,
+      page,
+      page_size: pageSize,
+    })
+    systemItems.push(...res.system_models.items)
+    userItems.push(...res.user_models.items)
+    if (res.connectivity_summary) {
+      connectivitySummary = res.connectivity_summary
+    }
+    if (!res.system_models.has_next && !res.user_models.has_next) break
+    page += 1
+  }
+  return {
+    system_models: {
+      items: systemItems,
+      total: systemItems.length,
+      page: 1,
+      page_size: systemItems.length || pageSize,
+      has_next: false,
+      has_prev: false,
+    },
+    user_models: {
+      items: userItems,
+      total: userItems.length,
+      page: 1,
+      page_size: userItems.length || pageSize,
+      has_next: false,
+      has_prev: false,
+    },
+    connectivity_summary: connectivitySummary,
+  }
+}
+
+/** 拉取全部分页结果（管理面下拉等需全量列表时使用，page_size 上限 200） */
+export async function fetchAllGatewayModelPages(
+  teamId: string,
+  params?: Omit<GatewayModelListQuery, 'page' | 'page_size'>
+): Promise<GatewayModel[]> {
+  const pageSize = 200
+  let page = 1
+  const all: GatewayModel[] = []
+  for (;;) {
+    const res = await modelsApi.listModels(teamId, { ...params, page, page_size: pageSize })
+    all.push(...res.items)
+    if (!res.has_next) break
+    page += 1
+  }
+  return all
+}
+
+/** 当前筛选下的模型 id（批量操作；须检查 ``truncated``） */
+export async function fetchGatewayModelIdsForBatch(
+  teamId: string,
+  params?: Omit<GatewayModelListQuery, 'page' | 'page_size'>
+): Promise<GatewayModelIdsResponse> {
+  return modelsApi.listModelIds(teamId, params)
+}
 
 /** Models 资源 API */
 export const modelsApi = {
@@ -181,30 +348,33 @@ export const modelsApi = {
   listAvailableModels: (
     type?: ModelType,
     provider?: string,
-    options?: { mode?: 'chat' | 'image_gen' | 'video' }
-  ) => {
-    const search: Record<string, string> = {}
-    if (type) search.type = type
-    if (provider) search.provider = provider
-    if (options?.mode) search.mode = options.mode
-    return apiClient.get<AvailableModelsResponse>(`${GATEWAY_API_BASE}/models/available`, search)
-  },
+    options?: { mode?: 'chat' | 'image_gen' | 'video' } & AvailableModelsListQuery
+  ) =>
+    apiClient.get<AvailableModelsResponse>(
+      `${GATEWAY_API_BASE}/models/available`,
+      buildAvailableModelsSearch(type, provider, options)
+    ),
 
-  /** 列出 Gateway 模型注册行或合并可调用列表（``registry_scope`` 与后端对齐） */
-  listModels: (
-    teamId: string,
-    params?: {
-      registry_scope?: GatewayModelRegistryScope
-      provider?: string
-      credential_id?: string
-    }
-  ) => {
-    const search: Record<string, string> = {}
-    if (params?.registry_scope) search.registry_scope = params.registry_scope
-    if (params?.provider) search.provider = params.provider
-    if (params?.credential_id) search.credential_id = params.credential_id
-    return apiClient.get<GatewayModel[]>(teamGatewayPath(teamId, '/models'), search)
-  },
+  /** 列出 Gateway 模型注册行或合并可调用列表（分页 envelope） */
+  listModels: (teamId: string, params?: GatewayModelListQuery) =>
+    apiClient.get<GatewayModelListResponse>(
+      teamGatewayPath(teamId, '/models'),
+      buildModelListSearch(params)
+    ),
+
+  /** 单条团队/系统注册模型 */
+  getModel: (teamId: string, id: string, params?: Pick<GatewayModelListQuery, 'registry_scope'>) =>
+    apiClient.get<GatewayModel>(
+      teamGatewayPath(teamId, `/models/${id}`),
+      params?.registry_scope ? { registry_scope: params.registry_scope } : undefined
+    ),
+
+  /** 当前筛选条件下的全部模型 id（批量操作） */
+  listModelIds: (teamId: string, params?: GatewayModelListQuery) =>
+    apiClient.get<GatewayModelIdsResponse>(
+      teamGatewayPath(teamId, '/models/ids'),
+      buildModelListSearch(params)
+    ),
   /** 团队模型用量汇总（按 route 维度） */
   modelsUsageSummary: (teamId: string, params?: { days?: number; provider?: string }) =>
     apiClient.get<GatewayModelUsageSummary>(
@@ -233,6 +403,12 @@ export const modelsApi = {
   batchDeleteModels: (teamId: string, modelIds: string[]) =>
     apiClient.post<GatewayModelBatchDeleteResponse>(
       teamGatewayPath(teamId, '/models/batch-delete'),
+      { model_ids: modelIds }
+    ),
+  /** 批量从 LiteLLM 同步能力 tags（部分成功） */
+  batchResyncCapabilities: (teamId: string, modelIds: string[]) =>
+    apiClient.post<GatewayModelBatchResyncCapabilitiesResponse>(
+      teamGatewayPath(teamId, '/models/batch-resync-capabilities'),
       { model_ids: modelIds }
     ),
   /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */

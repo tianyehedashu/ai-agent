@@ -1,12 +1,27 @@
-﻿import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
+﻿import {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi, type GatewayModelBatchDeleteFailureItem } from '@/api/gateway'
+import {
+  fetchAllPersonalGatewayModels,
+  gatewayApi,
+  type GatewayModelBatchDeleteFailureItem,
+  type PersonalGatewayModel,
+} from '@/api/gateway'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -44,7 +59,6 @@ import {
   filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
   formatDeleteFailedConfirmLabel,
-  matchesHealthFilter,
   type BatchDeleteChunkResult,
 } from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -59,6 +73,9 @@ import { PersonalModelListRow } from './personal-model-list-row'
 import { preloadPersonalModelDetailPane, preloadPersonalModelForm } from './personal-model-preload'
 
 const LIST_CHANNEL_ALL = FILTER_ALL
+const MY_MODELS_PAGE_SIZE = 20
+
+const EMPTY_PERSONAL_ITEMS: PersonalGatewayModel[] = []
 
 const formSuspenseFallback = (
   <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -85,6 +102,9 @@ export function PersonalModelsWorkspace({
   const credentialIdFromUrl = searchParams.get('credentialId') ?? ''
   const lockCredentialFromUrl = credentialIdFromUrl !== ''
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
+  const [search, setSearch] = useState('')
+  const deferredSearch = useDeferredValue(search)
+  const [page, setPage] = useState(1)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
@@ -105,14 +125,43 @@ export function PersonalModelsWorkspace({
 
   const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ['gateway', 'my-models', listChannel],
+  useEffect(() => {
+    setPage(1)
+  }, [listChannel, deferredSearch, healthFilter])
+
+  const personalListQueryBase = useMemo(
+    () => ({
+      ...(listChannel !== LIST_CHANNEL_ALL ? { provider: listChannel } : {}),
+      ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
+    }),
+    [listChannel, deferredSearch]
+  )
+
+  const hasActiveListFilters =
+    listChannel !== LIST_CHANNEL_ALL || healthFilter !== 'all' || deferredSearch.trim() !== ''
+
+  const { data: listData, isLoading } = useQuery({
+    queryKey: ['gateway', 'my-models', listChannel, page, deferredSearch, healthFilter],
     queryFn: () =>
       gatewayApi.listMyModels({
-        provider: listChannel === LIST_CHANNEL_ALL ? undefined : listChannel,
+        page,
+        page_size: MY_MODELS_PAGE_SIZE,
+        ...personalListQueryBase,
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       }),
     enabled: hasAuthSession && !isRegisterView,
   })
+
+  useEffect(() => {
+    if (!listData) return
+    const maxPage = Math.max(1, Math.ceil(listData.total / listData.page_size))
+    if (page > maxPage) {
+      setPage(maxPage)
+    }
+  }, [listData, page])
+
+  const items = listData?.items ?? EMPTY_PERSONAL_ITEMS
+  const connectivitySummary = listData?.connectivity_summary
 
   const goToList = useCallback((): void => {
     setSearchParams(
@@ -186,17 +235,18 @@ export function PersonalModelsWorkspace({
         description: ids.length > 0 ? '正在后台测试新导入模型的连通性…' : undefined,
       })
       if (ids.length > 0) {
-        void queryClient
-          .fetchQuery({
-            queryKey: ['gateway', 'my-models'],
-            queryFn: () => gatewayApi.listMyModels(),
-          })
+        void Promise.all(ids.map((id) => gatewayApi.getMyModel(id)))
           .then((models) => {
-            const idSet = new Set(ids)
-            const testable = filterTestableConnectivityModels(models.filter((m) => idSet.has(m.id)))
+            const testable = filterTestableConnectivityModels(models)
             if (testable.length > 0) {
               startBatchTest(testable)
             }
+          })
+          .catch(() => {
+            toast({
+              variant: 'destructive',
+              title: '导入成功，但无法启动连通性测试',
+            })
           })
       }
     },
@@ -222,10 +272,7 @@ export function PersonalModelsWorkspace({
     [createMutation]
   )
 
-  const filteredItems = useMemo(
-    () => items.filter((m) => matchesHealthFilter(m, healthFilter)),
-    [items, healthFilter]
-  )
+  const filteredItems = items
 
   const filteredIdSet = useMemo(() => new Set(filteredItems.map((m) => m.id)), [filteredItems])
 
@@ -257,23 +304,29 @@ export function PersonalModelsWorkspace({
     [selectedModelsForBatch]
   )
 
-  const filteredDeleteLabel = useMemo(
-    (): string => formatBatchDeleteConfirmLabel(filteredItems.map((m) => m.display_name)),
-    [filteredItems]
-  )
+  const filteredDeleteCount = listData?.total ?? filteredItems.length
+
+  const filteredDeleteLabel = useMemo((): string => {
+    if (filteredDeleteCount <= filteredItems.length) {
+      return formatBatchDeleteConfirmLabel(filteredItems.map((m) => m.display_name))
+    }
+    return `将删除当前筛选下的全部 ${String(filteredDeleteCount)} 个个人模型，此操作不可撤销。`
+  }, [filteredDeleteCount, filteredItems])
 
   const failedDeletableModels = useMemo(
     () => filterDeletableFailedModels(items, () => true),
     [items]
   )
 
+  const failedDeletableCount = connectivitySummary?.failed ?? failedDeletableModels.length
+
   const deleteFailedLabel = useMemo(
     (): string =>
       formatDeleteFailedConfirmLabel(
-        failedDeletableModels.length,
+        failedDeletableCount,
         failedDeletableModels.map((m) => m.display_name)
       ),
-    [failedDeletableModels]
+    [failedDeletableCount, failedDeletableModels]
   )
 
   const pendingRowDeleteModel = useMemo(
@@ -352,17 +405,31 @@ export function PersonalModelsWorkspace({
   }, [visibleSelectedIds, runPersonalBatchDelete])
 
   const handleConfirmDeleteFiltered = useCallback((): void => {
-    runPersonalBatchDelete(filteredItems.map((m) => m.id))
-  }, [filteredItems, runPersonalBatchDelete])
+    void (async () => {
+      const all = await fetchAllPersonalGatewayModels({
+        ...personalListQueryBase,
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+      })
+      if (all.length === 0) return
+      runPersonalBatchDelete(all.map((m) => m.id))
+    })()
+  }, [personalListQueryBase, healthFilter, runPersonalBatchDelete])
 
   const handleDeleteFailed = useCallback((): void => {
-    if (failedDeletableModels.length === 0) return
+    if (failedDeletableCount === 0) return
     setDeleteFailedOpen(true)
-  }, [failedDeletableModels.length])
+  }, [failedDeletableCount])
 
   const handleConfirmDeleteFailed = useCallback((): void => {
-    runPersonalBatchDelete(failedDeletableModels.map((m) => m.id))
-  }, [failedDeletableModels, runPersonalBatchDelete])
+    void (async () => {
+      const all = await fetchAllPersonalGatewayModels({
+        ...personalListQueryBase,
+        connectivity: 'failed',
+      })
+      if (all.length === 0) return
+      runPersonalBatchDelete(all.map((m) => m.id))
+    })()
+  }, [personalListQueryBase, runPersonalBatchDelete])
 
   const handleRowDelete = useCallback((id: string): void => {
     setPendingRowDeleteId(id)
@@ -378,14 +445,22 @@ export function PersonalModelsWorkspace({
   }, [pendingRowDeleteId, deleteMutation])
 
   const handleTestAll = useCallback((): void => {
-    if (!hasTestableModels) return
-    startBatchTest(testableItems)
-  }, [hasTestableModels, testableItems, startBatchTest])
+    void (async () => {
+      const all = await fetchAllPersonalGatewayModels(personalListQueryBase)
+      const testable = filterTestableConnectivityModels(all)
+      if (testable.length === 0) return
+      startBatchTest(testable)
+    })()
+  }, [personalListQueryBase, startBatchTest])
 
   const handleTestUntested = useCallback((): void => {
-    if (untestedTestableItems.length === 0) return
-    startBatchTest(untestedTestableItems)
-  }, [untestedTestableItems, startBatchTest])
+    void (async () => {
+      const all = await fetchAllPersonalGatewayModels(personalListQueryBase)
+      const untested = filterUntestedConnectivityModels(all)
+      if (untested.length === 0) return
+      startBatchTest(untested)
+    })()
+  }, [personalListQueryBase, startBatchTest])
 
   const handleTestSelected = useCallback((): void => {
     if (selectedTestable.length === 0) return
@@ -414,6 +489,9 @@ export function PersonalModelsWorkspace({
   }
 
   const batchTesting = batchTestState.running
+  const batchBusy = batchTesting || batchDeleting
+
+  const showEmptyOnboarding = !isLoading && (listData?.total ?? 0) === 0 && !hasActiveListFilters
 
   return (
     <div className="space-y-4">
@@ -436,42 +514,64 @@ export function PersonalModelsWorkspace({
       ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="grid max-w-xs gap-1.5">
-          <Label htmlFor="personal-model-channel">按接入通道筛选</Label>
-          <Select
-            value={listChannel}
-            onValueChange={(v) => {
-              setListChannel(v)
-            }}
-          >
-            <SelectTrigger id="personal-model-channel" className="w-full sm:w-[220px]">
-              <SelectValue placeholder="全部" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={LIST_CHANNEL_ALL}>全部</SelectItem>
-              {MODEL_PROVIDERS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="grid max-w-xs gap-1.5">
+            <Label htmlFor="personal-model-search">搜索</Label>
+            <Input
+              id="personal-model-search"
+              value={search}
+              placeholder="名称、模型 ID、通道…"
+              className="w-full sm:w-[220px]"
+              onChange={(e) => {
+                setSearch(e.currentTarget.value)
+              }}
+            />
+          </div>
+          <div className="grid max-w-xs gap-1.5">
+            <Label htmlFor="personal-model-channel">按接入通道筛选</Label>
+            <Select
+              value={listChannel}
+              onValueChange={(v) => {
+                setListChannel(v)
+              }}
+            >
+              <SelectTrigger id="personal-model-channel" className="w-full sm:w-[220px]">
+                <SelectValue placeholder="全部" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={LIST_CHANNEL_ALL}>全部</SelectItem>
+                {MODEL_PROVIDERS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {items.length > 0 ? (
+          {items.length > 0 || hasActiveListFilters ? (
             <ConnectivityHealthStrip
               models={items}
+              connectivitySummary={connectivitySummary}
               healthFilter={healthFilter}
               onHealthFilterChange={setHealthFilter}
               canWrite={hasAuthSession}
-              onTestAll={hasTestableModels && !batchTesting ? handleTestAll : undefined}
-              onTestUntested={
-                untestedTestableItems.length > 0 && !batchTesting ? handleTestUntested : undefined
+              onTestAll={
+                (connectivitySummary?.total ?? hasTestableModels) && !batchBusy
+                  ? handleTestAll
+                  : undefined
               }
-              untestedTestableCount={untestedTestableItems.length}
+              onTestUntested={
+                (connectivitySummary?.unknown ?? untestedTestableItems.length) > 0 && !batchBusy
+                  ? handleTestUntested
+                  : undefined
+              }
+              untestedTestableCount={connectivitySummary?.unknown ?? untestedTestableItems.length}
               testingAll={batchTesting}
-              onDeleteFailed={handleDeleteFailed}
+              batchBusy={batchBusy}
+              onDeleteFailed={failedDeletableCount > 0 ? handleDeleteFailed : undefined}
               deletingFailed={batchDeleting}
             />
           ) : null}
@@ -489,7 +589,7 @@ export function PersonalModelsWorkspace({
         </div>
       </div>
 
-      {filteredItems.length > 0 ? (
+      {filteredDeleteCount > 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox
@@ -499,32 +599,32 @@ export function PersonalModelsWorkspace({
               }}
               aria-label="全选当前筛选"
             />
-            <span className="text-muted-foreground">全选当前筛选（{filteredItems.length}）</span>
+            <span className="text-muted-foreground">全选当前筛选（{filteredDeleteCount}）</span>
           </label>
           {selectedCount > 0 ? (
             <span className="text-sm text-muted-foreground">已选 {selectedCount} 项</span>
           ) : null}
           <div className="ml-auto flex flex-wrap gap-2">
-            {filteredItems.length > 0 && healthFilter !== 'failed' ? (
+            {filteredDeleteCount > 0 && healthFilter !== 'failed' ? (
               <Button
                 size="sm"
                 variant="outline"
                 className="h-8 text-xs"
-                disabled={batchDeleting}
+                disabled={batchBusy}
                 onClick={() => {
                   setDeleteFilteredOpen(true)
                 }}
               >
                 <Trash2 className="mr-1 h-3 w-3" />
-                删除当前筛选下全部（{filteredItems.length}）
+                删除当前筛选下全部（{filteredDeleteCount}）
               </Button>
             ) : null}
-            {selectedCount > 0 && selectedTestable.length > 0 && !batchTesting ? (
+            {selectedCount > 0 && selectedTestable.length > 0 && !batchBusy ? (
               <Button
                 size="sm"
                 variant="outline"
                 className="h-8 text-xs"
-                disabled={batchDeleting}
+                disabled={batchBusy}
                 onClick={handleTestSelected}
               >
                 批量测试
@@ -535,7 +635,7 @@ export function PersonalModelsWorkspace({
                 size="sm"
                 variant="destructive"
                 className="h-8 text-xs"
-                disabled={batchDeleting || batchTesting}
+                disabled={batchBusy}
                 onClick={() => {
                   setBatchDeleteOpen(true)
                 }}
@@ -552,7 +652,7 @@ export function PersonalModelsWorkspace({
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : items.length === 0 ? (
+      ) : showEmptyOnboarding ? (
         <div className="rounded-lg border border-dashed bg-muted/10 p-8">
           <h3 className="text-lg font-semibold">配置个人模型供给链</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
@@ -590,9 +690,9 @@ export function PersonalModelsWorkspace({
             添加第一个模型
           </Button>
         </div>
-      ) : filteredItems.length === 0 ? (
+      ) : (listData?.total ?? 0) === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          当前筛选下没有模型，请切换健康状态筛选或添加模型。
+          当前筛选下没有匹配的模型，请调整搜索或健康状态筛选。
         </p>
       ) : (
         <ul className="divide-y rounded-lg border">
@@ -617,6 +717,18 @@ export function PersonalModelsWorkspace({
           ))}
         </ul>
       )}
+
+      {listData && listData.total > 0 ? (
+        <PaginationControls
+          page={listData.page}
+          page_size={listData.page_size}
+          total={listData.total}
+          has_next={listData.has_next}
+          has_prev={listData.has_prev}
+          onPageChange={setPage}
+          className="pt-2"
+        />
+      ) : null}
 
       <ModelBatchDeleteConfirmDialog
         open={batchDeleteOpen}

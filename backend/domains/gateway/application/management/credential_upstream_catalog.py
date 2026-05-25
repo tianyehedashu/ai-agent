@@ -14,6 +14,9 @@ from domains.gateway.application.management.ports import (
     RawUpstreamListResult,
     UpstreamModelListPort,
 )
+from domains.gateway.application.upstream_model_types_for_catalog import (
+    infer_upstream_model_types_for_catalog,
+)
 from domains.gateway.domain.credential_probe import (
     CredentialProbeResult,
     UpstreamModelItem,
@@ -28,10 +31,7 @@ from domains.gateway.domain.upstream_registration_match import (
     format_already_registered_reason,
     match_registered_names,
 )
-from domains.gateway.domain.upstream_type_inference import (
-    filter_valid_personal_model_types,
-    infer_upstream_model_types,
-)
+from domains.gateway.domain.upstream_type_inference import filter_valid_personal_model_types
 from domains.gateway.infrastructure.upstream.openai_compatible_model_list_adapter import (
     OpenAICompatibleModelListAdapter,
 )
@@ -152,9 +152,7 @@ class CredentialUpstreamCatalogService:
         enriched: list[UpstreamModelItem] = []
         for item in items:
             names = match_registered_names(prov, item.id, rows)
-            inferred = filter_valid_personal_model_types(
-                infer_upstream_model_types(prov, item.id, item.owned_by)
-            )
+            inferred = infer_upstream_model_types_for_catalog(prov, item.id, item.owned_by)
             enriched.append(
                 UpstreamModelItem(
                     id=item.id,
@@ -178,8 +176,8 @@ class CredentialUpstreamCatalogService:
                 UpstreamModelItem(
                     id=mid,
                     owned_by=ob,
-                    inferred_model_types=filter_valid_personal_model_types(
-                        infer_upstream_model_types("", mid, ob)
+                    inferred_model_types=list(
+                        infer_upstream_model_types_for_catalog("", mid, ob)
                     ),
                 )
                 for mid, ob in raw.items

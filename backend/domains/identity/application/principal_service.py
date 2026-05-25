@@ -9,11 +9,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import uuid
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
 from domains.identity.domain.types import Principal
+from libs.exceptions import AIAgentError, AuthenticationError, TokenError
+from libs.exceptions.codes import INTERNAL_ERROR
 from domains.identity.infrastructure.models.user import User
 from utils.logging import get_logger
 
@@ -98,9 +100,9 @@ async def get_principal(
                 return principal
 
             logger.error("Failed to create or retrieve anonymous user")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create anonymous user. Please check database connection.",
+            raise AIAgentError(
+                "Failed to create anonymous user. Please check database connection.",
+                INTERNAL_ERROR,
             )
 
         # 记录为什么返回 401（非开发环境需要认证）
@@ -109,11 +111,7 @@ async def get_principal(
             settings.app_env,
             settings.is_development,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError("Authentication required")
 
     from domains.identity.infrastructure.authentication import get_jwt_strategy
     from domains.identity.infrastructure.user_manager import UserManager
@@ -125,11 +123,7 @@ async def get_principal(
     user = await strategy.read_token(token, user_manager)
     if user is None:
         logger.warning("Invalid or expired JWT token, returning 401")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise TokenError("Invalid or expired token", expired=True)
 
     return Principal(
         id=str(user.id),

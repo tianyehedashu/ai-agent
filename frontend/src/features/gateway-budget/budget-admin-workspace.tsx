@@ -24,12 +24,13 @@ import { useBudgetAdminWorkspace } from './use-budget-admin-workspace'
 
 export function BudgetAdminWorkspace(): React.JSX.Element {
   const ws = useBudgetAdminWorkspace()
+  const { handleModelFilterChange } = ws
 
   const handleFilterModelChange = useCallback(
     (modelName: string): void => {
-      ws.handleModelFilterChange(modelName === '' ? '__all__' : modelName)
+      handleModelFilterChange(modelName === '' ? '__all__' : modelName)
     },
-    [ws.handleModelFilterChange]
+    [handleModelFilterChange]
   )
 
   return (
@@ -67,6 +68,7 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
               members={ws.memberOptions}
               modelOptions={ws.modelOptions}
               modelsLoading={ws.modelsLoading}
+              onModelPickerOpenChange={ws.onModelPickerOpenChange}
             />
 
             <div className="flex flex-wrap gap-3">
@@ -79,6 +81,7 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
                   loading={ws.modelsLoading}
                   placeholder="全部模型"
                   className="h-9"
+                  onPopoverOpenChange={ws.onModelPickerOpenChange}
                 />
               </div>
               <div className="min-w-[140px]">
@@ -123,6 +126,7 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
                 members={ws.memberOptions}
                 modelOptions={ws.modelOptions}
                 modelsLoading={ws.modelsLoading}
+                onModelPickerOpenChange={ws.onModelPickerOpenChange}
               />
             ) : null}
           </TabsContent>

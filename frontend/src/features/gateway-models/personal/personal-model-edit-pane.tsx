@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo } from 'react'
+﻿import { useCallback } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -26,12 +26,11 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
     queryFn: () => gatewayApi.listMyCredentials(),
   })
 
-  const { data: items = [], isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'my-models'],
-    queryFn: () => gatewayApi.listMyModels(),
+  const { data: model, isLoading: modelsLoading } = useQuery({
+    queryKey: ['gateway', 'my-models', modelId],
+    queryFn: () => gatewayApi.getMyModel(modelId),
+    enabled: modelId !== '',
   })
-
-  const model = useMemo(() => items.find((m) => m.id === modelId) ?? null, [items, modelId])
 
   const { updateMutation } = usePersonalModelMutations({
     onUpdateSuccess: () => {

@@ -5,6 +5,7 @@ import type { GatewayModel } from '@/api/gateway'
 import {
   canDeleteGatewayModel,
   canManageGatewayModel,
+  canResyncGatewayModelCapabilities,
   isConfigManagedSystemModel,
   isModelBatchSelectable,
   resolveGatewayModelRegistryKind,
@@ -98,6 +99,17 @@ describe('canDeleteGatewayModel', () => {
         true
       )
     ).toBe(false)
+  })
+})
+
+describe('canResyncGatewayModelCapabilities', () => {
+  it('matches canDeleteGatewayModel', () => {
+    const teamModel = model({ registry_kind: 'team' })
+    const systemModel = model({ registry_kind: 'system' })
+    const managed = model({ registry_kind: 'system', tags: { managed_by: 'config' } })
+    expect(canResyncGatewayModelCapabilities(teamModel, true, false)).toBe(true)
+    expect(canResyncGatewayModelCapabilities(systemModel, false, true)).toBe(true)
+    expect(canResyncGatewayModelCapabilities(managed, false, true)).toBe(false)
   })
 })
 

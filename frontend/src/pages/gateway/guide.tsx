@@ -201,7 +201,15 @@ export default function GatewayGuidePage(): React.JSX.Element {
     credentialById,
     credentialsLoading,
     candidateModels: guideModelCandidates,
+    ensureModelNameLoaded,
   } = playgroundFilteredModels
+
+  useEffect(() => {
+    const name = activeModel || PLACEHOLDER_MODEL
+    if (name !== PLACEHOLDER_MODEL) {
+      ensureModelNameLoaded(name)
+    }
+  }, [activeModel, ensureModelNameLoaded])
 
   useEffect(() => {
     if (!credentialId || credentialsLoading) return

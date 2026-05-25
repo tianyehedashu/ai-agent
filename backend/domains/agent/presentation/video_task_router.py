@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from domains.identity.presentation.deps import AuthUser
 from libs.api.deps import get_video_task_service
 from libs.api.params import parse_optional_uuid
 from libs.db.database import get_db
+from libs.exceptions import ValidationError
 
 router = APIRouter()
 
@@ -182,10 +183,7 @@ async def optimize_prompt(
     """利用 LLM 分析用户输入和图片，生成优化的视频提示词"""
     _ = current_user
     if not data.user_text and not data.image_urls:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="至少需要提供文字描述或图片",
-        )
+        raise ValidationError("至少需要提供文字描述或图片")
 
     catalog = get_model_catalog_adapter(db)
     use_case = VideoPromptOptimizeUseCase(model_catalog=catalog, db=db)
@@ -335,8 +333,5 @@ async def delete_video_task(
     """删除视频任务（仅支持 pending 状态的任务）"""
     task = await video_task_service.get_task(task_id)
     if task["status"] != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只能删除待提交状态的任务",
-        )
+        raise ValidationError("只能删除待提交状态的任务")
     await video_task_service.cancel_task(task_id)

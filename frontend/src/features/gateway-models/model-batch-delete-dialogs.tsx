@@ -66,19 +66,23 @@ interface ModelBatchDeleteFailedDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   failedItems: GatewayModelBatchDeleteFailureItem[]
+  title?: string
+  description?: string
 }
 
 export function ModelBatchDeleteFailedDialog({
   open,
   onOpenChange,
   failedItems,
+  title = '部分模型未能删除',
+  description = '以下条目未删除成功，其余已处理。',
 }: ModelBatchDeleteFailedDialogProps): React.JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>部分模型未能删除</DialogTitle>
-          <DialogDescription>以下条目未删除成功，其余已处理。</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <ul className="max-h-60 space-y-2 overflow-y-auto text-sm">
           {failedItems.map((item) => (

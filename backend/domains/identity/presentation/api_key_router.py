@@ -6,7 +6,7 @@ API Key Router - API Key 管理接口
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from bootstrap.config import settings
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
@@ -22,7 +22,6 @@ from domains.identity.domain.api_key_types import (
 from domains.identity.domain.services.api_key_service import ApiKeyGenerator
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.deps import DbSession
-from libs.exceptions import NotFoundError, ValidationError
 
 router = APIRouter()
 
@@ -167,21 +166,13 @@ async def get_api_key(
         API Key 详情
 
     Raises:
-        HTTPException: API Key 不存在或无权限访问
+        NotFoundError / PermissionDeniedError: API Key 不存在或无权限访问
     """
-    try:
-        entity = await service.get_api_key(
-            api_key_id=uuid.UUID(api_key_id),
-            user_id=get_user_uuid(current_user),
-        )
-        return ApiKeyResponse.from_entity(entity)
-    except Exception as e:
-        if "not found" in str(e).lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="API Key not found",
-            ) from e
-        raise
+    entity = await service.get_api_key(
+        api_key_id=uuid.UUID(api_key_id),
+        user_id=get_user_uuid(current_user),
+    )
+    return ApiKeyResponse.from_entity(entity)
 
 
 @router.get(
@@ -207,27 +198,13 @@ async def reveal_api_key(
         包含完整 API Key 的字典
 
     Raises:
-        HTTPException: API Key 不存在、无权限访问或无法解密
+        NotFoundError / PermissionDeniedError: API Key 不存在、无权限访问或无法解密
     """
-    try:
-        plain_key = await service.reveal_api_key(
-            api_key_id=uuid.UUID(api_key_id),
-            user_id=get_user_uuid(current_user),
-        )
-        return {"api_key": plain_key}
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="API Key not found",
-            ) from e
-        if "validation" in error_msg or "decrypt" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            ) from e
-        raise
+    plain_key = await service.reveal_api_key(
+        api_key_id=uuid.UUID(api_key_id),
+        user_id=get_user_uuid(current_user),
+    )
+    return {"api_key": plain_key}
 
 
 @router.put("/{api_key_id}", response_model=ApiKeyResponse, tags=["API Keys"])
@@ -251,25 +228,14 @@ async def update_api_key(
         更新后的 API Key
 
     Raises:
-        HTTPException: API Key 不存在或无权限访问
+        NotFoundError / PermissionDeniedError: API Key 不存在或无权限访问
     """
-    try:
-        entity = await service.update_api_key(
-            api_key_id=uuid.UUID(api_key_id),
-            user_id=get_user_uuid(current_user),
-            request=request,
-        )
-        return ApiKeyResponse.from_entity(entity)
-    except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API Key not found",
-        ) from e
-    except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.message,
-        ) from e
+    entity = await service.update_api_key(
+        api_key_id=uuid.UUID(api_key_id),
+        user_id=get_user_uuid(current_user),
+        request=request,
+    )
+    return ApiKeyResponse.from_entity(entity)
 
 
 @router.post(
@@ -290,18 +256,12 @@ async def revoke_api_key(
         service: API Key 服务
 
     Raises:
-        HTTPException: API Key 不存在或无权限访问
+        NotFoundError / PermissionDeniedError: API Key 不存在或无权限访问
     """
-    try:
-        await service.revoke_api_key(
-            api_key_id=uuid.UUID(api_key_id),
-            user_id=get_user_uuid(current_user),
-        )
-    except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API Key not found",
-        ) from e
+    await service.revoke_api_key(
+        api_key_id=uuid.UUID(api_key_id),
+        user_id=get_user_uuid(current_user),
+    )
 
 
 @router.delete(
@@ -322,18 +282,12 @@ async def delete_api_key(
         service: API Key 服务
 
     Raises:
-        HTTPException: API Key 不存在或无权限访问
+        NotFoundError / PermissionDeniedError: API Key 不存在或无权限访问
     """
-    try:
-        await service.delete_api_key(
-            api_key_id=uuid.UUID(api_key_id),
-            user_id=get_user_uuid(current_user),
-        )
-    except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API Key not found",
-        ) from e
+    await service.delete_api_key(
+        api_key_id=uuid.UUID(api_key_id),
+        user_id=get_user_uuid(current_user),
+    )
 
 
 @router.get("/{api_key_id}/logs", response_model=list[ApiKeyUsageLogResponse], tags=["API Keys"])

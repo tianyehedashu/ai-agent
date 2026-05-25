@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundCredentialField } from './playground-credential-field'
+import { withReferenceImagePayloadHint } from './playground-error'
 import { PlaygroundKeyField } from './playground-key-field'
 import {
   endpointPathForMode,
@@ -102,6 +103,8 @@ export function PlaygroundCard({
     credentialsEmpty,
     teamModelsLoaded,
     myModelsLoaded,
+    onModelPickerOpenChange,
+    ensureModelNameLoaded,
   },
 }: PlaygroundCardProps): React.JSX.Element {
   const isCredentialControlled = onCredentialChange !== undefined
@@ -261,6 +264,22 @@ export function PlaygroundCard({
   const trimmedModel = model.trim()
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
+
+  const displayError = useMemo(() => {
+    if (!error) return null
+    if (playgroundMode === 'vision') {
+      return withReferenceImagePayloadHint(error, trimmedVisionUrl)
+    }
+    if (playgroundMode === 'video_gen') {
+      return withReferenceImagePayloadHint(error, videoImageUrl.trim())
+    }
+    return error
+  }, [error, playgroundMode, trimmedVisionUrl, videoImageUrl])
+
+  useEffect(() => {
+    if (customModel || !trimmedModel) return
+    ensureModelNameLoaded(trimmedModel)
+  }, [customModel, trimmedModel, ensureModelNameLoaded])
 
   const modelsListLoaded = teamModelsLoaded && myModelsLoaded
 
@@ -526,6 +545,7 @@ export function PlaygroundCard({
                 currency={GATEWAY_DISPLAY_CURRENCY}
                 playgroundMode={playgroundMode}
                 modelsLoading={modelsLoading}
+                onOpenChange={onModelPickerOpenChange}
               />
             </div>
           </div>
@@ -545,7 +565,7 @@ export function PlaygroundCard({
               imageUrl={videoImageUrl}
               onImageUrlChange={setVideoImageUrl}
               disabled={isRunning}
-              label="参考图片 URL（可选）"
+              label="参考图片（可选）"
             />
           ) : null}
 
@@ -721,7 +741,7 @@ export function PlaygroundCard({
               content={content}
               thinkingContent={thinkingContent}
               metadata={metadata}
-              error={error}
+              error={displayError}
               rawResponse={rawResponse}
               lastRequest={lastRequest}
               priceRow={outputPriceRow}

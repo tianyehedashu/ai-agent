@@ -6,11 +6,12 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.responses import Response
 
 from domains.agent.domain.mcp.scopes import MCPServerScope
 from domains.agent.infrastructure.mcp_server.auth_middleware import verify_mcp_access
+from libs.exceptions import NotFoundError
 from domains.agent.infrastructure.mcp_server.context import (
     mcp_user_id_var,
     mcp_vendor_creator_id_var,
@@ -50,10 +51,9 @@ _SCOPE_TO_CURSOR_NAME = {
 def get_mcp_server(server_name: str):
     server = SERVER_MAP.get(server_name)
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"MCP server not found: {server_name}. "
-            f"Available servers: {list(SERVER_MAP.keys())}",
+        raise NotFoundError(
+            "MCP server",
+            server_name,
         )
     return server
 

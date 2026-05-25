@@ -40,6 +40,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PersonalCredentialBudgetInline } from '@/features/gateway-budget/personal-credential-budget-inline'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
+import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
@@ -87,10 +88,9 @@ export function PersonalCredentialsPanel({
     enabled: hasAuthSession,
   })
   const { data: personalBudgets = [] } = useGatewayBudgets(teamId)
-  const { data: myModels = [] } = useQuery({
-    queryKey: ['gateway', 'my-models'],
-    queryFn: () => gatewayApi.listMyModels(),
+  const { items: myModels } = useInfinitePersonalModelPages(undefined, {
     enabled: hasAuthSession,
+    prefetchMode: 'idle',
   })
 
   useEffect(() => {

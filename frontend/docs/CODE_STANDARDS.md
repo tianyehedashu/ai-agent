@@ -54,6 +54,29 @@ function process(data: unknown): User {
 
 路径别名：`@/*` 映射 `src/`；`@/features/*` 显式映射 `src/features/*`（见根目录 `tsconfig.json`）。业务组件优先 `@/features/...`，避免在 `pages/settings/components` 重复实现已迁入 Gateway 的凭据/模型 UI。
 
+## 列表 API 与分页
+
+**真源**：[docs/PAGINATION.md](../../docs/PAGINATION.md)（跨前后端 envelope、分层与 code-check 清单）。
+
+| 用途        | 路径                                                           |
+| ----------- | -------------------------------------------------------------- |
+| 类型        | `@/types` → `PaginatedList<T>`, `PageQuery`                    |
+| 翻页 helper | `@/lib/pagination` → `fetchAllPaginatedPages`, `MAX_PAGE_SIZE` |
+| UI          | `@/components/pagination-controls`                             |
+| API adapter | `src/api/<domain>/` 单点封装                                   |
+
+禁止新列表使用 legacy `PaginatedResponse`（camelCase）；全量拉取优先 `fetchAllPaginatedPages` 或后端 `/ids`。
+
+## API 响应与错误
+
+**真源**：[docs/API_RESPONSE.md](../../docs/API_RESPONSE.md)
+
+| 用途   | 路径                                               |
+| ------ | -------------------------------------------------- |
+| 成功   | 各 adapter 直出 `response_model` 类型              |
+| 错误类 | `@/api/errors` → `ApiError`                        |
+| 解析   | `@/lib/fastapi-error-detail` → `parseApiErrorBody` |
+
 ## React 组件
 
 ```tsx

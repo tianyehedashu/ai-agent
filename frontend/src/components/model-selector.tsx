@@ -1,13 +1,12 @@
 /**
  * ModelSelector - 通用模型选择器
  *
- * 显示系统预置模型 + 用户自定义模型，支持按类型过滤。
- * 复用于产品信息步骤、Agent 对话、视频任务等场景。
+ * 显示系统预置模型 + 用户自定义模型，支持按类型过滤与分页加载。
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Cpu, Loader2, User } from 'lucide-react'
 
 import { gatewayApi } from '@/api/gateway'
@@ -21,30 +20,38 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
-import type { ModelType } from '@/types/user-model'
+import type { ModelType, SystemModel, UserModel } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 const CHANNEL_ALL = '__all__'
+const SELECTOR_PAGE_SIZE = 50
 
 export type ModelListMode = 'chat' | 'image_gen' | 'video'
 
+type SelectorModel = (SystemModel | UserModel) & {
+  last_test_status?: 'success' | 'failed' | null
+  entitlement_status?: 'active' | 'exhausted' | 'resetting' | 'expired' | 'none'
+  enabled?: boolean
+}
+
 interface ModelSelectorProps {
-  /** 过滤模型类型 */
   modelType?: ModelType
-  /** 与后端 ``/gateway/models/available?mode=`` 对齐（与 modelType 可同时使用，用于创作模式语义） */
   listMode?: ModelListMode
-  /** 当前选中的 model_id (系统模型 ID 或用户模型 UUID) */
   value?: string | null
-  /** 选择变更回调 */
   onChange: (modelId: string | null) => void
-  /** 占位符文本 */
   placeholder?: string
-  /** 是否禁用 */
   disabled?: boolean
-  /** 额外 className */
   className?: string
-  /** 是否展示「按接入通道」筛选（与设置页列表语义一致） */
   showProviderFilter?: boolean
+}
+
+function isSelectableModel(model: SelectorModel): boolean {
+  const active = model.enabled ?? ('is_active' in model ? model.is_active : true)
+  if (!active) return false
+  if (model.last_test_status === 'failed') return false
+  const entitlement = model.entitlement_status
+  if (entitlement === 'exhausted' || entitlement === 'expired') return false
+  return true
 }
 
 export function ModelSelector({
@@ -58,48 +65,93 @@ export function ModelSelector({
   showProviderFilter = false,
 }: ModelSelectorProps): React.JSX.Element {
   const [channel, setChannel] = useState<string>(CHANNEL_ALL)
+  const [selectOpen, setSelectOpen] = useState(false)
 
   const providerForApi = showProviderFilter && channel !== CHANNEL_ALL ? channel : undefined
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [
-      'gateway-models-available',
-      modelType,
-      listMode ?? '',
-      showProviderFilter ? channel : '',
-    ],
-    queryFn: () =>
-      gatewayApi.listAvailableModels(
+  const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: [
+        'gateway-models-available',
         modelType,
-        providerForApi,
-        listMode ? { mode: listMode } : undefined
-      ),
-    staleTime: 30_000,
-    retry: 1,
-  })
+        listMode ?? '',
+        showProviderFilter ? channel : '',
+      ],
+      queryFn: ({ pageParam }) =>
+        gatewayApi.listAvailableModels(modelType, providerForApi, {
+          ...(listMode ? { mode: listMode } : {}),
+          page: pageParam,
+          page_size: SELECTOR_PAGE_SIZE,
+        }),
+      initialPageParam: 1,
+      getNextPageParam: (lastPage) => {
+        if (lastPage.system_models.has_next || lastPage.user_models.has_next) {
+          return lastPage.system_models.page + 1
+        }
+        return undefined
+      },
+      staleTime: 30_000,
+      retry: 1,
+    })
 
-  const systemModels = useMemo(() => data?.system_models ?? [], [data])
-  const userModels = useMemo(() => data?.user_models ?? [], [data])
+  // 仅在下拉打开时继续翻页，避免 mount 时拉全量
+  useEffect(() => {
+    if (!selectOpen || !hasNextPage || isFetchingNextPage) return
+    void fetchNextPage()
+  }, [selectOpen, hasNextPage, isFetchingNextPage, fetchNextPage, data?.pages.length])
+
+  const systemModels = useMemo(
+    () => data?.pages.flatMap((page) => page.system_models.items) ?? [],
+    [data]
+  )
+  const userModels = useMemo(
+    () => data?.pages.flatMap((page) => page.user_models.items) ?? [],
+    [data]
+  )
+  const defaultPage = data?.pages[0]
+
   const selectableIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const m of systemModels) ids.add(m.id)
-    for (const m of userModels) ids.add(m.id)
+    for (const m of systemModels) {
+      if (isSelectableModel(m as SelectorModel)) ids.add(m.id)
+    }
+    for (const m of userModels) {
+      if (isSelectableModel(m as SelectorModel)) ids.add(m.id)
+    }
     return ids
   }, [systemModels, userModels])
+
   const hasModels = systemModels.length > 0 || userModels.length > 0
 
+  // 当前选中项可能在后续页：先翻页再找，全量加载完仍不存在才清空
   useEffect(() => {
     if (value === null || value === undefined || isLoading || isError) return
-    if (!selectableIds.has(value)) {
+    if (selectableIds.has(value)) return
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage()
+      return
+    }
+    if (!hasNextPage) {
       onChange(null)
     }
-  }, [value, selectableIds, isLoading, isError, onChange])
+  }, [
+    value,
+    selectableIds,
+    isLoading,
+    isError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    onChange,
+  ])
+
   const defaultDisplayName =
     modelType === 'image_gen' || listMode === 'image_gen'
-      ? data?.default_for_image_gen?.display_name
+      ? defaultPage?.default_for_image_gen?.display_name
       : modelType === 'image'
-        ? data?.default_for_vision?.display_name
-        : data?.default_for_text?.display_name
+        ? defaultPage?.default_for_vision?.display_name
+        : defaultPage?.default_for_text?.display_name
+
   const defaultLabel = defaultDisplayName
     ? `默认（${defaultDisplayName}）`
     : hasModels
@@ -109,6 +161,10 @@ export function ModelSelector({
   const handleChange = (v: string): void => {
     onChange(v === '__default__' ? null : v)
   }
+
+  const handleMainOpenChange = useCallback((open: boolean): void => {
+    setSelectOpen(open)
+  }, [])
 
   if (isError) {
     return (
@@ -132,6 +188,7 @@ export function ModelSelector({
     <Select
       value={value ?? '__default__'}
       onValueChange={handleChange}
+      onOpenChange={handleMainOpenChange}
       disabled={disabled || isLoading}
     >
       <SelectTrigger className={className}>
@@ -147,39 +204,59 @@ export function ModelSelector({
       <SelectContent>
         <SelectItem value="__default__">{defaultLabel}</SelectItem>
 
-        {systemModels.length > 0 && (
+        {systemModels.length > 0 ? (
           <SelectGroup>
             <SelectLabel className="flex items-center gap-1">
               <Cpu className="h-3 w-3" />
               系统模型
             </SelectLabel>
-            {systemModels.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.display_name}
-                {m.config?.description ? (
-                  <span className="ml-1.5 text-xs text-muted-foreground">
-                    ({m.config.description})
-                  </span>
-                ) : null}
-              </SelectItem>
-            ))}
+            {systemModels.map((m) => {
+              const unavailable = !isSelectableModel(m as SelectorModel)
+              return (
+                <SelectItem key={m.id} value={m.id} disabled={unavailable}>
+                  {m.display_name}
+                  {unavailable ? (
+                    <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
+                  ) : null}
+                  {!unavailable && m.config?.description ? (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      ({m.config.description})
+                    </span>
+                  ) : null}
+                </SelectItem>
+              )
+            })}
           </SelectGroup>
-        )}
+        ) : null}
 
-        {userModels.length > 0 && (
+        {userModels.length > 0 ? (
           <SelectGroup>
             <SelectLabel className="flex items-center gap-1">
               <User className="h-3 w-3" />
               我的模型
             </SelectLabel>
-            {userModels.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.display_name}
-                <span className="ml-1.5 text-xs text-muted-foreground">({m.model_id})</span>
-              </SelectItem>
-            ))}
+            {userModels.map((m) => {
+              const unavailable = !isSelectableModel(m as SelectorModel)
+              return (
+                <SelectItem key={m.id} value={m.id} disabled={unavailable}>
+                  {m.display_name}
+                  {unavailable ? (
+                    <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
+                  ) : (
+                    <span className="ml-1.5 text-xs text-muted-foreground">({m.model_id})</span>
+                  )}
+                </SelectItem>
+              )
+            })}
           </SelectGroup>
-        )}
+        ) : null}
+
+        {isFetchingNextPage ? (
+          <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            加载更多…
+          </div>
+        ) : null}
       </SelectContent>
     </Select>
   )

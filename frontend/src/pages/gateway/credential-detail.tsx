@@ -45,14 +45,12 @@ import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/s
 import { managedCredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
 import { useCredentialEditForm } from '@/features/gateway-credentials/use-credential-edit-form'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import {
   credentialsSystemBrowseIndexHref,
   credentialsTeamListHref,
 } from '@/features/gateway-models/paths'
-import {
-  gatewayModelsByCredentialInvalidatePrefix,
-  gatewayModelsByCredentialQueryKey,
-} from '@/features/gateway-models/query-keys'
+import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-models/query-keys'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -494,15 +492,14 @@ function CredentialLinkedModelsSection({
   modelsTab?: 'shared' | 'system'
   onAddModels?: () => void
 }>): React.JSX.Element {
-  const { data: linkedModels, isLoading: modelsLoading } = useQuery({
-    queryKey: gatewayModelsByCredentialQueryKey(teamId, credentialId, modelsTab),
-    queryFn: () =>
-      gatewayApi.listModels(teamId, {
-        registry_scope: modelsTab === 'system' ? 'system' : 'callable',
-        credential_id: credentialId,
-      }),
-    enabled: credentialId.length > 0,
-  })
+  const { items: linkedModels, isLoading: modelsLoading } = useInfiniteGatewayModelPages(
+    teamId,
+    {
+      registry_scope: modelsTab === 'system' ? 'system' : 'callable',
+      credential_id: credentialId,
+    },
+    { enabled: credentialId.length > 0, prefetchMode: 'idle' }
+  )
   return (
     <CredentialModelsCard
       credentialId={credentialId}

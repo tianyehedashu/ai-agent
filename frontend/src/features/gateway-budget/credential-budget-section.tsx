@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
-
-import { gatewayApi } from '@/api/gateway'
 import {
   BudgetUsageCard,
   BudgetUsageCardWithAdminLink,
 } from '@/features/gateway-budget/budget-usage-card'
+import {
+  useInfiniteGatewayModelPages,
+  useInfinitePersonalModelPages,
+} from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 export interface CredentialBudgetSectionProps {
@@ -22,15 +23,14 @@ export function CredentialBudgetSection({
   isAdmin,
 }: CredentialBudgetSectionProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { data: models = [], isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', teamId, 'credential-budget', credentialId],
-    queryFn: () =>
-      gatewayApi.listModels(teamId, {
-        registry_scope: 'team',
-        credential_id: credentialId,
-      }),
-    enabled: credentialId.length > 0 && teamId.length > 0,
-  })
+  const { items: models, isLoading: modelsLoading } = useInfiniteGatewayModelPages(
+    teamId,
+    {
+      registry_scope: 'team',
+      credential_id: credentialId,
+    },
+    { enabled: credentialId.length > 0 && teamId.length > 0, prefetchMode: 'idle' }
+  )
 
   const linkedModelNames = useMemo(() => models.map((m) => m.name), [models])
   const modelPrefill = linkedModelNames[0]
@@ -65,9 +65,8 @@ export function PersonalCredentialBudgetSection({
   userId,
 }: PersonalCredentialBudgetSectionProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { data: myModels = [], isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'my-models'],
-    queryFn: () => gatewayApi.listMyModels(),
+  const { items: myModels, isLoading: modelsLoading } = useInfinitePersonalModelPages(undefined, {
+    prefetchMode: 'idle',
   })
 
   const linkedModelNames = useMemo(

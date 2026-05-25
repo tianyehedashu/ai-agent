@@ -11,7 +11,6 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     AlertEventResponse,
     AlertRuleCreate,
@@ -22,7 +21,6 @@ from domains.gateway.presentation.tenant_scoped_response import (
     apply_tenant_team_mirror,
     tenant_scoped_orm_dict,
 )
-from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
     MgmtReads,
@@ -87,14 +85,11 @@ async def update_alert_rule(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> AlertRuleResponse:
-    try:
-        rule = await writes.update_alert_rule(
-            rule_id,
-            tenant_id=team.team_id,
-            fields=body.model_dump(exclude_unset=True, exclude_none=True),
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    rule = await writes.update_alert_rule(
+        rule_id,
+        tenant_id=team.team_id,
+        fields=body.model_dump(exclude_unset=True, exclude_none=True),
+    )
     return AlertRuleResponse.model_validate(tenant_scoped_orm_dict(rule))
 
 
@@ -104,10 +99,7 @@ async def delete_alert_rule(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_alert_rule(rule_id, tenant_id=team.team_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_alert_rule(rule_id, tenant_id=team.team_id)
 
 
 @router.get("/alerts/events", response_model=list[AlertEventResponse])

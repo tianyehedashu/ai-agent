@@ -42,6 +42,14 @@ from domains.gateway.application.management.usage_reads import (
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
+from domains.gateway.application.model_list_pipeline import (
+    ModelListIdsResult,
+    ModelListPageResult,
+    ModelListQuery,
+    list_gateway_model_ids,
+    list_gateway_models_page,
+    list_personal_models_page,
+)
 from domains.gateway.application.system_visibility_filter import (
     filter_visible_system_provider_credentials,
     load_system_credentials_by_ids,
@@ -95,10 +103,9 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
-from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort
-from domains.tenancy.application.team_service import TeamService
-from domains.identity.application.ports import UserSummaryQueryPort
+from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort, UserSummaryQueryPort
 from domains.identity.application.user_use_case import UserUseCase
+from domains.tenancy.application.team_service import TeamService
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from libs.iam.tenancy import MembershipPort
 
@@ -273,6 +280,76 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             only_enabled=False,
             provider=provider,
         )
+
+    async def list_personal_gateway_models_page(
+        self,
+        user_id: UUID,
+        query: ModelListQuery,
+    ) -> ModelListPageResult:
+        personal_team = await self._teams.ensure_personal_team(user_id)
+        return await list_personal_models_page(
+            self._session,
+            personal_team.id,
+            query,
+        )
+
+    async def get_personal_gateway_model(
+        self,
+        user_id: UUID,
+        model_id: UUID,
+    ) -> GatewayModel | None:
+        personal_team = await self._teams.ensure_personal_team(user_id)
+        return await self._models.get_for_tenant(model_id, personal_team.id)
+
+    async def list_gateway_models_page(
+        self,
+        tenant_id: UUID,
+        query: ModelListQuery,
+        *,
+        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
+        only_enabled: bool = False,
+        user_id: UUID | None = None,
+    ) -> ModelListPageResult:
+        return await list_gateway_models_page(
+            self._session,
+            tenant_id,
+            query,
+            registry_scope=registry_scope,
+            only_enabled=only_enabled,
+            user_id=user_id,
+        )
+
+    async def list_gateway_model_ids(
+        self,
+        tenant_id: UUID,
+        query: ModelListQuery,
+        *,
+        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
+        only_enabled: bool = False,
+        user_id: UUID | None = None,
+    ) -> ModelListIdsResult:
+        return await list_gateway_model_ids(
+            self._session,
+            tenant_id,
+            query,
+            registry_scope=registry_scope,
+            only_enabled=only_enabled,
+            user_id=user_id,
+        )
+
+    async def get_gateway_registry_model(
+        self,
+        model_id: UUID,
+        tenant_id: UUID,
+        *,
+        is_platform_admin: bool,
+    ) -> GatewayRegistryModelRow | None:
+        row = await self._models.get_for_tenant(model_id, tenant_id)
+        if row is not None:
+            return row
+        if is_platform_admin:
+            return await self._models.get_system(model_id)
+        return None
 
     async def list_gateway_models(
         self,

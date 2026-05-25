@@ -5,13 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { modelsApi } from '@/api/gateway/models'
+import { pricingApi } from '@/api/gateway/pricing'
 import type {
   EffectiveProvider,
   UpstreamPricingRow,
   UpstreamPricingUpsertBody,
 } from '@/api/gateway/pricing'
-import { pricingApi } from '@/api/gateway/pricing'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -24,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
 import { UpstreamMissingModelsBanner } from '@/features/gateway-pricing/upstream-missing-models-banner'
 import { UpstreamPricingFormDialog } from '@/features/gateway-pricing/upstream-pricing-form-dialog'
@@ -78,10 +78,11 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
     queryFn: () => pricingApi.getEffectiveProviders(teamId),
   })
 
-  const modelsQuery = useQuery({
-    queryKey: [...UPSTREAM_PAGE_QUERY_KEYS.models, teamId],
-    queryFn: () => modelsApi.listModels(teamId, { registry_scope: 'callable' }),
-  })
+  const {
+    items: models,
+    isLoading: modelsLoading,
+    refetch: refetchModels,
+  } = useInfiniteGatewayModelPages(teamId, { registry_scope: 'callable' }, { prefetchMode: 'idle' })
 
   const effectiveProviders = providersQuery.data ?? EMPTY_EFFECTIVE_PROVIDERS
   const effectiveProviderSet = useMemo(
@@ -97,10 +98,9 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
     [selectedSyncProviders]
   )
 
-  const models = modelsQuery.data
   const upstreamRows = upstreamQuery.data
 
-  const linkedKeys = useMemo(() => buildLinkedModelKeys(models ?? []), [models])
+  const linkedKeys = useMemo(() => buildLinkedModelKeys(models), [models])
 
   const upstreamKeys = useMemo(() => buildUpstreamPricingKeySet(upstreamRows ?? []), [upstreamRows])
 
@@ -116,7 +116,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   )
 
   const modelsMissingUpstream = useMemo(
-    () => findModelsMissingUpstream(models ?? [], upstreamKeys),
+    () => findModelsMissingUpstream(models, upstreamKeys),
     [models, upstreamKeys]
   )
 
@@ -175,11 +175,11 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   }, [effectiveProviderSet])
 
   const handleRetry = useCallback((): void => {
-    void Promise.all([upstreamQuery.refetch(), providersQuery.refetch(), modelsQuery.refetch()])
-  }, [upstreamQuery, providersQuery, modelsQuery])
+    void Promise.all([upstreamQuery.refetch(), providersQuery.refetch(), refetchModels()])
+  }, [upstreamQuery, providersQuery, refetchModels])
 
-  const tableLoading = upstreamQuery.isLoading || providersQuery.isLoading || modelsQuery.isLoading
-  const tableError = upstreamQuery.isError || providersQuery.isError || modelsQuery.isError
+  const tableLoading = upstreamQuery.isLoading || providersQuery.isLoading || modelsLoading
+  const tableError = upstreamQuery.isError || providersQuery.isError
   const showMissingBanner = modelsMissingUpstream.length > 0
 
   return (

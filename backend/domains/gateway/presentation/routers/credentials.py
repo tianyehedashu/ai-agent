@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from domains.gateway.presentation.credential_response import (
     build_credential_response,
@@ -15,7 +15,6 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
     CredentialSummaryResponse,
@@ -30,7 +29,7 @@ from domains.gateway.presentation.schemas.credential_upstream_catalog import (
     TeamGatewayModelBatchImportResponse,
 )
 from libs.crypto import encrypt_value
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions import AuthenticationError, ValidationError
 
 from ._common import (
     CatalogSvc,
@@ -77,14 +76,11 @@ async def get_credential(
     team: RequiredTeamAdmin,
     reads: MgmtReads,
 ) -> CredentialResponse:
-    try:
-        row = await reads.get_managed_credential_for_team(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await reads.get_managed_credential_for_team(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     return build_credential_response(row, encryption_key=encryption_key())
 
 
@@ -95,18 +91,15 @@ async def reveal_managed_credential(
     reads: MgmtReads,
 ) -> dict[str, str]:
     """解密并返回完整 API Key（与 GET 凭据详情相同权限；用于前端显式展示）。"""
-    try:
-        row = await reads.get_managed_credential_for_team(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        plain = decrypt_credential_api_key_for_reveal(
-            row,
-            encryption_key=encryption_key(),
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await reads.get_managed_credential_for_team(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    plain = decrypt_credential_api_key_for_reveal(
+        row,
+        encryption_key=encryption_key(),
+    )
     return {"api_key": plain}
 
 
@@ -118,27 +111,24 @@ async def create_credential(
 ) -> CredentialResponse:
     provider = validate_managed_credential_provider(body.provider)
     encrypted = encrypt_value(body.api_key, encryption_key())
-    try:
-        if body.scope == "system":
-            cred = await writes.create_system_credential(
-                is_platform_admin=team.is_platform_admin,
-                provider=provider,
-                name=body.name,
-                api_key_encrypted=encrypted,
-                api_base=body.api_base,
-                extra=body.extra,
-            )
-        else:
-            cred = await writes.create_team_credential(
-                tenant_id=team.team_id,
-                provider=provider,
-                name=body.name,
-                api_key_encrypted=encrypted,
-                api_base=body.api_base,
-                extra=body.extra,
-            )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    if body.scope == "system":
+        cred = await writes.create_system_credential(
+            is_platform_admin=team.is_platform_admin,
+            provider=provider,
+            name=body.name,
+            api_key_encrypted=encrypted,
+            api_base=body.api_base,
+            extra=body.extra,
+        )
+    else:
+        cred = await writes.create_team_credential(
+            tenant_id=team.team_id,
+            provider=provider,
+            name=body.name,
+            api_key_encrypted=encrypted,
+            api_base=body.api_base,
+            extra=body.extra,
+        )
     return build_credential_response(cred, encryption_key=encryption_key())
 
 
@@ -149,20 +139,17 @@ async def update_credential(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> CredentialResponse:
-    try:
-        encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
-        updated = await writes.update_managed_credential(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            api_key_encrypted=encrypted,
-            api_base=body.api_base,
-            extra=body.extra,
-            is_active=body.is_active,
-            name=body.name,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
+    updated = await writes.update_managed_credential(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        api_key_encrypted=encrypted,
+        api_base=body.api_base,
+        extra=body.extra,
+        is_active=body.is_active,
+        name=body.name,
+    )
     return build_credential_response(updated, encryption_key=encryption_key())
 
 
@@ -172,14 +159,11 @@ async def delete_credential(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_managed_credential(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_managed_credential(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 @router.post("/credentials/{credential_id}/probe", response_model=CredentialProbeResponse)
@@ -189,14 +173,11 @@ async def probe_managed_credential_endpoint(
     catalog: CatalogSvc,
 ) -> CredentialProbeResponse:
     """POST 触发上游 OpenAI 兼容 ``/v1/models`` 列举（同路径重复调用即刷新）。"""
-    try:
-        result = await catalog.probe_managed_credential(
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            credential_id=credential_id,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    result = await catalog.probe_managed_credential(
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        credential_id=credential_id,
+    )
     return credential_probe_to_response(result)
 
 
@@ -211,23 +192,20 @@ async def batch_import_team_models_endpoint(
     team: RequiredTeamAdmin,
     catalog: CatalogSvc,
 ) -> TeamGatewayModelBatchImportResponse:
-    try:
-        tuples = [(it.upstream_model_id, it.name) for it in body.items]
-        created_raw, failed_raw = await catalog.batch_import_team_models(
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            credential_id=credential_id,
-            provider=body.provider.strip().lower(),
-            capability=body.capability,
-            weight=body.weight,
-            rpm_limit=body.rpm_limit,
-            tpm_limit=body.tpm_limit,
-            tags=body.tags,
-            enabled=body.enabled,
-            items=tuples,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    tuples = [(it.upstream_model_id, it.name) for it in body.items]
+    created_raw, failed_raw = await catalog.batch_import_team_models(
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        credential_id=credential_id,
+        provider=body.provider.strip().lower(),
+        capability=body.capability,
+        weight=body.weight,
+        rpm_limit=body.rpm_limit,
+        tpm_limit=body.tpm_limit,
+        tags=body.tags,
+        enabled=body.enabled,
+        items=tuples,
+    )
     return TeamGatewayModelBatchImportResponse(
         credential_id=credential_id,
         created=[
@@ -254,16 +232,13 @@ async def import_user_credential(
     """从用户私有凭据导入到当前团队"""
     user_credential_id = body.get("credential_id")
     if user_credential_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "credential_id required")
-    try:
-        new_cred = await writes.import_user_credential_to_team(
-            user_credential_id=user_credential_id,
-            tenant_id=team.team_id,
-            actor_user_id=team.user_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+        raise ValidationError("credential_id required")
+    new_cred = await writes.import_user_credential_to_team(
+        user_credential_id=user_credential_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     return build_credential_response(new_cred, encryption_key=encryption_key())
 
 
@@ -274,7 +249,7 @@ async def import_all_user_credentials(
 ) -> dict[str, int]:
     """一键把当前用户的所有 user-scope 凭据导入到当前团队（只复制不删除原凭据）"""
     if team.user_id is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User context required")
+        raise AuthenticationError("User context required")
     created = await writes.import_all_user_credentials_to_team(
         actor_user_id=team.user_id,
         tenant_id=team.team_id,

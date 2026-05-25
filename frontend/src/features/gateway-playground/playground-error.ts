@@ -74,3 +74,36 @@ export function buildNetworkPlaygroundError(error: unknown, url: string): Playgr
     hint: `无法连接到 ${url}。请确认后端服务可用、OpenAI 兼容面路径为 /api/v1/openai/v1/*（或部署时配置 VITE_API_URL / VITE_APP_ROOT）；若浏览器控制台提示 CORS，请检查跨域配置。`,
   }
 }
+
+const REFERENCE_IMAGE_PAYLOAD_HINT =
+  '参考图若为内联 data URL 会显著增大请求体。请改用「上传」将大图传到图床，或压缩后再试。'
+
+function isPayloadTooLargeError(error: PlaygroundError): boolean {
+  if (error.httpStatus === 413) return true
+  const blob = `${error.message} ${error.code ?? ''}`.toLowerCase()
+  return /payload too large|entity too large|request entity|body too large|413/.test(blob)
+}
+
+/** 参考图模式下，413 等请求体过大错误附加可操作提示 */
+export function withReferenceImagePayloadHint(
+  error: PlaygroundError | null,
+  referenceImageUrl?: string
+): PlaygroundError | null {
+  if (!error || !isPayloadTooLargeError(error)) return error
+  const ref = referenceImageUrl?.trim() ?? ''
+  if (!ref) return error
+
+  const hint =
+    ref.startsWith('data:') || ref.length > 200_000
+      ? REFERENCE_IMAGE_PAYLOAD_HINT
+      : '请求体过大，请缩短消息或减小参考图体积后再试。'
+
+  if (error.hint?.includes('参考图') || error.hint?.includes('请求体过大')) {
+    return error
+  }
+
+  return {
+    ...error,
+    hint: error.hint ? `${error.hint}\n${hint}` : hint,
+  }
+}

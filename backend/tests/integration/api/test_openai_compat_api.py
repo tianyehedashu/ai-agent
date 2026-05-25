@@ -4,9 +4,19 @@ OpenAI 兼容入口 /api/v1/openai/v1/* 集成测试（虚拟 Key + dev_client�
 
 from __future__ import annotations
 
+import types
+from typing import Any
+import uuid
+
 from httpx import AsyncClient
 import pytest
 
+from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+from domains.gateway.application.proxy_timing import (
+    HEADER_GATEWAY_PREFLIGHT_MS,
+    HEADER_GATEWAY_UPSTREAM_MS,
+)
+from domains.gateway.infrastructure.router_singleton import reload_router
 from domains.identity.domain.api_key_types import ApiKeyScope
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
@@ -14,7 +24,89 @@ from libs.api.paths import openai_compat_base
 from libs.iam.permission_context import clear_permission_context
 
 _OPENAI_MODELS = f"{openai_compat_base()}/models"
+_OPENAI_CHAT = f"{openai_compat_base()}/chat/completions"
 _API_KEYS = "/api/v1/api-keys/"
+
+
+def _fake_chat_completion(*, stream: bool = False) -> Any:
+    message = types.SimpleNamespace(content="ok", tool_calls=None, reasoning_content=None)
+    choice = types.SimpleNamespace(message=message, finish_reason="stop", delta=None)
+    usage = types.SimpleNamespace(
+        prompt_tokens=3,
+        completion_tokens=2,
+        total_tokens=5,
+        prompt_tokens_details={},
+        completion_tokens_details={},
+    )
+    if stream:
+
+        async def _gen():
+            delta_choice = types.SimpleNamespace(
+                delta=types.SimpleNamespace(content="ok", reasoning_content=None),
+                finish_reason=None,
+            )
+            yield types.SimpleNamespace(choices=[delta_choice], usage=None, id="chatcmpl-stream")
+            stop_choice = types.SimpleNamespace(
+                delta=types.SimpleNamespace(content="", reasoning_content=None),
+                finish_reason="stop",
+            )
+            yield types.SimpleNamespace(
+                choices=[stop_choice],
+                usage=usage,
+                id="chatcmpl-stream",
+            )
+
+        return _gen()
+
+    return types.SimpleNamespace(
+        id="chatcmpl-test",
+        choices=[choice],
+        usage=usage,
+        model="gpt-4o-mini",
+    )
+
+
+async def _setup_team_model_vkey(
+    dev_client: AsyncClient,
+    auth_headers: dict[str, str],
+    db_session,
+    test_user: User,
+) -> tuple[str, str]:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    await db_session.commit()
+    cred = await dev_client.post(
+        f"/api/v1/gateway/teams/{team.id}/credentials",
+        headers=auth_headers,
+        json={
+            "provider": "openai",
+            "name": f"timing-cred-{uuid.uuid4().hex[:8]}",
+            "api_key": "sk-timing-int-test-key-123456789",
+            "scope": "team",
+        },
+    )
+    assert cred.status_code == 201, cred.text
+    cid = cred.json()["id"]
+    model_name = f"timing-{uuid.uuid4().hex[:6]}"
+    model = await dev_client.post(
+        f"/api/v1/gateway/teams/{team.id}/models",
+        headers=auth_headers,
+        json={
+            "name": model_name,
+            "capability": "chat",
+            "real_model": "gpt-4o-mini",
+            "credential_id": cid,
+            "provider": "openai",
+        },
+    )
+    assert model.status_code == 201, model.text
+    await reload_router(db_session)
+    key = await dev_client.post(
+        f"/api/v1/gateway/teams/{team.id}/keys",
+        headers=auth_headers,
+        json={"name": f"timing-vkey-{uuid.uuid4().hex[:8]}"},
+    )
+    assert key.status_code == 201, key.text
+    return model_name, key.json()["plain_key"]
 
 
 @pytest.mark.integration
@@ -254,5 +346,59 @@ class TestOpenAiCompatApi:
                 },
             )
             assert bad.status_code == 400, bad.text
+        finally:
+            clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_chat_completions_exposes_gateway_timing_headers(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        try:
+            model_name, plain_key = await _setup_team_model_vkey(
+                dev_client, auth_headers, db_session, test_user
+            )
+
+            async def _acompletion(_self: Any, **kwargs: Any) -> Any:
+                return _fake_chat_completion(stream=bool(kwargs.get("stream")))
+
+            monkeypatch.setattr("litellm.router.Router.acompletion", _acompletion)
+
+            bearer = {"Authorization": f"Bearer {plain_key}"}
+            non_stream = await dev_client.post(
+                _OPENAI_CHAT,
+                headers=bearer,
+                json={
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": False,
+                },
+            )
+            assert non_stream.status_code == 200, non_stream.text
+            assert HEADER_GATEWAY_PREFLIGHT_MS in non_stream.headers
+            assert HEADER_GATEWAY_UPSTREAM_MS in non_stream.headers
+            assert int(non_stream.headers[HEADER_GATEWAY_PREFLIGHT_MS]) >= 0
+            assert int(non_stream.headers[HEADER_GATEWAY_UPSTREAM_MS]) >= 0
+            await shutdown_proxy_deferred_tasks()
+
+            stream = await dev_client.post(
+                _OPENAI_CHAT,
+                headers=bearer,
+                json={
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
+            )
+            assert stream.status_code == 200, stream.text
+            assert HEADER_GATEWAY_PREFLIGHT_MS in stream.headers
+            assert HEADER_GATEWAY_UPSTREAM_MS not in stream.headers
+            async for _chunk in stream.aiter_bytes():
+                pass
+            await shutdown_proxy_deferred_tasks()
         finally:
             clear_permission_context()

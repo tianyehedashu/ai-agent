@@ -33,6 +33,7 @@ export interface BudgetModelComboboxProps {
   placeholder?: string
   className?: string
   id?: string
+  onPopoverOpenChange?: (open: boolean) => void
 }
 
 function commandItemValue(option: BudgetModelOption): string {
@@ -48,8 +49,14 @@ export function BudgetModelCombobox({
   placeholder = '全模型汇总',
   className,
   id,
+  onPopoverOpenChange,
 }: Readonly<BudgetModelComboboxProps>): React.JSX.Element {
   const [open, setOpen] = useState(false)
+
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next)
+    onPopoverOpenChange?.(next)
+  }
 
   const grouped = useMemo(() => groupBudgetModelOptions(options), [options])
   const optionsByName = useMemo(() => budgetModelOptionsByName(options), [options])
@@ -64,7 +71,7 @@ export function BudgetModelCombobox({
   const triggerDisabled = disabled || loading
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           id={id}

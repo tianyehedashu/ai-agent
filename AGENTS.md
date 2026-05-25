@@ -80,6 +80,7 @@ from domains.agent.application import ChatUseCase, AgentUseCase
 # 纯技术基础设施
 from libs.config import ExecutionConfig
 from libs.api.deps import get_db, get_session_service, get_chat_service, get_video_task_service  # 服务工厂（Chat/Video 注入 SessionUseCase）
+from libs.api.pagination import PageParams, PaginatedListResponse, build_page  # 列表分页 → docs/PAGINATION.md
 from libs.exceptions import NotFoundError, ValidationError  # 跨域共享异常
 from libs.types import Result
 ```
@@ -95,4 +96,4 @@ from libs.types import Result
 
 ## 详细规范
 
-[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md) | 生产部署（阿里云 K8s）：[deploy/k8s/README.md](deploy/k8s/README.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | K8s 故障排查 Skill：[`.agents/skills/k8s-production-debug/SKILL.md`](.agents/skills/k8s-production-debug/SKILL.md) | 数据库 **Schema 设计 + 迁移**：Skill [`.agents/skills/database-schema/SKILL.md`](.agents/skills/database-schema/SKILL.md)（`basemodel.md` / `design.md` / `reference.md`）
+[backend/docs/CODE_STANDARDS.md](backend/docs/CODE_STANDARDS.md) | [frontend/docs/CODE_STANDARDS.md](frontend/docs/CODE_STANDARDS.md) | [docs/PAGINATION.md](docs/PAGINATION.md)（列表分页） | [docs/API_RESPONSE.md](docs/API_RESPONSE.md)（API 响应/异常） | 生产部署（阿里云 K8s）：[deploy/k8s/README.md](deploy/k8s/README.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | K8s 故障排查 Skill：[`.agents/skills/k8s-production-debug/SKILL.md`](.agents/skills/k8s-production-debug/SKILL.md) | 数据库 **Schema 设计 + 迁移**：Skill [`.agents/skills/database-schema/SKILL.md`](.agents/skills/database-schema/SKILL.md)（`basemodel.md` / `design.md` / `reference.md`）

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
 from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
+from libs.api.pagination import PaginatedListResponse
 
 # =============================================================================
 # Gateway features（运行时能力开关，与部署 env 对齐）
@@ -298,6 +299,10 @@ class GatewayModelUpdate(BaseModel):
     tpm_limit: int | None = None
     enabled: bool | None = None
     tags: dict[str, Any] | None = None
+    resync_capabilities: bool = Field(
+        default=False,
+        description="为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化该字段）",
+    )
 
 
 class ModelSelectorCapabilities(BaseModel):
@@ -377,6 +382,42 @@ class GatewayModelResponse(BaseModel):
                 ),
             }
         )
+
+
+class ModelConnectivitySummary(BaseModel):
+    total: int = 0
+    available: int = 0
+    unavailable: int = 0
+    success: int = 0
+    failed: int = 0
+    unknown: int = 0
+
+
+class GatewayModelListResponse(PaginatedListResponse[GatewayModelResponse]):
+    connectivity_summary: ModelConnectivitySummary
+
+
+class GatewayModelIdsResponse(BaseModel):
+    ids: list[uuid.UUID] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class PaginatedSelectorModels(BaseModel):
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=200)
+    has_next: bool
+    has_prev: bool
+
+
+class AvailableModelsListResponse(BaseModel):
+    system_models: PaginatedSelectorModels
+    user_models: PaginatedSelectorModels
+    default_for_text: dict[str, str] | None = None
+    default_for_vision: dict[str, str] | None = None
+    default_for_image_gen: dict[str, str] | None = None
+    connectivity_summary: ModelConnectivitySummary | None = None
 
 
 class GatewayModelRouteUsageSlice(BaseModel):
@@ -511,6 +552,10 @@ class PersonalModelResponse(BaseModel):
         )
 
 
+class PersonalModelListResponse(PaginatedListResponse[PersonalModelResponse]):
+    connectivity_summary: ModelConnectivitySummary
+
+
 class GatewayModelTestResponse(BaseModel):
     """模型连通性测试响应。
 
@@ -543,6 +588,15 @@ class GatewayModelBatchDeleteResponse(BaseModel):
     failed: list[GatewayModelBatchDeleteFailureItem]
     grants_removed: int = 0
     budgets_removed: int = 0
+
+
+class GatewayModelBatchResyncCapabilitiesRequest(BaseModel):
+    model_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=200)
+
+
+class GatewayModelBatchResyncCapabilitiesResponse(BaseModel):
+    succeeded: list[uuid.UUID]
+    failed: list[GatewayModelBatchDeleteFailureItem]
 
 
 class GatewayModelPresetResponse(BaseModel):
@@ -1021,7 +1075,10 @@ __all__ = [
     "GatewayModelBatchDeleteFailureItem",
     "GatewayModelBatchDeleteRequest",
     "GatewayModelBatchDeleteResponse",
-    "GatewayModelCreate",
+    "GatewayModelBatchResyncCapabilitiesRequest",
+    "GatewayModelBatchResyncCapabilitiesResponse",
+    "GatewayModelIdsResponse",
+    "GatewayModelListResponse",
     "GatewayModelPresetResponse",
     "GatewayModelResponse",
     "GatewayModelRouteUsageItem",
@@ -1029,10 +1086,12 @@ __all__ = [
     "GatewayModelTestResponse",
     "GatewayModelUpdate",
     "GatewayModelUsageSummaryResponse",
-    "ManagedCredentialCreate",
     "MarginGroupItemResponse",
     "MarginSummaryResponse",
+    "ModelConnectivitySummary",
+    "PaginatedSelectorModels",
     "PersonalModelCreate",
+    "PersonalModelListResponse",
     "PersonalModelResponse",
     "PersonalModelUpdate",
     "PlanQuotaResponse",

@@ -8,7 +8,7 @@ from pathlib import Path
 import tomllib
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 import tomli_w
 
@@ -20,6 +20,7 @@ from libs.config.service import (
     ExecutionConfigService,
     get_execution_config_service,
 )
+from libs.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/execution", tags=["Execution"])
 
@@ -139,10 +140,7 @@ async def get_template(
     """
     template = service.get_template(template_name)
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Template not found: {template_name}",
-        )
+        raise NotFoundError("Template", template_name)
     return template.model_dump()
 
 
@@ -170,10 +168,7 @@ async def get_agent_config(
     else:
         config = service.get_agent_config(agent_id)
         if not config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agent config not found: {agent_id}",
-            )
+            raise NotFoundError("Agent config", agent_id)
     return config.model_dump()
 
 
@@ -197,10 +192,7 @@ async def update_agent_config(
     try:
         validated = ExecutionConfig.model_validate(config)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid config: {e}",
-        ) from e
+        raise ValidationError(f"Invalid config: {e}") from e
 
     #
     config_path = _get_agents_dir() / agent_id / "agent.toml"
@@ -272,10 +264,7 @@ async def delete_agent_config(
         config_path.unlink()
         return {"status": "deleted", "agent_id": agent_id}
     else:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent config not found: {agent_id}",
-        )
+        raise NotFoundError("Agent config", agent_id)
 
 
 @router.post("/validate")
@@ -397,20 +386,14 @@ async def get_tool(tool_name: str) -> dict[str, Any]:
     tools_path = config_dir / "tools.toml"
 
     if not tools_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool not found: {tool_name}",
-        )
+        raise NotFoundError("Tool", tool_name)
 
     with tools_path.open("rb") as f:
         data = tomllib.load(f)
 
     tools = data.get("tools", {})
     if tool_name not in tools:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool not found: {tool_name}",
-        )
+        raise NotFoundError("Tool", tool_name)
     return {tool_name: tools[tool_name]}
 
 

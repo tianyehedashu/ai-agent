@@ -31,7 +31,7 @@
 
 import { ApiError } from '@/api/errors'
 import { API_V1 } from '@/api/paths'
-import { messageFromApiErrorBody } from '@/lib/fastapi-error-detail'
+import { parseApiErrorBody, messageFromApiErrorBody } from '@/lib/fastapi-error-detail'
 import { shouldInvalidateGlobalSession } from '@/lib/session-invalidation'
 import {
   getAuthToken,
@@ -251,8 +251,13 @@ class ApiClient {
         typeof (errorBody as { message: unknown }).message === 'string'
           ? (errorBody as { message: string }).message
           : 'Unknown error'
-      const message = messageFromApiErrorBody(errorBody, fallback)
-      throw new ApiError(response.status, message)
+      const parsed = parseApiErrorBody(errorBody, fallback)
+      throw new ApiError(response.status, parsed.message, {
+        code: parsed.code,
+        title: parsed.title,
+        errors: parsed.errors,
+        extra: parsed.extra,
+      })
     }
 
     return parseResponseBody<T>(response)

@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
+from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
 from domains.gateway.application.proxy_litellm_kwargs import optional_body_model
 from domains.gateway.application.proxy_response_adapter import (
     adapt_binary_response,
@@ -13,17 +14,16 @@ from domains.gateway.application.proxy_response_adapter import (
     pricing_kwargs_from_litellm,
 )
 from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
-from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.policies.dashscope_embedding import (
     should_use_dashscope_direct_embedding,
 )
 from domains.gateway.domain.policies.volcengine_video import should_use_volcengine_direct_video
+from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import get_router
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
-    from domains.gateway.application.proxy_guard import BudgetReservation
     from domains.gateway.application.proxy_use_case import ProxyUseCase
 
 
@@ -57,25 +57,36 @@ class ProxyNonChatMixin:
             router_call=router_call,
         )
 
+    async def _run_non_chat_preflight(
+        self: ProxyUseCase,
+        ctx: ProxyContext,
+        *,
+        capability: GatewayCapability,
+        model: str | None,
+        require_model: bool = False,
+    ) -> tuple[str | None, list[BudgetReservation]]:
+        result = await run_proxy_inbound_preflight(
+            self.guard,
+            ctx,
+            capability=capability,
+            model=model,
+            require_model=require_model,
+        )
+        return result.model, result.reservations
+
     async def embedding(
         self: ProxyUseCase,
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.EMBEDDING
         model = str(body.get("model", "")).strip()
-        if not model:
-            raise ValueError("model is required")
-        ctx.budget_model = model
-        self.guard.check_model(model, ctx)
-        self.guard.check_capability(ctx)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.EMBEDDING,
+            model=model,
+            require_model=True,
+        )
+        assert budget_model is not None
 
         prepared, kwargs = await self.prepare_litellm_invoke(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
@@ -87,11 +98,11 @@ class ProxyNonChatMixin:
             if dashscope_direct:
                 response = await self.litellm.dashscope_direct_embedding(
                     ctx,
-                    prepared.client_model or model,
+                    prepared.client_model or budget_model,
                     kwargs,
                     real_model=prepared.resolved.record.real_model if prepared.resolved else None,
                 )
-            elif await self.litellm.should_use_internal_direct_litellm(ctx, model):
+            elif await self.litellm.should_use_internal_direct_litellm(ctx, budget_model):
                 response = await self.litellm.direct_embedding(kwargs)
             else:
                 router = await get_router(self.session)
@@ -115,26 +126,17 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.IMAGE
-        ctx.budget_model = optional_body_model(body)
-        if ctx.budget_model:
-            self.guard.check_model(ctx.budget_model, ctx)
-        self.guard.check_capability(ctx)
-        if ctx.budget_model:
-            await self.guard.assert_request_capability_matches_model(ctx, ctx.budget_model)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.IMAGE,
+            model=optional_body_model(body),
+        )
         kwargs = await self.prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             response = await self._invoke_non_chat_with_router_fallback(
                 ctx,
-                ctx.budget_model,
+                budget_model,
                 reservations,
                 kwargs,
                 router_call=lambda: self.litellm.router_image_generation(kwargs),
@@ -159,22 +161,17 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.AUDIO_TRANSCRIPTION
-        ctx.budget_model = optional_body_model(body)
-        self.guard.check_capability(ctx)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.AUDIO_TRANSCRIPTION,
+            model=optional_body_model(body),
+        )
         kwargs = await self.prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             response = await self._invoke_non_chat_with_router_fallback(
                 ctx,
-                ctx.budget_model,
+                budget_model,
                 reservations,
                 kwargs,
                 router_call=lambda: self.litellm.router_transcription(kwargs),
@@ -199,22 +196,17 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any] | bytes:
-        ctx.capability = GatewayCapability.AUDIO_SPEECH
-        ctx.budget_model = optional_body_model(body)
-        self.guard.check_capability(ctx)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.AUDIO_SPEECH,
+            model=optional_body_model(body),
+        )
         kwargs = await self.prepare_litellm_kwargs(ctx, body)
         meta, up_c, _down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             result = await self._invoke_non_chat_with_router_fallback(
                 ctx,
-                ctx.budget_model,
+                budget_model,
                 reservations,
                 kwargs,
                 router_call=lambda: self.litellm.router_speech(kwargs),
@@ -247,21 +239,16 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.RERANK
-        ctx.budget_model = optional_body_model(body)
-        self.guard.check_capability(ctx)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.RERANK,
+            model=optional_body_model(body),
+        )
         kwargs = await self.prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         response = await self._invoke_non_chat_with_router_fallback(
             ctx,
-            ctx.budget_model,
+            budget_model,
             reservations,
             kwargs,
             router_call=lambda: self.litellm.router_rerank(kwargs),
@@ -282,25 +269,18 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.MODERATION
         raw_model = body.get("model")
         model = str(raw_model).strip() if raw_model is not None else ""
-        ctx.budget_model = model or None
-        if model:
-            self.guard.check_model(model, ctx)
-        self.guard.check_capability(ctx)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, ctx.budget_model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.MODERATION,
+            model=model or None,
+        )
         kwargs = await self.prepare_litellm_kwargs(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         response = await self._invoke_non_chat_with_router_fallback(
             ctx,
-            ctx.budget_model,
+            budget_model,
             reservations,
             kwargs,
             router_call=lambda: self.litellm.router_moderation(kwargs),
@@ -321,21 +301,15 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        ctx.capability = GatewayCapability.VIDEO_GENERATION
         model = str(body.get("model", "")).strip()
-        if not model:
-            raise ValueError("model is required")
-        ctx.budget_model = model
-        self.guard.check_model(model, ctx)
-        self.guard.check_capability(ctx)
-        await self.guard.assert_request_capability_matches_model(ctx, model)
-        await self.guard.check_limits(ctx)
-        reservations = await self.guard.check_budget(ctx)
-        try:
-            await self.guard.check_entitlement(ctx, model)
-        except EntitlementPlanExhaustedError:
-            await self.guard.release_budget_reservations(reservations)
-            raise
+        budget_model, reservations = await self._run_non_chat_preflight(
+            ctx,
+            capability=GatewayCapability.VIDEO_GENERATION,
+            model=model,
+            require_model=True,
+        )
+        assert budget_model is not None
+
         prepared, invoke_kwargs = await self.prepare_litellm_invoke(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(invoke_kwargs)
         volcengine_direct = (
@@ -346,14 +320,14 @@ class ProxyNonChatMixin:
             if volcengine_direct:
                 response = await self.litellm.volcengine_direct_video_generation(
                     ctx,
-                    prepared.client_model or model,
+                    prepared.client_model or budget_model,
                     invoke_kwargs,
                     real_model=prepared.resolved.record.real_model if prepared.resolved else None,
                 )
             else:
                 response = await self._invoke_non_chat_with_router_fallback(
                     ctx,
-                    model,
+                    budget_model,
                     reservations,
                     invoke_kwargs,
                     router_call=lambda: self.litellm.router_video_generation(invoke_kwargs),

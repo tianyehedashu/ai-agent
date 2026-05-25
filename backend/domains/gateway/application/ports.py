@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
     from decimal import Decimal
@@ -82,6 +84,18 @@ class GatewayStreamChunk:
     usage: dict[str, Any] | None = None  # 仅末帧填充（同 GatewayResponse.usage）
 
 
+class LitellmCapabilityHintPort(Protocol):
+    """查询 LiteLLM 内置价目表中的能力标记（catalog 写侧 / 探测 enrich）。"""
+
+    def get_model_hints(
+        self, *, provider: str, real_model: str
+    ) -> LitellmModelInfoHints | None:
+        """已映射模型返回 hint 子集；未映射或 litellm 不可用返回 None。"""
+
+    def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
+        """已映射且支持 reasoning 返回 True/False；未映射返回 None。"""
+
+
 class GatewayProxyProtocol(Protocol):
     """Gateway 代理协议
 
@@ -128,4 +142,5 @@ __all__ = [
     "GatewayResponse",
     "GatewayStreamChunk",
     "InvocationOverrides",
+    "LitellmCapabilityHintPort",
 ]

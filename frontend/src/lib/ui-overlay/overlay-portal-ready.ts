@@ -1,4 +1,4 @@
-import { useOverlayScope } from './overlay-scope-context'
+import { useOverlayScope } from './overlay-scope-hooks'
 
 /** Portal 容器：scope 内优先用 state，同步回退 ref（避免首次打开下拉时 Content 为 null） */
 export function useOverlayPortalReady(): {

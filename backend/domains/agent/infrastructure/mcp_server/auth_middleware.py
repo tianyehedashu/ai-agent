@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from domains.identity.domain.api_key_types import ApiKeyScope
+from libs.exceptions import AuthenticationError, PermissionDeniedError, ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -56,7 +57,9 @@ async def verify_mcp_access(
         (api_key_id, user_id, scopes, client_ip) 元组
 
     Raises:
-        HTTPException: 认证失败
+        AuthenticationError: 认证失败
+        PermissionDeniedError: 权限不足
+        ValidationError: 请求无效
     """
     # 获取客户端 IP
     client_ip = request.client.host if request.client else None
@@ -64,28 +67,20 @@ async def verify_mcp_access(
     # 检查 Authorization 头
     if not credentials:
         logger.warning(f"MCP access denied: no credentials provided (IP: {client_ip})")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API Key required for MCP access. Use Authorization: Bearer sk_...",
-            headers={"WWW-Authenticate": "Bearer"},
+        raise AuthenticationError(
+            "API Key required for MCP access. Use Authorization: Bearer sk_..."
         )
 
     # 验证 API Key 格式
     api_key = credentials.credentials
     if not api_key.startswith("sk_"):
         logger.warning(f"MCP access denied: invalid key format (IP: {client_ip})")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key format. Must start with 'sk_'",
-        )
+        raise AuthenticationError("Invalid API Key format. Must start with 'sk_'")
 
     # 从路径提取服务器名称
     server_name = request.path_params.get("server_name")
     if not server_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Server name required",
-        )
+        raise ValidationError("Server name required")
 
     # 验证 API Key（延迟导入避免循环依赖，verify_mcp_access 在请求时调用）
     # pylint: disable=import-outside-toplevel
@@ -102,10 +97,7 @@ async def verify_mcp_access(
                 f"MCP access denied: invalid API key (IP: {client_ip}, "
                 f"key_id: {api_key.split('_')[1] if len(api_key.split('_')) > 1 else 'unknown'})"
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired API Key",
-            )
+            raise AuthenticationError("Invalid or expired API Key")
 
         # 检查 API Key 是否有效
         if not entity.is_valid:
@@ -113,10 +105,7 @@ async def verify_mcp_access(
                 f"MCP access denied: API key not valid (IP: {client_ip}, "
                 f"key_id: {entity.key_id}, status: {entity.status})"
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"API Key is {entity.status.value}",
-            )
+            raise AuthenticationError(f"API Key is {entity.status.value}")
 
         # 检查 MCP 权限
         required_scopes = get_required_scope_for_server(server_name)
@@ -132,9 +121,9 @@ async def verify_mcp_access(
                 required_scopes,
                 entity.scopes,
             )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Missing required scope: {', '.join(s.value for s in required_scopes)}",
+            raise PermissionDeniedError(
+                message=f"Missing required scope: {', '.join(s.value for s in required_scopes)}",
+                resource="MCP server",
             )
 
         logger.info(
@@ -188,6 +177,6 @@ async def verify_mcp_access_optional(
     try:
         api_key_id, _user_id, scopes, _ = await verify_mcp_access(request, credentials)
         return api_key_id, scopes, client_ip
-    except HTTPException:
+    except (AuthenticationError, PermissionDeniedError, ValidationError):
         # 验证失败，返回匿名访问
         return None, set(), client_ip

@@ -3,13 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { parseModelsScopeTab } from '@/features/gateway-models/constants'
-import {
-  gatewayModelsListQueryKey,
-  resolveTeamModelsRegistryScope,
-} from '@/features/gateway-models/utils'
+import { resolveTeamModelsRegistryScope } from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
-/** 从团队模型列表缓存解析显示名（与 TeamModelsWorkspace / TeamModelDetailPane 共用 queryKey） */
+/** 从 GET /models/{id} 解析显示名 */
 export function useGatewayModelLabel(modelId: string, credentialId = ''): string {
   const teamId = useGatewayTeamId()
   const [searchParams] = useSearchParams()
@@ -17,15 +14,15 @@ export function useGatewayModelLabel(modelId: string, credentialId = ''): string
   const listMode = scopeTab === 'system' ? 'system' : 'team'
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialId)
   const { data: name } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, registryScope, '', credentialId),
+    queryKey: ['gateway', 'models', teamId, modelId, registryScope, 'label'],
     queryFn: () =>
-      gatewayApi.listModels(teamId, {
+      gatewayApi.getModel(teamId, modelId, {
         registry_scope: registryScope,
-        ...(credentialId ? { credential_id: credentialId } : {}),
       }),
-    select: (items) => items.find((m) => m.id === modelId)?.name,
+    select: (model) => model.name,
     enabled: modelId.length > 0,
     staleTime: 30_000,
+    retry: false,
   })
 
   return name ?? modelId

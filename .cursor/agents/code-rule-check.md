@@ -9,6 +9,8 @@ description: 对修改的代码进行全面检查,确保符合项目规范和质
 > **真源**：所有规则细节以下列文档为准；本清单只做可勾选项 + 锚点：
 >
 > - `backend/docs/CODE_STANDARDS.md`（结构 / 导入 / 反退化 / Gateway 分层 / 读路径）
+> - `docs/PAGINATION.md`（**列表 API 分页 envelope 权威**）
+> - `docs/API_RESPONSE.md`（**API 成功/错误响应 + 异常处理权威**）
 > - `backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界、ProxyUseCase 拆分）
 > - 仓库根 `AGENTS.md`（导入路径速查）
 >
@@ -97,6 +99,7 @@ description: 对修改的代码进行全面检查,确保符合项目规范和质
 - [ ] 业务过滤（可见性 / team axis / scope）在 domain policy 决策；application 按 plan 查一次
 - [ ] 跨域消费方依赖端口 DTO，不复制字段结构
 - [ ] 集成测试断言新字段；前端 `@/types` 或 `features/<bc>/*` 内单一 adapter 同步
+- [ ] 新列表 endpoint 须满足 **§15 列表分页**（真源 `docs/PAGINATION.md`）
 
 ## 10. 遗留与重复
 
@@ -131,6 +134,42 @@ uv run pyright <相关包路径>
 uv run pytest tests/unit/<相关目录> -q --tb=short
 uv run pytest tests/integration/ -q --tb=short  # 涉及 HTTP/DB
 ```
+
+## 15. 列表分页（→ `docs/PAGINATION.md`）
+
+> 新增或改动 **list endpoint / 表格分页 UI / 批量 id** 时必勾本节。
+
+### 后端
+
+- [ ] Query：`page`（1-based）+ `page_size`（默认 20，上限 200）；禁止对外 `skip/limit`
+- [ ] 响应：`PaginatedListResponse[T]` + `build_page` / 专用 builder；禁止裸 `list[T]`
+- [ ] DB 分页经 repository / ReadRepository；application 不直接 `session.execute` 列表 SQL
+- [ ] 内存合并路径用 `slice_page`；filter/sort 在 domain policy
+- [ ] `/ids` 返回 `{ ids, truncated }`（有上限时）
+- [ ] 集成测试断言 envelope 全字段
+
+### 前端
+
+- [ ] 类型：`PaginatedList<T>` / `PageQuery` @ `@/types`；禁止 legacy `PaginatedResponse`
+- [ ] API 经 `src/api/<domain>/` adapter；全量用 `fetchAllPaginatedPages` @ `@/lib/pagination`
+- [ ] 表格用 `@/components/pagination-controls` + 服务端分页 state；筛选变更重置 `page=1`
+
+## 16. API 响应 / 异常处理（→ `docs/API_RESPONSE.md`）
+
+> 新增/改动 endpoint、异常类或前端错误处理时必勾本节。
+
+### 后端
+
+- [ ] 成功 = Schema 直出；禁止 `{ success, data }` / `{ code: 0, message, data }`
+- [ ] 错误 = RFC 7807 Problem Details（`type/title/status/detail/code/extra/errors`）
+- [ ] 业务 `raise AIAgentError` 子类；Presentation 禁止 `HTTPException`（OpenAI/Anthropic mapper 白名单除外）
+- [ ] 新 `code` 登记 `libs/exceptions/codes.py`；`HttpMappableDomainError` 映射在 `http_error_map.py`
+- [ ] 集成测试断言 `status` + `code` + `detail`；422 断言 `errors[]`
+
+### 前端
+
+- [ ] 错误经 `parseApiErrorBody` / `ApiError`（含 `code`, `errors`, `extra`）
+- [ ] 禁止 legacy `ApiResponse { success, data }`
 
 ---
 

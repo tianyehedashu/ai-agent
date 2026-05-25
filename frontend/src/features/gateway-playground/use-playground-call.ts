@@ -36,6 +36,11 @@ import {
   buildVisionRequestBody,
   maskAuthHeadersForDisplay,
 } from './playground-request'
+import {
+  mergePlaygroundTimingFields,
+  parseGatewayTimingHeaders,
+  type GatewayTimingFromHeaders,
+} from './playground-timing'
 
 import type {
   PlaygroundApiFlavor,
@@ -190,6 +195,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
       response.headers.get('x-litellm-request-id') ??
       response.headers.get('request-id') ??
       undefined
+    const gatewayTiming = parseGatewayTimingHeaders(response.headers)
 
     if (!response.ok) {
       const errorJson = await readPlaygroundErrorBody(response)
@@ -200,12 +206,14 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
         fallback,
         params.flavor
       )
+      const elapsedMs = Math.round(performance.now() - startedAt)
       setStatus('error')
       setError(playgroundError)
       setMetadata({
         httpStatus: response.status,
-        elapsedMs: Math.round(performance.now() - startedAt),
+        elapsedMs,
         requestId,
+        ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming),
       })
       setRawResponse(errorJson)
       return
@@ -213,7 +221,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
 
     if (!params.stream) {
       if (isAnthropic) {
-        await handleAnthropicJson(response, startedAt, requestId, {
+        await handleAnthropicJson(response, startedAt, requestId, gatewayTiming, {
           setStatus,
           setContent,
           setThinkingContent,
@@ -222,7 +230,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
           setRawResponse,
         })
       } else {
-        await handleOpenAiJson(response, startedAt, requestId, {
+        await handleOpenAiJson(response, startedAt, requestId, gatewayTiming, {
           setStatus,
           setContent,
           setThinkingContent,
@@ -252,7 +260,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
         setRawResponse,
       })
     } else {
-      await streamOpenAi(reader, controller, response.status, startedAt, requestId, {
+      await streamOpenAi(reader, controller, response.status, startedAt, requestId, gatewayTiming, {
         setStatus,
         setContent,
         setThinkingContent,
@@ -291,6 +299,7 @@ async function handleOpenAiJson(
   response: Response,
   startedAt: number,
   requestId: string | undefined,
+  gatewayTiming: GatewayTimingFromHeaders,
   setters: Setters
 ): Promise<void> {
   let json: OpenAiCompatChunk | null = null
@@ -309,9 +318,11 @@ async function handleOpenAiJson(
   const reasoning = typeof message?.reasoning_content === 'string' ? message.reasoning_content : ''
   setters.setThinkingContent(reasoning)
   setters.setContent(text)
+  const elapsedMs = Math.round(performance.now() - startedAt)
   setters.setMetadata({
     httpStatus: response.status,
-    elapsedMs: Math.round(performance.now() - startedAt),
+    elapsedMs,
+    ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming),
     promptTokens: json.usage?.prompt_tokens,
     completionTokens: json.usage?.completion_tokens,
     totalTokens: json.usage?.total_tokens,
@@ -328,6 +339,7 @@ async function handleAnthropicJson(
   response: Response,
   startedAt: number,
   requestId: string | undefined,
+  _gatewayTiming: GatewayTimingFromHeaders,
   setters: Setters
 ): Promise<void> {
   let json: AnthropicMessage | null = null
@@ -367,6 +379,7 @@ async function streamOpenAi(
   httpStatus: number,
   startedAt: number,
   requestId: string | undefined,
+  gatewayTiming: GatewayTimingFromHeaders,
   setters: Setters
 ): Promise<void> {
   const decoder = new TextDecoder('utf-8')
@@ -374,6 +387,7 @@ async function streamOpenAi(
   let answerAcc = ''
   let thinkingAcc = ''
   let lastJson: OpenAiCompatChunk | null = null
+  let ttftMs: number | undefined
   try {
     let finished = false
     while (!finished) {
@@ -398,6 +412,7 @@ async function streamOpenAi(
         if (parts.reasoning.length > 0) reasoningBatch += parts.reasoning
       }
       if (contentBatch.length > 0 || reasoningBatch.length > 0) {
+        ttftMs ??= Math.round(performance.now() - startedAt)
         answerAcc += contentBatch
         thinkingAcc += reasoningBatch
         const answerSnap = answerAcc
@@ -422,9 +437,11 @@ async function streamOpenAi(
     return
   }
 
+  const elapsedMs = Math.round(performance.now() - startedAt)
   setters.setMetadata({
     httpStatus,
-    elapsedMs: Math.round(performance.now() - startedAt),
+    elapsedMs,
+    ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming, ttftMs),
     finishReason: lastJson?.choices?.[0]?.finish_reason ?? undefined,
     promptTokens: lastJson?.usage?.prompt_tokens,
     completionTokens: lastJson?.usage?.completion_tokens,

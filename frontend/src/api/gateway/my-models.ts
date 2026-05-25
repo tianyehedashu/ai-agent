@@ -6,9 +6,17 @@
  */
 
 import { apiClient } from '@/api/client'
+import { fetchAllPaginatedPages } from '@/lib/pagination'
+import type { PageQuery, PaginatedList } from '@/types'
 import type { ModelTestStatus, ModelType } from '@/types/user-model'
 
 import { GATEWAY_API_BASE } from './_base'
+
+import type {
+  GatewayModelBatchDeleteResponse,
+  GatewayModelTestResult,
+  ModelConnectivitySummary,
+} from './models'
 
 /** GET /my-models 列表项（与模型选择器 personal 段形状对齐） */
 export interface PersonalGatewayModel {
@@ -58,13 +66,54 @@ export interface PersonalGatewayModelUpdateBody {
 }
 
 // 测试结果与团队侧共用类型，从 models 模块导出，避免重复声明
-import type { GatewayModelBatchDeleteResponse, GatewayModelTestResult } from './models'
+
+export interface PersonalModelListQuery extends PageQuery {
+  q?: string
+  connectivity?: 'all' | 'success' | 'failed' | 'unknown'
+  sort?: 'name' | 'created_at' | 'provider' | 'last_tested_at'
+  order?: 'asc' | 'desc'
+  provider?: string
+}
+
+export interface PersonalModelListResponse extends PaginatedList<PersonalGatewayModel> {
+  connectivity_summary: ModelConnectivitySummary
+}
+
+function buildPersonalModelListSearch(params?: PersonalModelListQuery): Record<string, string> {
+  const search: Record<string, string> = {}
+  if (!params) return search
+  if (params.page !== undefined) search.page = String(params.page)
+  if (params.page_size !== undefined) search.page_size = String(params.page_size)
+  if (params.q) search.q = params.q
+  if (params.connectivity && params.connectivity !== 'all')
+    search.connectivity = params.connectivity
+  if (params.sort) search.sort = params.sort
+  if (params.order) search.order = params.order
+  if (params.provider) search.provider = params.provider
+  return search
+}
+
+/** 拉取全部个人模型分页（下拉/预算等需全量时使用） */
+export async function fetchAllPersonalGatewayModels(
+  params?: Omit<PersonalModelListQuery, 'page' | 'page_size'>
+): Promise<PersonalGatewayModel[]> {
+  return fetchAllPaginatedPages((page, page_size) =>
+    myModelsApi.listMyModels({ ...params, page, page_size })
+  )
+}
 
 /** My-models 资源 API */
 export const myModelsApi = {
-  /** 列出当前用户的个人 Gateway 模型 */
-  listMyModels: (params?: { provider?: string }) =>
-    apiClient.get<PersonalGatewayModel[]>(`${GATEWAY_API_BASE}/my-models`, params),
+  /** 列出当前用户的个人 Gateway 模型（分页） */
+  listMyModels: (params?: PersonalModelListQuery) =>
+    apiClient.get<PersonalModelListResponse>(
+      `${GATEWAY_API_BASE}/my-models`,
+      buildPersonalModelListSearch(params)
+    ),
+
+  /** 单条个人 Gateway 模型 */
+  getMyModel: (id: string) =>
+    apiClient.get<PersonalGatewayModel>(`${GATEWAY_API_BASE}/my-models/${id}`),
   /** 创建个人 Gateway 模型；响应为该模型可能产生的全部 routing 行 */
   createMyModel: (body: PersonalGatewayModelCreateBody) =>
     apiClient.post<PersonalGatewayModel[]>(`${GATEWAY_API_BASE}/my-models`, body),

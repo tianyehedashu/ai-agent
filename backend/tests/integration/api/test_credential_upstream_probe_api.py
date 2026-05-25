@@ -16,6 +16,14 @@ from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 
 
+def _model_list_items(payload: dict | list) -> list:
+    if isinstance(payload, dict) and "items" in payload:
+        return payload["items"]
+    if isinstance(payload, list):
+        return payload
+    raise TypeError(f"unexpected models list payload: {type(payload)!r}")
+
+
 def _mock_models_list() -> RawUpstreamListResult:
     return RawUpstreamListResult(
         ok=True,
@@ -124,11 +132,66 @@ class TestCredentialUpstreamProbeApi:
 
         listed = await client.get("/api/v1/gateway/my-models", headers=auth_headers)
         assert listed.status_code == 200
-        names = {m.get("display_name") for m in listed.json()}
+        names = {m.get("display_name") for m in _model_list_items(listed.json())}
         assert any(n and "e2e-model-a" in n for n in names)
 
         for mid in batch["created"][0]["gateway_model_ids"]:
             await client.delete(f"/api/v1/gateway/my-models/{mid}", headers=auth_headers)
+        await client.delete(f"/api/v1/gateway/my-credentials/{cid}", headers=auth_headers)
+
+    @pytest.mark.asyncio
+    async def test_probe_inferred_model_types_unions_litellm_vision(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+            LitellmCapabilityHintAdapter,
+        )
+
+        r1 = await client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "volcengine",
+                "name": f"probe-volc-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-volc-mock",
+                "api_base": None,
+            },
+        )
+        assert r1.status_code == 201, r1.text
+        cid = r1.json()["id"]
+
+        def _volc_vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
+            _ = provider, real_model
+            return LitellmModelInfoHints(supports_vision=True)
+
+        monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _volc_vision_hints)
+
+        volc_items = RawUpstreamListResult(
+            ok=True,
+            http_status=200,
+            items=(("doubao-seed-2-0-lite-260215", "volcengine"),),
+            error_message=None,
+        )
+
+        with patch.object(
+            OpenAICompatibleModelListAdapter,
+            "fetch_models",
+            new=AsyncMock(return_value=volc_items),
+        ):
+            pr = await client.post(
+                f"/api/v1/gateway/my-credentials/{cid}/probe",
+                headers=auth_headers,
+                json={},
+            )
+        assert pr.status_code == 200, pr.text
+        probe = pr.json()
+        assert probe["support"] == "full"
+        assert len(probe["items"]) == 1
+        inferred = probe["items"][0]["inferred_model_types"]
+        assert "text" in inferred
+        assert "image" in inferred
+
         await client.delete(f"/api/v1/gateway/my-credentials/{cid}", headers=auth_headers)
 
     @pytest.mark.asyncio
@@ -317,7 +380,7 @@ class TestCredentialUpstreamProbeApi:
             params={"registry_scope": "system"},
         )
         assert r_list.status_code == 200, r_list.text
-        by_id = {item["id"]: item for item in r_list.json()}
+        by_id = {item["id"]: item for item in _model_list_items(r_list.json())}
         assert gid in by_id
         assert by_id[gid]["registry_kind"] == "system"
         assert by_id[gid]["name"] == alias
@@ -328,7 +391,7 @@ class TestCredentialUpstreamProbeApi:
             params={"registry_scope": "team"},
         )
         assert r_team.status_code == 200, r_team.text
-        team_ids = {item["id"] for item in r_team.json()}
+        team_ids = {item["id"] for item in _model_list_items(r_team.json())}
         assert gid not in team_ids
 
         await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{gid}", headers=headers)

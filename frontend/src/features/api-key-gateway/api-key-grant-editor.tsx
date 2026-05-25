@@ -41,18 +41,6 @@ function toDraft(grant: ApiKeyGatewayGrantRequest, localId: string): GrantDraft 
   }
 }
 
-function draftToRequest(draft: GrantDraft): ApiKeyGatewayGrantRequest {
-  return {
-    team_id: draft.team_id,
-    allowed_models: draft.allowed_models,
-    allowed_capabilities: draft.allowed_capabilities,
-    rpm_limit: draft.rpm_limit,
-    tpm_limit: draft.tpm_limit,
-    store_full_messages: draft.store_full_messages,
-    guardrail_enabled: draft.guardrail_enabled,
-  }
-}
-
 function policyFromDraft(draft: GrantDraft): GrantPolicyValues {
   return {
     allowed_models: draft.allowed_models ?? [],
@@ -195,36 +183,5 @@ export function ApiKeyGrantEditor({
         ))
       )}
     </div>
-  )
-}
-
-export function grantsToRequests(grants: GrantDraft[]): ApiKeyGatewayGrantRequest[] {
-  return grants.map(draftToRequest)
-}
-
-export function gatewayGrantsToDrafts(
-  grants: Array<{
-    team_id: string
-    allowed_models: string[]
-    allowed_capabilities: string[]
-    rpm_limit: number | null
-    tpm_limit: number | null
-    store_full_messages: boolean
-    guardrail_enabled: boolean
-  }>
-): GrantDraft[] {
-  return grants.map((g) =>
-    toDraft(
-      {
-        team_id: g.team_id,
-        allowed_models: g.allowed_models,
-        allowed_capabilities: g.allowed_capabilities,
-        rpm_limit: g.rpm_limit,
-        tpm_limit: g.tpm_limit,
-        store_full_messages: g.store_full_messages,
-        guardrail_enabled: g.guardrail_enabled,
-      },
-      crypto.randomUUID()
-    )
   )
 }

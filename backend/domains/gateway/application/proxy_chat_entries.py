@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.application.anthropic_native_adapt import (
@@ -19,6 +20,7 @@ from domains.gateway.application.proxy_router_invoke import invoke_router_with_d
 from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
+from domains.gateway.application.proxy_timing import GatewayProxyTiming
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import ensure_router_deployment
 
@@ -64,6 +66,7 @@ class ProxyChatMixin:
         estimate_tokens = sum(
             len(str(m.get("content", ""))) for m in (body.get("messages") or [])
         ) // 4 + int(body.get("max_tokens") or 0)
+        preflight_started = time.perf_counter()
         prepared = await prepare_chat_proxy_request(
             self,
             ctx,
@@ -72,6 +75,7 @@ class ProxyChatMixin:
             require_model=True,
         )
         use_direct = await self.litellm.should_use_internal_direct_litellm(ctx, prepared.model)
+        preflight_ms = max(0, int((time.perf_counter() - preflight_started) * 1000))
 
         async def _direct() -> Any:
             return await self.litellm.direct_chat_completion(prepared.kwargs)
@@ -82,6 +86,7 @@ class ProxyChatMixin:
             router = await ensure_router_deployment(self.session, encoded)
             return await router.acompletion(**prepared.kwargs)
 
+        upstream_started = time.perf_counter()
         response = await invoke_router_with_direct_fallback(
             guard=self.guard,
             litellm=self.litellm,
@@ -92,6 +97,14 @@ class ProxyChatMixin:
             direct_call=_direct,
             router_call=_router,
         )
+        if prepared.stream:
+            ctx.proxy_timing = GatewayProxyTiming(preflight_ms=preflight_ms)
+        else:
+            upstream_ms = max(0, int((time.perf_counter() - upstream_started) * 1000))
+            ctx.proxy_timing = GatewayProxyTiming(
+                preflight_ms=preflight_ms,
+                upstream_ms=upstream_ms,
+            )
         if prepared.stream:
             return adapt_stream(
                 response,

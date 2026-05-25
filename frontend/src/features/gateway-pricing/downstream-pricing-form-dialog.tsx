@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
 import type React from 'react'
 
-import { useQuery } from '@tanstack/react-query'
-
 import type { DownstreamPricingRow, DownstreamPricingUpsertBody } from '@/api/gateway'
-import { modelsApi, type GatewayModel } from '@/api/gateway/models'
+import type { GatewayModel } from '@/api/gateway/models'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
-import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { Loader2 } from '@/lib/lucide-icons'
 import type { DisplayCurrency } from '@/types/money'
 
@@ -94,13 +92,21 @@ export function DownstreamPricingFormDialog({
   const [values, setValues] = useState<DownstreamPricingFormValues>(() => initialValues(row))
   const { byId: credentialById } = useGatewayCredentialDirectory()
 
-  const modelsQuery = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, 'team'),
-    queryFn: () => modelsApi.listModels(teamId, { registry_scope: 'team' }),
-    enabled: open && !row?.gateway_model_id,
-  })
+  const {
+    items: modelOptions,
+    isLoading: modelsLoading,
+    onPickerOpenChange,
+  } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'team' },
+    { enabled: open && !row?.gateway_model_id, prefetchMode: 'open' }
+  )
 
-  const modelOptions = modelsQuery.data ?? []
+  useEffect(() => {
+    if (open && !row?.gateway_model_id) {
+      onPickerOpenChange(true)
+    }
+  }, [open, row?.gateway_model_id, onPickerOpenChange])
 
   useEffect(() => {
     if (!open) return
@@ -136,9 +142,10 @@ export function DownstreamPricingFormDialog({
                 onValueChange={(value) => {
                   update('gateway_model_id', value)
                 }}
+                onOpenChange={onPickerOpenChange}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择要调价的模型" />
+                  <SelectValue placeholder={modelsLoading ? '加载模型…' : '选择要调价的模型'} />
                 </SelectTrigger>
                 <SelectContent>
                   {modelOptions.map((model) => (

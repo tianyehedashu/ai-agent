@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from domains.gateway.application.management.log_presentation import request_log_to_dict
 from domains.gateway.domain.usage_read_model import (
@@ -17,13 +17,12 @@ from domains.gateway.domain.usage_read_model import (
     UsageAggregation,
 )
 from domains.gateway.presentation.deps import CurrentTeam
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     RequestLogDetailResponse,
     RequestLogListResponse,
     RequestLogResponse,
 )
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions import NotFoundError
 
 from ._common import MgmtReads
 
@@ -77,12 +76,9 @@ async def get_log_detail(
         description=USAGE_AGGREGATION_QUERY_DESCRIPTION,
     ),
 ) -> RequestLogDetailResponse:
-    try:
-        record = await reads.get_request_log(team, log_id, usage_aggregation=usage_aggregation)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    record = await reads.get_request_log(team, log_id, usage_aggregation=usage_aggregation)
     if record is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Log not found")
+        raise NotFoundError("Log")
     return RequestLogDetailResponse.model_validate(request_log_to_dict(record, team))
 
 

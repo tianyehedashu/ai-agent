@@ -77,6 +77,7 @@ export type {
   GatewayModel,
   GatewayModelBatchDeleteFailureItem,
   GatewayModelBatchDeleteResponse,
+  GatewayModelBatchResyncCapabilitiesResponse,
   GatewayModelRouteUsageSlice,
   GatewayModelRouteUsageItem,
   GatewayModelUsageSummary,
@@ -88,11 +89,19 @@ export type {
   GatewayModelUpdateBody,
 } from './models'
 
+export {
+  fetchAllAvailableGatewayModels,
+  fetchAllGatewayModelPages,
+  fetchGatewayModelIdsForBatch,
+} from './models'
+
 export type {
   PersonalGatewayModel,
   PersonalGatewayModelCreateBody,
   PersonalGatewayModelUpdateBody,
 } from './my-models'
+
+export { fetchAllPersonalGatewayModels } from './my-models'
 
 export type { GatewayRoute, GatewayRouteCreateBody, GatewayRouteUpdateBody } from './routes'
 

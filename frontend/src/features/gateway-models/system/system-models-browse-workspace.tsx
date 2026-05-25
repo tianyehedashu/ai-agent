@@ -1,13 +1,8 @@
 import { useMemo } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { gatewayApi } from '@/api/gateway'
-import {
-  gatewayModelsRequestableQueryKey,
-  GATEWAY_MODELS_STALE_MS,
-} from '@/features/gateway-models/utils'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
 
@@ -25,11 +20,11 @@ function BrowseFallback(): React.JSX.Element {
 export function SystemModelsBrowseWorkspace(): React.JSX.Element {
   const teamId = useGatewayTeamId()
 
-  const { data: requestableItems = [], isLoading } = useQuery({
-    queryKey: gatewayModelsRequestableQueryKey(teamId),
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'requestable' }),
-    staleTime: GATEWAY_MODELS_STALE_MS,
-  })
+  const { items: requestableItems, isLoading } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'requestable' },
+    { prefetchMode: 'idle' }
+  )
 
   const systemModels = useMemo(
     () => requestableItems.filter((m) => m.registry_kind === 'system'),

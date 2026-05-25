@@ -41,11 +41,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  ApiKeyGrantEditor,
-  grantsToRequests,
-  type GrantDraft,
-} from '@/features/api-key-gateway/api-key-grant-editor'
+import { ApiKeyGrantEditor, type GrantDraft } from '@/features/api-key-gateway/api-key-grant-editor'
+import { grantsToRequests } from '@/features/api-key-gateway/api-key-grant-editor-utils'
+import { applyApiFieldErrors, apiErrorFormMessage } from '@/lib/api-form-errors'
 import type { ApiKeyScope } from '@/types/api-key'
 import {
   API_KEY_SCOPE_GROUPS,
@@ -108,7 +106,11 @@ export function ApiKeyCreateDialog({
       onSuccess?.()
     },
     onError: (error: Error) => {
-      toast.error(`创建失败: ${error.message}`)
+      if (!applyApiFieldErrors(error, form.setError)) {
+        toast.error(apiErrorFormMessage(error, '创建失败'))
+      } else {
+        toast.error(apiErrorFormMessage(error, '请检查表单字段'))
+      }
     },
   })
 

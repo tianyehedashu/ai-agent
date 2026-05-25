@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.pricing.pricing_catalog_reads import (
@@ -58,7 +58,7 @@ from domains.gateway.presentation.schemas.pricing import (
 )
 from domains.identity.presentation.deps import RequiredAuthUser
 from libs.db.database import get_db
-from libs.exceptions import ValidationError
+from libs.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
 from ._common import MgmtWrites
 
@@ -70,7 +70,7 @@ def _parse_currency(raw: str | None) -> DisplayCurrency:
         return "CNY"
     if raw.upper() == "USD":
         return "USD"
-    raise HTTPException(status_code=400, detail="currency must be CNY or USD")
+    raise ValidationError("currency must be CNY or USD")
 
 
 def _catalog_reads(db: AsyncSession) -> PricingCatalogReadService:
@@ -136,9 +136,9 @@ async def estimate_pricing(
             cache_read_tokens=body.cache_read_tokens,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError("pricing rate", str(exc)) from exc
     except RateUnavailableError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError("pricing rate", str(exc)) from exc
     return PricingEstimateResponse.model_validate(payload)
 
 
@@ -205,9 +205,9 @@ async def create_upstream_pricing(
             amount_per_million=body.amount_per_million,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
+    except ValidationError:
+        raise
     cur = _parse_currency(body.currency)
     fx = build_static_fx_adapter()
     projector = build_money_projector(fx)
@@ -228,7 +228,10 @@ async def list_downstream_pricing(
     cur = _parse_currency(currency)
     scope_norm = normalize_downstream_pricing_scope(scope)
     if scope_norm == "global" and not team.is_platform_admin:
-        raise HTTPException(status_code=403, detail="global scope requires platform admin")
+        raise PermissionDeniedError(
+            message="global scope requires platform admin",
+            resource="global pricing scope",
+        )
     sid = scope_id if scope_norm != "global" else None
     if scope_norm == "tenant" and sid is None:
         sid = team.team_id
@@ -251,7 +254,10 @@ async def create_downstream_pricing(
     _ = admin
     scope_norm = normalize_downstream_pricing_scope(body.scope)
     if scope_norm == "global" and not team.is_platform_admin:
-        raise HTTPException(status_code=403, detail="global scope requires platform admin")
+        raise PermissionDeniedError(
+            message="global scope requires platform admin",
+            resource="global pricing scope",
+        )
     sid = body.scope_id
     if scope_norm == "tenant" and sid is None:
         sid = team.team_id
@@ -265,7 +271,7 @@ async def create_downstream_pricing(
             amount_per_million=body.amount_per_million,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
     cur = _parse_currency(body.currency)
     reads = _catalog_reads(db)
     payload = await reads.list_downstream(
@@ -284,7 +290,7 @@ async def create_downstream_pricing(
             tenant_id=tenant_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
     return DownstreamPricingResponse.model_validate(enriched)
 
 
@@ -343,9 +349,9 @@ async def resolve_pricing(
             currency=cur,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError("pricing rate", str(exc)) from exc
     except RateUnavailableError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError("pricing rate", str(exc)) from exc
     if is_pricing_admin(team):
         return PricingRateAdminView.model_validate(payload)
     return PricingRateMemberView.model_validate(payload)

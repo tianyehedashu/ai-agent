@@ -289,7 +289,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 | ``domain/model_capability.py`` | ``ModelCapabilitySnapshot`` 读模型 |
 | ``application/invocation_overrides.py`` | 内部桥接 ``InvocationOverrides`` 合并（Agent Chat） |
 
-**写侧**：种子 / 管理面注册 → ``build_gateway_model_tags``（内部：``build_tags_from_seed_model`` → 可选 ``merge_litellm_reasoning_hint`` → ``enrich_gateway_model_tags``）。
+**写侧**：种子 / 管理面注册 → ``build_gateway_model_tags``（内部：``merge_litellm_capability_hints``（LiteLLM model_cost → tags）→ ``enrich_gateway_model_tags``）；配置托管种子 ``skip_hints=True``；管理面 ``PATCH resync_capabilities=true`` 可显式重算能力 tags。
 
 **读侧**：``tags_to_capability_snapshot`` → ``selector_capabilities``（管理 API、``GET /v1/models`` 的 ``gateway.selector_capabilities``、模型选择器 ``selector_capabilities`` + 一期别名 ``capabilities``）。
 

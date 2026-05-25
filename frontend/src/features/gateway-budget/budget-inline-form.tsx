@@ -26,6 +26,7 @@ export interface BudgetInlineFormProps {
   members: { id: string; label: string }[]
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
+  onModelPickerOpenChange?: (open: boolean) => void
   fixedTargetKind?: BudgetAdminTab
 }
 
@@ -40,6 +41,7 @@ export function BudgetInlineForm({
   members,
   modelOptions,
   modelsLoading = false,
+  onModelPickerOpenChange,
   fixedTargetKind,
 }: Readonly<BudgetInlineFormProps>): React.JSX.Element {
   const targetKind = fixedTargetKind ?? values.target_kind
@@ -148,6 +150,7 @@ export function BudgetInlineForm({
           disabled={disabled}
           loading={modelsLoading}
           placeholder="全模型汇总"
+          onPopoverOpenChange={onModelPickerOpenChange}
         />
         <BudgetModelComboboxHint loading={modelsLoading} optionsCount={modelOptions.length} />
       </div>

@@ -7,7 +7,7 @@ import json
 from typing import Annotated, Any
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 
@@ -15,6 +15,8 @@ from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase, TitleUseCase
 from domains.session.infrastructure.models.session import Session
 from libs.api.deps import get_session_service, get_title_service
+from libs.exceptions import AIAgentError, ValidationError
+from libs.exceptions.codes import INTERNAL_ERROR
 
 router = APIRouter()
 
@@ -227,10 +229,7 @@ async def create_session(
     except IntegrityError as e:
         # 捕获外键约束错误（如无效agent_id）
         await session_service.db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid agent_id or other constraint violation",
-        ) from e
+        raise ValidationError("Invalid agent_id or other constraint violation") from e
     return _session_to_response(session)
 
 
@@ -309,10 +308,7 @@ async def generate_session_title(
     )
 
     if strategy not in ["first_message", "summary"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid strategy. Must be 'first_message' or 'summary'",
-        )
+        raise ValidationError("Invalid strategy. Must be 'first_message' or 'summary'")
 
     first_message = None
     if strategy == "first_message":
@@ -328,10 +324,7 @@ async def generate_session_title(
     )
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate title",
-        )
+        raise AIAgentError("Failed to generate title", INTERNAL_ERROR)
 
     await session_service.db.refresh(session)
     return _session_to_response(session)

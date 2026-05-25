@@ -246,19 +246,29 @@ export interface Tool {
 }
 
 // ============================================
-// API Response Types
+// API Response Types（成功直出；错误见 @/api/errors ApiError + docs/API_RESPONSE.md）
 // ============================================
 
-export interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
+/** @deprecated 使用 PaginatedList */
 export interface PaginatedResponse<T> {
   items: T[]
   total: number
   page: number
   pageSize: number
   hasMore: boolean
+}
+
+/** 与后端 PaginatedListResponse 对齐（JSON snake_case） */
+export interface PaginatedList<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  has_next: boolean
+  has_prev: boolean
+}
+
+export interface PageQuery {
+  page?: number
+  page_size?: number
 }

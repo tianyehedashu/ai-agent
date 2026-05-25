@@ -5,10 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from domains.gateway.presentation.deps import RequiredTeamAdmin
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.plan_response import (
     entitlement_plan_to_response,
     provider_plan_to_response,
@@ -23,7 +22,8 @@ from domains.gateway.presentation.schemas.common import (
     ProviderPlanResponse,
     ProviderPlanUpdate,
 )
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions import AIAgentError, NotFoundError
+from libs.exceptions.codes import INTERNAL_ERROR
 
 from ._common import (
     MgmtReads,
@@ -42,15 +42,12 @@ async def list_provider_plans(
     team: RequiredTeamAdmin,
     reads: MgmtReads,
 ) -> list[ProviderPlanResponse]:
-    try:
-        await reads.access.assert_credential_in_team(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await reads.access.assert_credential_in_team(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
     return [provider_plan_to_response(row) for row in rows]
 
 
@@ -66,28 +63,23 @@ async def create_provider_plan(
     writes: MgmtWrites,
     reads: MgmtReads,
 ) -> ProviderPlanResponse:
-    try:
-        plan = await writes.create_provider_plan(
-            credential_id=credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            real_model=body.real_model,
-            label=body.label,
-            valid_from=body.valid_from,
-            valid_until=body.valid_until,
-            is_active=body.is_active,
-            auto_renew=body.auto_renew,
-            notes=body.notes,
-            extra=body.extra,
-            quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
-        )
-        result = await reads.get_provider_plan_with_quotas(plan.id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    plan = await writes.create_provider_plan(
+        credential_id=credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        real_model=body.real_model,
+        label=body.label,
+        valid_from=body.valid_from,
+        valid_until=body.valid_until,
+        is_active=body.is_active,
+        auto_renew=body.auto_renew,
+        notes=body.notes,
+        extra=body.extra,
+        quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
+    )
+    result = await reads.get_provider_plan_with_quotas(plan.id)
     if result is None:
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, detail="plan not found after create"
-        )
+        raise AIAgentError("plan not found after create", INTERNAL_ERROR)
     return provider_plan_to_response(result)
 
 
@@ -103,27 +95,24 @@ async def update_provider_plan(
     writes: MgmtWrites,
     reads: MgmtReads,
 ) -> ProviderPlanResponse:
-    try:
-        fields = body.model_dump(exclude_unset=True, exclude_none=True)
-        quotas_raw = fields.pop("quotas", None)
-        quotas_input = (
-            [q if isinstance(q, dict) else q.model_dump(exclude_none=True) for q in quotas_raw]
-            if quotas_raw is not None
-            else None
-        )
-        await writes.update_provider_plan(
-            plan_id,
-            credential_id=credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            fields=fields,
-            quotas=quotas_input,
-        )
-        result = await reads.get_provider_plan_with_quotas(plan_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    fields = body.model_dump(exclude_unset=True, exclude_none=True)
+    quotas_raw = fields.pop("quotas", None)
+    quotas_input = (
+        [q if isinstance(q, dict) else q.model_dump(exclude_none=True) for q in quotas_raw]
+        if quotas_raw is not None
+        else None
+    )
+    await writes.update_provider_plan(
+        plan_id,
+        credential_id=credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        fields=fields,
+        quotas=quotas_input,
+    )
+    result = await reads.get_provider_plan_with_quotas(plan_id)
     if result is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="provider plan not found")
+        raise NotFoundError("provider plan")
     return provider_plan_to_response(result)
 
 
@@ -137,15 +126,12 @@ async def delete_provider_plan(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_provider_plan(
-            plan_id,
-            credential_id=credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_provider_plan(
+        plan_id,
+        credential_id=credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 @router.get(
@@ -158,15 +144,12 @@ async def list_provider_plan_usage(
     reads: MgmtReads,
     days: int = Query(30, ge=1, le=180),
 ) -> list[ProviderPlanCostResponse]:
-    try:
-        await reads.access.assert_credential_in_team(
-            credential_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await reads.access.assert_credential_in_team(
+        credential_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
     end = datetime.now(UTC)
     start = end - timedelta(days=days)
     out: list[ProviderPlanCostResponse] = []
@@ -195,15 +178,12 @@ async def list_vkey_entitlements(
     team: RequiredTeamAdmin,
     reads: MgmtReads,
 ) -> list[EntitlementPlanResponse]:
-    try:
-        await reads.access.assert_vkey_in_team(
-            vkey_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        rows = await reads.list_entitlement_plans_with_quotas_for_scope("vkey", vkey_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await reads.access.assert_vkey_in_team(
+        vkey_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    rows = await reads.list_entitlement_plans_with_quotas_for_scope("vkey", vkey_id)
     return [entitlement_plan_to_response(row) for row in rows]
 
 
@@ -219,28 +199,25 @@ async def create_vkey_entitlement(
     writes: MgmtWrites,
     reads: MgmtReads,
 ) -> EntitlementPlanResponse:
-    try:
-        plan = await writes.create_entitlement_plan(
-            scope="vkey",
-            scope_id=vkey_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            label=body.label,
-            valid_from=body.valid_from,
-            valid_until=body.valid_until,
-            included_models=body.included_models,
-            included_capabilities=body.included_capabilities,
-            is_active=body.is_active,
-            auto_renew=body.auto_renew,
-            notes=body.notes,
-            extra=body.extra,
-            quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
-        )
-        result = await reads.get_entitlement_plan_with_quotas(plan.id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    plan = await writes.create_entitlement_plan(
+        scope="vkey",
+        scope_id=vkey_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        label=body.label,
+        valid_from=body.valid_from,
+        valid_until=body.valid_until,
+        included_models=body.included_models,
+        included_capabilities=body.included_capabilities,
+        is_active=body.is_active,
+        auto_renew=body.auto_renew,
+        notes=body.notes,
+        extra=body.extra,
+        quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
+    )
+    result = await reads.get_entitlement_plan_with_quotas(plan.id)
     if result is None:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="plan not found")
+        raise AIAgentError("plan not found", INTERNAL_ERROR)
     return entitlement_plan_to_response(result)
 
 
@@ -255,26 +232,23 @@ async def update_entitlement_plan(
     writes: MgmtWrites,
     reads: MgmtReads,
 ) -> EntitlementPlanResponse:
-    try:
-        fields = body.model_dump(exclude_unset=True, exclude_none=True)
-        quotas_raw = fields.pop("quotas", None)
-        quotas_input = (
-            [q if isinstance(q, dict) else q.model_dump(exclude_none=True) for q in quotas_raw]
-            if quotas_raw is not None
-            else None
-        )
-        await writes.update_entitlement_plan(
-            plan_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            fields=fields,
-            quotas=quotas_input,
-        )
-        result = await reads.get_entitlement_plan_with_quotas(plan_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    fields = body.model_dump(exclude_unset=True, exclude_none=True)
+    quotas_raw = fields.pop("quotas", None)
+    quotas_input = (
+        [q if isinstance(q, dict) else q.model_dump(exclude_none=True) for q in quotas_raw]
+        if quotas_raw is not None
+        else None
+    )
+    await writes.update_entitlement_plan(
+        plan_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        fields=fields,
+        quotas=quotas_input,
+    )
+    result = await reads.get_entitlement_plan_with_quotas(plan_id)
     if result is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="entitlement plan not found")
+        raise NotFoundError("entitlement plan")
     return entitlement_plan_to_response(result)
 
 
@@ -287,14 +261,11 @@ async def delete_entitlement_plan(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_entitlement_plan(
-            plan_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_entitlement_plan(
+        plan_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 @router.get(
@@ -307,14 +278,11 @@ async def get_entitlement_plan_usage(
     reads: MgmtReads,
     days: int = Query(30, ge=1, le=180),
 ) -> EntitlementUsageResponse:
-    try:
-        await reads.access.assert_entitlement_plan_in_team(
-            plan_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await reads.access.assert_entitlement_plan_in_team(
+        plan_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     end = datetime.now(UTC)
     start = end - timedelta(days=days)
     usage = await reads.get_entitlement_usage(plan_id, since=start, until=end)
@@ -339,15 +307,12 @@ async def list_apikey_grant_entitlements(
     team: RequiredTeamAdmin,
     reads: MgmtReads,
 ) -> list[EntitlementPlanResponse]:
-    try:
-        await reads.access.assert_apikey_grant_in_team(
-            grant_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-        rows = await reads.list_entitlement_plans_with_quotas_for_scope("apikey_grant", grant_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await reads.access.assert_apikey_grant_in_team(
+        grant_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    rows = await reads.list_entitlement_plans_with_quotas_for_scope("apikey_grant", grant_id)
     return [entitlement_plan_to_response(row) for row in rows]
 
 
@@ -363,28 +328,25 @@ async def create_apikey_grant_entitlement(
     writes: MgmtWrites,
     reads: MgmtReads,
 ) -> EntitlementPlanResponse:
-    try:
-        plan = await writes.create_entitlement_plan(
-            scope="apikey_grant",
-            scope_id=grant_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-            label=body.label,
-            valid_from=body.valid_from,
-            valid_until=body.valid_until,
-            included_models=body.included_models,
-            included_capabilities=body.included_capabilities,
-            is_active=body.is_active,
-            auto_renew=body.auto_renew,
-            notes=body.notes,
-            extra=body.extra,
-            quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
-        )
-        result = await reads.get_entitlement_plan_with_quotas(plan.id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    plan = await writes.create_entitlement_plan(
+        scope="apikey_grant",
+        scope_id=grant_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+        label=body.label,
+        valid_from=body.valid_from,
+        valid_until=body.valid_until,
+        included_models=body.included_models,
+        included_capabilities=body.included_capabilities,
+        is_active=body.is_active,
+        auto_renew=body.auto_renew,
+        notes=body.notes,
+        extra=body.extra,
+        quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
+    )
+    result = await reads.get_entitlement_plan_with_quotas(plan.id)
     if result is None:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="plan not found")
+        raise AIAgentError("plan not found", INTERNAL_ERROR)
     return entitlement_plan_to_response(result)
 
 

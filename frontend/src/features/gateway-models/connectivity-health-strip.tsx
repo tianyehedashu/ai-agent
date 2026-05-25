@@ -8,8 +8,17 @@ import { summarizeHealth, type ModelWithConnectivityStatus } from './utils'
 
 import type { HealthFilter } from './constants'
 
+interface ConnectivitySummaryCounts {
+  total: number
+  success: number
+  failed: number
+  unknown: number
+}
+
 interface ConnectivityHealthStripProps {
   models: readonly ModelWithConnectivityStatus[]
+  /** 服务端全量筛选统计（分页列表时优先） */
+  connectivitySummary?: ConnectivitySummaryCounts
   healthFilter: HealthFilter
   onHealthFilterChange: (f: HealthFilter) => void
   canWrite: boolean
@@ -21,6 +30,10 @@ interface ConnectivityHealthStripProps {
   /** 探活失败项一键删除（与当前 healthFilter 无关） */
   onDeleteFailed?: () => void
   deletingFailed?: boolean
+  onResyncAll?: () => void
+  resyncingAll?: boolean
+  /** 任意批量操作（测试 / 同步 / 删除）进行中时禁用全部动作按钮 */
+  batchBusy?: boolean
 }
 
 const FILTER_OPTIONS: ReadonlyArray<{
@@ -68,6 +81,7 @@ function FilterChip({
 /** 团队 / 个人模型清单共用的连通性健康筛选与「测试全部」入口 */
 export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
   models,
+  connectivitySummary,
   healthFilter,
   onHealthFilterChange,
   canWrite,
@@ -77,8 +91,14 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
   testingAll,
   onDeleteFailed,
   deletingFailed = false,
+  onResyncAll,
+  resyncingAll = false,
+  batchBusy = false,
 }: ConnectivityHealthStripProps): React.JSX.Element {
-  const counts = useMemo(() => summarizeHealth(models), [models])
+  const counts = useMemo(
+    () => connectivitySummary ?? summarizeHealth(models),
+    [connectivitySummary, models]
+  )
 
   const countByFilter = useMemo(
     (): Record<HealthFilter, number> => ({
@@ -115,11 +135,24 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
             size="sm"
             variant="ghost"
             className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-            disabled={testingAll === true || deletingFailed}
+            disabled={batchBusy || deletingFailed}
             onClick={onDeleteFailed}
           >
             {deletingFailed ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
             删除不可用 ({counts.failed})
+          </Button>
+        ) : null}
+        {canWrite && onResyncAll ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={batchBusy || deletingFailed}
+            onClick={onResyncAll}
+          >
+            {resyncingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            同步全部能力
           </Button>
         ) : null}
         {canWrite && onTestUntested ? (
@@ -128,7 +161,7 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
             size="sm"
             variant="ghost"
             className="h-7 px-2 text-xs text-muted-foreground"
-            disabled={testingAll === true || deletingFailed}
+            disabled={batchBusy || deletingFailed}
             onClick={onTestUntested}
           >
             {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
@@ -141,7 +174,7 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
             size="sm"
             variant="ghost"
             className="h-7 px-2 text-xs text-muted-foreground"
-            disabled={testingAll === true || deletingFailed}
+            disabled={batchBusy || deletingFailed}
             onClick={onTestAll}
           >
             {testingAll ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}

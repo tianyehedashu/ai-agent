@@ -25,6 +25,7 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
 )
+from domains.gateway.domain.litellm_capability_mapping import strip_litellm_capability_tags
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.policies.credential_scope import (
     assert_system_credential_mutation_allowed,
@@ -36,17 +37,18 @@ from domains.gateway.domain.types import (
     GATEWAY_MODEL_MANAGED_BY_TAG,
     PERSONAL_MODEL_PROVIDERS,
     PERSONAL_MODEL_TYPES,
+    is_config_managed_system_gateway_model,
 )
 from libs.exceptions import HttpMappableDomainError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_BATCH_DELETE_MAX = 200
+_BATCH_MODEL_OP_MAX = 200
 
 
 @dataclass(frozen=True)
-class GatewayModelBatchDeleteFailure:
+class GatewayModelBatchOperationFailure:
     id: uuid.UUID
     code: str
     message: str
@@ -55,9 +57,15 @@ class GatewayModelBatchDeleteFailure:
 @dataclass(frozen=True)
 class GatewayModelBatchDeleteResult:
     succeeded: list[uuid.UUID]
-    failed: list[GatewayModelBatchDeleteFailure]
+    failed: list[GatewayModelBatchOperationFailure]
     grants_removed: int = 0
     budgets_removed: int = 0
+
+
+@dataclass(frozen=True)
+class GatewayModelBatchResyncCapabilitiesResult:
+    succeeded: list[uuid.UUID]
+    failed: list[GatewayModelBatchOperationFailure]
 
 
 @dataclass(frozen=True)
@@ -86,7 +94,10 @@ def _prepare_gateway_model_write_fields(
         raise ValidationError(prefix_msg)
     normalized_rm = build_litellm_model_id(provider, raw_rm)
     enriched_tags = build_gateway_model_tags(
-        tags, provider=provider, real_model=normalized_rm
+        tags,
+        provider=provider,
+        real_model=normalized_rm,
+        skip_hints=is_config_managed_system_gateway_model(tags=tags),
     )
     return _PreparedGatewayModelWrite(
         normalized_real_model=normalized_rm,
@@ -410,10 +421,17 @@ class ModelWritesMixin:
             if prefix_msg:
                 raise ValidationError(prefix_msg)
             update_fields['real_model'] = build_litellm_model_id(existing.provider, raw_rm)
-        if 'real_model' in update_fields or 'tags' in update_fields:
+        resync_capabilities = bool(update_fields.pop('resync_capabilities', False))
+        if resync_capabilities and is_config_managed_system_gateway_model(
+            tags=existing.tags
+        ):
+            raise ValidationError('配置托管的系统模型不可从 LiteLLM 同步能力')
+        if resync_capabilities or 'real_model' in update_fields or 'tags' in update_fields:
             merged_tags = dict(existing.tags or {})
             if isinstance(update_fields.get('tags'), dict):
                 merged_tags.update(update_fields['tags'])
+            if resync_capabilities:
+                merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(
                 update_fields.get('real_model') or existing.real_model
             ).strip()
@@ -421,6 +439,8 @@ class ModelWritesMixin:
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,
+                skip_hints=is_config_managed_system_gateway_model(tags=existing.tags),
+                hint_mode='resync' if resync_capabilities else 'fill_missing',
             )
         new_name_raw = update_fields.get('name')
         if new_name_raw is not None:
@@ -441,7 +461,15 @@ class ModelWritesMixin:
                 )
         return update_fields
 
-    async def update_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any]) -> Any:
+    async def update_gateway_model(
+        self,
+        model_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+        fields: dict[str, Any],
+        reload_router: bool = True,
+    ) -> Any:
         from domains.gateway.domain.policies.credential_scope import (
             assert_system_credential_mutation_allowed,
         )
@@ -469,7 +497,8 @@ class ModelWritesMixin:
             updated = await repo.update(model_id, **update_fields)
             if updated is None:
                 raise ManagementEntityNotFoundError('model', str(model_id))
-            await self.reload_litellm_router()
+            if reload_router:
+                await self.reload_litellm_router()
             return updated
 
         system_existing = await repo.get_system(model_id)
@@ -491,7 +520,8 @@ class ModelWritesMixin:
         updated = await repo.update_system(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
-        await self.reload_litellm_router()
+        if reload_router:
+            await self.reload_litellm_router()
         return updated
 
     async def _delete_gateway_model_row(
@@ -530,13 +560,13 @@ class ModelWritesMixin:
         return model_id, model_name
 
     @staticmethod
-    def _batch_delete_failure(
+    def _batch_operation_failure(
         model_id: uuid.UUID,
         exc: BaseException,
-    ) -> GatewayModelBatchDeleteFailure:
+    ) -> GatewayModelBatchOperationFailure:
         code = getattr(exc, 'code', None) or exc.__class__.__name__
         message = getattr(exc, 'message', None) or str(exc)
-        return GatewayModelBatchDeleteFailure(
+        return GatewayModelBatchOperationFailure(
             id=model_id,
             code=str(code),
             message=str(message),
@@ -583,13 +613,13 @@ class ModelWritesMixin:
         tenant_id: uuid.UUID,
         is_platform_admin: bool = False,
     ) -> GatewayModelBatchDeleteResult:
-        if len(model_ids) > _BATCH_DELETE_MAX:
+        if len(model_ids) > _BATCH_MODEL_OP_MAX:
             raise ValidationError(
-                f'单次最多删除 {_BATCH_DELETE_MAX} 个模型',
+                f'单次最多删除 {_BATCH_MODEL_OP_MAX} 个模型',
             )
         unique_ids = list(dict.fromkeys(model_ids))
         succeeded: list[uuid.UUID] = []
-        failed: list[GatewayModelBatchDeleteFailure] = []
+        failed: list[GatewayModelBatchOperationFailure] = []
         deleted_ids: set[uuid.UUID] = set()
         deleted_names: set[str] = set()
 
@@ -601,7 +631,7 @@ class ModelWritesMixin:
                     is_platform_admin=is_platform_admin,
                 )
             except (HttpMappableDomainError, ValidationError) as exc:
-                failed.append(self._batch_delete_failure(model_id, exc))
+                failed.append(self._batch_operation_failure(model_id, exc))
                 continue
             succeeded.append(deleted_id)
             deleted_ids.add(deleted_id)
@@ -620,4 +650,41 @@ class ModelWritesMixin:
             failed=failed,
             grants_removed=grants_removed,
             budgets_removed=budgets_removed,
+        )
+
+    async def resync_gateway_models_capabilities_batch(
+        self,
+        model_ids: list[uuid.UUID],
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool = False,
+    ) -> GatewayModelBatchResyncCapabilitiesResult:
+        if len(model_ids) > _BATCH_MODEL_OP_MAX:
+            raise ValidationError(
+                f'单次最多同步 {_BATCH_MODEL_OP_MAX} 个模型能力',
+            )
+        unique_ids = list(dict.fromkeys(model_ids))
+        succeeded: list[uuid.UUID] = []
+        failed: list[GatewayModelBatchOperationFailure] = []
+
+        for model_id in unique_ids:
+            try:
+                await self.update_gateway_model(
+                    model_id,
+                    tenant_id=tenant_id,
+                    is_platform_admin=is_platform_admin,
+                    fields={'resync_capabilities': True},
+                    reload_router=False,
+                )
+            except (HttpMappableDomainError, ValidationError) as exc:
+                failed.append(self._batch_operation_failure(model_id, exc))
+                continue
+            succeeded.append(model_id)
+
+        if succeeded:
+            await self.reload_litellm_router()
+
+        return GatewayModelBatchResyncCapabilitiesResult(
+            succeeded=succeeded,
+            failed=failed,
         )

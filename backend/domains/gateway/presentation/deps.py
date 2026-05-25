@@ -20,11 +20,10 @@ from dataclasses import dataclass
 from typing import Annotated
 import uuid
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.errors import VirtualKeyInvalidError
 from domains.gateway.domain.types import (
     ApiKeyGatewayGrantPrincipal,
     GatewayInboundVia,
@@ -33,7 +32,6 @@ from domains.gateway.domain.types import (
 )
 from domains.gateway.domain.virtual_key_access import assert_vkey_team_header_compatible
 from domains.gateway.domain.virtual_key_service import is_vkey_format
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.platform_api_key_usage_middleware import (
     PLATFORM_API_KEY_USAGE_STATE,
     PlatformApiKeyUsageContext,
@@ -52,7 +50,8 @@ from domains.tenancy.presentation.team_dependencies import (
     resolve_current_team,
 )
 from libs.db.database import get_db
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions import AIAgentError, AuthenticationError
+from libs.exceptions.codes import INTERNAL_ERROR
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -94,11 +93,7 @@ def pick_gateway_proxy_plain_token(
         return credentials.credentials.strip()
     if x_api_key is not None and x_api_key.strip():
         return x_api_key.strip()
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    raise AuthenticationError("Missing credentials")
 
 
 async def _gateway_principal_from_vkey_plain(
@@ -106,21 +101,14 @@ async def _gateway_principal_from_vkey_plain(
     db: AsyncSession,
 ) -> GatewayPrincipal:
     if not is_vkey_format(plain):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid virtual key format",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError("Invalid virtual key format")
 
     from domains.gateway.application.gateway_access_factory import (
         build_gateway_access_use_case,
     )
 
     access = build_gateway_access_use_case(db)
-    try:
-        record = await access.validate_bearer_virtual_key(plain)
-    except VirtualKeyInvalidError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    record = await access.validate_bearer_virtual_key(plain)
 
     await access.record_virtual_key_usage(record.id)
 
@@ -135,9 +123,9 @@ async def _gateway_principal_from_vkey_plain(
             "virtual key %s has invalid allowed_capabilities in DB",
             record.id,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid virtual key capability configuration",
+        raise AIAgentError(
+            "Invalid virtual key capability configuration",
+            INTERNAL_ERROR,
         ) from None
 
     vkey_principal = VirtualKeyPrincipal(
@@ -224,10 +212,7 @@ async def bearer_vkey_or_apikey_auth(
 
     if is_vkey_format(plain):
         gp = await _gateway_principal_from_vkey_plain(plain, db)
-        try:
-            assert_vkey_team_header_compatible(gp.team_id, x_team_id)
-        except HttpMappableDomainError as exc:
-            raise http_exception_from_gateway_domain(exc) from exc
+        assert_vkey_team_header_compatible(gp.team_id, x_team_id)
         user_display_snapshot = await resolve_user_display_snapshot(db, gp.user_id)
         return VkeyOrApikeyPrincipal(
             via="vkey",
@@ -243,10 +228,7 @@ async def bearer_vkey_or_apikey_auth(
     )
 
     access = build_gateway_access_use_case(db)
-    try:
-        auth = await access.authenticate_platform_sk_for_gateway_proxy(plain, x_team_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    auth = await access.authenticate_platform_sk_for_gateway_proxy(plain, x_team_id)
 
     try:
         grant_caps = allowed_capabilities_from_storage(auth.allowed_capabilities)
@@ -255,9 +237,9 @@ async def bearer_vkey_or_apikey_auth(
             "api key gateway grant %s has invalid allowed_capabilities in DB",
             auth.grant_id,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid API key Gateway grant capability configuration",
+        raise AIAgentError(
+            "Invalid API key Gateway grant capability configuration",
+            INTERNAL_ERROR,
         ) from None
 
     composer = PermissionContextComposer(db)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
+from libs.exceptions import AuthenticationError
 from fastapi.security import HTTPAuthorizationCredentials
 import pytest
 
@@ -24,6 +24,5 @@ def test_pick_token_bearer_only() -> None:
 
 
 def test_pick_token_missing_raises() -> None:
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(AuthenticationError):
         pick_gateway_proxy_plain_token(None, None)
-    assert ei.value.status_code == 401

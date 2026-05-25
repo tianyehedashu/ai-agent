@@ -7,7 +7,7 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from domains.agent.domain.types import ToolCall
@@ -17,6 +17,8 @@ from evaluation.gaia import GAIAEvaluator, GAIAReport
 from evaluation.llm_judge import JudgeScore
 from evaluation.task_completion import EvaluationReport
 from evaluation.tool_accuracy import ToolAccuracyReport
+from libs.exceptions import AIAgentError, NotFoundError, ValidationError
+from libs.exceptions.codes import INTERNAL_ERROR
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluation"])
 
@@ -54,27 +56,17 @@ async def evaluate_task_completion(
 ):
     """任务完成率评估"""
     if request.benchmark_type != "task":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid benchmark type for task evaluation",
-        )
+        raise ValidationError("Invalid benchmark type for task evaluation")
 
     if not request.test_cases:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="test_cases is required",
-        )
+        raise ValidationError("test_cases is required")
 
     # TODO: 实现完整评估流程:
     # 1. 从数据库加载 Agent
     # 2. 创建评估器并运行评估
     _ = (request, current_user)  # 抑制未使用警告，待实现
 
-    # 临时返回示例
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Task evaluation not fully implemented yet",
-    )
+    raise AIAgentError("Task evaluation not fully implemented yet", INTERNAL_ERROR)
 
 
 @router.post("/gaia", response_model=GAIAReport)
@@ -84,10 +76,7 @@ async def evaluate_gaia(
 ):
     """GAIA 基准评估"""
     if request.benchmark_type != "gaia":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid benchmark type for GAIA evaluation",
-        )
+        raise ValidationError("Invalid benchmark type for GAIA evaluation")
 
     evaluator = GAIAEvaluator()
 
@@ -95,10 +84,7 @@ async def evaluate_gaia(
     if request.benchmark_path:
         benchmark_path = Path(request.benchmark_path)
         if not benchmark_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Benchmark file not found: {request.benchmark_path}",
-            )
+            raise NotFoundError("Benchmark file", request.benchmark_path)
         evaluator.load_benchmark(benchmark_path)
     else:
         # 使用默认的 GAIA 基准
@@ -111,21 +97,14 @@ async def evaluate_gaia(
         if default_path.exists():
             evaluator.load_benchmark(default_path)
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No benchmark file provided and default not found",
-            )
+            raise ValidationError("No benchmark file provided and default not found")
 
     # TODO: 实现完整评估流程:
     # 1. 从数据库加载 Agent
     # 2. 使用真实 Agent 实例运行 GAIA 评估
     _ = current_user  # 抑制未使用警告，待实现
 
-    # 临时返回示例
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="GAIA evaluation not fully implemented yet",
-    )
+    raise AIAgentError("GAIA evaluation not fully implemented yet", INTERNAL_ERROR)
 
 
 @router.post("/tool-accuracy", response_model=ToolAccuracyReport)

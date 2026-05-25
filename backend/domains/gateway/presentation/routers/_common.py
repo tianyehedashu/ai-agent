@@ -16,7 +16,7 @@ from binascii import Error as BinasciiError
 from typing import Annotated
 
 from cryptography.fernet import InvalidToken
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
@@ -44,6 +44,7 @@ from domains.gateway.presentation.schemas.credential_upstream_catalog import (
 )
 from libs.crypto import decrypt_value, derive_encryption_key
 from libs.db.database import get_db
+from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -73,12 +74,9 @@ def credential_probe_to_response(result: CredentialProbeResult) -> CredentialPro
 def validate_user_credential_provider(provider: str) -> str:
     p = provider.lower()
     if p not in USER_GATEWAY_CREDENTIAL_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"不支持的提供商: {provider}。"
-                f"支持: {', '.join(sorted(USER_GATEWAY_CREDENTIAL_PROVIDERS))}"
-            ),
+        raise ValidationError(
+            f"不支持的提供商: {provider}。"
+            f"支持: {', '.join(sorted(USER_GATEWAY_CREDENTIAL_PROVIDERS))}"
         )
     return p
 
@@ -87,12 +85,9 @@ def validate_managed_credential_provider(provider: str) -> str:
     """校验 team/system 凭据 provider；与前端 `provider-schemas.ts` 表对齐。"""
     p = provider.lower()
     if p not in MANAGED_GATEWAY_CREDENTIAL_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"不支持的提供商: {provider}。"
-                f"支持: {', '.join(sorted(MANAGED_GATEWAY_CREDENTIAL_PROVIDERS))}"
-            ),
+        raise ValidationError(
+            f"不支持的提供商: {provider}。"
+            f"支持: {', '.join(sorted(MANAGED_GATEWAY_CREDENTIAL_PROVIDERS))}"
         )
     return p
 
@@ -100,21 +95,15 @@ def validate_managed_credential_provider(provider: str) -> str:
 def validate_personal_model_provider(provider: str) -> str:
     p = provider.lower()
     if p not in PERSONAL_MODEL_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"不支持的提供商: {provider}。支持: {', '.join(sorted(PERSONAL_MODEL_PROVIDERS))}"
-            ),
+        raise ValidationError(
+            f"不支持的提供商: {provider}。支持: {', '.join(sorted(PERSONAL_MODEL_PROVIDERS))}"
         )
     return p
 
 
 def validate_optional_provider(provider: str | None) -> None:
     if provider is not None and provider not in PERSONAL_MODEL_PROVIDERS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的提供商: {provider}",
-        )
+        raise ValidationError(f"不支持的提供商: {provider}")
 
 
 def effective_model_type_query(*, model_type: str | None, mode: str | None) -> str | None:

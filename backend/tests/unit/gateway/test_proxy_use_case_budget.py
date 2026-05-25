@@ -135,7 +135,6 @@ async def test_chat_failure_releases_all_request_reservations(
     user_id = uuid.uuid4()
     budget = RecordingBudgetService()
     session = cast("AsyncSession", object())
-    use_case = ProxyUseCase(session, budget_service=budget)
 
     async def use_direct(_ctx: ProxyContext, _model: str) -> bool:
         return True
@@ -155,7 +154,14 @@ async def test_chat_failure_releases_all_request_reservations(
         return None
 
     monkeypatch.setattr(proxy_guard, "BudgetRepository", FakeBudgetRepository)
+    monkeypatch.setattr(
+        proxy_guard,
+        "_default_budget_repository_factory",
+        lambda session: FakeBudgetRepository(session),
+    )
     monkeypatch.setattr(proxy_guard, "resolve_model_or_route", _none_resolve)
+
+    use_case = ProxyUseCase(session, budget_service=budget)
     monkeypatch.setattr(
         use_case.litellm, "should_use_internal_direct_litellm", use_direct
     )

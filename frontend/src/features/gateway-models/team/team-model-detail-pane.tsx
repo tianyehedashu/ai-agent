@@ -22,10 +22,7 @@ import {
   teamModelsFilteredHref,
   teamModelsIndexHref,
 } from '@/features/gateway-models/paths'
-import {
-  gatewayModelsListQueryKey,
-  resolveTeamModelsRegistryScope,
-} from '@/features/gateway-models/utils'
+import { resolveTeamModelsRegistryScope } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
@@ -48,32 +45,26 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const [usageDays] = useState<UsagePeriodDays>(7)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, registryScope, '', credentialFilter),
+  const { data: primaryModel, isLoading } = useQuery({
+    queryKey: ['gateway', 'models', teamId, modelId, registryScope],
     queryFn: () =>
-      gatewayApi.listModels(teamId, {
+      gatewayApi.getModel(teamId, modelId, {
         registry_scope: registryScope,
-        ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       }),
+    enabled: modelId !== '',
+    retry: false,
   })
-
-  const primaryModel = useMemo(
-    () => (items ?? []).find((m) => m.id === modelId) ?? null,
-    [items, modelId]
-  )
 
   const trySystemFallback =
-    !isLoading &&
-    primaryModel === null &&
-    isPlatformAdmin &&
-    registryScope !== 'system' &&
-    modelId !== ''
+    !isLoading && !primaryModel && isPlatformAdmin && registryScope !== 'system' && modelId !== ''
 
-  const { data: systemFallbackItems, isLoading: systemFallbackLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, 'system', '', ''),
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'system' }),
+  const { data: systemFallbackModel, isLoading: systemFallbackLoading } = useQuery({
+    queryKey: ['gateway', 'models', teamId, modelId, 'system'],
+    queryFn: () => gatewayApi.getModel(teamId, modelId, { registry_scope: 'system' }),
     enabled: trySystemFallback,
   })
+
+  const resolvedModel = primaryModel ?? systemFallbackModel ?? null
 
   const listHref =
     credentialFilter !== ''
@@ -109,10 +100,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     return m
   }, [usageSummary])
 
-  const model = useMemo(() => {
-    if (primaryModel) return primaryModel
-    return (systemFallbackItems ?? []).find((m) => m.id === modelId) ?? null
-  }, [primaryModel, systemFallbackItems, modelId])
+  const model = resolvedModel
 
   const { updateModelMutation, testMutation, deleteModelMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
@@ -131,6 +119,13 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const handleSave = useCallback(
     (id: string, body: GatewayModelUpdateBody): void => {
       updateModelMutation.mutate({ id, body })
+    },
+    [updateModelMutation]
+  )
+
+  const handleResyncCapabilities = useCallback(
+    (id: string): void => {
+      updateModelMutation.mutate({ id, body: { resync_capabilities: true } })
     },
     [updateModelMutation]
   )
@@ -182,6 +177,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
         isDeleting={deleteModelMutation.isPending}
         onTest={handleTest}
         onSave={handleSave}
+        onResyncCapabilities={handleResyncCapabilities}
         onToggleEnabled={handleToggleEnabled}
         onDelete={handleDelete}
       />

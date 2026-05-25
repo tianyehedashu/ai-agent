@@ -132,9 +132,35 @@ export function gatewayModelsListQueryKey(
   teamId: string,
   registryScope: GatewayModelRegistryScope = 'team',
   providerFilter = '',
-  credentialFilter = ''
-): readonly ['gateway', 'models', string, GatewayModelRegistryScope, string, string] {
-  return ['gateway', 'models', teamId, registryScope, providerFilter, credentialFilter]
+  credentialFilter = '',
+  page = 1,
+  pageSize = 20,
+  search = '',
+  healthFilter: HealthFilter = 'all'
+): readonly [
+  'gateway',
+  'models',
+  string,
+  GatewayModelRegistryScope,
+  string,
+  string,
+  number,
+  number,
+  string,
+  HealthFilter,
+] {
+  return [
+    'gateway',
+    'models',
+    teamId,
+    registryScope,
+    providerFilter,
+    credentialFilter,
+    page,
+    pageSize,
+    search,
+    healthFilter,
+  ]
 }
 
 export function channelLabel(id: string): string {
@@ -243,6 +269,39 @@ export function healthKey(status: ModelTestStatus): 'success' | 'failed' | 'unkn
   return 'unknown'
 }
 
+/** 与后端不可用判定对齐：disabled / failed / entitlement 耗尽或过期 */
+export function isModelUnavailable(model: ModelWithConnectivityStatus): boolean {
+  const active = model.enabled ?? model.is_active ?? true
+  if (!active) return true
+  if (model.last_test_status === 'failed') return true
+  const entitlement = model.entitlement_status
+  return entitlement === 'exhausted' || entitlement === 'expired'
+}
+
+export function connectivitySummaryFromApi(
+  summary:
+    | {
+        total: number
+        available: number
+        unavailable: number
+        success: number
+        failed: number
+        unknown: number
+      }
+    | undefined,
+  models: readonly ModelWithConnectivityStatus[]
+): ReturnType<typeof summarizeHealth> {
+  if (summary) {
+    return {
+      total: summary.total,
+      success: summary.success,
+      failed: summary.failed,
+      unknown: summary.unknown,
+    }
+  }
+  return summarizeHealth(models)
+}
+
 export function matchesHealthFilter(
   model: ModelWithConnectivityStatus,
   filter: HealthFilter
@@ -322,6 +381,21 @@ function isModelListConnectivityCache(data: unknown): data is Array<{ id: string
   )
 }
 
+function isPaginatedModelListConnectivityCache(
+  data: unknown
+): data is { items: Array<{ id: string }> } {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    'items' in data &&
+    Array.isArray((data as { items: unknown }).items) &&
+    (data as { items: unknown[] }).items.every(
+      (item) =>
+        item !== null && typeof item === 'object' && 'id' in item && 'last_test_status' in item
+    )
+  )
+}
+
 function patchModelListConnectivity<T extends { id: string }>(
   models: readonly T[],
   modelId: string,
@@ -343,8 +417,16 @@ export function patchModelConnectivityInCache(
     scope === 'team' ? (['gateway', 'models'] as const) : (['gateway', 'my-models'] as const)
   startTransition(() => {
     queryClient.setQueriesData({ queryKey }, (old) => {
-      if (!isModelListConnectivityCache(old)) return old
-      return patchModelListConnectivity(old, modelId, fields)
+      if (isModelListConnectivityCache(old)) {
+        return patchModelListConnectivity(old, modelId, fields)
+      }
+      if (isPaginatedModelListConnectivityCache(old)) {
+        return {
+          ...old,
+          items: patchModelListConnectivity(old.items, modelId, fields),
+        }
+      }
+      return old
     })
   })
 }
@@ -592,14 +674,22 @@ export function filterDeletableFailedModels<T extends ModelWithConnectivityStatu
   return models.filter((m) => m.last_test_status === 'failed' && canDelete(m))
 }
 
-/** 将 ID 列表按单次 batch-delete 上限分块 */
-export function chunkIdsForBatchDelete(ids: readonly string[], max = BATCH_DELETE_MAX): string[][] {
+/** 将 ID 列表按单次 batch 操作上限分块 */
+export function chunkIdsForBatchOperation(
+  ids: readonly string[],
+  max = BATCH_DELETE_MAX
+): string[][] {
   if (ids.length === 0) return []
   const chunks: string[][] = []
   for (let i = 0; i < ids.length; i += max) {
     chunks.push(ids.slice(i, i + max))
   }
   return chunks
+}
+
+/** @deprecated 使用 chunkIdsForBatchOperation */
+export function chunkIdsForBatchDelete(ids: readonly string[], max = BATCH_DELETE_MAX): string[][] {
+  return chunkIdsForBatchOperation(ids, max)
 }
 
 /** 将勾选集限制在当前可见列表内（渲染期派生，避免 effect 同步） */
@@ -627,7 +717,7 @@ export async function runChunkedBatchDelete(
   mutateFn: (chunk: string[]) => Promise<BatchDeleteChunkResult>,
   chunkSize = BATCH_DELETE_MAX
 ): Promise<BatchDeleteChunkResult> {
-  const chunks = chunkIdsForBatchDelete(ids, chunkSize)
+  const chunks = chunkIdsForBatchOperation(ids, chunkSize)
   const merged: BatchDeleteChunkResult = {
     succeeded: [],
     failed: [],
@@ -642,4 +732,36 @@ export async function runChunkedBatchDelete(
     merged.budgets_removed += result.budgets_removed
   }
   return merged
+}
+
+export interface BatchResyncChunkResult {
+  succeeded: string[]
+  failed: Array<{ id: string; code: string; message: string }>
+}
+
+/** 顺序执行多批 batch-resync-capabilities 并合并结果 */
+export async function runChunkedBatchResync(
+  ids: readonly string[],
+  mutateFn: (chunk: string[]) => Promise<BatchResyncChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchResyncChunkResult> {
+  const chunks = chunkIdsForBatchOperation(ids, chunkSize)
+  const merged: BatchResyncChunkResult = {
+    succeeded: [],
+    failed: [],
+  }
+  for (const chunk of chunks) {
+    const result = await mutateFn(chunk)
+    merged.succeeded.push(...result.succeeded)
+    merged.failed.push(...result.failed)
+  }
+  return merged
+}
+
+/** 可执行 LiteLLM 能力 resync 的模型（与批量删除权限一致） */
+export function filterResyncableCapabilityModels<T extends GatewayModel>(
+  models: readonly T[],
+  canResync: (model: T) => boolean
+): T[] {
+  return models.filter(canResync)
 }

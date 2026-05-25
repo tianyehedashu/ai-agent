@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { routingStrategyLabel } from '@/features/gateway-models/constants'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
 import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
@@ -42,13 +43,15 @@ export function RouteWorkspace(): React.JSX.Element {
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const { data: models, isLoading: modelsLoading } = useQuery({
-    queryKey: ['gateway', 'models', teamId],
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'callable' }),
-    staleTime: GATEWAY_MODELS_STALE_MS,
-  })
+  const needsRouteModels = createMode || selectedId !== null
 
-  const pickerModels = useMemo(() => enabledGatewayModels(models ?? []), [models])
+  const { items: models, isLoading: modelsLoading } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'callable' },
+    { enabled: needsRouteModels, prefetchMode: 'idle' }
+  )
+
+  const pickerModels = useMemo(() => enabledGatewayModels(models), [models])
 
   useEffect(() => {
     if (!routeIdFromUrl || !routes?.length) return
@@ -275,7 +278,7 @@ export function RouteWorkspace(): React.JSX.Element {
         ) : (
           <RouteTopologyEditor
             route={selectedRoute}
-            models={models ?? []}
+            models={models}
             pickerModels={pickerModels}
             isSaving={updateMutation.isPending}
             isDeleting={deleteMutation.isPending}

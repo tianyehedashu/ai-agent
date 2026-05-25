@@ -10,7 +10,6 @@ from domains.gateway.presentation.credential_response import (
     build_credential_response,
     decrypt_credential_api_key_for_reveal,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
     CredentialUpdate,
@@ -25,7 +24,6 @@ from domains.gateway.presentation.schemas.credential_upstream_catalog import (
 )
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.crypto import encrypt_value
-from libs.exceptions import HttpMappableDomainError
 
 from ._common import (
     CatalogSvc,
@@ -58,14 +56,11 @@ async def reveal_my_credential(
 ) -> dict[str, str]:
     """解密并返回当前用户私有凭据的完整 API Key。"""
     user_id = get_user_uuid(current_user)
-    try:
-        row = await reads.get_user_credential_for_owner(credential_id, user_id)
-        plain = decrypt_credential_api_key_for_reveal(
-            row,
-            encryption_key=encryption_key(),
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    row = await reads.get_user_credential_for_owner(credential_id, user_id)
+    plain = decrypt_credential_api_key_for_reveal(
+        row,
+        encryption_key=encryption_key(),
+    )
     return {"api_key": plain}
 
 
@@ -80,17 +75,14 @@ async def create_my_credential(
     user_id = get_user_uuid(current_user)
     provider = validate_user_credential_provider(body.provider)
     encrypted = encrypt_value(body.api_key, encryption_key())
-    try:
-        cred = await writes.create_user_credential(
-            actor_user_id=user_id,
-            provider=provider,
-            name=body.name.strip() or "default",
-            api_key_encrypted=encrypted,
-            api_base=body.api_base,
-            extra=body.extra,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    cred = await writes.create_user_credential(
+        actor_user_id=user_id,
+        provider=provider,
+        name=body.name.strip() or "default",
+        api_key_encrypted=encrypted,
+        api_base=body.api_base,
+        extra=body.extra,
+    )
     return build_credential_response(cred, encryption_key=encryption_key())
 
 
@@ -102,19 +94,16 @@ async def update_my_credential(
     writes: MgmtWrites,
 ) -> CredentialResponse:
     user_id = get_user_uuid(current_user)
-    try:
-        encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
-        updated = await writes.update_user_credential(
-            credential_id,
-            actor_user_id=user_id,
-            api_key_encrypted=encrypted,
-            api_base=body.api_base,
-            extra=body.extra,
-            is_active=body.is_active,
-            name=body.name,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
+    updated = await writes.update_user_credential(
+        credential_id,
+        actor_user_id=user_id,
+        api_key_encrypted=encrypted,
+        api_base=body.api_base,
+        extra=body.extra,
+        is_active=body.is_active,
+        name=body.name,
+    )
     return build_credential_response(updated, encryption_key=encryption_key())
 
 
@@ -125,10 +114,7 @@ async def delete_my_credential(
     writes: MgmtWrites,
 ) -> None:
     user_id = get_user_uuid(current_user)
-    try:
-        await writes.delete_user_credential(credential_id, actor_user_id=user_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_user_credential(credential_id, actor_user_id=user_id)
 
 
 @router.post("/my-credentials/{credential_id}/probe", response_model=CredentialProbeResponse)
@@ -139,10 +125,7 @@ async def probe_my_credential_endpoint(
 ) -> CredentialProbeResponse:
     """POST 触发上游列举；重复调用即刷新。"""
     user_id = get_user_uuid(current_user)
-    try:
-        result = await catalog.probe_user_credential(user_id=user_id, credential_id=credential_id)
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    result = await catalog.probe_user_credential(user_id=user_id, credential_id=credential_id)
     return credential_probe_to_response(result)
 
 
@@ -169,20 +152,17 @@ async def batch_import_my_models_endpoint(
         import_items = []
         legacy_ids = body.upstream_model_ids
         legacy_types = body.model_types
-    try:
-        created_raw, failed_raw = await catalog.batch_import_personal_models(
-            user_id=user_id,
-            credential_id=credential_id,
-            provider=provider,
-            import_items=import_items,
-            upstream_model_ids=legacy_ids,
-            model_types=legacy_types,
-            display_name_prefix=body.display_name_prefix,
-            enabled=body.enabled,
-            tags=body.tags,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    created_raw, failed_raw = await catalog.batch_import_personal_models(
+        user_id=user_id,
+        credential_id=credential_id,
+        provider=provider,
+        import_items=import_items,
+        upstream_model_ids=legacy_ids,
+        model_types=legacy_types,
+        display_name_prefix=body.display_name_prefix,
+        enabled=body.enabled,
+        tags=body.tags,
+    )
     return PersonalModelBatchImportResponse(
         credential_id=credential_id,
         created=[

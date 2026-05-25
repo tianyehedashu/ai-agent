@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type BudgetUpsertBody, type GatewayBudget } from '@/api/gateway'
-import { gatewayModelsListQueryKey, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
+import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
+import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -40,6 +41,7 @@ export interface BudgetAdminWorkspaceState {
   filteredItems: GatewayBudget[]
   modelOptions: BudgetModelOption[]
   modelsLoading: boolean
+  onModelPickerOpenChange: (open: boolean) => void
   keyOptions: { id: string; label: string }[]
   memberOptions: { id: string; label: string }[]
   upsertPending: boolean
@@ -100,11 +102,24 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     enabled: activeTab === 'user' || createValues.target_kind === 'user',
   })
 
-  const { data: models = [], isLoading: modelsQueryLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, 'callable'),
-    queryFn: () => gatewayApi.listModels(teamId, { registry_scope: 'callable' }),
-    staleTime: GATEWAY_MODELS_STALE_MS,
-  })
+  const needsModelOptions =
+    createOpen || modelFilter.trim() !== '' || activeTab === 'team' || activeTab === 'system'
+
+  const {
+    items: models,
+    isLoading: modelsQueryLoading,
+    onPickerOpenChange: onModelPickerOpenChange,
+  } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'callable' },
+    { enabled: needsModelOptions, prefetchMode: 'open' }
+  )
+
+  useEffect(() => {
+    if (createOpen) {
+      onModelPickerOpenChange(true)
+    }
+  }, [createOpen, onModelPickerOpenChange])
 
   const { data: routes = [], isLoading: routesQueryLoading } = useQuery({
     queryKey: ['gateway', 'routes', teamId],
@@ -296,6 +311,7 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     filteredItems,
     modelOptions,
     modelsLoading,
+    onModelPickerOpenChange,
     keyOptions,
     memberOptions,
     upsertPending: upsertMutation.isPending,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from domains.gateway.domain.policies.budget_scope_policy import (
     filter_budget_rows,
@@ -14,13 +14,12 @@ from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
 from domains.gateway.presentation.schemas.common import (
     BudgetResponse,
     BudgetUpsert,
 )
 from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
-from libs.exceptions import HttpMappableDomainError
+from libs.exceptions import PermissionDeniedError, ValidationError
 
 from ._common import (
     MgmtReads,
@@ -74,25 +73,25 @@ async def upsert_budget(
     if body.target_kind == "user" and body.target_id is None:
         body.target_id = team.user_id
     if body.target_kind == "key" and body.target_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "key target requires target_id")
+        raise ValidationError("key target requires target_id")
     if body.target_kind == "system" and not team.is_platform_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only platform admin can set system budget")
-    model_name = (body.model_name or "").strip() or None
-    try:
-        budget = await writes.upsert_budget(
-            target_kind=body.target_kind,
-            target_id=body.target_id,
-            period=body.period,
-            model_name=model_name,
-            limit_usd=body.limit_usd,
-            soft_limit_usd=body.soft_limit_usd,
-            limit_tokens=body.limit_tokens,
-            limit_requests=body.limit_requests,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
+        raise PermissionDeniedError(
+            message="Only platform admin can set system budget",
+            resource="system budget",
         )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    model_name = (body.model_name or "").strip() or None
+    budget = await writes.upsert_budget(
+        target_kind=body.target_kind,
+        target_id=body.target_id,
+        period=body.period,
+        model_name=model_name,
+        limit_usd=body.limit_usd,
+        soft_limit_usd=body.soft_limit_usd,
+        limit_tokens=body.limit_tokens,
+        limit_requests=body.limit_requests,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
     return BudgetResponse.model_validate(budget)
 
 
@@ -102,14 +101,11 @@ async def delete_budget(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
 ) -> None:
-    try:
-        await writes.delete_budget(
-            budget_id,
-            tenant_id=team.team_id,
-            is_platform_admin=team.is_platform_admin,
-        )
-    except HttpMappableDomainError as exc:
-        raise http_exception_from_gateway_domain(exc) from exc
+    await writes.delete_budget(
+        budget_id,
+        tenant_id=team.team_id,
+        is_platform_admin=team.is_platform_admin,
+    )
 
 
 __all__ = ["router"]

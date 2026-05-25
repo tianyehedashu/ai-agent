@@ -23,6 +23,7 @@ export interface BudgetAdminCreatePanelProps {
   members: BudgetInlineFormProps['members']
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
+  onModelPickerOpenChange?: (open: boolean) => void
 }
 
 export function BudgetAdminCreatePanel({
@@ -38,6 +39,7 @@ export function BudgetAdminCreatePanel({
   members,
   modelOptions,
   modelsLoading = false,
+  onModelPickerOpenChange,
 }: BudgetAdminCreatePanelProps): React.JSX.Element {
   return (
     <Collapsible open={createOpen} onOpenChange={onCreateOpenChange}>
@@ -65,6 +67,7 @@ export function BudgetAdminCreatePanel({
               members={members}
               modelOptions={modelOptions}
               modelsLoading={modelsLoading}
+              onModelPickerOpenChange={onModelPickerOpenChange}
               fixedTargetKind={tab}
             />
           </CardContent>

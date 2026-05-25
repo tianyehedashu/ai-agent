@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { extractPlaygroundHttpError } from './playground-error'
+import { extractPlaygroundHttpError, withReferenceImagePayloadHint } from './playground-error'
 
 describe('extractPlaygroundHttpError', () => {
   it('解析 FastAPI OpenAI detail.error', () => {
@@ -57,5 +57,25 @@ describe('extractPlaygroundHttpError', () => {
     )
     expect(err.message).toBe('invalid model')
     expect(err.code).toBe('model_not_found')
+  })
+})
+
+describe('withReferenceImagePayloadHint', () => {
+  it('413 with data URL adds upload hint', () => {
+    const err = withReferenceImagePayloadHint(
+      { httpStatus: 413, message: 'Payload Too Large' },
+      'data:image/png;base64,abc'
+    )
+    expect(err?.hint).toContain('上传')
+  })
+
+  it('non-payload error unchanged', () => {
+    const base = { httpStatus: 401, message: 'Unauthorized' }
+    expect(withReferenceImagePayloadHint(base, 'data:image/png;base64,x')).toEqual(base)
+  })
+
+  it('413 without reference image unchanged', () => {
+    const base = { httpStatus: 413, message: 'Payload Too Large' }
+    expect(withReferenceImagePayloadHint(base)).toEqual(base)
   })
 })

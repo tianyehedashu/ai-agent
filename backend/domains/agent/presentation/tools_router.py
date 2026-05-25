@@ -7,11 +7,12 @@ Tools Router - 工具路由
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from domains.agent.domain.types import ToolCategory
 from domains.agent.infrastructure.tools.registry import ToolRegistry
+from libs.exceptions import NotFoundError
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
 
@@ -96,10 +97,7 @@ async def get_tool(tool_name: str) -> ToolDefinition:
     tool = registry.get(tool_name)
 
     if not tool:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool '{tool_name}' not found",
-        )
+        raise NotFoundError("Tool", tool_name)
 
     return ToolDefinition(
         name=tool.name,
@@ -120,10 +118,7 @@ async def test_tool(
     tool = registry.get(tool_name)
 
     if not tool:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool '{tool_name}' not found",
-        )
+        raise NotFoundError("Tool", tool_name)
 
     start_time = time.time()
     result = await registry.execute(

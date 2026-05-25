@@ -1,11 +1,25 @@
-﻿import { lazy, Suspense, useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
+﻿import {
+  lazy,
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi, type GatewayModelBatchDeleteFailureItem } from '@/api/gateway'
+import {
+  fetchAllGatewayModelPages,
+  gatewayApi,
+  type GatewayModelBatchDeleteFailureItem,
+} from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway/models'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
 import {
   canLinkToCredentialDetail,
@@ -21,10 +35,12 @@ import {
 } from '@/features/gateway-models/constants'
 import {
   canDeleteGatewayModel,
+  canResyncGatewayModelCapabilities,
   isConfigManagedSystemModel,
   isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
 import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
+import { useChunkedModelBatchResync } from '@/features/gateway-models/hooks/use-chunked-model-batch-resync'
 import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
@@ -44,14 +60,15 @@ import {
   invalidateGatewayModelAliasDependents,
   invalidateGatewayModelCaches,
   filterDeletableFailedModels,
+  filterResyncableCapabilityModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
   filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
   formatDeleteFailedConfirmLabel,
-  matchesHealthFilter,
   resolveTeamModelsRegistryScope,
   type BatchDeleteChunkResult,
+  type BatchResyncChunkResult,
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -86,6 +103,7 @@ const registerFormSuspenseFallback = (
 )
 
 const EMPTY_REGISTRY_ITEMS: GatewayModel[] = []
+const MODELS_PAGE_SIZE = 20
 
 interface TeamModelsWorkspaceProps {
   hideRegisterAction?: boolean
@@ -116,12 +134,16 @@ export function TeamModelsWorkspace({
   const [providerFilter, setProviderFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
+  const [page, setPage] = useState(1)
   const [usageDays, setUsageDays] = useState<UsagePeriodDays>(7)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [batchFailedOpen, setBatchFailedOpen] = useState(false)
   const [batchFailedItems, setBatchFailedItems] = useState<GatewayModelBatchDeleteFailureItem[]>([])
+  const [batchFailedDialogTitle, setBatchFailedDialogTitle] = useState('部分模型未能删除')
+  const [batchFailedDialogDescription, setBatchFailedDialogDescription] =
+    useState('以下条目未删除成功，其余已处理。')
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
   const [rowDeleteOpen, setRowDeleteOpen] = useState(false)
   const [pendingRowDeleteId, setPendingRowDeleteId] = useState<string | null>(null)
@@ -135,6 +157,20 @@ export function TeamModelsWorkspace({
     (listMode === 'system' && isPlatformAdmin) || (listMode === 'team' && canWrite)
 
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
+
+  useEffect(() => {
+    setPage(1)
+  }, [registryScope, providerFilter, credentialFilter, deferredSearch, healthFilter])
+
+  const teamListQueryBase = useMemo(
+    () => ({
+      registry_scope: registryScope,
+      ...(providerFilter ? { provider: providerFilter } : {}),
+      ...(credentialFilter ? { credential_id: credentialFilter } : {}),
+      ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
+    }),
+    [registryScope, providerFilter, credentialFilter, deferredSearch]
+  )
 
   const goToRegister = useCallback((): void => {
     preloadRegisterModelForm()
@@ -159,17 +195,40 @@ export function TeamModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const { data: items, isLoading } = useQuery({
-    queryKey: gatewayModelsListQueryKey(teamId, registryScope, providerFilter, credentialFilter),
+  const { data: listData, isLoading } = useQuery({
+    queryKey: gatewayModelsListQueryKey(
+      teamId,
+      registryScope,
+      providerFilter,
+      credentialFilter,
+      page,
+      MODELS_PAGE_SIZE,
+      deferredSearch,
+      healthFilter
+    ),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
         registry_scope: registryScope,
+        page,
+        page_size: MODELS_PAGE_SIZE,
         ...(providerFilter ? { provider: providerFilter } : {}),
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
+        ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       }),
   })
 
-  const registryItems = items ?? EMPTY_REGISTRY_ITEMS
+  const registryItems = listData?.items ?? EMPTY_REGISTRY_ITEMS
+  const filteredModels = registryItems
+  const connectivitySummary = listData?.connectivity_summary
+
+  useEffect(() => {
+    if (!listData) return
+    const maxPage = Math.max(1, Math.ceil(listData.total / listData.page_size))
+    if (page > maxPage) {
+      setPage(maxPage)
+    }
+  }, [listData, page])
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
@@ -247,19 +306,6 @@ export function TeamModelsWorkspace({
     return Array.from(s).sort()
   }, [registryItems, providerFilter])
 
-  const filteredModels = useMemo(() => {
-    const q = deferredSearch.trim().toLowerCase()
-    return registryItems.filter((m) => {
-      if (!matchesHealthFilter(m, healthFilter)) return false
-      if (!q) return true
-      return (
-        m.name.toLowerCase().includes(q) ||
-        m.real_model.toLowerCase().includes(q) ||
-        m.provider.toLowerCase().includes(q)
-      )
-    })
-  }, [registryItems, healthFilter, deferredSearch])
-
   const filteredModelIdSet = useMemo(
     () => new Set(filteredModels.map((m) => m.id)),
     [filteredModels]
@@ -279,6 +325,12 @@ export function TeamModelsWorkspace({
   const canDeleteModel = useCallback(
     (model: (typeof registryItems)[number]) =>
       canDeleteGatewayModel(model, canWrite, isPlatformAdmin, systemPermContext),
+    [canWrite, isPlatformAdmin, systemPermContext]
+  )
+
+  const canResyncModel = useCallback(
+    (model: (typeof registryItems)[number]) =>
+      canResyncGatewayModelCapabilities(model, canWrite, isPlatformAdmin, systemPermContext),
     [canWrite, isPlatformAdmin, systemPermContext]
   )
 
@@ -316,6 +368,8 @@ export function TeamModelsWorkspace({
         return next
       })
       if (result.failed.length > 0) {
+        setBatchFailedDialogTitle('部分模型未能删除')
+        setBatchFailedDialogDescription('以下条目未删除成功，其余已处理。')
         setBatchFailedItems(result.failed)
         setBatchFailedOpen(true)
       } else if (result.succeeded.length > 0) {
@@ -343,6 +397,32 @@ export function TeamModelsWorkspace({
   const { batchDeleting, runBatchDelete: runTeamBatchDelete } = useChunkedModelBatchDelete({
     deleteChunk: deleteTeamModelChunk,
     onComplete: handleBatchDeleteComplete,
+  })
+
+  const handleBatchResyncComplete = useCallback(
+    (result: BatchResyncChunkResult): void => {
+      invalidateGatewayModelCaches(queryClient, {
+        credentialId: credentialFilter || undefined,
+        usageSummary: true,
+      })
+      if (result.failed.length > 0) {
+        setBatchFailedDialogTitle('部分模型未能同步能力')
+        setBatchFailedDialogDescription('以下条目未同步成功，其余已处理。')
+        setBatchFailedItems(result.failed)
+        setBatchFailedOpen(true)
+      }
+    },
+    [queryClient, credentialFilter]
+  )
+
+  const resyncTeamModelChunk = useCallback(
+    (chunk: string[]) => gatewayApi.batchResyncCapabilities(teamId, chunk),
+    [teamId]
+  )
+
+  const { batchResyncing, runBatchResync: runTeamBatchResync } = useChunkedModelBatchResync({
+    resyncChunk: resyncTeamModelChunk,
+    onComplete: handleBatchResyncComplete,
   })
 
   const handleToggleSelect = useCallback((id: string, selected: boolean): void => {
@@ -421,23 +501,33 @@ export function TeamModelsWorkspace({
     [registryItems, canDeleteModel]
   )
 
+  const failedDeletableCount = connectivitySummary?.failed ?? failedDeletableModels.length
+
   const deleteFailedLabel = useMemo(
     (): string =>
       formatDeleteFailedConfirmLabel(
-        failedDeletableModels.length,
+        failedDeletableCount,
         failedDeletableModels.map((m) => m.name)
       ),
-    [failedDeletableModels]
+    [failedDeletableCount, failedDeletableModels]
   )
 
   const handleDeleteFailed = useCallback((): void => {
-    if (failedDeletableModels.length === 0) return
+    if (failedDeletableCount === 0) return
     setDeleteFailedOpen(true)
-  }, [failedDeletableModels.length])
+  }, [failedDeletableCount])
 
   const handleConfirmDeleteFailed = useCallback((): void => {
-    runTeamBatchDelete(failedDeletableModels.map((m) => m.id))
-  }, [failedDeletableModels, runTeamBatchDelete])
+    void (async () => {
+      const all = await fetchAllGatewayModelPages(teamId, {
+        ...teamListQueryBase,
+        connectivity: 'failed',
+      })
+      const deletable = filterDeletableFailedModels(all, canDeleteModel)
+      if (deletable.length === 0) return
+      runTeamBatchDelete(deletable.map((m) => m.id))
+    })()
+  }, [teamId, teamListQueryBase, canDeleteModel, runTeamBatchDelete])
 
   const getModelHref = useCallback(
     (modelId: string) =>
@@ -473,6 +563,11 @@ export function TeamModelsWorkspace({
   const selectedTestable = useMemo(
     () => filterTestableConnectivityModels(selectedModelsForBatch),
     [selectedModelsForBatch]
+  )
+
+  const selectedResyncable = useMemo(
+    () => filterResyncableCapabilityModels(selectedModelsForBatch, canResyncModel),
+    [selectedModelsForBatch, canResyncModel]
   )
 
   const onBatchItemComplete = useMemo(
@@ -518,21 +613,44 @@ export function TeamModelsWorkspace({
   }, [])
 
   const handleTestAll = useCallback((): void => {
-    if (testableItems.length === 0) return
-    startBatchTest(testableItems)
-  }, [testableItems, startBatchTest])
+    void (async () => {
+      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
+      const testable = filterTestableConnectivityModels(all)
+      if (testable.length === 0) return
+      startBatchTest(testable)
+    })()
+  }, [teamId, teamListQueryBase, startBatchTest])
 
   const handleTestUntested = useCallback((): void => {
-    if (untestedTestableItems.length === 0) return
-    startBatchTest(untestedTestableItems)
-  }, [untestedTestableItems, startBatchTest])
+    void (async () => {
+      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
+      const untested = filterUntestedConnectivityModels(all)
+      if (untested.length === 0) return
+      startBatchTest(untested)
+    })()
+  }, [teamId, teamListQueryBase, startBatchTest])
 
   const handleTestSelected = useCallback((): void => {
     if (selectedTestable.length === 0) return
     startBatchTest(selectedTestable)
   }, [selectedTestable, startBatchTest])
 
+  const handleResyncAll = useCallback((): void => {
+    void (async () => {
+      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
+      const resyncable = filterResyncableCapabilityModels(all, canResyncModel)
+      if (resyncable.length === 0) return
+      runTeamBatchResync(resyncable.map((m) => m.id))
+    })()
+  }, [teamId, teamListQueryBase, canResyncModel, runTeamBatchResync])
+
+  const handleResyncSelected = useCallback((): void => {
+    if (selectedResyncable.length === 0) return
+    runTeamBatchResync(selectedResyncable.map((m) => m.id))
+  }, [selectedResyncable, runTeamBatchResync])
+
   const batchTesting = batchTestState.running
+  const batchBusy = batchTesting || batchResyncing || batchDeleting
 
   const handleCreateSubmit = useCallback(
     (body: Parameters<typeof gatewayApi.createModel>[1]) => {
@@ -542,7 +660,13 @@ export function TeamModelsWorkspace({
   )
 
   const showEmptyOnboarding =
-    !isRegisterView && !isLoading && registryItems.length === 0 && !credentialFilter
+    !isRegisterView &&
+    !isLoading &&
+    (listData?.total ?? 0) === 0 &&
+    !credentialFilter &&
+    !providerFilter &&
+    !deferredSearch.trim() &&
+    healthFilter === 'all'
 
   const credentialBanner = credentialFilter ? (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
@@ -655,67 +779,95 @@ export function TeamModelsWorkspace({
         </div>
       ) : (
         <>
-          {registryItems.length > 0 ? (
-            <Suspense fallback={inventorySuspenseFallback}>
-              <ModelInventory
-                models={filteredModels}
-                allModels={registryItems}
-                selectedId={null}
-                getModelHref={getModelHref}
-                isLoading={isLoading}
-                search={search}
-                onSearchChange={setSearch}
-                providerFilter={providerFilter}
-                onProviderFilterChange={setProviderFilter}
-                providerChoices={providerChoices}
-                usageDays={usageDays}
-                onUsageDaysChange={setUsageDays}
-                usageByRouteName={usageByRouteName}
-                usageLoading={usageLoading}
-                highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
-                healthFilter={healthFilter}
-                onHealthFilterChange={setHealthFilter}
-                canWrite={canManageModels}
-                onTestAll={
-                  canManageModels && testableItems.length > 0 && !batchTesting
-                    ? handleTestAll
-                    : undefined
-                }
-                onTestUntested={
-                  canManageModels && untestedTestableItems.length > 0 && !batchTesting
-                    ? handleTestUntested
-                    : undefined
-                }
-                untestedTestableCount={untestedTestableItems.length}
-                onBatchTestSelected={
-                  canManageModels && selectedTestable.length > 0 && !batchTesting
-                    ? handleTestSelected
-                    : undefined
-                }
-                testingAll={batchTesting}
-                onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
-                onPreloadRegister={preloadRegisterModelForm}
-                onPreloadRowNavigate={preloadTeamModelDetailPane}
-                showSystemAdmin={listMode === 'system' && isPlatformAdmin}
-                batchSelectEnabled={batchSelectEnabled}
-                selectedIds={visibleSelectedIds}
-                onToggleSelect={handleToggleSelect}
-                onToggleSelectAll={handleToggleSelectAll}
-                isModelBatchSelectable={checkModelBatchSelectable}
-                canDeleteModel={canDeleteModel}
-                isConfigManagedModel={isConfigManagedModel}
-                deletingModelId={deletingModelId}
-                onDeleteModel={handleDeleteModel}
-                batchDeleteOpen={batchDeleteOpen}
-                onBatchDeleteOpenChange={setBatchDeleteOpen}
-                onConfirmBatchDelete={handleConfirmBatchDelete}
-                batchDeletePending={batchDeleting}
-                batchDeleteLabel={batchDeleteLabel}
-                batchDeleteTitle={listMode === 'system' ? '批量删除系统模型' : '批量删除团队模型'}
-                onDeleteFailed={canManageModels ? handleDeleteFailed : undefined}
-                deletingFailed={batchDeleting}
-              />
-            </Suspense>
+          <Suspense fallback={inventorySuspenseFallback}>
+            <ModelInventory
+              models={filteredModels}
+              allModels={registryItems}
+              selectedId={null}
+              getModelHref={getModelHref}
+              isLoading={isLoading}
+              search={search}
+              onSearchChange={setSearch}
+              providerFilter={providerFilter}
+              onProviderFilterChange={setProviderFilter}
+              providerChoices={providerChoices}
+              usageDays={usageDays}
+              onUsageDaysChange={setUsageDays}
+              usageByRouteName={usageByRouteName}
+              usageLoading={usageLoading}
+              highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
+              healthFilter={healthFilter}
+              onHealthFilterChange={setHealthFilter}
+              connectivitySummary={connectivitySummary}
+              canWrite={canManageModels}
+              onTestAll={
+                canManageModels &&
+                (connectivitySummary?.total ?? testableItems.length) > 0 &&
+                !batchBusy
+                  ? handleTestAll
+                  : undefined
+              }
+              onTestUntested={
+                canManageModels &&
+                (connectivitySummary?.unknown ?? untestedTestableItems.length) > 0 &&
+                !batchBusy
+                  ? handleTestUntested
+                  : undefined
+              }
+              onResyncAll={
+                canManageModels && (listData?.total ?? 0) > 0 && !batchBusy
+                  ? handleResyncAll
+                  : undefined
+              }
+              resyncingAll={batchResyncing}
+              batchBusy={batchBusy}
+              untestedTestableCount={untestedTestableItems.length}
+              onBatchTestSelected={
+                canManageModels && selectedTestable.length > 0 && !batchBusy
+                  ? handleTestSelected
+                  : undefined
+              }
+              onBatchResyncSelected={
+                canManageModels && selectedResyncable.length > 0 && !batchBusy
+                  ? handleResyncSelected
+                  : undefined
+              }
+              testingAll={batchTesting}
+              onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
+              onPreloadRegister={preloadRegisterModelForm}
+              onPreloadRowNavigate={preloadTeamModelDetailPane}
+              showSystemAdmin={listMode === 'system' && isPlatformAdmin}
+              batchSelectEnabled={batchSelectEnabled}
+              selectedIds={visibleSelectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleSelectAll={handleToggleSelectAll}
+              isModelBatchSelectable={checkModelBatchSelectable}
+              canDeleteModel={canDeleteModel}
+              isConfigManagedModel={isConfigManagedModel}
+              deletingModelId={deletingModelId}
+              onDeleteModel={handleDeleteModel}
+              batchDeleteOpen={batchDeleteOpen}
+              onBatchDeleteOpenChange={setBatchDeleteOpen}
+              onConfirmBatchDelete={handleConfirmBatchDelete}
+              batchDeletePending={batchDeleting}
+              batchDeleteLabel={batchDeleteLabel}
+              batchDeleteTitle={listMode === 'system' ? '批量删除系统模型' : '批量删除团队模型'}
+              onDeleteFailed={
+                canManageModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
+              }
+              deletingFailed={batchDeleting}
+            />
+          </Suspense>
+          {listData && listData.total > 0 ? (
+            <PaginationControls
+              page={listData.page}
+              page_size={listData.page_size}
+              total={listData.total}
+              has_next={listData.has_next}
+              has_prev={listData.has_prev}
+              onPageChange={setPage}
+              className="pt-2"
+            />
           ) : null}
         </>
       )}
@@ -755,6 +907,8 @@ export function TeamModelsWorkspace({
         open={batchFailedOpen}
         onOpenChange={setBatchFailedOpen}
         failedItems={batchFailedItems}
+        title={batchFailedDialogTitle}
+        description={batchFailedDialogDescription}
       />
     </div>
   )

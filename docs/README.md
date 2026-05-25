@@ -30,6 +30,8 @@
 
 | 文档 | 说明 |
 |------|------|
+| [PAGINATION.md](./PAGINATION.md) | **列表 API 分页 envelope**（前后端 + code-check §15 真源） |
+| [API_RESPONSE.md](./API_RESPONSE.md) | **API 成功/错误响应 + RFC 7807 异常**（code-check §16 真源） |
 | [系统可测试性与TDD设计.md](./系统可测试性与TDD设计.md) | TDD 方法论与测试分层 |
 
 ## 全栈功能

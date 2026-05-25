@@ -21,7 +21,7 @@ from domains.gateway.infrastructure.repositories.model_repository import Gateway
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
-from domains.gateway.presentation.http_error_map import http_exception_from_gateway_domain
+from domains.gateway.presentation.http_error_map import problem_context_from_gateway_domain
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
@@ -171,9 +171,9 @@ async def test_update_managed_wrong_team_returns_not_found(db_session, test_user
 
 
 def test_system_credential_admin_error_maps_to_403() -> None:
-    exc = http_exception_from_gateway_domain(SystemCredentialAdminRequiredError())
-    assert exc.status_code == 403
-    assert "平台管理员" in str(exc.detail)
+    ctx = problem_context_from_gateway_domain(SystemCredentialAdminRequiredError())
+    assert ctx.status_code == 403
+    assert "平台管理员" in str(ctx.detail)
 
 
 @pytest.mark.asyncio

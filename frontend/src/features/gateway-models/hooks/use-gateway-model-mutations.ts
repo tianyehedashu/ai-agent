@@ -66,7 +66,9 @@ export function useGatewayModelMutations(
       if (typeof body.name === 'string' && body.name.trim() !== '') {
         invalidateGatewayModelAliasDependents(queryClient)
       }
-      toast({ title: '模型已更新' })
+      toast({
+        title: body.resync_capabilities ? '能力已从 LiteLLM 同步' : '模型已更新',
+      })
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '更新失败', description: e.message })

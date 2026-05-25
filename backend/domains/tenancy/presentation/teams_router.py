@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application.user_use_case import UserUseCase
@@ -26,8 +26,7 @@ from domains.tenancy.presentation.team_dependencies import (
     RequiredTeamOwner,
 )
 from libs.db.database import get_db
-from libs.exceptions import TeamNotFoundError
-from libs.iam.team_http import map_team_access_exception_to_http
+from libs.exceptions import AuthenticationError, NotFoundError, ValidationError
 from libs.identity_bridge_deps import get_user_use_case
 
 router = APIRouter(tags=["Tenancy / Teams"])
@@ -69,7 +68,7 @@ async def create_team(
     svc: TeamSvc,
 ) -> TeamResponse:
     if current_user.is_anonymous:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Anonymous cannot create team")
+        raise AuthenticationError("Anonymous cannot create team")
     team = await svc.create_team(
         name=body.name,
         owner_user_id=uuid.UUID(current_user.id),
@@ -88,7 +87,7 @@ async def update_team(
 ) -> TeamResponse:
     updated = await svc.update_team(team_id, name=body.name, settings=body.settings)
     if updated is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
+        raise NotFoundError("Team")
     return TeamResponse.model_validate(updated)
 
 
@@ -100,13 +99,13 @@ async def delete_team(
 ) -> None:
     record = await svc.get_team(team_id)
     if record is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
+        raise NotFoundError("Team")
     if record.kind == "personal":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot delete personal team")
+        raise ValidationError("Cannot delete personal team")
     try:
         await svc.delete_shared_team(team_id)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
 
 
 @router.get("/teams/{team_id}/members", response_model=list[TeamMemberResponse])
@@ -148,16 +147,8 @@ async def add_team_member(
 ) -> TeamMemberResponse:
     try:
         member = await svc.add_member(team_id, body.user_id, body.role)
-    except TeamNotFoundError as exc:
-        mapped = map_team_access_exception_to_http(exc)
-        if mapped is None:
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unmapped team access error",
-            ) from exc
-        raise mapped from exc
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
     enriched = await enrich_team_members([member], user_service)
     return _to_member_responses(enriched)[0]
 
@@ -176,7 +167,7 @@ async def remove_self_from_team(
     try:
         await svc.remove_member(team_id, uuid.UUID(current_user.id))
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
 
 
 @router.delete("/teams/{team_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -189,4 +180,4 @@ async def remove_team_member(
     try:
         await svc.remove_member(team_id, user_id)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc

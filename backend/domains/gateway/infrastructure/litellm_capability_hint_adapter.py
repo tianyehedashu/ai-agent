@@ -2,39 +2,49 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, cast
 
-
-class LitellmCapabilityHintPort(Protocol):
-    """查询 LiteLLM 内置价目表中的能力标记。"""
-
-    def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
-        """已映射且支持 reasoning 返回 True/False；未映射返回 None。"""
+from domains.gateway.domain.litellm_capability_mapping import (
+    LitellmModelInfoHints,
+    hints_from_model_info,
+)
 
 
 class LitellmCapabilityHintAdapter:
-    """通过 ``litellm.supports_reasoning`` 查询；未映射模型返回 None。"""
+    """通过 ``litellm.get_model_info`` 查询；未映射模型返回 None。"""
 
-    def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
+    @staticmethod
+    def _resolve_model_id(provider: str, real_model: str) -> str:
+        rm = (real_model or "").strip()
+        prov = (provider or "").strip().lower()
+        if "/" in rm:
+            return rm
+        if prov and rm:
+            return f"{prov}/{rm}"
+        return rm
+
+    def get_model_hints(
+        self, *, provider: str, real_model: str
+    ) -> LitellmModelInfoHints | None:
+        model_id = self._resolve_model_id(provider, real_model)
+        if not model_id:
+            return None
         try:
             import litellm
         except ImportError:
             return None
-
-        rm = (real_model or "").strip()
-        prov = (provider or "").strip().lower()
-        if "/" in rm:
-            model_id = rm
-        elif prov and rm:
-            model_id = f"{prov}/{rm}"
-        else:
-            model_id = rm
-        if not model_id:
-            return None
         try:
-            return bool(litellm.supports_reasoning(model=model_id))
+            raw = litellm.get_model_info(model=model_id)
         except Exception:
             return None
+        return hints_from_model_info(cast("dict[str, Any]", raw))
+
+    def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
+        hints = self.get_model_hints(provider=provider, real_model=real_model)
+        if hints is None:
+            return None
+        value = hints.get("supports_reasoning")
+        return value if isinstance(value, bool) else None
 
 
-__all__ = ["LitellmCapabilityHintAdapter", "LitellmCapabilityHintPort"]
+__all__ = ["LitellmCapabilityHintAdapter"]

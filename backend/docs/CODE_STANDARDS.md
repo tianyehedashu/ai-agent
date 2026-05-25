@@ -339,9 +339,9 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 @router.put("/{id}")                # 更新
 @router.delete("/{id}")             # 删除
 
-# 分页参数
-skip: Annotated[int, Query(ge=0)] = 0
-limit: Annotated[int, Query(ge=1, le=100)] = 20
+# 分页：见 docs/PAGINATION.md；错误：见 docs/API_RESPONSE.md
+from libs.api.pagination import PageParams, PaginatedListResponse, build_page, page_query_params
+from libs.api.problem_details import ProblemDetails, problem_response_from_agent_error
 ```
 
 ## 测试规范

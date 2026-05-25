@@ -7,7 +7,7 @@ import mimetypes
 from typing import Annotated, Any
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
@@ -105,11 +105,8 @@ async def get_job(
     service: ListingStudioUseCase = Depends(get_listing_studio_service),
 ) -> ListingStudioJobResponse:
     """任务详情（含 steps，用于后台查看）"""
-    try:
-        data = await service.get_job(job_id)
-        return job_response(data)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    data = await service.get_job(job_id)
+    return job_response(data)
 
 
 @router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -119,10 +116,7 @@ async def delete_job(
     service: ListingStudioUseCase = Depends(get_listing_studio_service),
 ) -> None:
     """删除任务"""
-    try:
-        await service.delete_job(job_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    await service.delete_job(job_id)
 
 
 # =============================================================================
@@ -143,19 +137,16 @@ async def run_step(
         try:
             template_uuid = uuid.UUID(body.prompt_template_id)
         except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid prompt_template_id") from None
-    try:
-        data = await service.run_step(
-            job_id=job_id,
-            capability_id=body.capability_id,
-            user_input=body.user_input,
-            meta_prompt=body.meta_prompt,
-            prompt_template_id=template_uuid,
-            model_id=body.model_id,
-        )
-        return job_response(data)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+            raise ValidationError("Invalid prompt_template_id") from None
+    data = await service.run_step(
+        job_id=job_id,
+        capability_id=body.capability_id,
+        user_input=body.user_input,
+        meta_prompt=body.meta_prompt,
+        prompt_template_id=template_uuid,
+        model_id=body.model_id,
+    )
+    return job_response(data)
 
 
 @router.post("/jobs/{job_id}/optimize-prompt")
@@ -166,22 +157,17 @@ async def optimize_prompt(
     service: ListingStudioUseCase = Depends(get_listing_studio_service),
 ) -> OptimizePromptResponse:
     """可选：AI 优化提示词，返回优化后的文本供用户确认"""
-    try:
-        optimized = await service.optimize_prompt(
-            job_id=job_id,
-            capability_id=body.capability_id,
-            user_input=body.user_input,
-            meta_prompt=body.meta_prompt,
-            model_id=body.model_id,
-        )
-        return OptimizePromptResponse(
-            capability_id=body.capability_id,
-            optimized_prompt=optimized,
-        )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+    optimized = await service.optimize_prompt(
+        job_id=job_id,
+        capability_id=body.capability_id,
+        user_input=body.user_input,
+        meta_prompt=body.meta_prompt,
+        model_id=body.model_id,
+    )
+    return OptimizePromptResponse(
+        capability_id=body.capability_id,
+        optimized_prompt=optimized,
+    )
 
 
 # =============================================================================
@@ -258,10 +244,7 @@ async def get_template(
     prompt_service: ListingStudioPromptTemplateUseCase = Depends(get_listing_studio_prompt_service),
 ) -> dict[str, Any]:
     """获取单条模板"""
-    try:
-        return await prompt_service.get_template(template_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    return await prompt_service.get_template(template_id)
 
 
 @router.patch("/templates/{template_id}")
@@ -272,15 +255,12 @@ async def update_template(
     prompt_service: ListingStudioPromptTemplateUseCase = Depends(get_listing_studio_prompt_service),
 ) -> dict[str, Any]:
     """更新用户模板"""
-    try:
-        return await prompt_service.update_template(
-            template_id,
-            name=body.name,
-            content=body.content,
-            prompts=body.prompts,
-        )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    return await prompt_service.update_template(
+        template_id,
+        name=body.name,
+        content=body.content,
+        prompts=body.prompts,
+    )
 
 
 @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -290,10 +270,7 @@ async def delete_template(
     prompt_service: ListingStudioPromptTemplateUseCase = Depends(get_listing_studio_prompt_service),
 ) -> None:
     """删除用户模板"""
-    try:
-        await prompt_service.delete_template(template_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    await prompt_service.delete_template(template_id)
 
 
 # =============================================================================
@@ -380,13 +357,10 @@ async def create_image_gen_task(
     if body is None:
         body = CreateImageGenTaskBody()
 
-    try:
-        resolved = await model_resolution_service.resolve_image_gen_model_for_chat(
-            body.model_id,
-            allowed_image_gen_system_ids=await model_resolution_service.visible_image_gen_system_model_ids(),
-        )
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+    resolved = await model_resolution_service.resolve_image_gen_model_for_chat(
+        body.model_id,
+        allowed_image_gen_system_ids=await model_resolution_service.visible_image_gen_system_model_ids(),
+    )
 
     owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
     job_uuid = parse_optional_uuid(body.job_id, "job_id")
@@ -446,10 +420,7 @@ async def get_image_gen_task(
     image_gen_service: ProductImageGenTaskUseCase = Depends(get_product_image_gen_task_service),
 ) -> dict[str, Any]:
     """8 图任务详情"""
-    try:
-        return await image_gen_service.get_task(task_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Image gen task not found") from None
+    return await image_gen_service.get_task(task_id)
 
 
 # =============================================================================
@@ -465,6 +436,6 @@ async def serve_image(
     """提供本地存储的图片（仅 storage_type=local）。"""
     path = await image_service.resolve_local_image_path(filename)
     if not path:
-        raise HTTPException(status_code=404, detail="Image not found")
+        raise NotFoundError("Image")
     media_type = mimetypes.guess_type(str(path))[0] or "image/png"
     return FileResponse(path, media_type=media_type)
