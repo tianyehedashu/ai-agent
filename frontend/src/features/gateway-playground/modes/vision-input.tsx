@@ -182,8 +182,16 @@ export function VisionInput({
       e.preventDefault()
       setDragOver(false)
       if (isBusy) return
-      const file = e.dataTransfer.files.item(0)
-      if (file === null || !isImageFileCandidate(file)) {
+      const { files } = e.dataTransfer
+      if (files.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: REFERENCE_IMAGE_ACCEPT_ERROR,
+        })
+        return
+      }
+      const file = files[0]
+      if (!isImageFileCandidate(file)) {
         toast({
           variant: 'destructive',
           title: REFERENCE_IMAGE_ACCEPT_ERROR,
