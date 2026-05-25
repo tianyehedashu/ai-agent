@@ -2,12 +2,8 @@
  * 8 图生成：模型选择（系统+用户）、参考图输入、8 槽提示词编辑、生成主图。
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
-import { gatewayApi } from '@/api/gateway'
-import { listingStudioApi } from '@/api/listingStudio'
 import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
@@ -25,60 +21,60 @@ import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio
 import { useToast } from '@/hooks/use-toast'
 import { ImagePlus, Loader2, Copy, Check, Settings2 } from '@/lib/lucide-icons'
 import { OverlayScope } from '@/lib/ui-overlay'
+import { cn } from '@/lib/utils'
 import type { ListingStudioJob, ProductImageGenTask } from '@/types/listing-studio'
 
 import { ImageUrlListEditor } from './input-panel'
+import { SlotRegeneratePopover } from './slot-regenerate-popover'
+
+import type {
+  UseListingStudioImageGenResult,
+  SlotReferenceMode,
+} from '../hooks/use-listing-studio-image-gen'
+
+const SLOT_LABELS = ['第1张（白底）', '第2张', '第3张', '第4张', '第5张', '第6张', '第7张', '第8张']
 
 interface ImageGenPanelProps {
   currentJob: ListingStudioJob | null
   prompts: string[]
   onPromptsChange: (prompts: string[]) => void
   capabilityConfig: ListingStudioCapabilitiesConfig
+  imageGen: UseListingStudioImageGenResult
 }
-
-const SLOT_LABELS = ['第1张（白底）', '第2张', '第3张', '第4张', '第5张', '第6张', '第7张', '第8张']
-
-const PROVIDER_SIZE_MAP: Record<string, string[]> = {
-  volcengine: ['1920x1920', '1080x1920', '1920x1080'],
-  openai: ['1024x1024', '1024x1792', '1792x1024'],
-}
-const DEFAULT_SIZES = ['1024x1024', '1920x1920']
 
 export function ImageGenPanel({
   currentJob,
   prompts,
   onPromptsChange,
   capabilityConfig: caps,
+  imageGen,
 }: ImageGenPanelProps): React.JSX.Element {
   const [copyPrompt, copiedIndex] = useCopyToClipboardKeyed()
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  const [modelId, setModelId] = useState<string | null>(null)
-  const [size, setSize] = useState('')
-  const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([])
-  const [strength, setStrength] = useState(0.7)
-
-  const queryClient = useQueryClient()
   const { toast } = useToast()
 
-  const { data: availableData } = useQuery({
-    queryKey: ['gateway-models-available', 'image_gen'],
-    queryFn: () => gatewayApi.listAvailableModels('image_gen'),
-    staleTime: 30_000,
-  })
+  const {
+    modelId,
+    setModelId,
+    setSize,
+    effectiveSize,
+    sizeOptions,
+    referenceImageUrls,
+    setReferenceImageUrls,
+    strength,
+    setStrength,
+    sourceImageUrl,
+    tasks,
+    isCreating,
+    regeneratingSlot,
+    createAll,
+    regenerateSlot,
+    generateSingleSlot,
+  } = imageGen
 
-  const selectedProvider = useMemo(() => {
-    if (!modelId || !availableData) return 'volcengine'
-    const sys = availableData.system_models.find((m) => m.id === modelId)
-    if (sys) return sys.provider
-    const user = availableData.user_models.find((m) => m.id === modelId)
-    if (user) return user.provider
-    return 'volcengine'
-  }, [modelId, availableData])
-
-  const sizeOptions = PROVIDER_SIZE_MAP[selectedProvider] ?? DEFAULT_SIZES
-  const effectiveSize = size && sizeOptions.includes(size) ? size : sizeOptions[0]
+  const resolvedSizeOptions = sizeOptions.length ? sizeOptions : ['1024x1024', '1920x1920']
 
   const outputKey = caps.outputKeys.image_gen_prompts
   const step5 = currentJob?.steps?.find((s) => s.capability_id === 'image_gen_prompts')
@@ -86,42 +82,6 @@ export function ImageGenPanel({
     const step5Prompts = step5?.output_snapshot?.[outputKey]
     return Array.isArray(step5Prompts) ? step5Prompts.map(String).slice(0, 8) : []
   }, [step5?.output_snapshot, outputKey])
-
-  const { data: tasksData } = useQuery({
-    queryKey: ['listing-studio', 'image-gen-tasks', currentJob?.id],
-    queryFn: () =>
-      listingStudioApi.listImageGenTasks({ limit: 10, jobId: currentJob?.id ?? undefined }),
-    enabled: !!currentJob?.id,
-    refetchInterval: (query) => {
-      const data = query.state.data as { items?: { status: string }[] } | undefined
-      const hasActive = data?.items?.some((t) => t.status === 'pending' || t.status === 'running')
-      return hasActive ? 3000 : false
-    },
-  })
-  const tasks = tasksData?.items ?? []
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const firstRef = referenceImageUrls[0] ?? ''
-      const hasRef = firstRef !== ''
-      const body: Parameters<typeof listingStudioApi.createImageGenTask>[0] = {
-        prompts: prompts.slice(0, 8).map((p, slot) => ({ slot: slot + 1, prompt: p })),
-        job_id: currentJob?.id,
-        model_id: modelId,
-        size: effectiveSize,
-        reference_image_url: hasRef ? firstRef : null,
-        strength: hasRef ? strength : null,
-      }
-      return listingStudioApi.createImageGenTask(body)
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['listing-studio', 'image-gen-tasks'] })
-      toast({ title: '已提交生成，主图将显示在下方' })
-    },
-    onError: (err) => {
-      toast({ title: '创建失败', description: String(err), variant: 'destructive' })
-    },
-  })
 
   const fillFromStep5 = (): void => {
     if (fromStep5.length) {
@@ -176,7 +136,6 @@ export function ImageGenPanel({
             </Button>
           </div>
 
-          {/* 模型 + 尺寸 */}
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Label className="whitespace-nowrap text-sm text-muted-foreground">模型</Label>
@@ -195,7 +154,7 @@ export function ImageGenPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {sizeOptions.map((s) => (
+                  {resolvedSizeOptions.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>
@@ -205,16 +164,21 @@ export function ImageGenPanel({
             </div>
           </div>
 
-          {/* 展开区域：参考图 + strength */}
           {showSettings ? (
             <div className="mt-4 space-y-4 border-t border-border/30 pt-4">
               <ImageUrlListEditor
                 urls={referenceImageUrls}
                 onChange={setReferenceImageUrls}
-                label="参考图片（img2img）"
+                label="生图参考图（img2img，优先于输入区原图）"
                 compact
               />
-              {referenceImageUrls.length > 0 && (
+              {sourceImageUrl ? (
+                <p className="text-xs text-muted-foreground">
+                  当前生图参考图：
+                  <span className="ml-1 font-mono">{sourceImageUrl.slice(0, 48)}…</span>
+                </p>
+              ) : null}
+              {(referenceImageUrls.length > 0 || sourceImageUrl) && (
                 <div className="flex items-center gap-3">
                   <Label className="whitespace-nowrap text-sm text-muted-foreground">
                     参考强度
@@ -261,44 +225,56 @@ export function ImageGenPanel({
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {SLOT_LABELS.map((label, i) => (
-              <div key={i} className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">{label}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 rounded-md p-0"
-                    onClick={() => copyPrompt(paddedPrompts[i] ?? '', i)}
-                  >
-                    {copiedIndex === i ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
+            {SLOT_LABELS.map((label, i) => {
+              const slot = i + 1
+              const isSlotBusy = isCreating && regeneratingSlot === slot
+              return (
+                <div key={i} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">{label}</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={isCreating || !paddedPrompts[i]?.trim()}
+                        onClick={() => {
+                          generateSingleSlot(slot)
+                        }}
+                      >
+                        {isSlotBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : '生成此张'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 rounded-md p-0"
+                        onClick={() => copyPrompt(paddedPrompts[i] ?? '', i)}
+                      >
+                        {copiedIndex === i ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={paddedPrompts[i] ?? ''}
+                    onChange={(e) => {
+                      setPrompt(i, e.target.value)
+                    }}
+                    placeholder={i === 0 ? '白底产品图…' : '提示词…'}
+                    rows={2}
+                    className="rounded-xl border-border/60 font-mono text-sm"
+                  />
                 </div>
-                <Textarea
-                  value={paddedPrompts[i] ?? ''}
-                  onChange={(e) => {
-                    setPrompt(i, e.target.value)
-                  }}
-                  placeholder={i === 0 ? '白底产品图…' : '提示词…'}
-                  rows={2}
-                  className="rounded-xl border-border/60 font-mono text-sm"
-                />
-              </div>
-            ))}
+              )
+            })}
           </div>
-          <Button
-            className="mt-4 rounded-xl"
-            onClick={() => {
-              createMutation.mutate()
-            }}
-            disabled={createMutation.isPending}
-          >
-            {createMutation.isPending ? (
+          <Button className="mt-4 rounded-xl" onClick={createAll} disabled={isCreating}>
+            {isCreating && regeneratingSlot === null ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <ImagePlus className="h-4 w-4" />
@@ -315,7 +291,14 @@ export function ImageGenPanel({
           ) : (
             <div className="space-y-4">
               {tasks.map((t) => (
-                <TaskResultCard key={t.id} task={t} onPreview={handlePreview} />
+                <TaskResultCard
+                  key={t.id}
+                  task={t}
+                  onPreview={handlePreview}
+                  onRegenerate={regenerateSlot}
+                  isCreating={isCreating}
+                  regeneratingSlot={regeneratingSlot}
+                />
               ))}
             </div>
           )}
@@ -339,12 +322,18 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   failed: { label: '失败', color: 'text-destructive' },
 }
 
-function TaskResultCard({
+const TaskResultCard = memo(function TaskResultCard({
   task,
   onPreview,
+  onRegenerate,
+  isCreating,
+  regeneratingSlot,
 }: {
   task: ProductImageGenTask
   onPreview: (url: string) => void
+  onRegenerate: (slot: number, mode: SlotReferenceMode) => void
+  isCreating: boolean
+  regeneratingSlot: number | null
 }): React.JSX.Element {
   const images = task.result_images ?? []
   const isActive = task.status === 'pending' || task.status === 'running'
@@ -385,35 +374,59 @@ function TaskResultCard({
           {images.length === 0 ? (
             <p className="col-span-full py-4 text-sm text-muted-foreground">暂无结果图</p>
           ) : (
-            images.map((img, i) =>
-              img.url ? (
-                <button
-                  key={i}
-                  type="button"
-                  className="aspect-square overflow-hidden rounded-lg border border-border/60 bg-muted transition-transform hover:scale-[1.02]"
-                  onClick={() => {
-                    onPreview(img.url)
-                  }}
+            images.map((img) => {
+              const slot = img.slot
+              const isRegenerating = isCreating && regeneratingSlot === slot
+              return img.url ? (
+                <div
+                  key={slot}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-border/60 bg-muted"
                 >
-                  <img
-                    src={img.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </button>
+                  <button
+                    type="button"
+                    className="h-full w-full transition-transform hover:scale-[1.02]"
+                    onClick={() => {
+                      onPreview(img.url)
+                    }}
+                  >
+                    <img
+                      src={img.url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
+                  <div
+                    className={cn(
+                      'absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100',
+                      isRegenerating && 'opacity-100'
+                    )}
+                  >
+                    {isRegenerating ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-white" />
+                    ) : (
+                      <SlotRegeneratePopover
+                        slot={slot}
+                        disabled={isCreating}
+                        isRegenerating={false}
+                        onRegenerate={onRegenerate}
+                        variant="overlay"
+                      />
+                    )}
+                  </div>
+                </div>
               ) : (
                 <div
-                  key={i}
+                  key={slot}
                   className="flex aspect-square items-center justify-center rounded-lg border border-border/40 bg-muted/30 text-xs text-muted-foreground/50"
                 >
-                  {img.error ? '!' : i + 1}
+                  {img.error ? '!' : slot}
                 </div>
               )
-            )
+            })
           )}
         </div>
       )}
     </div>
   )
-}
+})

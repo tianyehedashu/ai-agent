@@ -2,41 +2,46 @@
  * 本次产出预览：5 点商品描述、8 图位、视频位（等待、展示、创建一体化）
  */
 
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio-capabilities'
 import { FileText, ImageIcon } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 import type { ListingStudioJob } from '@/types/listing-studio'
 
 import { getFivePointDescription } from './output-preview-shared'
+import { SlotRegeneratePopover } from './slot-regenerate-popover'
 import { VideoPreviewSection } from './video-preview-section'
+
+import type { SlotReferenceMode } from '../hooks/use-listing-studio-image-gen'
 
 interface OutputPreviewProps {
   currentJob: ListingStudioJob | null
-  /** 当前 job 对应的 8 图结果（最近一次生成的 8 张图） */
-  latestEightImages: { slot: number; url: string }[] | null
   capabilityConfig: ListingStudioCapabilitiesConfig
+  slotUrls: (string | null)[]
+  isCreating: boolean
+  regeneratingSlot: number | null
+  regenerateSlot: (slot: number, mode?: SlotReferenceMode) => void
 }
 
-export function OutputPreview({
+export const OutputPreview = memo(function OutputPreview({
   currentJob,
-  latestEightImages,
   capabilityConfig: caps,
+  slotUrls,
+  isCreating,
+  regeneratingSlot,
+  regenerateSlot,
 }: OutputPreviewProps): React.JSX.Element {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  const videoImageUrls = useMemo(() => slotUrls.filter((u): u is string => !!u), [slotUrls])
 
   const outputKey = caps.outputKeys.product_link_analysis
   const stepProduct = currentJob?.steps?.find((s) => s.capability_id === 'product_link_analysis')
   const snapshot = stepProduct?.output_snapshot
   const productInfo = snapshot === undefined || snapshot === null ? null : snapshot[outputKey]
   const fivePoints = getFivePointDescription(productInfo)
-
-  const images = latestEightImages ?? []
-  const slots = Array.from({ length: 8 }, (_, i) => {
-    const bySlot = images.find((img) => img.slot === i + 1)
-    return bySlot?.url ?? null
-  })
 
   return (
     <>
@@ -75,36 +80,55 @@ export function OutputPreview({
             <h3 className="text-base font-medium">主图（8 张）</h3>
           </div>
           <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-8">
-            {slots.map((url, i) => (
-              <div
-                key={String(i)}
-                className="aspect-square overflow-hidden rounded-md border border-border/40 bg-muted/20"
-              >
-                {url ? (
-                  <button
-                    type="button"
-                    className="h-full w-full transition-transform hover:scale-[1.03]"
-                    onClick={() => {
-                      setLightboxUrl(url)
-                    }}
-                  >
-                    <img
-                      src={url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </button>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm tabular-nums text-muted-foreground/50">
-                    {String(i + 1)}
-                  </div>
-                )}
-              </div>
-            ))}
+            {slotUrls.map((url, i) => {
+              const slot = i + 1
+              const isRegenerating = isCreating && regeneratingSlot === slot
+              return (
+                <div
+                  key={String(i)}
+                  className="group relative aspect-square overflow-hidden rounded-md border border-border/40 bg-muted/20"
+                >
+                  {url ? (
+                    <>
+                      <button
+                        type="button"
+                        className="h-full w-full transition-transform hover:scale-[1.03]"
+                        onClick={() => {
+                          setLightboxUrl(url)
+                        }}
+                      >
+                        <img
+                          src={url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
+                      <div
+                        className={cn(
+                          'absolute inset-x-0 bottom-0 flex justify-end p-1 opacity-0 transition-opacity group-hover:opacity-100',
+                          isRegenerating && 'opacity-100'
+                        )}
+                      >
+                        <SlotRegeneratePopover
+                          slot={slot}
+                          disabled={isCreating}
+                          isRegenerating={isRegenerating}
+                          onRegenerate={regenerateSlot}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm tabular-nums text-muted-foreground/50">
+                      {String(i + 1)}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            填写下方提示词并生成后，图片将显示在此
+            填写下方提示词并生成后，图片将显示在此；悬停可单张重生成
           </p>
         </div>
       </div>
@@ -112,7 +136,7 @@ export function OutputPreview({
       <VideoPreviewSection
         jobId={currentJob?.id ?? null}
         currentJob={currentJob}
-        imageUrls={slots.filter((u): u is string => !!u)}
+        imageUrls={videoImageUrls}
         capabilityConfig={caps}
       />
 
@@ -124,4 +148,4 @@ export function OutputPreview({
       />
     </>
   )
-}
+})

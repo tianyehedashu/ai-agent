@@ -6,7 +6,11 @@ import { describe, it, expect } from 'vitest'
 
 import type { ProductImageGenTask } from '@/types/listing-studio'
 
-import { getFivePointDescription, pickLatestEightImages } from './output-preview-shared'
+import {
+  getFivePointDescription,
+  mergedImagesToSlotArray,
+  pickLatestEightImages,
+} from './output-preview-shared'
 
 describe('getFivePointDescription', () => {
   it('从 bullet_points 解析最多 5 条', () => {
@@ -58,11 +62,54 @@ describe('pickLatestEightImages', () => {
     expect(pickLatestEightImages(tasks, 'job-a')).toEqual([{ slot: 1, url: 'https://a/1.png' }])
   })
 
-  it('无 job 匹配时取第一条有图任务', () => {
+  it('无 job 匹配时取有图任务', () => {
     expect(pickLatestEightImages(tasks, null)).toEqual([{ slot: 1, url: 'https://a/1.png' }])
   })
 
   it('无任务时返回 null', () => {
     expect(pickLatestEightImages([], 'job-a')).toBeNull()
+  })
+
+  it('跨 task 按槽合并，新 task 仅更新单槽', () => {
+    const mergedTasks: ProductImageGenTask[] = [
+      {
+        id: 'regen-3',
+        job_id: 'job-a',
+        status: 'completed',
+        prompts: [],
+        result_images: [{ slot: 3, url: 'https://a/3-new.png' }],
+        error_message: null,
+        created_at: '2026-01-03',
+      },
+      {
+        id: 'batch-1',
+        job_id: 'job-a',
+        status: 'completed',
+        prompts: [],
+        result_images: [
+          { slot: 1, url: 'https://a/1.png' },
+          { slot: 2, url: 'https://a/2.png' },
+          { slot: 3, url: 'https://a/3-old.png' },
+        ],
+        error_message: null,
+        created_at: '2026-01-02',
+      },
+    ]
+    expect(pickLatestEightImages(mergedTasks, 'job-a')).toEqual([
+      { slot: 1, url: 'https://a/1.png' },
+      { slot: 2, url: 'https://a/2.png' },
+      { slot: 3, url: 'https://a/3-new.png' },
+    ])
+  })
+})
+
+describe('mergedImagesToSlotArray', () => {
+  it('转为 8 槽数组', () => {
+    expect(
+      mergedImagesToSlotArray([
+        { slot: 1, url: 'https://a/1.png' },
+        { slot: 3, url: 'https://a/3.png' },
+      ])
+    ).toEqual(['https://a/1.png', null, 'https://a/3.png', null, null, null, null, null])
   })
 })

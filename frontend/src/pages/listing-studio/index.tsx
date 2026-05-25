@@ -31,7 +31,7 @@ import {
   type ListingStudioInputs,
 } from './components/input-panel-shared'
 import { OutputPreview } from './components/output-preview'
-import { pickLatestEightImages } from './components/output-preview-shared'
+import { useListingStudioImageGen } from './hooks/use-listing-studio-image-gen'
 
 function StepIcon({ status, name }: { status?: string; name: string }): React.JSX.Element {
   return (
@@ -176,21 +176,9 @@ export default function ListingStudioPage(): React.JSX.Element {
     },
   })
 
-  const { data: imageGenData } = useQuery({
-    queryKey: ['listing-studio', 'image-gen-tasks', currentJobId],
-    queryFn: () =>
-      listingStudioApi.listImageGenTasks({ limit: 10, jobId: currentJobId ?? undefined }),
-    enabled: !!currentJobId,
-    refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return false
-      const hasActive = data.items.some((t) => t.status === 'pending' || t.status === 'running')
-      return hasActive ? 3000 : false
-    },
-  })
-  const latestEightImages = useMemo(
-    () => pickLatestEightImages(imageGenData?.items ?? [], currentJob?.id ?? null),
-    [imageGenData?.items, currentJob?.id]
+  const inputImageUrls = useMemo(
+    () => (inputs.image_urls ?? []).filter((u) => u.trim() !== ''),
+    [inputs.image_urls]
   )
 
   const onPromptChange = useCallback((capabilityId: string, value: string) => {
@@ -229,6 +217,12 @@ export default function ListingStudioPage(): React.JSX.Element {
   }, [currentJob?.steps, caps.outputKeys])
 
   const imageGenPrompts = imageGenPromptEdits ?? derivedImageGenPrompts ?? []
+
+  const imageGen = useListingStudioImageGen({
+    jobId: currentJobId,
+    prompts: imageGenPrompts,
+    inputImageUrls,
+  })
 
   const ensureJob = useCallback(async (): Promise<string> => {
     if (currentJobId) return currentJobId
@@ -355,14 +349,18 @@ export default function ListingStudioPage(): React.JSX.Element {
               <div className="space-y-6">
                 <OutputPreview
                   currentJob={currentJob ?? null}
-                  latestEightImages={latestEightImages}
                   capabilityConfig={caps}
+                  slotUrls={imageGen.slotUrls}
+                  isCreating={imageGen.isCreating}
+                  regeneratingSlot={imageGen.regeneratingSlot}
+                  regenerateSlot={imageGen.regenerateSlot}
                 />
                 <ImageGenPanel
                   currentJob={currentJob ?? null}
                   prompts={imageGenPrompts}
                   onPromptsChange={setImageGenPromptEdits}
                   capabilityConfig={caps}
+                  imageGen={imageGen}
                 />
               </div>
             </section>

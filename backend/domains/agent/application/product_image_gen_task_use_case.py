@@ -11,6 +11,11 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.agent.domain.listing_studio.slot_reference_image import (
+    extract_global_source_reference,
+    normalize_explicit_reference_url,
+    resolve_slot_reference_image,
+)
 from domains.agent.infrastructure.llm.image_generator import (
     ImageGenerationResult,
     ImageGenerator,
@@ -78,8 +83,14 @@ async def _generate_images_background(
             result_images: list[dict[str, Any]] = []
             errors: list[str] = []
 
-            for item in prompts:
-                slot = item.get("slot", 0)
+            sorted_prompts = sorted(prompts, key=lambda p: int(p.get("slot") or 0))
+            global_source_ref = extract_global_source_reference(sorted_prompts)
+            prompt_count = len(sorted_prompts)
+
+            slot1_generated_url: str | None = None
+
+            for item in sorted_prompts:
+                slot = int(item.get("slot") or 0)
                 prompt_text = item.get("prompt", "")
                 if not prompt_text.strip():
                     result_images.append({"slot": slot, "url": "", "skipped": True})
@@ -88,7 +99,20 @@ async def _generate_images_background(
                 provider = item.get("provider", "volcengine")
                 model = item.get("model")
                 size = item.get("size")
-                ref_url = item.get("reference_image_url")
+                explicit_ref = item.get("reference_image_url")
+                explicit_str = normalize_explicit_reference_url(
+                    slot=slot,
+                    explicit_reference_url=str(explicit_ref) if explicit_ref is not None else None,
+                    global_source_reference_url=global_source_ref,
+                    prompt_count=prompt_count,
+                )
+                ref_url = resolve_slot_reference_image(
+                    mode="chain",
+                    slot=slot,
+                    source_image_url=global_source_ref,
+                    slot1_generated_url=slot1_generated_url,
+                    explicit_reference_url=explicit_str,
+                )
                 strength = item.get("strength")
 
                 try:
@@ -106,6 +130,8 @@ async def _generate_images_background(
                     if result.success and result.images:
                         url = await image_svc.persist_generated_image(result.images[0])
                         result_images.append({"slot": slot, "url": url})
+                        if slot == 1:
+                            slot1_generated_url = url
                     else:
                         err_msg = result.error or "Unknown error"
                         errors.append(f"Slot {slot}: {err_msg}")
