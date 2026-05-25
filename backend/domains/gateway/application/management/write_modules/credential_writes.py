@@ -7,6 +7,10 @@ from typing import Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.management.credential_read_mappers import (
+    ensure_credential_read_model,
+)
+from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -69,7 +73,7 @@ class CredentialWritesMixin:
                 revoked.append(key_id)
         return (revoked, failed)
 
-    async def create_team_credential(self, *, tenant_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
+    async def create_team_credential(self, *, tenant_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
         row = await self._creds.create_for_tenant(
             tenant_id=tenant_id,
             provider=provider,
@@ -79,9 +83,9 @@ class CredentialWritesMixin:
             extra=extra,
         )
         await self.reload_litellm_router()
-        return row
+        return ensure_credential_read_model(row)
 
-    async def create_system_credential(self, *, is_platform_admin: bool, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
+    async def create_system_credential(self, *, is_platform_admin: bool, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
         from domains.gateway.domain.policies.credential_scope import (
             assert_system_credential_mutation_allowed,
         )
@@ -95,9 +99,9 @@ class CredentialWritesMixin:
             extra=extra,
         )
         await self.reload_litellm_router()
-        return row
+        return ensure_credential_read_model(row)
 
-    async def update_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> Any:
+    async def update_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> CredentialReadModel:
         system_existing = await self._system_creds.get(credential_id)
         if system_existing is not None:
             from domains.gateway.domain.policies.credential_scope import (
@@ -122,7 +126,7 @@ class CredentialWritesMixin:
             if updated is None:
                 raise CredentialNotFoundError(str(credential_id))
             await self.reload_litellm_router()
-            return updated
+            return ensure_credential_read_model(updated)
 
         existing = await self._creds.get(credential_id)
         if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
@@ -138,7 +142,7 @@ class CredentialWritesMixin:
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
         await self.reload_litellm_router()
-        return updated
+        return ensure_credential_read_model(updated)
 
     async def delete_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
         system_existing = await self._system_creds.get(credential_id)
@@ -160,7 +164,7 @@ class CredentialWritesMixin:
         await self._creds.delete(credential_id)
         await self.reload_litellm_router()
 
-    async def import_user_credential_to_team(self, *, user_credential_id: uuid.UUID, tenant_id: uuid.UUID, actor_user_id: uuid.UUID, is_platform_admin: bool) -> Any:
+    async def import_user_credential_to_team(self, *, user_credential_id: uuid.UUID, tenant_id: uuid.UUID, actor_user_id: uuid.UUID, is_platform_admin: bool) -> CredentialReadModel:
         src = await self._creds.get(user_credential_id)
         if src is None or src.scope != 'user':
             raise CredentialNotFoundError(str(user_credential_id))
@@ -170,7 +174,7 @@ class CredentialWritesMixin:
         if new_cred is None:
             raise CredentialNotFoundError(str(user_credential_id))
         await self.reload_litellm_router()
-        return new_cred
+        return ensure_credential_read_model(new_cred)
 
     async def import_all_user_credentials_to_team(self, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID) -> int:
         user_creds = await self._creds.list_for_user(actor_user_id)
@@ -183,15 +187,15 @@ class CredentialWritesMixin:
             await self.reload_litellm_router()
         return created
 
-    async def create_user_credential(self, *, actor_user_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> Any:
+    async def create_user_credential(self, *, actor_user_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
         dup = await self._creds.find_user_by_provider_and_name(actor_user_id, provider, name)
         if dup is not None:
             raise CredentialNameConflictError(provider, name)
         row = await self._creds.create(scope='user', scope_id=actor_user_id, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=resolve_effective_api_base(provider, api_base), extra=extra)
         await self.reload_litellm_router()
-        return row
+        return ensure_credential_read_model(row)
 
-    async def update_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> Any:
+    async def update_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> CredentialReadModel:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != 'user' or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
@@ -203,7 +207,7 @@ class CredentialWritesMixin:
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
         await self.reload_litellm_router()
-        return updated
+        return ensure_credential_read_model(updated)
 
     async def delete_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, reload_router: bool=True) -> None:
         existing = await self._creds.get(credential_id)

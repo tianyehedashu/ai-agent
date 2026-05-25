@@ -6,12 +6,9 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
-from domains.gateway.domain.types import (
-    credential_api_scope,
-    is_config_managed_system_credential,
-)
 from domains.gateway.presentation.credential_response import (
     build_credential_response,
+    build_credential_summary_response,
     decrypt_credential_api_key_for_reveal,
 )
 from domains.gateway.presentation.deps import (
@@ -65,22 +62,7 @@ async def list_credential_summaries(
 ) -> list[CredentialSummaryResponse]:
     """团队 member 可读：解析模型 credential_id → 显示名（含 system，无密钥）。"""
     rows = await reads.list_credential_summaries_for_team(team.team_id)
-    return [
-        CredentialSummaryResponse(
-            id=r.id,
-            provider=r.provider,
-            name=r.name,
-            scope=credential_api_scope(scope=r.scope, tenant_id=r.tenant_id),
-            is_active=r.is_active,
-            is_config_managed=is_config_managed_system_credential(
-                scope=r.scope,
-                tenant_id=r.tenant_id,
-                name=r.name,
-                extra=r.extra,
-            ),
-        )
-        for r in rows
-    ]
+    return [build_credential_summary_response(r) for r in rows]
 
 
 @router.get("/credentials/{credential_id}", response_model=CredentialResponse)

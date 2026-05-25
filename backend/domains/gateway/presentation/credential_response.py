@@ -13,7 +13,10 @@ from domains.gateway.domain.types import (
     is_config_managed_system_credential,
 )
 from domains.gateway.domain.visibility import credential_visibility_for_api
-from domains.gateway.presentation.schemas.common import CredentialResponse
+from domains.gateway.presentation.schemas.common import (
+    CredentialResponse,
+    CredentialSummaryResponse,
+)
 from libs.crypto import decrypt_value
 from utils.logging import get_logger
 
@@ -86,8 +89,26 @@ def build_credential_response(
     )
 
 
+def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSummaryResponse:
+    """凭据摘要 DTO（无密钥）；读/写侧均应先映射为 CredentialReadModel。"""
+    return CredentialSummaryResponse(
+        id=cred.id,
+        provider=cred.provider,
+        name=cred.name,
+        scope=credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id),
+        is_active=cred.is_active,
+        is_config_managed=is_config_managed_system_credential(
+            scope=cred.scope,
+            tenant_id=cred.tenant_id,
+            name=cred.name,
+            extra=cred.extra,
+        ),
+    )
+
+
 __all__ = [
     "build_credential_response",
+    "build_credential_summary_response",
     "decrypt_credential_api_key_for_reveal",
     "mask_plain_secret_for_display",
 ]

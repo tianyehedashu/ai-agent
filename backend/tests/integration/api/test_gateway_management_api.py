@@ -1710,6 +1710,39 @@ class TestGatewayManagementApi:
         assert r_sys_detail.status_code == 403, r_sys_detail.text
 
     @pytest.mark.asyncio
+    async def test_create_system_credential_returns_mapped_response(
+        self,
+        dev_client: AsyncClient,
+        admin_user: User,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        """POST scope=system：平台管理员创建系统凭据应 201 且响应含 scope=api 字段。"""
+        team = await TeamService(db_session).ensure_personal_team(admin_user.id)
+        await db_session.commit()
+
+        sys_name = f"sys-create-{uuid.uuid4().hex[:8]}"
+        r_create = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=admin_headers,
+            json={
+                "provider": "openai",
+                "name": sys_name,
+                "api_key": "sk-system-create-integration-test-key",
+                "api_base": "https://api.openai.com/v1",
+                "scope": "system",
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        body = r_create.json()
+        assert body["scope"] == "system"
+        assert body["tenant_id"] is None
+        assert body["name"] == sys_name
+        assert body["provider"] == "openai"
+        assert "api_key_masked" in body
+        assert "sk-system-create-integration-test-key" not in body["api_key_masked"]
+
+    @pytest.mark.asyncio
     async def test_batch_delete_system_models_partial_success(
         self,
         dev_client: AsyncClient,

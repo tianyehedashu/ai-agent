@@ -1,4 +1,4 @@
-"""ProviderCredential ORM → CredentialReadModel。"""
+"""ProviderCredential / SystemProviderCredential ORM → CredentialReadModel。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,12 @@ from domains.gateway.application.management.credential_read_model import Credent
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
     from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
+
+    CredentialReadSource = (
+        CredentialReadModel | ProviderCredential | SystemProviderCredential
+    )
+else:
+    CredentialReadSource = CredentialReadModel
 
 
 def credential_from_orm(cred: ProviderCredential) -> CredentialReadModel:
@@ -45,4 +51,23 @@ def system_credential_from_orm(cred: SystemProviderCredential) -> CredentialRead
     )
 
 
-__all__ = ["credential_from_orm", "system_credential_from_orm"]
+def ensure_credential_read_model(cred: CredentialReadSource) -> CredentialReadModel:
+    """ORM 或已映射的只读模型统一为 CredentialReadModel（写侧返回 ORM 时 presentation 复用）。"""
+    if isinstance(cred, CredentialReadModel):
+        return cred
+    from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
+    from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
+
+    if isinstance(cred, SystemProviderCredential):
+        return system_credential_from_orm(cred)
+    if isinstance(cred, ProviderCredential):
+        return credential_from_orm(cred)
+    raise TypeError(f"unsupported credential type: {type(cred)!r}")
+
+
+__all__ = [
+    "CredentialReadSource",
+    "credential_from_orm",
+    "ensure_credential_read_model",
+    "system_credential_from_orm",
+]
