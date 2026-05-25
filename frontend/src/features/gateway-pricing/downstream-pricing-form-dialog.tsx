@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type React from 'react'
 
 import { useQuery } from '@tanstack/react-query'
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
+import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
 import { Loader2 } from '@/lib/lucide-icons'
 import type { DisplayCurrency } from '@/types/money'
 
@@ -94,12 +95,12 @@ export function DownstreamPricingFormDialog({
   const { byId: credentialById } = useGatewayCredentialDirectory()
 
   const modelsQuery = useQuery({
-    queryKey: ['gateway-models-for-downstream-pricing', teamId],
-    queryFn: () => modelsApi.listModels(teamId),
+    queryKey: gatewayModelsListQueryKey(teamId, 'team'),
+    queryFn: () => modelsApi.listModels(teamId, { registry_scope: 'team' }),
     enabled: open && !row?.gateway_model_id,
   })
 
-  const modelOptions = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data])
+  const modelOptions = modelsQuery.data ?? []
 
   useEffect(() => {
     if (!open) return

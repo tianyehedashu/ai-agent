@@ -14,6 +14,8 @@ from typing import Any
 
 import pytest
 
+from tests.e2e.config import append_sse_data_line, e2e_api_v1_path
+
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
     """解析 SSE 事件"""
@@ -51,7 +53,7 @@ class TestExecutionConfigIntegration:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "你好，请简单介绍你自己"},
             headers={"Accept": "text/event-stream"},
         ) as response:
@@ -59,8 +61,8 @@ class TestExecutionConfigIntegration:
             assert response.status_code == 200
 
             async for line in response.aiter_lines():
-                if line.startswith("data: ") and line != "data: [DONE]":
-                    events.append(json.loads(line[6:]))
+                if append_sse_data_line(line, events):
+                    break
 
         # Then: 验证事件
         event_types = [e["type"] for e in events]
@@ -82,7 +84,7 @@ class TestExecutionConfigIntegration:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "请列出当前目录下的文件（使用工具）"},
             headers={"Accept": "text/event-stream"},
         ) as response:
@@ -93,6 +95,8 @@ class TestExecutionConfigIntegration:
                     event = json.loads(line[6:])
                     events.append(event)
                     print(f"Event: {event['type']}")
+                    if event.get("type") == "done":
+                        break
 
         # Then: 验证事件流
         event_types = [e["type"] for e in events]
@@ -121,7 +125,7 @@ class TestExecutionConfigIntegration:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={
                 "message": "你好",
                 "agent_id": "example-agent",  # 使用示例 Agent
@@ -132,8 +136,8 @@ class TestExecutionConfigIntegration:
             assert response.status_code == 200
 
             async for line in response.aiter_lines():
-                if line.startswith("data: ") and line != "data: [DONE]":
-                    events.append(json.loads(line[6:]))
+                if append_sse_data_line(line, events):
+                    break
 
         # Then: 验证有响应
         event_types = [e["type"] for e in events]
@@ -159,7 +163,7 @@ class TestExecutionConfigAPI:
         Then 应返回所有可用模板
         """
         # When: 请求模板列表
-        response = http_client.get("/api/v1/execution/templates")
+        response = http_client.get(e2e_api_v1_path("execution", "templates"))
 
         # Then: 如果 API 存在，验证响应
         if response.status_code == 200:
@@ -180,7 +184,7 @@ class TestExecutionConfigAPI:
         Then 应返回所有注册的工具及其描述
         """
         # When: 请求工具列表
-        response = http_client.get("/api/v1/execution/tools")
+        response = http_client.get(e2e_api_v1_path("execution", "tools"))
 
         # Then: 验证响应
         if response.status_code == 200:
@@ -213,15 +217,15 @@ class TestConfiguredToolBehavior:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "请读取 README.md 文件的内容"},
             headers={"Accept": "text/event-stream"},
         ) as response:
             assert response.status_code == 200
 
             async for line in response.aiter_lines():
-                if line.startswith("data: ") and line != "data: [DONE]":
-                    events.append(json.loads(line[6:]))
+                if append_sse_data_line(line, events):
+                    break
 
         # Then: 如果有工具调用，不应有 interrupt 事件
         event_types = [e["type"] for e in events]

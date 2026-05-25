@@ -47,7 +47,12 @@ from typing import Any
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL
+from tests.e2e.config import (
+    E2E_API_BASE_URL as API_BASE_URL,
+    append_sse_data_line,
+    e2e_api_v1_path,
+    e2e_service_health_path,
+)
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
@@ -70,7 +75,7 @@ class TestHealthCheck:
     def test_health_endpoint(self):
         """测试: 健康检查端点可访问"""
         with httpx.Client(base_url=API_BASE_URL, timeout=10.0) as client:
-            response = client.get("/health")
+            response = client.get(e2e_service_health_path())
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "healthy"
@@ -100,17 +105,19 @@ class TestChatAPIE2E:
 
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "你好"},
             headers={"Accept": "text/event-stream"},
         ) as response:
             assert response.status_code == 200
 
             async for line in response.aiter_lines():
-                if line.startswith("data: ") and line != "data: [DONE]":
-                    event_data = json.loads(line[6:])
-                    events.append(event_data)
-                    print(f"Event: {event_data['type']} - {event_data.get('data', {})}")
+                if append_sse_data_line(line, events):
+                    print(f"Event: done - {events[-1].get('data', {})}")
+                    break
+                if events:
+                    last = events[-1]
+                    print(f"Event: {last['type']} - {last.get('data', {})}")
 
         # 验证收到了必要的事件
         event_types = [e["type"] for e in events]
@@ -151,7 +158,7 @@ class TestChatAPIE2E:
 
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "我叫张三"},
             headers={"Accept": "text/event-stream"},
         ) as response:
@@ -188,7 +195,7 @@ class TestChatAPIE2E:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "我叫什么名字？", "session_id": session_id},
             headers={"Accept": "text/event-stream"},
         ) as response:
@@ -245,7 +252,7 @@ class TestChatAPIE2E:
         print("\n第一轮: 我喜欢吃苹果")
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "记住：我喜欢吃苹果"},
         ) as response:
             async for line in response.aiter_lines():
@@ -264,7 +271,7 @@ class TestChatAPIE2E:
         print("\n第二轮: 我住在北京")
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "记住：我住在北京", "session_id": session_id},
         ) as response:
             async for line in response.aiter_lines():
@@ -280,7 +287,7 @@ class TestChatAPIE2E:
         final_response = ""
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "请总结一下你记住的关于我的信息", "session_id": session_id},
         ) as response:
             async for line in response.aiter_lines():
@@ -317,7 +324,7 @@ class TestChatErrorHandling:
     async def test_empty_message_validation(self, async_http_client: httpx.AsyncClient):
         """测试: 空消息验证"""
         response = await async_http_client.post(
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": ""},
         )
         # 应该返回 422 (Validation Error) - message 最小长度为 1
@@ -330,7 +337,7 @@ class TestChatErrorHandling:
         events = []
         async with async_http_client.stream(
             "POST",
-            "/api/v1/chat",
+            e2e_api_v1_path("chat"),
             json={"message": "hello", "session_id": "invalid-uuid-12345"},
         ) as response:
             # API 可能返回 200 但在事件流中返回 error
@@ -352,25 +359,20 @@ class TestChatErrorHandling:
 class TestAgentAPIE2E:
     """Agent API 端到端测试"""
 
-    def test_list_agents(self):
-        """测试: 获取 Agent 列表
-
-        注意: 此测试需要后端服务在开发模式下运行（允许匿名用户），
-        或者需要提供有效的认证 token。
-        """
-        with httpx.Client(base_url=API_BASE_URL, timeout=30.0, follow_redirects=True) as client:
-            response = client.get("/api/v1/agents/")
-            assert response.status_code == 200, (
-                f"Expected 200, got {response.status_code}: {response.text}"
-            )
-            data = response.json()
-            assert isinstance(data, list)
-            print(f"✓ 获取 Agent 列表成功，共 {len(data)} 个")
+    def test_list_agents(self, http_client: httpx.Client):
+        """测试: 获取 Agent 列表（需 E2E_USER_EMAIL / E2E_USER_PASSWORD）。"""
+        response = http_client.get(f"{e2e_api_v1_path('agents')}/")
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}: {response.text}"
+        )
+        data = response.json()
+        assert isinstance(data, list)
+        print(f"✓ 获取 Agent 列表成功，共 {len(data)} 个")
 
     def test_system_stats(self):
         """测试: 获取系统统计"""
         with httpx.Client(base_url=API_BASE_URL, timeout=30.0) as client:
-            response = client.get("/api/v1/system/stats")
+            response = client.get(e2e_api_v1_path("system", "stats"))
             # 可能需要认证
             if response.status_code == 200:
                 print(f"✓ 获取系统统计成功: {response.json()}")

@@ -43,7 +43,7 @@ image = "ai-agent-sandbox:latest"
 
 # 会话模式：容器保持运行，状态保留（推荐）
 session_enabled = true
-workspace_volume = null  # 使用默认工作目录，如需持久化可设置为主机路径
+# workspace_volume 省略时使用默认临时工作目录；如需持久化可设置为主机路径
 container_workspace = "/workspace"
 
 packages = [

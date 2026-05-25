@@ -74,3 +74,14 @@ def e2e_anthropic_messages_path() -> str:
 
 def e2e_api_v1_path(*segments: str) -> str:
     return _api_v1_path(*segments)
+
+
+def append_sse_data_line(line: str, events: list) -> bool:
+    """解析一行 SSE ``data:`` 载荷；收到 ``done`` 时返回 True，便于结束流式读取。"""
+    import json
+
+    if not line.startswith("data: ") or line == "data: [DONE]":
+        return False
+    event = json.loads(line[6:])
+    events.append(event)
+    return event.get("type") == "done"

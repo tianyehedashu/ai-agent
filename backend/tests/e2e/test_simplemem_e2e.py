@@ -19,6 +19,8 @@ import uuid
 import httpx
 import pytest
 
+from tests.e2e.config import append_sse_data_line, e2e_api_v1_path
+
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:
     """解析 SSE 事件"""
@@ -59,7 +61,7 @@ async def send_chat_message(
         try:
             async with client.stream(
                 "POST",
-                "/api/v1/chat",
+                e2e_api_v1_path("chat"),
                 json=payload,
                 headers={"Accept": "text/event-stream"},
             ) as response:
@@ -88,6 +90,7 @@ async def send_chat_message(
                                 final_response = final_msg.get("content") or final_msg.get(
                                     "reasoning_content", ""
                                 )
+                                break
                             elif event["type"] == "error":
                                 print(f"  ⚠️ 错误事件: {event['data']}")
                         except json.JSONDecodeError as e:
