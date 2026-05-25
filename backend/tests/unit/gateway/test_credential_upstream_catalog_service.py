@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
+import uuid
 
 import pytest
 
@@ -13,6 +14,10 @@ from domains.gateway.application.management.credential_upstream_catalog import (
 from domains.gateway.application.management.ports import RawUpstreamListResult
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
+)
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
+from domains.gateway.infrastructure.repositories.system_credential_repository import (
+    SystemProviderCredentialRepository,
 )
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
@@ -227,3 +232,164 @@ async def test_batch_import_team_success(db_session, test_user: User) -> None:
     assert len(created) == 1
     assert created[0]["upstream_model_id"] == "gpt-new-model"
     assert "gateway_model_id" in created[0]
+
+
+@pytest.mark.asyncio
+async def test_list_name_real_model_pairs_includes_system_gateway_models(
+    db_session,
+) -> None:
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await SystemProviderCredentialRepository(db_session).create(
+        provider="openai",
+        name=f"sys-pairs-{uuid.uuid4().hex[:8]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    models = GatewayModelRepository(db_session)
+    await models.create_system(
+        name="catalog-gpt4o",
+        capability="chat",
+        real_model="openai/gpt-4o-mini",
+        credential_id=cred.id,
+        provider="openai",
+    )
+    await db_session.commit()
+
+    pairs = await models.list_name_real_model_pairs_for_credential(cred.id)
+    assert ("catalog-gpt4o", "openai/gpt-4o-mini") in pairs
+
+
+@pytest.mark.asyncio
+async def test_probe_system_credential_marks_system_model_already_registered(
+    db_session, test_user: User
+) -> None:
+    port = AsyncMock()
+    port.fetch_models = AsyncMock(
+        return_value=RawUpstreamListResult(
+            ok=True,
+            http_status=200,
+            items=(("gpt-4o-mini", "openai"), ("gpt-new-only", "openai")),
+            error_message=None,
+        )
+    )
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await SystemProviderCredentialRepository(db_session).create(
+        provider="openai",
+        name=f"sys-probe-{uuid.uuid4().hex[:8]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    await GatewayModelRepository(db_session).create_system(
+        name="catalog-gpt4o-mini",
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=cred.id,
+        provider="openai",
+    )
+    await db_session.commit()
+
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    svc = CredentialUpstreamCatalogService(db_session, port=port)
+    result = await svc.probe_managed_credential(
+        tenant_id=team.id,
+        is_platform_admin=True,
+        credential_id=cred.id,
+    )
+    assert result.support == "full"
+    by_id = {item.id: item for item in result.items}
+    assert by_id["gpt-4o-mini"].already_registered is True
+    assert by_id["gpt-4o-mini"].registered_names == ("catalog-gpt4o-mini",)
+    assert by_id["gpt-new-only"].already_registered is False
+
+
+@pytest.mark.asyncio
+async def test_batch_import_system_duplicate_fails_when_in_system_gateway_models(
+    db_session, test_user: User
+) -> None:
+    port = AsyncMock()
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await SystemProviderCredentialRepository(db_session).create(
+        provider="openai",
+        name=f"sys-dup-{uuid.uuid4().hex[:8]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    await GatewayModelRepository(db_session).create_system(
+        name="catalog-existing",
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=cred.id,
+        provider="openai",
+    )
+    await db_session.commit()
+
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    svc = CredentialUpstreamCatalogService(db_session, port=port)
+    created, failed = await svc.batch_import_team_models(
+        tenant_id=team.id,
+        is_platform_admin=True,
+        credential_id=cred.id,
+        provider="openai",
+        capability="chat",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        enabled=True,
+        items=[("gpt-4o-mini", None)],
+    )
+    assert created == []
+    assert len(failed) == 1
+    assert failed[0]["upstream_model_id"] == "gpt-4o-mini"
+    assert "已注册" in failed[0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_batch_import_cross_credential_same_upstream_id_succeeds(
+    db_session, test_user: User
+) -> None:
+    port = AsyncMock()
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred_a = await create_tenant_test_credential(
+        db_session, team.id, name="import-cred-a", provider="openai"
+    )
+    cred_b = await create_tenant_test_credential(
+        db_session, team.id, name="import-cred-b", provider="openai"
+    )
+    from domains.gateway.application.management.writes import GatewayManagementWriteService
+
+    writes = GatewayManagementWriteService(db_session)
+    await writes.create_gateway_model(
+        tenant_id=team.id,
+        name="alias-on-a",
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=cred_a.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        is_platform_admin=False,
+        enabled=True,
+        reload_router=False,
+    )
+    await db_session.commit()
+
+    svc = CredentialUpstreamCatalogService(db_session, port=port)
+    created, failed = await svc.batch_import_team_models(
+        tenant_id=team.id,
+        is_platform_admin=False,
+        credential_id=cred_b.id,
+        provider="openai",
+        capability="chat",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        enabled=True,
+        items=[("gpt-4o-mini", None)],
+    )
+    assert failed == []
+    assert len(created) == 1
+    assert created[0]["upstream_model_id"] == "gpt-4o-mini"

@@ -34,14 +34,22 @@ class GatewayModelRepository:
     async def list_name_real_model_pairs_for_credential(
         self, credential_id: uuid.UUID
     ) -> list[tuple[str, str]]:
-        """凭据下已注册模型的 (注册别名, real_model)。"""
-        stmt = (
-            select(GatewayModel.name, GatewayModel.real_model)
-            .where(GatewayModel.credential_id == credential_id)
-            .order_by(GatewayModel.name)
+        """凭据下已注册模型的 (注册别名, real_model)。
+
+        合并 ``gateway_models`` 与 ``system_gateway_models``（catalog 同步的系统行）。
+        """
+        tenant_stmt = select(GatewayModel.name, GatewayModel.real_model).where(
+            GatewayModel.credential_id == credential_id
         )
-        result = await self._session.execute(stmt)
-        return [(str(row[0]), str(row[1])) for row in result.all()]
+        system_stmt = select(SystemGatewayModel.name, SystemGatewayModel.real_model).where(
+            SystemGatewayModel.credential_id == credential_id
+        )
+        tenant_result = await self._session.execute(tenant_stmt)
+        system_result = await self._session.execute(system_stmt)
+        rows = [(str(row[0]), str(row[1])) for row in tenant_result.all()]
+        rows.extend((str(row[0]), str(row[1])) for row in system_result.all())
+        rows.sort(key=lambda pair: pair[0])
+        return rows
 
     async def list_system(
         self,
