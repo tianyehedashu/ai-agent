@@ -13,9 +13,16 @@ from domains.gateway.infrastructure.router_singleton import ensure_gateway_callb
 def _reset_pii_singleton() -> None:
     router_singleton._pii_guardrail_instance = None
     litellm.callbacks = []
+    litellm.drop_params = False
     yield
     router_singleton._pii_guardrail_instance = None
     litellm.callbacks = []
+    litellm.drop_params = False
+
+
+def test_ensure_gateway_callbacks_enables_litellm_drop_params() -> None:
+    ensure_gateway_callbacks()
+    assert litellm.drop_params is True
 
 
 def test_pii_callback_not_registered_when_global_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

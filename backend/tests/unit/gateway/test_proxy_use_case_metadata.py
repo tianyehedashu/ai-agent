@@ -119,6 +119,10 @@ async def test_build_metadata_ignores_user_gateway_prefix_keys(
     assert meta.get("safe_client_marker") == 42
     assert meta["gateway_team_id"] == str(tid)
     assert meta["user_api_key_team_id"] == str(tid)
+    auth_meta = meta.get("user_api_key_auth_metadata")
+    assert isinstance(auth_meta, dict)
+    assert auth_meta.get("gateway_team_id") == str(tid)
+    assert auth_meta.get("gateway_vkey_id") == str(vid)
     assert meta["gateway_store_full_messages"] is False
     assert meta["gateway_inbound_via"] == "vkey"
     assert meta["gateway_platform_api_key_id"] is None

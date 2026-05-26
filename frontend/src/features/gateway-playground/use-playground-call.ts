@@ -41,6 +41,7 @@ import {
   parseGatewayTimingHeaders,
   type GatewayTimingFromHeaders,
 } from './playground-timing'
+import { resolvePlaygroundTokenUsage } from './playground-token-usage'
 
 import type {
   PlaygroundApiFlavor,
@@ -295,6 +296,17 @@ interface Setters {
   setRawResponse: (r: PlaygroundRawResponse) => void
 }
 
+function withResolvedTotalTokens(metadata: PlaygroundMetadata): PlaygroundMetadata {
+  if (metadata.totalTokens !== undefined) {
+    return metadata
+  }
+  const usage = resolvePlaygroundTokenUsage(metadata)
+  if (!usage) {
+    return metadata
+  }
+  return { ...metadata, totalTokens: usage.total }
+}
+
 async function handleOpenAiJson(
   response: Response,
   startedAt: number,
@@ -319,18 +331,20 @@ async function handleOpenAiJson(
   setters.setThinkingContent(reasoning)
   setters.setContent(text)
   const elapsedMs = Math.round(performance.now() - startedAt)
-  setters.setMetadata({
-    httpStatus: response.status,
-    elapsedMs,
-    ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming),
-    promptTokens: json.usage?.prompt_tokens,
-    completionTokens: json.usage?.completion_tokens,
-    totalTokens: json.usage?.total_tokens,
-    finishReason: json.choices?.[0]?.finish_reason ?? undefined,
-    requestId: json.id ?? requestId,
-    responseCostUsd: extractResponseCostUsd(json),
-    hasReasoning: reasoning.length > 0,
-  })
+  setters.setMetadata(
+    withResolvedTotalTokens({
+      httpStatus: response.status,
+      elapsedMs,
+      ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming),
+      promptTokens: json.usage?.prompt_tokens,
+      completionTokens: json.usage?.completion_tokens,
+      totalTokens: json.usage?.total_tokens,
+      finishReason: json.choices?.[0]?.finish_reason ?? undefined,
+      requestId: json.id ?? requestId,
+      responseCostUsd: extractResponseCostUsd(json),
+      hasReasoning: reasoning.length > 0,
+    })
+  )
   setters.setRawResponse(json)
   setters.setStatus('done')
 }
@@ -356,19 +370,17 @@ async function handleAnthropicJson(
   const thinking = pickAnthropicThinking(json)
   setters.setThinkingContent(thinking)
   setters.setContent(pickAnthropicText(json))
-  setters.setMetadata({
-    httpStatus: response.status,
-    elapsedMs: Math.round(performance.now() - startedAt),
-    promptTokens: json.usage?.input_tokens,
-    completionTokens: json.usage?.output_tokens,
-    totalTokens:
-      typeof json.usage?.input_tokens === 'number' && typeof json.usage.output_tokens === 'number'
-        ? json.usage.input_tokens + json.usage.output_tokens
-        : undefined,
-    finishReason: json.stop_reason ?? undefined,
-    requestId: json.id ?? requestId,
-    hasReasoning: thinking.length > 0,
-  })
+  setters.setMetadata(
+    withResolvedTotalTokens({
+      httpStatus: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      promptTokens: json.usage?.input_tokens,
+      completionTokens: json.usage?.output_tokens,
+      finishReason: json.stop_reason ?? undefined,
+      requestId: json.id ?? requestId,
+      hasReasoning: thinking.length > 0,
+    })
+  )
   setters.setRawResponse(json)
   setters.setStatus('done')
 }
@@ -438,18 +450,20 @@ async function streamOpenAi(
   }
 
   const elapsedMs = Math.round(performance.now() - startedAt)
-  setters.setMetadata({
-    httpStatus,
-    elapsedMs,
-    ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming, ttftMs),
-    finishReason: lastJson?.choices?.[0]?.finish_reason ?? undefined,
-    promptTokens: lastJson?.usage?.prompt_tokens,
-    completionTokens: lastJson?.usage?.completion_tokens,
-    totalTokens: lastJson?.usage?.total_tokens,
-    requestId: lastJson?.id ?? requestId,
-    responseCostUsd: extractResponseCostUsd(lastJson),
-    hasReasoning: thinkingAcc.length > 0,
-  })
+  setters.setMetadata(
+    withResolvedTotalTokens({
+      httpStatus,
+      elapsedMs,
+      ...mergePlaygroundTimingFields(elapsedMs, gatewayTiming, ttftMs),
+      finishReason: lastJson?.choices?.[0]?.finish_reason ?? undefined,
+      promptTokens: lastJson?.usage?.prompt_tokens,
+      completionTokens: lastJson?.usage?.completion_tokens,
+      totalTokens: lastJson?.usage?.total_tokens,
+      requestId: lastJson?.id ?? requestId,
+      responseCostUsd: extractResponseCostUsd(lastJson),
+      hasReasoning: thinkingAcc.length > 0,
+    })
+  )
   setters.setRawResponse({
     type: 'openai.stream.summary',
     text: answerAcc,
@@ -540,20 +554,17 @@ async function streamAnthropic(
     return
   }
 
-  const totalTokens =
-    typeof inputTokens === 'number' && typeof outputTokens === 'number'
-      ? inputTokens + outputTokens
-      : undefined
-  setters.setMetadata({
-    httpStatus,
-    elapsedMs: Math.round(performance.now() - startedAt),
-    finishReason: stopReason,
-    promptTokens: inputTokens,
-    completionTokens: outputTokens,
-    totalTokens,
-    requestId: messageId ?? requestId,
-    hasReasoning: thinkingAcc.length > 0,
-  })
+  setters.setMetadata(
+    withResolvedTotalTokens({
+      httpStatus,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      finishReason: stopReason,
+      promptTokens: inputTokens,
+      completionTokens: outputTokens,
+      requestId: messageId ?? requestId,
+      hasReasoning: thinkingAcc.length > 0,
+    })
+  )
   // raw 取最后一个事件 + 累计的关键元数据（流式没有单一 JSON 终响应）
   setters.setRawResponse({
     type: 'anthropic.stream.summary',

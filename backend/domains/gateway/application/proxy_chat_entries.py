@@ -21,14 +21,47 @@ from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
 from domains.gateway.application.proxy_timing import GatewayProxyTiming
+from domains.gateway.domain.policies.anthropic_only_request_fields import (
+    strip_anthropic_only_fields,
+)
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import ensure_router_deployment
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from domains.gateway.application.proxy_context import ProxyContext
     from domains.gateway.application.proxy_use_case import ProxyUseCase
+
+
+def _strip_anthropic_only_fields_for_non_anthropic_upstream(
+    kwargs: dict[str, Any],
+    *,
+    metadata: dict[str, Any],
+    model_tags: dict[str, Any] | None,
+    request_id: str | None,
+    client_model: str,
+) -> None:
+    """非 Anthropic 上游：按 domain 策略剥离 Anthropic-only 字段并写 warning 日志。"""
+    upstream_provider = metadata.get("gateway_provider") if isinstance(metadata, dict) else None
+    dropped = strip_anthropic_only_fields(
+        kwargs,
+        upstream_provider=upstream_provider if isinstance(upstream_provider, str) else None,
+        model_tags=model_tags,
+    )
+    if dropped:
+        logger.warning(
+            "anthropic_messages: stripped Anthropic-only fields for non-anthropic upstream",
+            extra={
+                "request_id": request_id,
+                "client_model": client_model,
+                "upstream_provider": upstream_provider,
+                "dropped_fields": dropped,
+            },
+        )
 
 
 async def estimate_anthropic_input_tokens(body: dict[str, Any], model: str) -> int:
@@ -137,6 +170,13 @@ class ProxyChatMixin:
             estimate_tokens=estimate_anthropic_request_tokens(body),
             require_model=False,
             body_validator=validate_anthropic_messages_body,
+        )
+        _strip_anthropic_only_fields_for_non_anthropic_upstream(
+            prepared.kwargs,
+            metadata=prepared.metadata,
+            model_tags=prepared.model_tags,
+            request_id=ctx.request_id,
+            client_model=prepared.model,
         )
         use_direct = await self.litellm.should_use_internal_direct_litellm(ctx, prepared.model)
 

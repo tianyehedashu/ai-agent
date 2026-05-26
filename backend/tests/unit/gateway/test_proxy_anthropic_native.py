@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+import logging
 from typing import Any
 import uuid
 
@@ -255,3 +256,157 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
     assert b"message_start" in payload
     assert b"content_block_delta" in payload
     assert b"message_stop" in payload
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic_upstream(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """volcengine 上游：协议私有 ``context_management`` / ``anthropic_version`` 被剥离并产 warning 日志。
+
+    ``thinking`` 不在本策略清单（由模型粒度 ``thinking_param`` 体系按 GatewayModel.tags
+    处理），fake_metadata 没接通真实 ``UpstreamAdapter``，故此处验证 ``thinking`` **未**
+    被 provider 粒度策略剥离。
+    """
+
+    captured: dict[str, Any] = {}
+
+    async def fake_router_anthropic(kwargs: dict[str, Any]) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "id": "msg_strip",
+            "type": "message",
+            "role": "assistant",
+            "model": kwargs.get("model"),
+            "content": [{"type": "text", "text": "ok"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-strip",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+
+    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+        return False
+
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
+
+    async def fake_metadata(
+        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        _ = user_kwargs
+        return {"gateway_request_id": "req-strip", "gateway_provider": "volcengine"}
+
+    monkeypatch.setattr(use_case.metadata_builder, "build", fake_metadata)
+
+    async def noop_entitlement(*_a: object, **_k: object) -> None:
+        return None
+
+    monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
+
+    body: dict[str, Any] = {
+        "model": "glm-4-7-251222",
+        "max_tokens": 64,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "context_management": {"edits": [{"type": "clear_tool_uses_20250919"}]},
+        "anthropic_version": "2023-06-01",
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+        "top_p": 0.8,
+    }
+
+    with caplog.at_level(logging.WARNING, logger="domains.gateway.application.proxy_chat_entries"):
+        result = await use_case.anthropic_messages(ctx, body)
+
+    assert isinstance(result, dict)
+    assert "context_management" not in captured
+    assert "anthropic_version" not in captured
+    # ``thinking`` 留给 invocation_policy；本策略不应剥离。
+    assert captured.get("thinking") == {"type": "enabled", "budget_tokens": 1024}
+    assert captured.get("top_p") == 0.8
+    assert captured["messages"] == body["messages"]
+
+    strip_logs = [r for r in caplog.records if "stripped Anthropic-only fields" in r.getMessage()]
+    assert len(strip_logs) == 1
+    extra = strip_logs[0]
+    assert getattr(extra, "upstream_provider", None) == "volcengine"
+    dropped_fields = getattr(extra, "dropped_fields", None)
+    assert isinstance(dropped_fields, list)
+    assert set(dropped_fields) == {"context_management", "anthropic_version"}
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """anthropic 上游：Anthropic-only 字段保留透传。"""
+
+    captured: dict[str, Any] = {}
+
+    async def fake_router_anthropic(kwargs: dict[str, Any]) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "id": "msg_keep",
+            "type": "message",
+            "role": "assistant",
+            "model": kwargs.get("model"),
+            "content": [{"type": "text", "text": "ok"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-keep",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+
+    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+        return False
+
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
+
+    async def fake_metadata(
+        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        _ = user_kwargs
+        return {"gateway_request_id": "req-keep", "gateway_provider": "anthropic"}
+
+    monkeypatch.setattr(use_case.metadata_builder, "build", fake_metadata)
+
+    async def noop_entitlement(*_a: object, **_k: object) -> None:
+        return None
+
+    monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
+
+    body: dict[str, Any] = {
+        "model": "claude-opus-4-7",
+        "max_tokens": 64,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "context_management": {"edits": [{"type": "clear_tool_uses_20250919"}]},
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+    }
+
+    await use_case.anthropic_messages(ctx, body)
+
+    assert captured.get("context_management") == body["context_management"]
+    assert captured.get("thinking") == body["thinking"]

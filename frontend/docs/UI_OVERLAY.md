@@ -130,13 +130,14 @@ useEffect(() => registerSidebarNavigate(navigate), [navigate])
 
 ## 禁止事项
 
-| 不要做                                               | 原因                                                          |
-| ---------------------------------------------------- | ------------------------------------------------------------- |
-| 路由切换时 `deferDismissOpenRadixLayers()`（Escape） | 与 React Router / Portal 卸载竞态，可能导致 URL 与页面不一致  |
-| 手动 `removeChild` Radix Portal 节点                 | 与 React commit 冲突（如 Sidebar Tooltip `removeChild` 报错） |
-| Select 上写 `modal={false}`                          | API 不存在，无效                                              |
-| 强制导航时直接 `navigate(href)` 不 strip basename    | 产生 `/ai-agent/ai-agent/...` 错误路径                        |
-| 在 block **外部** 长期挂载带 Portal 的重面板         | 折叠后 popper 残留，继续封锁 body                             |
+| 不要做                                                | 原因                                                                                                           |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 路由切换时 `deferDismissOpenRadixLayers()`（Escape）  | 与 React Router / Portal 卸载竞态，可能导致 URL 与页面不一致                                                   |
+| 手动 `removeChild` Radix Portal 节点                  | 与 React commit 冲突（如 Sidebar Tooltip `removeChild` 报错）                                                  |
+| Select 上写 `modal={false}`                           | API 不存在，无效                                                                                               |
+| 强制导航时直接 `navigate(href)` 不 strip basename     | 产生 `/ai-agent/ai-agent/...` 错误路径                                                                         |
+| 在 block **外部** 长期挂载带 Portal 的重面板          | 折叠后 popper 残留，继续封锁 body                                                                              |
+| `BrowserRouter` 上开 `future.v7_startTransition=true` | navigate 内部 setState 被包进 transition，与 capture 阶段同步派发的 Escape 紧急更新竞态，URL 不变 / 页面不刷新 |
 
 ## 测试
 

@@ -24,6 +24,13 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
+      {/*
+        不开启 v7_startTransition：会把 navigate 引起的内部 state 更新包进 React.startTransition，
+        与 src/lib/ui-overlay/overlay-pointer-guard.ts 在 pointerdown capture 阶段同步触发的
+        navigate + Radix Select onOpenChange 紧急更新冲突，导致 Listing 创作页展开 Select 后
+        点击侧栏菜单时 transition 被推迟/丢弃（URL 不变 / 页面不刷新）。
+        参考：frontend/docs/UI_OVERLAY.md
+      */}
       <BrowserRouter
         basename={APP_ROOT || undefined}
         future={{

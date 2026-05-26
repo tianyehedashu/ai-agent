@@ -37,10 +37,14 @@ import { Switch } from '@/components/ui/switch'
 import { KeyBudgetInline } from '@/features/gateway-budget/key-budget-inline'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
+import {
+  VirtualKeyRevealDialog,
+  type VirtualKeyRevealTarget,
+} from '@/features/gateway-keys/virtual-key-reveal-dialog'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
-import { BookOpen, Copy, Plus, Trash2 } from '@/lib/lucide-icons'
+import { BookOpen, Copy, Eye, Plus, Trash2 } from '@/lib/lucide-icons'
 
 export default function GatewayKeysPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
@@ -55,6 +59,7 @@ export default function GatewayKeysPage(): React.JSX.Element {
   const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
   const [revokeOpen, setRevokeOpen] = useState(false)
   const [pendingRevoke, setPendingRevoke] = useState<{ id: string; name: string } | null>(null)
+  const [revealTarget, setRevealTarget] = useState<VirtualKeyRevealTarget | null>(null)
 
   const { data: keys, isLoading } = useQuery({
     queryKey: ['gateway', 'keys', teamId],
@@ -303,17 +308,34 @@ export default function GatewayKeysPage(): React.JSX.Element {
                         </Button>
                       ) : null}
                       {canManageKeys && k.is_active ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            setPendingRevoke({ id: k.id, name: k.name })
-                            setRevokeOpen(true)
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            aria-label={`查看 ${k.name} 完整 Key`}
+                            onClick={() => {
+                              setRevealTarget({
+                                id: k.id,
+                                name: k.name,
+                                masked_key: k.masked_key,
+                              })
+                            }}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              setPendingRevoke({ id: k.id, name: k.name })
+                              setRevokeOpen(true)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </>
                       ) : null}
                     </div>
                   </td>
@@ -338,6 +360,14 @@ export default function GatewayKeysPage(): React.JSX.Element {
           createMutation.mutate(values)
         }}
         plaintext={createdKey}
+      />
+
+      <VirtualKeyRevealDialog
+        teamId={teamId}
+        target={revealTarget}
+        onClose={() => {
+          setRevealTarget(null)
+        }}
       />
 
       <ConfirmAlertDialog
@@ -442,7 +472,9 @@ function CreateKeyDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>创建虚拟 Key</DialogTitle>
-          <DialogDescription>创建后明文仅展示一次，请立即复制保存。</DialogDescription>
+          <DialogDescription>
+            创建后请立即复制保存；之后仍可在列表中通过「查看」再次获取完整 Key。
+          </DialogDescription>
         </DialogHeader>
         {plaintext ? (
           <div className="space-y-3 py-2">

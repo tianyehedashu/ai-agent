@@ -15,6 +15,7 @@ import type { DisplayCurrency } from '@/types/money'
 import { ImageGenOutput } from './modes/image-gen-output'
 import { VideoOutput } from './modes/video-output'
 import { isImageGenRaw, isVideoGenRaw, safeStringify } from './playground-raw-response'
+import { resolvePlaygroundTokenUsage } from './playground-token-usage'
 
 import type { PlaygroundMode } from './playground-mode-filter'
 import type {
@@ -333,13 +334,15 @@ function MetadataRow({
   if (metadata.upstreamMs !== undefined) {
     items.push({ label: '上游', value: `${String(metadata.upstreamMs)} ms` })
   }
-  if (metadata.totalTokens !== undefined) {
-    items.push({ label: 'Tokens', value: String(metadata.totalTokens) })
-  } else if (metadata.completionTokens !== undefined || metadata.promptTokens !== undefined) {
-    const promptPart = metadata.promptTokens !== undefined ? String(metadata.promptTokens) : '?'
-    const completionPart =
-      metadata.completionTokens !== undefined ? String(metadata.completionTokens) : '?'
-    items.push({ label: 'Tokens', value: `${promptPart} → ${completionPart}` })
+  const tokenUsage = resolvePlaygroundTokenUsage(metadata)
+  if (tokenUsage) {
+    items.push({ label: '总 Token', value: tokenUsage.total.toLocaleString() })
+    if (tokenUsage.prompt !== undefined) {
+      items.push({ label: '输入', value: tokenUsage.prompt.toLocaleString() })
+    }
+    if (tokenUsage.completion !== undefined) {
+      items.push({ label: '输出', value: tokenUsage.completion.toLocaleString() })
+    }
   }
   if (metadata.finishReason) items.push({ label: 'finish', value: metadata.finishReason })
   if (metadata.requestId) items.push({ label: 'id', value: metadata.requestId })

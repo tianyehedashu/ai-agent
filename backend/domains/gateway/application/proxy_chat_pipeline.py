@@ -1,7 +1,7 @@
 """Chat / Anthropic Messages 代理入站公共流水线（校验、预算、kwargs 准备）。
 
 校验/限流/预算/entitlement 经 :func:`run_proxy_inbound_preflight` 完成；
-LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_kwargs`` 拼装。
+LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_invoke`` 拼装（保留 ``resolved`` / tags）。
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ class ChatProxyPrepared:
     downstream_custom: dict[str, float] | None
     upstream_custom: dict[str, float] | None
     stream: bool
+    model_tags: dict[str, Any] | None = None
 
 
 def apply_stream_cost_defer_flag(metadata: dict[str, Any] | None, *, stream: bool) -> None:
@@ -68,12 +69,18 @@ async def prepare_chat_proxy_request(
     )
     assert preflight.model is not None
 
-    kwargs = await use_case.prepare_litellm_kwargs(ctx, body)
+    prepared_litellm, kwargs = await use_case.prepare_litellm_invoke(ctx, body)
     kwargs = await inline_vision_image_urls_in_kwargs(use_case.session, kwargs)
     meta = kwargs.get("metadata")
     metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}
     stream = bool(body.get("stream"))
     apply_stream_cost_defer_flag(metadata, stream=stream)
+
+    model_tags: dict[str, Any] | None = None
+    if prepared_litellm.resolved is not None:
+        raw_tags = prepared_litellm.resolved.record.tags
+        if isinstance(raw_tags, dict):
+            model_tags = dict(raw_tags)
 
     return ChatProxyPrepared(
         model=preflight.model,
@@ -83,6 +90,7 @@ async def prepare_chat_proxy_request(
         downstream_custom=downstream_custom_from_metadata(metadata),
         upstream_custom=upstream_custom_from_metadata(metadata),
         stream=stream,
+        model_tags=model_tags,
     )
 
 

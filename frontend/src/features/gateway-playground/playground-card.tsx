@@ -39,6 +39,10 @@ import { cn } from '@/lib/utils'
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundCredentialField } from './playground-credential-field'
 import { withReferenceImagePayloadHint } from './playground-error'
+import {
+  PLAYGROUND_EXAMPLE_PROMPTS,
+  PLAYGROUND_EXAMPLE_PROMPT_VALUES,
+} from './playground-example-content'
 import { PlaygroundImageGenSizeField } from './playground-image-gen-size-field'
 import { PlaygroundKeyField } from './playground-key-field'
 import {
@@ -62,22 +66,17 @@ import type { PlaygroundApiFlavor } from './types'
 import type { PlaygroundModelsSnapshot } from './use-playground-filtered-models'
 import type { UsePlaygroundVirtualKeyReturn } from './use-playground-virtual-key'
 
-const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
-  chat: '请用三句话介绍 AI Gateway 的作用，并给出一个适合接入的场景。',
-  vision: '请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。',
-  image_gen:
-    '写实风格的 SaaS 产品发布海报，主体是一台展示 AI Gateway 控制台的笔记本电脑，蓝紫渐变背景，干净科技感，16:9。',
-  video_gen:
-    '生成一段 6 秒产品演示短视频：镜头从团队仪表盘推进到模型调用日志，风格简洁、科技感、平滑运镜。',
-}
-const DEFAULT_PROMPT = DEFAULT_PROMPTS.chat
-const DEFAULT_PROMPT_VALUES = new Set<string>(Object.values(DEFAULT_PROMPTS))
+const DEFAULT_PROMPT = PLAYGROUND_EXAMPLE_PROMPTS.chat
+const DEFAULT_PROMPT_VALUES = PLAYGROUND_EXAMPLE_PROMPT_VALUES
 interface PlaygroundCardProps {
   baseUrl: string
   onModelChange?: (model: string) => void
   /** 可选凭据筛选（Guide 页与 URL 同步） */
   credentialId?: string
   onCredentialChange?: (id: string) => void
+  /** Guide 页与代码示例同步试调模式（须与 onPlaygroundModeChange 成对传入） */
+  playgroundMode?: PlaygroundMode
+  onPlaygroundModeChange?: (mode: PlaygroundMode) => void
   /** 由父级调用 ``usePlaygroundVirtualKey`` 注入，避免重复 list/reveal 请求 */
   virtualKey: UsePlaygroundVirtualKeyReturn
   /** 由父级 ``usePlaygroundFilteredModels`` 注入（凭据目录 + 模型候选 + 路由）；卡片内不自行查询 */
@@ -89,6 +88,8 @@ export function PlaygroundCard({
   onModelChange,
   credentialId: credentialIdProp = '',
   onCredentialChange,
+  playgroundMode: playgroundModeProp,
+  onPlaygroundModeChange,
   virtualKey,
   filteredModels: {
     credentialGroups,
@@ -105,8 +106,11 @@ export function PlaygroundCard({
   },
 }: PlaygroundCardProps): React.JSX.Element {
   const isCredentialControlled = onCredentialChange !== undefined
+  const isModeControlled = onPlaygroundModeChange !== undefined && playgroundModeProp !== undefined
   const [localCredentialId, setLocalCredentialId] = useState('')
+  const [localPlaygroundMode, setLocalPlaygroundMode] = useState<PlaygroundMode>('chat')
   const credentialId = isCredentialControlled ? credentialIdProp : localCredentialId
+  const playgroundMode = isModeControlled ? playgroundModeProp : localPlaygroundMode
   const handleCredentialChange = useCallback(
     (id: string) => {
       if (onCredentialChange) onCredentialChange(id)
@@ -128,7 +132,6 @@ export function PlaygroundCard({
   const imageSizeId = useId()
   const imageCountId = useId()
 
-  const [playgroundMode, setPlaygroundMode] = useState<PlaygroundMode>('chat')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
   const [customModel, setCustomModel] = useState(false)
@@ -275,9 +278,10 @@ export function PlaygroundCard({
   }
 
   const handleModeChange = (mode: PlaygroundMode): void => {
-    setPlaygroundMode(mode)
+    if (onPlaygroundModeChange) onPlaygroundModeChange(mode)
+    else setLocalPlaygroundMode(mode)
     if (!prompt.trim() || DEFAULT_PROMPT_VALUES.has(prompt)) {
-      setPrompt(DEFAULT_PROMPTS[mode])
+      setPrompt(PLAYGROUND_EXAMPLE_PROMPTS[mode])
     }
     resetAllCalls()
   }
@@ -605,7 +609,7 @@ export function PlaygroundCard({
                 setPrompt(e.target.value)
               }}
               rows={4}
-              placeholder={DEFAULT_PROMPTS[playgroundMode]}
+              placeholder={PLAYGROUND_EXAMPLE_PROMPTS[playgroundMode]}
             />
           </div>
 

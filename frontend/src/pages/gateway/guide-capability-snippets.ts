@@ -2,6 +2,11 @@
  * 调用指南 · 按能力分块的示例代码（OpenAI / Anthropic 双风格）
  */
 
+import {
+  PLAYGROUND_EXAMPLE_IMAGE_URL,
+  PLAYGROUND_EXAMPLE_PROMPTS,
+} from '@/features/gateway-playground/playground-example-content'
+
 export interface FlavorCodeTriple {
   curl: string
   ts: string
@@ -22,6 +27,8 @@ export function buildCapabilityModules(
   model: string
 ): CapabilityGuideModule[] {
   const authOpenai = `Authorization: Bearer ${key}`
+  const visionPrompt = PLAYGROUND_EXAMPLE_PROMPTS.vision
+  const visionImageUrl = PLAYGROUND_EXAMPLE_IMAGE_URL
 
   return [
     {
@@ -149,8 +156,8 @@ export function buildCapabilityModules(
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
-        {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}}
+        {"type": "text", "text": "${visionPrompt}"},
+        {"type": "image_url", "image_url": {"url": "${visionImageUrl}"}}
       ]
     }]
   }'`,
@@ -159,8 +166,8 @@ export function buildCapabilityModules(
   messages: [{
     role: "user",
     content: [
-      { type: "text", text: "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。" },
-      { type: "image_url", image_url: { url: "https://example.com/photo.jpg" } },
+      { type: "text", text: "${visionPrompt}" },
+      { type: "image_url", image_url: { url: "${visionImageUrl}" } },
     ],
   }],
 });`,
@@ -169,8 +176,8 @@ export function buildCapabilityModules(
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
-            {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}},
+            {"type": "text", "text": "${visionPrompt}"},
+            {"type": "image_url", "image_url": {"url": "${visionImageUrl}"}},
         ],
     }],
 )`,
@@ -186,12 +193,12 @@ export function buildCapabilityModules(
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
+        {"type": "text", "text": "${visionPrompt}"},
         {
           "type": "image",
           "source": {
             "type": "url",
-            "url": "https://example.com/photo.jpg"
+            "url": "${visionImageUrl}"
           }
         }
       ]
@@ -203,8 +210,8 @@ export function buildCapabilityModules(
   messages: [{
     role: "user",
     content: [
-      { type: "text", text: "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。" },
-      { type: "image", source: { type: "url", url: "https://example.com/photo.jpg" } },
+      { type: "text", text: "${visionPrompt}" },
+      { type: "image", source: { type: "url", url: "${visionImageUrl}" } },
     ],
   }],
 });`,
@@ -214,8 +221,8 @@ export function buildCapabilityModules(
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "请用三点总结图片内容，识别主要物体、场景关系和任何可能的风险。"},
-            {"type": "image", "source": {"type": "url", "url": "https://example.com/photo.jpg"}},
+            {"type": "text", "text": "${visionPrompt}"},
+            {"type": "image", "source": {"type": "url", "url": "${visionImageUrl}"}},
         ],
     }],
 )`,

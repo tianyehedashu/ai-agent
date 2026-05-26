@@ -126,6 +126,13 @@ class ProxyMetadataBuilder:
             "gateway_client_ua": ctx.client_ua,
             "gateway_client_type": ctx.client_type,
         }
+        gateway_snapshot = {
+            key: value for key, value in meta.items() if str(key).startswith("gateway_")
+        }
+        if gateway_snapshot:
+            # Router aanthropic_messages / ageneric_api_call 回调常剥离顶层 gateway_*；
+            # LiteLLM 标准键 user_api_key_auth_metadata 更易保留到 CustomLogger。
+            meta["user_api_key_auth_metadata"] = gateway_snapshot
         if user_kwargs:
             await self._merge_user_and_model_metadata(ctx, meta, user_kwargs)
         return meta

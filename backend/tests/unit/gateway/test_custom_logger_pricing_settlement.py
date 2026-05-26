@@ -66,3 +66,45 @@ def test_extract_metadata_merges_litellm_params() -> None:
     meta = _extract_gateway_metadata(kwargs)
     assert "gateway_team_id" in meta
     assert "gateway_pricing_downstream" in meta
+
+
+def test_extract_metadata_backfills_from_litellm_router_keys() -> None:
+    """模拟 Router ageneric_api_call 回调：仅保留 user_api_key_* 标准键。"""
+    team_id = "409c3f0d-2b98-4a30-8826-e2cbf5eaca65"
+    user_id = "8563b561-5124-4b69-aa99-4a6f1c36c9e5"
+    kwargs = {
+        "model": "glm-4-7-251222",
+        "litellm_params": {
+            "metadata": {
+                "user_api_key_team_id": team_id,
+                "user_api_key_user_id": user_id,
+                "team_id": team_id,
+            }
+        },
+    }
+    meta = _extract_gateway_metadata(kwargs)
+    assert meta.get("gateway_team_id") == team_id
+    assert meta.get("gateway_user_id") == user_id
+
+
+def test_extract_metadata_restores_gateway_from_auth_metadata_snapshot() -> None:
+    team_id = "409c3f0d-2b98-4a30-8826-e2cbf5eaca65"
+    vkey_id = "11111111-1111-4111-8111-111111111111"
+    kwargs = {
+        "litellm_params": {
+            "metadata": {
+                "user_api_key_team_id": team_id,
+                "user_api_key_auth_metadata": {
+                    "gateway_team_id": team_id,
+                    "gateway_vkey_id": vkey_id,
+                    "gateway_request_id": "req-anthropic-1",
+                    "gateway_capability": "chat",
+                },
+            }
+        },
+    }
+    meta = _extract_gateway_metadata(kwargs)
+    assert meta.get("gateway_team_id") == team_id
+    assert meta.get("gateway_vkey_id") == vkey_id
+    assert meta.get("gateway_request_id") == "req-anthropic-1"
+    assert meta.get("gateway_capability") == "chat"

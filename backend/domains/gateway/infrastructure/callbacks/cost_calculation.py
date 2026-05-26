@@ -6,6 +6,26 @@ from decimal import Decimal
 from typing import Any
 
 
+def _merge_gateway_fields(target: dict[str, Any], source: dict[str, Any]) -> None:
+    for key, value in source.items():
+        if not str(key).startswith("gateway_"):
+            continue
+        if key not in target or target[key] is None:
+            target[key] = value
+
+
+def _backfill_gateway_attribution_aliases(merged: dict[str, Any]) -> None:
+    """Router ``ageneric_api_call`` 等路径常只保留 LiteLLM 标准 metadata 键。"""
+    if merged.get("gateway_team_id") is None:
+        team_raw = merged.get("user_api_key_team_id")
+        if team_raw is not None and str(team_raw).strip():
+            merged["gateway_team_id"] = team_raw
+    if merged.get("gateway_user_id") is None:
+        user_raw = merged.get("user_api_key_user_id")
+        if user_raw is not None and str(user_raw).strip():
+            merged["gateway_user_id"] = user_raw
+
+
 def extract_gateway_metadata(kwargs: dict[str, Any]) -> dict[str, Any]:
     """从 LiteLLM 回调 kwargs 合并 gateway_* metadata 字段。"""
     candidates: list[dict[str, Any]] = []
@@ -25,6 +45,13 @@ def extract_gateway_metadata(kwargs: dict[str, Any]) -> dict[str, Any]:
         for k, v in m.items():
             if k not in merged or merged[k] is None:
                 merged[k] = v
+
+    for nested_key in ("user_api_key_auth_metadata", "spend_logs_metadata", "requester_metadata"):
+        nested = merged.get(nested_key)
+        if isinstance(nested, dict):
+            _merge_gateway_fields(merged, nested)
+
+    _backfill_gateway_attribution_aliases(merged)
     return merged
 
 

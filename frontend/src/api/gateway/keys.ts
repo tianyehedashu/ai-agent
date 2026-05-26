@@ -2,7 +2,7 @@
  * AI Gateway · 虚拟 Key（VKey）资源
  *
  * 虚拟 Key 是下游业务调用 Gateway 的凭证（`sk-gw-*`）。
- * 团队维度路径 `/teams/{teamId}/keys`；明文仅创建时返回一次，按需 `reveal`。
+ * 团队维度路径 `/teams/{teamId}/keys`；创建时返回明文，之后通过 `revealKey` 按需查看。
  * **外部 `/v1/*` 调用勿传 `X-Team-Id`**，团队已在 Key 创建时绑定。
  */
 

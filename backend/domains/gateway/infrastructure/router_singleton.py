@@ -60,6 +60,12 @@ def ensure_gateway_callbacks() -> None:
     """注册 Gateway LiteLLM callbacks，供 Router 与内部直连兜底共用。"""
     import litellm
 
+    # 兜底层：跨协议转译时丢弃目标 provider 不支持的字段。
+    # 已知 Anthropic-only 字段（``context_management`` 等）由 domain 策略
+    # ``anthropic_only_request_fields`` 在 anthropic_messages 入口显式剥离并写
+    # warning 日志；此处只兜底未来上游新增/客户端自创但未纳入策略清单的字段。
+    litellm.drop_params = True
+
     from domains.gateway.application.provider_plan_guard import (
         build_provider_plan_pre_call_logger,
     )

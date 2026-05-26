@@ -19,6 +19,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  PLAYGROUND_MODE_LABELS,
+  type PlaygroundMode,
+} from '@/features/gateway-playground/playground-mode-filter'
 import { usePlaygroundFilteredModels } from '@/features/gateway-playground/use-playground-filtered-models'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { thinkingHintForModel } from '@/features/gateway-shared/thinking-param'
@@ -32,6 +36,7 @@ import {
   type FlavorCodeTriple,
 } from '@/pages/gateway/guide-capability-snippets'
 import type { GuideClientIntegrationsKeyHint } from '@/pages/gateway/guide-client-integrations'
+import { buildMediaModeSnippets } from '@/pages/gateway/guide-mode-snippets'
 import {
   buildClientIntegrations,
   buildGuideSnippets,
@@ -151,6 +156,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const { plain: revealedKey, isRevealing } = virtualKey
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
+  const [playgroundMode, setPlaygroundMode] = useState<PlaygroundMode>('chat')
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
   const [exampleStream, setExampleStream] = useState(true)
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
@@ -191,6 +197,16 @@ export default function GatewayGuidePage(): React.JSX.Element {
     () => buildCapabilityModules(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
     [gatewayV1Base, displayKey, activeModel]
   )
+
+  const mediaModeSnippets = useMemo(() => {
+    if (playgroundMode === 'chat') return null
+    return buildMediaModeSnippets(
+      gatewayV1Base,
+      displayKey,
+      activeModel || PLACEHOLDER_MODEL,
+      playgroundMode
+    )
+  }, [gatewayV1Base, displayKey, activeModel, playgroundMode])
 
   const playgroundFilteredModels = usePlaygroundFilteredModels({
     credentialId,
@@ -244,6 +260,9 @@ export default function GatewayGuidePage(): React.JSX.Element {
     },
     [copy]
   )
+  const handlePlaygroundModeChange = useCallback((mode: PlaygroundMode) => {
+    setPlaygroundMode(mode)
+  }, [])
   const handlePlaygroundModelChange = useCallback((next: string) => {
     if (!next) {
       setActiveModel(PLACEHOLDER_MODEL)
@@ -301,6 +320,8 @@ export default function GatewayGuidePage(): React.JSX.Element {
             <PlaygroundCard
               baseUrl={gatewayV1Base}
               onModelChange={handlePlaygroundModelChange}
+              playgroundMode={playgroundMode}
+              onPlaygroundModeChange={handlePlaygroundModeChange}
               credentialId={credentialId}
               onCredentialChange={handleCredentialChange}
               virtualKey={virtualKey}
@@ -335,74 +356,113 @@ export default function GatewayGuidePage(): React.JSX.Element {
                   <CardTitle id="examples-heading" className="text-base">
                     代码示例
                   </CardTitle>
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                    <span>当前试调：</span>
+                    <Badge variant="secondary" className="font-normal">
+                      {PLAYGROUND_MODE_LABELS[playgroundMode]}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
-                  <Zap
-                    className={cn(
-                      'h-4 w-4',
-                      exampleStream ? 'text-amber-500' : 'text-muted-foreground'
-                    )}
-                    aria-hidden="true"
-                  />
-                  <Label htmlFor="example-stream" className="cursor-pointer text-sm">
-                    SSE
-                  </Label>
-                  <Switch
-                    id="example-stream"
-                    checked={exampleStream}
-                    onCheckedChange={setExampleStream}
-                  />
-                </div>
+                {playgroundMode === 'chat' ? (
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
+                    <Zap
+                      className={cn(
+                        'h-4 w-4',
+                        exampleStream ? 'text-amber-500' : 'text-muted-foreground'
+                      )}
+                      aria-hidden="true"
+                    />
+                    <Label htmlFor="example-stream" className="cursor-pointer text-sm">
+                      SSE
+                    </Label>
+                    <Switch
+                      id="example-stream"
+                      checked={exampleStream}
+                      onCheckedChange={setExampleStream}
+                    />
+                  </div>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="pt-5">
-              <Tabs
-                value={apiFlavor}
-                onValueChange={(v) => {
-                  setApiFlavor(v as ApiFlavor)
-                }}
-              >
-                <TabsList>
-                  <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
-                  <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
-                </TabsList>
+              {playgroundMode === 'chat' ? (
+                <Tabs
+                  value={apiFlavor}
+                  onValueChange={(v) => {
+                    setApiFlavor(v as ApiFlavor)
+                  }}
+                >
+                  <TabsList>
+                    <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
+                    <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="openai" className="space-y-3">
+                  <TabsContent value="openai" className="space-y-3">
+                    <EndpointBadge
+                      endpoint={snippets.openai.endpoint}
+                      mode={exampleStream ? 'stream' : 'json'}
+                      copyKey="openaiEndpoint"
+                      copied={copiedKey === 'openaiEndpoint'}
+                      onCopy={handleCopy}
+                    />
+                    <FlavorExamples
+                      curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
+                      ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
+                      py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
+                      keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
+                      copiedKey={copiedKey}
+                      onCopy={handleCopy}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="anthropic" className="space-y-3">
+                    <EndpointBadge
+                      endpoint={snippets.anthropic.endpoint}
+                      mode={exampleStream ? 'stream' : 'json'}
+                      copyKey="anthropicEndpoint"
+                      copied={copiedKey === 'anthropicEndpoint'}
+                      onCopy={handleCopy}
+                    />
+                    <FlavorExamples
+                      curl={exampleStream ? snippets.anthropic.curlStream : snippets.anthropic.curl}
+                      ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
+                      py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
+                      keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
+                      copiedKey={copiedKey}
+                      onCopy={handleCopy}
+                    />
+                  </TabsContent>
+                </Tabs>
+              ) : mediaModeSnippets ? (
+                <div className="space-y-3">
+                  {mediaModeSnippets.hint ? (
+                    <p className="text-sm text-muted-foreground">
+                      {mediaModeSnippets.hint}
+                      <Link
+                        to="/gateway/models"
+                        className="ml-1 text-primary underline-offset-4 hover:underline"
+                      >
+                        查看模型
+                      </Link>
+                    </p>
+                  ) : null}
                   <EndpointBadge
-                    endpoint={snippets.openai.endpoint}
-                    mode={exampleStream ? 'stream' : 'json'}
-                    copyKey="openaiEndpoint"
-                    copied={copiedKey === 'openaiEndpoint'}
+                    endpoint={mediaModeSnippets.endpoint}
+                    mode="json"
+                    copyKey="mediaEndpoint"
+                    copied={copiedKey === 'mediaEndpoint'}
                     onCopy={handleCopy}
                   />
                   <FlavorExamples
-                    curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
-                    ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
-                    py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
-                    keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
+                    curl={mediaModeSnippets.curl}
+                    ts={mediaModeSnippets.ts}
+                    py={mediaModeSnippets.py}
+                    keyPrefix={`media-${playgroundMode}`}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
                   />
-                </TabsContent>
-
-                <TabsContent value="anthropic" className="space-y-3">
-                  <EndpointBadge
-                    endpoint={snippets.anthropic.endpoint}
-                    mode={exampleStream ? 'stream' : 'json'}
-                    copyKey="anthropicEndpoint"
-                    copied={copiedKey === 'anthropicEndpoint'}
-                    onCopy={handleCopy}
-                  />
-                  <FlavorExamples
-                    curl={exampleStream ? snippets.anthropic.curlStream : snippets.anthropic.curl}
-                    ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
-                    py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
-                    keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
-                    copiedKey={copiedKey}
-                    onCopy={handleCopy}
-                  />
-                </TabsContent>
-              </Tabs>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </section>
@@ -420,6 +480,20 @@ export default function GatewayGuidePage(): React.JSX.Element {
             </CardHeader>
             <CardContent className="space-y-3 pt-5">
               <GuideReferenceSection title="按能力查看示例" defaultOpen>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  图片生成、视频生成的 curl 示例见上方
+                  <a
+                    href="#examples"
+                    className="mx-1 text-primary underline-offset-4 hover:underline"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      scrollToGuideSection('#examples')
+                    }}
+                  >
+                    代码示例
+                  </a>
+                  （随在线试调 Tab 切换）。
+                </p>
                 <div id="capabilities" className="scroll-mt-20 space-y-3">
                   {capabilityModules.map((mod) => (
                     <CapabilityGuideCard
