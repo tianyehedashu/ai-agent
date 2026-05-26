@@ -670,18 +670,25 @@ class TestGatewayManagementApi:
     async def test_list_system_models_connectivity_summary_matches_total(
         self,
         dev_client: AsyncClient,
-        auth_headers: dict[str, str],
+        admin_headers: dict[str, str],
+        admin_user: User,
+        db_session,
     ) -> None:
+        """系统注册表分页列表的 connectivity_summary 与 total 一致（SQL 聚合路径）。"""
+        team = await TeamService(db_session).ensure_personal_team(admin_user.id)
+        await db_session.commit()
         r = await dev_client.get(
-            "/api/v1/gateway/system/models",
-            headers=auth_headers,
-            params={"page": 1, "page_size": 20},
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=admin_headers,
+            params={"registry_scope": "system", "page": 1, "page_size": 20},
         )
         assert r.status_code == 200, r.text
         body = r.json()
         summary = body["connectivity_summary"]
         assert summary["total"] == body["total"]
         assert summary["success"] + summary["failed"] + summary["unknown"] == summary["total"]
+
+    @pytest.mark.asyncio
     async def test_list_model_ids_returns_ids_envelope(
         self,
         dev_client: AsyncClient,
