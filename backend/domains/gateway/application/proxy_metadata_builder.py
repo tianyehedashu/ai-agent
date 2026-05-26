@@ -91,11 +91,14 @@ class ProxyMetadataBuilder:
         team = await TeamService(self._session).get_team(ctx.team_id)
         verbose_log = bool(ctx.store_full_messages)
         team_id_str = str(ctx.team_id)
+        user_id_str = str(ctx.user_id) if ctx.user_id else None
         meta: dict[str, Any] = {
             "gateway_team_id": team_id_str,
             # LiteLLM Router async 路径 filter_team_based_models 要求与 model_info.team_id 一致
             "user_api_key_team_id": team_id_str,
-            "gateway_user_id": str(ctx.user_id) if ctx.user_id else None,
+            "gateway_user_id": user_id_str,
+            # Router ageneric_api_call 回调常剥离顶层 gateway_*；标准键更易保留到 CustomLogger
+            "user_api_key_user_id": user_id_str,
             "gateway_vkey_id": str(ctx.vkey.vkey_id) if ctx.vkey else None,
             "gateway_inbound_via": ctx.inbound_via,
             "gateway_platform_api_key_id": (
@@ -130,7 +133,7 @@ class ProxyMetadataBuilder:
             key: value for key, value in meta.items() if str(key).startswith("gateway_")
         }
         if gateway_snapshot:
-            # Router aanthropic_messages / ageneric_api_call 回调常剥离顶层 gateway_*；
+            # Router anthropic_messages / ageneric_api_call 回调常剥离顶层 gateway_*；
             # LiteLLM 标准键 user_api_key_auth_metadata 更易保留到 CustomLogger。
             meta["user_api_key_auth_metadata"] = gateway_snapshot
         if user_kwargs:

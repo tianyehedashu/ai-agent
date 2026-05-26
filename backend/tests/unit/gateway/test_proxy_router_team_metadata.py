@@ -44,3 +44,30 @@ def test_ensure_litellm_router_team_metadata_explicit_team_id() -> None:
     kwargs: dict = {}
     ensure_litellm_router_team_metadata(kwargs, team_id)
     assert kwargs["metadata"]["user_api_key_team_id"] == str(team_id)
+
+
+def test_ensure_litellm_router_team_metadata_mirrors_user_and_auth_to_litellm_metadata() -> None:
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    vkey_id = uuid.uuid4()
+    gateway_snapshot = {
+        "gateway_team_id": str(team_id),
+        "gateway_user_id": str(user_id),
+        "gateway_vkey_id": str(vkey_id),
+        "gateway_request_id": "req-1",
+    }
+    kwargs: dict = {
+        "metadata": {
+            "gateway_team_id": str(team_id),
+            "gateway_user_id": str(user_id),
+            "gateway_vkey_id": str(vkey_id),
+            "user_api_key_team_id": str(team_id),
+            "user_api_key_user_id": str(user_id),
+            "user_api_key_auth_metadata": gateway_snapshot,
+        }
+    }
+    ensure_litellm_router_team_metadata(kwargs)
+    litellm_meta = kwargs["litellm_metadata"]
+    assert litellm_meta["user_api_key_team_id"] == str(team_id)
+    assert litellm_meta["user_api_key_user_id"] == str(user_id)
+    assert litellm_meta["user_api_key_auth_metadata"] == gateway_snapshot

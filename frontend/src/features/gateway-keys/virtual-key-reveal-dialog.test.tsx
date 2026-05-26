@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { VirtualKeyRevealDialog } from './virtual-key-reveal-dialog'
 
 const { revealKeyMock } = vi.hoisted(() => ({
-  revealKeyMock: vi.fn<(teamId: string, keyId: string) => Promise<{ plain_key: string }>>(),
+  revealKeyMock: vi.fn<[string, string], Promise<{ plain_key: string }>>(),
 }))
 
 vi.mock('@/api/gateway', () => ({

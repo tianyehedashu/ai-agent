@@ -229,6 +229,72 @@ def _tool_calls_digest(tool_calls: Any, max_chars: int) -> str | None:
     return truncated
 
 
+def _message_content_to_text(content: Any) -> str:
+    """OpenAI 字符串或 Anthropic content blocks → 可读文本。"""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                if block:
+                    parts.append(block)
+                continue
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+            elif block_type == "thinking":
+                thinking = block.get("thinking")
+                if isinstance(thinking, str) and thinking:
+                    parts.append(f"[thinking]{thinking}")
+            elif block_type == "image":
+                parts.append("[image]")
+            elif block_type == "tool_use":
+                name = block.get("name", "tool")
+                parts.append(f"[tool_use:{name}]")
+            elif block_type == "tool_result":
+                parts.append(_message_content_to_text(block.get("content")))
+            elif isinstance(block.get("text"), str):
+                parts.append(block["text"])
+        return "\n".join(parts)
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text
+    return str(content)
+
+
+def _extract_request_messages_from_kwargs(kwargs: dict[str, Any]) -> list[Any] | None:
+    """LiteLLM 回调 kwargs 中 messages 位置因路径而异（chat / Router ageneric）。"""
+    direct = kwargs.get("messages")
+    if isinstance(direct, list) and direct:
+        return direct
+    for container_key in ("optional_params", "litellm_params"):
+        container = kwargs.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        nested = container.get("messages")
+        if isinstance(nested, list) and nested:
+            return nested
+    slo = kwargs.get("standard_logging_object")
+    if isinstance(slo, dict):
+        slo_messages = slo.get("messages")
+        if isinstance(slo_messages, list) and slo_messages:
+            return slo_messages
+        model_params = slo.get("model_parameters")
+        if isinstance(model_params, dict):
+            nested = model_params.get("messages")
+            if isinstance(nested, list) and nested:
+                return nested
+    return None
+
+
 def _serialize_messages_preview(messages: Any, max_chars: int) -> dict[str, Any] | None:
     """将 LiteLLM messages 压成单行摘要（截断）。"""
     if not isinstance(messages, list) or max_chars <= 0:
@@ -240,9 +306,7 @@ def _serialize_messages_preview(messages: Any, max_chars: int) -> dict[str, Any]
         if not isinstance(m, dict) or budget <= 0:
             break
         role = str(m.get("role", ""))
-        content = m.get("content", "")
-        if not isinstance(content, str):
-            content = str(content) if content is not None else ""
+        content = _message_content_to_text(m.get("content", ""))
         line = f"{role}:{content}"
         piece, cut = _truncate_str(line, min(budget, max(64, budget // 2)))
         if cut:
@@ -500,6 +564,25 @@ def _settlement_from_response(
     return input_tokens, output_tokens, cached_tokens, cost_usd, revenue_usd, pricing_snapshot
 
 
+async def _resolve_persist_user_id(
+    session: Any,
+    *,
+    user_id: uuid.UUID | None,
+    vkey_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    """metadata 缺 user_id 时，从非系统 vkey 创建者回填（供「我」聚合）。"""
+    if user_id is not None or vkey_id is None:
+        return user_id
+    from domains.gateway.infrastructure.repositories.virtual_key_repository import (
+        VirtualKeyRepository,
+    )
+
+    vkey = await VirtualKeyRepository(session).get(vkey_id)
+    if vkey is None or vkey.is_system:
+        return None
+    return vkey.created_by_user_id
+
+
 async def _persist_event(
     *,
     kwargs: dict[str, Any],
@@ -586,7 +669,7 @@ async def _persist_event(
 
     prompt_redacted = _build_prompt_redacted(
         verbose_log=verbose_log,
-        kwargs_messages=kwargs.get("messages"),
+        kwargs_messages=_extract_request_messages_from_kwargs(kwargs),
         prompt_max=prompt_max,
         pii_redactions=pii_redactions,
     )
@@ -630,9 +713,14 @@ async def _persist_event(
             )
 
             async with get_session_context() as session:
+                persist_user_id = await _resolve_persist_user_id(
+                    session,
+                    user_id=user_id,
+                    vkey_id=vkey_id,
+                )
                 await RequestLogRepository(session).insert(
                     team_id=team_id,
-                    user_id=user_id,
+                    user_id=persist_user_id,
                     vkey_id=vkey_id,
                     team_snapshot=_jsonb_safe_dict(team_snapshot),
                     user_email_snapshot=user_email_snapshot,
