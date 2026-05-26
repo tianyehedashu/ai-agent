@@ -8,29 +8,33 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { ManagedTeamCredentialListResponse } from '@/api/gateway/credentials'
+import type {
+  ListManagedTeamCredentialsParams,
+  ManagedTeamCredentialListResponse,
+} from '@/api/gateway/credentials'
 
 import { useManagedTeamCredentialsList } from './use-managed-team-credentials-list'
 
+const emptyManagedTeamCredentialListResponse = (): ManagedTeamCredentialListResponse => ({
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 20,
+  has_next: false,
+  has_prev: false,
+  queried_team_count: 0,
+  queried_personal_team_count: 0,
+  queried_shared_team_count: 0,
+})
+
 const listManagedTeamCredentialsMock = vi.fn(
-  (): Promise<ManagedTeamCredentialListResponse> =>
-    Promise.resolve({
-      items: [],
-      total: 0,
-      page: 1,
-      page_size: 20,
-      has_next: false,
-      has_prev: false,
-      queried_team_count: 0,
-      queried_personal_team_count: 0,
-      queried_shared_team_count: 0,
-    })
+  (_params?: ListManagedTeamCredentialsParams): Promise<ManagedTeamCredentialListResponse> =>
+    Promise.resolve(emptyManagedTeamCredentialListResponse())
 )
 
 vi.mock('@/api/gateway/credentials', () => ({
   credentialsApi: {
-    listManagedTeamCredentials: (params?: { page?: number; page_size?: number; search?: string }) =>
-      listManagedTeamCredentialsMock(params),
+    listManagedTeamCredentials: listManagedTeamCredentialsMock,
   },
 }))
 
@@ -41,17 +45,7 @@ function wrapper(): React.FC<{ children: React.ReactNode }> {
 
 beforeEach(() => {
   listManagedTeamCredentialsMock.mockClear()
-  listManagedTeamCredentialsMock.mockResolvedValue({
-    items: [],
-    total: 0,
-    page: 1,
-    page_size: 20,
-    has_next: false,
-    has_prev: false,
-    queried_team_count: 0,
-    queried_personal_team_count: 0,
-    queried_shared_team_count: 0,
-  })
+  listManagedTeamCredentialsMock.mockResolvedValue(emptyManagedTeamCredentialListResponse())
 })
 
 describe('useManagedTeamCredentialsList', () => {
