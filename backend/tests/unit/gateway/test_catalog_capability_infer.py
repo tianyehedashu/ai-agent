@@ -9,6 +9,7 @@ import pytest
 from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.config_catalog_sync import model_types_for_gateway_registration
+from domains.gateway.domain.registry_model_types import infer_model_types_from_tags
 
 
 def _base(**kwargs: object) -> CatalogSeedModel:
@@ -49,6 +50,13 @@ def test_infer_video_generation_only_sku() -> None:
         supports_tools=False,
     )
     assert infer_catalog_capability(m) == "video_generation"
+
+
+def test_infer_matches_registration_helper() -> None:
+    tags = {"supports_vision": True, "supports_image_gen": True}
+    assert infer_model_types_from_tags(tags, "chat") == model_types_for_gateway_registration(
+        tags, "chat"
+    )
 
 
 def test_model_types_image_capability() -> None:

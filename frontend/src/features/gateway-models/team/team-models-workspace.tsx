@@ -132,6 +132,7 @@ export function TeamModelsWorkspace({
   const isRegisterView = pageView === 'register' && canManageModels
 
   const [providerFilter, setProviderFilter] = useState('')
+  const [abilityFilter, setAbilityFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [page, setPage] = useState(1)
@@ -160,16 +161,17 @@ export function TeamModelsWorkspace({
 
   useEffect(() => {
     setPage(1)
-  }, [registryScope, providerFilter, credentialFilter, deferredSearch, healthFilter])
+  }, [registryScope, providerFilter, credentialFilter, abilityFilter, deferredSearch, healthFilter])
 
   const teamListQueryBase = useMemo(
     () => ({
       registry_scope: registryScope,
       ...(providerFilter ? { provider: providerFilter } : {}),
       ...(credentialFilter ? { credential_id: credentialFilter } : {}),
+      ...(abilityFilter ? { type: abilityFilter } : {}),
       ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
     }),
-    [registryScope, providerFilter, credentialFilter, deferredSearch]
+    [registryScope, providerFilter, credentialFilter, abilityFilter, deferredSearch]
   )
 
   const goToRegister = useCallback((): void => {
@@ -204,7 +206,8 @@ export function TeamModelsWorkspace({
       page,
       MODELS_PAGE_SIZE,
       deferredSearch,
-      healthFilter
+      healthFilter,
+      abilityFilter
     ),
     queryFn: () =>
       gatewayApi.listModels(teamId, {
@@ -213,6 +216,7 @@ export function TeamModelsWorkspace({
         page_size: MODELS_PAGE_SIZE,
         ...(providerFilter ? { provider: providerFilter } : {}),
         ...(credentialFilter ? { credential_id: credentialFilter } : {}),
+        ...(abilityFilter ? { type: abilityFilter } : {}),
         ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
         ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       }),
@@ -790,6 +794,8 @@ export function TeamModelsWorkspace({
               onSearchChange={setSearch}
               providerFilter={providerFilter}
               onProviderFilterChange={setProviderFilter}
+              abilityFilter={abilityFilter}
+              onAbilityFilterChange={setAbilityFilter}
               providerChoices={providerChoices}
               usageDays={usageDays}
               onUsageDaysChange={setUsageDays}

@@ -26,15 +26,17 @@ from domains.gateway.application.management.write_modules.probe_target import (
 from domains.gateway.application.management.write_modules.probe_video_preview import (
     video_generation_probe_preview,
 )
+from domains.gateway.application.router_deployment_params import (
+    VOLCENGINE_IMAGE_ENDPOINT_PROBE_MESSAGE,
+    require_volcengine_image_endpoint_id,
+)
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
     should_use_dashscope_direct_embedding,
 )
-from domains.gateway.domain.policies.volcengine_image_probe import (
-    build_volcengine_image_probe_request,
-)
+from domains.gateway.domain.policies.volcengine_image import build_volcengine_image_probe_request
 from domains.gateway.domain.policies.volcengine_video import (
     build_volcengine_video_create_request,
     map_volcengine_video_task_to_openai,
@@ -44,13 +46,14 @@ from domains.gateway.domain.provider_env_catalog import image_probe_size
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
 )
-from domains.gateway.infrastructure.upstream.volcengine_image_probe_client import (
-    perform_volcengine_image_probe,
+from domains.gateway.infrastructure.upstream.volcengine_image_client import (
+    perform_volcengine_image_generation,
 )
 from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
 )
 from libs.crypto import decrypt_value, derive_encryption_key
+from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -154,22 +157,28 @@ class ProbeWritesMixin:
             if capability == "image":
                 img_size = image_probe_size(target.provider)
                 if target.provider == "volcengine":
-                    image_endpoint = (credential.extra or {}).get("image_endpoint_id")
-                    if not isinstance(image_endpoint, str) or not image_endpoint.strip():
-                        msg = (
-                            "未配置火山图像接入点（凭据 extra.image_endpoint_id 为空；"
-                            "需设置 VOLCENGINE_IMAGE_ENDPOINT_ID 或在 BYOK 凭据 extra 中提供）"
+                    extra = credential.extra if isinstance(credential.extra, dict) else None
+                    try:
+                        image_endpoint_id = require_volcengine_image_endpoint_id(
+                            extra,
+                            message=VOLCENGINE_IMAGE_ENDPOINT_PROBE_MESSAGE,
                         )
+                    except ValidationError as exc:
                         return await record_gateway_model_test_failure(
-                            self._models, model_id, tested_at, msg, litellm_model, **record_kw
+                            self._models,
+                            model_id,
+                            tested_at,
+                            str(exc),
+                            litellm_model,
+                            **record_kw,
                         )
                     request = build_volcengine_image_probe_request(
                         api_key=api_key,
                         api_base=api_base,
-                        image_endpoint_id=image_endpoint.strip(),
+                        image_endpoint_id=image_endpoint_id,
                         size=img_size,
                     )
-                    img_data = await perform_volcengine_image_probe(request)
+                    img_data = await perform_volcengine_image_generation(request)
                     preview = image_generation_probe_preview(img_data)
                 else:
                     img_response = await aimage_generation(

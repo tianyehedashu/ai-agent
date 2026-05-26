@@ -126,7 +126,7 @@
 | H3 | Prompt Cache 注入 | ✅ | `prompt_cache_middleware.py` | Anthropic / DeepSeek / OpenAI；**非** LiteLLM 内置 middleware |
 | H4 | Temperature 策略 | ✅ | `temperature_policy.py` | reasoning 模型禁温度等 |
 | H5 | DashScope embedding 直连 | ✅ | 绕过 LiteLLM | 见 A2 |
-| H6 | Volcengine 图像探测 | ✅ | `volcengine_image_probe.py` | 管理面 probe，非 LiteLLM API |
+| H6 | Volcengine 图像生图 | ✅ | `volcengine_image.py` + `router_deployment_params` + `proxy_litellm_client` | 探活与 `POST .../images/generations` 直连方舟；非 LiteLLM ``aimage_generation`` |
 | **I. 架构约束** |
 | I1 | Agent 域禁止 import litellm | ✅ | `test_agent_no_litellm_import.py` | 必须经 `GatewayProxyProtocol` |
 | I2 | 内部桥接禁止静默直连 | ✅ | `gateway_proxy_disable_internal_direct_litellm=True`（默认） | system vkey 未注册模型时可例外直连 |

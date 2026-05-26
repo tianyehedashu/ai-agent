@@ -603,6 +603,70 @@ class TestGatewayManagementApi:
         assert summary["available"] + summary["unavailable"] == summary["total"]
 
     @pytest.mark.asyncio
+    async def test_list_team_models_filters_by_registry_type(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """GET .../models?type= 与注册表 model_types 推导一致（chat+supports_vision 命中 image）。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"type-filter-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-type-filter-test-key-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        text_only = f"text-only-{uuid.uuid4().hex[:6]}"
+        vision_alias = f"vision-{uuid.uuid4().hex[:6]}"
+        for name, tags in (
+            (text_only, {"supports_vision": False}),
+            (vision_alias, {"supports_vision": True}),
+        ):
+            r_model = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/models",
+                headers=headers,
+                json={
+                    "name": name,
+                    "capability": "chat",
+                    "real_model": "gpt-4o-mini",
+                    "credential_id": cid,
+                    "provider": "openai",
+                    "tags": tags,
+                },
+            )
+            assert r_model.status_code == 201, r_model.text
+
+        r_image = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"credential_id": cid, "type": "image", "page_size": 50},
+        )
+        assert r_image.status_code == 200, r_image.text
+        image_names = {m["name"] for m in _model_list_items(r_image.json())}
+        assert vision_alias in image_names
+        assert text_only not in image_names
+
+        r_text = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"credential_id": cid, "type": "text", "page_size": 50},
+        )
+        assert r_text.status_code == 200, r_text.text
+        text_names = {m["name"] for m in _model_list_items(r_text.json())}
+        assert text_only in text_names
+        assert vision_alias in text_names
+
+    @pytest.mark.asyncio
     async def test_list_system_models_connectivity_summary_matches_total(
         self,
         dev_client: AsyncClient,

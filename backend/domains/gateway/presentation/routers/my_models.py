@@ -8,6 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.model_list_pipeline import resolved_registry_ability
 from domains.gateway.application.model_selector_list_reads import list_available_models_page
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.gateway.presentation.gateway_model_list_response import (
@@ -168,6 +169,8 @@ async def list_available_models_for_chat(
     """聊天/产品信息模型选择器：系统目录 + personal gateway_models（分页）。"""
     validate_optional_provider(query.provider)
     effective_type = effective_model_type_query(model_type=model_type, mode=mode)
+    if effective_type is None:
+        effective_type = resolved_registry_ability(query)
     catalog = get_model_catalog_adapter(db)
     user_id: uuid.UUID | None = None
     if current_user is not None and not current_user.is_anonymous:

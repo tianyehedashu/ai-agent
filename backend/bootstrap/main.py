@@ -32,6 +32,9 @@ from fastapi.responses import JSONResponse
 from starlette.responses import RedirectResponse
 
 from bootstrap.config import settings
+from domains.agent.application.listing_studio_local_image_for_gateway import (
+    listing_studio_local_image_port_for_session,
+)
 from domains.agent.application.startup import (
     agent_streamable_http_lifespan,
     run_agent_shutdown,
@@ -52,6 +55,9 @@ from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
+from domains.gateway.application.listing_studio_image_port_registry import (
+    register_listing_studio_local_image_port_factory,
+)
 from domains.gateway.application.startup import run_gateway_shutdown, run_gateway_startup
 from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
@@ -138,6 +144,7 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
     await init_db()
 
     await run_gateway_startup(_fastapi_app)
+    register_listing_studio_local_image_port_factory(listing_studio_local_image_port_for_session)
 
     # 初始化 Redis（开发机未起 redis 时仅告警，不阻断启动）
     try:

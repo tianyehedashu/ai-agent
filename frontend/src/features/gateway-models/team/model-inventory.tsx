@@ -34,6 +34,7 @@ import {
   USAGE_PERIOD_DAYS,
   type UsagePeriodDays,
 } from '../constants'
+import { RegistryAbilityFilterSelect } from '../registry-ability-filter-select'
 import { channelLabel } from '../utils'
 import { ModelInventoryRow } from './model-inventory-row'
 
@@ -50,6 +51,8 @@ interface ModelInventoryProps {
   onSearchChange: (v: string) => void
   providerFilter: string
   onProviderFilterChange: (v: string) => void
+  abilityFilter: string
+  onAbilityFilterChange: (v: string) => void
   providerChoices: string[]
   usageDays: UsagePeriodDays
   onUsageDaysChange: (d: UsagePeriodDays) => void
@@ -111,6 +114,8 @@ export const ModelInventory = memo(function ModelInventory({
   onSearchChange,
   providerFilter,
   onProviderFilterChange,
+  abilityFilter,
+  onAbilityFilterChange,
   providerChoices,
   usageDays,
   onUsageDaysChange,
@@ -241,6 +246,10 @@ export const ModelInventory = memo(function ModelInventory({
               ))}
             </SelectContent>
           </Select>
+          <RegistryAbilityFilterSelect
+            value={abilityFilter}
+            onValueChange={onAbilityFilterChange}
+          />
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>

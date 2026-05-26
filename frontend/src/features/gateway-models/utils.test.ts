@@ -610,6 +610,7 @@ describe('playgroundTeamModelsQueryKey', () => {
       20,
       '',
       'all',
+      '',
     ])
     expect(playgroundTeamModelsQueryKey('team-1', 'cred-1')).toEqual([
       'gateway',
@@ -622,6 +623,7 @@ describe('playgroundTeamModelsQueryKey', () => {
       20,
       '',
       'all',
+      '',
     ])
   })
 })

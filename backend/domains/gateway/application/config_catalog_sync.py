@@ -30,6 +30,7 @@ from domains.gateway.domain.provider_env_catalog import (
     resolve_provider_credentials,
     volcengine_extra_from_snapshot,
 )
+from domains.gateway.domain.registry_model_types import infer_model_types_from_tags
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     CONFIG_MANAGED_CREDENTIAL_NAME,
@@ -206,41 +207,9 @@ async def _upsert_upstream_pricing_from_model(
     )
 
 
-def _infer_model_types_from_tags(tags: dict[str, Any], capability: str) -> list[str]:
-    """结合网关 capability 与 tags 推断 user-model 选择器 ``model_types``。"""
-    cap = (capability or "").strip().lower()
-    if cap in (
-        "embedding",
-        "audio_transcription",
-        "audio_speech",
-        "rerank",
-        "moderation",
-    ):
-        return []
-    out: list[str] = []
-    if tags.get("supports_video_gen"):
-        out.append("video")
-    if cap == "image":
-        out.append("image_gen")
-    elif cap == "video_generation":
-        if "video" not in out:
-            out.append("video")
-    elif cap == "chat":
-        out.append("text")
-        if tags.get("supports_vision"):
-            out.append("image")
-        if tags.get("supports_image_gen"):
-            out.append("image_gen")
-    if not out:
-        out.append("text")
-        if tags.get("supports_vision"):
-            out.append("image")
-    return out
-
-
 def model_types_for_gateway_registration(tags: dict[str, Any], capability: str) -> list[str]:
     """管理 API / 文档用：与 ``gateway_model_to_selector_item`` 的 ``model_types`` 推导一致。"""
-    return _infer_model_types_from_tags(tags, capability)
+    return infer_model_types_from_tags(tags, capability)
 
 
 def selector_capabilities_from_tags(
@@ -450,7 +419,7 @@ def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
         "provider": row.provider,
         "real_model": row.real_model,
         "model_id": row.name,
-        "model_types": _infer_model_types_from_tags(tags, row.capability),
+        "model_types": infer_model_types_from_tags(tags, row.capability),
         "selector_capabilities": _selector_capabilities_payload(
             tags, provider=row.provider, real_model=row.real_model
         ),

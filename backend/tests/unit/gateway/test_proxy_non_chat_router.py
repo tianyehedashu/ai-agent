@@ -13,7 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.router_deployment_params import (
+    VOLCENGINE_IMAGE_ENDPOINT_PROXY_MESSAGE,
+)
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
+from libs.exceptions import ValidationError
 
 
 def _vkey(team_id: uuid.UUID) -> VirtualKeyPrincipal:
@@ -198,6 +202,92 @@ async def test_video_generation_non_volcengine_uses_router(
     assert result == {"ok": True}
     router_fn.assert_awaited_once()
     volcengine_direct.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_volcengine_image_generation_uses_direct_not_router(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"model": "volcengine/seedream", "prompt": "a cat", "size": "1920x1920"}
+    record = SimpleNamespace(
+        provider="volcengine",
+        real_model="seedream",
+    )
+    prepared, invoke_kwargs = _prepared_litellm_invoke(body)
+    prepared = PreparedLitellmKwargs(
+        kwargs=prepared.kwargs,
+        client_model=prepared.client_model,
+        resolved=ResolvedModelName(record=record, route=None, via_route=None),
+    )
+
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    ctx = _ctx()
+
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(return_value=(prepared, invoke_kwargs)),
+    )
+    monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    volcengine_direct = AsyncMock(return_value={"data": [{"b64_json": "abc"}]})
+    monkeypatch.setattr(
+        use_case.litellm, "volcengine_direct_image_generation", volcengine_direct
+    )
+    router_image = AsyncMock()
+    monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        lambda *_a, **_k: None,
+    )
+
+    result = await use_case.image_generation(ctx, body)
+
+    assert result == {"data": [{"b64_json": "abc"}]}
+    volcengine_direct.assert_awaited_once()
+    router_image.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_volcengine_image_generation_fails_without_image_endpoint(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"model": "volcengine/seedream", "prompt": "a cat"}
+    record = SimpleNamespace(
+        provider="volcengine",
+        real_model="seedream",
+        credential_id=uuid.uuid4(),
+        rpm_limit=None,
+        tpm_limit=None,
+        tags={},
+    )
+    prepared, invoke_kwargs = _prepared_litellm_invoke(body)
+    prepared = PreparedLitellmKwargs(
+        kwargs=prepared.kwargs,
+        client_model=prepared.client_model,
+        resolved=ResolvedModelName(record=record, route=None, via_route=None),
+    )
+
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    ctx = _ctx()
+    ctx.capability = GatewayCapability.IMAGE
+
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(return_value=(prepared, invoke_kwargs)),
+    )
+    monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_litellm_client.resolve_volcengine_image_deployment",
+        AsyncMock(
+            side_effect=ValidationError(VOLCENGINE_IMAGE_ENDPOINT_PROXY_MESSAGE),
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="image_endpoint_id"):
+        await use_case.image_generation(ctx, body)
 
 
 @pytest.mark.asyncio

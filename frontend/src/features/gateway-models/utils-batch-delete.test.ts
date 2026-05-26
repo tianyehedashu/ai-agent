@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  chunkIdsForBatchDelete,
+  chunkIdsForBatchOperation,
   filterDeletableFailedModels,
   filterSelectedIdsInView,
   formatBatchDeleteConfirmLabel,
@@ -39,14 +39,14 @@ describe('filterDeletableFailedModels', () => {
   })
 })
 
-describe('chunkIdsForBatchDelete', () => {
+describe('chunkIdsForBatchOperation', () => {
   it('splits ids into chunks of max size', () => {
     const ids = Array.from({ length: 5 }, (_, i) => String(i))
-    expect(chunkIdsForBatchDelete(ids, 2)).toEqual([['0', '1'], ['2', '3'], ['4']])
+    expect(chunkIdsForBatchOperation(ids, 2)).toEqual([['0', '1'], ['2', '3'], ['4']])
   })
 
   it('returns empty for no ids', () => {
-    expect(chunkIdsForBatchDelete([])).toEqual([])
+    expect(chunkIdsForBatchOperation([])).toEqual([])
   })
 })
 

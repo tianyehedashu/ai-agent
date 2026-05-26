@@ -6,6 +6,9 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
 
+from domains.gateway.domain.registry_model_types import REGISTRY_ABILITY_FILTER_VALUES
+from libs.exceptions import ValidationError
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -104,6 +107,20 @@ def matches_connectivity_filter(
     if filter_value == ModelListConnectivityFilter.ALL:
         return True
     return connectivity_health_key(last_test_status) == filter_value
+
+
+def parse_registry_ability_filter(value: str | None) -> str | None:
+    """解析列表 ``?type=`` / ``?capability=``（兼容）筛选值；非法则 ValidationError。"""
+    if value is None:
+        return None
+    key = value.strip().lower()
+    if not key:
+        return None
+    if key not in REGISTRY_ABILITY_FILTER_VALUES:
+        raise ValidationError(
+            f"无效的能力筛选: {value!r}；允许: {', '.join(sorted(REGISTRY_ABILITY_FILTER_VALUES))}"
+        )
+    return key
 
 
 def matches_search(
@@ -295,6 +312,7 @@ __all__ = [
     "matches_connectivity_filter",
     "matches_search",
     "parse_entitlement_list_status",
+    "parse_registry_ability_filter",
     "sort_registry_rows",
     "sort_selector_items",
     "summarize_connectivity",

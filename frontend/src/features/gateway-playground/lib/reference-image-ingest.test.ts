@@ -17,6 +17,7 @@ import {
   normalizeImageFile,
   readImageFromClipboard,
   REFERENCE_IMAGE_ACCEPT_ERROR,
+  toAbsoluteImageUrl,
 } from './reference-image-ingest'
 
 const mockedUpload = vi.mocked(uploadUserImage)
@@ -114,6 +115,25 @@ describe('normalizeImageFile', () => {
   })
 })
 
+describe('toAbsoluteImageUrl', () => {
+  test('prefixes relative listing-studio path', () => {
+    expect(
+      toAbsoluteImageUrl('/ai-agent/api/v1/listing-studio/images/a.jpg', 'http://localhost:5173')
+    ).toBe('http://localhost:5173/ai-agent/api/v1/listing-studio/images/a.jpg')
+  })
+
+  test('leaves https cdn url unchanged', () => {
+    expect(toAbsoluteImageUrl('https://cdn.example.com/a.png', 'http://localhost:5173')).toBe(
+      'https://cdn.example.com/a.png'
+    )
+  })
+
+  test('leaves data url unchanged', () => {
+    const data = 'data:image/png;base64,abc'
+    expect(toAbsoluteImageUrl(data, 'http://localhost:5173')).toBe(data)
+  })
+})
+
 describe('ingestReferenceImage', () => {
   beforeEach(() => {
     mockedUpload.mockReset()
@@ -137,6 +157,22 @@ describe('ingestReferenceImage', () => {
       maxInlineBytes: DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES,
     })
     expect(result).toBe('https://cdn.example.com/a.png')
+    expect(mockedUpload).toHaveBeenCalledOnce()
+  })
+
+  test('large file upload converts relative api path to absolute url', async () => {
+    mockedUpload.mockResolvedValue({
+      url: '/ai-agent/api/v1/listing-studio/images/a89f.jpg',
+      content_type: 'image/jpeg',
+      size_bytes: DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES + 1,
+    })
+    const file = makePngFile(DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES + 1)
+    const result = await ingestReferenceImage(file, {
+      maxInlineBytes: DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES,
+    })
+    expect(result).toMatch(
+      /^https?:\/\/[^/]+\/ai-agent\/api\/v1\/listing-studio\/images\/a89f\.jpg$/
+    )
     expect(mockedUpload).toHaveBeenCalledOnce()
   })
 

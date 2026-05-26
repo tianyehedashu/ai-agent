@@ -1,5 +1,5 @@
 /**
- * Playground 按试调模式过滤模型列表（与 GatewayModel.capability / selector_capabilities 对齐）
+ * Playground 按试调模式过滤模型列表（与 GatewayModel.model_types 对齐；API 已推导）
  */
 
 import type { ModelTestStatus } from '@/types/user-model'
@@ -11,6 +11,8 @@ export interface ModelCandidate {
   scope: 'team' | 'personal'
   status: ModelTestStatus
   capability: string
+  /** 注册行厂商（生图尺寸预设应与模型 provider 对齐，不能只看凭据筛选） */
+  provider: string
   selector_capabilities?: Record<string, unknown>
   model_types?: string[]
 }
@@ -22,45 +24,68 @@ export const PLAYGROUND_MODE_LABELS: Record<PlaygroundMode, string> = {
   video_gen: '视频生成',
 }
 
-function flag(cap: Record<string, unknown> | undefined, key: string): boolean {
-  return cap?.[key] === true
+/** Playground 模式 → 注册表列表 ``?type=``（与后端 policy 一致） */
+export function playgroundModeToRegistryType(mode: PlaygroundMode): string {
+  switch (mode) {
+    case 'chat':
+      return 'text'
+    case 'vision':
+      return 'image'
+    case 'image_gen':
+      return 'image_gen'
+    case 'video_gen':
+      return 'video'
+    default: {
+      const _exhaustive: never = mode
+      return _exhaustive
+    }
+  }
+}
+
+function hasModelType(m: ModelCandidate, type: string): boolean {
+  const types = m.model_types
+  if (types && types.length > 0) {
+    return types.includes(type)
+  }
+  return legacyModelSupportsType(m, type)
+}
+
+/** 无 model_types 时的兼容回退（旧数据或尚未 resync） */
+function legacyModelSupportsType(m: ModelCandidate, type: string): boolean {
+  const cap = m.selector_capabilities
+  if (type === 'image') {
+    return cap?.supports_vision === true || m.capability === 'chat'
+  }
+  if (type === 'image_gen') {
+    return m.capability === 'image' || cap?.supports_image_gen === true
+  }
+  if (type === 'video') {
+    return m.capability === 'video_generation' || cap?.supports_video_gen === true
+  }
+  if (type === 'text') {
+    return m.capability === 'chat'
+  }
+  return false
 }
 
 export function modelSupportsVision(m: ModelCandidate): boolean {
-  if (flag(m.selector_capabilities, 'supports_vision')) return true
-  return m.capability === 'chat' && (m.model_types?.includes('image') ?? false)
+  return hasModelType(m, 'image')
 }
 
 export function modelSupportsImageGen(m: ModelCandidate): boolean {
-  if (m.capability === 'image') return true
-  if (flag(m.selector_capabilities, 'supports_image_gen')) return true
-  return m.model_types?.includes('image_gen') ?? false
+  return hasModelType(m, 'image_gen')
 }
 
 export function modelSupportsVideoGen(m: ModelCandidate): boolean {
-  if (m.capability === 'video_generation') return true
-  if (flag(m.selector_capabilities, 'supports_video_gen')) return true
-  return m.model_types?.includes('video') ?? false
+  return hasModelType(m, 'video')
 }
 
 export function filterModelsByMode(
   models: ModelCandidate[],
   mode: PlaygroundMode
 ): ModelCandidate[] {
-  switch (mode) {
-    case 'chat':
-      return models.filter((m) => m.capability === 'chat')
-    case 'vision':
-      return models.filter(modelSupportsVision)
-    case 'image_gen':
-      return models.filter(modelSupportsImageGen)
-    case 'video_gen':
-      return models.filter(modelSupportsVideoGen)
-    default: {
-      const _exhaustive: never = mode
-      return _exhaustive
-    }
-  }
+  const type = playgroundModeToRegistryType(mode)
+  return models.filter((m) => hasModelType(m, type))
 }
 
 export function routeSupportsMode(

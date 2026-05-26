@@ -2,12 +2,16 @@
  * Listing Studio 8 图生成：模型设置、批量生成、单槽重生成
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
 import { listingStudioApi } from '@/api/listingStudio'
+import {
+  defaultImageGenSizeForProvider,
+  imageGenSizesForProvider,
+} from '@/features/gateway-shared/image-gen-size-presets'
 import { useToast } from '@/hooks/use-toast'
 import { MAX_PAGE_SIZE } from '@/lib/pagination'
 import type { ProductImageGenTask } from '@/types/listing-studio'
@@ -19,11 +23,6 @@ import {
   type SlotReferenceMode,
 } from '../lib/slot-reference-image'
 
-const PROVIDER_SIZE_MAP: Record<string, string[]> = {
-  volcengine: ['1920x1920', '1080x1920', '1920x1080'],
-  openai: ['1024x1024', '1024x1792', '1792x1024'],
-}
-const DEFAULT_SIZES = ['1024x1024', '1920x1920']
 const EMPTY_TASKS: ProductImageGenTask[] = []
 
 async function resolveAvailableModelProvider(modelId: string): Promise<string> {
@@ -59,6 +58,7 @@ export interface UseListingStudioImageGenResult {
   setSize: (size: string) => void
   effectiveSize: string
   sizeOptions: string[]
+  selectedProvider: string
   referenceImageUrls: string[]
   setReferenceImageUrls: (urls: string[]) => void
   strength: number
@@ -108,8 +108,16 @@ export function useListingStudioImageGen({
     staleTime: 60_000,
   })
 
-  const sizeOptions = PROVIDER_SIZE_MAP[selectedProvider] ?? DEFAULT_SIZES
+  const sizeOptions = useMemo(
+    () => [...imageGenSizesForProvider(selectedProvider)],
+    [selectedProvider]
+  )
   const effectiveSize = size && sizeOptions.includes(size) ? size : sizeOptions[0]
+
+  useEffect(() => {
+    if (size && sizeOptions.includes(size)) return
+    setSize(defaultImageGenSizeForProvider(selectedProvider))
+  }, [selectedProvider, size, sizeOptions])
 
   const manualReferenceUrl = referenceImageUrls[0]
 
@@ -269,6 +277,7 @@ export function useListingStudioImageGen({
     setSize,
     effectiveSize,
     sizeOptions,
+    selectedProvider,
     referenceImageUrls,
     setReferenceImageUrls,
     strength,

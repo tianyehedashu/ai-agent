@@ -13,22 +13,20 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import {
+  defaultImageGenSizeForProvider,
+  imageGenSizesForProvider,
+} from '@/features/gateway-shared/image-gen-size-presets'
+import {
   temperatureDefaultFromCapabilities,
   temperaturePolicyFromCapabilities,
 } from '@/features/gateway-shared/model-selector-capabilities'
+import { resolvePlaygroundImageGenProvider } from '@/features/gateway-shared/resolve-playground-image-gen-provider'
 import {
   builtinReasoningPlaygroundHint,
   resolveThinkingParamForModel,
@@ -41,6 +39,7 @@ import { cn } from '@/lib/utils'
 import { VisionInput } from './modes/vision-input'
 import { PlaygroundCredentialField } from './playground-credential-field'
 import { withReferenceImagePayloadHint } from './playground-error'
+import { PlaygroundImageGenSizeField } from './playground-image-gen-size-field'
 import { PlaygroundKeyField } from './playground-key-field'
 import {
   endpointPathForMode,
@@ -73,8 +72,6 @@ const DEFAULT_PROMPTS: Record<PlaygroundMode, string> = {
 }
 const DEFAULT_PROMPT = DEFAULT_PROMPTS.chat
 const DEFAULT_PROMPT_VALUES = new Set<string>(Object.values(DEFAULT_PROMPTS))
-const IMAGE_GEN_SIZES = ['1024x1024', '1024x1792', '1792x1024'] as const
-
 interface PlaygroundCardProps {
   baseUrl: string
   onModelChange?: (model: string) => void
@@ -143,7 +140,9 @@ export function PlaygroundCard({
   const [showKey, setShowKey] = useState(false)
   const [visionImageUrl, setVisionImageUrl] = useState('')
   const [videoImageUrl, setVideoImageUrl] = useState('')
-  const [imageSize, setImageSize] = useState<string>(IMAGE_GEN_SIZES[0])
+  const [imageSize, setImageSize] = useState<string>(() =>
+    defaultImageGenSizeForProvider(undefined)
+  )
   const [imageN, setImageN] = useState(1)
   const userEditedKeyRef = useRef(false)
 
@@ -220,6 +219,29 @@ export function PlaygroundCard({
     [routeCandidates, model]
   )
 
+  const trimmedModel = model.trim()
+
+  const imageGenProvider = useMemo(
+    () =>
+      resolvePlaygroundImageGenProvider(
+        credentialById.get(credentialId)?.provider,
+        selectedCandidate?.provider,
+        trimmedModel
+      ),
+    [credentialById, credentialId, selectedCandidate?.provider, trimmedModel]
+  )
+
+  const imageGenSizes = useMemo(
+    () => imageGenSizesForProvider(imageGenProvider),
+    [imageGenProvider]
+  )
+
+  useEffect(() => {
+    if (playgroundMode !== 'image_gen') return
+    if (imageGenSizes.includes(imageSize)) return
+    setImageSize(imageGenSizes[0])
+  }, [playgroundMode, imageGenSizes, imageSize])
+
   const endpointPath = endpointPathForMode(
     playgroundMode,
     playgroundMode === 'chat' ? apiFlavor : 'openai'
@@ -261,7 +283,6 @@ export function PlaygroundCard({
   }
 
   const trimmedKey = apiKey.trim()
-  const trimmedModel = model.trim()
   const trimmedPrompt = prompt.trim()
   const trimmedVisionUrl = visionImageUrl.trim()
 
@@ -590,22 +611,13 @@ export function PlaygroundCard({
 
           {playgroundMode === 'image_gen' ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor={imageSizeId}>尺寸</Label>
-                <Select value={imageSize} onValueChange={setImageSize}>
-                  <SelectTrigger id={imageSizeId} className="font-mono text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_GEN_SIZES.map((size) => (
-                      <SelectItem key={size} value={size} className="font-mono">
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
+              <PlaygroundImageGenSizeField
+                id={imageSizeId}
+                provider={imageGenProvider}
+                size={imageSize}
+                onSizeChange={setImageSize}
+              />
+              <div className="space-y-1.5 sm:col-span-2 sm:max-w-[12rem]">
                 <Label htmlFor={imageCountId}>数量 (n)</Label>
                 <Input
                   id={imageCountId}

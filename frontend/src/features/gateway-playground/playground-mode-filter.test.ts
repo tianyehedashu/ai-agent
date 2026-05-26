@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import { filterPlaygroundRouteCandidates, type ModelCandidate } from './playground-mode-filter'
+import {
+  filterModelsByMode,
+  filterPlaygroundRouteCandidates,
+  type ModelCandidate,
+} from './playground-mode-filter'
 
 const chatModel: ModelCandidate = {
   name: 'chat-model',
   scope: 'team',
   status: 'success',
   capability: 'chat',
+  provider: 'openai',
   selector_capabilities: {},
-  model_types: ['chat'],
+  model_types: ['text'],
 }
 
 const visionModel: ModelCandidate = {
@@ -16,8 +21,9 @@ const visionModel: ModelCandidate = {
   scope: 'team',
   status: 'success',
   capability: 'chat',
+  provider: 'openai',
   selector_capabilities: { supports_vision: true },
-  model_types: ['chat'],
+  model_types: ['text', 'image'],
 }
 
 describe('filterPlaygroundRouteCandidates', () => {
@@ -52,5 +58,37 @@ describe('filterPlaygroundRouteCandidates', () => {
   it('filters routes by playground mode capabilities', () => {
     const result = filterPlaygroundRouteCandidates(routes, '', [chatModel, visionModel], 'vision')
     expect(result.map((r) => r.name)).toEqual(['route-a'])
+  })
+})
+
+describe('filterModelsByMode', () => {
+  const chatModel: ModelCandidate = {
+    name: 'chat-only',
+    scope: 'team',
+    status: 'success',
+    capability: 'chat',
+    provider: 'openai',
+    selector_capabilities: {},
+    model_types: ['text'],
+  }
+
+  const visionModel: ModelCandidate = {
+    name: 'vision',
+    scope: 'team',
+    status: 'success',
+    capability: 'chat',
+    provider: 'openai',
+    selector_capabilities: { supports_vision: true },
+    model_types: ['text', 'image'],
+  }
+
+  it('uses model_types for vision mode without relying on supports_vision alone', () => {
+    const result = filterModelsByMode([chatModel, visionModel], 'vision')
+    expect(result.map((m) => m.name)).toEqual(['vision'])
+  })
+
+  it('filters chat mode to text registry type', () => {
+    const result = filterModelsByMode([chatModel, visionModel], 'chat')
+    expect(result.map((m) => m.name)).toEqual(['chat-only', 'vision'])
   })
 })

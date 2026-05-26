@@ -317,7 +317,7 @@ async def test_volcengine_image_probe_uses_image_endpoint_from_extra(
         return {"data": [{"url": "https://cdn.example.com/img.png"}]}
 
     with patch(
-        "domains.gateway.application.management.write_modules.probe.perform_volcengine_image_probe",
+        "domains.gateway.application.management.write_modules.probe.perform_volcengine_image_generation",
         new=fake_perform,
     ):
         result = await writes.test_gateway_model(model.id, tenant_id=team.id)

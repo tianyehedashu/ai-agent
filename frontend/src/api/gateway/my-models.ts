@@ -73,6 +73,7 @@ export interface PersonalModelListQuery extends PageQuery {
   sort?: 'name' | 'created_at' | 'provider' | 'last_tested_at'
   order?: 'asc' | 'desc'
   provider?: string
+  type?: string
 }
 
 export interface PersonalModelListResponse extends PaginatedList<PersonalGatewayModel> {
@@ -90,6 +91,7 @@ function buildPersonalModelListSearch(params?: PersonalModelListQuery): Record<s
   if (params.sort) search.sort = params.sort
   if (params.order) search.order = params.order
   if (params.provider) search.provider = params.provider
+  if (params.type) search.type = params.type
   return search
 }
 

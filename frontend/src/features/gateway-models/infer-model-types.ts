@@ -1,6 +1,8 @@
 /**
- * 上游 model id → personal model_types（与 backend upstream_type_inference 对齐）。
- * 仅在后端未返回 inferred_model_types 时作兜底。
+ * 上游 model id → personal model_types（启发式，仅用于凭据页「从上游导入」预览）。
+ *
+ * 列表筛选、Playground、注册表展示以 API 返回的 ``model_types`` / ``?type=`` 为准；
+ * 与 backend ``domains/gateway/domain/registry_model_types.infer_model_types_from_tags`` 不同源，勿混用。
  */
 
 import type { ModelType } from '@/types/user-model'

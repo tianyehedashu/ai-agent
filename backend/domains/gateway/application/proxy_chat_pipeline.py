@@ -15,6 +15,7 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
     upstream_custom_from_metadata,
 )
 from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
+from domains.gateway.application.proxy_vision_image_urls import inline_vision_image_urls_in_kwargs
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 
@@ -68,6 +69,7 @@ async def prepare_chat_proxy_request(
     assert preflight.model is not None
 
     kwargs = await use_case.prepare_litellm_kwargs(ctx, body)
+    kwargs = await inline_vision_image_urls_in_kwargs(use_case.session, kwargs)
     meta = kwargs.get("metadata")
     metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}
     stream = bool(body.get("stream"))

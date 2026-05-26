@@ -12,6 +12,7 @@ from domains.gateway.domain.policies.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
     ModelListSortOrder,
+    parse_registry_ability_filter,
 )
 from libs.api.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, PageParams
 
@@ -31,9 +32,28 @@ def parse_model_list_query(
     order: Annotated[Literal["asc", "desc"], Query()] = "asc",
     provider: Annotated[str | None, Query(min_length=1, max_length=50)] = None,
     credential_id: uuid.UUID | None = None,
-    capability: Annotated[str | None, Query(min_length=1, max_length=50)] = None,
+    type: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=50,
+            description="能力筛选（model_types 或主 capability，与 /models/available 的 type 一致）",
+        ),
+    ] = None,
+    capability: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=50,
+            deprecated=True,
+            description="已弃用，请用 type；未传 type 时作兼容回退",
+        ),
+    ] = None,
     enabled: bool | None = None,
 ) -> ModelListQuery:
+    ability = parse_registry_ability_filter(type)
+    if ability is None and capability is not None:
+        ability = parse_registry_ability_filter(capability)
     return ModelListQuery(
         page_params=PageParams(page=page, page_size=page_size),
         q=q,
@@ -42,7 +62,8 @@ def parse_model_list_query(
         order=ModelListSortOrder(order),
         provider=provider,
         credential_id=credential_id,
-        capability=capability,
+        ability=ability,
+        capability=capability if ability is None else None,
         enabled=enabled,
     )
 

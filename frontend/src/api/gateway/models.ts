@@ -197,6 +197,9 @@ export interface GatewayModelListQuery extends PageQuery {
   order?: 'asc' | 'desc'
   provider?: string
   credential_id?: string
+  /** 能力筛选（与 /models/available 的 type 一致；勿用 capability 查列表） */
+  type?: string
+  /** @deprecated 列表请用 type */
   capability?: string
   enabled?: boolean
 }
@@ -232,7 +235,7 @@ function buildModelListSearch(params?: GatewayModelListQuery): Record<string, st
   if (params.order) search.order = params.order
   if (params.provider) search.provider = params.provider
   if (params.credential_id) search.credential_id = params.credential_id
-  if (params.capability) search.capability = params.capability
+  if (params.type) search.type = params.type
   if (params.enabled !== undefined) search.enabled = String(params.enabled)
   return search
 }

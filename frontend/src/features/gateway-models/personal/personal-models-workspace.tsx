@@ -51,6 +51,7 @@ import {
   personalModelDetailHref,
   personalModelsRegisterHref,
 } from '@/features/gateway-models/paths'
+import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
 import {
   createBatchConnectivityCachePatcher,
   filterDeletableFailedModels,
@@ -102,6 +103,7 @@ export function PersonalModelsWorkspace({
   const credentialIdFromUrl = searchParams.get('credentialId') ?? ''
   const lockCredentialFromUrl = credentialIdFromUrl !== ''
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
+  const [abilityFilter, setAbilityFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [page, setPage] = useState(1)
@@ -127,21 +129,33 @@ export function PersonalModelsWorkspace({
 
   useEffect(() => {
     setPage(1)
-  }, [listChannel, deferredSearch, healthFilter])
+  }, [listChannel, abilityFilter, deferredSearch, healthFilter])
 
   const personalListQueryBase = useMemo(
     () => ({
       ...(listChannel !== LIST_CHANNEL_ALL ? { provider: listChannel } : {}),
+      ...(abilityFilter ? { type: abilityFilter } : {}),
       ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
     }),
-    [listChannel, deferredSearch]
+    [listChannel, abilityFilter, deferredSearch]
   )
 
   const hasActiveListFilters =
-    listChannel !== LIST_CHANNEL_ALL || healthFilter !== 'all' || deferredSearch.trim() !== ''
+    listChannel !== LIST_CHANNEL_ALL ||
+    abilityFilter !== '' ||
+    healthFilter !== 'all' ||
+    deferredSearch.trim() !== ''
 
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['gateway', 'my-models', listChannel, page, deferredSearch, healthFilter],
+    queryKey: [
+      'gateway',
+      'my-models',
+      listChannel,
+      abilityFilter,
+      page,
+      deferredSearch,
+      healthFilter,
+    ],
     queryFn: () =>
       gatewayApi.listMyModels({
         page,
@@ -548,6 +562,14 @@ export function PersonalModelsWorkspace({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
+          </div>
+          <div className="grid max-w-xs gap-1.5">
+            <Label htmlFor="personal-model-ability">按能力筛选</Label>
+            <RegistryAbilityFilterSelect
+              value={abilityFilter}
+              onValueChange={setAbilityFilter}
+              className="h-9 w-full sm:w-[220px]"
+            />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

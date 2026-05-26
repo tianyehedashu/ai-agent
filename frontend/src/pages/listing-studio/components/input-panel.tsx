@@ -10,6 +10,7 @@ import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { INPUT_FIELDS, INPUT_IMAGE_URLS_KEY } from '@/constants/listing-studio'
+import { toAbsoluteImageUrl } from '@/features/gateway-playground/lib/reference-image-ingest'
 import { useToast } from '@/hooks/use-toast'
 import { ImagePlus, X, Loader2, Link2, Package, Tags, ImageIcon } from '@/lib/lucide-icons'
 
@@ -235,7 +236,7 @@ export function InputPanel({
     setUploading(true)
     try {
       const res = await listingStudioApi.upload(file)
-      update(INPUT_IMAGE_URLS_KEY, [...imageUrls, res.url])
+      update(INPUT_IMAGE_URLS_KEY, [...imageUrls, toAbsoluteImageUrl(res.url)])
       toast({ title: '上传成功' })
     } catch (err) {
       toast({ title: '上传失败', description: String(err), variant: 'destructive' })

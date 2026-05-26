@@ -12,9 +12,11 @@ from domains.gateway.domain.policies.model_list_policy import (
     is_model_unavailable,
     matches_connectivity_filter,
     matches_search,
+    parse_registry_ability_filter,
     sort_registry_rows,
     summarize_connectivity,
 )
+from libs.exceptions import ValidationError
 
 
 class _Row:
@@ -147,3 +149,17 @@ def test_parse_entitlement_list_status_invalid() -> None:
     assert parse_entitlement_list_status("exhausted") == "exhausted"
     assert parse_entitlement_list_status("bogus") == "none"
     assert parse_entitlement_list_status(None) == "none"
+
+
+def test_parse_registry_ability_filter_valid() -> None:
+    assert parse_registry_ability_filter("image") == "image"
+    assert parse_registry_ability_filter("  text ") == "text"
+
+
+def test_parse_registry_ability_filter_invalid() -> None:
+    try:
+        parse_registry_ability_filter("bogus")
+    except ValidationError as exc:
+        assert "bogus" in str(exc)
+    else:
+        raise AssertionError("expected ValidationError")

@@ -6,8 +6,9 @@ import {
   thinkingParamLabel,
 } from '@/features/gateway-shared/thinking-param'
 import { Info } from '@/lib/lucide-icons'
+import { MODEL_TYPE_LABELS } from '@/types/user-model'
 
-import { MODEL_TYPE_LABELS, capabilityLabel } from '../constants'
+import { capabilityLabel } from '../constants'
 
 export function ModelCapabilityBadges({
   model,

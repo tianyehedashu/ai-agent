@@ -20,10 +20,18 @@ from domains.gateway.domain.policies.model_list_policy import (
 from domains.gateway.domain.policies.model_registry_scope import (
     exclude_user_scope_credentials_for_registry,
 )
+from domains.gateway.domain.registry_model_types import (
+    ability_filters_via_sql_capability_column,
+    registry_row_matches_ability_filter,
+)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.repositories.model_list_read_repository import (
     ModelListReadRepository,
+)
+from domains.gateway.infrastructure.repositories.model_list_sql import (
+    build_system_list_stmt,
+    build_tenant_list_stmt,
 )
 from libs.api.pagination import MAX_PAGE_SIZE, PageParams, slice_page, total_pages
 
@@ -46,7 +54,8 @@ class ModelListQuery:
     order: ModelListSortOrder = ModelListSortOrder.ASC
     provider: str | None = None
     credential_id: uuid.UUID | None = None
-    capability: str | None = None
+    ability: str | None = None
+    capability: str | None = None  # deprecated：列表筛选用 ability；未设 ability 时作回退
     enabled: bool | None = None
 
 
@@ -65,15 +74,34 @@ class ModelListIdsResult:
     truncated: bool
 
 
+def resolved_registry_ability(query: ModelListQuery) -> str | None:
+    """列表 ``?type=`` 优先；``?capability=`` 仅作兼容回退。"""
+    if query.ability:
+        return query.ability
+    if query.capability:
+        return query.capability
+    return None
+
+
+def sql_capability_for_registry_ability(ability: str | None) -> str | None:
+    """可下推 SQL ``capability =`` 时返回筛选值，否则 None（改内存 policy）。"""
+    if not ability:
+        return None
+    if ability_filters_via_sql_capability_column(ability):
+        return ability
+    return None
+
+
 def _filter_rows_in_memory(
     rows: list[GatewayRegistryModelRow],
     query: ModelListQuery,
 ) -> list[GatewayRegistryModelRow]:
+    ability = resolved_registry_ability(query)
     filtered: list[GatewayRegistryModelRow] = []
     for row in rows:
         if query.enabled is not None and row.enabled is not query.enabled:
             continue
-        if query.capability and row.capability != query.capability:
+        if ability and not registry_row_matches_ability_filter(row, ability):
             continue
         if query.provider is not None and row.provider != query.provider:
             continue
@@ -98,9 +126,44 @@ async def _list_system_page(
     *,
     only_enabled: bool,
 ) -> ModelListPageResult:
+    ability = resolved_registry_ability(query)
+    sql_cap = sql_capability_for_registry_ability(ability)
+    if ability and not sql_cap:
+        stmt = build_system_list_stmt(
+            only_enabled=only_enabled,
+            capability=None,
+            provider=query.provider,
+            credential_id=query.credential_id,
+            enabled=query.enabled,
+            q=query.q,
+            connectivity=query.connectivity,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        result = await repo._session.execute(stmt)
+        all_rows = list(result.scalars().all())
+        filtered = _filter_rows_in_memory(all_rows, query)
+        summary = summarize_connectivity(filtered)
+        sorted_rows = sort_registry_rows(
+            filtered,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        page_items, total = slice_page(
+            sorted_rows,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+        )
+        return ModelListPageResult(
+            items=page_items,
+            total=total,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+            connectivity_summary=summary,
+        )
     items, total, summary = await repo.paginate_system(
         only_enabled=only_enabled,
-        capability=query.capability,
+        capability=sql_cap,
         provider=query.provider,
         credential_id=query.credential_id,
         enabled=query.enabled,
@@ -128,11 +191,48 @@ async def _list_tenant_page(
     only_enabled: bool,
     exclude_user_scope_credentials: bool,
 ) -> ModelListPageResult:
+    ability = resolved_registry_ability(query)
+    sql_cap = sql_capability_for_registry_ability(ability)
+    if ability and not sql_cap:
+        stmt = build_tenant_list_stmt(
+            tenant_id=tenant_id,
+            only_enabled=only_enabled,
+            capability=None,
+            provider=query.provider,
+            credential_id=query.credential_id,
+            exclude_user_scope_credentials=exclude_user_scope_credentials,
+            enabled=query.enabled,
+            q=query.q,
+            connectivity=query.connectivity,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        result = await repo._session.execute(stmt)
+        all_rows = list(result.scalars().all())
+        filtered = _filter_rows_in_memory(all_rows, query)
+        summary = summarize_connectivity(filtered)
+        sorted_rows = sort_registry_rows(
+            filtered,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        page_items, total = slice_page(
+            sorted_rows,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+        )
+        return ModelListPageResult(
+            items=page_items,
+            total=total,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+            connectivity_summary=summary,
+        )
     items, total, summary = await repo.paginate_tenant(
         tenant_id=tenant_id,
         only_enabled=only_enabled,
         exclude_user_scope_credentials=exclude_user_scope_credentials,
-        capability=query.capability,
+        capability=sql_cap,
         provider=query.provider,
         credential_id=query.credential_id,
         enabled=query.enabled,
@@ -165,7 +265,6 @@ async def _list_merged_page(
         session,
         tenant_id,
         only_enabled=True if registry_scope == "requestable" else only_enabled,
-        capability=query.capability,
         provider=query.provider,
         credential_id=query.credential_id,
         user_id=user_id,
@@ -181,6 +280,7 @@ async def _list_merged_page(
         order=query.order,
         provider=query.provider,
         credential_id=query.credential_id,
+        ability=query.ability,
         capability=query.capability,
         enabled=query.enabled,
     )
@@ -271,6 +371,7 @@ async def list_gateway_model_ids(
         "order": query.order,
         "provider": query.provider,
         "credential_id": query.credential_id,
+        "ability": query.ability,
         "capability": query.capability,
         "enabled": query.enabled,
     }
@@ -307,7 +408,6 @@ async def list_gateway_model_ids(
         session,
         tenant_id,
         only_enabled=True if registry_scope == "requestable" else only_enabled,
-        capability=query.capability,
         provider=query.provider,
         credential_id=query.credential_id,
         user_id=user_id,
@@ -329,4 +429,6 @@ __all__ = [
     "list_gateway_model_ids",
     "list_gateway_models_page",
     "list_personal_models_page",
+    "resolved_registry_ability",
+    "sql_capability_for_registry_ability",
 ]

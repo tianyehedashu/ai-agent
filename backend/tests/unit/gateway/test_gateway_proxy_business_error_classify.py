@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from fastapi import status
 
 from domains.gateway.domain.errors import (
@@ -12,6 +13,7 @@ from domains.gateway.domain.errors import (
 from domains.gateway.presentation.gateway_proxy_business_error_classify import (
     classify_proxy_use_case_business_error,
 )
+from libs.exceptions import ExternalServiceError, ValidationError
 
 
 def test_classify_model_not_allowed() -> None:
@@ -41,6 +43,50 @@ def test_classify_budget_maps_anthropic_api_error() -> None:
     assert biz.http_status == status.HTTP_402_PAYMENT_REQUIRED
     assert biz.openai_error_type == "budget_exceeded"
     assert biz.anthropic_error_type == "api_error"
+
+
+def test_classify_validation_error_maps_400() -> None:
+    biz = classify_proxy_use_case_business_error(
+        ValidationError("Volcengine image endpoint id is required")
+    )
+    assert biz is not None
+    assert biz.http_status == status.HTTP_400_BAD_REQUEST
+    assert biz.openai_error_type == "invalid_request_error"
+
+
+def test_classify_external_service_maps_502() -> None:
+    biz = classify_proxy_use_case_business_error(
+        ExternalServiceError("volcengine", message="upstream timeout")
+    )
+    assert biz is not None
+    assert biz.http_status == status.HTTP_502_BAD_GATEWAY
+    assert biz.openai_error_type == "api_error"
+
+
+def test_classify_httpx_upstream_4xx_maps_400() -> None:
+    response = httpx.Response(
+        400,
+        json={"error": {"message": "invalid model"}},
+        request=httpx.Request("POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"),
+    )
+    exc = httpx.HTTPStatusError("bad", request=response.request, response=response)
+    biz = classify_proxy_use_case_business_error(exc)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_400_BAD_REQUEST
+    assert biz.message == "invalid model"
+    assert biz.openai_error_type == "invalid_request_error"
+
+
+def test_classify_httpx_upstream_5xx_maps_502() -> None:
+    response = httpx.Response(
+        503,
+        request=httpx.Request("POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"),
+    )
+    exc = httpx.HTTPStatusError("bad", request=response.request, response=response)
+    biz = classify_proxy_use_case_business_error(exc)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_502_BAD_GATEWAY
+    assert biz.openai_error_type == "api_error"
 
 
 def test_classify_unknown_returns_none() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.policies.volcengine_image import VOLCENGINE_DEFAULT_IMAGE_SIZE
 from domains.gateway.domain.provider_api_base import resolve_effective_api_base
 
 
@@ -94,7 +95,7 @@ def image_probe_size(provider: str) -> str:
     """生图探活/测试用最小合法尺寸。"""
     p = provider.strip().lower()
     if p == "volcengine":
-        return "1920x1920"
+        return VOLCENGINE_DEFAULT_IMAGE_SIZE
     if p == "openai":
         return "1024x1024"
     return "1024x1024"

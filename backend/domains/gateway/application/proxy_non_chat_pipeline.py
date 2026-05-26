@@ -17,6 +17,7 @@ from domains.gateway.application.proxy_router_invoke import invoke_router_with_d
 from domains.gateway.domain.policies.dashscope_embedding import (
     should_use_dashscope_direct_embedding,
 )
+from domains.gateway.domain.policies.volcengine_image import should_use_volcengine_direct_image
 from domains.gateway.domain.policies.volcengine_video import should_use_volcengine_direct_video
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
@@ -131,17 +132,29 @@ class ProxyNonChatMixin:
             capability=GatewayCapability.IMAGE,
             model=optional_body_model(body),
         )
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
+        prepared, kwargs = await self.prepare_litellm_invoke(ctx, body)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
+        volcengine_direct = (
+            prepared.resolved is not None
+            and should_use_volcengine_direct_image(prepared.resolved.record.provider)
+        )
         try:
-            response = await self._invoke_non_chat_with_router_fallback(
-                ctx,
-                budget_model,
-                reservations,
-                kwargs,
-                router_call=lambda: self.litellm.router_image_generation(kwargs),
-                direct_call=lambda: self.litellm.direct_image_generation(kwargs),
-            )
+            if volcengine_direct:
+                client_model = prepared.client_model or budget_model or ""
+                response = await self.litellm.volcengine_direct_image_generation(
+                    ctx,
+                    client_model,
+                    kwargs,
+                )
+            else:
+                response = await self._invoke_non_chat_with_router_fallback(
+                    ctx,
+                    budget_model,
+                    reservations,
+                    kwargs,
+                    router_call=lambda: self.litellm.router_image_generation(kwargs),
+                    direct_call=lambda: self.litellm.direct_image_generation(kwargs),
+                )
         except Exception:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)

@@ -136,7 +136,8 @@ export function gatewayModelsListQueryKey(
   page = 1,
   pageSize = 20,
   search = '',
-  healthFilter: HealthFilter = 'all'
+  healthFilter: HealthFilter = 'all',
+  abilityFilter = ''
 ): readonly [
   'gateway',
   'models',
@@ -148,6 +149,7 @@ export function gatewayModelsListQueryKey(
   number,
   string,
   HealthFilter,
+  string,
 ] {
   return [
     'gateway',
@@ -160,6 +162,7 @@ export function gatewayModelsListQueryKey(
     pageSize,
     search,
     healthFilter,
+    abilityFilter,
   ]
 }
 

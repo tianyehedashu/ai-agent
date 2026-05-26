@@ -51,12 +51,8 @@ export function capabilityLabel(capability: string): string {
   return capability
 }
 
-export const MODEL_TYPE_LABELS: Record<string, string> = {
-  text: '文本',
-  image: '视觉',
-  image_gen: '生图',
-  video: '视频',
-}
+/** @deprecated 使用 `@/types/user-model` 的 `MODEL_TYPE_LABELS` */
+export { MODEL_TYPE_LABELS } from '@/types/user-model'
 
 export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
   GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES

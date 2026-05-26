@@ -590,6 +590,19 @@ def clear_storage_config_cache() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="session", autouse=True)
+def register_gateway_listing_studio_image_port() -> None:
+    """与 bootstrap lifespan 一致：Gateway 视觉内联端口由 Agent 实现。"""
+    from domains.agent.application.listing_studio_local_image_for_gateway import (  # pylint: disable=import-outside-toplevel
+        listing_studio_local_image_port_for_session,
+    )
+    from domains.gateway.application.listing_studio_image_port_registry import (  # pylint: disable=import-outside-toplevel
+        register_listing_studio_local_image_port_factory,
+    )
+
+    register_listing_studio_local_image_port_factory(listing_studio_local_image_port_for_session)
+
+
+@pytest.fixture(scope="session", autouse=True)
 def cleanup_litellm():
     """清理 LiteLLM 资源，避免在程序退出时出现日志错误"""
     yield

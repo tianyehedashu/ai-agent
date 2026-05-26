@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 
 from fastapi import status
+import httpx
 
 from domains.gateway.domain.errors import (
     BudgetExceededError,
@@ -15,6 +17,7 @@ from domains.gateway.domain.errors import (
     ModelNotAllowedError,
     RateLimitExceededError,
 )
+from libs.exceptions import ExternalServiceError, ValidationError
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,42 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             message=str(exc),
             openai_error_type="invocation_policy_violation",
             anthropic_error_type="invalid_request_error",
+        )
+    if isinstance(exc, ValidationError):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_400_BAD_REQUEST,
+            message=str(exc),
+            openai_error_type="invalid_request_error",
+            anthropic_error_type="invalid_request_error",
+        )
+    if isinstance(exc, ExternalServiceError):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_502_BAD_GATEWAY,
+            message=str(exc),
+            openai_error_type="api_error",
+            anthropic_error_type="api_error",
+        )
+    if isinstance(exc, httpx.HTTPStatusError):
+        upstream_status = exc.response.status_code
+        http_status = (
+            status.HTTP_502_BAD_GATEWAY
+            if upstream_status >= 500
+            else status.HTTP_400_BAD_REQUEST
+        )
+        message = str(exc)
+        with suppress(Exception):
+            body = exc.response.json()
+            if isinstance(body, dict):
+                err = body.get("error")
+                if isinstance(err, dict) and err.get("message"):
+                    message = str(err["message"])
+                elif body.get("message"):
+                    message = str(body["message"])
+        return ProxyUseCaseBusinessFailure(
+            http_status=http_status,
+            message=message,
+            openai_error_type="api_error" if upstream_status >= 500 else "invalid_request_error",
+            anthropic_error_type="api_error",
         )
     if isinstance(exc, ValueError):
         return ProxyUseCaseBusinessFailure(

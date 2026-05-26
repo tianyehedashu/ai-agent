@@ -93,25 +93,11 @@ def gateway_model_to_selector_user_item(row: GatewayModel) -> dict[str, Any]:
     return item
 
 
-def model_type_hint_from_capability(capability: str | None) -> str | None:
-    if not capability:
-        return None
-    cap = capability.strip().lower()
-    if cap == "image":
-        return "image_gen"
-    if cap == "video_generation":
-        return "video"
-    if cap == "chat":
-        return "text"
-    return None
-
-
 __all__ = [
     "VALID_PERSONAL_MODEL_TYPES",
     "capability_for_model_type",
     "gateway_model_to_personal_list_item",
     "gateway_model_to_selector_user_item",
-    "model_type_hint_from_capability",
     "personal_model_alias",
     "slugify_display_name",
     "tags_for_model_type",

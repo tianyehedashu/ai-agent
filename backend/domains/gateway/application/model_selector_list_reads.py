@@ -12,7 +12,10 @@ from domains.gateway.application.gateway_model_listing import (
     list_merged_models_for_tenant,
 )
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
-from domains.gateway.application.model_list_pipeline import ModelListQuery
+from domains.gateway.application.model_list_pipeline import (
+    ModelListQuery,
+    resolved_registry_ability,
+)
 from domains.gateway.application.model_selector_reads import get_default_for_model_type
 from domains.gateway.application.personal_models import gateway_model_to_selector_user_item
 from domains.gateway.domain.policies.model_list_policy import (
@@ -22,6 +25,7 @@ from domains.gateway.domain.policies.model_list_policy import (
     sort_selector_items,
     summarize_selector_items,
 )
+from domains.gateway.domain.registry_model_types import selector_item_matches_ability_filter
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.api.pagination import build_page, slice_page
@@ -88,10 +92,11 @@ async def list_available_models_page(
         billing_team_id=team_id,
         user_id=user_id,
     )
+    ability_filter = model_type or resolved_registry_ability(query)
     system_items: list[dict[str, object]] = []
     for row in system_rows:
         item = gateway_model_to_selector_item(row)
-        if model_type and model_type not in item.get("model_types", []):
+        if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
             continue
         item["enabled"] = row.enabled
         item["last_test_status"] = row.last_test_status
@@ -134,7 +139,7 @@ async def list_available_models_page(
         )
         for row in personal_rows:
             item = gateway_model_to_selector_user_item(row)
-            if model_type and model_type not in item.get("model_types", []):
+            if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
                 continue
             item["enabled"] = row.enabled
             personal_items.append(item)

@@ -107,6 +107,7 @@ domains/agent/infrastructure/llm/agent_llm_facade.py   # AgentLlmFacade
   - `proxy_response_adapter.py` —— 响应适配、`response_cost` 注入、预算/套餐结算
   - `proxy_deferred_tasks.py` —— fire-and-forget 结算任务登记 + shutdown 收口
   - `proxy_chat_pipeline.py` / `proxy_stream_settlement.py` —— Chat/Anthropic 流水线
+  - `proxy_vision_image_urls.py` —— 将 `/api/v1/listing-studio/images/*` 相对 URL 内联为 data URL（规则在 `domain/policies/vision_image_url.py`、`vision_image_mime.py`）；经 `ListingStudioLocalImagePort`（`application/ports.py`）依赖倒置，bootstrap 注册 `AgentListingStudioLocalImagePort`（`listing_studio_local_image_for_gateway.py` + `listing_studio_image_port_registry.py`）
   - `proxy_router_invoke.py` —— LiteLLM Router miss / 内部直连降级（chat 与非 chat 共用）
   - `proxy_non_chat_pipeline.py` —— embedding / 媒体 / rerank / moderation 等非对话能力
   - `catalog/gateway_model_tags_pipeline.py` —— 写侧 tags 统一流水线（``build_gateway_model_tags``）
@@ -269,8 +270,11 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 | 端点 | 消费方 | 列表范围 | 扩展字段 | 过滤策略 |
 |------|--------|----------|----------|----------|
 | ``GET /api/v1/openai/v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
-| ``GET /api/v1/gateway/teams/{team_id}/models`` | 管理 UI（JWT + 团队路径） | 含 disabled；可按 provider / credential 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
+| ``GET /api/v1/gateway/teams/{team_id}/models`` | 管理 UI（JWT + 团队路径） | 含 disabled；可按 provider / credential / ``?type=`` 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
+| ``GET /api/v1/gateway/my-models`` | 个人模型管理 UI | 同上 | 同上 | 同上 |
 | ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
+
+**能力筛选（``?type=``）**：推断与匹配单一真源为 ``domain/registry_model_types.py``（``infer_model_types_from_tags``、``matches_registry_ability_filter``）。有推导 ``model_types`` 时按成员匹配（例如 ``chat`` + ``supports_vision`` 同时命中 ``type=text`` 与 ``type=image``）；无推导 types 时回退 ``capability`` 列相等（``embedding`` 等）。列表查询参数 ``type`` 与 ``/models/available`` 一致；``?capability=`` 已弃用，仅作短期兼容。写目录种子仍用 ``infer_catalog_capability``，与读侧推导正交。
 
 ``gateway.callable`` 派生规则（与前端 ``ModelStatusBadge`` 一致）：连通性 ``failed`` → 不可调用；``entitlement_status`` 为 ``exhausted`` / ``expired`` → 不可调用；``resetting`` / ``active`` / ``none`` / 未测 → 可调用。``entitlement_status`` 含 ``resetting``（配额已耗尽且距窗口重置 ≤ 5 分钟）。上游 ``ProviderPlan`` 耗尽仍在 pre-call 拦截，列表阶段不做批量快照。
 

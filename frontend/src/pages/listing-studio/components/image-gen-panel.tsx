@@ -8,14 +8,8 @@ import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageGenSizePresetPicker } from '@/features/gateway-shared/image-gen-size-preset-picker'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio-capabilities'
 import { useToast } from '@/hooks/use-toast'
@@ -60,7 +54,7 @@ export function ImageGenPanel({
     setModelId,
     setSize,
     effectiveSize,
-    sizeOptions,
+    selectedProvider,
     referenceImageUrls,
     setReferenceImageUrls,
     strength,
@@ -73,8 +67,6 @@ export function ImageGenPanel({
     regenerateSlot,
     generateSingleSlot,
   } = imageGen
-
-  const resolvedSizeOptions = sizeOptions.length ? sizeOptions : ['1024x1024', '1920x1920']
 
   const outputKey = caps.outputKeys.image_gen_prompts
   const step5 = currentJob?.steps?.find((s) => s.capability_id === 'image_gen_prompts')
@@ -147,22 +139,14 @@ export function ImageGenPanel({
                 className="h-9 w-[220px] rounded-lg"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Label className="whitespace-nowrap text-sm text-muted-foreground">尺寸</Label>
-              <Select value={effectiveSize} onValueChange={setSize}>
-                <SelectTrigger className="h-9 w-[150px] rounded-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {resolvedSizeOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
+
+          <ImageGenSizePresetPicker
+            layout="compact"
+            provider={selectedProvider}
+            size={effectiveSize}
+            onSizeChange={setSize}
+          />
 
           {showSettings ? (
             <div className="mt-4 space-y-4 border-t border-border/30 pt-4">

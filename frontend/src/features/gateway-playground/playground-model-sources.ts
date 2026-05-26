@@ -21,6 +21,7 @@ function teamRowToCandidate(item: GatewayModel): ModelCandidate | null {
     scope: 'team',
     status: item.last_test_status,
     capability: item.capability,
+    provider: item.provider,
     selector_capabilities: item.selector_capabilities,
     model_types: item.model_types,
   }
@@ -34,6 +35,7 @@ function personalRowToCandidate(item: PersonalGatewayModel): ModelCandidate | nu
     scope: 'personal',
     status: item.last_test_status,
     capability: item.capability,
+    provider: item.provider,
     selector_capabilities: item.selector_capabilities,
     model_types: item.model_types,
   }

@@ -61,11 +61,20 @@ export function useInfiniteGatewayModelPages(
           1,
           MAX_PAGE_SIZE,
           params.q ?? '',
-          params.connectivity ?? 'all'
+          params.connectivity ?? 'all',
+          params.type ?? ''
         ),
         'infinite',
       ] as const,
-    [teamId, registryScope, params.provider, params.credential_id, params.q, params.connectivity]
+    [
+      teamId,
+      registryScope,
+      params.provider,
+      params.credential_id,
+      params.q,
+      params.connectivity,
+      params.type,
+    ]
   )
 
   const { data, isLoading, isSuccess, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } =

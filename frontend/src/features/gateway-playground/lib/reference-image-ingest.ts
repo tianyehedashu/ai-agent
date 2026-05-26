@@ -197,6 +197,31 @@ export function clipboardHasImage(data: DataTransfer): boolean {
   return readImageFromClipboard(data) !== null
 }
 
+/** 将站内相对图片路径转为可在输入框展示的完整 URL（保留 data / 外链不变） */
+export function toAbsoluteImageUrl(url: string, origin?: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) {
+    return trimmed
+  }
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://')
+  ) {
+    return trimmed
+  }
+  if (!trimmed.startsWith('/')) {
+    return trimmed
+  }
+  const pageOrigin =
+    typeof globalThis !== 'undefined' && 'location' in globalThis ? globalThis.location.origin : ''
+  const base = origin ?? (typeof pageOrigin === 'string' ? pageOrigin : '')
+  if (!base) {
+    return trimmed
+  }
+  return `${base.replace(/\/$/, '')}${trimmed}`
+}
+
 export interface IngestReferenceImageOptions {
   maxInlineBytes?: number
 }
@@ -220,7 +245,7 @@ export async function ingestReferenceImage(
     return fileToDataUrl(normalized)
   }
   const res = await uploadUserImage(normalized)
-  return res.url
+  return toAbsoluteImageUrl(res.url)
 }
 
 export function formatReferenceImageIngestError(err: unknown): string {

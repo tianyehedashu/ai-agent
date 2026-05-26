@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.policies.volcengine_direct import should_use_volcengine_direct_upstream
 from domains.gateway.domain.provider_api_base import (
     get_default_api_base,
     resolve_effective_api_base,
@@ -31,7 +32,7 @@ class VolcengineVideoCreateRequest:
 
 def should_use_volcengine_direct_video(provider: str) -> bool:
     """是否应绕过 LiteLLM Router / ``avideo_generation``，改走方舟任务 API。"""
-    return (provider or "").strip().lower() == "volcengine"
+    return should_use_volcengine_direct_upstream(provider)
 
 
 def normalize_volcengine_video_model(model_id: str) -> str:

@@ -7,8 +7,12 @@ Gateway 应用端口 — 内部桥接与跨域调用的抽象
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
 
@@ -136,11 +140,26 @@ class GatewayProxyProtocol(Protocol):
         ...
 
 
+class ListingStudioLocalImagePort(Protocol):
+    """解析 listing-studio 本地存储图片路径（由 Agent 域在 bootstrap 注入实现）。"""
+
+    async def resolve_local_image_path(self, filename: str) -> Path | None:
+        """本地模式返回可读路径；非 local 或文件不存在时返回 None。"""
+        ...
+
+
+ListingStudioLocalImagePortFactory = Callable[
+    [AsyncSession], ListingStudioLocalImagePort
+]
+
+
 __all__ = [
     "GatewayCallContext",
     "GatewayProxyProtocol",
     "GatewayResponse",
     "GatewayStreamChunk",
     "InvocationOverrides",
+    "ListingStudioLocalImagePort",
+    "ListingStudioLocalImagePortFactory",
     "LitellmCapabilityHintPort",
 ]
