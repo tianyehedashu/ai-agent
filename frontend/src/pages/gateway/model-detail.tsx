@@ -2,7 +2,7 @@
  * AI Gateway · 模型详情（个人 / 团队深链）
  */
 
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
@@ -27,21 +27,22 @@ import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/person
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronLeft, ChevronRight, Loader2 } from '@/lib/lucide-icons'
 
-const TeamModelDetailPane = lazy(() =>
+const TeamModelDetailPane = lazyWithReload(() =>
   import('@/features/gateway-models/team/team-model-detail-pane').then((m) => ({
     default: m.TeamModelDetailPane,
   }))
 )
 
-const PersonalModelDetailPane = lazy(() =>
+const PersonalModelDetailPane = lazyWithReload(() =>
   import('@/features/gateway-models/personal/personal-model-detail-pane').then((m) => ({
     default: m.PersonalModelDetailPane,
   }))
 )
 
-const PersonalModelEditPane = lazy(() =>
+const PersonalModelEditPane = lazyWithReload(() =>
   import('@/features/gateway-models/personal/personal-model-edit-pane').then((m) => ({
     default: m.PersonalModelEditPane,
   }))

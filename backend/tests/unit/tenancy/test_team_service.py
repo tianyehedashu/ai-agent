@@ -106,3 +106,38 @@ async def test_add_member_shared_team_accepts_other_user(db_session, test_user):
     row = await svc.add_member(shared.id, other.id, "member")
     assert row.user_id == other.id
     assert row.role == "member"
+
+
+@pytest.mark.asyncio
+async def test_list_teams_for_gateway_non_admin_returns_membership_only(db_session, test_user):
+    svc = TeamService(db_session)
+    await svc.ensure_personal_team(test_user.id)
+    shared = await svc.create_team(name="Shared", owner_user_id=test_user.id)
+
+    items = await svc.list_teams_for_gateway(test_user.id, is_platform_admin=False)
+    team_ids = {team.id for team, _role in items}
+    assert shared.id in team_ids
+    assert all(role is not None for _team, role in items)
+
+
+@pytest.mark.asyncio
+async def test_list_teams_for_gateway_platform_admin_includes_non_membership_team(
+    db_session, test_user
+):
+    other = User(
+        email=f"outsider_{uuid.uuid4()}@example.com",
+        hashed_password="x",
+        name="Outsider",
+    )
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+
+    svc = TeamService(db_session)
+    await svc.ensure_personal_team(other.id)
+    other_team = await svc.create_team(name="Other Org", owner_user_id=other.id)
+
+    items = await svc.list_teams_for_gateway(test_user.id, is_platform_admin=True)
+    by_id = {team.id: role for team, role in items}
+    assert other_team.id in by_id
+    assert by_id[other_team.id] == "admin"

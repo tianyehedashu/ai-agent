@@ -54,6 +54,14 @@ class MembershipPort(Protocol):
     ) -> str | None:
         """非成员返回 None。"""
 
+    async def member_roles_for_user(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+    ) -> dict[TenantId, str]:
+        """用户在各租户的成员角色；非成员租户不在 map 中。"""
+
 
 __all__ = [
     "DefaultTenantProvisionerPort",

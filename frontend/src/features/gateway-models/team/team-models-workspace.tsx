@@ -1,5 +1,4 @@
 ﻿import {
-  lazy,
   Suspense,
   useCallback,
   useDeferredValue,
@@ -74,17 +73,18 @@ import {
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadRegisterModelForm } from './register-model-preload'
 import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
-const ModelInventory = lazy(() =>
+const ModelInventory = lazyWithReload(() =>
   import('./model-inventory').then((m) => ({ default: m.ModelInventory }))
 )
 
-const RegisterModelForm = lazy(() =>
+const RegisterModelForm = lazyWithReload(() =>
   import('./register-model-form').then((m) => ({ default: m.RegisterModelForm }))
 )
 

@@ -7,7 +7,7 @@
  * - 头部「启用」Switch 走独立的乐观更新 mutation，UI 即时响应。
  */
 
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -54,10 +54,11 @@ import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-mo
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
 import { useUserStore } from '@/stores/user'
 
-const AddModelsDialog = lazy(() =>
+const AddModelsDialog = lazyWithReload(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
     default: m.AddModelsDialog,
   }))

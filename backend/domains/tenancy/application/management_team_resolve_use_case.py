@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.tenancy.domain.management_context import ManagementTeamContext
+from domains.tenancy.domain.policies.team_role import effective_team_role
 from domains.tenancy.domain.policies.team_target import parse_team_id_header
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.repositories.team_repository import TeamRepository
@@ -48,17 +49,18 @@ class TenancyManagementTeamResolveUseCase:
             if team is None or not team.is_active:
                 raise TeamNotFoundError(str(target_team_id))
             tid = TenantId(team.id)
+            member_role = await self._membership.member_role(
+                self._session, tenant_id=tid, user_id=user_id
+            )
             if is_platform_admin:
-                role = await self._membership.member_role(
-                    self._session, tenant_id=tid, user_id=user_id
+                role = effective_team_role(
+                    member_role=member_role,
+                    is_platform_admin=True,
                 )
-                role = role if role is not None else "admin"
+            elif member_role is None:
+                raise TeamPermissionDeniedError(str(team.id))
             else:
-                role = await self._membership.member_role(
-                    self._session, tenant_id=tid, user_id=user_id
-                )
-                if role is None:
-                    raise TeamPermissionDeniedError(str(team.id))
+                role = member_role
         else:
             team = await self._teams.get_personal(user_id)
             if team is None:

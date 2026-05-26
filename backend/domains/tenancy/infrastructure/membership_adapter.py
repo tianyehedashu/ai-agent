@@ -24,5 +24,15 @@ class TenancyMembershipAdapter:
         row = await repo.get(uuid.UUID(str(tenant_id)), user_id)
         return row.role if row is not None else None
 
+    async def member_roles_for_user(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+    ) -> dict[TenantId, str]:
+        repo = TeamMemberRepository(session)
+        by_team = await repo.list_roles_for_user(user_id)
+        return {TenantId(team_id): role for team_id, role in by_team.items()}
+
 
 __all__ = ["TenancyMembershipAdapter"]

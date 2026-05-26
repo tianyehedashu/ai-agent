@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
+import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
 import { Eye, EyeOff } from '@/lib/lucide-icons'
 
 import { ExtraFieldsRenderer } from './credential-extra-fields'
@@ -43,6 +45,8 @@ import {
 
 export interface CreateCredentialValues {
   scope: CredentialFormScope
+  /** scope=team 时必填：凭据写入的目标团队 */
+  teamId?: string
   provider: string
   name: string
   api_key: string
@@ -66,12 +70,24 @@ function buildScopeOptions(
   return allowedScopes.map((s) => ({ value: s, label: labels[s] }))
 }
 
+function resolveInitialTeamId(
+  writableTeams: readonly GatewayTeam[],
+  defaultTeamId: string | undefined
+): string {
+  if (defaultTeamId && writableTeams.some((team) => team.id === defaultTeamId)) {
+    return defaultTeamId
+  }
+  return writableTeams[0]?.id ?? ''
+}
+
 export function CreateCredentialDialog({
   open,
   onOpenChange,
   allowedScopes,
   defaultScope,
   defaultProvider,
+  writableTeams,
+  defaultTeamId,
   onSubmit,
   submitting,
 }: Readonly<{
@@ -83,6 +99,10 @@ export function CreateCredentialDialog({
   defaultScope?: CredentialFormScope
   /** 打开时的默认 provider；若不在 scope 候选内则回退到该 scope 的第一项 */
   defaultProvider?: string
+  /** scope=team 时可写团队列表（由外层 useGatewayWritableTeams 提供） */
+  writableTeams?: readonly GatewayTeam[]
+  /** scope=team 时默认选中的团队（通常为路由 teamId） */
+  defaultTeamId?: string
   onSubmit: (values: CreateCredentialValues) => void
   submitting?: boolean
 }>): React.JSX.Element {
@@ -98,6 +118,9 @@ export function CreateCredentialDialog({
   const [apiBaseTouched, setApiBaseTouched] = useState(false)
   const [extra, setExtra] = useState<CredentialExtraValues>({})
   const [showKey, setShowKey] = useState(false)
+  const [teamId, setTeamId] = useState('')
+
+  const teamOptions = useMemo(() => writableTeams ?? [], [writableTeams])
 
   const providerOptions = useMemo(() => providersForScope(scope), [scope])
   const schema = useMemo(() => getProviderSchema(provider), [provider])
@@ -121,7 +144,8 @@ export function CreateCredentialDialog({
     setApiBaseTouched(false)
     setExtra({})
     setShowKey(false)
-  }, [open, resolvedDefaultScope, defaultProvider])
+    setTeamId(resolveInitialTeamId(teamOptions, defaultTeamId))
+  }, [open, resolvedDefaultScope, defaultProvider, defaultTeamId, teamOptions])
 
   useEffect(() => {
     if (!provider) return
@@ -133,6 +157,12 @@ export function CreateCredentialDialog({
       setExtra({})
     }
   }, [providerOptions, provider])
+
+  useEffect(() => {
+    if (scope !== 'team') return
+    if (teamId && teamOptions.some((team) => team.id === teamId)) return
+    setTeamId(resolveInitialTeamId(teamOptions, defaultTeamId))
+  }, [scope, teamId, teamOptions, defaultTeamId])
 
   const handleProviderChange = (next: string): void => {
     setProvider(next)
@@ -149,19 +179,22 @@ export function CreateCredentialDialog({
 
   const requiredExtraMissing = extraFields.some((f) => f.required && !(extra[f.key] ?? '').trim())
   const apiBaseMissing = (schema?.apiBaseRequired ?? false) && !apiBase.trim()
+  const teamScopeReady = scope !== 'team' || Boolean(teamId)
   const canSubmit =
     !submitting &&
     Boolean(provider) &&
     Boolean(name.trim()) &&
     Boolean(apiKey.trim()) &&
     !apiBaseMissing &&
-    !requiredExtraMissing
+    !requiredExtraMissing &&
+    teamScopeReady
 
   const handleSubmit = (): void => {
     if (!canSubmit) return
     const compactedExtra = compactExtra(extra)
     onSubmit({
       scope,
+      teamId: scope === 'team' ? teamId : undefined,
       provider,
       name: name.trim(),
       api_key: apiKey.trim(),
@@ -209,6 +242,26 @@ export function CreateCredentialDialog({
                     ? '团队凭据由团队所有成员可见、管理员可写'
                     : '系统凭据对所有团队生效（需平台管理员）'}
               </p>
+            </div>
+          ) : null}
+
+          {scope === 'team' ? (
+            <div className="space-y-2">
+              <Label>目标团队</Label>
+              <GatewayTeamCombobox
+                value={teamId}
+                onChange={setTeamId}
+                teams={teamOptions}
+                disabled={teamOptions.length === 0}
+                placeholder={teamOptions.length === 0 ? '无可管理的团队' : '选择团队'}
+              />
+              {teamOptions.length === 0 ? (
+                <p className="text-[11px] text-destructive">当前账号没有可写入团队凭据的团队。</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  凭据将写入所选团队，团队成员可见、管理员可写。
+                </p>
+              )}
             </div>
           ) : null}
 

@@ -67,6 +67,16 @@ class TeamRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().unique().all())
 
+    async def list_all_active(self) -> list[Team]:
+        """列出全部活跃团队（平台 admin Gateway 管理面）。"""
+        stmt = (
+            select(Team)
+            .where(Team.is_active.is_(True))
+            .order_by(Team.kind.desc(), Team.created_at)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def create(
         self,
         *,
@@ -139,6 +149,14 @@ class TeamMemberRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_roles_for_user(self, user_id: uuid.UUID) -> dict[uuid.UUID, str]:
+        """单次查询用户全部 team_id → role（Gateway 团队列表避免 N+1）。"""
+        stmt = select(TeamMember.team_id, TeamMember.role).where(
+            TeamMember.user_id == user_id
+        )
+        result = await self._session.execute(stmt)
+        return dict(result.all())
 
     async def add(self, team_id: uuid.UUID, user_id: uuid.UUID, role: str) -> TeamMember:
         member = TeamMember(team_id=team_id, user_id=user_id, role=role)

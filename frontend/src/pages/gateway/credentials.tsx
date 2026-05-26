@@ -2,7 +2,7 @@
  * AI Gateway · 凭据（个人 / 团队 / 系统）
  */
 
-import { lazy, Suspense, startTransition, useCallback, useMemo, useState } from 'react'
+import { Suspense, startTransition, useCallback, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -52,19 +52,21 @@ import {
   credentialDetailHref,
   systemModelsBrowseIndexHref,
 } from '@/features/gateway-models/paths'
+import { useGatewayWritableTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 
-const AddModelsDialog = lazy(() =>
+const AddModelsDialog = lazyWithReload(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
     default: m.AddModelsDialog,
   }))
 )
 
-const SystemCredentialsBrowseWorkspace = lazy(() =>
+const SystemCredentialsBrowseWorkspace = lazyWithReload(() =>
   import('@/features/gateway-credentials/system/system-credentials-browse-workspace').then((m) => ({
     default: m.SystemCredentialsBrowseWorkspace,
   }))
@@ -81,6 +83,7 @@ function CredentialsPanelFallback(): React.JSX.Element {
 
 interface JustCreatedCredential {
   id: string
+  teamId: string
   provider: string
   name: string
   scope: CredentialUpstreamScope
@@ -272,6 +275,7 @@ function CredentialApiBaseCell({
 
 export default function GatewayCredentialsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const writableTeams = useGatewayWritableTeams()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -305,10 +309,11 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   )
 
   const openAddModelsAfterCreate = useCallback(
-    (cred: ProviderCredential, scope: CredentialUpstreamScope): void => {
+    (cred: ProviderCredential, scope: CredentialUpstreamScope, targetTeamId: string): void => {
       closeCreateUi()
       setJustCreated({
         id: cred.id,
+        teamId: targetTeamId,
         provider: cred.provider,
         name: cred.name,
         scope,
@@ -323,13 +328,21 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   )
 
   const createManagedMutation = useMutation({
-    mutationFn: (body: Parameters<typeof gatewayApi.createCredential>[1]) =>
-      gatewayApi.createCredential(teamId, body),
+    mutationFn: ({
+      targetTeamId,
+      body,
+    }: {
+      targetTeamId: string
+      body: Parameters<typeof gatewayApi.createCredential>[1]
+    }) => gatewayApi.createCredential(targetTeamId, body),
     onSuccess: (cred, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['gateway', 'credentials', variables.targetTeamId],
+      })
       invalidateCredentialSummariesCache(queryClient)
-      const scope: CredentialUpstreamScope = variables.scope === 'system' ? 'system' : 'team'
-      openAddModelsAfterCreate(cred, scope)
+      const scope: CredentialUpstreamScope = variables.body.scope === 'system' ? 'system' : 'team'
+      openAddModelsAfterCreate(cred, scope, variables.targetTeamId)
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -341,7 +354,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     onSuccess: (cred) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
       invalidateCredentialSummariesCache(queryClient)
-      openAddModelsAfterCreate(cred, 'user')
+      openAddModelsAfterCreate(cred, 'user', teamId)
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -399,13 +412,38 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
       })
       return
     }
+    if (v.scope === 'team') {
+      if (!v.teamId) {
+        toast({
+          variant: 'destructive',
+          title: '创建失败',
+          description: '请选择目标团队',
+        })
+        return
+      }
+      createManagedMutation.mutate({
+        targetTeamId: v.teamId,
+        body: {
+          provider: v.provider,
+          name: v.name,
+          api_key: v.api_key,
+          api_base: v.api_base,
+          extra: v.extra,
+          scope: v.scope,
+        },
+      })
+      return
+    }
     createManagedMutation.mutate({
-      provider: v.provider,
-      name: v.name,
-      api_key: v.api_key,
-      api_base: v.api_base,
-      extra: v.extra,
-      scope: v.scope,
+      targetTeamId: teamId,
+      body: {
+        provider: v.provider,
+        name: v.name,
+        api_key: v.api_key,
+        api_base: v.api_base,
+        extra: v.extra,
+        scope: v.scope,
+      },
     })
   }
 
@@ -582,6 +620,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         allowedScopes={allowedScopes}
         defaultScope={defaultScope}
         defaultProvider={pendingProvider}
+        writableTeams={writableTeams}
+        defaultTeamId={teamId}
         submitting={createSubmitting}
         onSubmit={onCreateSubmit}
       />
@@ -600,6 +640,7 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
             onOpenChange={(next: boolean) => {
               if (!next) setJustCreated(null)
             }}
+            teamId={justCreated.teamId}
             scope={justCreated.scope}
             credentialId={justCreated.id}
             provider={justCreated.provider}

@@ -99,6 +99,8 @@ export interface CredentialUpstreamModelsPanelProps {
   scope: CredentialUpstreamScope
   credentialId: string
   provider: string
+  /** 覆盖路由 teamId（团队凭据 onboarding 等） */
+  teamId?: string
   disabled?: boolean
   onPickModelId?: (upstreamId: string) => void
   embedded?: boolean
@@ -165,6 +167,7 @@ export function CredentialUpstreamModelsPanel({
   scope,
   credentialId,
   provider,
+  teamId: teamIdProp,
   disabled = false,
   onPickModelId,
   embedded = false,
@@ -173,7 +176,8 @@ export function CredentialUpstreamModelsPanel({
   cacheKey: cacheKeyProp,
   onProbeResult,
 }: CredentialUpstreamModelsPanelProps): React.JSX.Element {
-  const teamId = useGatewayTeamId()
+  const routeTeamId = useGatewayTeamId()
+  const teamId = teamIdProp ?? routeTeamId
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const cacheKey = cacheKeyProp ?? credentialProbeCacheKey(scope, credentialId)

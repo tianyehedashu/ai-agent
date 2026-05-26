@@ -2,7 +2,7 @@
  * 统一「为凭据添加模型」弹窗：上游探测批量导入 + 团队手动注册。
  */
 
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -28,10 +28,11 @@ import {
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { credentialDetailHref, personalModelsRegisterHref } from '@/features/gateway-models/paths'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
-const RegisterModelForm = lazy(() =>
+const RegisterModelForm = lazyWithReload(() =>
   import('@/features/gateway-models/team/register-model-form').then((m) => ({
     default: m.RegisterModelForm,
   }))
@@ -55,6 +56,8 @@ export interface AddModelsDialogProps {
   credentialName?: string
   isActive?: boolean
   onboardingHint?: string
+  /** 覆盖路由 teamId（团队凭据创建后 onboarding） */
+  teamId?: string
   /** 个人凭据禁用时：关闭本弹窗并打开编辑 */
   onEditPersonalCredential?: () => void
 }
@@ -62,6 +65,7 @@ export interface AddModelsDialogProps {
 type TeamTab = 'import' | 'manual'
 
 interface TeamManualRegisterTabProps {
+  teamId: string
   credentialId: string
   provider: string
   credentialName?: string
@@ -71,6 +75,7 @@ interface TeamManualRegisterTabProps {
 }
 
 function TeamManualRegisterTab({
+  teamId,
   credentialId,
   provider,
   credentialName,
@@ -78,7 +83,6 @@ function TeamManualRegisterTab({
   onCloseDialog,
   onBackToImport,
 }: TeamManualRegisterTabProps): React.JSX.Element {
-  const teamId = useGatewayTeamId()
   const { data: credentials } = useQuery({
     queryKey: ['gateway', 'credentials', teamId],
     queryFn: () => gatewayApi.listCredentials(teamId),
@@ -99,6 +103,7 @@ function TeamManualRegisterTab({
   const lockCredential = credentials?.find((c) => c.id === credentialId)
 
   const { createMutation } = useGatewayModelMutations({
+    teamId,
     credentialId,
     onCreateSuccess: onCloseDialog,
   })
@@ -137,9 +142,11 @@ export function AddModelsDialog({
   credentialName,
   isActive = true,
   onboardingHint,
+  teamId: teamIdProp,
   onEditPersonalCredential,
 }: AddModelsDialogProps): React.JSX.Element {
-  const teamId = useGatewayTeamId()
+  const routeTeamId = useGatewayTeamId()
+  const teamId = teamIdProp ?? routeTeamId
   const [teamTab, setTeamTab] = useState<TeamTab>('import')
   const [lastProbe, setLastProbe] = useState<CredentialProbeResult | null>(null)
 
@@ -231,6 +238,7 @@ export function AddModelsDialog({
                 {teamTab === 'import' ? (
                   <CredentialUpstreamModelsPanel
                     scope={scope}
+                    teamId={teamId}
                     credentialId={credentialId}
                     provider={provider}
                     embedded
@@ -244,6 +252,7 @@ export function AddModelsDialog({
               <TabsContent value="manual" className="mt-0 focus-visible:outline-none">
                 {teamTab === 'manual' ? (
                   <TeamManualRegisterTab
+                    teamId={teamId}
                     credentialId={credentialId}
                     provider={provider}
                     credentialName={credentialName}

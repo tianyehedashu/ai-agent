@@ -8,6 +8,8 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.tenancy.application.ports import TeamSnapshot
+from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
+from domains.tenancy.domain.policies.team_role import effective_team_role
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.models.team import Team, TeamMember
 from domains.tenancy.infrastructure.repositories.team_repository import (
@@ -108,13 +110,45 @@ class TeamService:
         self, user_id: uuid.UUID
     ) -> list[tuple[Team, str | None]]:
         teams = await self.list_user_teams(user_id)
-        items: list[tuple[Team, str | None]] = []
-        for t in teams:
-            role = await self._membership.member_role(
-                self._session, tenant_id=TenantId(t.id), user_id=user_id
+        roles = await self._membership.member_roles_for_user(
+            self._session, user_id=user_id
+        )
+        return [(team, roles.get(TenantId(team.id))) for team in teams]
+
+    async def list_teams_for_gateway(
+        self,
+        user_id: uuid.UUID,
+        *,
+        is_platform_admin: bool,
+        search: str | None = None,
+    ) -> list[tuple[Team, str]]:
+        """Gateway 管理面团队列表：普通用户仅 membership；平台 admin 可见全部活跃团队。"""
+        if not is_platform_admin:
+            membership_items = await self.list_teams_with_roles_for_user(user_id)
+            return [
+                (team, role)
+                for team, role in membership_items
+                if role is not None
+                and team_metadata_matches_search(
+                    name=team.name, slug=team.slug, search=search
+                )
+            ]
+
+        teams = await self._teams.list_all_active()
+        roles = await self._membership.member_roles_for_user(
+            self._session, user_id=user_id
+        )
+        return [
+            (
+                team,
+                effective_team_role(
+                    member_role=roles.get(TenantId(team.id)),
+                    is_platform_admin=True,
+                ),
             )
-            items.append((t, role))
-        return items
+            for team in teams
+            if team_metadata_matches_search(name=team.name, slug=team.slug, search=search)
+        ]
 
     async def get_team(self, team_id: uuid.UUID) -> Team | None:
         return await self._teams.get(team_id)

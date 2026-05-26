@@ -64,6 +64,22 @@ async def test_tenancy_membership_adapter_owner(db_session, test_user):
     assert role == "owner"
 
 
+@pytest.mark.asyncio
+async def test_tenancy_membership_adapter_roles_for_user_batch(db_session, test_user):
+    from domains.tenancy.application.team_service import TeamService
+
+    svc = TeamService(db_session)
+    personal = await svc.ensure_personal_team(test_user.id)
+    shared = await svc.create_team(name="Batch Roles Team", owner_user_id=test_user.id)
+    await db_session.commit()
+
+    adapter = TenancyMembershipAdapter()
+    roles = await adapter.member_roles_for_user(db_session, user_id=test_user.id)
+    assert roles[TenantId(personal.id)] == "owner"
+    assert roles[TenantId(shared.id)] == "owner"
+    assert len(roles) == 2
+
+
 def test_parse_external_idp_claims_tenant_and_org() -> None:
     uid = str(uuid.uuid4())
     v = parse_external_idp_claims({"sub": "abc", "tenant_id": uid})

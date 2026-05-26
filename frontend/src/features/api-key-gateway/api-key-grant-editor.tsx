@@ -2,12 +2,10 @@
  * 平台 API Key 的 Gateway 团队授权编辑器
  */
 
-import { useMemo } from 'react'
 import type React from 'react'
 
 import { Plus, Trash2 } from 'lucide-react'
 
-import type { GatewayTeam } from '@/api/gateway/teams'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -18,11 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  gatewayTeamDisplayLabel,
+  useGatewayTeamNameMap,
+  useGatewayWritableTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import type { ApiKeyGatewayGrantRequest } from '@/types/api-key'
 
 import { EMPTY_GRANT_POLICY, type GrantPolicyValues } from './gateway-capability-options'
 import { GrantPolicyFields } from './grant-policy-fields'
-import { useGatewayTeams } from './use-gateway-teams'
 
 export interface GrantDraft extends ApiKeyGatewayGrantRequest {
   localId: string
@@ -52,12 +54,6 @@ function policyFromDraft(draft: GrantDraft): GrantPolicyValues {
   }
 }
 
-function isGrantAdminTeam(team: GatewayTeam): boolean {
-  if (team.kind === 'personal') return true
-  const role = team.team_role ?? 'member'
-  return role === 'owner' || role === 'admin'
-}
-
 interface ApiKeyGrantEditorProps {
   grants: GrantDraft[]
   onChange: (grants: GrantDraft[]) => void
@@ -69,17 +65,8 @@ export function ApiKeyGrantEditor({
   onChange,
   includePersonalDefaultHint = true,
 }: ApiKeyGrantEditorProps): React.ReactElement {
-  const { data: teams = [] } = useGatewayTeams()
-
-  const eligibleTeams = useMemo(() => teams.filter(isGrantAdminTeam), [teams])
-
-  const teamNameById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const team of teams) {
-      map.set(team.id, team.kind === 'personal' ? '个人工作区' : team.name)
-    }
-    return map
-  }, [teams])
+  const eligibleTeams = useGatewayWritableTeams()
+  const teamNameById = useGatewayTeamNameMap()
 
   const usedTeamIds = new Set(grants.map((g) => g.team_id))
 
@@ -143,7 +130,7 @@ export function ApiKeyGrantEditor({
                           team.id !== grant.team_id && grants.some((g) => g.team_id === team.id)
                         }
                       >
-                        {team.kind === 'personal' ? '个人工作区' : team.name}
+                        {gatewayTeamDisplayLabel(team)}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -17,6 +17,8 @@ import type { UseMutationResult } from '@tanstack/react-query'
 
 interface UseGatewayModelMutationsOptions {
   credentialId?: string
+  /** 覆盖路由 teamId（凭据创建 onboarding 等场景） */
+  teamId?: string
   onCreateSuccess?: (created: GatewayModel) => void
   onDeleteSuccess?: () => void
 }
@@ -35,7 +37,8 @@ interface GatewayModelMutations {
 export function useGatewayModelMutations(
   options?: UseGatewayModelMutationsOptions
 ): GatewayModelMutations {
-  const teamId = useGatewayTeamId()
+  const routeTeamId = useGatewayTeamId()
+  const teamId = options?.teamId ?? routeTeamId
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const filterCredentialId = options?.credentialId

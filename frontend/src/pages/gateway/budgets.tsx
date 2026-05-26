@@ -2,15 +2,16 @@
  * AI Gateway · 预算配额（Admin 专页）
  */
 
-import { lazy, Suspense, useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 
 import { Navigate } from 'react-router-dom'
 
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2 } from '@/lib/lucide-icons'
 
-const BudgetAdminWorkspace = lazy(() =>
+const BudgetAdminWorkspace = lazyWithReload(() =>
   import('@/features/gateway-budget/budget-admin-workspace').then((m) => ({
     default: m.BudgetAdminWorkspace,
   }))

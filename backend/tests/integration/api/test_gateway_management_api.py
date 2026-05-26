@@ -57,6 +57,30 @@ class TestGatewayManagementApi:
         assert personal.get("team_role") == "owner"
 
     @pytest.mark.asyncio
+    async def test_list_teams_platform_admin_includes_non_membership_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        admin_headers: dict[str, str],
+    ) -> None:
+        """平台 admin 可见全站活跃团队；非成员团队 team_role 合成为 admin。"""
+        r_create = await dev_client.post(
+            "/api/v1/gateway/teams",
+            headers=auth_headers,
+            json={"name": f"Outsider-{uuid.uuid4().hex[:8]}"},
+        )
+        assert r_create.status_code == 201, r_create.text
+        outsider_team_id = r_create.json()["id"]
+
+        r = await dev_client.get("/api/v1/gateway/teams", headers=admin_headers)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert isinstance(data, list)
+        by_id = {item["id"]: item for item in data}
+        assert outsider_team_id in by_id
+        assert by_id[outsider_team_id]["team_role"] == "admin"
+
+    @pytest.mark.asyncio
     async def test_add_member_to_personal_team_rejected(
         self,
         dev_client: AsyncClient,

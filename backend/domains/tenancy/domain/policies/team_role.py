@@ -69,10 +69,25 @@ def assert_gateway_admin(team: ManagementTeamContext) -> None:
     )
 
 
+def effective_team_role(
+    *,
+    member_role: str | None,
+    is_platform_admin: bool,
+) -> str:
+    """合成管理面团队角色：平台 admin 无 membership 时视为 admin。"""
+    if member_role is not None:
+        return member_role
+    if is_platform_admin:
+        return TeamRole.ADMIN.value
+    msg = "Team membership required for non-platform admin"
+    raise ValueError(msg)
+
+
 __all__ = [
     "TeamRole",
     "assert_gateway_admin",
     "assert_team_role",
+    "effective_team_role",
     "is_plain_team_member_role",
     "is_platform_admin",
     "is_team_admin_or_platform",

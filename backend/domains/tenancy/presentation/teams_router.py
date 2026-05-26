@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application.user_use_case import UserUseCase
-from domains.identity.presentation.deps import RequiredAuthUser
+from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser
 from domains.tenancy.application.team_member_reads import EnrichedTeamMember, enrich_team_members
 from domains.tenancy.application.team_service import TeamService
 from domains.tenancy.presentation.schemas.teams import (
@@ -50,9 +50,15 @@ def _to_member_responses(
 async def list_my_teams(
     current_user: RequiredAuthUser,
     svc: TeamSvc,
+    search: Annotated[str | None, Query(max_length=100)] = None,
 ) -> list[TeamResponse]:
     user_uuid = uuid.UUID(current_user.id)
-    items_data = await svc.list_teams_with_roles_for_user(user_uuid)
+    is_platform_admin = current_user.role == ADMIN_ROLE
+    items_data = await svc.list_teams_for_gateway(
+        user_uuid,
+        is_platform_admin=is_platform_admin,
+        search=search,
+    )
     out: list[TeamResponse] = []
     for t, role in items_data:
         resp = TeamResponse.model_validate(t)

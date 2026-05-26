@@ -2,7 +2,7 @@
  * AI Gateway · 模型（个人 / 团队 / 系统）
  */
 
-import { Suspense, lazy, startTransition, useCallback, useEffect } from 'react'
+import { Suspense, startTransition, useCallback, useEffect } from 'react'
 
 import { Link } from 'react-router-dom'
 
@@ -26,21 +26,22 @@ import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/prelo
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronLeft, Loader2 } from '@/lib/lucide-icons'
 
-const PersonalModelsWorkspace = lazy(() =>
+const PersonalModelsWorkspace = lazyWithReload(() =>
   import('@/features/gateway-models/personal/personal-models-workspace').then((m) => ({
     default: m.PersonalModelsWorkspace,
   }))
 )
 
-const TeamModelsWorkspace = lazy(() =>
+const TeamModelsWorkspace = lazyWithReload(() =>
   import('@/features/gateway-models/team/team-models-workspace').then((m) => ({
     default: m.TeamModelsWorkspace,
   }))
 )
 
-const SystemModelsBrowseWorkspace = lazy(() =>
+const SystemModelsBrowseWorkspace = lazyWithReload(() =>
   import('@/features/gateway-models/system/system-models-browse-workspace').then((m) => ({
     default: m.SystemModelsBrowseWorkspace,
   }))

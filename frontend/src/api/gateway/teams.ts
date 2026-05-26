@@ -46,10 +46,18 @@ export interface TeamMemberLookup {
   name: string | null
 }
 
+/** GET /teams 可选 query：search（名称/slug 模糊，服务端过滤，减轻平台 admin 全量列表体积） */
+export interface ListGatewayTeamsParams {
+  search?: string
+}
+
 /** Teams 资源 API */
 export const teamsApi = {
-  /** 列出当前用户可见的全部团队（含 personal + shared） */
-  listTeams: () => apiClient.get<GatewayTeam[]>(`${GATEWAY_API_BASE}/teams`),
+  /** 列出团队：普通用户为 membership；平台 admin 为全部活跃团队（可用 search 过滤） */
+  listTeams: (params?: ListGatewayTeamsParams) =>
+    apiClient.get<GatewayTeam[]>(`${GATEWAY_API_BASE}/teams`, {
+      search: params?.search,
+    }),
   /** 创建共享团队（personal 团队由后端自动 provisioning） */
   createTeam: (body: { name: string; slug?: string }) =>
     apiClient.post<GatewayTeam>(`${GATEWAY_API_BASE}/teams`, body),

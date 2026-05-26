@@ -6,7 +6,10 @@ import { BrowserRouter } from 'react-router-dom'
 
 import { APP_ROOT } from './api/paths'
 import App from './App'
+import { clearChunkReloadFlag } from './lib/lazy-with-reload'
 import './index.css'
+
+clearChunkReloadFlag()
 
 const queryClient = new QueryClient({
   defaultOptions: {

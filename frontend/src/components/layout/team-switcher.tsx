@@ -7,23 +7,25 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronsUpDown, Users } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ChevronsUpDown, Users } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import { gatewayApi, type GatewayTeam as ApiTeam } from '@/api/gateway'
+import type { GatewayTeam as ApiTeam } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { GatewayTeamCommandItems } from '@/features/gateway-teams/gateway-team-command-items'
+import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
-import { cn } from '@/lib/utils'
+import { useGatewayTeams } from '@/features/gateway-teams/use-gateway-teams'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
 
@@ -33,14 +35,11 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   const navigate = useNavigate()
   const location = useLocation()
   const { currentUser } = useUserStore()
+  const { isPlatformAdmin } = useGatewayPermission()
   const { currentTeamId, setTeams } = useGatewayTeamStore()
   const isAnonymous = currentUser?.is_anonymous ?? true
 
-  const { data: teams } = useQuery({
-    queryKey: ['gateway', 'teams'],
-    queryFn: () => gatewayApi.listTeams(),
-    enabled: !isAnonymous,
-  })
+  const { data: teams } = useGatewayTeams(!isAnonymous)
 
   useEffect(() => {
     if (teams) {
@@ -67,6 +66,8 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   if (isAnonymous) return null
   if (!teams || teams.length === 0) return null
 
+  const currentLabel = current ? gatewayTeamDisplayLabel(current) : '选择团队'
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -78,12 +79,7 @@ export default function TeamSwitcher(): React.JSX.Element | null {
         >
           <span className="flex items-center gap-2 truncate">
             <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{current?.name ?? '选择团队'}</span>
-            {current?.kind === 'personal' && (
-              <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
-                我
-              </span>
-            )}
+            <span className="truncate">{currentLabel}</span>
           </span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
@@ -94,29 +90,15 @@ export default function TeamSwitcher(): React.JSX.Element | null {
           <CommandList>
             <CommandEmpty>未找到匹配的团队</CommandEmpty>
             <CommandGroup heading="我的团队">
-              {teams.map((team) => (
-                <CommandItem
-                  key={team.id}
-                  value={`${team.name} ${team.slug}`}
-                  onSelect={() => {
-                    setOpen(false)
-                    switchGatewayTeam(team.id, navigate, location, queryClient)
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      currentTeamId === team.id ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <div className="flex flex-1 items-center justify-between gap-2">
-                    <span className="truncate">{team.name}</span>
-                    <span className="text-[10px] uppercase text-muted-foreground">
-                      {team.kind === 'personal' ? '个人' : (team.team_role ?? 'member')}
-                    </span>
-                  </div>
-                </CommandItem>
-              ))}
+              <GatewayTeamCommandItems
+                teams={teams}
+                selectedTeamId={currentTeamId}
+                isPlatformAdmin={isPlatformAdmin}
+                onSelectTeam={(teamId) => {
+                  setOpen(false)
+                  switchGatewayTeam(teamId, navigate, location, queryClient)
+                }}
+              />
             </CommandGroup>
           </CommandList>
         </Command>

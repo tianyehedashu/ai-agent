@@ -5,7 +5,7 @@
  * 的 `CreateCredentialDialog` 统一承担，本组件仅承载列表渲染与编辑弹窗。
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,6 +43,7 @@ import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets
 import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
@@ -54,7 +55,7 @@ import { displayListApiKeyMasked } from './mask-display'
 import { invalidateCredentialSummariesCache } from './use-credential-directory'
 import { useCredentialEditForm } from './use-credential-edit-form'
 
-const AddModelsDialog = lazy(() =>
+const AddModelsDialog = lazyWithReload(() =>
   import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
 )
 
