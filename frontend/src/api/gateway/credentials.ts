@@ -180,6 +180,8 @@ export interface TeamGatewayModelBatchImportResponse {
 /** GET /managed-team-credentials 分页响应 */
 export interface ManagedTeamCredentialListResponse extends PaginatedList<ProviderCredential> {
   queried_team_count: number
+  queried_personal_team_count: number
+  queried_shared_team_count: number
 }
 
 export interface ListManagedTeamCredentialsParams {
@@ -190,6 +192,8 @@ export interface ListManagedTeamCredentialsParams {
 
 interface ManagedTeamCredentialListWire extends PaginatedList<ProviderCredentialWire> {
   queried_team_count: number
+  queried_personal_team_count: number
+  queried_shared_team_count: number
 }
 
 /** Credentials 资源 API（团队/系统 + 我的 + 探测/批量导入 + 从 app.toml 导入） */

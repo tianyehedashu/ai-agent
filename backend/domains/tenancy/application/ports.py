@@ -55,8 +55,9 @@ class GatewayTeamListingPort(Protocol):
         *,
         is_platform_admin: bool,
         search: str | None = None,
+        exclude_anonymous_personal: bool = True,
     ) -> list[GatewayTeamMembershipSnapshot]:
-        """普通用户仅 membership；平台 admin 可见全部活跃团队。"""
+        """普通用户仅 membership；平台 admin 可见活跃团队（默认不含匿名 personal）。"""
         ...
 
 

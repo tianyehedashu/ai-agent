@@ -23,7 +23,12 @@ import type { GatewayCredentialMutations } from '@/features/gateway-credentials/
 import { ManagedCredentialsTable } from '@/features/gateway-credentials/managed-credentials-table'
 import { teamCredentialsListQueryKey } from '@/features/gateway-credentials/query-keys'
 import { useManagedTeamCredentialsList } from '@/features/gateway-credentials/use-managed-team-credentials-list'
-import { useGatewayWritableTeams } from '@/features/gateway-teams/use-gateway-teams'
+import { gatewayCrossTeamOverviewTabLabel } from '@/features/gateway-teams/gateway-team-display'
+import {
+  resolveGatewayTeamLabel,
+  useGatewayTeamNameMap,
+  useGatewayWritableTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Plus } from '@/lib/lucide-icons'
@@ -40,8 +45,11 @@ export function TeamCredentialsWorkspace({
   onAdd,
 }: TeamCredentialsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const teamNameById = useGatewayTeamNameMap()
+  const currentTeamLabel = resolveGatewayTeamLabel(teamNameById, teamId)
   const writableTeams = useGatewayWritableTeams()
   const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
+  const crossTeamTabLabel = gatewayCrossTeamOverviewTabLabel(writableTeams.length, isPlatformAdmin)
   const [teamView, setTeamView] = useState<TeamCredentialsView>('current-team')
   const [crossTeamSearch, setCrossTeamSearch] = useState('')
   const deferredCrossTeamSearch = useDeferredValue(crossTeamSearch)
@@ -103,19 +111,25 @@ export function TeamCredentialsWorkspace({
               type="button"
               size="sm"
               variant={isCrossTeamView ? 'ghost' : 'secondary'}
-              className="h-8"
+              className="h-8 max-w-[180px]"
+              title={currentTeamLabel}
               onClick={handleSelectCurrentTeam}
             >
-              当前团队
+              <span className="truncate">{currentTeamLabel}</span>
             </Button>
             <Button
               type="button"
               size="sm"
               variant={isCrossTeamView ? 'secondary' : 'ghost'}
               className="h-8"
+              title={
+                isPlatformAdmin
+                  ? '汇总全平台各团队的凭据（平台管理员权限）'
+                  : '汇总您可管理的全部团队凭据'
+              }
               onClick={handleSelectCrossTeam}
             >
-              全部可管理 ({writableTeams.length})
+              {crossTeamTabLabel}
             </Button>
           </div>
           {isCrossTeamView ? (
@@ -133,8 +147,18 @@ export function TeamCredentialsWorkspace({
 
       {isCrossTeamView && crossTeamData ? (
         <p className="text-xs text-muted-foreground">
-          汇总 {String(crossTeamData.queried_team_count)} 个可管理团队，共{' '}
-          {String(crossTeamData.total)} 条凭据
+          {isPlatformAdmin ? (
+            <>
+              汇总 {String(crossTeamData.queried_personal_team_count)} 个注册用户工作区 +{' '}
+              {String(crossTeamData.queried_shared_team_count)} 个协作团队，共{' '}
+              {String(crossTeamData.total)} 条凭据
+            </>
+          ) : (
+            <>
+              汇总 {String(crossTeamData.queried_team_count)} 个可管理团队，共{' '}
+              {String(crossTeamData.total)} 条凭据
+            </>
+          )}
         </p>
       ) : null}
 

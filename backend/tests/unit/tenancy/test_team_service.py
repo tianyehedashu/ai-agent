@@ -121,6 +121,47 @@ async def test_list_teams_for_gateway_non_admin_returns_membership_only(db_sessi
 
 
 @pytest.mark.asyncio
+async def test_list_teams_for_gateway_platform_admin_excludes_anonymous_personal(
+    db_session, test_user
+):
+    anon = User(
+        email=f"anon_{uuid.uuid4()}@anonymous.local",
+        hashed_password="x",
+        name="Anon",
+        role="anonymous",
+    )
+    db_session.add(anon)
+    await db_session.commit()
+    await db_session.refresh(anon)
+
+    svc = TeamService(db_session)
+    anon_personal = await svc.ensure_personal_team(anon.id)
+    await svc.ensure_personal_team(test_user.id)
+    registered_other = User(
+        email=f"reg_{uuid.uuid4()}@example.com",
+        hashed_password="x",
+        name="Registered",
+        role="user",
+    )
+    db_session.add(registered_other)
+    await db_session.commit()
+    await db_session.refresh(registered_other)
+    reg_personal = await svc.ensure_personal_team(registered_other.id)
+
+    items = await svc.list_teams_for_gateway(test_user.id, is_platform_admin=True)
+    team_ids = {team.id for team, _role in items}
+    assert anon_personal.id not in team_ids
+    assert reg_personal.id in team_ids
+
+    items_all = await svc.list_teams_for_gateway(
+        test_user.id,
+        is_platform_admin=True,
+        exclude_anonymous_personal=False,
+    )
+    assert anon_personal.id in {team.id for team, _role in items_all}
+
+
+@pytest.mark.asyncio
 async def test_list_teams_for_gateway_platform_admin_includes_non_membership_team(
     db_session, test_user
 ):

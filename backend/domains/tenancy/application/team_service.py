@@ -8,8 +8,12 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot, TeamSnapshot
+from domains.tenancy.domain.policies.gateway_team_list_visibility import (
+    is_visible_in_platform_admin_gateway_list,
+)
 from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
 from domains.tenancy.domain.policies.team_role import effective_team_role
+from domains.tenancy.infrastructure.identity_user_role_lookup import IdentityUserRoleLookup
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.models.team import Team, TeamMember
 from domains.tenancy.infrastructure.repositories.team_repository import (
@@ -37,6 +41,28 @@ class TeamService:
         self._teams = TeamRepository(session)
         self._members = TeamMemberRepository(session)
         self._membership = membership or TenancyMembershipAdapter()
+        self._user_role_lookup = IdentityUserRoleLookup(session)
+
+    async def _filter_platform_admin_teams(
+        self,
+        teams: list[Team],
+        *,
+        exclude_anonymous_personal: bool,
+    ) -> list[Team]:
+        if not exclude_anonymous_personal:
+            return teams
+        personal_owner_ids = list(
+            {team.owner_user_id for team in teams if team.kind == "personal"}
+        )
+        roles = await self._user_role_lookup.roles_by_user_ids(personal_owner_ids)
+        return [
+            team
+            for team in teams
+            if is_visible_in_platform_admin_gateway_list(
+                kind=team.kind,
+                owner_user_role=roles.get(team.owner_user_id, "anonymous"),
+            )
+        ]
 
     async def ensure_personal_team(
         self,
@@ -121,8 +147,9 @@ class TeamService:
         *,
         is_platform_admin: bool,
         search: str | None = None,
+        exclude_anonymous_personal: bool = True,
     ) -> list[tuple[Team, str]]:
-        """Gateway 管理面团队列表：普通用户仅 membership；平台 admin 可见全部活跃团队。"""
+        """Gateway 管理面团队列表：普通用户仅 membership；平台 admin 可见活跃团队。"""
         if not is_platform_admin:
             membership_items = await self.list_teams_with_roles_for_user(user_id)
             return [
@@ -135,6 +162,10 @@ class TeamService:
             ]
 
         teams = await self._teams.list_all_active()
+        teams = await self._filter_platform_admin_teams(
+            teams,
+            exclude_anonymous_personal=exclude_anonymous_personal,
+        )
         roles = await self._membership.member_roles_for_user(
             self._session, user_id=user_id
         )
@@ -230,12 +261,14 @@ class TeamService:
         *,
         is_platform_admin: bool,
         search: str | None = None,
+        exclude_anonymous_personal: bool = True,
     ) -> list[GatewayTeamMembershipSnapshot]:
         """``GatewayTeamListingPort``：Gateway 管理面团队 membership 快照。"""
         teams_with_roles = await self.list_teams_for_gateway(
             user_id,
             is_platform_admin=is_platform_admin,
             search=search,
+            exclude_anonymous_personal=exclude_anonymous_personal,
         )
         return [
             GatewayTeamMembershipSnapshot(team_id=team.id, kind=team.kind, role=role)

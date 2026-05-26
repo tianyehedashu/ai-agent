@@ -173,15 +173,17 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
   const showCrossTeamOverview = activeTab === 'shared' && canWrite && writableTeams.length > 1
 
+  const crossTeamOverviewLabel = isPlatformAdmin ? '全平台汇总' : '全部可管理'
+
   const sharedTabDescription = useMemo(() => {
     if (isAdmin) {
       if (showCrossTeamOverview) {
-        return `以下凭据仅属于「${currentTeamName}」。可切换到「全部可管理」查看其它团队，或通过侧栏切换工作区。`
+        return `以下凭据仅属于「${currentTeamName}」。可切换到「${crossTeamOverviewLabel}」查看其它团队，或通过侧栏切换工作区。`
       }
       return `以下凭据仅属于「${currentTeamName}」。切换侧栏团队可查看其它团队的凭据。`
     }
     return `以下凭据属于「${currentTeamName}」，团队成员可见；密钥已脱敏，详情与变更需团队管理员。`
-  }, [currentTeamName, isAdmin, showCrossTeamOverview])
+  }, [crossTeamOverviewLabel, currentTeamName, isAdmin, showCrossTeamOverview])
 
   return (
     <div className="space-y-4">

@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 class ManagedTeamCredentialListPage:
     page: PaginatedListResponse[CredentialReadModel]
     queried_team_count: int
+    queried_personal_team_count: int
+    queried_shared_team_count: int
 
 
 async def list_managed_team_credentials_for_actor(
@@ -74,6 +76,8 @@ async def list_managed_team_credentials_for_actor(
     return ManagedTeamCredentialListPage(
         page=page,
         queried_team_count=plan.queried_team_count,
+        queried_personal_team_count=plan.queried_personal_team_count,
+        queried_shared_team_count=plan.queried_shared_team_count,
     )
 
 

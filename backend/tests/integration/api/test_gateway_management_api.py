@@ -57,6 +57,65 @@ class TestGatewayManagementApi:
         assert personal.get("team_role") == "owner"
 
     @pytest.mark.asyncio
+    async def test_list_teams_membership_only_skips_platform_admin_global_list(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        admin_headers: dict[str, str],
+    ) -> None:
+        """membership_only=true 时平台 admin 也仅返回 membership，不含全站 personal team。"""
+        r_create = await dev_client.post(
+            "/api/v1/gateway/teams",
+            headers=auth_headers,
+            json={"name": f"MemberOnly-{uuid.uuid4().hex[:8]}"},
+        )
+        assert r_create.status_code == 201, r_create.text
+
+        r_all = await dev_client.get("/api/v1/gateway/teams", headers=admin_headers)
+        r_member = await dev_client.get(
+            "/api/v1/gateway/teams",
+            headers=admin_headers,
+            params={"membership_only": "true"},
+        )
+        assert r_all.status_code == 200, r_all.text
+        assert r_member.status_code == 200, r_member.text
+        assert len(r_member.json()) < len(r_all.json())
+
+    @pytest.mark.asyncio
+    async def test_list_teams_platform_admin_excludes_anonymous_personal_by_default(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        """默认全站列表不含 anonymous personal team；include_anonymous_personal=true 可恢复。"""
+        anon = User(
+            email=f"anon_{uuid.uuid4()}@anonymous.local",
+            hashed_password="x",
+            name="Anon",
+            role="anonymous",
+        )
+        db_session.add(anon)
+        await db_session.commit()
+        await db_session.refresh(anon)
+        anon_personal = await TeamService(db_session).ensure_personal_team(anon.id)
+        await db_session.commit()
+
+        r_default = await dev_client.get("/api/v1/gateway/teams", headers=admin_headers)
+        r_include = await dev_client.get(
+            "/api/v1/gateway/teams",
+            headers=admin_headers,
+            params={"include_anonymous_personal": "true"},
+        )
+        assert r_default.status_code == 200, r_default.text
+        assert r_include.status_code == 200, r_include.text
+        default_ids = {item["id"] for item in r_default.json()}
+        include_ids = {item["id"] for item in r_include.json()}
+        assert str(anon_personal.id) not in default_ids
+        assert str(anon_personal.id) in include_ids
+        assert len(include_ids) > len(default_ids)
+
+    @pytest.mark.asyncio
     async def test_list_teams_platform_admin_includes_non_membership_team(
         self,
         dev_client: AsyncClient,
@@ -2367,6 +2426,12 @@ class TestManagedTeamCredentialsAggregateApi:
         assert "has_next" in payload
         assert "has_prev" in payload
         assert payload["queried_team_count"] >= 2
+        assert payload["queried_personal_team_count"] >= 1
+        assert payload["queried_shared_team_count"] >= 1
+        assert (
+            payload["queried_personal_team_count"] + payload["queried_shared_team_count"]
+            == payload["queried_team_count"]
+        )
         names = {item["name"] for item in payload["items"]}
         assert name_personal in names
         assert name_shared in names
@@ -2460,6 +2525,39 @@ class TestManagedTeamCredentialsAggregateApi:
     ) -> None:
         r = await dev_client.get("/api/v1/gateway/managed-team-credentials")
         assert r.status_code == 401, r.text
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_platform_admin_excludes_anonymous_personal(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        anon = User(
+            email=f"anon_cred_{uuid.uuid4()}@anonymous.local",
+            hashed_password="x",
+            name="Anon",
+            role="anonymous",
+        )
+        db_session.add(anon)
+        await db_session.commit()
+        await db_session.refresh(anon)
+        await TeamService(db_session).ensure_personal_team(anon.id)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=admin_headers,
+            params={"page": 1, "page_size": 10},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert "queried_personal_team_count" in payload
+        assert "queried_shared_team_count" in payload
+        assert (
+            payload["queried_personal_team_count"] + payload["queried_shared_team_count"]
+            == payload["queried_team_count"]
+        )
 
     @pytest.mark.asyncio
     async def test_list_managed_team_credentials_pagination_has_next(

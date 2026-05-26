@@ -50,21 +50,60 @@ def _to_member_responses(
 async def list_my_teams(
     current_user: RequiredAuthUser,
     svc: TeamSvc,
+    user_service: UserSvc,
     search: Annotated[str | None, Query(max_length=100)] = None,
+    membership_only: Annotated[
+        bool,
+        Query(description="true 时仅返回当前用户 membership（含 personal），平台 admin 亦同"),
+    ] = False,
+    include_anonymous_personal: Annotated[
+        bool,
+        Query(
+            description="平台 admin 全站列表是否包含匿名用户的 personal team（默认 false，即排除）"
+        ),
+    ] = False,
 ) -> list[TeamResponse]:
     user_uuid = uuid.UUID(current_user.id)
     is_platform_admin = current_user.role == ADMIN_ROLE
     items_data = await svc.list_teams_for_gateway(
         user_uuid,
-        is_platform_admin=is_platform_admin,
+        is_platform_admin=is_platform_admin and not membership_only,
         search=search,
+        exclude_anonymous_personal=not include_anonymous_personal,
     )
     out: list[TeamResponse] = []
     for t, role in items_data:
         resp = TeamResponse.model_validate(t)
         resp.team_role = role
         out.append(resp)
+    if is_platform_admin and not membership_only:
+        await _enrich_foreign_personal_team_owners(out, user_service, viewer_id=user_uuid)
     return out
+
+
+async def _enrich_foreign_personal_team_owners(
+    teams: list[TeamResponse],
+    user_service: UserUseCase,
+    *,
+    viewer_id: uuid.UUID,
+) -> None:
+    """他人 personal team 补充 owner 邮箱/姓名，避免 UI 全部显示「个人工作区」。"""
+    owner_ids = [
+        team.owner_user_id
+        for team in teams
+        if team.kind == "personal" and team.owner_user_id != viewer_id
+    ]
+    if not owner_ids:
+        return
+    summaries = await user_service.list_summary_views_by_ids(owner_ids)
+    for team in teams:
+        if team.kind != "personal" or team.owner_user_id == viewer_id:
+            continue
+        summary = summaries.get(team.owner_user_id)
+        if summary is None:
+            continue
+        team.owner_email = summary.email
+        team.owner_name = summary.name
 
 
 @router.post("/teams", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)

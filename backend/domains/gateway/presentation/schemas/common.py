@@ -199,6 +199,14 @@ class ManagedTeamCredentialListResponse(PaginatedListResponse[CredentialResponse
         ge=0,
         description="search 过滤后参与聚合的可写团队数量",
     )
+    queried_personal_team_count: int = Field(
+        ge=0,
+        description="参与聚合的注册用户 personal team 数量",
+    )
+    queried_shared_team_count: int = Field(
+        ge=0,
+        description="参与聚合的协作团队数量",
+    )
 
 
 # =============================================================================

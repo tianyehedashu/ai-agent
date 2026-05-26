@@ -22,6 +22,8 @@ const listManagedTeamCredentialsMock = vi.fn(
       has_next: false,
       has_prev: false,
       queried_team_count: 0,
+      queried_personal_team_count: 0,
+      queried_shared_team_count: 0,
     })
 )
 
@@ -47,6 +49,8 @@ beforeEach(() => {
     has_next: false,
     has_prev: false,
     queried_team_count: 0,
+    queried_personal_team_count: 0,
+    queried_shared_team_count: 0,
   })
 })
 

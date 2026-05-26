@@ -24,7 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { GatewayTeamCommandItems } from '@/features/gateway-teams/gateway-team-command-items'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
-import { useGatewayTeams } from '@/features/gateway-teams/use-gateway-teams'
+import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
@@ -37,9 +37,10 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   const { currentUser } = useUserStore()
   const { isPlatformAdmin } = useGatewayPermission()
   const { currentTeamId, setTeams } = useGatewayTeamStore()
+  const viewerUserId = currentUser?.id ?? null
   const isAnonymous = currentUser?.is_anonymous ?? true
 
-  const { data: teams } = useGatewayTeams(!isAnonymous)
+  const { data: teams } = useGatewayMemberTeams(!isAnonymous)
 
   useEffect(() => {
     if (teams) {
@@ -66,7 +67,7 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   if (isAnonymous) return null
   if (!teams || teams.length === 0) return null
 
-  const currentLabel = current ? gatewayTeamDisplayLabel(current) : '选择团队'
+  const currentLabel = current ? gatewayTeamDisplayLabel(current, { viewerUserId }) : '选择团队'
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -94,6 +95,7 @@ export default function TeamSwitcher(): React.JSX.Element | null {
                 teams={teams}
                 selectedTeamId={currentTeamId}
                 isPlatformAdmin={isPlatformAdmin}
+                viewerUserId={viewerUserId}
                 onSelectTeam={(teamId) => {
                   setOpen(false)
                   switchGatewayTeam(teamId, navigate, location, queryClient)

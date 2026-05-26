@@ -16,6 +16,7 @@ import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-d
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { ChevronsUpDown } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { useUserStore } from '@/stores/user'
 
 export interface GatewayTeamComboboxProps {
   value: string
@@ -38,12 +39,15 @@ export function GatewayTeamCombobox({
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { isPlatformAdmin } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === value) ?? null,
     [teams, value]
   )
-  const triggerLabel = selectedTeam ? gatewayTeamDisplayLabel(selectedTeam) : placeholder
+  const triggerLabel = selectedTeam
+    ? gatewayTeamDisplayLabel(selectedTeam, { viewerUserId })
+    : placeholder
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -71,6 +75,7 @@ export function GatewayTeamCombobox({
                 teams={teams}
                 selectedTeamId={value}
                 isPlatformAdmin={isPlatformAdmin}
+                viewerUserId={viewerUserId}
                 onSelectTeam={(teamId) => {
                   onChange(teamId)
                   setOpen(false)

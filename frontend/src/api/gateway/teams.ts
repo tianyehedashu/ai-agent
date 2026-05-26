@@ -23,6 +23,8 @@ export interface GatewayTeam {
   owner_user_id: string
   /** 后端扩展角色时用 string；常见值 owner | admin | member */
   team_role?: string | null
+  owner_email?: string | null
+  owner_name?: string | null
   is_active?: boolean
   settings?: Record<string, unknown> | null
   created_at?: string
@@ -46,9 +48,12 @@ export interface TeamMemberLookup {
   name: string | null
 }
 
-/** GET /teams 可选 query：search（名称/slug 模糊，服务端过滤，减轻平台 admin 全量列表体积） */
+/** GET /teams 可选 query */
 export interface ListGatewayTeamsParams {
   search?: string
+  membership_only?: boolean
+  /** 平台 admin 全站列表是否包含匿名 personal team（默认 false） */
+  include_anonymous_personal?: boolean
 }
 
 /** Teams 资源 API */
@@ -57,6 +62,8 @@ export const teamsApi = {
   listTeams: (params?: ListGatewayTeamsParams) =>
     apiClient.get<GatewayTeam[]>(`${GATEWAY_API_BASE}/teams`, {
       search: params?.search,
+      membership_only: params?.membership_only,
+      include_anonymous_personal: params?.include_anonymous_personal,
     }),
   /** 创建共享团队（personal 团队由后端自动 provisioning） */
   createTeam: (body: { name: string; slug?: string }) =>

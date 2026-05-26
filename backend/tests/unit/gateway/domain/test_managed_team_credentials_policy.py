@@ -59,6 +59,8 @@ def test_build_managed_team_credential_list_plan_filters_members() -> None:
     )
 
     assert plan.queried_team_count == 2
+    assert plan.queried_personal_team_count == 1
+    assert plan.queried_shared_team_count == 1
     assert personal.team_id in plan.tenant_ids
     assert shared_admin.team_id in plan.tenant_ids
     assert shared_member.team_id not in plan.tenant_ids
@@ -68,3 +70,5 @@ def test_build_managed_team_credential_list_plan_platform_admin_includes_all() -
     teams = [_snap("shared", TeamRole.MEMBER.value), _snap("shared", TeamRole.ADMIN.value)]
     plan = build_managed_team_credential_list_plan(teams, is_platform_admin=True)
     assert plan.queried_team_count == 2
+    assert plan.queried_personal_team_count == 0
+    assert plan.queried_shared_team_count == 2

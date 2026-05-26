@@ -53,4 +53,6 @@ async def list_managed_team_credentials(
         has_next=result.page.has_next,
         has_prev=result.page.has_prev,
         queried_team_count=result.queried_team_count,
+        queried_personal_team_count=result.queried_personal_team_count,
+        queried_shared_team_count=result.queried_shared_team_count,
     )

@@ -23,6 +23,8 @@ class WritableTeamSnapshot:
 class ManagedTeamCredentialListPlan:
     tenant_ids: tuple[uuid.UUID, ...]
     queried_team_count: int
+    queried_personal_team_count: int
+    queried_shared_team_count: int
 
 
 def is_writable_gateway_team(
@@ -60,10 +62,23 @@ def build_managed_team_credential_list_plan(
     *,
     is_platform_admin: bool,
 ) -> ManagedTeamCredentialListPlan:
-    tenant_ids = filter_writable_team_ids(teams, is_platform_admin=is_platform_admin)
+    writable = [
+        team
+        for team in teams
+        if is_writable_gateway_team(
+            kind=team.kind,
+            role=team.role,
+            is_platform_admin=is_platform_admin,
+        )
+    ]
+    tenant_ids = tuple(team.team_id for team in writable)
+    personal_count = sum(1 for team in writable if team.kind == "personal")
+    shared_count = sum(1 for team in writable if team.kind == "shared")
     return ManagedTeamCredentialListPlan(
-        tenant_ids=tuple(tenant_ids),
+        tenant_ids=tenant_ids,
         queried_team_count=len(tenant_ids),
+        queried_personal_team_count=personal_count,
+        queried_shared_team_count=shared_count,
     )
 
 

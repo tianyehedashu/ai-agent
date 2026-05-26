@@ -31,6 +31,9 @@ class TeamResponse(BaseModel):
     is_active: bool = True
     created_at: datetime
     team_role: str | None = None
+    """平台 admin 列全站团队时，他人 personal team 的归属用户（用于 UI 区分）。"""
+    owner_email: str | None = None
+    owner_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
