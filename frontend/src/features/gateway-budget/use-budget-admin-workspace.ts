@@ -103,7 +103,7 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
   })
 
   const needsModelOptions =
-    createOpen || modelFilter.trim() !== '' || activeTab === 'team' || activeTab === 'system'
+    createOpen || modelFilter.trim() !== '' || activeTab === 'tenant' || activeTab === 'system'
 
   const {
     items: models,

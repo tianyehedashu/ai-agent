@@ -6,9 +6,15 @@ import {
   thinkingParamLabel,
 } from '@/features/gateway-shared/thinking-param'
 import { Info } from '@/lib/lucide-icons'
-import { MODEL_TYPE_LABELS } from '@/types/user-model'
+import { MODEL_TYPE_LABELS, type ModelType } from '@/types/user-model'
 
 import { capabilityLabel } from '../constants'
+
+const MODEL_TYPE_KEYS = new Set<ModelType>(['text', 'image', 'image_gen', 'video'])
+
+function modelTypeLabel(t: string): string {
+  return MODEL_TYPE_KEYS.has(t as ModelType) ? MODEL_TYPE_LABELS[t as ModelType] : t
+}
 
 export function ModelCapabilityBadges({
   model,
@@ -58,7 +64,7 @@ export function ModelCapabilityBadges({
         <div className="flex flex-wrap gap-1">
           {types.map((t) => (
             <Badge key={t} variant="secondary" className="text-xs font-normal">
-              {MODEL_TYPE_LABELS[t] ?? t}
+              {modelTypeLabel(t)}
             </Badge>
           ))}
           {extraTags.map((t) => (
