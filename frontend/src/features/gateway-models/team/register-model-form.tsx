@@ -40,6 +40,7 @@ interface ModelFormValues {
   weight: string
   rpmLimit: string
   tpmLimit: string
+  upstreamCallShape: string
 }
 
 const emptyForm: ModelFormValues = {
@@ -52,6 +53,7 @@ const emptyForm: ModelFormValues = {
   weight: '1',
   rpmLimit: '',
   tpmLimit: '',
+  upstreamCallShape: '',
 }
 
 export interface RegisterModelFormProps {
@@ -154,6 +156,7 @@ export function RegisterModelForm({
       rpm_limit: parsePositiveInt(values.rpmLimit),
       tpm_limit: parsePositiveInt(values.tpmLimit),
       tags: selectedPreset ? buildPresetTags(selectedPreset) : null,
+      upstream_call_shape: values.upstreamCallShape.trim() || null,
     })
   }
 
@@ -364,6 +367,31 @@ export function RegisterModelForm({
                         setValues({ ...values, tpmLimit: e.target.value })
                       }}
                     />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label>出站调用形</Label>
+                    <Select
+                      value={values.upstreamCallShape || '__default__'}
+                      onValueChange={(v) => {
+                        setValues({
+                          ...values,
+                          upstreamCallShape: v === '__default__' ? '' : v,
+                        })
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__default__">跟随凭据方案（默认）</SelectItem>
+                        <SelectItem value="openai_compat">OpenAI-compat</SelectItem>
+                        <SelectItem value="anthropic_native">Anthropic-native（实验）</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Anthropic-native 需服务端开启实验开关；当前经 Gateway 代理仍以 OpenAI-compat
+                      出站。
+                    </p>
                   </div>
                 </div>
               </CollapsibleContent>

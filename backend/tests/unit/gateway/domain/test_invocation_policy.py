@@ -38,10 +38,19 @@ def test_none_strips_thinking_fields() -> None:
     assert out["temperature"] == 0.5
 
 
-def test_none_rejects_enable_thinking() -> None:
+def test_none_strips_thinking_with_validate() -> None:
+    """默认 validate=True：不支持思考时剥离而非 400（Claude Code Extended Thinking 等）。"""
     snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_NONE)
-    with pytest.raises(InvocationPolicyViolationError):
-        validate_invocation_kwargs(snap, {"enable_thinking": True})
+    body = {
+        "enable_thinking": True,
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+        "temperature": 0.5,
+    }
+    validate_invocation_kwargs(snap, body)
+    out = apply_invocation_kwargs(snap, body)
+    assert "enable_thinking" not in out
+    assert "thinking" not in out
+    assert out["temperature"] == 0.5
 
 
 def test_dashscope_requires_stream_when_thinking_on() -> None:

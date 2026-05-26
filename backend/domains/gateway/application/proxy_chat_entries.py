@@ -25,6 +25,10 @@ from domains.gateway.domain.policies.anthropic_only_request_fields import (
     strip_anthropic_only_fields,
 )
 from domains.gateway.domain.types import GatewayCapability
+from domains.gateway.domain.upstream_call_shape_policy import (
+    resolve_effective_upstream_call_shape,
+)
+from domains.gateway.domain.upstream_profile import UpstreamCallShape
 from domains.gateway.infrastructure.router_singleton import ensure_router_deployment
 from utils.logging import get_logger
 
@@ -171,13 +175,36 @@ class ProxyChatMixin:
             require_model=False,
             body_validator=validate_anthropic_messages_body,
         )
-        _strip_anthropic_only_fields_for_non_anthropic_upstream(
-            prepared.kwargs,
-            metadata=prepared.metadata,
-            model_tags=prepared.model_tags,
-            request_id=ctx.request_id,
-            client_model=prepared.model,
+        # Anthropic-native 出站直通的实际选择落在 deployment 构造层
+        # （``router_singleton._build_litellm_params``：根据 ``upstream_call_shape``
+        # 把 ``model`` 改成 ``anthropic/…`` 并解析 profile 的 Anthropic-native 根）。
+        # 此处只剥离非 Anthropic 上游不支持的 Anthropic-only 字段；
+        # 但 ``call_shape=anthropic_native`` 时上游协议本身即 Anthropic 兼容，应保留私有字段。
+        gateway_provider = (
+            prepared.metadata.get("gateway_provider")
+            if isinstance(prepared.metadata, dict)
+            else None
         )
+        profile_id = (
+            prepared.metadata.get("gateway_credential_profile_id")
+            if isinstance(prepared.metadata, dict)
+            else None
+        )
+        effective_call_shape: UpstreamCallShape | None = None
+        if isinstance(gateway_provider, str):
+            effective_call_shape = resolve_effective_upstream_call_shape(
+                model_upstream_call_shape=prepared.upstream_call_shape,
+                credential_profile_id=profile_id if isinstance(profile_id, str) else None,
+                provider=gateway_provider,
+            )
+        if effective_call_shape != UpstreamCallShape.ANTHROPIC_NATIVE:
+            _strip_anthropic_only_fields_for_non_anthropic_upstream(
+                prepared.kwargs,
+                metadata=prepared.metadata,
+                model_tags=prepared.model_tags,
+                request_id=ctx.request_id,
+                client_model=prepared.model,
+            )
         use_direct = await self.litellm.should_use_internal_direct_litellm(ctx, prepared.model)
 
         async def _direct() -> Any:

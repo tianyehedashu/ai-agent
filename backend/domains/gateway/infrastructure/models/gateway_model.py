@@ -72,6 +72,11 @@ class GatewayModel(BaseModel, TenantScopedMixin):
             "video_durations（整数秒列表）"
         ),
     )
+    upstream_call_shape: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="出站 LiteLLM 调用形：openai_compat / anthropic_native；NULL=跟随凭据 profile",
+    )
     last_test_status: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,

@@ -176,6 +176,7 @@ class ProbeWritesMixin:
                         api_key=api_key,
                         api_base=api_base,
                         image_endpoint_id=image_endpoint_id,
+                        profile_id=getattr(credential, "profile_id", None),
                         size=img_size,
                     )
                     img_data = await perform_volcengine_image_generation(request)

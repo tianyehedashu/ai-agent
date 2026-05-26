@@ -34,11 +34,15 @@ import { Eye, EyeOff } from '@/lib/lucide-icons'
 
 import { ExtraFieldsRenderer } from './credential-extra-fields'
 import { compactExtra, type CredentialExtraValues } from './credential-extra-utils'
+import { useProviderProfilesCatalog } from './hooks/use-provider-profiles-catalog'
 import {
   apiKeyLabelForProvider,
   defaultApiBaseForProvider,
+  defaultProfileIdForProvider,
   extraFieldsForProvider,
   getProviderSchema,
+  getUpstreamProfileSpec,
+  profilesForProvider,
   providersForScope,
   type CredentialFormScope,
 } from './provider-schemas'
@@ -51,6 +55,7 @@ export interface CreateCredentialValues {
   name: string
   api_key: string
   api_base?: string
+  profile_id?: string
   extra?: Record<string, string>
 }
 
@@ -88,6 +93,7 @@ export function CreateCredentialDialog({
   defaultProvider,
   writableTeams,
   defaultTeamId,
+  routeTeamId,
   onSubmit,
   submitting,
 }: Readonly<{
@@ -103,9 +109,13 @@ export function CreateCredentialDialog({
   writableTeams?: readonly GatewayTeam[]
   /** scope=team 时默认选中的团队（通常为路由 teamId） */
   defaultTeamId?: string
+  /** 当前路由工作区团队，用于跨团队创建提示 */
+  routeTeamId?: string
   onSubmit: (values: CreateCredentialValues) => void
   submitting?: boolean
 }>): React.JSX.Element {
+  useProviderProfilesCatalog(open)
+
   const fallbackScope: CredentialFormScope = allowedScopes[0] ?? 'user'
   const resolvedDefaultScope: CredentialFormScope =
     defaultScope && allowedScopes.includes(defaultScope) ? defaultScope : fallbackScope
@@ -116,6 +126,7 @@ export function CreateCredentialDialog({
   const [apiKey, setApiKey] = useState('')
   const [apiBase, setApiBase] = useState('')
   const [apiBaseTouched, setApiBaseTouched] = useState(false)
+  const [profileId, setProfileId] = useState('')
   const [extra, setExtra] = useState<CredentialExtraValues>({})
   const [showKey, setShowKey] = useState(false)
   const [teamId, setTeamId] = useState('')
@@ -124,6 +135,11 @@ export function CreateCredentialDialog({
 
   const providerOptions = useMemo(() => providersForScope(scope), [scope])
   const schema = useMemo(() => getProviderSchema(provider), [provider])
+  const profileOptions = useMemo(() => profilesForProvider(provider), [provider])
+  const activeProfile = useMemo(
+    () => getUpstreamProfileSpec(provider, profileId || undefined),
+    [provider, profileId]
+  )
   const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
   const apiKeyLabel = apiKeyLabelForProvider(provider)
 
@@ -140,7 +156,9 @@ export function CreateCredentialDialog({
     setProvider(initialProvider)
     setName('')
     setApiKey('')
-    setApiBase(defaultApiBaseForProvider(initialProvider))
+    const initialProfile = defaultProfileIdForProvider(initialProvider) ?? ''
+    setProfileId(initialProfile)
+    setApiBase(defaultApiBaseForProvider(initialProvider, initialProfile || undefined))
     setApiBaseTouched(false)
     setExtra({})
     setShowKey(false)
@@ -152,7 +170,9 @@ export function CreateCredentialDialog({
     if (!providerOptions.some((p) => p.id === provider)) {
       const next = providerOptions[0]?.id ?? ''
       setProvider(next)
-      setApiBase(defaultApiBaseForProvider(next))
+      const nextProfile = defaultProfileIdForProvider(next) ?? ''
+      setProfileId(nextProfile)
+      setApiBase(defaultApiBaseForProvider(next, nextProfile || undefined))
       setApiBaseTouched(false)
       setExtra({})
     }
@@ -167,8 +187,17 @@ export function CreateCredentialDialog({
   const handleProviderChange = (next: string): void => {
     setProvider(next)
     setExtra({})
+    const nextProfile = defaultProfileIdForProvider(next) ?? ''
+    setProfileId(nextProfile)
     if (!apiBaseTouched) {
-      setApiBase(defaultApiBaseForProvider(next))
+      setApiBase(defaultApiBaseForProvider(next, nextProfile || undefined))
+    }
+  }
+
+  const handleProfileChange = (nextProfile: string): void => {
+    setProfileId(nextProfile)
+    if (!apiBaseTouched) {
+      setApiBase(defaultApiBaseForProvider(provider, nextProfile))
     }
   }
 
@@ -199,11 +228,13 @@ export function CreateCredentialDialog({
       name: name.trim(),
       api_key: apiKey.trim(),
       api_base: apiBase.trim() || undefined,
+      profile_id: profileId.trim() || undefined,
       extra: Object.keys(compactedExtra).length > 0 ? compactedExtra : undefined,
     })
   }
 
   const scopeOptions = useMemo(() => buildScopeOptions(allowedScopes), [allowedScopes])
+  const crossTeamTarget = scope === 'team' && routeTeamId && teamId && teamId !== routeTeamId
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -240,7 +271,7 @@ export function CreateCredentialDialog({
                   ? '个人凭据仅当前账号可见，存储于 /my-credentials'
                   : scope === 'team'
                     ? '团队凭据由团队所有成员可见、管理员可写'
-                    : '系统凭据对所有团队生效（需平台管理员）'}
+                    : '创建后默认对所有团队公开；可在详情中改为「受限」并指定授权团队。'}
               </p>
             </div>
           ) : null}
@@ -258,9 +289,16 @@ export function CreateCredentialDialog({
               {teamOptions.length === 0 ? (
                 <p className="text-[11px] text-destructive">当前账号没有可写入团队凭据的团队。</p>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  凭据将写入所选团队，团队成员可见、管理员可写。
-                </p>
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    凭据将写入所选团队，团队成员可见、管理员可写。
+                  </p>
+                  {crossTeamTarget ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                      将创建到其他团队，创建后需切换工作区查看。
+                    </p>
+                  ) : null}
+                </>
               )}
             </div>
           ) : null}
@@ -283,6 +321,29 @@ export function CreateCredentialDialog({
               <p className="text-[11px] text-muted-foreground">{schema.helpText}</p>
             ) : null}
           </div>
+
+          {profileOptions.length > 1 ? (
+            <div className="space-y-2">
+              <Label>方案</Label>
+              <Select value={profileId} onValueChange={handleProfileChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择上游方案" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profileOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activeProfile?.anthropicDirectHint ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {activeProfile.anthropicDirectHint}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>名称</Label>
@@ -342,7 +403,11 @@ export function CreateCredentialDialog({
               onChange={(e) => {
                 handleApiBaseChange(e.target.value)
               }}
-              placeholder={schema?.apiBasePlaceholder ?? schema?.defaultApiBase}
+              placeholder={
+                schema?.apiBasePlaceholder ??
+                activeProfile?.defaultApiBaseOpenai ??
+                schema?.defaultApiBase
+              }
             />
             {schema?.defaultApiBase && !apiBaseTouched ? (
               <p className="text-[11px] text-muted-foreground">

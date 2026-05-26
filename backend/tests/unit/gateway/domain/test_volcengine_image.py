@@ -43,6 +43,16 @@ def test_falls_back_to_default_api_base_when_none() -> None:
     assert req.url.endswith("/images/generations")
 
 
+def test_coding_plan_profile_resolves_openai_compat_base() -> None:
+    req = build_volcengine_image_probe_request(
+        api_key="k",
+        api_base="https://ark.cn-beijing.volces.com/api/coding",
+        image_endpoint_id="ep",
+        profile_id="volcengine.coding_plan",
+    )
+    assert req.url == "https://ark.cn-beijing.volces.com/api/coding/v3/images/generations"
+
+
 def test_parse_volcengine_image_endpoint_id() -> None:
     assert parse_volcengine_image_endpoint_id({"image_endpoint_id": " ep-1 "}) == "ep-1"
     assert parse_volcengine_image_endpoint_id({}) is None

@@ -26,6 +26,11 @@ from domains.gateway.domain.router_model_name import (
     encode_router_model_name,
 )
 from domains.gateway.domain.types import credential_api_scope
+from domains.gateway.domain.upstream_call_shape_policy import (
+    resolve_effective_upstream_call_shape,
+)
+from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
+from domains.gateway.domain.upstream_profile import UpstreamCallShape, UpstreamProtocol
 from libs.crypto import decrypt_value, derive_encryption_key
 from utils.logging import get_logger
 
@@ -117,6 +122,7 @@ def _build_litellm_params(
     tpm_limit: int | None,
     tags: dict[str, Any] | None,
     pricing: dict[str, float] | None = None,
+    upstream_call_shape: str | None = None,
 ) -> dict[str, Any]:
     """构造单个 deployment 的 litellm_params。
 
@@ -125,20 +131,46 @@ def _build_litellm_params(
     会按 deployment 维度结算成本，从而让 ``cost-based-routing`` 在「同 ``model_name``
     多 deployment」（含跨 provider）情形下真正按价格择优。全局 ``litellm.register_model``
     仍然作为兜底。
+
+    ``upstream_call_shape`` 决定出站协议面：``anthropic_native`` 时
+    ``model`` 强制走 ``anthropic/`` 前缀（让 LiteLLM 使用 Anthropic Messages 通道）
+    并解析 profile 的 Anthropic-native 根 ``api_base``；
+    否则保持 ``provider`` 原生前缀 + OpenAI-compat 根。
     """
-    params: dict[str, Any] = {
-        "model": build_litellm_model_id(provider, real_model),
-    }
+    profile_id = getattr(credential, "profile_id", None)
+    call_shape = resolve_effective_upstream_call_shape(
+        model_upstream_call_shape=upstream_call_shape,
+        credential_profile_id=profile_id,
+        provider=provider,
+    )
+    if call_shape == UpstreamCallShape.ANTHROPIC_NATIVE:
+        model_id = build_litellm_model_id("anthropic", real_model)
+        protocol = UpstreamProtocol.ANTHROPIC_NATIVE
+    else:
+        model_id = build_litellm_model_id(provider, real_model)
+        protocol = UpstreamProtocol.OPENAI_COMPAT
+    params: dict[str, Any] = {"model": model_id}
     encryption_key = _get_encryption_key()
     try:
         decrypted_api_key = decrypt_value(credential.api_key_encrypted, encryption_key)
     except Exception:  # pragma: no cover
         logger.warning("Failed to decrypt credential %s; falling back to raw value", credential.id)
         decrypted_api_key = credential.api_key_encrypted
-    api_key_param = litellm_api_key_param_name(provider)
+    # Anthropic-native 通道统一用 ``api_key``；OpenAI-compat 沿用 provider 专属重命名。
+    api_key_param = (
+        "api_key"
+        if call_shape == UpstreamCallShape.ANTHROPIC_NATIVE
+        else litellm_api_key_param_name(provider)
+    )
     params[api_key_param] = decrypted_api_key
-    if credential.api_base:
-        params["api_base"] = credential.api_base
+    endpoint = resolve_upstream_endpoint(
+        provider=provider,
+        profile_id=profile_id,
+        api_base=credential.api_base,
+        protocol=protocol,
+    )
+    if endpoint:
+        params["api_base"] = endpoint
     extra = credential.extra or {}
     for key in credential_extra_keys_for_litellm(provider):
         value = extra.get(key)
@@ -199,6 +231,7 @@ def _build_deployment(
             tpm_limit=src.tpm_limit,
             tags=src.tags,
             pricing=pricing,
+            upstream_call_shape=getattr(src, "upstream_call_shape", None),
         ),
         "model_info": {
             "id": str(src.id),

@@ -10,7 +10,7 @@
 import { Suspense, useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -19,16 +19,7 @@ import {
   type ProviderPlan,
   type ProviderPlanCost,
 } from '@/api/gateway'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,10 +27,22 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
+import { CredentialDeleteConfirmDialog } from '@/features/gateway-credentials/credential-delete-confirm-dialog'
 import { CredentialEditFields } from '@/features/gateway-credentials/credential-edit-fields'
-import { canEditGatewayCredential } from '@/features/gateway-credentials/credential-edit-policy'
 import { CredentialModelsCard } from '@/features/gateway-credentials/credential-linked-models'
+import {
+  canEditGatewayCredential,
+  canLinkToCredentialDetail,
+  canManageSystemCredentialVisibility,
+  isWritableTargetTeam,
+} from '@/features/gateway-credentials/credential-permissions'
 import { invalidateCredentialProbeCache } from '@/features/gateway-credentials/credential-probe-cache'
+import {
+  CredentialScopeBadge,
+  CredentialTeamBadge,
+  CredentialVisibilityBadge,
+} from '@/features/gateway-credentials/credential-scope-display'
+import { useProviderProfilesCatalog } from '@/features/gateway-credentials/hooks/use-provider-profiles-catalog'
 import { getProviderSchema, providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
 import { managedCredentialUpstreamScope } from '@/features/gateway-credentials/types'
@@ -51,11 +54,18 @@ import {
   credentialsTeamListHref,
 } from '@/features/gateway-models/paths'
 import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-models/query-keys'
+import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
+import {
+  resolveGatewayTeamLabel,
+  useGatewayTeamNameMap,
+  useGatewayWritableTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
 
 const AddModelsDialog = lazyWithReload(() =>
@@ -65,8 +75,13 @@ const AddModelsDialog = lazyWithReload(() =>
 )
 
 export default function GatewayCredentialDetailPage(): React.JSX.Element {
+  useProviderProfilesCatalog()
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
+  const location = useLocation()
+  const writableTeams = useGatewayWritableTeams()
+  const teamNameById = useGatewayTeamNameMap()
+  const currentTeam = useGatewayTeamStore((s) => s.current())
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
@@ -89,6 +104,15 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   })
 
   const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
+  const linkable = cred ? canLinkToCredentialDetail(cred, isAdmin, isPlatformAdmin) : false
+  const ownerTenantId =
+    cred?.scope === 'team' && cred.tenant_id !== null && cred.tenant_id !== teamId && linkable
+      ? cred.tenant_id
+      : null
+  const wrongTeamContext = ownerTenantId !== null
+  const canSwitchToOwnerTeam =
+    ownerTenantId !== null && isWritableTargetTeam(ownerTenantId, writableTeams)
+  const canManageVisibility = canManageSystemCredentialVisibility(isPlatformAdmin)
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
   const upstreamScope = cred ? managedCredentialUpstreamScope(cred.scope) : 'team'
   const credentialsListHref =
@@ -171,6 +195,14 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     },
   })
 
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    setDeleteDialogOpen(open)
+  }, [])
+
+  const handleDeleteConfirm = useCallback(() => {
+    deleteMutation.mutate()
+  }, [deleteMutation])
+
   if (!id) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -215,21 +247,77 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         <span className="font-medium text-foreground">{cred.name}</span>
       </nav>
 
+      {wrongTeamContext && ownerTenantId ? (
+        <Alert>
+          <AlertTitle>工作区与凭据归属不一致</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>
+              此凭据属于「
+              {teamNameById.get(ownerTenantId) ?? ownerTenantId.slice(0, 8)}」，当前工作区为「
+              {currentTeam
+                ? currentTeam.kind === 'personal'
+                  ? '个人工作区'
+                  : currentTeam.name
+                : resolveGatewayTeamLabel(teamNameById, teamId)}
+              」。
+            </span>
+            {canSwitchToOwnerTeam ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7"
+                onClick={() => {
+                  switchGatewayTeam(ownerTenantId, navigate, location, queryClient)
+                }}
+              >
+                切换到所属团队
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{cred.name}</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{providerLabel(cred.provider)}</span>
-            <span className="ml-1.5 font-mono text-[11px]">({cred.provider})</span>
-            <span className="mx-2">·</span>
-            <span>{cred.scope}</span>
-            {cred.scope === 'system' ? <span className="ml-2 text-xs">（系统全局）</span> : null}
+            <span className="font-mono text-[11px]">({cred.provider})</span>
+            <CredentialScopeBadge scope={cred.scope} />
+            {cred.scope === 'team' && cred.tenant_id ? (
+              <CredentialTeamBadge tenantId={cred.tenant_id} teamNameById={teamNameById} />
+            ) : null}
+            {cred.scope === 'system' ? (
+              <CredentialVisibilityBadge visibility={cred.visibility} />
+            ) : null}
+            {cred.profile_label ? <Badge variant="outline">{cred.profile_label}</Badge> : null}
             {configManaged ? (
-              <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">
+              <span className="text-xs text-amber-700 dark:text-amber-400">
                 （配置同步托管，名称不可改）
               </span>
             ) : null}
           </p>
+          {cred.effective_api_base_openai || cred.effective_api_base_anthropic ? (
+            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {cred.effective_api_base_openai ? (
+                <p>
+                  OpenAI-compat 根：
+                  <span className="ml-1 font-mono text-[11px]">
+                    {cred.effective_api_base_openai}
+                  </span>
+                </p>
+              ) : null}
+              {cred.effective_api_base_anthropic ? (
+                <p>
+                  Anthropic-native 根：
+                  <span className="ml-1 font-mono text-[11px]">
+                    {cred.effective_api_base_anthropic}
+                  </span>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {schema?.helpText ? (
             <p className="mt-1 text-xs text-muted-foreground">{schema.helpText}</p>
           ) : null}
@@ -275,7 +363,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-6">
-        {cred.scope === 'system' && isPlatformAdmin ? (
+        {cred.scope === 'system' && canManageVisibility ? (
           <SystemCredentialVisibilityCard cred={cred} teamId={teamId} />
         ) : null}
         <Card>
@@ -340,30 +428,12 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         ) : null}
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除凭据</AlertDialogTitle>
-            <AlertDialogDescription>
-              {configManaged
-                ? `确定删除「${cred.name}」？将同时删除所有引用该凭据的注册模型；此为配置同步凭据，下次从配置重载或重启后可能自动恢复。`
-                : `确定删除「${cred.name}」？将同时删除所有引用该凭据的注册模型，并更新虚拟 Key / 路由中的模型白名单。`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                deleteMutation.mutate()
-              }}
-            >
-              {deleteMutation.isPending ? '删除中…' : '删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CredentialDeleteConfirmDialog
+        credential={deleteDialogOpen ? cred : null}
+        isPending={deleteMutation.isPending}
+        onOpenChange={handleDeleteDialogOpenChange}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   )
 }

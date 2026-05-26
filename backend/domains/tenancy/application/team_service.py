@@ -7,7 +7,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.tenancy.application.ports import TeamSnapshot
+from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot, TeamSnapshot
 from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
 from domains.tenancy.domain.policies.team_role import effective_team_role
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
@@ -223,6 +223,24 @@ class TeamService:
         if role is None:
             raise TeamPermissionDeniedError(str(team.id))
         return self._to_snapshot(team), role
+
+    async def list_gateway_team_memberships(
+        self,
+        user_id: uuid.UUID,
+        *,
+        is_platform_admin: bool,
+        search: str | None = None,
+    ) -> list[GatewayTeamMembershipSnapshot]:
+        """``GatewayTeamListingPort``：Gateway 管理面团队 membership 快照。"""
+        teams_with_roles = await self.list_teams_for_gateway(
+            user_id,
+            is_platform_admin=is_platform_admin,
+            search=search,
+        )
+        return [
+            GatewayTeamMembershipSnapshot(team_id=team.id, kind=team.kind, role=role)
+            for team, role in teams_with_roles
+        ]
 
 
 __all__ = ["TeamService"]

@@ -8,6 +8,10 @@ export interface NormalizedProviderCredential {
   provider: string
   name: string
   api_base: string | null
+  profile_id?: string | null
+  profile_label?: string | null
+  effective_api_base_openai?: string | null
+  effective_api_base_anthropic?: string | null
   is_active: boolean
   is_config_managed?: boolean
   visibility?: 'public' | 'restricted' | null
@@ -23,6 +27,10 @@ export interface ProviderCredentialWire {
   provider: string
   name: string
   api_base: string | null
+  profile_id?: string | null
+  profile_label?: string | null
+  effective_api_base_openai?: string | null
+  effective_api_base_anthropic?: string | null
   is_active: boolean
   is_config_managed?: boolean
   visibility?: 'public' | 'restricted' | null
@@ -50,6 +58,10 @@ export function normalizeCredential(raw: ProviderCredentialWire): NormalizedProv
     provider: raw.provider,
     name: raw.name,
     api_base: raw.api_base,
+    profile_id: raw.profile_id ?? null,
+    profile_label: raw.profile_label ?? null,
+    effective_api_base_openai: raw.effective_api_base_openai ?? null,
+    effective_api_base_anthropic: raw.effective_api_base_anthropic ?? null,
     is_active: raw.is_active,
     is_config_managed: raw.is_config_managed,
     visibility: raw.visibility ?? null,

@@ -19,7 +19,7 @@ from domains.gateway.domain.errors import (
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
-from domains.gateway.domain.provider_api_base import resolve_effective_api_base
+from domains.gateway.domain.credential_persist import normalize_credential_write_fields
 from domains.gateway.domain.types import (
     VirtualKeyBatchRevokeReason,
     is_config_managed_system_credential,
@@ -30,6 +30,28 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def _credential_update_api_fields(
+    *,
+    provider: str,
+    api_base: str | None,
+    profile_id: str | None,
+    existing_api_base: str | None,
+    existing_profile_id: str | None,
+) -> tuple[str | None, str | None] | tuple[None, str | None]:
+    """更新凭据时：仅当 api_base 或 profile_id 出现在 PATCH 中才重算 base。"""
+    if api_base is None and profile_id is None:
+        return (None, None)
+    stored_base, stored_profile = normalize_credential_write_fields(
+        provider=provider,
+        profile_id=profile_id,
+        api_base=api_base,
+        existing_api_base=existing_api_base,
+        existing_profile_id=existing_profile_id,
+    )
+    patch_base = stored_base if api_base is not None or profile_id is not None else None
+    patch_profile = stored_profile if profile_id is not None else None
+    return (patch_base, patch_profile)
 
 
 class CredentialWritesMixin:
@@ -73,35 +95,79 @@ class CredentialWritesMixin:
                 revoked.append(key_id)
         return (revoked, failed)
 
-    async def create_team_credential(self, *, tenant_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
+    async def create_team_credential(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        provider: str,
+        name: str,
+        api_key_encrypted: str,
+        api_base: str | None,
+        profile_id: str | None,
+        extra: dict[str, Any] | None,
+    ) -> CredentialReadModel:
+        stored_base, stored_profile = normalize_credential_write_fields(
+            provider=provider,
+            profile_id=profile_id,
+            api_base=api_base,
+        )
         row = await self._creds.create_for_tenant(
             tenant_id=tenant_id,
             provider=provider,
             name=name,
             api_key_encrypted=api_key_encrypted,
-            api_base=resolve_effective_api_base(provider, api_base),
+            api_base=stored_base,
+            profile_id=stored_profile,
             extra=extra,
         )
         await self.reload_litellm_router()
         return ensure_credential_read_model(row)
 
-    async def create_system_credential(self, *, is_platform_admin: bool, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
+    async def create_system_credential(
+        self,
+        *,
+        is_platform_admin: bool,
+        provider: str,
+        name: str,
+        api_key_encrypted: str,
+        api_base: str | None,
+        profile_id: str | None,
+        extra: dict[str, Any] | None,
+    ) -> CredentialReadModel:
         from domains.gateway.domain.policies.credential_scope import (
             assert_system_credential_mutation_allowed,
         )
 
         assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
+        stored_base, stored_profile = normalize_credential_write_fields(
+            provider=provider,
+            profile_id=profile_id,
+            api_base=api_base,
+        )
         row = await self._system_creds.create(
             provider=provider,
             name=name,
             api_key_encrypted=api_key_encrypted,
-            api_base=resolve_effective_api_base(provider, api_base),
+            api_base=stored_base,
+            profile_id=stored_profile,
             extra=extra,
         )
         await self.reload_litellm_router()
         return ensure_credential_read_model(row)
 
-    async def update_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> CredentialReadModel:
+    async def update_managed_credential(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+        api_key_encrypted: str | None,
+        api_base: str | None,
+        profile_id: str | None,
+        extra: dict[str, Any] | None,
+        is_active: bool | None,
+        name: str | None,
+    ) -> CredentialReadModel:
         system_existing = await self._system_creds.get(credential_id)
         if system_existing is not None:
             from domains.gateway.domain.policies.credential_scope import (
@@ -115,10 +181,18 @@ class CredentialWritesMixin:
                 raise ValidationError(
                     "配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥"
                 )
+            patch_base, patch_profile = _credential_update_api_fields(
+                provider=system_existing.provider,
+                api_base=api_base,
+                profile_id=profile_id,
+                existing_api_base=system_existing.api_base,
+                existing_profile_id=system_existing.profile_id,
+            )
             updated = await self._system_creds.update(
                 credential_id,
                 api_key_encrypted=api_key_encrypted,
-                api_base=api_base,
+                api_base=patch_base,
+                profile_id=patch_profile,
                 extra=extra,
                 is_active=is_active,
                 name=name,
@@ -131,10 +205,18 @@ class CredentialWritesMixin:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
+        patch_base, patch_profile = _credential_update_api_fields(
+            provider=existing.provider,
+            api_base=api_base,
+            profile_id=profile_id,
+            existing_api_base=existing.api_base,
+            existing_profile_id=existing.profile_id,
+        )
         updated = await self._creds.update(
             credential_id,
             api_key_encrypted=api_key_encrypted,
-            api_base=api_base,
+            api_base=patch_base,
+            profile_id=patch_profile,
             extra=extra,
             is_active=is_active,
             name=name,
@@ -187,15 +269,50 @@ class CredentialWritesMixin:
             await self.reload_litellm_router()
         return created
 
-    async def create_user_credential(self, *, actor_user_id: uuid.UUID, provider: str, name: str, api_key_encrypted: str, api_base: str | None, extra: dict[str, Any] | None) -> CredentialReadModel:
+    async def create_user_credential(
+        self,
+        *,
+        actor_user_id: uuid.UUID,
+        provider: str,
+        name: str,
+        api_key_encrypted: str,
+        api_base: str | None,
+        profile_id: str | None,
+        extra: dict[str, Any] | None,
+    ) -> CredentialReadModel:
         dup = await self._creds.find_user_by_provider_and_name(actor_user_id, provider, name)
         if dup is not None:
             raise CredentialNameConflictError(provider, name)
-        row = await self._creds.create(scope='user', scope_id=actor_user_id, provider=provider, name=name, api_key_encrypted=api_key_encrypted, api_base=resolve_effective_api_base(provider, api_base), extra=extra)
+        stored_base, stored_profile = normalize_credential_write_fields(
+            provider=provider,
+            profile_id=profile_id,
+            api_base=api_base,
+        )
+        row = await self._creds.create(
+            scope='user',
+            scope_id=actor_user_id,
+            provider=provider,
+            name=name,
+            api_key_encrypted=api_key_encrypted,
+            api_base=stored_base,
+            profile_id=stored_profile,
+            extra=extra,
+        )
         await self.reload_litellm_router()
         return ensure_credential_read_model(row)
 
-    async def update_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, api_key_encrypted: str | None, api_base: str | None, extra: dict[str, Any] | None, is_active: bool | None, name: str | None) -> CredentialReadModel:
+    async def update_user_credential(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        api_key_encrypted: str | None,
+        api_base: str | None,
+        profile_id: str | None,
+        extra: dict[str, Any] | None,
+        is_active: bool | None,
+        name: str | None,
+    ) -> CredentialReadModel:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != 'user' or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
@@ -203,7 +320,22 @@ class CredentialWritesMixin:
             dup = await self._creds.find_user_by_provider_and_name(actor_user_id, existing.provider, name)
             if dup is not None:
                 raise CredentialNameConflictError(existing.provider, name)
-        updated = await self._creds.update(credential_id, api_key_encrypted=api_key_encrypted, api_base=api_base, extra=extra, is_active=is_active, name=name)
+        patch_base, patch_profile = _credential_update_api_fields(
+            provider=existing.provider,
+            api_base=api_base,
+            profile_id=profile_id,
+            existing_api_base=existing.api_base,
+            existing_profile_id=existing.profile_id,
+        )
+        updated = await self._creds.update(
+            credential_id,
+            api_key_encrypted=api_key_encrypted,
+            api_base=patch_base,
+            profile_id=patch_profile,
+            extra=extra,
+            is_active=is_active,
+            name=name,
+        )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
         await self.reload_litellm_router()

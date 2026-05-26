@@ -11,10 +11,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from domains.gateway.domain.policies.volcengine_direct import should_use_volcengine_direct_upstream
-from domains.gateway.domain.provider_api_base import (
-    get_default_api_base,
-    resolve_effective_api_base,
-)
+from domains.gateway.domain.provider_api_base import get_default_api_base
+from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
+from domains.gateway.domain.upstream_profile import UpstreamProtocol
 
 DEFAULT_VOLCENGINE_API_BASE = (
     get_default_api_base("volcengine") or "https://ark.cn-beijing.volces.com/api/v3"
@@ -105,13 +104,20 @@ def build_volcengine_image_request(
     api_key: str,
     api_base: str | None,
     image_endpoint_id: str,
+    profile_id: str | None = None,
     size: str = VOLCENGINE_DEFAULT_IMAGE_SIZE,
     prompt: str = "ping",
     n: int | str | None = 1,
     response_format: str = "b64_json",
 ) -> VolcengineImageRequest:
     """根据凭据 + image endpoint 构建生图 HTTP 请求。"""
-    base = (resolve_effective_api_base("volcengine", api_base) or DEFAULT_VOLCENGINE_API_BASE).rstrip("/")
+    resolved = resolve_upstream_endpoint(
+        provider="volcengine",
+        profile_id=profile_id,
+        api_base=api_base,
+        protocol=UpstreamProtocol.OPENAI_COMPAT,
+    )
+    base = (resolved or DEFAULT_VOLCENGINE_API_BASE).rstrip("/")
     resolved_size = resolve_volcengine_image_size(size)
     body: dict[str, Any] = {
         "model": image_endpoint_id,
@@ -132,6 +138,7 @@ def build_volcengine_image_probe_request(
     api_key: str,
     api_base: str | None,
     image_endpoint_id: str,
+    profile_id: str | None = None,
     size: str = VOLCENGINE_DEFAULT_IMAGE_SIZE,
     prompt: str = "ping",
     n: int | str | None = 1,
@@ -142,6 +149,7 @@ def build_volcengine_image_probe_request(
         api_key=api_key,
         api_base=api_base,
         image_endpoint_id=image_endpoint_id,
+        profile_id=profile_id,
         size=size,
         prompt=prompt,
         n=n,
@@ -154,6 +162,7 @@ def build_volcengine_image_generation_request(
     api_key: str,
     api_base: str | None,
     image_endpoint_id: str,
+    profile_id: str | None = None,
     prompt: str,
     size: str | None = None,
     n: int | str | None = None,
@@ -166,6 +175,7 @@ def build_volcengine_image_generation_request(
         api_key=api_key,
         api_base=api_base,
         image_endpoint_id=image_endpoint_id,
+        profile_id=profile_id,
         size=resolve_volcengine_image_size(size),
         prompt=prompt.strip(),
         n=n,

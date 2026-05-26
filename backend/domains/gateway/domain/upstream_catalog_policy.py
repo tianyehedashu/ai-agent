@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from typing import Literal
 
-from domains.gateway.domain.provider_api_base import resolve_effective_api_base
+from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
+from domains.gateway.domain.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 
-_ANTHROPIC_UNSUPPORTED = "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，或使用带 OpenAI 兼容列表端点的代理。"
+_ANTHROPIC_UNSUPPORTED = (
+    "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，"
+    "或使用带 OpenAI 兼容列表端点的代理。"
+)
 
 
 def resolve_openai_compatible_models_list_url(
-    *, provider: str, api_base: str | None
+    *,
+    provider: str,
+    api_base: str | None,
+    profile_id: str | None = None,
 ) -> tuple[Literal["ok", "unsupported"], str | None, str | None]:
     """解析用于列举模型的 URL。
 
@@ -18,43 +26,41 @@ def resolve_openai_compatible_models_list_url(
         ``(status, list_url, reason)`` — ``reason`` 仅在 ``unsupported`` 时非空。
     """
     p = provider.lower().strip()
-    base = resolve_effective_api_base(p, api_base)
+    profile = get_upstream_profile(profile_id, provider=p)
 
-    if p == "anthropic":
-        return ("unsupported", None, _ANTHROPIC_UNSUPPORTED)
-
-    if p == "openai":
-        root = base.rstrip("/") if base else "https://api.openai.com/v1"
-        return ("ok", f"{root}/models", None)
+    if not profile.probe_supported:
+        reason = profile.probe_unsupported_reason or _ANTHROPIC_UNSUPPORTED
+        return ("unsupported", None, reason)
 
     if p == "custom":
-        if not base:
-            return ("unsupported", None, "custom 提供商需配置 api_base 后才能探测上游模型列表。")
-        return ("ok", f"{base.rstrip('/')}/models", None)
-
-    if p == "deepseek":
-        root = (base or "https://api.deepseek.com").rstrip("/")
-        if not root.endswith("/v1"):
-            root = f"{root}/v1"
-        return ("ok", f"{root}/models", None)
-
-    if p in ("dashscope", "zhipuai", "volcengine"):
-        if not base:
+        endpoint = resolve_upstream_endpoint(
+            provider=p,
+            profile_id=profile_id,
+            api_base=api_base,
+            protocol=UpstreamProtocol.OPENAI_COMPAT,
+        )
+        if not endpoint:
             return (
                 "unsupported",
                 None,
-                f"提供商「{p}」未配置 api_base 时无法在网关内发起 OpenAI 兼容的模型列表请求；"
-                "请填写 api_base 后重试，或直接手填模型 ID。",
+                "custom 提供商需配置 api_base 后才能探测上游模型列表。",
             )
-        return ("ok", f"{base.rstrip('/')}/models", None)
+        return ("ok", f"{endpoint.rstrip('/')}{profile.models_list_path}", None)
 
-    if base:
-        return ("ok", f"{base.rstrip('/')}/models", None)
-    return (
-        "unsupported",
-        None,
-        f"提供商「{p}」未配置 api_base，且网关未内置其官方列举端点；请配置 api_base 或手填模型 ID。",
+    endpoint = resolve_upstream_endpoint(
+        provider=p,
+        profile_id=profile_id,
+        api_base=api_base,
+        protocol=UpstreamProtocol.OPENAI_COMPAT,
     )
+    if not endpoint:
+        return (
+            "unsupported",
+            None,
+            f"提供商「{p}」未配置 api_base 时无法在网关内发起 OpenAI 兼容的模型列表请求；"
+            "请填写 api_base 后重试，或直接手填模型 ID。",
+        )
+    return ("ok", f"{endpoint.rstrip('/')}{profile.models_list_path}", None)
 
 
 def derive_client_facing_model_alias(upstream_model_id: str) -> str:

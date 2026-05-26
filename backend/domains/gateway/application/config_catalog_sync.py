@@ -19,6 +19,10 @@ from domains.gateway.domain.credential_sync_policy import (
     credential_force_env_sync,
     resolve_bootstrap_api_base,
 )
+from domains.gateway.domain.upstream_endpoint import (
+    infer_profile_id_from_env_api_base,
+    resolve_openai_compat_api_base_for_storage,
+)
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.catalog_provider_availability import (
@@ -105,11 +109,22 @@ async def _ensure_system_credential(
         is_new_credential=existing is None,
         force_env_sync=credential_force_env_sync(existing_extra),
     )
+    profile_id = (
+        existing.profile_id
+        if existing is not None and existing.profile_id
+        else infer_profile_id_from_env_api_base(provider, api_base=resolved_base)
+    )
+    stored_base = resolve_openai_compat_api_base_for_storage(
+        provider=provider,
+        profile_id=profile_id,
+        api_base=resolved_base,
+    )
     if existing is not None:
         await repo.update(
             existing.id,
             api_key_encrypted=encrypted,
-            api_base=resolved_base,
+            api_base=stored_base,
+            profile_id=profile_id,
             extra=extra,
             is_active=True,
         )
@@ -119,7 +134,8 @@ async def _ensure_system_credential(
         provider=provider,
         name=SYSTEM_CREDENTIAL_NAME,
         api_key_encrypted=encrypted,
-        api_base=resolved_base,
+        api_base=stored_base,
+        profile_id=profile_id,
         extra=extra,
         is_active=True,
     )

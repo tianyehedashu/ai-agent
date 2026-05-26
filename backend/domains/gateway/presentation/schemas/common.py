@@ -99,6 +99,10 @@ class UserCredentialCreate(BaseModel):
     name: str
     api_key: str
     api_base: str | None = None
+    profile_id: str | None = Field(
+        default=None,
+        description="上游方案 ID（如 volcengine.coding_plan）；省略则使用 provider.default",
+    )
     extra: dict[str, Any] | None = None
 
 
@@ -113,6 +117,10 @@ class ManagedCredentialCreate(BaseModel):
     name: str
     api_key: str
     api_base: str | None = None
+    profile_id: str | None = Field(
+        default=None,
+        description="上游方案 ID（如 volcengine.coding_plan）；省略则使用 provider.default",
+    )
     extra: dict[str, Any] | None = None
     scope: Literal["team", "system"] = "team"
 
@@ -121,6 +129,7 @@ class CredentialUpdate(BaseModel):
     name: str | None = None
     api_key: str | None = None
     api_base: str | None = None
+    profile_id: str | None = None
     extra: dict[str, Any] | None = None
     is_active: bool | None = None
 
@@ -133,6 +142,22 @@ class CredentialResponse(BaseModel):
     provider: str
     name: str
     api_base: str | None = None
+    profile_id: str | None = Field(
+        default=None,
+        description="上游方案 ID；NULL 表示 provider.default",
+    )
+    profile_label: str | None = Field(
+        default=None,
+        description="方案展示名（来自 SSOT 注册表）",
+    )
+    effective_api_base_openai: str | None = Field(
+        default=None,
+        description="OpenAI-compat 协议下的有效 api_base（解析后）",
+    )
+    effective_api_base_anthropic: str | None = Field(
+        default=None,
+        description="Anthropic-native 协议下的有效 api_base（若 profile 支持）",
+    )
     extra: dict[str, Any] | None = None
     is_active: bool = True
     is_config_managed: bool = Field(
@@ -165,6 +190,15 @@ class CredentialSummaryResponse(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=False)
+
+
+class ManagedTeamCredentialListResponse(PaginatedListResponse[CredentialResponse]):
+    """跨可写团队聚合的团队 scope 凭据列表。"""
+
+    queried_team_count: int = Field(
+        ge=0,
+        description="search 过滤后参与聚合的可写团队数量",
+    )
 
 
 # =============================================================================
@@ -247,6 +281,10 @@ class GatewayModelCreate(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
+    upstream_call_shape: str | None = Field(
+        default=None,
+        description="出站 LiteLLM 调用形：openai_compat / anthropic_native；NULL=跟随凭据 profile",
+    )
     enabled: bool = True
 
 
@@ -272,6 +310,7 @@ class MultiCredentialGatewayModelCreate(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
+    upstream_call_shape: str | None = None
     enabled: bool = True
 
 
@@ -302,6 +341,10 @@ class GatewayModelUpdate(BaseModel):
     resync_capabilities: bool = Field(
         default=False,
         description="为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化该字段）",
+    )
+    upstream_call_shape: str | None = Field(
+        default=None,
+        description="出站 LiteLLM 调用形：openai_compat / anthropic_native",
     )
 
 
@@ -343,6 +386,10 @@ class GatewayModelResponse(BaseModel):
     tpm_limit: int | None = None
     enabled: bool = True
     tags: dict[str, Any] | None = None
+    upstream_call_shape: str | None = Field(
+        default=None,
+        description="出站 LiteLLM 调用形：openai_compat / anthropic_native",
+    )
     model_types: list[str] = Field(
         default_factory=list,
         description="选择器用特性类型（由 tags + capability 推导，如 text / image / image_gen / video）",
@@ -1064,6 +1111,7 @@ __all__ = [
     "BudgetResponse",
     "BudgetUpsert",
     "CredentialResponse",
+    "ManagedTeamCredentialListResponse",
     "CredentialUpdate",
     "DashboardSummaryResponse",
     "EntitlementPlanCreate",

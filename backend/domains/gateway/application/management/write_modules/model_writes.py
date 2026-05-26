@@ -202,7 +202,24 @@ class ModelWritesMixin:
             is_platform_admin=False,
         )
 
-    async def create_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, credential_id: uuid.UUID, provider: str, weight: int, rpm_limit: int | None, tpm_limit: int | None, tags: dict[str, Any] | None, is_platform_admin: bool, enabled: bool=True, reload_router: bool=True) -> Any:
+    async def create_gateway_model(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        name: str,
+        capability: str,
+        real_model: str,
+        credential_id: uuid.UUID,
+        provider: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        upstream_call_shape: str | None = None,
+        is_platform_admin: bool,
+        enabled: bool = True,
+        reload_router: bool = True,
+    ) -> Any:
         cred = await self._creds.get_bindable_for_team_gateway_model(
             credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
         )
@@ -230,6 +247,7 @@ class ModelWritesMixin:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=prepared.enriched_tags,
+            upstream_call_shape=upstream_call_shape,
             enabled=enabled,
         )
         if reload_router:
@@ -248,6 +266,7 @@ class ModelWritesMixin:
         rpm_limit: int | None,
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
+        upstream_call_shape: str | None = None,
         is_platform_admin: bool,
         enabled: bool = True,
         reload_router: bool = True,
@@ -272,6 +291,7 @@ class ModelWritesMixin:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=prepared.enriched_tags,
+            upstream_call_shape=upstream_call_shape,
             enabled=enabled,
         )
         if reload_router:
@@ -292,6 +312,7 @@ class ModelWritesMixin:
         rpm_limit: int | None,
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
+        upstream_call_shape: str | None = None,
         is_platform_admin: bool,
         enabled: bool = True,
         reload_router: bool = True,
@@ -308,6 +329,7 @@ class ModelWritesMixin:
                 rpm_limit=rpm_limit,
                 tpm_limit=tpm_limit,
                 tags=tags,
+                upstream_call_shape=upstream_call_shape,
                 is_platform_admin=is_platform_admin,
                 enabled=enabled,
                 reload_router=reload_router,
@@ -323,12 +345,30 @@ class ModelWritesMixin:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=tags,
+            upstream_call_shape=upstream_call_shape,
             is_platform_admin=is_platform_admin,
             enabled=enabled,
             reload_router=reload_router,
         )
 
-    async def create_multi_credential_gateway_model(self, *, tenant_id: uuid.UUID, name: str, capability: str, real_model: str, provider: str, credential_ids: list[uuid.UUID], is_platform_admin: bool, strategy: str='simple-shuffle', weight: int=1, rpm_limit: int | None=None, tpm_limit: int | None=None, tags: dict[str, Any] | None=None, enabled: bool=True) -> MultiCredentialGatewayModelResult:
+    async def create_multi_credential_gateway_model(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        name: str,
+        capability: str,
+        real_model: str,
+        provider: str,
+        credential_ids: list[uuid.UUID],
+        is_platform_admin: bool,
+        strategy: str = 'simple-shuffle',
+        weight: int = 1,
+        rpm_limit: int | None = None,
+        tpm_limit: int | None = None,
+        tags: dict[str, Any] | None = None,
+        upstream_call_shape: str | None = None,
+        enabled: bool = True,
+    ) -> MultiCredentialGatewayModelResult:
         """为同一 ``(provider, real_model)`` 在多个凭据上一键注册并生成 ``GatewayRoute``。
 
             - 每个 ``credential_id`` 都建一行 ``GatewayModel``，别名为 ``<name>--<credentialId 短哈希>``；
@@ -374,7 +414,22 @@ class ModelWritesMixin:
                 while await repo.name_exists_for_tenant(tenant_id, alias):
                     suffix += 1
                     alias = f'{base_alias}-{suffix}'
-                row = await self.create_gateway_model(tenant_id=tenant_id, name=alias, capability=capability, real_model=real_model, credential_id=cid, provider=provider, weight=weight, rpm_limit=rpm_limit, tpm_limit=tpm_limit, tags=tags, is_platform_admin=is_platform_admin, enabled=enabled, reload_router=False)
+                row = await self.create_gateway_model(
+                    tenant_id=tenant_id,
+                    name=alias,
+                    capability=capability,
+                    real_model=real_model,
+                    credential_id=cid,
+                    provider=provider,
+                    weight=weight,
+                    rpm_limit=rpm_limit,
+                    tpm_limit=tpm_limit,
+                    tags=tags,
+                    upstream_call_shape=upstream_call_shape,
+                    is_platform_admin=is_platform_admin,
+                    enabled=enabled,
+                    reload_router=False,
+                )
                 created_models.append(row)
             route = await self._routes.create(tenant_id=tenant_id, virtual_model=cleaned_name, primary_models=[m.name for m in created_models], strategy=strategy_norm)
         except Exception:

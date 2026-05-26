@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.errors import InvocationPolicyViolationError
-from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
 from domains.gateway.domain.temperature_policy import (
     TEMPERATURE_MAX,
     TEMPERATURE_MIN,
@@ -20,6 +19,9 @@ from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_DASHSCOPE,
     THINKING_PARAM_NONE,
 )
+
+if TYPE_CHECKING:
+    from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
 
 
 def _extra_body_dict(kwargs: dict[str, Any]) -> dict[str, Any] | None:
@@ -54,16 +56,13 @@ def validate_invocation_kwargs(
     snap: ModelCapabilitySnapshot,
     kwargs: dict[str, Any],
 ) -> None:
-    """校验思考相关组合；违规抛 ``InvocationPolicyViolationError``。"""
+    """校验思考相关组合；违规抛 ``InvocationPolicyViolationError``。
+
+    ``thinking_param=none`` 时不在此拒绝 ``thinking`` / ``enable_thinking``：
+    由 ``_apply_thinking_kwargs`` 静默剥离（兼容 Claude Code 等默认携带 Extended Thinking
+    的客户端）。显式开启思考仍走 ``validate_client_thinking_toggle``。
+    """
     if snap.thinking_param == THINKING_PARAM_NONE:
-        if kwargs.get("thinking") is not None:
-            raise InvocationPolicyViolationError(
-                "当前模型不支持 Extended Thinking / thinking 参数"
-            )
-        if _enable_thinking_requested(kwargs):
-            raise InvocationPolicyViolationError(
-                "当前模型不支持 enable_thinking；请更换支持思考模式的模型"
-            )
         return
 
     if snap.thinking_param == THINKING_PARAM_DASHSCOPE:

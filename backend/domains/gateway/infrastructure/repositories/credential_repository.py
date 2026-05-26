@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
-from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
@@ -17,6 +16,8 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,45 @@ class ProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    def _team_scope_for_tenants_stmt(self, tenant_ids: list[uuid.UUID]):
+        return (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.tenant_id.in_(tenant_ids),
+                or_(
+                    ProviderCredential.scope.is_(None),
+                    ProviderCredential.scope == "team",
+                ),
+            )
+            .order_by(ProviderCredential.tenant_id, ProviderCredential.name)
+        )
+
+    async def count_team_scope_for_tenants(self, tenant_ids: list[uuid.UUID]) -> int:
+        if not tenant_ids:
+            return 0
+        stmt = select(func.count(ProviderCredential.id)).where(
+            ProviderCredential.tenant_id.in_(tenant_ids),
+            or_(
+                ProviderCredential.scope.is_(None),
+                ProviderCredential.scope == "team",
+            ),
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_team_scope_for_tenants_page(
+        self,
+        tenant_ids: list[uuid.UUID],
+        *,
+        offset: int,
+        limit: int,
+    ) -> list[ProviderCredential]:
+        if not tenant_ids:
+            return []
+        stmt = self._team_scope_for_tenants_stmt(tenant_ids).offset(offset).limit(limit)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_effective_provider_summaries(self) -> list[EffectiveProviderSummary]:
         stmt = (
             select(
@@ -149,6 +189,7 @@ class ProviderCredentialRepository:
         name: str,
         api_key_encrypted: str,
         api_base: str | None = None,
+        profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
     ) -> ProviderCredential:
@@ -160,6 +201,7 @@ class ProviderCredentialRepository:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=api_base,
+            profile_id=profile_id,
             extra=extra,
             is_active=is_active,
         )
@@ -175,6 +217,7 @@ class ProviderCredentialRepository:
         name: str,
         api_key_encrypted: str,
         api_base: str | None = None,
+        profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
     ) -> ProviderCredential:
@@ -186,6 +229,7 @@ class ProviderCredentialRepository:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=api_base,
+            profile_id=profile_id,
             extra=extra,
             is_active=is_active,
         )
@@ -196,6 +240,7 @@ class ProviderCredentialRepository:
         *,
         api_key_encrypted: str | None = None,
         api_base: str | None = None,
+        profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool | None = None,
         name: str | None = None,
@@ -207,6 +252,8 @@ class ProviderCredentialRepository:
             credential.api_key_encrypted = api_key_encrypted
         if api_base is not None:
             credential.api_base = api_base
+        if profile_id is not None:
+            credential.profile_id = profile_id
         if extra is not None:
             credential.extra = extra
         if is_active is not None:
@@ -240,6 +287,7 @@ class ProviderCredentialRepository:
             name=source.name,
             api_key_encrypted=source.api_key_encrypted,
             api_base=source.api_base,
+            profile_id=source.profile_id,
             extra=source.extra,
             is_active=True,
         )

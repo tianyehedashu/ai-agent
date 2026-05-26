@@ -29,13 +29,13 @@ ANTHROPIC_MESSAGES_FIELD_POLICY_VALUES: frozenset[str] = frozenset(
 PRESERVE_ANTHROPIC_FIELDS_TAG = "preserve_anthropic_fields"
 
 # Anthropic Messages 协议私有且无跨 provider 翻译能力的请求字段（不含 ``thinking``）。
-ANTHROPIC_ONLY_REQUEST_FIELDS: frozenset[str] = frozenset(
-    {
-        "context_management",
-        "anthropic_version",
-        "anthropic_beta",
-    }
+# 固定顺序供 ``resolve_fields_to_strip`` / ``find_anthropic_only_fields_present`` 稳定枚举。
+_ANTHROPIC_ONLY_REQUEST_FIELD_ORDER: tuple[str, ...] = (
+    "context_management",
+    "anthropic_version",
+    "anthropic_beta",
 )
+ANTHROPIC_ONLY_REQUEST_FIELDS: frozenset[str] = frozenset(_ANTHROPIC_ONLY_REQUEST_FIELD_ORDER)
 
 
 def normalize_upstream_provider(upstream_provider: str | None) -> str:
@@ -109,14 +109,14 @@ def resolve_fields_to_strip(
     preserve = _preserve_fields_from_tags(model_tags)
     return [
         key
-        for key in ANTHROPIC_ONLY_REQUEST_FIELDS
+        for key in _ANTHROPIC_ONLY_REQUEST_FIELD_ORDER
         if key in kwargs and key not in preserve
     ]
 
 
 def find_anthropic_only_fields_present(kwargs: dict[str, Any]) -> list[str]:
     """枚举 kwargs 中出现的 Anthropic-only 字段名（纯查询，按清单顺序）。"""
-    return [key for key in ANTHROPIC_ONLY_REQUEST_FIELDS if key in kwargs]
+    return [key for key in _ANTHROPIC_ONLY_REQUEST_FIELD_ORDER if key in kwargs]
 
 
 def strip_anthropic_only_fields(

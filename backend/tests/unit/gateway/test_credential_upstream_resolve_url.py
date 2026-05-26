@@ -30,6 +30,18 @@ from domains.gateway.domain.upstream_catalog_policy import (
             "ok",
             "https://open.bigmodel.cn/api/paas/v4/models",
         ),
+        (
+            "volcengine",
+            "https://ark.cn-beijing.volces.com/api/coding",
+            "ok",
+            "https://ark.cn-beijing.volces.com/api/coding/v3/models",
+        ),
+        (
+            "volcengine",
+            None,
+            "ok",
+            "https://ark.cn-beijing.volces.com/api/v3/models",
+        ),
     ],
 )
 def test_resolve_url(

@@ -328,6 +328,10 @@ class Settings(BaseSettings):
     gateway_internal_proxy_delegate_user_id: uuid.UUID | None = None
     # 是否在 LiteLLM 注册 PII Guardrail 回调（False=暂不启用；True 时仍受 vkey.guardrail_enabled 控制）
     gateway_default_guardrail_enabled: bool = False
+    # Anthropic-native 出站直通：True 时 ``gateway_models.upstream_call_shape='anthropic_native'``
+    # 或 profile.default_call_shape=anthropic_native 的 deployment 会用 Anthropic 通道
+    # （``model='anthropic/...'`` + profile 的 Anthropic-native 根）。
+    gateway_enable_anthropic_native_passthrough: bool = True
     # 默认是否在日志中存完整 prompt/response（vkey 可覆盖）
     gateway_default_store_full_messages: bool = False
     # Router 启用 cooldown 的失败次数阈值（与 LiteLLM 默认一致）

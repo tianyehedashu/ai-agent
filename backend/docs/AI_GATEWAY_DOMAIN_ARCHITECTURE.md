@@ -133,6 +133,14 @@ domains/agent/infrastructure/llm/agent_llm_facade.py   # AgentLlmFacade
 - **纯策略**：`domain/upstream_catalog_policy.py` 的 `resolve_openai_compatible_models_list_url`（无 I/O）；探测结果值对象在 `domain/credential_probe.py`。
 - **HTTP**：`presentation/management_router.py` —— `POST /api/v1/gateway/credentials/{credential_id}/probe`、`POST /api/v1/gateway/my-credentials/{credential_id}/probe`；`POST .../batch-import-models`（团队与个人各一路径）。响应体由路由层将 `CredentialProbeResult` 映射为 `schemas/credential_upstream_catalog.py` 中的 Pydantic 模型（presentation 不依赖 `from_result` 之类跨层捷径）。
 
+**上游方案（Upstream Profile）与出站调用形**
+
+- **SSOT**：`domain/upstream_profile_registry.py` 注册 `(provider, plan)` → 各协议 `api_base`（`openai_compat` / `anthropic_native`）与 `normalize_rules`（如 Volcengine 缺 `/v3` 自动补全）。
+- **统一解析**：`domain/upstream_endpoint.py` 的 `resolve_upstream_endpoint` —— Router deployment、凭据 probe、`credential_writes` 落库归一化共用；用户填写的 `api_base` 为覆盖值，非空时经 profile 规则规范化后写入库。
+- **凭据列**：`provider_credentials.profile_id`（可空，默认 `<provider>.default`）。
+- **模型列**：`gateway_models.upstream_call_shape`（可空，默认跟随 profile；`anthropic_native` 实验开关 `gateway_enable_anthropic_native_passthrough`）。
+- **HTTP**：`GET /api/v1/gateway/provider-profiles` 列举方案供控制台表单使用。
+
 **后台任务**：`jobs.py` 调度；rollup 实现在 `infrastructure/repositories/metrics_rollup_repository.py`。
 
 ---

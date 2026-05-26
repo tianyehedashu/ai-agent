@@ -22,6 +22,7 @@ import { logsApi } from './logs'
 import { modelsApi } from './models'
 import { myModelsApi } from './my-models'
 import { pricingApi } from './pricing'
+import { providerProfilesApi } from './provider-profiles'
 import { routesApi } from './routes'
 import { statsApi } from './stats'
 import { systemVisibilityApi } from './system-visibility'
@@ -62,6 +63,8 @@ export type {
   TeamGatewayModelBatchImportBody,
   TeamGatewayModelBatchImportCreatedItem,
   TeamGatewayModelBatchImportResponse,
+  ManagedTeamCredentialListResponse,
+  ListManagedTeamCredentialsParams,
 } from './credentials'
 
 export type {
@@ -163,10 +166,13 @@ export type {
 
 // ---------- 资源 API 命名空间 re-export（按资源调用更显意图） ----------
 
+export type { ProviderProfileItem, ProviderProfilesListResponse } from './provider-profiles'
+
 export {
   teamsApi,
   keysApi,
   credentialsApi,
+  providerProfilesApi,
   modelsApi,
   myModelsApi,
   routesApi,
@@ -190,6 +196,7 @@ export const gatewayApi = {
   ...teamsApi,
   ...keysApi,
   ...credentialsApi,
+  ...providerProfilesApi,
   ...modelsApi,
   ...myModelsApi,
   ...routesApi,

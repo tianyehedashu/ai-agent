@@ -10,6 +10,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { PaginatedList } from '@/types'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 import { normalizeCredential, type ProviderCredentialWire } from './credential-normalize'
@@ -37,6 +38,10 @@ export interface ProviderCredential {
   provider: string
   name: string
   api_base: string | null
+  profile_id?: string | null
+  profile_label?: string | null
+  effective_api_base_openai?: string | null
+  effective_api_base_anthropic?: string | null
   is_active: boolean
   /** app.toml/环境变量同步托管的 system 凭据；UI 不允许直接修改 */
   is_config_managed?: boolean
@@ -54,6 +59,7 @@ export interface ProviderCredentialCreateBody {
   name: string
   api_key: string
   api_base?: string
+  profile_id?: string | null
   extra?: Record<string, unknown>
   /** 默认 team；system 仅平台管理员可创建 */
   scope?: 'team' | 'system'
@@ -65,6 +71,7 @@ export interface MyCredentialCreateBody {
   name: string
   api_key: string
   api_base?: string | null
+  profile_id?: string | null
   extra?: Record<string, unknown>
 }
 
@@ -73,6 +80,7 @@ export interface GatewayCredentialUpdateBody {
   name?: string | null
   api_key?: string | null
   api_base?: string | null
+  profile_id?: string | null
   extra?: Record<string, unknown> | null
   is_active?: boolean | null
 }
@@ -169,6 +177,21 @@ export interface TeamGatewayModelBatchImportResponse {
   failed: BatchImportFailureItem[]
 }
 
+/** GET /managed-team-credentials 分页响应 */
+export interface ManagedTeamCredentialListResponse extends PaginatedList<ProviderCredential> {
+  queried_team_count: number
+}
+
+export interface ListManagedTeamCredentialsParams {
+  page?: number
+  page_size?: number
+  search?: string
+}
+
+interface ManagedTeamCredentialListWire extends PaginatedList<ProviderCredentialWire> {
+  queried_team_count: number
+}
+
 /** Credentials 资源 API（团队/系统 + 我的 + 探测/批量导入 + 从 app.toml 导入） */
 export const credentialsApi = {
   // --- 团队 / 系统凭据 ---
@@ -211,6 +234,22 @@ export const credentialsApi = {
   /** 删除团队/系统凭据（不可恢复） */
   deleteCredential: (teamId: string, id: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/credentials/${id}`)),
+
+  /** 跨可写团队聚合的团队 scope 凭据（分页） */
+  listManagedTeamCredentials: async (params?: ListManagedTeamCredentialsParams) => {
+    const data = await apiClient.get<ManagedTeamCredentialListWire>(
+      `${GATEWAY_API_BASE}/managed-team-credentials`,
+      {
+        page: params?.page,
+        page_size: params?.page_size,
+        search: params?.search,
+      }
+    )
+    return {
+      ...data,
+      items: data.items.map(normalizeCredential),
+    }
+  },
 
   // --- 我的（BYOK 个人）凭据 ---
   /** 列出我的个人凭据 */

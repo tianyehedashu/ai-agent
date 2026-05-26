@@ -2,6 +2,13 @@ import type { ProviderCredential } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
 import { ExtraFieldsRenderer } from './credential-extra-fields'
@@ -49,6 +56,10 @@ export function CredentialEditFields({
     apiBasePlaceholder,
     apiBaseRequired,
     hasUnknownExtra,
+    profileId,
+    setProfileId,
+    profileOptions,
+    activeProfile,
   } = form
 
   const credExtra = cred.extra
@@ -106,6 +117,31 @@ export function CredentialEditFields({
               <p className="mt-1 text-xs text-muted-foreground">{schema.apiKeyHelpText}</p>
             ) : null}
           </div>
+          {profileOptions.length > 1 ? (
+            <div className={showActiveSwitch ? 'space-y-2' : undefined}>
+              <Label htmlFor={`${idPrefix}-profile`}>方案</Label>
+              <Select value={profileId} onValueChange={setProfileId}>
+                <SelectTrigger
+                  id={`${idPrefix}-profile`}
+                  className={showActiveSwitch ? undefined : 'mt-1.5'}
+                >
+                  <SelectValue placeholder="选择上游方案" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profileOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activeProfile?.anthropicDirectHint ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {activeProfile.anthropicDirectHint}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className={showActiveSwitch ? 'space-y-2' : undefined}>
             <div className="flex items-center gap-2">
               <Label htmlFor={`${idPrefix}-base`}>

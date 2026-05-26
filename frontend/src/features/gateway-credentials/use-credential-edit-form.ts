@@ -10,8 +10,11 @@ import {
 import {
   apiKeyLabelForProvider,
   defaultApiBaseForProvider,
+  defaultProfileIdForProvider,
   extraFieldsForProvider,
   getProviderSchema,
+  getUpstreamProfileSpec,
+  profilesForProvider,
 } from './provider-schemas'
 
 export interface UseCredentialEditFormOptions {
@@ -32,6 +35,8 @@ export interface CredentialEditFormDerived {
   apiBasePlaceholder: string
   apiBaseRequired: boolean
   hasUnknownExtra: boolean
+  profileOptions: ReturnType<typeof profilesForProvider>
+  activeProfile: ReturnType<typeof getUpstreamProfileSpec>
 }
 
 export interface UseCredentialEditFormResult extends CredentialEditFormDerived {
@@ -41,6 +46,8 @@ export interface UseCredentialEditFormResult extends CredentialEditFormDerived {
   setApiBase: (value: string) => void
   apiKey: string
   setApiKey: (value: string) => void
+  profileId: string
+  setProfileId: (value: string) => void
   extra: CredentialExtraValues
   setExtra: (value: CredentialExtraValues) => void
   isActive: boolean
@@ -51,6 +58,13 @@ export interface UseCredentialEditFormResult extends CredentialEditFormDerived {
   clearApiKey: () => void
 }
 
+function initialProfileId(cred: ProviderCredential): string {
+  if (cred.profile_id?.trim()) {
+    return cred.profile_id.trim()
+  }
+  return defaultProfileIdForProvider(cred.provider) ?? ''
+}
+
 export function useCredentialEditForm({
   cred,
   configManaged = false,
@@ -59,17 +73,24 @@ export function useCredentialEditForm({
   const [name, setName] = useState<string>(() => cred.name)
   const [apiBase, setApiBase] = useState<string>(() => cred.api_base ?? '')
   const [apiKey, setApiKey] = useState<string>('')
+  const [profileId, setProfileIdState] = useState<string>(() => initialProfileId(cred))
   const [extra, setExtra] = useState<CredentialExtraValues>(() => extraToFormValues(cred.extra))
   const [isActive, setIsActive] = useState<boolean>(() => cred.is_active)
 
   const provider = cred.provider
   const schema = getProviderSchema(provider)
+  const profileOptions = useMemo(() => profilesForProvider(provider), [provider])
+  const activeProfile = useMemo(
+    () => getUpstreamProfileSpec(provider, profileId || undefined),
+    [provider, profileId]
+  )
   const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
   const apiKeyLabel = apiKeyLabelForProvider(provider)
-  const defaultApiBase = defaultApiBaseForProvider(provider)
+  const defaultApiBase = defaultApiBaseForProvider(provider, profileId || undefined)
   const baseIsDefault = defaultApiBase.length > 0 && apiBase === defaultApiBase
   const apiBasePlaceholder =
     schema?.apiBasePlaceholder ??
+    activeProfile?.defaultApiBaseOpenai ??
     (defaultApiBase.length > 0 ? defaultApiBase : 'https://example.com/v1')
   const apiBaseRequired = schema?.apiBaseRequired ?? false
   const apiBaseMissing = apiBaseRequired && !apiBase.trim()
@@ -86,10 +107,14 @@ export function useCredentialEditForm({
     }
     return true
   }, [compactedNow, compactedOrig])
+
+  const origProfileId =
+    (cred.profile_id ?? '').trim() || (defaultProfileIdForProvider(provider) ?? '')
   const synced =
     name === cred.name &&
     (apiBase.trim() || '') === (cred.api_base ?? '') &&
     apiKey === '' &&
+    (profileId.trim() || '') === origProfileId &&
     extraSynced &&
     (!trackIsActive || isActive === cred.is_active)
 
@@ -103,6 +128,7 @@ export function useCredentialEditForm({
     setName(cred.name)
     setApiBase(cred.api_base ?? '')
     setApiKey('')
+    setProfileIdState(initialProfileId(cred))
     setExtra(extraToFormValues(cred.extra))
     setIsActive(cred.is_active)
   }, [cred])
@@ -110,6 +136,17 @@ export function useCredentialEditForm({
   const clearApiKey = useCallback((): void => {
     setApiKey('')
   }, [])
+
+  const setProfileId = useCallback(
+    (nextProfileId: string): void => {
+      setProfileIdState(nextProfileId)
+      const spec = getUpstreamProfileSpec(provider, nextProfileId)
+      if (spec?.defaultApiBaseOpenai) {
+        setApiBase(spec.defaultApiBaseOpenai)
+      }
+    },
+    [provider]
+  )
 
   const buildUpdateBody = useCallback((): GatewayCredentialUpdateBody => {
     const body: GatewayCredentialUpdateBody = {
@@ -125,8 +162,25 @@ export function useCredentialEditForm({
     if (trackIsActive) {
       body.is_active = isActive
     }
+    const trimmedProfile = profileId.trim()
+    if (trimmedProfile && trimmedProfile !== origProfileId) {
+      body.profile_id = trimmedProfile
+    } else if (!trimmedProfile && cred.profile_id) {
+      body.profile_id = null
+    }
     return body
-  }, [apiBase, apiKey, compactedNow, configManaged, isActive, name, trackIsActive])
+  }, [
+    apiBase,
+    apiKey,
+    compactedNow,
+    configManaged,
+    cred.profile_id,
+    isActive,
+    name,
+    origProfileId,
+    profileId,
+    trackIsActive,
+  ])
 
   return {
     name,
@@ -135,6 +189,8 @@ export function useCredentialEditForm({
     setApiBase,
     apiKey,
     setApiKey,
+    profileId,
+    setProfileId,
     extra,
     setExtra,
     isActive,
@@ -152,5 +208,7 @@ export function useCredentialEditForm({
     apiBasePlaceholder,
     apiBaseRequired,
     hasUnknownExtra,
+    profileOptions,
+    activeProfile,
   }
 }

@@ -37,6 +37,7 @@ class ChatProxyPrepared:
     upstream_custom: dict[str, float] | None
     stream: bool
     model_tags: dict[str, Any] | None = None
+    upstream_call_shape: str | None = None
 
 
 def apply_stream_cost_defer_flag(metadata: dict[str, Any] | None, *, stream: bool) -> None:
@@ -77,10 +78,13 @@ async def prepare_chat_proxy_request(
     apply_stream_cost_defer_flag(metadata, stream=stream)
 
     model_tags: dict[str, Any] | None = None
+    upstream_call_shape: str | None = None
     if prepared_litellm.resolved is not None:
-        raw_tags = prepared_litellm.resolved.record.tags
+        record = prepared_litellm.resolved.record
+        raw_tags = record.tags
         if isinstance(raw_tags, dict):
             model_tags = dict(raw_tags)
+        upstream_call_shape = getattr(record, "upstream_call_shape", None)
 
     return ChatProxyPrepared(
         model=preflight.model,
@@ -91,6 +95,7 @@ async def prepare_chat_proxy_request(
         upstream_custom=upstream_custom_from_metadata(metadata),
         stream=stream,
         model_tags=model_tags,
+        upstream_call_shape=upstream_call_shape,
     )
 
 

@@ -21,6 +21,10 @@ class CredentialReadModel:
     is_active: bool
     created_at: datetime
     api_key_encrypted: str
+    profile_id: str | None = None
+    profile_label: str | None = None
+    effective_api_base_openai: str | None = None
+    effective_api_base_anthropic: str | None = None
     visibility: str | None = None
     api_key_masked: str | None = None
 

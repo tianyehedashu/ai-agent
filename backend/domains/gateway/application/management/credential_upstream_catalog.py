@@ -218,7 +218,9 @@ class CredentialUpstreamCatalogService:
                 http_status=None,
             )
         st, url, reason = resolve_openai_compatible_models_list_url(
-            provider=row.provider, api_base=row.api_base
+            provider=row.provider,
+            api_base=row.api_base,
+            profile_id=row.profile_id,
         )
         if st == "unsupported":
             return CredentialProbeResult(

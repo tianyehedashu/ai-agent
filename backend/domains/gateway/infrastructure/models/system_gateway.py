@@ -33,6 +33,11 @@ class SystemProviderCredential(BaseModel):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     api_base: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    profile_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="上游方案 ID；NULL 表示 provider.default",
+    )
     extra: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
@@ -69,6 +74,11 @@ class SystemGatewayModel(BaseModel):
         String(20), default="inherit", server_default="inherit", nullable=False
     )
     tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    upstream_call_shape: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="出站 LiteLLM 调用形：openai_compat / anthropic_native",
+    )
     last_test_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_test_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -241,6 +241,7 @@ class GatewayModelRepository:
         rpm_limit: int | None = None,
         tpm_limit: int | None = None,
         tags: dict[str, Any] | None = None,
+        upstream_call_shape: str | None = None,
         enabled: bool = True,
     ) -> SystemGatewayModel:
         row = SystemGatewayModel(
@@ -253,6 +254,7 @@ class GatewayModelRepository:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=tags,
+            upstream_call_shape=upstream_call_shape,
             enabled=enabled,
         )
         self._session.add(row)
@@ -272,6 +274,7 @@ class GatewayModelRepository:
         rpm_limit: int | None = None,
         tpm_limit: int | None = None,
         tags: dict[str, Any] | None = None,
+        upstream_call_shape: str | None = None,
         enabled: bool = True,
     ) -> GatewayModel:
         model = GatewayModel(
@@ -285,6 +288,7 @@ class GatewayModelRepository:
             rpm_limit=rpm_limit,
             tpm_limit=tpm_limit,
             tags=tags,
+            upstream_call_shape=upstream_call_shape,
             enabled=enabled,
         )
         self._session.add(model)

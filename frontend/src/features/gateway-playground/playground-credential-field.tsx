@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { credentialProviderLabel } from '@/features/gateway-credentials/constants'
+import { CREDENTIAL_SCOPE_LABELS } from '@/features/gateway-credentials/credential-scope-labels'
 import {
   canLinkToCredentialDetail,
   credentialSummaryLabel,
@@ -27,12 +28,6 @@ import type {
   PlaygroundCredentialGroups,
   PlaygroundCredentialOption,
 } from './playground-credential-options'
-
-const SCOPE_LABELS: Record<'user' | 'team' | 'system', string> = {
-  user: '个人',
-  team: '团队',
-  system: '系统',
-}
 
 export interface PlaygroundCredentialFieldProps {
   credentialSelectId: string
@@ -149,10 +144,10 @@ function ScopeBadge({
 }>): React.JSX.Element {
   const label =
     scope === 'user'
-      ? SCOPE_LABELS.user
+      ? CREDENTIAL_SCOPE_LABELS.user
       : scope === 'system'
-        ? SCOPE_LABELS.system
-        : SCOPE_LABELS.team
+        ? CREDENTIAL_SCOPE_LABELS.system
+        : CREDENTIAL_SCOPE_LABELS.team
   return (
     <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
       {inactive ? '已停用' : label}

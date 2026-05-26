@@ -5,7 +5,7 @@
  * 的 `CreateCredentialDialog` 统一承担，本组件仅承载列表渲染与编辑弹窗。
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -15,16 +15,6 @@ import {
   type GatewayCredentialUpdateBody,
   type ProviderCredential,
 } from '@/api/gateway'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -49,8 +39,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
+import { CredentialDeleteConfirmDialog } from './credential-delete-confirm-dialog'
 import { CredentialEditFields } from './credential-edit-fields'
 import { invalidateCredentialProbeCache } from './credential-probe-cache'
+import { useProviderProfilesCatalog } from './hooks/use-provider-profiles-catalog'
 import { displayListApiKeyMasked } from './mask-display'
 import { invalidateCredentialSummariesCache } from './use-credential-directory'
 import { useCredentialEditForm } from './use-credential-edit-form'
@@ -70,6 +62,7 @@ export interface PersonalCredentialsPanelProps {
 export function PersonalCredentialsPanel({
   onAddCredential,
 }: PersonalCredentialsPanelProps = {}): React.ReactElement {
+  useProviderProfilesCatalog()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const token = useAuthStore((s) => s.token)
@@ -143,6 +136,20 @@ export function PersonalCredentialsPanel({
       toast({ variant: 'destructive', title: '删除失败', description: e.message })
     },
   })
+
+  const pendingDeleteRef = useRef<ProviderCredential | null>(null)
+  pendingDeleteRef.current = credentialPendingDelete
+
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) setCredentialPendingDelete(null)
+  }, [])
+
+  const handleDeleteConfirm = useCallback(() => {
+    const pending = pendingDeleteRef.current
+    if (pending) {
+      deleteMutation.mutate(pending.id)
+    }
+  }, [deleteMutation])
 
   const testMutation = useMutation({
     mutationFn: (credentialId: string) => gatewayApi.probeMyCredential(credentialId),
@@ -363,39 +370,13 @@ export function PersonalCredentialsPanel({
         ) : null}
       </Dialog>
 
-      <AlertDialog
-        open={credentialPendingDelete !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setCredentialPendingDelete(null)
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除凭据</AlertDialogTitle>
-            <AlertDialogDescription>
-              {credentialPendingDelete
-                ? `确定删除「${credentialPendingDelete.name}」？将同时删除所有引用该凭据的个人注册模型，并更新虚拟 Key / 路由中的模型白名单。`
-                : ''}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteMutation.isPending || credentialPendingDelete === null}
-              onClick={() => {
-                if (credentialPendingDelete) {
-                  deleteMutation.mutate(credentialPendingDelete.id)
-                }
-              }}
-            >
-              {deleteMutation.isPending ? '删除中…' : '删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CredentialDeleteConfirmDialog
+        credential={credentialPendingDelete}
+        isPending={deleteMutation.isPending}
+        variant="personal"
+        onOpenChange={handleDeleteDialogOpenChange}
+        onConfirm={handleDeleteConfirm}
+      />
 
       {addModelsCred ? (
         <Suspense

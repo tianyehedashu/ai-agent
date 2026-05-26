@@ -78,6 +78,7 @@ class ProxyMetadataBuilder:
                 scope=cred.scope,
                 tenant_id=cred.tenant_id,
             ),
+            "gateway_credential_profile_id": cred.profile_id,
             "gateway_provider": record.provider,
         }
 

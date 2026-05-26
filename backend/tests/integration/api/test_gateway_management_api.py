@@ -969,6 +969,67 @@ class TestGatewayManagementApi:
         assert body["extra"]["aws_secret_access_key"] == "secret-int-test-value"
 
     @pytest.mark.asyncio
+    async def test_create_managed_credential_volcengine_coding_plan_normalizes_api_base(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """Volcengine Coding Plan：无 /v3 的 api_base 入库前补全为 OpenAI-compat 根。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        name = f"ve-cp-{uuid.uuid4().hex[:8]}"
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "volcengine",
+                "name": name,
+                "api_key": "vk-int-test-key-123456789012",
+                "api_base": "https://ark.cn-beijing.volces.com/api/coding",
+                "profile_id": "volcengine.coding_plan",
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["profile_id"] == "volcengine.coding_plan"
+        assert body["api_base"] == "https://ark.cn-beijing.volces.com/api/coding/v3"
+        assert body["effective_api_base_openai"] == (
+            "https://ark.cn-beijing.volces.com/api/coding/v3"
+        )
+        assert body["effective_api_base_anthropic"] == (
+            "https://ark.cn-beijing.volces.com/api/coding"
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_provider_profiles_requires_auth_and_returns_ssot(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        unauth = await dev_client.get("/api/v1/gateway/provider-profiles")
+        assert unauth.status_code in (401, 403), unauth.text
+
+        r = await dev_client.get(
+            "/api/v1/gateway/provider-profiles",
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        profiles = r.json().get("profiles", [])
+        assert isinstance(profiles, list)
+        ids = {p["id"] for p in profiles}
+        assert "volcengine.coding_plan" in ids
+        coding = next(p for p in profiles if p["id"] == "volcengine.coding_plan")
+        assert coding["api_bases"]["openai_compat"] == (
+            "https://ark.cn-beijing.volces.com/api/coding/v3"
+        )
+        assert coding["api_bases"]["anthropic_native"] == (
+            "https://ark.cn-beijing.volces.com/api/coding"
+        )
+
+    @pytest.mark.asyncio
     async def test_create_managed_credential_rejects_unknown_provider(
         self,
         dev_client: AsyncClient,
@@ -2242,3 +2303,205 @@ class TestGatewayPiiGuardrailCreateKey:
         )
         assert r.status_code == 400, r.text
         assert r.json().get("code") == "VALIDATION_ERROR"
+
+
+@pytest.mark.integration
+class TestManagedTeamCredentialsAggregateApi:
+    @staticmethod
+    async def _create_team_credential(
+        dev_client: AsyncClient,
+        team_id: uuid.UUID,
+        headers: dict[str, str],
+        *,
+        name: str,
+    ) -> dict:
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": name,
+                "api_key": "sk-managed-aggregate-test-key",
+                "api_base": None,
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_merges_writable_teams(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        personal = await ts.ensure_personal_team(test_user.id)
+        shared = await ts.create_team(
+            name=f"Aggregate-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        name_personal = f"personal-cred-{uuid.uuid4().hex[:6]}"
+        name_shared = f"shared-cred-{uuid.uuid4().hex[:6]}"
+        await self._create_team_credential(
+            dev_client, personal.id, auth_headers, name=name_personal
+        )
+        await self._create_team_credential(
+            dev_client, shared.id, auth_headers, name=name_shared
+        )
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 50},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["total"] >= 2
+        assert payload["page"] == 1
+        assert payload["page_size"] == 50
+        assert "has_next" in payload
+        assert "has_prev" in payload
+        assert payload["queried_team_count"] >= 2
+        names = {item["name"] for item in payload["items"]}
+        assert name_personal in names
+        assert name_shared in names
+        assert all(item["scope"] == "team" for item in payload["items"])
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_member_gets_empty(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"managed_cred_member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Managed Cred Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"MemberOnly-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        owner_cred_name = f"owner-only-{uuid.uuid4().hex[:6]}"
+        await self._create_team_credential(
+            dev_client,
+            shared.id,
+            auth_headers,
+            name=owner_cred_name,
+        )
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=member_headers,
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        names = {item["name"] for item in payload["items"]}
+        assert owner_cred_name not in names
+        assert payload["queried_team_count"] == 1
+        assert all(item["tenant_id"] != str(shared.id) for item in payload["items"])
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_search_filters_by_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        await ts.ensure_personal_team(test_user.id)
+        unique = uuid.uuid4().hex[:8]
+        shared = await ts.create_team(
+            name=f"SearchTarget-{unique}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        target_name = f"search-hit-{uuid.uuid4().hex[:6]}"
+        await self._create_team_credential(
+            dev_client, shared.id, auth_headers, name=target_name
+        )
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=auth_headers,
+            params={"search": f"SearchTarget-{unique}", "page_size": 50},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["queried_team_count"] == 1
+        names = {item["name"] for item in payload["items"]}
+        assert target_name in names
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_unauthenticated(
+        self,
+        dev_client: AsyncClient,
+    ) -> None:
+        r = await dev_client.get("/api/v1/gateway/managed-team-credentials")
+        assert r.status_code == 401, r.text
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_credentials_pagination_has_next(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        personal = await ts.ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        page_size = 3
+        created_names: list[str] = []
+        for i in range(page_size + 1):
+            name = f"page-cred-{uuid.uuid4().hex[:6]}-{i}"
+            created_names.append(name)
+            await self._create_team_credential(
+                dev_client, personal.id, auth_headers, name=name
+            )
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=auth_headers,
+            params={"page": 1, "page_size": page_size},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["page"] == 1
+        assert payload["page_size"] == page_size
+        assert payload["total"] >= page_size + 1
+        assert payload["has_next"] is True
+        assert payload["has_prev"] is False
+        assert len(payload["items"]) == page_size
+
+        r2 = await dev_client.get(
+            "/api/v1/gateway/managed-team-credentials",
+            headers=auth_headers,
+            params={"page": 2, "page_size": page_size},
+        )
+        assert r2.status_code == 200, r2.text
+        payload2 = r2.json()
+        assert payload2["has_prev"] is True
+        assert len(payload2["items"]) >= 1

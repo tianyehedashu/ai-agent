@@ -6,7 +6,7 @@ import { useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, LogOut, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import type { GatewayTeam, TeamMember, TeamMemberLookup } from '@/api/gateway/teams'
@@ -35,6 +35,7 @@ import {
   GATEWAY_TEAMS_QUERY_KEY,
   useGatewayTeams,
 } from '@/features/api-key-gateway/use-gateway-teams'
+import { credentialsTeamListHref } from '@/features/gateway-models/paths'
 import { switchGatewayTeam, switchToFallbackTeam } from '@/features/gateway-teams/navigate-team'
 import {
   gatewayTeamMembersQueryKey,
@@ -318,19 +319,29 @@ export default function GatewayTeamsPage(): React.JSX.Element {
               <span>
                 {currentTeam ? `${currentTeam.name} · ${currentTeam.slug}` : '当前团队成员'}
               </span>
-              {canAddMember ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 text-xs"
-                  onClick={() => {
-                    setOpenMember(true)
-                  }}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  添加
-                </Button>
-              ) : null}
+              <div className="flex items-center gap-2 normal-case">
+                {teamId ? (
+                  <Link
+                    to={credentialsTeamListHref(teamId)}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    查看凭据
+                  </Link>
+                ) : null}
+                {canAddMember ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      setOpenMember(true)
+                    }}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    添加
+                  </Button>
+                ) : null}
+              </div>
             </div>
             {isPersonalTeam ? (
               <p className="border-b px-4 py-2 text-xs text-muted-foreground">

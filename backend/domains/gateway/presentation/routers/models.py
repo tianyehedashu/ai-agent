@@ -253,6 +253,7 @@ async def create_model(
         rpm_limit=body.rpm_limit,
         tpm_limit=body.tpm_limit,
         tags=body.tags,
+        upstream_call_shape=body.upstream_call_shape,
         is_platform_admin=team.is_platform_admin,
         enabled=body.enabled,
     )
@@ -283,6 +284,7 @@ async def create_multi_credential_model(
         rpm_limit=body.rpm_limit,
         tpm_limit=body.tpm_limit,
         tags=body.tags,
+        upstream_call_shape=body.upstream_call_shape,
         enabled=body.enabled,
     )
     route = result.route

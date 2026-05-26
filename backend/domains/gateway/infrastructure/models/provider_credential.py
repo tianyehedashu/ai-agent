@@ -73,6 +73,11 @@ class ProviderCredential(BaseModel):
         nullable=True,
         comment="自定义 API Base URL",
     )
+    profile_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="上游方案 ID（如 volcengine.coding_plan）；NULL 表示 provider.default",
+    )
     extra: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,

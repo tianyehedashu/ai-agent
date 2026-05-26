@@ -81,6 +81,7 @@ async def create_my_credential(
         name=body.name.strip() or "default",
         api_key_encrypted=encrypted,
         api_base=body.api_base,
+        profile_id=body.profile_id,
         extra=body.extra,
     )
     return build_credential_response(cred, encryption_key=encryption_key())
@@ -100,6 +101,7 @@ async def update_my_credential(
         actor_user_id=user_id,
         api_key_encrypted=encrypted,
         api_base=body.api_base,
+        profile_id=body.profile_id,
         extra=body.extra,
         is_active=body.is_active,
         name=body.name,

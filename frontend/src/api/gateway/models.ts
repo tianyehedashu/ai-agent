@@ -161,6 +161,7 @@ export interface GatewayModelCreateBody {
   rpm_limit?: number | null
   tpm_limit?: number | null
   tags?: Record<string, unknown> | null
+  upstream_call_shape?: string | null
   enabled?: boolean
 }
 
@@ -176,6 +177,7 @@ export interface GatewayModelUpdateBody {
   tags?: Record<string, unknown> | null
   /** 为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化） */
   resync_capabilities?: boolean
+  upstream_call_shape?: string | null
 }
 
 export type GatewayModelRegistryScope = 'team' | 'system' | 'callable' | 'requestable'

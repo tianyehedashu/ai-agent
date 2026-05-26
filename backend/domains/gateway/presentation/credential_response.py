@@ -12,6 +12,8 @@ from domains.gateway.domain.types import (
     credential_api_scope,
     is_config_managed_system_credential,
 )
+from domains.gateway.domain.upstream_endpoint import effective_api_bases_for_credential
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 from domains.gateway.domain.visibility import credential_visibility_for_api
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
@@ -70,6 +72,20 @@ def build_credential_response(
             api_key_masked = "（无法展示）"
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     vis = credential_visibility_for_api(cred.visibility) if api_scope == "system" else None
+    profile_label = cred.profile_label or get_upstream_profile(
+        cred.profile_id, provider=cred.provider
+    ).label
+    if cred.effective_api_base_openai or cred.effective_api_base_anthropic:
+        effective_openai = cred.effective_api_base_openai
+        effective_anthropic = cred.effective_api_base_anthropic
+    else:
+        effective = effective_api_bases_for_credential(
+            provider=cred.provider,
+            profile_id=cred.profile_id,
+            api_base=cred.api_base,
+        )
+        effective_openai = effective.get("openai_compat")
+        effective_anthropic = effective.get("anthropic_native")
     return CredentialResponse(
         id=cred.id,
         tenant_id=cred.tenant_id,
@@ -78,6 +94,10 @@ def build_credential_response(
         provider=cred.provider,
         name=cred.name,
         api_base=cred.api_base,
+        profile_id=cred.profile_id,
+        profile_label=profile_label,
+        effective_api_base_openai=effective_openai,
+        effective_api_base_anthropic=effective_anthropic,
         extra=cred.extra,
         is_active=cred.is_active,
         is_config_managed=is_config_managed_system_credential(

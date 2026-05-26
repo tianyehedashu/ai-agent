@@ -27,6 +27,12 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
+import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
+import {
+  resolveGatewayTeamLabel,
+  useGatewayTeamNameMap,
+  useGatewayTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { ExternalLink, Loader2, Trash2 } from '@/lib/lucide-icons'
@@ -43,6 +49,13 @@ function grantsQueryKey(subjectKind: string, subjectId: string): string[] {
   return ['gateway', 'system-grants', subjectKind, subjectId]
 }
 
+function grantTargetLabel(grant: SystemGatewayGrant, teamNameById: Map<string, string>): string {
+  if (grant.target_kind === 'team') {
+    return resolveGatewayTeamLabel(teamNameById, grant.target_id)
+  }
+  return grant.target_id
+}
+
 export function SystemGrantsPanel({
   open,
   onOpenChange,
@@ -53,8 +66,11 @@ export function SystemGrantsPanel({
   const teamId = useGatewayTeamId()
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const teamNameById = useGatewayTeamNameMap()
+  const { data: allTeams = [] } = useGatewayTeams(open)
   const [targetKind, setTargetKind] = useState<'team' | 'user'>('team')
-  const [targetId, setTargetId] = useState('')
+  const [targetTeamId, setTargetTeamId] = useState('')
+  const [targetUserId, setTargetUserId] = useState('')
   const [note, setNote] = useState('')
 
   const { data: grants = [], isLoading } = useQuery({
@@ -75,7 +91,8 @@ export function SystemGrantsPanel({
     mutationFn: (body: SystemGatewayGrantCreateBody) => gatewayApi.createGrant(body),
     onSuccess: () => {
       invalidate()
-      setTargetId('')
+      setTargetTeamId('')
+      setTargetUserId('')
       setNote('')
       toast({ title: '授权已添加' })
     },
@@ -99,9 +116,12 @@ export function SystemGrantsPanel({
   })
 
   const handleAdd = (): void => {
-    const tid = targetId.trim()
+    const tid = targetKind === 'team' ? targetTeamId.trim() : targetUserId.trim()
     if (!tid) {
-      toast({ variant: 'destructive', title: '请填写目标 ID' })
+      toast({
+        variant: 'destructive',
+        title: targetKind === 'team' ? '请选择团队' : '请填写用户 ID',
+      })
       return
     }
     createMutation.mutate({
@@ -152,22 +172,34 @@ export function SystemGrantsPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="team">团队 (team_id)</SelectItem>
+                <SelectItem value="team">团队</SelectItem>
                 <SelectItem value="user">用户 (user_id)</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-2">
-            <Label className="text-xs">目标 UUID</Label>
-            <Input
-              value={targetId}
-              onChange={(e) => {
-                setTargetId(e.target.value)
-              }}
-              placeholder="粘贴 team_id 或 user_id"
-              className="h-8 font-mono text-xs"
-            />
-          </div>
+          {targetKind === 'team' ? (
+            <div className="grid gap-2">
+              <Label className="text-xs">目标团队</Label>
+              <GatewayTeamCombobox
+                value={targetTeamId}
+                onChange={setTargetTeamId}
+                teams={allTeams}
+                placeholder="选择团队"
+              />
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label className="text-xs">用户 UUID</Label>
+              <Input
+                value={targetUserId}
+                onChange={(e) => {
+                  setTargetUserId(e.target.value)
+                }}
+                placeholder="粘贴 user_id"
+                className="h-8 font-mono text-xs"
+              />
+            </div>
+          )}
           <div className="grid gap-2">
             <Label className="text-xs">备注（可选）</Label>
             <Input
@@ -203,7 +235,8 @@ export function SystemGrantsPanel({
                 >
                   <div className="min-w-0">
                     <p className="font-medium">
-                      {g.target_kind} · <span className="font-mono">{g.target_id}</span>
+                      {g.target_kind === 'team' ? '团队' : '用户'} ·{' '}
+                      <span title={g.target_id}>{grantTargetLabel(g, teamNameById)}</span>
                     </p>
                     {g.note ? <p className="text-muted-foreground">{g.note}</p> : null}
                   </div>

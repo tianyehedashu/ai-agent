@@ -118,6 +118,7 @@ async def resolve_deployment_litellm_params(
         tpm_limit=record.tpm_limit,
         tags=record.tags,
         pricing=pricing,
+        upstream_call_shape=getattr(record, "upstream_call_shape", None),
     )
 
 
@@ -156,6 +157,7 @@ async def resolve_volcengine_image_deployment(
         tpm_limit=record.tpm_limit,
         tags=record.tags,
         pricing=pricing,
+        upstream_call_shape=getattr(record, "upstream_call_shape", None),
     )
     return VolcengineImageDeployment(
         litellm_params=litellm_params,

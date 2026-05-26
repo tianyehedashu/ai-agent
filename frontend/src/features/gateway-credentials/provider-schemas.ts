@@ -1,3 +1,5 @@
+import { remoteProfilesForProvider } from './provider-profile-catalog'
+
 /**
  * 凭据 provider 与差异化字段的单一事实源。
  *
@@ -21,10 +23,21 @@ export interface CredentialFieldSpec {
   helpText?: string
 }
 
+/** 与后端 ``upstream_profile_registry`` 对齐的凭据方案（plan/profile）。 */
+export interface UpstreamProfileSpec {
+  id: string
+  label: string
+  defaultApiBaseOpenai?: string
+  defaultApiBaseAnthropic?: string
+  /** Claude Code 等直连 Anthropic 根路径提示 */
+  anthropicDirectHint?: string
+}
+
 export interface ProviderCredentialSchema {
   id: string
   label: string
   defaultApiBase?: string
+  profiles?: ReadonlyArray<UpstreamProfileSpec>
   apiBaseRequired?: boolean
   apiBasePlaceholder?: string
   apiKeyLabel?: string
@@ -170,6 +183,23 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
     label: '阿里云 DashScope (通义千问)',
     apiBaseRequired: true,
     defaultApiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    profiles: [
+      {
+        id: 'dashscope.default',
+        label: '北京地域（兼容模式）',
+        defaultApiBaseOpenai: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      },
+      {
+        id: 'dashscope.intl',
+        label: '新加坡地域（兼容模式）',
+        defaultApiBaseOpenai: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      },
+      {
+        id: 'dashscope.us',
+        label: '美国弗吉尼亚（兼容模式）',
+        defaultApiBaseOpenai: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1',
+      },
+    ],
     availableScopes: SCOPES_ALL,
     extraFields: [
       {
@@ -191,6 +221,21 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
     label: '火山引擎 (豆包/方舟)',
     apiBaseRequired: true,
     defaultApiBase: 'https://ark.cn-beijing.volces.com/api/v3',
+    profiles: [
+      {
+        id: 'volcengine.standard',
+        label: '方舟标准',
+        defaultApiBaseOpenai: 'https://ark.cn-beijing.volces.com/api/v3',
+      },
+      {
+        id: 'volcengine.coding_plan',
+        label: 'Coding Plan',
+        defaultApiBaseOpenai: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+        defaultApiBaseAnthropic: 'https://ark.cn-beijing.volces.com/api/coding',
+        anthropicDirectHint:
+          'Claude Code 直连 Anthropic 根为 /api/coding；经本 Gateway 代理时请使用 OpenAI-compat 根（已自动补 /v3）。',
+      },
+    ],
     availableScopes: SCOPES_ALL,
     extraFields: [
       {
@@ -213,6 +258,18 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
     label: '智谱 AI (GLM)',
     apiBaseRequired: true,
     defaultApiBase: 'https://open.bigmodel.cn/api/paas/v4',
+    profiles: [
+      {
+        id: 'zhipuai.standard',
+        label: '标准 API',
+        defaultApiBaseOpenai: 'https://open.bigmodel.cn/api/paas/v4',
+      },
+      {
+        id: 'zhipuai.coding_plan',
+        label: 'Coding Plan',
+        defaultApiBaseOpenai: 'https://open.bigmodel.cn/api/coding/paas/v4',
+      },
+    ],
     availableScopes: SCOPES_ALL,
   },
   {
@@ -255,7 +312,37 @@ export function providersForScope(scope: CredentialFormScope): readonly Provider
   })
 }
 
-export function defaultApiBaseForProvider(providerId: string): string {
+export function profilesForProvider(providerId: string): readonly UpstreamProfileSpec[] {
+  const remote = remoteProfilesForProvider(providerId)
+  if (remote && remote.length > 0) {
+    return remote
+  }
+  return SCHEMA_BY_ID.get(providerId)?.profiles ?? []
+}
+
+export function defaultProfileIdForProvider(providerId: string): string | undefined {
+  const profiles = profilesForProvider(providerId)
+  if (profiles.length === 0) return undefined
+  const def = profiles.find((p) => p.id.endsWith('.default'))
+  return def?.id ?? profiles[0]?.id
+}
+
+export function getUpstreamProfileSpec(
+  providerId: string,
+  profileId: string | undefined
+): UpstreamProfileSpec | undefined {
+  const profiles = profilesForProvider(providerId)
+  if (profiles.length === 0) return undefined
+  if (profileId) {
+    const found = profiles.find((p) => p.id === profileId)
+    if (found) return found
+  }
+  return profiles[0]
+}
+
+export function defaultApiBaseForProvider(providerId: string, profileId?: string): string {
+  const spec = getUpstreamProfileSpec(providerId, profileId)
+  if (spec?.defaultApiBaseOpenai) return spec.defaultApiBaseOpenai
   return SCHEMA_BY_ID.get(providerId)?.defaultApiBase ?? ''
 }
 

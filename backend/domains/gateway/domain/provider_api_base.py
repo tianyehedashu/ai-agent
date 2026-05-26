@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
+from domains.gateway.domain.upstream_profile import UpstreamProtocol, default_profile_id
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+
 _DEFAULT_API_BASE_BY_PROVIDER: dict[str, str] = {
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com",
@@ -16,18 +20,40 @@ def get_default_api_base(provider: str) -> str | None:
     key = (provider or "").strip().lower()
     if not key:
         return None
+    profile = get_upstream_profile(None, provider=key)
+    openai_base = profile.api_bases.get(UpstreamProtocol.OPENAI_COMPAT)
+    if openai_base:
+        return openai_base
     return _DEFAULT_API_BASE_BY_PROVIDER.get(key)
 
 
 def resolve_effective_api_base(provider: str, api_base: str | None) -> str | None:
-    """凭据或 env 上的 base 为空时回退到 ``get_default_api_base``。"""
-    stripped = (api_base or "").strip()
-    if stripped:
-        return stripped
-    return get_default_api_base(provider)
+    """凭据或 env 上的 base 为空时回退到 profile 默认 OpenAI-compat 根。"""
+    return resolve_upstream_endpoint(
+        provider=provider,
+        profile_id=None,
+        api_base=api_base,
+        protocol=UpstreamProtocol.OPENAI_COMPAT,
+    )
+
+
+def resolve_effective_api_base_with_profile(
+    provider: str,
+    api_base: str | None,
+    profile_id: str | None,
+) -> str | None:
+    """带 profile 的 OpenAI-compat 有效 base（凭据写侧 / Router 复用）。"""
+    return resolve_upstream_endpoint(
+        provider=provider,
+        profile_id=profile_id,
+        api_base=api_base,
+        protocol=UpstreamProtocol.OPENAI_COMPAT,
+    )
 
 
 __all__ = [
+    "default_profile_id",
     "get_default_api_base",
     "resolve_effective_api_base",
+    "resolve_effective_api_base_with_profile",
 ]

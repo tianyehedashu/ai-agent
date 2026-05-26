@@ -1,8 +1,10 @@
 /**
- * 凭据摘要展示与深链 gating（团队模型 / 凭据筛选 banner 共用）。
+ * 凭据摘要展示（纯 label；深链权限见 credential-permissions.ts）。
  */
 
 import type { CredentialSummary } from '@/api/gateway'
+
+export { canLinkToCredentialDetail } from './credential-permissions'
 
 export function credentialSummaryLabel(
   summary: CredentialSummary | undefined,
@@ -11,16 +13,4 @@ export function credentialSummaryLabel(
   if (summary?.name) return summary.name
   const short = credentialId.length > 8 ? `${credentialId.slice(0, 8)}…` : credentialId
   return `未知凭据 (${short})`
-}
-
-/** 团队 admin+ 可打开团队凭据详情；system 凭据仅平台管理员；个人 BYOK 无团队详情页 */
-export function canLinkToCredentialDetail(
-  summary: CredentialSummary | undefined,
-  isAdmin: boolean,
-  isPlatformAdmin: boolean
-): boolean {
-  if (!summary || !isAdmin) return false
-  if (summary.scope === 'user') return false
-  if (summary.scope === 'system') return isPlatformAdmin
-  return true
 }

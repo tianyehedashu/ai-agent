@@ -17,6 +17,15 @@ class TeamSnapshot:
     owner_user_id: uuid.UUID | None
 
 
+@dataclass(frozen=True)
+class GatewayTeamMembershipSnapshot:
+    """Gateway 管理面团队 membership（跨域读侧，不含 ORM）。"""
+
+    team_id: uuid.UUID
+    kind: str
+    role: str
+
+
 class TeamResolutionPort(Protocol):
     """团队解析端口（供 Gateway / Identity 等消费）。"""
 
@@ -37,4 +46,23 @@ class TeamResolutionPort(Protocol):
         ...
 
 
-__all__ = ["TeamResolutionPort", "TeamSnapshot"]
+class GatewayTeamListingPort(Protocol):
+    """Gateway 管理面团队列表（membership + 角色，供凭据/模型读侧聚合）。"""
+
+    async def list_gateway_team_memberships(
+        self,
+        user_id: uuid.UUID,
+        *,
+        is_platform_admin: bool,
+        search: str | None = None,
+    ) -> list[GatewayTeamMembershipSnapshot]:
+        """普通用户仅 membership；平台 admin 可见全部活跃团队。"""
+        ...
+
+
+__all__ = [
+    "GatewayTeamListingPort",
+    "GatewayTeamMembershipSnapshot",
+    "TeamResolutionPort",
+    "TeamSnapshot",
+]

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi, type ProviderCredential, type SystemVisibility } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { SystemGrantsPanel } from '@/features/gateway-models/team/system-grants-panel'
+import {
+  resolveGatewayTeamLabel,
+  useGatewayTeamNameMap,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Shield } from '@/lib/lucide-icons'
 
@@ -16,14 +20,25 @@ interface SystemCredentialVisibilityCardProps {
   teamId: string
 }
 
+function grantsQueryKey(credentialId: string): string[] {
+  return ['gateway', 'system-grants', 'credential', credentialId]
+}
+
 export function SystemCredentialVisibilityCard({
   cred,
   teamId,
 }: SystemCredentialVisibilityCardProps): React.JSX.Element {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const teamNameById = useGatewayTeamNameMap()
   const [grantsOpen, setGrantsOpen] = useState(false)
   const isRestricted = cred.visibility === 'restricted'
+
+  const { data: grants = [], isLoading: grantsLoading } = useQuery({
+    queryKey: grantsQueryKey(cred.id),
+    queryFn: () => gatewayApi.listCredentialGrants(cred.id),
+    enabled: isRestricted,
+  })
 
   const patchMutation = useMutation({
     mutationFn: (visibility: SystemVisibility) =>
@@ -44,6 +59,9 @@ export function SystemCredentialVisibilityCard({
     },
     [patchMutation]
   )
+
+  const enabledTeamGrants = grants.filter((g) => g.target_kind === 'team' && g.enabled)
+  const enabledUserGrants = grants.filter((g) => g.target_kind === 'user' && g.enabled)
 
   return (
     <Card>
@@ -75,6 +93,29 @@ export function SystemCredentialVisibilityCard({
             />
           </div>
         </div>
+        {isRestricted ? (
+          <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            {grantsLoading ? (
+              <span>加载授权摘要…</span>
+            ) : enabledTeamGrants.length === 0 && enabledUserGrants.length === 0 ? (
+              <span>暂无有效授权（restricted 时对所有人不可见）</span>
+            ) : (
+              <div className="space-y-1">
+                {enabledTeamGrants.length > 0 ? (
+                  <p>
+                    已授权团队 ({enabledTeamGrants.length})：
+                    {enabledTeamGrants
+                      .map((g) => resolveGatewayTeamLabel(teamNameById, g.target_id))
+                      .join('、')}
+                  </p>
+                ) : null}
+                {enabledUserGrants.length > 0 ? (
+                  <p>已授权用户 ({enabledUserGrants.length})</p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
         <Button
           type="button"
           variant="outline"
