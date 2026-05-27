@@ -80,10 +80,54 @@ function buildUsageStatsSearch(params?: GatewayUsageStatsQuery): Record<string, 
   return search
 }
 
+export type UsageStatisticsBreakdownBy = 'credential' | 'model'
+
+export interface UsageStatisticsBreakdownSlice {
+  group_key: string
+  label: string
+  requests: number
+  share: number
+}
+
+export interface UsageStatisticsBreakdownResponse {
+  parent_group_by: GatewayUsageStatsGroupBy
+  parent_group_key: string
+  breakdown_by: UsageStatisticsBreakdownBy
+  parent_requests: number
+  items: UsageStatisticsBreakdownSlice[]
+}
+
+export type GatewayUsageStatsBreakdownQuery = Omit<
+  GatewayUsageStatsQuery,
+  'group_by' | 'page' | 'page_size'
+> & {
+  parent_group_by: GatewayUsageStatsGroupBy
+  parent_group_key: string
+  breakdown_by: UsageStatisticsBreakdownBy
+  top_n?: number
+}
+
+function buildUsageStatsBreakdownSearch(
+  params: GatewayUsageStatsBreakdownQuery
+): Record<string, string | string[]> {
+  const search = buildUsageStatsSearch(params)
+  search.parent_group_by = params.parent_group_by
+  search.parent_group_key = params.parent_group_key
+  search.breakdown_by = params.breakdown_by
+  if (params.top_n !== undefined) search.top_n = String(params.top_n)
+  return search
+}
+
 export const statsApi = {
   usageStats: (teamId: string, params?: GatewayUsageStatsQuery) =>
     apiClient.get<GatewayUsageStatsResponse>(
       teamGatewayPath(teamId, '/dashboard/statistics'),
       buildUsageStatsSearch(params)
+    ),
+
+  usageStatsBreakdown: (teamId: string, params: GatewayUsageStatsBreakdownQuery) =>
+    apiClient.get<UsageStatisticsBreakdownResponse>(
+      teamGatewayPath(teamId, '/dashboard/statistics/breakdown'),
+      buildUsageStatsBreakdownSearch(params)
     ),
 } as const

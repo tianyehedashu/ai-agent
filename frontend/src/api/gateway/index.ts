@@ -134,6 +134,10 @@ export type {
   GatewayUsageStatsItem,
   GatewayUsageStatsResponse,
   GatewayUsageStatsQuery,
+  GatewayUsageStatsBreakdownQuery,
+  UsageStatisticsBreakdownBy,
+  UsageStatisticsBreakdownSlice,
+  UsageStatisticsBreakdownResponse,
 } from './stats'
 
 export type { AlertRule, AlertRuleCreateBody } from './alerts'

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -86,14 +87,46 @@ const CAPABILITY_FILTERS: readonly { value: string; label: string }[] = [
 const LOG_GRID_COLS =
   'grid grid-cols-[156px_178px_142px_104px_108px_104px_92px_92px_minmax(240px,1fr)]'
 
+interface LogsLocationState {
+  usageStatsFilters?: {
+    usageAggregation?: GatewayUsageAggregation
+    status?: string
+    capability?: string
+  }
+}
+
 export default function GatewayLogsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const location = useLocation()
+  const navigate = useNavigate()
   const parentRef = useRef<HTMLDivElement>(null)
+  const consumedStatsNavigationRef = useRef(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [capabilityFilter, setCapabilityFilter] = useState('all')
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const [copiedRequestId, setCopiedRequestId] = useState(false)
+
+  useEffect(() => {
+    if (consumedStatsNavigationRef.current) return
+    const state = location.state as LogsLocationState | null
+    const fromStats = state?.usageStatsFilters
+    if (!fromStats) return
+    consumedStatsNavigationRef.current = true
+    if (fromStats.usageAggregation) {
+      setUsageAggregation(fromStats.usageAggregation)
+    }
+    if (fromStats.status) {
+      setStatusFilter(fromStats.status)
+    }
+    if (fromStats.capability) {
+      setCapabilityFilter(fromStats.capability)
+    }
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: null }
+    )
+  }, [location.pathname, location.search, location.state, navigate])
 
   const resetListPosition = (): void => {
     setSelectedId(null)

@@ -921,6 +921,21 @@ class UsageStatisticsResponse(PaginatedListResponse[UsageStatisticsItemResponse]
     totals: UsageStatisticsMetricResponse
 
 
+class UsageStatisticsBreakdownSliceResponse(BaseModel):
+    group_key: str
+    label: str
+    requests: int
+    share: float
+
+
+class UsageStatisticsBreakdownResponse(BaseModel):
+    parent_group_by: UsageStatisticsGroupBy
+    parent_group_key: str
+    breakdown_by: UsageStatisticsGroupBy
+    parent_requests: int
+    items: list[UsageStatisticsBreakdownSliceResponse] = Field(default_factory=list)
+
+
 # =============================================================================
 # Alert
 # =============================================================================
@@ -1218,6 +1233,8 @@ __all__ = [
     "TimeSeriesPointResponse",
     "UsageStatisticsItemResponse",
     "UsageStatisticsMetricResponse",
+    "UsageStatisticsBreakdownResponse",
+    "UsageStatisticsBreakdownSliceResponse",
     "UsageStatisticsResponse",
     "UserCredentialCreate",
     "VirtualKeyCreate",

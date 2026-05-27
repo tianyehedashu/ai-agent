@@ -66,6 +66,14 @@ class UsageStatisticsFilters:
     vkey_id: UUID | None = None
 
 
+@dataclass(frozen=True)
+class UsageStatisticsParentScope:
+    """行内 breakdown：限定到父维度某一分组键下的日志子集。"""
+
+    group_by: UsageStatisticsGroupBy
+    group_key: str
+
+
 USAGE_AGGREGATION_QUERY_DESCRIPTION = (
     "用量切片：workspace（产品文案：团队）=按当前团队工作区"
     "（URL /teams/{team_id} 或 legacy X-Team-Id；含 personal/shared）;"
@@ -80,4 +88,5 @@ __all__ = [
     "UsageAggregation",
     "UsageStatisticsFilters",
     "UsageStatisticsGroupBy",
+    "UsageStatisticsParentScope",
 ]

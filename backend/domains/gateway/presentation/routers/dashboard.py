@@ -13,6 +13,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 
 from domains.gateway.application.management.usage_reads import (
+    UsageStatisticsBreakdownSummary,
     UsageStatisticsItem,
     UsageStatisticsMetric,
 )
@@ -27,6 +28,10 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
 )
+from domains.gateway.domain.usage_statistics_breakdown import (
+    ensure_usage_statistics_breakdown_by,
+    normalize_usage_statistics_parent_group_key,
+)
 from domains.gateway.presentation.deps import CurrentTeam
 from domains.gateway.presentation.gateway_usage_list_response import (
     build_usage_statistics_response,
@@ -36,6 +41,8 @@ from domains.gateway.presentation.schemas.common import (
     DashboardSummaryResponse,
     MarginGroupItemResponse,
     MarginSummaryResponse,
+    UsageStatisticsBreakdownResponse,
+    UsageStatisticsBreakdownSliceResponse,
     UsageStatisticsItemResponse,
     UsageStatisticsMetricResponse,
     UsageStatisticsResponse,
@@ -189,6 +196,81 @@ async def dashboard_statistics(
         group_by=summary.group_by,
         totals=_usage_stats_metric_response(summary.totals, show_cost=show_cost),
     )
+
+
+def _breakdown_response(
+    summary: UsageStatisticsBreakdownSummary,
+) -> UsageStatisticsBreakdownResponse:
+    return UsageStatisticsBreakdownResponse(
+        parent_group_by=summary.parent_group_by,
+        parent_group_key=summary.parent_group_key,
+        breakdown_by=summary.breakdown_by,
+        parent_requests=summary.parent_requests,
+        items=[
+            UsageStatisticsBreakdownSliceResponse(
+                group_key=item.group_key,
+                label=item.label,
+                requests=item.requests,
+                share=item.share,
+            )
+            for item in summary.items
+        ],
+    )
+
+
+@router.get(
+    "/dashboard/statistics/breakdown",
+    response_model=UsageStatisticsBreakdownResponse,
+)
+async def dashboard_statistics_breakdown(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    days: int = Query(7, ge=1, le=365),
+    usage_aggregation: UsageAggregation = Query(
+        UsageAggregation.WORKSPACE,
+        description=USAGE_AGGREGATION_QUERY_DESCRIPTION,
+    ),
+    parent_group_by: UsageStatisticsGroupBy = Query(...),
+    parent_group_key: str = Query(..., min_length=0, max_length=200),
+    breakdown_by: UsageStatisticsGroupBy = Query(...),
+    top_n: int = Query(3, ge=1, le=5),
+    credential_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    team_id: uuid.UUID | None = None,
+    model: str | None = Query(default=None, min_length=1, max_length=200),
+    provider: str | None = Query(default=None, min_length=1, max_length=50),
+    capability: str | None = Query(default=None, min_length=1, max_length=40),
+    status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
+    vkey_id: uuid.UUID | None = None,
+) -> UsageStatisticsBreakdownResponse:
+    ensure_usage_statistics_breakdown_by(breakdown_by)
+    normalized_parent_key = normalize_usage_statistics_parent_group_key(
+        parent_group_by,
+        parent_group_key,
+    )
+    end = datetime.now(UTC)
+    start = end - timedelta(days=days)
+    summary = await reads.aggregate_usage_statistics_breakdown(
+        team,
+        start,
+        end,
+        usage_aggregation=usage_aggregation,
+        filters=UsageStatisticsFilters(
+            credential_id=credential_id,
+            user_id=user_id,
+            team_id=team_id,
+            model=model.strip() if model else None,
+            provider=provider.strip() if provider else None,
+            capability=capability.strip() if capability else None,
+            status=status_filter.strip() if status_filter else None,
+            vkey_id=vkey_id,
+        ),
+        parent_group_by=parent_group_by,
+        parent_group_key=normalized_parent_key,
+        breakdown_by=breakdown_by,
+        top_n=top_n,
+    )
+    return _breakdown_response(summary)
 
 
 @router.get(

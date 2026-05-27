@@ -17,6 +17,7 @@ from sqlalchemy.orm import defer
 from domains.gateway.domain.usage_read_model import (
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
+    UsageStatisticsParentScope,
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.usage_axis_sql import usage_axis_base_clauses
@@ -569,6 +570,58 @@ class RequestLogRepository:
             clauses.append(GatewayRequestLog.status == filters.status)
         return clauses
 
+    @staticmethod
+    def _usage_statistics_parent_clause(
+        parent: UsageStatisticsParentScope,
+    ) -> ColumnElement[bool]:
+        group_expr = RequestLogRepository._usage_statistics_group_expr(parent.group_by)
+        key = parent.group_key.strip()
+        if not key:
+            return group_expr.is_(None)
+        if parent.group_by in (
+            UsageStatisticsGroupBy.CREDENTIAL,
+            UsageStatisticsGroupBy.USER,
+            UsageStatisticsGroupBy.TEAM,
+            UsageStatisticsGroupBy.VKEY,
+        ):
+            from uuid import UUID as _UUID
+
+            return group_expr == _UUID(key)
+        if parent.group_by == UsageStatisticsGroupBy.MODEL:
+            return or_(
+                GatewayRequestLog.deployment_model_name == key,
+                GatewayRequestLog.route_name == key,
+                GatewayRequestLog.real_model == key,
+            )
+        if parent.group_by in (
+            UsageStatisticsGroupBy.PROVIDER,
+            UsageStatisticsGroupBy.CAPABILITY,
+            UsageStatisticsGroupBy.STATUS,
+        ):
+            return group_expr == key
+        raise ValueError(f"Unknown parent group_by: {parent.group_by!r}")
+
+    async def count_usage_requests_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        filters: UsageStatisticsFilters,
+        parent_scope: UsageStatisticsParentScope | None = None,
+    ) -> int:
+        """统计时间窗内满足过滤（及可选父行范围）的请求条数。"""
+        clauses = [
+            *usage_axis_base_clauses(axis),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+            *self._usage_statistics_filter_clauses(filters),
+        ]
+        if parent_scope is not None:
+            clauses.append(self._usage_statistics_parent_clause(parent_scope))
+        stmt = select(func.count(GatewayRequestLog.id)).where(and_(*clauses))
+        return int((await self._session.execute(stmt)).scalar_one())
+
     async def aggregate_usage_statistics_by_axis(
         self,
         axis: UsageAxis,
@@ -579,6 +632,7 @@ class RequestLogRepository:
         filters: UsageStatisticsFilters,
         page: int = 1,
         page_size: int = 20,
+        parent_scope: UsageStatisticsParentScope | None = None,
     ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals, int]:
         """按指定维度聚合调用统计，并返回同一过滤条件下的总计与分组总数。"""
         group_expr = self._usage_statistics_group_expr(group_by)
@@ -589,6 +643,8 @@ class RequestLogRepository:
             GatewayRequestLog.created_at <= end,
             *self._usage_statistics_filter_clauses(filters),
         ]
+        if parent_scope is not None:
+            clauses.append(self._usage_statistics_parent_clause(parent_scope))
         success_case = case((GatewayRequestLog.status == "success", 1), else_=0)
         failure_case = case((GatewayRequestLog.status != "success", 1), else_=0)
         cache_hit_case = case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)

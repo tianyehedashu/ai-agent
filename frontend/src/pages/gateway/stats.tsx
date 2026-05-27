@@ -2,7 +2,7 @@
  * AI Gateway · 调用统计
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -23,13 +23,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -39,16 +32,37 @@ import {
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
+import {
+  GATEWAY_FILTER_ALL,
+  GatewayFilterCombobox,
+  type GatewayFilterOption,
+} from '@/features/gateway-usage/gateway-filter-combobox'
 import { isCrossTeamUsageStatsEnabled } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { UsageStatsBreakdownList } from '@/features/gateway-usage/usage-stats-breakdown-list'
+import { UsageStatsDetailSheet } from '@/features/gateway-usage/usage-stats-detail-sheet'
+import {
+  applyDrillSegmentToFilterState,
+  clearDrillSegmentsFromFilterState,
+  drillDownNextState,
+  shouldShowBreakdownColumns,
+  type StatsFilterKey,
+  type UsageStatsDrillSegment,
+  type UsageStatsFilterState,
+} from '@/features/gateway-usage/usage-stats-drill-down'
+import {
+  useUsageStatsBreakdownBatch,
+  type UsageStatsBreakdownBaseQuery,
+  type UsageStatsRowBreakdown,
+} from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { LineChart, Settings2, X } from '@/lib/lucide-icons'
+import { BarChart3, ChevronRight, LineChart, Settings2, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { cn } from '@/lib/utils'
 
-const ALL_VALUE = '__all__'
 const PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 const RANGE_DAYS: { value: 1 | 7 | 30 | 90; label: string }[] = [
@@ -69,7 +83,7 @@ const GROUP_OPTIONS: { value: GatewayUsageStatsGroupBy; label: string }[] = [
   { value: 'status', label: '状态' },
 ]
 
-const STATUS_OPTIONS = [
+const STATUS_OPTIONS: GatewayFilterOption[] = [
   { value: 'success', label: '成功' },
   { value: 'failed', label: '失败' },
   { value: 'rate_limited', label: '限流' },
@@ -77,7 +91,7 @@ const STATUS_OPTIONS = [
   { value: 'guardrail_blocked', label: '安全拦截' },
 ]
 
-const CAPABILITY_OPTIONS = [
+const CAPABILITY_OPTIONS: GatewayFilterOption[] = [
   { value: 'chat', label: 'Chat' },
   { value: 'embedding', label: 'Embedding' },
   { value: 'image', label: 'Image' },
@@ -86,12 +100,15 @@ const CAPABILITY_OPTIONS = [
   { value: 'rerank', label: 'Rerank' },
 ]
 
-type StatsFilterSource = 'credential' | 'user' | 'team' | 'model' | 'vkey' | 'provider'
-
-interface SelectOption {
-  value: string
-  label: string
-  meta?: string
+const INITIAL_FILTER_STATE: UsageStatsFilterState = {
+  credentialId: GATEWAY_FILTER_ALL,
+  userId: GATEWAY_FILTER_ALL,
+  teamFilterId: GATEWAY_FILTER_ALL,
+  model: GATEWAY_FILTER_ALL,
+  provider: GATEWAY_FILTER_ALL,
+  capability: GATEWAY_FILTER_ALL,
+  status: GATEWAY_FILTER_ALL,
+  vkeyId: GATEWAY_FILTER_ALL,
 }
 
 function asNumber(value: unknown): number {
@@ -120,18 +137,13 @@ function errorMessage(error: unknown): string {
 }
 
 function resettable(value: string): string | undefined {
-  return value === ALL_VALUE ? undefined : value
+  return value === GATEWAY_FILTER_ALL ? undefined : value
 }
 
-function uniqueSorted(values: string[]): SelectOption[] {
+function uniqueSorted(values: string[]): GatewayFilterOption[] {
   return Array.from(new Set(values.filter((v) => v.trim().length > 0)))
     .sort((a, b) => a.localeCompare(b))
     .map((value) => ({ value, label: value }))
-}
-
-function selectedOptionLabel(options: SelectOption[], value: string): string {
-  if (value === ALL_VALUE) return ''
-  return options.find((option) => option.value === value)?.label ?? value
 }
 
 function modelOptionValues(models: GatewayModel[]): string[] {
@@ -143,30 +155,69 @@ function modelOptionValues(models: GatewayModel[]): string[] {
   return values
 }
 
+function selectedOptionLabel(options: GatewayFilterOption[], value: string): string {
+  if (value === GATEWAY_FILTER_ALL) return ''
+  return options.find((option) => option.value === value)?.label ?? value
+}
+
+function filterStateToQueryParams(
+  state: UsageStatsFilterState,
+  crossTeamStatsEnabled: boolean
+): Pick<
+  GatewayUsageStatsQuery,
+  | 'credential_id'
+  | 'user_id'
+  | 'team_id'
+  | 'model'
+  | 'provider'
+  | 'capability'
+  | 'status'
+  | 'vkey_id'
+> {
+  return {
+    credential_id: resettable(state.credentialId),
+    user_id: resettable(state.userId),
+    team_id: crossTeamStatsEnabled ? resettable(state.teamFilterId) : undefined,
+    model: resettable(state.model),
+    provider: resettable(state.provider),
+    capability: resettable(state.capability),
+    status: resettable(state.status),
+    vkey_id: resettable(state.vkeyId),
+  }
+}
+
+function buildLogsNavigationState(
+  usageAggregation: GatewayUsageAggregation,
+  state: UsageStatsFilterState,
+  crossTeamStatsEnabled: boolean
+): Record<string, string | undefined> {
+  const q = filterStateToQueryParams(state, crossTeamStatsEnabled)
+  return {
+    usageAggregation,
+    status: q.status,
+    capability: q.capability,
+    credentialId: q.credential_id,
+    userId: q.user_id,
+    model: q.model,
+    provider: q.provider,
+    vkeyId: q.vkey_id,
+    teamId: q.team_id,
+  }
+}
+
 export default function GatewayStatsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { isAdmin } = useGatewayPermission()
+  const tableAnchorRef = useRef<HTMLDivElement>(null)
+
   const [days, setDays] = useState<1 | 7 | 30 | 90>(7)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('workspace')
   const [groupBy, setGroupBy] = useState<GatewayUsageStatsGroupBy>('credential')
-  const [credentialId, setCredentialId] = useState(ALL_VALUE)
-  const [userId, setUserId] = useState(ALL_VALUE)
-  const [teamFilterId, setTeamFilterId] = useState(ALL_VALUE)
-  const [model, setModel] = useState(ALL_VALUE)
-  const [provider, setProvider] = useState(ALL_VALUE)
-  const [capability, setCapability] = useState(ALL_VALUE)
-  const [status, setStatus] = useState(ALL_VALUE)
-  const [vkeyId, setVkeyId] = useState(ALL_VALUE)
+  const [filterState, setFilterState] = useState<UsageStatsFilterState>(INITIAL_FILTER_STATE)
+  const [drillSegments, setDrillSegments] = useState<UsageStatsDrillSegment[]>([])
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [loadedFilters, setLoadedFilters] = useState<ReadonlySet<StatsFilterSource>>(
-    () => new Set()
-  )
-
-  const needsModelOptions =
-    loadedFilters.has('model') ||
-    loadedFilters.has('provider') ||
-    model !== ALL_VALUE ||
-    provider !== ALL_VALUE
+  const [detailItem, setDetailItem] = useState<GatewayUsageStatsItem | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const {
     items: modelItems,
@@ -175,43 +226,23 @@ export default function GatewayStatsPage(): React.JSX.Element {
   } = useInfiniteGatewayModelPages(
     teamId,
     { registry_scope: 'callable' },
-    { enabled: needsModelOptions, prefetchMode: 'open' }
+    { enabled: true, prefetchMode: 'open' }
   )
-
-  const requestFilter = useCallback(
-    (source: StatsFilterSource): void => {
-      if (source === 'model' || source === 'provider') {
-        onModelPickerOpenChange(true)
-      }
-      setLoadedFilters((prev) => {
-        if (prev.has(source)) return prev
-        const next = new Set(prev)
-        next.add(source)
-        return next
-      })
-    },
-    [onModelPickerOpenChange]
-  )
-
-  const requestProviderFilters = useCallback((): void => {
-    onModelPickerOpenChange(true)
-    setLoadedFilters((prev) => {
-      const next = new Set(prev)
-      next.add('credential')
-      next.add('model')
-      next.add('provider')
-      if (next.size === prev.size) return prev
-      return next
-    })
-  }, [onModelPickerOpenChange])
 
   useEffect(() => {
-    if (model !== ALL_VALUE) {
-      ensureModelName(model)
+    if (filterState.model !== GATEWAY_FILTER_ALL) {
+      ensureModelName(filterState.model)
     }
-  }, [model, ensureModelName])
+  }, [filterState.model, ensureModelName])
 
   const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
+
+  const setFilterField = useCallback(
+    <K extends keyof UsageStatsFilterState>(key: K, value: UsageStatsFilterState[K]): void => {
+      setFilterState((prev) => ({ ...prev, [key]: value }))
+    },
+    []
+  )
 
   const statsFilterKey = useMemo(
     () =>
@@ -219,36 +250,25 @@ export default function GatewayStatsPage(): React.JSX.Element {
         days,
         usageAggregation,
         groupBy,
-        credentialId,
-        userId,
-        teamFilterId,
-        model,
-        provider,
-        capability,
-        status,
-        vkeyId,
+        filterState.credentialId,
+        filterState.userId,
+        filterState.teamFilterId,
+        filterState.model,
+        filterState.provider,
+        filterState.capability,
+        filterState.status,
+        filterState.vkeyId,
+        drillSegments.map((s) => `${s.filterKey}:${s.filterValue}`).join('|'),
       ]),
-    [
-      days,
-      usageAggregation,
-      groupBy,
-      credentialId,
-      userId,
-      teamFilterId,
-      model,
-      provider,
-      capability,
-      status,
-      vkeyId,
-    ]
+    [days, usageAggregation, groupBy, filterState, drillSegments]
   )
   const [page, setPage] = usePaginationPageForFilters(statsFilterKey)
 
   useEffect(() => {
     if (crossTeamStatsEnabled) return
-    setTeamFilterId(ALL_VALUE)
+    setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
     setGroupBy((current) => (current === 'team' ? 'credential' : current))
-  }, [crossTeamStatsEnabled])
+  }, [crossTeamStatsEnabled, setFilterField])
 
   const groupOptions = useMemo(
     () =>
@@ -258,33 +278,25 @@ export default function GatewayStatsPage(): React.JSX.Element {
     [crossTeamStatsEnabled]
   )
 
-  const needsCredentialOptions =
-    loadedFilters.has('credential') ||
-    loadedFilters.has('provider') ||
-    credentialId !== ALL_VALUE ||
-    provider !== ALL_VALUE
-
   const credentialsQuery = useQuery({
     queryKey: ['gateway', 'credential-summaries', teamId],
     queryFn: () => credentialsApi.listCredentialSummaries(teamId),
-    enabled: needsCredentialOptions,
   })
   const membersQuery = useQuery({
     queryKey: ['gateway', 'members', teamId],
     queryFn: () => teamsApi.listMembers(teamId),
-    enabled: loadedFilters.has('user') || userId !== ALL_VALUE,
   })
   const teamsQuery = useQuery({
     queryKey: ['gateway', 'teams'],
     queryFn: () => teamsApi.listTeams(),
-    enabled: crossTeamStatsEnabled && (loadedFilters.has('team') || teamFilterId !== ALL_VALUE),
+    enabled: crossTeamStatsEnabled,
   })
   const keysQuery = useQuery({
     queryKey: ['gateway', 'keys', teamId],
     queryFn: () => keysApi.listKeys(teamId),
-    enabled: loadedFilters.has('vkey') || vkeyId !== ALL_VALUE,
   })
-  const credentialOptions = useMemo<SelectOption[]>(
+
+  const credentialOptions = useMemo<GatewayFilterOption[]>(
     () =>
       (credentialsQuery.data ?? []).map((credential) => ({
         value: credential.id,
@@ -293,7 +305,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
       })),
     [credentialsQuery.data]
   )
-  const memberOptions = useMemo<SelectOption[]>(
+  const memberOptions = useMemo<GatewayFilterOption[]>(
     () =>
       (membersQuery.data ?? []).map((member) => ({
         value: member.user_id,
@@ -302,16 +314,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
       })),
     [membersQuery.data]
   )
-  const teamOptions = useMemo<SelectOption[]>(
-    () =>
-      (teamsQuery.data ?? []).map((team) => ({
-        value: team.id,
-        label: team.name,
-        meta: team.kind,
-      })),
-    [teamsQuery.data]
-  )
-  const keyOptions = useMemo<SelectOption[]>(
+  const teamOptions = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
+  const keyOptions = useMemo<GatewayFilterOption[]>(
     () =>
       (keysQuery.data ?? []).map((key) => ({
         value: key.id,
@@ -329,37 +333,29 @@ export default function GatewayStatsPage(): React.JSX.Element {
     return uniqueSorted(values)
   }, [credentialsQuery.data, modelItems])
 
+  const filterQueryFields = useMemo(
+    () => filterStateToQueryParams(filterState, crossTeamStatsEnabled),
+    [filterState, crossTeamStatsEnabled]
+  )
+
   const queryParams = useMemo((): GatewayUsageStatsQuery => {
     return {
       days,
       usage_aggregation: usageAggregation,
       group_by: groupBy,
-      credential_id: resettable(credentialId),
-      user_id: resettable(userId),
-      team_id: crossTeamStatsEnabled ? resettable(teamFilterId) : undefined,
-      model: resettable(model),
-      provider: resettable(provider),
-      capability: resettable(capability),
-      status: resettable(status),
-      vkey_id: resettable(vkeyId),
+      ...filterQueryFields,
       page,
       page_size: PAGE_SIZE,
     }
-  }, [
-    days,
-    usageAggregation,
-    groupBy,
-    credentialId,
-    userId,
-    teamFilterId,
-    crossTeamStatsEnabled,
-    model,
-    provider,
-    capability,
-    status,
-    vkeyId,
-    page,
-  ])
+  }, [days, usageAggregation, groupBy, filterQueryFields, page])
+
+  const breakdownBaseQuery = useMemo((): UsageStatsBreakdownBaseQuery => {
+    return {
+      days,
+      usage_aggregation: usageAggregation,
+      ...filterQueryFields,
+    }
+  }, [days, usageAggregation, filterQueryFields])
 
   const statsQuery = useQuery({
     queryKey: ['gateway', 'usage-stats', teamId, queryParams],
@@ -367,41 +363,151 @@ export default function GatewayStatsPage(): React.JSX.Element {
     placeholderData: keepPreviousData,
   })
 
+  const showBreakdownCols = shouldShowBreakdownColumns(groupBy)
   const items = statsQuery.data?.items ?? []
-  const maxRequests = Math.max(...items.map((item) => item.requests), 1)
-  const totals = statsQuery.data?.totals
+
+  const { breakdownByRowKey, isLoading: breakdownLoading } = useUsageStatsBreakdownBatch({
+    teamId,
+    baseQuery: breakdownBaseQuery,
+    parentGroupBy: groupBy,
+    items,
+    enabled: showBreakdownCols && items.length > 0 && !statsQuery.isLoading,
+  })
+
   const activeFilters = [
     {
-      key: 'credential',
+      key: 'credential' as const,
+      filterKey: 'credential_id' as StatsFilterKey,
       label: '凭据',
-      value: selectedOptionLabel(credentialOptions, credentialId),
+      value: selectedOptionLabel(credentialOptions, filterState.credentialId),
+      clear: () => {
+        setFilterField('credentialId', GATEWAY_FILTER_ALL)
+      },
     },
-    { key: 'user', label: '人员', value: selectedOptionLabel(memberOptions, userId) },
-    ...(crossTeamStatsEnabled
-      ? [{ key: 'team', label: '团队', value: selectedOptionLabel(teamOptions, teamFilterId) }]
-      : []),
-    { key: 'model', label: '模型', value: selectedOptionLabel(modelOptions, model) },
-    { key: 'vkey', label: '虚拟 Key', value: selectedOptionLabel(keyOptions, vkeyId) },
-    { key: 'provider', label: '提供商', value: selectedOptionLabel(providerOptions, provider) },
     {
-      key: 'capability',
-      label: '能力',
-      value: selectedOptionLabel(CAPABILITY_OPTIONS, capability),
+      key: 'user' as const,
+      filterKey: 'user_id' as StatsFilterKey,
+      label: '人员',
+      value: selectedOptionLabel(memberOptions, filterState.userId),
+      clear: () => {
+        setFilterField('userId', GATEWAY_FILTER_ALL)
+      },
     },
-    { key: 'status', label: '状态', value: selectedOptionLabel(STATUS_OPTIONS, status) },
-  ].filter((filter) => filter.value.length > 0)
+    ...(crossTeamStatsEnabled
+      ? [
+          {
+            key: 'team' as const,
+            filterKey: 'team_id' as StatsFilterKey,
+            label: '团队',
+            value: teamOptions.find((t) => t.id === filterState.teamFilterId)?.name ?? '',
+            clear: () => {
+              setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
+            },
+          },
+        ]
+      : []),
+    {
+      key: 'model' as const,
+      filterKey: 'model' as StatsFilterKey,
+      label: '模型',
+      value: selectedOptionLabel(modelOptions, filterState.model),
+      clear: () => {
+        setFilterField('model', GATEWAY_FILTER_ALL)
+      },
+    },
+    {
+      key: 'vkey' as const,
+      filterKey: 'vkey_id' as StatsFilterKey,
+      label: '虚拟 Key',
+      value: selectedOptionLabel(keyOptions, filterState.vkeyId),
+      clear: () => {
+        setFilterField('vkeyId', GATEWAY_FILTER_ALL)
+      },
+    },
+    {
+      key: 'provider' as const,
+      filterKey: 'provider' as StatsFilterKey,
+      label: '提供商',
+      value: selectedOptionLabel(providerOptions, filterState.provider),
+      clear: () => {
+        setFilterField('provider', GATEWAY_FILTER_ALL)
+      },
+    },
+    {
+      key: 'capability' as const,
+      filterKey: 'capability' as StatsFilterKey,
+      label: '能力',
+      value: selectedOptionLabel(CAPABILITY_OPTIONS, filterState.capability),
+      clear: () => {
+        setFilterField('capability', GATEWAY_FILTER_ALL)
+      },
+    },
+    {
+      key: 'status' as const,
+      filterKey: 'status' as StatsFilterKey,
+      label: '状态',
+      value: selectedOptionLabel(STATUS_OPTIONS, filterState.status),
+      clear: () => {
+        setFilterField('status', GATEWAY_FILTER_ALL)
+      },
+    },
+  ].filter((filter) => filter.value.length > 0 && filter.value !== GATEWAY_FILTER_ALL)
+
   const activeFilterCount = activeFilters.length
 
-  function clearFilters(): void {
-    setCredentialId(ALL_VALUE)
-    setUserId(ALL_VALUE)
-    setTeamFilterId(ALL_VALUE)
-    setModel(ALL_VALUE)
-    setProvider(ALL_VALUE)
-    setCapability(ALL_VALUE)
-    setStatus(ALL_VALUE)
-    setVkeyId(ALL_VALUE)
-  }
+  const clearManualFilters = useCallback((): void => {
+    setFilterState(clearDrillSegmentsFromFilterState(INITIAL_FILTER_STATE, drillSegments))
+  }, [drillSegments])
+
+  const clearAllFilters = useCallback((): void => {
+    setDrillSegments([])
+    setFilterState(INITIAL_FILTER_STATE)
+  }, [])
+
+  const resetDrillToRoot = useCallback((): void => {
+    setDrillSegments([])
+    setFilterState(clearDrillSegmentsFromFilterState(filterState, drillSegments))
+    setGroupBy('credential')
+    setPage(1)
+  }, [drillSegments, filterState, setPage])
+
+  const popDrillToIndex = useCallback(
+    (index: number): void => {
+      const kept = drillSegments.slice(0, index + 1)
+      const removed = drillSegments.slice(index + 1)
+      let nextState = clearDrillSegmentsFromFilterState(INITIAL_FILTER_STATE, removed)
+      for (const segment of kept) {
+        nextState = applyDrillSegmentToFilterState(nextState, segment)
+      }
+      setDrillSegments(kept)
+      setFilterState(nextState)
+      const lastSegment = kept.at(-1)
+      setGroupBy(lastSegment !== undefined ? lastSegment.groupByAfter : 'credential')
+      setPage(1)
+    },
+    [drillSegments, setPage]
+  )
+
+  const handleRowDrill = useCallback(
+    (item: GatewayUsageStatsItem): void => {
+      const next = drillDownNextState(groupBy, item.group_key, item.label)
+      if (next === null) return
+      setDrillSegments((prev) => [...prev, next.segment])
+      setFilterState((prev) => applyDrillSegmentToFilterState(prev, next.segment))
+      setGroupBy(next.groupBy)
+      setPage(1)
+      tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [groupBy, setPage]
+  )
+
+  const maxRequests = Math.max(...items.map((item) => item.requests), 1)
+  const totals = statsQuery.data?.totals
+
+  const logsNavigationState = useMemo(
+    () => buildLogsNavigationState(usageAggregation, filterState, crossTeamStatsEnabled),
+    [usageAggregation, filterState, crossTeamStatsEnabled]
+  )
 
   return (
     <div className="space-y-4">
@@ -435,6 +541,51 @@ export default function GatewayStatsPage(): React.JSX.Element {
               </Button>
             ))}
           </div>
+          <GatewayRefreshButton
+            isFetching={statsQuery.isFetching}
+            ariaLabel="刷新统计"
+            onRefresh={() => statsQuery.refetch()}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-lg border bg-background p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <GatewayFilterCombobox
+            value={filterState.credentialId}
+            onChange={(v) => {
+              setFilterField('credentialId', v)
+            }}
+            options={credentialOptions}
+            placeholder="凭据"
+            searchPlaceholder="搜索凭据…"
+            loading={credentialsQuery.isLoading}
+            className="w-[min(100%,11rem)]"
+          />
+          <GatewayFilterCombobox
+            value={filterState.userId}
+            onChange={(v) => {
+              setFilterField('userId', v)
+            }}
+            options={memberOptions}
+            placeholder="人员"
+            searchPlaceholder="搜索人员…"
+            loading={membersQuery.isLoading}
+            className="w-[min(100%,11rem)]"
+          />
+          <GatewayFilterCombobox
+            value={filterState.model}
+            onChange={(v) => {
+              setFilterField('model', v)
+            }}
+            options={modelOptions}
+            placeholder="模型"
+            searchPlaceholder="搜索模型…"
+            onOpenChange={(open) => {
+              if (open) onModelPickerOpenChange(true)
+            }}
+            className="w-[min(100%,11rem)]"
+          />
           <Button
             type="button"
             size="sm"
@@ -445,37 +596,87 @@ export default function GatewayStatsPage(): React.JSX.Element {
             }}
           >
             <Settings2 className="h-4 w-4" />
-            筛选
+            更多筛选
             {activeFilterCount > 0 ? (
               <Badge variant="secondary" className="ml-0.5 px-1.5">
                 {activeFilterCount}
               </Badge>
             ) : null}
           </Button>
-          <GatewayRefreshButton
-            isFetching={statsQuery.isFetching}
-            ariaLabel="刷新统计"
-            onRefresh={() => statsQuery.refetch()}
-          />
         </div>
+
+        {(drillSegments.length > 0 || activeFilterCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {drillSegments.length > 0 ? (
+              <nav aria-label="钻取路径" className="flex flex-wrap items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={resetDrillToRoot}
+                >
+                  全部
+                </Button>
+                {drillSegments.map((segment, index) => (
+                  <span
+                    key={`${segment.filterKey}-${segment.filterValue}`}
+                    className="flex items-center gap-1"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 max-w-[200px] truncate px-2"
+                      title={segment.label}
+                      onClick={() => {
+                        popDrillToIndex(index)
+                      }}
+                    >
+                      {segment.label}
+                    </Button>
+                  </span>
+                ))}
+              </nav>
+            ) : null}
+            {activeFilterCount > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {activeFilters.map((filter) => (
+                  <Badge
+                    key={filter.key}
+                    variant="outline"
+                    className="max-w-[240px] gap-1 truncate font-normal"
+                  >
+                    <span className="text-muted-foreground">{filter.label}</span>
+                    <span className="truncate">{filter.value}</span>
+                    <button
+                      type="button"
+                      className="rounded-sm hover:bg-muted"
+                      aria-label={`移除${filter.label}筛选`}
+                      onClick={filter.clear}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2"
+                  onClick={clearManualFilters}
+                >
+                  清空筛选
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3 rounded-lg border bg-background p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs font-medium text-muted-foreground">分析维度</div>
-          {activeFilterCount > 0 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs"
-              onClick={clearFilters}
-            >
-              <X className="h-3.5 w-3.5" />
-              清空筛选
-            </Button>
-          ) : null}
-        </div>
+        <div className="text-xs font-medium text-muted-foreground">分析维度</div>
         <div className="flex flex-wrap gap-1">
           {groupOptions.map((option) => (
             <Button
@@ -492,21 +693,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
             </Button>
           ))}
         </div>
-        {activeFilterCount > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {activeFilters.map((filter) => (
-              <Badge
-                key={filter.key}
-                variant="outline"
-                className="max-w-[240px] gap-1 truncate font-normal"
-                title={`${filter.label}: ${filter.value}`}
-              >
-                <span className="text-muted-foreground">{filter.label}</span>
-                <span className="truncate">{filter.value}</span>
-              </Badge>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -514,7 +700,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
           <SheetHeader className="shrink-0 border-b px-5 pb-4 pt-5 text-left">
             <SheetTitle className="flex items-center gap-2 pr-8 text-base">
               <Settings2 className="h-4 w-4" />
-              筛选调用统计
+              更多筛选
             </SheetTitle>
             <SheetDescription>
               {usageAggregation === 'user' ? '我的跨团队调用' : '当前团队调用'} ·{' '}
@@ -522,87 +708,81 @@ export default function GatewayStatsPage(): React.JSX.Element {
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            {crossTeamStatsEnabled ? (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold text-muted-foreground">团队</h3>
+                <GatewayTeamCombobox
+                  value={
+                    filterState.teamFilterId === GATEWAY_FILTER_ALL ? '' : filterState.teamFilterId
+                  }
+                  onChange={(teamFilterId) => {
+                    setFilterField(
+                      'teamFilterId',
+                      teamFilterId.length > 0 ? teamFilterId : GATEWAY_FILTER_ALL
+                    )
+                  }}
+                  teams={teamOptions}
+                  placeholder="全部团队"
+                  className="h-9"
+                />
+              </section>
+            ) : null}
             <section className="space-y-3">
               <h3 className="text-xs font-semibold text-muted-foreground">对象</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterSelect
-                  label="凭据"
-                  value={credentialId}
-                  onValueChange={setCredentialId}
-                  onRequestOptions={() => {
-                    requestFilter('credential')
-                  }}
-                  options={credentialOptions}
-                />
-                <FilterSelect
-                  label="人员"
-                  value={userId}
-                  onValueChange={setUserId}
-                  onRequestOptions={() => {
-                    requestFilter('user')
-                  }}
-                  options={memberOptions}
-                />
-                {crossTeamStatsEnabled ? (
-                  <FilterSelect
-                    label="团队"
-                    value={teamFilterId}
-                    onValueChange={setTeamFilterId}
-                    onRequestOptions={() => {
-                      requestFilter('team')
+                <FilterField label="虚拟 Key">
+                  <GatewayFilterCombobox
+                    value={filterState.vkeyId}
+                    onChange={(v) => {
+                      setFilterField('vkeyId', v)
                     }}
-                    options={teamOptions}
+                    options={keyOptions}
+                    placeholder="全部 Key"
+                    searchPlaceholder="搜索 Key…"
+                    loading={keysQuery.isLoading}
                   />
-                ) : null}
-                <FilterSelect
-                  label="虚拟 Key"
-                  value={vkeyId}
-                  onValueChange={setVkeyId}
-                  onRequestOptions={() => {
-                    requestFilter('vkey')
-                  }}
-                  options={keyOptions}
-                />
+                </FilterField>
+                <FilterField label="提供商">
+                  <GatewayFilterCombobox
+                    value={filterState.provider}
+                    onChange={(v) => {
+                      setFilterField('provider', v)
+                    }}
+                    options={providerOptions}
+                    placeholder="全部提供商"
+                    searchPlaceholder="搜索提供商…"
+                    onOpenChange={(open) => {
+                      if (open) onModelPickerOpenChange(true)
+                    }}
+                  />
+                </FilterField>
               </div>
             </section>
-
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground">模型</h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterSelect
-                  label="模型"
-                  value={model}
-                  onValueChange={setModel}
-                  onRequestOptions={() => {
-                    requestFilter('model')
-                  }}
-                  options={modelOptions}
-                />
-                <FilterSelect
-                  label="提供商"
-                  value={provider}
-                  onValueChange={setProvider}
-                  onRequestOptions={requestProviderFilters}
-                  options={providerOptions}
-                />
-              </div>
-            </section>
-
             <section className="space-y-3">
               <h3 className="text-xs font-semibold text-muted-foreground">调用</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterSelect
-                  label="能力"
-                  value={capability}
-                  onValueChange={setCapability}
-                  options={CAPABILITY_OPTIONS}
-                />
-                <FilterSelect
-                  label="状态"
-                  value={status}
-                  onValueChange={setStatus}
-                  options={STATUS_OPTIONS}
-                />
+                <FilterField label="能力">
+                  <GatewayFilterCombobox
+                    value={filterState.capability}
+                    onChange={(v) => {
+                      setFilterField('capability', v)
+                    }}
+                    options={CAPABILITY_OPTIONS}
+                    placeholder="全部能力"
+                    searchPlaceholder="搜索能力…"
+                  />
+                </FilterField>
+                <FilterField label="状态">
+                  <GatewayFilterCombobox
+                    value={filterState.status}
+                    onChange={(v) => {
+                      setFilterField('status', v)
+                    }}
+                    options={STATUS_OPTIONS}
+                    placeholder="全部状态"
+                    searchPlaceholder="搜索状态…"
+                  />
+                </FilterField>
               </div>
             </section>
           </div>
@@ -612,8 +792,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
               variant="ghost"
               size="sm"
               className="gap-1.5"
-              disabled={activeFilterCount === 0}
-              onClick={clearFilters}
+              disabled={activeFilterCount === 0 && drillSegments.length === 0}
+              onClick={clearAllFilters}
             >
               <X className="h-4 w-4" />
               清空
@@ -652,7 +832,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
         />
       </div>
 
-      <Card>
+      <Card ref={tableAnchorRef}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
             {groupOptions.find((option) => option.value === groupBy)?.label ?? '维度'}排名
@@ -672,16 +852,23 @@ export default function GatewayStatsPage(): React.JSX.Element {
           ) : null}
           {!statsQuery.isLoading && !statsQuery.isError && items.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-sm">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
                   <tr>
-                    <th className="w-[280px] px-4 py-2 text-left font-medium">维度</th>
+                    <th className="w-[220px] px-4 py-2 text-left font-medium">维度</th>
+                    {showBreakdownCols ? (
+                      <>
+                        <th className="w-[160px] px-4 py-2 text-left font-medium">主要凭据</th>
+                        <th className="w-[160px] px-4 py-2 text-left font-medium">主要模型</th>
+                      </>
+                    ) : null}
                     <th className="px-4 py-2 text-left font-medium">请求</th>
                     <th className="px-4 py-2 text-right font-medium">成功率</th>
                     <th className="px-4 py-2 text-right font-medium">Tokens</th>
                     {isAdmin ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
                     <th className="px-4 py-2 text-right font-medium">缓存</th>
                     <th className="px-4 py-2 text-right font-medium">延迟</th>
+                    <th className="w-[72px] px-4 py-2 text-right font-medium">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -691,6 +878,16 @@ export default function GatewayStatsPage(): React.JSX.Element {
                       item={item}
                       maxRequests={maxRequests}
                       showCost={isAdmin}
+                      showBreakdownCols={showBreakdownCols}
+                      rowBreakdown={breakdownByRowKey.get(item.group_key.trim())}
+                      breakdownLoading={breakdownLoading}
+                      onDrill={() => {
+                        handleRowDrill(item)
+                      }}
+                      onShowDetail={() => {
+                        setDetailItem(item)
+                        setDetailOpen(true)
+                      }}
                     />
                   ))}
                 </tbody>
@@ -711,50 +908,32 @@ export default function GatewayStatsPage(): React.JSX.Element {
           ) : null}
         </CardContent>
       </Card>
+
+      <UsageStatsDetailSheet
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        teamId={teamId}
+        groupBy={groupBy}
+        item={detailItem}
+        baseQuery={breakdownBaseQuery}
+        sheetOpen={detailOpen}
+        logsNavigationState={logsNavigationState}
+      />
     </div>
   )
 }
 
-function FilterSelect({
+function FilterField({
   label,
-  value,
-  onValueChange,
-  onRequestOptions,
-  options,
+  children,
 }: Readonly<{
   label: string
-  value: string
-  onValueChange: (value: string) => void
-  onRequestOptions?: () => void
-  options: SelectOption[]
+  children: React.ReactNode
 }>): React.JSX.Element {
   return (
     <label className="space-y-1 text-xs font-medium text-muted-foreground">
       <span>{label}</span>
-      <Select
-        value={value}
-        onValueChange={onValueChange}
-        onOpenChange={(open) => {
-          if (open) onRequestOptions?.()
-        }}
-      >
-        <SelectTrigger className="h-9 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_VALUE}>全部</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{option.label}</span>
-                {option.meta ? (
-                  <span className="truncate text-[11px] text-muted-foreground">{option.meta}</span>
-                ) : null}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {children}
     </label>
   )
 }
@@ -782,26 +961,55 @@ const StatsRow = memo(function StatsRow({
   item,
   maxRequests,
   showCost,
+  showBreakdownCols,
+  rowBreakdown,
+  breakdownLoading,
+  onDrill,
+  onShowDetail,
 }: Readonly<{
   item: GatewayUsageStatsItem
   maxRequests: number
   showCost: boolean
+  showBreakdownCols: boolean
+  rowBreakdown?: UsageStatsRowBreakdown
+  breakdownLoading: boolean
+  onDrill: () => void
+  onShowDetail: () => void
 }>): React.JSX.Element {
   const width = Math.max(4, (item.requests / maxRequests) * 100)
+  const canDrill = item.group_key.trim().length > 0
+
   return (
     <tr className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
       <td className="px-4 py-3">
-        <div className="min-w-0">
-          <div className="truncate font-medium" title={item.label}>
-            {item.label}
-          </div>
+        <button
+          type="button"
+          className={cn(
+            'min-w-0 text-left',
+            canDrill && 'cursor-pointer rounded-sm hover:underline'
+          )}
+          disabled={!canDrill}
+          onClick={canDrill ? onDrill : undefined}
+          title={canDrill ? '点击钻取下一维度' : undefined}
+        >
+          <div className="truncate font-medium">{item.label}</div>
           {item.group_key ? (
             <div className="truncate font-mono text-[10px] text-muted-foreground">
               {item.group_key}
             </div>
           ) : null}
-        </div>
+        </button>
       </td>
+      {showBreakdownCols ? (
+        <>
+          <td className="px-4 py-3 align-top">
+            <UsageStatsBreakdownList data={rowBreakdown?.credential} loading={breakdownLoading} />
+          </td>
+          <td className="px-4 py-3 align-top">
+            <UsageStatsBreakdownList data={rowBreakdown?.model} loading={breakdownLoading} />
+          </td>
+        </>
+      ) : null}
       <td className="px-4 py-3">
         <div className="flex min-w-[180px] items-center gap-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
@@ -838,6 +1046,18 @@ const StatsRow = memo(function StatsRow({
       <td className="px-4 py-3 text-right tabular-nums">{formatPercent(item.cache_hit_rate)}</td>
       <td className="px-4 py-3 text-right tabular-nums">
         {Math.round(item.avg_latency_ms).toLocaleString()}ms
+      </td>
+      <td className="px-4 py-3 text-right">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          onClick={onShowDetail}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          分布
+        </Button>
       </td>
     </tr>
   )

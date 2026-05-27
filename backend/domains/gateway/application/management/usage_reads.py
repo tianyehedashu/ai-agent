@@ -106,6 +106,23 @@ class UsageStatisticsSummary:
     items: list[UsageStatisticsItem] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class UsageStatisticsBreakdownSlice:
+    group_key: str
+    label: str
+    requests: int
+    share: float
+
+
+@dataclass(frozen=True)
+class UsageStatisticsBreakdownSummary:
+    parent_group_by: UsageStatisticsGroupBy
+    parent_group_key: str
+    breakdown_by: UsageStatisticsGroupBy
+    parent_requests: int
+    items: list[UsageStatisticsBreakdownSlice] = field(default_factory=list)
+
+
 class GatewayUsageReadService:
     """从 Gateway 表读取用量与配额；调用方不 import ORM。"""
 
@@ -482,6 +499,8 @@ __all__ = [
     "UsageLogReadModel",
     "UsageStatisticsItem",
     "UsageStatisticsMetric",
+    "UsageStatisticsBreakdownSlice",
+    "UsageStatisticsBreakdownSummary",
     "UsageStatisticsSummary",
     "UserQuotaReadModel",
 ]

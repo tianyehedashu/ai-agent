@@ -9,6 +9,8 @@ from uuid import UUID
 from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
 from domains.gateway.application.management.usage_reads import (
+    UsageStatisticsBreakdownSlice,
+    UsageStatisticsBreakdownSummary,
     UsageStatisticsItem,
     UsageStatisticsMetric,
     UsageStatisticsSummary,
@@ -20,10 +22,15 @@ from domains.gateway.domain.policies.usage_log_visibility import (
     workspace_axis_member_user_id,
 )
 from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage_statistics_breakdown import (
+    ensure_usage_statistics_breakdown_by,
+    normalize_usage_statistics_parent_group_key,
+)
 from domains.gateway.domain.usage_read_model import (
     UsageAggregation,
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
+    UsageStatisticsParentScope,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 from domains.identity.application.ports import user_display_label
@@ -271,6 +278,72 @@ class GatewayUsageLogReadMixin:
             items=items,
         )
         return summary, group_total
+
+    async def aggregate_usage_statistics_breakdown(
+        self,
+        ctx: ManagementTeamContext,
+        start: datetime,
+        end: datetime,
+        *,
+        usage_aggregation: UsageAggregation,
+        filters: UsageStatisticsFilters,
+        parent_group_by: UsageStatisticsGroupBy,
+        parent_group_key: str,
+        breakdown_by: UsageStatisticsGroupBy,
+        top_n: int,
+    ) -> UsageStatisticsBreakdownSummary:
+        ensure_usage_statistics_breakdown_by(breakdown_by)
+        normalized_parent_key = normalize_usage_statistics_parent_group_key(
+            parent_group_by,
+            parent_group_key,
+        )
+        axis = self._resolve_usage_axis(
+            ctx,
+            usage_aggregation,
+            vkey_id=filters.vkey_id,
+        )
+        parent_scope = UsageStatisticsParentScope(
+            group_by=parent_group_by,
+            group_key=normalized_parent_key,
+        )
+        parent_requests = await self._logs.count_usage_requests_by_axis(
+            axis,
+            start,
+            end,
+            filters=filters,
+            parent_scope=parent_scope,
+        )
+        rows, _, _ = await self._logs.aggregate_usage_statistics_by_axis(
+            axis,
+            start,
+            end,
+            group_by=breakdown_by,
+            filters=filters,
+            page=1,
+            page_size=top_n,
+            parent_scope=parent_scope,
+        )
+        labels = await self._usage_statistics_labels(rows, breakdown_by)
+        items: list[UsageStatisticsBreakdownSlice] = []
+        for row in rows:
+            key = self._group_key_to_str(row.group_key)
+            label = labels.get(key, "未知")
+            share = (row.requests / parent_requests) if parent_requests > 0 else 0.0
+            items.append(
+                UsageStatisticsBreakdownSlice(
+                    group_key=key,
+                    label=label,
+                    requests=row.requests,
+                    share=share,
+                )
+            )
+        return UsageStatisticsBreakdownSummary(
+            parent_group_by=parent_group_by,
+            parent_group_key=normalized_parent_key,
+            breakdown_by=breakdown_by,
+            parent_requests=parent_requests,
+            items=items,
+        )
 
     async def aggregate_gateway_model_route_usage(
         self,

@@ -2738,6 +2738,110 @@ class TestGatewayManagementApi:
         assert payload["group_by"] == "credential"
 
     @pytest.mark.asyncio
+    async def test_dashboard_statistics_breakdown_under_user_parent(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        now = datetime.now(UTC)
+        cred_a = uuid.uuid4()
+        cred_b = uuid.uuid4()
+        db_session.add_all(
+            [
+                GatewayRequestLog(
+                    id=uuid.uuid4(),
+                    created_at=now,
+                    tenant_id=team.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    credential_id=cred_a,
+                    credential_name_snapshot="cred-a",
+                    capability="chat",
+                    route_name="route-a",
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=2,
+                    output_tokens=1,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.002"),
+                    latency_ms=10,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id="req-bd-a",
+                ),
+                GatewayRequestLog(
+                    id=uuid.uuid4(),
+                    created_at=now,
+                    tenant_id=team.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    credential_id=cred_b,
+                    credential_name_snapshot="cred-b",
+                    capability="chat",
+                    route_name="route-b",
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=12,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id="req-bd-b",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_key": str(test_user.id),
+                "breakdown_by": "credential",
+                "top_n": 3,
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["parent_requests"] == 2
+        assert len(body["items"]) == 2
+        shares = sorted(item["share"] for item in body["items"])
+        assert shares == pytest.approx([0.5, 0.5])
+
+        bad = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_key": "not-a-uuid",
+                "breakdown_by": "credential",
+            },
+        )
+        assert bad.status_code == 400, bad.text
+
+        bad_breakdown = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_key": str(test_user.id),
+                "breakdown_by": "provider",
+            },
+        )
+        assert bad_breakdown.status_code == 400, bad_breakdown.text
+
+    @pytest.mark.asyncio
     async def test_admin_credential_stats_pagination_envelope(
         self,
         dev_client: AsyncClient,
@@ -2971,7 +3075,7 @@ class TestManagedTeamCredentialsAggregateApi:
         assert len(payload["tenant_ids_with_credentials"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_list_managed_team_credentials_member_gets_empty(
+    async def test_list_managed_team_credentials_member_can_read(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
@@ -3014,9 +3118,9 @@ class TestManagedTeamCredentialsAggregateApi:
         assert r.status_code == 200, r.text
         payload = r.json()
         names = {item["name"] for item in payload["items"]}
-        assert owner_cred_name not in names
-        assert payload["queried_team_count"] == 0
-        assert payload["total"] == 0
+        assert owner_cred_name in names
+        assert payload["queried_team_count"] == 1
+        assert payload["total"] >= 1
 
     @pytest.mark.asyncio
     async def test_list_managed_team_credentials_search_filters_by_team(
