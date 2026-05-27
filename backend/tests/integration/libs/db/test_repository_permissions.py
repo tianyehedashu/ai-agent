@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.agent import Agent
 from domains.agent.infrastructure.repositories import AgentRepository
-from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
+from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.identity.infrastructure.models.user import User
 from domains.session.infrastructure.models import Session
 from domains.session.infrastructure.repositories import SessionRepository
@@ -47,10 +47,7 @@ async def _add_session_for_anonymous(
     *,
     title: str,
 ) -> tuple[Session, uuid.UUID]:
-    shadow_id = await AnonymousUserProvisioner(db_session).ensure_shadow_user(
-        anonymous_cookie_id
-    )
-    tenant_id = await PersonalTeamProvisioner(db_session).ensure_personal_team(shadow_id)
+    tenant_id = resolve_anonymous_tenant_id(anonymous_cookie_id)
     session = Session(
         tenant_id=tenant_id,
         title=title,

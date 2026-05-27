@@ -11,10 +11,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from domains.identity.domain.policies.platform_role_policy import ANONYMOUS_ROLE
 from domains.identity.domain.repositories.user_repository import UserListFilters, UserRepository
 from domains.identity.infrastructure.models.user import User
-
-ANONYMOUS_ROLE = "anonymous"
 
 
 def _apply_user_list_filters(stmt: Select[tuple[User]], filters: UserListFilters) -> Select[tuple[User]]:

@@ -1,6 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 import { adminUsersApi, type PlatformRole, type PlatformUserListResponse } from '@/api/adminUsers'
+import { GATEWAY_TEAMS_STALE_MS } from '@/features/gateway-teams/use-gateway-teams'
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination'
 
 import { PLATFORM_USERS_QUERY_KEY } from './query-keys'
@@ -40,5 +41,6 @@ export function usePlatformUsersList({
         page_size: pageSize,
       }),
     enabled,
+    staleTime: GATEWAY_TEAMS_STALE_MS,
   })
 }

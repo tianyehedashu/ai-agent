@@ -6,21 +6,20 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
+from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.iam.data_scope_policy import require_permission_context
 
 
 async def resolve_tenant_id_for_write(db: AsyncSession) -> uuid.UUID:
-    """活动团队优先，否则 personal team。"""
+    """活动团队优先，否则 personal team（匿名则为确定性 orphan tenant）。"""
     ctx = require_permission_context()
     if ctx.team_id is not None:
         return ctx.team_id
     if ctx.user_id is not None:
         return await PersonalTeamProvisioner(db).ensure_personal_team(ctx.user_id)
     if ctx.anonymous_user_id:
-        shadow = await AnonymousUserProvisioner(db).ensure_shadow_user(ctx.anonymous_user_id)
-        return await PersonalTeamProvisioner(db).ensure_personal_team(shadow)
+        return resolve_anonymous_tenant_id(ctx.anonymous_user_id)
     msg = "Cannot resolve tenant_id without user identity in PermissionContext"
     raise RuntimeError(msg)
 

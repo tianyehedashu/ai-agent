@@ -6,6 +6,8 @@ import uuid
 from sqlalchemy import update
 
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
+from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
+from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.tenant_resolve import resolve_tenant_id_for_write
 
@@ -64,13 +66,7 @@ class VideoGenTaskRepository(TenantScopedRepositoryBase[VideoGenTask]):
         user_id: uuid.UUID,
         anonymous_user_id: str,
     ) -> int:
-        from domains.identity.application.anonymous_user_provisioner import (
-            AnonymousUserProvisioner,
-        )
-        from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
-
-        shadow = await AnonymousUserProvisioner(self.db).ensure_shadow_user(anonymous_user_id)
-        anon_tenant = await PersonalTeamProvisioner(self.db).ensure_personal_team(shadow)
+        anon_tenant = resolve_anonymous_tenant_id(anonymous_user_id)
         user_tenant = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
         stmt = (
             update(VideoGenTask)

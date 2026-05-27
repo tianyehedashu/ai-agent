@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.agent.domain.types import MessageRole
-from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
+from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.identity.domain.rbac import Role
 from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
@@ -79,10 +79,7 @@ class SessionUseCase:
         if owner.user_id is not None:
             return await PersonalTeamProvisioner(self.db).ensure_personal_team(owner.user_id)
         if owner.anonymous_user_id:
-            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
-                owner.anonymous_user_id
-            )
-            return await PersonalTeamProvisioner(self.db).ensure_personal_team(shadow_id)
+            return resolve_anonymous_tenant_id(owner.anonymous_user_id)
         raise ValueError("SessionOwner must have user_id or anonymous_user_id")
 
     # =========================================================================

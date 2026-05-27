@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from typing import Annotated
-import uuid
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
 from domains.identity.application.user_use_case import UserSummary, UserUseCase
-from domains.identity.domain.policies.platform_role_policy import ANONYMOUS_ROLE
-from domains.identity.domain.rbac import Role
 from domains.identity.domain.repositories.user_repository import UserListFilters
 from domains.identity.presentation.deps import AdminUser
 from domains.identity.presentation.schemas import (
@@ -19,13 +17,11 @@ from domains.identity.presentation.schemas import (
     SetPlatformRoleBody,
 )
 from libs.api.pagination import PageParams, page_query_params
-from libs.exceptions import NotFoundError
 from libs.identity_bridge_deps import get_user_use_case
 
 router = APIRouter()
 
 PageDep = Annotated[PageParams, Depends(page_query_params)]
-ASSIGNABLE_ROLES = {Role.ADMIN.value, Role.USER.value, Role.VIEWER.value}
 
 
 def _to_response(summary: UserSummary) -> PlatformUserSummaryResponse:
@@ -53,8 +49,6 @@ async def list_platform_users(
     is_active: Annotated[bool | None, Query()] = None,
 ) -> PlatformUserListResponse:
     """分页列出平台用户（默认排除 anonymous）。"""
-    if role is not None and role not in ASSIGNABLE_ROLES:
-        role = None
     filters = UserListFilters(
         search=search.strip() if search else None,
         role=role,
@@ -73,31 +67,35 @@ async def list_platform_users(
 
 @router.get("/lookup", response_model=PlatformUserSummaryResponse)
 async def lookup_user_by_email(
-    _: AdminUser,
+    admin: AdminUser,
     email: Annotated[str, Query(min_length=3, max_length=320)],
     user_service: Annotated[UserUseCase, Depends(get_user_use_case)],
 ) -> PlatformUserSummaryResponse:
     """按邮箱查找已注册用户（平台管理员）。"""
-    summary = await user_service.lookup_user_by_email(email)
+    summary = await user_service.lookup_admin_user_by_email(
+        actor_role=admin.role,
+        email=email,
+    )
     return _to_response(summary)
 
 
 @router.get("/{user_id}", response_model=PlatformUserSummaryResponse)
 async def get_platform_user(
-    user_id: uuid.UUID,
-    _: AdminUser,
+    user_id: UUID,
+    admin: AdminUser,
     user_service: Annotated[UserUseCase, Depends(get_user_use_case)],
 ) -> PlatformUserSummaryResponse:
     """获取单个平台用户详情。"""
-    summary = await user_service.get_user_summary(str(user_id))
-    if summary.role == ANONYMOUS_ROLE:
-        raise NotFoundError("User", str(user_id))
+    summary = await user_service.get_admin_user_summary(
+        actor_role=admin.role,
+        user_id=str(user_id),
+    )
     return _to_response(summary)
 
 
 @router.patch("/{user_id}", response_model=PlatformUserSummaryResponse)
 async def update_platform_user(
-    user_id: uuid.UUID,
+    user_id: UUID,
     body: AdminUpdatePlatformUserBody,
     admin: AdminUser,
     user_service: Annotated[UserUseCase, Depends(get_user_use_case)],
@@ -118,7 +116,7 @@ async def update_platform_user(
 
 @router.patch("/{user_id}/role", response_model=PlatformUserSummaryResponse)
 async def set_user_platform_role(
-    user_id: uuid.UUID,
+    user_id: UUID,
     body: SetPlatformRoleBody,
     admin: AdminUser,
     user_service: Annotated[UserUseCase, Depends(get_user_use_case)],

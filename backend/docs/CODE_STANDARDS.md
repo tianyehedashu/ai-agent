@@ -273,7 +273,8 @@ if TYPE_CHECKING:
 
 - **多租户业务表**：`BaseModel` + `TenantScopedMixin`（物理列 `tenant_id UUID NOT NULL`）；系统级配置写入 `system_*` 表。
 - **系统级配置**：`system_*` 表（无 `tenant_id`），如 `system_gateway_models`；查询时在应用层 `list_system()` + `list_for_tenant()` 合并（tenant 同名覆盖 system）。
-- **个人/匿名用户**：归属 `personal` team（`TeamService.ensure_personal_team`）；匿名 cookie 映射为 `role=anonymous` 的 shadow `User`（`AnonymousUserProvisioner`）。
+- **个人用户**：归属 `personal` team（`TeamService.ensure_personal_team`）。
+- **匿名用户（仅开发环境）**：Cookie → 内存 `Principal`；业务 `tenant_id` = `resolve_anonymous_tenant_id(cookie_id)`（UUID v5，**不写** `users` / `gateway_teams`）。见 `domains/identity/domain/anonymous_tenant.py`。
 - **授权链**：`User → team_members → tenant_id`；`PermissionContext.team_ids` + `DataScopeEnforcer`（libs 机制，不含 domain 字面量）。
 - **策略挂载**：`PolicyTargetMixin`（`target_kind` / `target_id`），与 tenant 正交；字面量仅出现在各 domain（如 gateway `vkey`）。
 

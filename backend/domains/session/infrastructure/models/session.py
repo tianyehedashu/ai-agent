@@ -18,10 +18,7 @@ if TYPE_CHECKING:
 
 
 class Session(BaseModel, TenantScopedMixin):
-    """会话模型（归属 ``tenant_id``：注册用户 personal team 或匿名 shadow user team）。
-
-    ``tenant_id`` 由 ``TenantScopedMixin`` 提供（无 DB FK）。
-    """
+    """会话模型（归属 ``tenant_id``：注册用户 personal team 或匿名 orphan tenant）。"""
 
     __tablename__ = "sessions"
 

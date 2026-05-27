@@ -25,7 +25,7 @@
 | 概念 | 实现 |
 |------|------|
 | 个人用户 | `TeamService.ensure_personal_team` / `PersonalTeamProvisioner` |
-| 匿名用户 | Cookie → `AnonymousUserProvisioner.ensure_shadow_user`（`role=anonymous`）→ personal team |
+| 匿名用户 | Cookie → 内存 `Principal`；`tenant_id` = `resolve_anonymous_tenant_id`（orphan tenant，无 team 行） |
 | 系统级配置 | 独立 `system_*` 表（无 `tenant_id`）；查询用 `list_system()` + `list_for_tenant()` 在应用层合并 |
 | 策略挂载（vkey 等） | `target_kind` + `target_id`（如 `EntitlementPlan`），与 tenant 正交 |
 | Repository 过滤 | `TenantScopedRepositoryBase` + `DataScopeEnforcer`（`PermissionContext.team_ids`） |
@@ -591,7 +591,7 @@ from domains.tenancy.presentation.team_dependencies import RequiredTeamAdmin
 
 ### Q4: 匿名用户如何隔离？
 
-**A**: 匿名 shadow user 拥有 personal `tenant_id`；数据与其它用户一样按 `tenant_id` 隔离，而非 `anonymous_user_id` 列过滤。
+**A**: 匿名用户使用确定性 orphan `tenant_id`（不在 `gateway_teams`）；数据与其它 tenant 一样按 `tenant_id` 隔离。登录/注册时 `reassign_anonymous_to_user` 迁到正式用户的 personal team。
 
 ### Q5: 权限上下文何时可用？
 

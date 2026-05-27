@@ -10,6 +10,9 @@ vi.mock('react-router-dom', () => ({
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 import {
+  membershipTeamIdsKeyFromTeams,
+  useGatewayMembershipTeamIds,
+  useGatewayMembershipTeamIdsKey,
   useGatewayTeamId,
   useGatewayTeamRecord,
   useOptionalGatewayTeamId,
@@ -117,5 +120,47 @@ describe('useGatewayTeamRecord', () => {
   it('returns null for unknown id', () => {
     const { result } = renderHook(() => useGatewayTeamRecord('missing'))
     expect(result.current).toBeNull()
+  })
+})
+
+describe('membershipTeamIdsKeyFromTeams', () => {
+  it('joins team ids in stable order', () => {
+    expect(
+      membershipTeamIdsKeyFromTeams([
+        { id: 'b', name: 'B', slug: 'b', kind: 'shared' },
+        { id: 'a', name: 'A', slug: 'a', kind: 'personal' },
+      ])
+    ).toBe('b|a')
+  })
+})
+
+describe('useGatewayMembershipTeamIdsKey', () => {
+  beforeEach(() => {
+    useGatewayTeamStore.setState({ teams: [] })
+  })
+
+  it('returns primitive key from store teams', () => {
+    useGatewayTeamStore.setState({
+      teams: [
+        { id: 'team-a', name: 'A', slug: 'a', kind: 'shared' },
+        { id: 'team-b', name: 'B', slug: 'b', kind: 'personal' },
+      ],
+    })
+    const { result } = renderHook(() => useGatewayMembershipTeamIdsKey())
+    expect(result.current).toBe('team-a|team-b')
+  })
+})
+
+describe('useGatewayMembershipTeamIds', () => {
+  beforeEach(() => {
+    useGatewayTeamStore.setState({ teams: [] })
+  })
+
+  it('splits membership key into id array', () => {
+    useGatewayTeamStore.setState({
+      teams: [{ id: 'team-a', name: 'A', slug: 'a', kind: 'shared' }],
+    })
+    const { result } = renderHook(() => useGatewayMembershipTeamIds())
+    expect(result.current).toEqual(['team-a'])
   })
 })

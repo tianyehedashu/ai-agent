@@ -13,10 +13,10 @@ from fastapi import Request
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
+from domains.identity.domain.anonymous_tenant import normalize_anonymous_cookie_id
 from domains.identity.domain.types import Principal
-from libs.exceptions import AIAgentError, AuthenticationError, TokenError
-from libs.exceptions.codes import INTERNAL_ERROR
 from domains.identity.infrastructure.models.user import User
+from libs.exceptions import AuthenticationError, TokenError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -31,25 +31,13 @@ ANONYMOUS_COOKIE_MAX_AGE = 365 * 24 * 60 * 60  # 1 year
 ANONYMOUS_USER_HEADER = "X-Anonymous-User-Id"
 
 
-async def _get_or_create_anonymous_principal(
-    db: AsyncSession,
-    anonymous_id: str,
-) -> Principal | None:
-    """获取或创建匿名主体（开发环境）：shadow User + personal team。"""
-    from domains.identity.application.anonymous_user_provisioner import (
-        AnonymousUserProvisioner,
-    )
-
-    provisioner = AnonymousUserProvisioner(db)
-    user_id = await provisioner.ensure_shadow_user(anonymous_id)
-    user = await db.get(User, user_id)
-    if user is None:
-        return None
-    cookie_id = AnonymousUserProvisioner._normalize_cookie_id(anonymous_id)
+def build_anonymous_principal(anonymous_id: str) -> Principal:
+    """由 cookie ID 构建内存 Principal（不写 DB）。"""
+    cookie_id = normalize_anonymous_cookie_id(anonymous_id)
     return Principal(
         id=Principal.make_anonymous_id(cookie_id),
-        email=user.email,
-        name=user.name or f"Anonymous ({cookie_id[:8]})",
+        email=Principal.make_anonymous_email(cookie_id),
+        name=f"Anonymous ({cookie_id[:8]})",
         is_anonymous=True,
         role="anonymous",
     )
@@ -95,15 +83,7 @@ async def get_principal(
                 logger.info("Generated new anonymous_user_id: %s", anonymous_user_id[:8])
 
             request.state.anonymous_user_id = anonymous_user_id
-            principal = await _get_or_create_anonymous_principal(db, anonymous_user_id)
-            if principal:
-                return principal
-
-            logger.error("Failed to create or retrieve anonymous user")
-            raise AIAgentError(
-                "Failed to create anonymous user. Please check database connection.",
-                INTERNAL_ERROR,
-            )
+            return build_anonymous_principal(anonymous_user_id)
 
         # 记录为什么返回 401（非开发环境需要认证）
         logger.warning(

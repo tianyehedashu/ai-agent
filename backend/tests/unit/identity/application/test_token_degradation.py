@@ -166,28 +166,12 @@ class TestTokenExpiry:
     async def test_no_token_anonymous_in_dev_mode(self):
         """测试: 开发模式下无 token 走正常匿名流程"""
         from domains.identity.application.principal_service import get_principal
-        from domains.identity.domain.types import Principal
 
         request = self._create_mock_request()
         mock_db = AsyncMock()
         anonymous_id = str(uuid.uuid4())
-        cookie_id = anonymous_id
-        mock_principal = Principal(
-            id=Principal.make_anonymous_id(cookie_id),
-            email="anon@local",
-            name="Anonymous",
-            is_anonymous=True,
-            role="anonymous",
-        )
 
-        with (
-            patch("domains.identity.application.principal_service.settings") as mock_settings,
-            patch(
-                "domains.identity.application.principal_service._get_or_create_anonymous_principal",
-                new_callable=AsyncMock,
-                return_value=mock_principal,
-            ),
-        ):
+        with patch("domains.identity.application.principal_service.settings") as mock_settings:
             mock_settings.is_development = True
             principal = await get_principal(request, None, mock_db, anonymous_id)
 

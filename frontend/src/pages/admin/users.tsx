@@ -7,7 +7,6 @@ import type React from 'react'
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
-import { Navigate } from 'react-router-dom'
 
 import type { PlatformRole, PlatformUserSummary } from '@/api/adminUsers'
 import { PaginationControls } from '@/components/pagination-controls'
@@ -16,17 +15,15 @@ import { PlatformUsersTable } from '@/features/admin-users/platform-users-table'
 import { PlatformUsersToolbar } from '@/features/admin-users/platform-users-toolbar'
 import { PLATFORM_USERS_QUERY_KEY } from '@/features/admin-users/query-keys'
 import { usePlatformUsersList } from '@/features/admin-users/use-platform-users-list'
-import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 
 export default function AdminUsersPage(): React.JSX.Element {
   const queryClient = useQueryClient()
-  const { isPlatformAdmin } = useGatewayPermission()
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [role, setRole] = useState<string>('all')
   const [isActive, setIsActive] = useState<string>('all')
   const [page, setPage] = useState(1)
-  const [editingUser, setEditingUser] = useState<PlatformUserSummary | null>(null)
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
 
   const { data, isLoading, isFetching, refetch } = usePlatformUsersList({
@@ -34,7 +31,7 @@ export default function AdminUsersPage(): React.JSX.Element {
     role: role as PlatformRole | 'all',
     isActive: isActive as 'all' | 'active' | 'inactive',
     page,
-    enabled: isPlatformAdmin,
+    enabled: true,
   })
 
   const handleSearchChange = useCallback((value: string) => {
@@ -53,21 +50,17 @@ export default function AdminUsersPage(): React.JSX.Element {
   }, [])
 
   const handleEdit = useCallback((user: PlatformUserSummary) => {
-    setEditingUser(user)
+    setEditingUserId(user.id)
     setEditOpen(true)
   }, [])
 
-  const handleSaved = useCallback(
-    (user: PlatformUserSummary) => {
-      setEditingUser(user)
-      void queryClient.invalidateQueries({ queryKey: PLATFORM_USERS_QUERY_KEY })
-    },
-    [queryClient]
-  )
+  const handleSaved = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: PLATFORM_USERS_QUERY_KEY })
+  }, [queryClient])
 
-  if (!isPlatformAdmin) {
-    return <Navigate to="/settings" replace />
-  }
+  const handleRefresh = useCallback(() => {
+    void refetch()
+  }, [refetch])
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
@@ -90,9 +83,7 @@ export default function AdminUsersPage(): React.JSX.Element {
         onIsActiveChange={handleIsActiveChange}
         total={data?.total}
         isRefreshing={isFetching}
-        onRefresh={() => {
-          void refetch()
-        }}
+        onRefresh={handleRefresh}
       />
 
       <PlatformUsersTable items={data?.items ?? []} isLoading={isLoading} onEdit={handleEdit} />
@@ -109,7 +100,7 @@ export default function AdminUsersPage(): React.JSX.Element {
       ) : null}
 
       <PlatformUserEditSheet
-        user={editingUser}
+        userId={editingUserId}
         open={editOpen}
         onOpenChange={setEditOpen}
         onSaved={handleSaved}

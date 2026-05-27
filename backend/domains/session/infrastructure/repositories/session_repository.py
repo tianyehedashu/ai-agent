@@ -10,7 +10,7 @@ import uuid
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.application.anonymous_user_provisioner import AnonymousUserProvisioner
+from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.session.domain.interfaces.session_repository import (
     SessionRepository as SessionRepositoryInterface,
 )
@@ -41,10 +41,7 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
         if user_id is not None:
             return await teams.ensure_personal_team(user_id)
         if anonymous_user_id:
-            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
-                anonymous_user_id
-            )
-            return await teams.ensure_personal_team(shadow_id)
+            return resolve_anonymous_tenant_id(anonymous_user_id)
         msg = "Either user_id or anonymous_user_id is required to resolve tenant_id"
         raise ValueError(msg)
 
@@ -98,10 +95,7 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
         if user_id is not None:
             tenant_id = await self._personal_tenant_id(user_id)
         elif anonymous_user_id:
-            shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
-                anonymous_user_id
-            )
-            tenant_id = await self._personal_tenant_id(shadow_id)
+            tenant_id = resolve_anonymous_tenant_id(anonymous_user_id)
         else:
             msg = "Either user_id or anonymous_user_id is required"
             raise ValueError(msg)
@@ -221,11 +215,8 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
         user_id: uuid.UUID,
         anonymous_user_id: str,
     ) -> int:
-        """把匿名 shadow team 下的会话迁到正式用户的 personal team。"""
-        shadow_id = await AnonymousUserProvisioner(self.db).ensure_shadow_user(
-            anonymous_user_id
-        )
-        anon_tenant = await self._personal_tenant_id(shadow_id)
+        """把匿名 orphan tenant 下的会话迁到正式用户的 personal team。"""
+        anon_tenant = resolve_anonymous_tenant_id(anonymous_user_id)
         user_tenant = await self._personal_tenant_id(user_id)
         if anon_tenant == user_tenant:
             return 0

@@ -4,12 +4,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from domains.identity.domain.policies.platform_role_policy import (
+    ANONYMOUS_ROLE,
+    ASSIGNABLE_PLATFORM_ROLES,
+    is_assignable_platform_role,
+)
+from domains.identity.domain.rbac import Role
+from libs.exceptions import PermissionDeniedError, ValidationError
+
 if TYPE_CHECKING:
     import uuid
 
-from domains.identity.domain.policies.platform_role_policy import ANONYMOUS_ROLE
-from domains.identity.domain.rbac import Role
-from libs.exceptions import PermissionDeniedError, ValidationError
+
+def parse_platform_user_list_role(role: str | None) -> str | None:
+    """校验列表筛选的平台角色；None 表示不按角色过滤。"""
+    if role is None:
+        return None
+    if not is_assignable_platform_role(role):
+        raise ValidationError(
+            f"Invalid platform role filter: {role}; "
+            f"expected one of {', '.join(sorted(ASSIGNABLE_PLATFORM_ROLES))}"
+        )
+    return role
 
 
 def assert_can_admin_manage_user(*, actor_role: str, target_current_role: str) -> None:

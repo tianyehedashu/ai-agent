@@ -35,7 +35,7 @@ import {
   gatewayTeamRoutesHref,
 } from '@/features/gateway-teams/gateway-team-paths'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
-import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayMembershipTeamIds, useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -51,7 +51,7 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
+
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
   return { default: mod.PlaygroundCard }
@@ -194,7 +194,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
   } = playgroundFilteredModels
 
   const workspaceTeamId = useGatewayWorkspaceTeamId()
-  const membershipTeamIds = useGatewayTeamStore((s) => s.teams.map((t) => t.id))
+  const membershipTeamIds = useGatewayMembershipTeamIds()
   const vkeyTeamIds = useMemo(
     () =>
       resolvePlaygroundVirtualKeyTeamIds(

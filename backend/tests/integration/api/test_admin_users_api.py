@@ -261,3 +261,133 @@ class TestAdminUsersApi:
             json={"is_active": False},
         )
         assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_list_invalid_role_returns_400(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"role": "anonymous"},
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_list_pagination_envelope_fields(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"page": 1, "page_size": 20},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert data["page"] == 1
+        assert data["page_size"] == 20
+        assert isinstance(data["has_next"], bool)
+        assert isinstance(data["has_prev"], bool)
+
+    @pytest.mark.asyncio
+    async def test_list_filter_by_is_active(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+        db_session,
+    ) -> None:
+        test_user.is_active = False
+        await db_session.commit()
+
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"is_active": False, "search": test_user.email.split("@")[0]},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        items = r.json()["items"]
+        assert len(items) >= 1
+        assert all(item["is_active"] is False for item in items)
+
+    @pytest.mark.asyncio
+    async def test_get_anonymous_user_returns_400(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        from domains.identity.domain.types import Principal
+
+        anon_id = uuid.uuid4().hex
+        anon_user = User(
+            email=Principal.make_anonymous_email(anon_id),
+            hashed_password="anonymous-no-login",
+            name="Anonymous",
+            role="anonymous",
+        )
+        db_session.add(anon_user)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/admin/users/{anon_user.id}",
+            headers=admin_headers,
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_lookup_anonymous_user_returns_400(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        from domains.identity.domain.types import Principal
+
+        anon_id = uuid.uuid4().hex
+        email = Principal.make_anonymous_email(anon_id)
+        anon_user = User(
+            email=email,
+            hashed_password="anonymous-no-login",
+            name="Anonymous",
+            role="anonymous",
+        )
+        db_session.add(anon_user)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            "/api/v1/admin/users/lookup",
+            headers=admin_headers,
+            params={"email": email},
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_patch_anonymous_user_returns_400(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+    ) -> None:
+        from domains.identity.domain.types import Principal
+
+        anon_id = uuid.uuid4().hex
+        anon_user = User(
+            email=Principal.make_anonymous_email(anon_id),
+            hashed_password="anonymous-no-login",
+            name="Anonymous",
+            role="anonymous",
+        )
+        db_session.add(anon_user)
+        await db_session.commit()
+
+        r = await dev_client.patch(
+            f"/api/v1/admin/users/{anon_user.id}",
+            headers=admin_headers,
+            json={"name": "Blocked"},
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST

@@ -7,7 +7,11 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import type { PlaygroundCredentialSummary } from '@/api/gateway'
-import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
+import {
+  useGatewayMembershipTeamIdSet,
+  useGatewayMembershipTeamIdsKey,
+  useGatewayWorkspaceTeamId,
+} from '@/hooks/use-gateway-team-id'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 import { fetchPlaygroundCredentialSummaries } from './playground-credential-summaries'
@@ -94,18 +98,17 @@ export interface UsePlaygroundCredentialOptionsReturn {
 
 export function usePlaygroundCredentialOptions(): UsePlaygroundCredentialOptionsReturn {
   const workspaceTeamId = useGatewayWorkspaceTeamId()
-  const teams = useGatewayTeamStore((s) => s.teams)
+  const membershipTeamIdsKey = useGatewayMembershipTeamIdsKey()
+  const membershipTeamIds = useGatewayMembershipTeamIdSet()
   const {
     data: allOptions = [],
     isLoading,
     isFetching,
   } = useQuery({
-    queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY, teams.map((t) => t.id).join(',')],
-    queryFn: () => fetchPlaygroundCredentialSummaries(teams),
-    enabled: teams.length > 0,
+    queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY, membershipTeamIdsKey],
+    queryFn: () => fetchPlaygroundCredentialSummaries(useGatewayTeamStore.getState().teams),
+    enabled: membershipTeamIdsKey.length > 0,
   })
-
-  const membershipTeamIds = useMemo(() => new Set(teams.map((t) => t.id)), [teams])
 
   const selectableOptions = useMemo(
     () => filterPlaygroundCredentialOptions(allOptions, membershipTeamIds),

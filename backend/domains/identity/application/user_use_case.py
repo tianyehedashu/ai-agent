@@ -25,6 +25,7 @@ from domains.identity.domain.policies.platform_role_policy import (
 from domains.identity.domain.policies.platform_user_admin_policy import (
     assert_can_admin_manage_user,
     assert_can_set_user_active,
+    parse_platform_user_list_role,
 )
 from domains.identity.domain.rbac import Role
 from domains.identity.domain.repositories.user_repository import UserListFilters, UserRepository
@@ -181,9 +182,23 @@ class UserUseCase:
             raise NotFoundError("User", email.strip())
         return _user_to_summary(user)
 
+    async def lookup_admin_user_by_email(self, *, actor_role: str, email: str) -> UserSummary:
+        """平台管理员按邮箱查找可管理用户。"""
+        user = await self.user_repo.get_by_email_insensitive(email)
+        if user is None:
+            raise NotFoundError("User", email.strip())
+        assert_can_admin_manage_user(actor_role=actor_role, target_current_role=user.role)
+        return _user_to_summary(user)
+
     async def get_user_summary(self, user_id: str) -> UserSummary:
         """按 ID 获取平台用户摘要（管理面）。"""
         user = await self.get_user_by_id_or_raise(user_id)
+        return _user_to_summary(user)
+
+    async def get_admin_user_summary(self, *, actor_role: str, user_id: str) -> UserSummary:
+        """平台管理员获取可管理用户摘要。"""
+        user = await self.get_user_by_id_or_raise(user_id)
+        assert_can_admin_manage_user(actor_role=actor_role, target_current_role=user.role)
         return _user_to_summary(user)
 
     async def list_users_page(
@@ -194,11 +209,19 @@ class UserUseCase:
         """分页列出平台用户（默认排除 anonymous）。"""
         from libs.api.pagination import build_page
 
-        total = await self.user_repo.count_filtered(filters)
+        role_filter = parse_platform_user_list_role(filters.role)
+        normalized_filters = UserListFilters(
+            search=filters.search,
+            role=role_filter,
+            is_active=filters.is_active,
+            exclude_anonymous=filters.exclude_anonymous,
+        )
+
+        total = await self.user_repo.count_filtered(normalized_filters)
         users = await self.user_repo.list_page(
             offset=page_params.offset,
             limit=page_params.page_size,
-            filters=filters,
+            filters=normalized_filters,
         )
         return build_page(
             items=[_user_to_summary(user) for user in users],
