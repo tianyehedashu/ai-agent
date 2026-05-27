@@ -370,7 +370,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           <CardHeader>
             <CardTitle>凭据与密钥</CardTitle>
             <CardDescription>
-              默认显示掩码。打开「显示完整密钥」可查看当前值；轮换请在下方填写新密钥后保存。
+              默认显示掩码；需要时可查看完整密钥，或点「更换」输入新密钥后保存。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

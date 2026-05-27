@@ -58,6 +58,7 @@ export function CredentialEditFields({
     profileOptions,
     activeProfile,
     activeProtocols,
+    clearApiKey,
   } = form
 
   const credExtra = cred.extra
@@ -77,6 +78,17 @@ export function CredentialEditFields({
         maskedValue={cred.api_key_masked}
         revealFn={revealFn}
         canReveal={canReveal}
+        editable={editable}
+        newKeyValue={apiKey}
+        onNewKeyValueChange={(value) => {
+          if (value === '') {
+            clearApiKey()
+            return
+          }
+          setApiKey(value)
+        }}
+        apiKeyPlaceholder={schema?.apiKeyPlaceholder}
+        apiKeyHelpText={schema?.apiKeyHelpText}
       />
       {editable ? (
         <>
@@ -96,23 +108,6 @@ export function CredentialEditFields({
               <p className="mt-1 text-xs text-muted-foreground">
                 该凭据由 app.toml / 环境变量同步维护，重命名会导致重复凭据。
               </p>
-            ) : null}
-          </div>
-          <div className={showActiveSwitch ? 'space-y-2' : undefined}>
-            <Label htmlFor={`${idPrefix}-new-key`}>新 {apiKeyLabel}（留空则不变）</Label>
-            <Input
-              id={`${idPrefix}-new-key`}
-              type="password"
-              autoComplete="new-password"
-              className={showActiveSwitch ? undefined : 'mt-1.5'}
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value)
-              }}
-              placeholder={schema?.apiKeyPlaceholder}
-            />
-            {schema?.apiKeyHelpText ? (
-              <p className="mt-1 text-xs text-muted-foreground">{schema.apiKeyHelpText}</p>
             ) : null}
           </div>
           {profileOptions.length > 1 ? (

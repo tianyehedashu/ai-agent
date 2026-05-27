@@ -56,4 +56,70 @@ describe('CurrentApiKeyField', () => {
     )
     expect(screen.queryByRole('switch', { name: '显示完整密钥' })).not.toBeInTheDocument()
   })
+
+  it('enters rotate mode with password input and hides reveal switch', () => {
+    const onNewKeyValueChange = vi.fn()
+    renderWithQueryClient(
+      <CurrentApiKeyField
+        label="API Key"
+        maskedValue="sk-1…2345"
+        revealFn={vi.fn()}
+        editable
+        newKeyValue=""
+        onNewKeyValueChange={onNewKeyValueChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '更换' }))
+
+    expect(screen.getByLabelText('新 API Key')).toBeInTheDocument()
+    expect(screen.getByLabelText('新 API Key')).toHaveAttribute('type', 'password')
+    expect(screen.queryByRole('switch', { name: '显示完整密钥' })).not.toBeInTheDocument()
+  })
+
+  it('cancels rotate mode and clears new key value', () => {
+    const onNewKeyValueChange = vi.fn()
+    renderWithQueryClient(
+      <CurrentApiKeyField
+        label="API Key"
+        maskedValue="sk-1…2345"
+        revealFn={vi.fn()}
+        editable
+        newKeyValue="sk-new"
+        onNewKeyValueChange={onNewKeyValueChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '更换' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(screen.getByLabelText('当前 API Key')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('sk-1…2345')).toBeInTheDocument()
+    expect(onNewKeyValueChange).toHaveBeenCalledWith('')
+  })
+
+  it('clears revealed plaintext when entering rotate mode', async () => {
+    const revealFn = vi.fn().mockResolvedValue({ api_key: 'sk-full-secret' })
+    const onNewKeyValueChange = vi.fn()
+    renderWithQueryClient(
+      <CurrentApiKeyField
+        label="API Key"
+        maskedValue="sk-1…2345"
+        revealFn={revealFn}
+        editable
+        newKeyValue=""
+        onNewKeyValueChange={onNewKeyValueChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('switch', { name: '显示完整密钥' }))
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('sk-full-secret')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '更换' }))
+
+    expect(screen.queryByDisplayValue('sk-full-secret')).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: '显示完整密钥' })).not.toBeInTheDocument()
+  })
 })

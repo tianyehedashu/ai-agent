@@ -444,7 +444,7 @@ function PersonalCredentialEditDialog({
       <DialogHeader>
         <DialogTitle>编辑凭据</DialogTitle>
         <DialogDescription>
-          修改账号名称、启用状态或轮换 {form.apiKeyLabel}；当前密钥可按需查看完整明文。
+          修改账号名称、启用状态或密钥；默认显示掩码，需要时可查看完整明文，或点「更换」输入新密钥后保存。
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-3 py-2">
