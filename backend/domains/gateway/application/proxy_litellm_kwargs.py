@@ -11,6 +11,7 @@ from domains.gateway.application.proxy_metadata_builder import (
     PreparedLitellmKwargs,
     ProxyMetadataBuilder,
 )
+from domains.gateway.application.proxy_timing import ProxyPrepareTimings
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
 
 
@@ -51,9 +52,12 @@ async def prepare_litellm_invoke(
     upstream_adapter: UpstreamAdapter,
     prompt_cache: PromptCacheMiddleware,
     resolved: ResolvedModelName | None = None,
+    timings: ProxyPrepareTimings | None = None,
 ) -> tuple[PreparedLitellmKwargs, dict[str, Any]]:
     """返回 metadata 准备结果与最终 LiteLLM kwargs（embedding 等需读 ``prepared.resolved``）。"""
-    prepared = await metadata_builder.prepare_litellm_kwargs(ctx, body, resolved=resolved)
+    prepared = await metadata_builder.prepare_litellm_kwargs(
+        ctx, body, resolved=resolved, timings=timings
+    )
     kwargs = kwargs_from_prepared(
         prepared,
         upstream_adapter=upstream_adapter,

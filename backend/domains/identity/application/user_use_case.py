@@ -15,7 +15,10 @@ import uuid
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.application.ports import UserSummaryView
+from domains.identity.application.ports import (
+    InviteCandidateRowView,
+    UserSummaryView,
+)
 from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
@@ -36,11 +39,18 @@ from domains.identity.infrastructure.default_tenant_lifecycle import (
 )
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
+from domains.identity.infrastructure.repositories.user_invite_candidate_repository import (
+    UserInviteCandidateRepository,
+)
+from domains.identity.infrastructure.user_platform_role_lookup import (
+    UserPlatformRoleLookupAdapter,
+)
 from libs.exceptions import AuthenticationError, NotFoundError, ValidationError
 from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
 
 if TYPE_CHECKING:
+    from domains.identity.application.ports import UserPlatformRoleLookupPort
     from libs.api.pagination import PageParams, PaginatedListResponse
 
 
@@ -93,6 +103,8 @@ class UserUseCase:
         self.password_service = PasswordService()
         self.token_service = TokenService()
         self._tenant_provisioner = tenant_provisioner
+        self._platform_role_lookup: UserPlatformRoleLookupPort | None = None
+        self._invite_candidate_repo: UserInviteCandidateRepository | None = None
 
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
         return self._tenant_provisioner or get_default_tenant_provisioner()
@@ -291,6 +303,62 @@ class UserUseCase:
             uid: UserSummaryView(name=summary.name, email=summary.email)
             for uid, summary in summaries.items()
         }
+
+    def _platform_role_lookup_impl(self) -> UserPlatformRoleLookupPort:
+        if self._platform_role_lookup is None:
+            self._platform_role_lookup = UserPlatformRoleLookupAdapter(self.db)
+        return self._platform_role_lookup
+
+    async def roles_by_user_ids(
+        self, user_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """``UserPlatformRoleLookupPort``：批量解析平台 role。"""
+        return await self._platform_role_lookup_impl().roles_by_user_ids(user_ids)
+
+    def _invite_candidate_repo_impl(self) -> UserInviteCandidateRepository:
+        if self._invite_candidate_repo is None:
+            self._invite_candidate_repo = UserInviteCandidateRepository(self.db)
+        return self._invite_candidate_repo
+
+    async def list_team_invite_candidates_page(
+        self,
+        page: PageParams,
+        *,
+        team_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        scope: str,
+        search: str | None = None,
+    ) -> PaginatedListResponse[InviteCandidateRowView]:
+        """``TeamInviteCandidateQueryPort``：团队可邀请用户分页列表。"""
+        from libs.api.pagination import build_page
+
+        trimmed_search = search.strip() if search else None
+        if trimmed_search == "":
+            trimmed_search = None
+        repo = self._invite_candidate_repo_impl()
+        total = await repo.count(
+            team_id=team_id,
+            actor_user_id=actor_user_id,
+            scope=scope,
+            search=trimmed_search,
+        )
+        rows = await repo.list_page(
+            team_id=team_id,
+            actor_user_id=actor_user_id,
+            scope=scope,
+            search=trimmed_search,
+            offset=page.offset,
+            limit=page.page_size,
+        )
+        return build_page(
+            items=[
+                InviteCandidateRowView(id=row.id, email=row.email, name=row.name)
+                for row in rows
+            ],
+            total=total,
+            page=page.page,
+            page_size=page.page_size,
+        )
 
     async def bootstrap_set_admin_by_email(self, email: str, *, revoke: bool = False) -> UserSummary:
         """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""

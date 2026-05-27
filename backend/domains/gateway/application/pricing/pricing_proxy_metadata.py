@@ -7,7 +7,10 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.model_or_route_resolution import (
+    ResolvedModelName,
+    resolve_model_or_route,
+)
 from domains.gateway.application.pricing.pricing_management import build_pricing_service
 from domains.gateway.application.pricing.pricing_service import (
     RateUnavailableError,
@@ -93,6 +96,7 @@ async def attach_downstream_pricing_metadata(
     virtual_model: str,
     entitlement_plan_id: uuid.UUID | None,
     billing_package: str | None,
+    resolved: ResolvedModelName | None = None,
 ) -> None:
     """向 ``metadata`` 注入下游单价（供回调结算 revenue）。
 
@@ -104,42 +108,48 @@ async def attach_downstream_pricing_metadata(
     if billing_package is not None:
         meta["gateway_billing_package"] = billing_package
 
-    resolved_name = await resolve_model_or_route(session, team_id, virtual_model)
+    resolved_name = resolved
+    if resolved_name is None:
+        resolved_name = await resolve_model_or_route(session, team_id, virtual_model)
     if resolved_name is None:
         return
 
     record = resolved_name.record
-    meta["gateway_gateway_model_id"] = str(record.id)
-    meta["gateway_provider"] = record.provider
-    meta["gateway_upstream_model"] = record.real_model
+    model_id = record.id
+    provider = record.provider
+    real_model = record.real_model
+    capability = record.capability
+    meta["gateway_gateway_model_id"] = str(model_id)
+    meta["gateway_provider"] = provider
+    meta["gateway_upstream_model"] = real_model
     if resolved_name.via_route is not None:
         meta["gateway_via_route"] = resolved_name.via_route
 
     svc = build_pricing_service(session)
     try:
-        resolved = await svc.resolve_downstream_rate(
+        pricing = await svc.resolve_downstream_rate(
             tenant_id=team_id,
             entitlement_plan_id=entitlement_plan_id,
-            gateway_model_id=record.id,
-            provider=record.provider,
-            upstream_model=record.real_model,
-            capability=record.capability,
+            gateway_model_id=model_id,
+            provider=provider,
+            upstream_model=real_model,
+            capability=capability,
         )
     except RateUnavailableError:
         return
 
-    meta["gateway_pricing_downstream"] = downstream_rate_to_custom_cost(resolved.downstream)
-    if resolved.upstream is not None:
+    meta["gateway_pricing_downstream"] = downstream_rate_to_custom_cost(pricing.downstream)
+    if pricing.upstream is not None:
         upstream_extra = (
-            resolved.upstream_row.extra
-            if resolved.upstream_row is not None and resolved.upstream_row.extra
+            pricing.upstream_row.extra
+            if pricing.upstream_row is not None and pricing.upstream_row.extra
             else None
         )
         meta["gateway_pricing_upstream"] = downstream_rate_to_custom_cost(
-            resolved.upstream,
+            pricing.upstream,
             extra=upstream_extra,
         )
-    meta["gateway_pricing_hit_chain"] = resolved.hit_chain
+    meta["gateway_pricing_hit_chain"] = pricing.hit_chain
 
 
 __all__ = [

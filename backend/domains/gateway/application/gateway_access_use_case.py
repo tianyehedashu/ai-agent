@@ -85,7 +85,9 @@ class GatewayAccessUseCase:
         return record
 
     async def record_virtual_key_usage(self, vkey_id: uuid.UUID) -> None:
-        await self._vkeys.touch_used(vkey_id)
+        from domains.gateway.application.virtual_key_touch import schedule_virtual_key_touch
+
+        schedule_virtual_key_touch(vkey_id)
 
     async def record_platform_api_key_usage(
         self,

@@ -81,10 +81,13 @@ def _patch_preflight_model_resolution(
         match_registered_capability: bool = True,
     ) -> ResolvedModelName:
         rec = record or SimpleNamespace(
+            id=uuid.uuid4(),
+            credential_id=uuid.uuid4(),
             capability=ctx.capability.value,
             provider="openai",
             real_model=model,
             tags={},
+            enabled=True,
         )
         return ResolvedModelName(record=rec, route=None, via_route=None)
 
@@ -165,6 +168,12 @@ async def test_non_chat_uses_router_not_direct_litellm(
         use_case,
         "prepare_litellm_kwargs",
         AsyncMock(return_value={"model": body.get("model", ""), "metadata": {}}),
+    )
+    prepared, invoke_kwargs = _prepared_litellm_invoke(body)
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(return_value=(prepared, invoke_kwargs)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(use_case.litellm, direct_method, block_direct)

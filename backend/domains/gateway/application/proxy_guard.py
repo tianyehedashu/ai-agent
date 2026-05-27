@@ -240,13 +240,12 @@ class ProxyGuard:
             request_model=ctx.budget_model,
         )
 
+        budget_by_coord = await repo.get_many_by_plan(plan)
+
         reservations: list[BudgetReservation] = []
         for query in plan:
-            budget = await repo.get_for(
-                query.target_kind,
-                query.target_id,
-                query.period,
-                model_name=query.model_name,
+            budget = budget_by_coord.get(
+                (query.target_kind, query.target_id, query.period, query.model_name)
             )
             if budget is None:
                 continue

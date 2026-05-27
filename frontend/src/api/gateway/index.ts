@@ -34,7 +34,13 @@ export { GATEWAY_API_BASE, GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from './_
 
 // ---------- 资源类型 re-export ----------
 
-export type { GatewayTeam, TeamMember, TeamMemberLookup } from './teams'
+export type {
+  GatewayTeam,
+  InviteCandidateScope,
+  TeamInviteCandidate,
+  TeamMember,
+  TeamMemberLookup,
+} from './teams'
 
 export type {
   VirtualKey,

@@ -7,6 +7,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from libs.api.pagination import PaginatedListResponse
+
 JsonObject = dict[str, object]
 
 
@@ -65,8 +67,24 @@ class TeamMemberLookupResponse(BaseModel):
     name: str | None = None
 
 
+class TeamInviteCandidateResponse(BaseModel):
+    """可邀请用户摘要（分页列表项，与 lookup 字段一致）。"""
+
+    id: uuid.UUID
+    email: str
+    name: str | None = None
+
+
+class TeamInviteCandidateListResponse(
+    PaginatedListResponse[TeamInviteCandidateResponse]
+):
+    """可邀请用户分页列表。"""
+
+
 __all__ = [
     "TeamCreate",
+    "TeamInviteCandidateListResponse",
+    "TeamInviteCandidateResponse",
     "TeamMemberAdd",
     "TeamMemberLookupResponse",
     "TeamMemberResponse",

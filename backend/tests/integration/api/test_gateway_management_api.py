@@ -301,6 +301,195 @@ class TestGatewayManagementApi:
         assert r.status_code == 404, r.text
 
     @pytest.mark.asyncio
+    async def test_list_invite_candidates_paginated(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        invitee = User(
+            email=f"candidate_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Candidate Person",
+        )
+        db_session.add(invitee)
+        await db_session.commit()
+        await db_session.refresh(invitee)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Candidates Team", owner_user_id=test_user.id)
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/candidates",
+            headers=auth_headers,
+            params={"search": "Candidate", "page": 1, "page_size": 20},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        ids = [item["id"] for item in data["items"]]
+        assert str(invitee.id) in ids
+        assert str(test_user.id) not in ids
+        assert "role" not in data["items"][0]
+        assert data["page"] == 1
+        assert data["page_size"] == 20
+        assert data["total"] >= 1
+        assert "has_next" in data
+        assert "has_prev" in data
+
+    @pytest.mark.asyncio
+    async def test_list_invite_candidates_excludes_existing_member(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"existing_member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Existing Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name="Exclude Member Team", owner_user_id=test_user.id
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/candidates",
+            headers=auth_headers,
+            params={"search": member.email.split("@")[0]},
+        )
+        assert r.status_code == 200, r.text
+        ids = [item["id"] for item in r.json()["items"]]
+        assert str(member.id) not in ids
+
+    @pytest.mark.asyncio
+    async def test_list_invite_candidates_shared_teams_scope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        outsider = User(
+            email=f"outsider_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Outsider User",
+        )
+        insider = User(
+            email=f"insider_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Insider User",
+        )
+        db_session.add_all([outsider, insider])
+        await db_session.commit()
+        await db_session.refresh(outsider)
+        await db_session.refresh(insider)
+
+        ts = TeamService(db_session)
+        bridge = await ts.create_team(name="Bridge Team", owner_user_id=test_user.id)
+        await ts.add_member(bridge.id, insider.id, "member")
+        target = await ts.create_team(name="Target Team", owner_user_id=test_user.id)
+        await ts.update_team(
+            target.id,
+            settings={"invite_candidate_scope": "shared_teams"},
+            actor_team_role="owner",
+        )
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{target.id}/members/candidates",
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        ids = {item["id"] for item in r.json()["items"]}
+        assert str(insider.id) in ids
+        assert str(outsider.id) not in ids
+
+    @pytest.mark.asyncio
+    async def test_list_invite_candidates_forbidden_for_member(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"cand_member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Cand Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name="Cand Forbidden Team", owner_user_id=test_user.id
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/members/candidates",
+            headers=member_headers,
+        )
+        assert r.status_code == 403, r.text
+
+    @pytest.mark.asyncio
+    async def test_update_invite_scope_forbidden_for_team_admin(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team_admin = User(
+            email=f"team_admin_scope_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Team Admin Scope",
+        )
+        db_session.add(team_admin)
+        await db_session.commit()
+        await db_session.refresh(team_admin)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name="Scope Settings Team", owner_user_id=test_user.id
+        )
+        await ts.add_member(shared.id, team_admin.id, "admin")
+        await db_session.commit()
+
+        admin_uc = UserUseCase(db_session)
+        admin_token = await admin_uc.create_token(team_admin)
+        admin_headers = {
+            "Authorization": f"Bearer {admin_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        r = await dev_client.patch(
+            f"/api/v1/gateway/teams/{shared.id}",
+            headers=admin_headers,
+            json={"settings": {"invite_candidate_scope": "shared_teams"}},
+        )
+        assert r.status_code == 403, r.text
+
+    @pytest.mark.asyncio
     async def test_get_log_detail(
         self,
         dev_client: AsyncClient,

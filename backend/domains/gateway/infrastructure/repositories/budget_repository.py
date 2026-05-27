@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.domain.proxy_policy import BudgetCheckQuery
 
 
 class BudgetRepository:
@@ -50,6 +52,38 @@ class BudgetRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_many_by_plan(
+        self,
+        plan: tuple[BudgetCheckQuery, ...] | list[BudgetCheckQuery],
+    ) -> dict[tuple[str, uuid.UUID, str, str | None], GatewayBudget]:
+        """一次查询拉取预算扫描 plan 中的全部配置行。"""
+        if not plan:
+            return {}
+        clauses = []
+        for query in plan:
+            if query.model_name is None:
+                model_clause = GatewayBudget.model_name.is_(None)
+            else:
+                model_clause = GatewayBudget.model_name == query.model_name
+            clauses.append(
+                and_(
+                    GatewayBudget.target_kind == query.target_kind,
+                    GatewayBudget.target_id == query.target_id,
+                    GatewayBudget.period == query.period,
+                    model_clause,
+                )
+            )
+        stmt = select(GatewayBudget).where(or_(*clauses))
+        result = await self._session.execute(stmt)
+        rows = list(result.scalars().all())
+        out: dict[tuple[str, uuid.UUID, str, str | None], GatewayBudget] = {}
+        for row in rows:
+            if row.target_id is None:
+                continue
+            key = (row.target_kind, row.target_id, row.period, row.model_name)
+            out[key] = row
+        return out
 
     async def get_for(
         self,

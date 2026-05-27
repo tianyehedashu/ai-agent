@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
 from domains.gateway.application.model_or_route_resolution import (
     ResolvedModelName,
-    resolve_model_or_route,
 )
 from domains.gateway.application.pricing.pricing_proxy_metadata import (
     apply_downstream_custom_pricing_kwargs,
@@ -18,6 +18,7 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
 from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
+from domains.gateway.application.proxy_timing import ProxyPrepareTimings
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
 from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
@@ -28,8 +29,6 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 from domains.tenancy.application.team_service import TeamService
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.application.proxy_context import ProxyContext
@@ -65,22 +64,32 @@ class ProxyMetadataBuilder:
         virtual_model: str | None,
         *,
         user_id: uuid.UUID | None = None,
+        resolved: ResolvedModelName | None = None,
     ) -> dict[str, Any]:
         """按虚拟模型名解析 GatewayModel -> 凭据，供日志归因。"""
         if not virtual_model:
             return {}
-        resolved = await resolve_model_or_route(
-            self._session, team_id, virtual_model, user_id=user_id
-        )
-        if resolved is None:
+        model_resolved = resolved
+        if model_resolved is None:
+            from domains.gateway.application.model_or_route_resolution import (
+                resolve_model_or_route,
+            )
+
+            model_resolved = await resolve_model_or_route(
+                self._session, team_id, virtual_model, user_id=user_id
+            )
+        if model_resolved is None:
             return {}
-        if resolved.route is not None:
+        if model_resolved.route is not None:
             return {
-                "gateway_via_route": resolved.via_route,
-                "gateway_provider": resolved.record.provider,
+                "gateway_via_route": model_resolved.via_route,
+                "gateway_provider": model_resolved.record.provider,
             }
-        record = resolved.record
-        cred = await ProviderCredentialRepository(self._session).get(record.credential_id)
+        record = model_resolved.record
+        cred_id = record.credential_id
+        if cred_id is None:
+            return {"gateway_provider": record.provider}
+        cred = await ProviderCredentialRepository(self._session).get(cred_id)
         if cred is None:
             return {}
         return {
@@ -99,8 +108,11 @@ class ProxyMetadataBuilder:
         ctx: ProxyContext,
         *,
         user_kwargs: dict[str, Any] | None = None,
+        resolved: ResolvedModelName | None = None,
+        timings: ProxyPrepareTimings | None = None,
     ) -> dict[str, Any]:
         """生成单次代理调用的 Gateway metadata。"""
+        meta_started = time.perf_counter()
         team = await TeamService(self._session).get_team(ctx.team_id)
         effective_user_id = ctx.user_id
         if effective_user_id is None and team is not None and team.kind == "personal":
@@ -152,8 +164,19 @@ class ProxyMetadataBuilder:
             # Router anthropic_messages / ageneric_api_call 回调常剥离顶层 gateway_*；
             # LiteLLM 标准键 user_api_key_auth_metadata 更易保留到 CustomLogger。
             meta["user_api_key_auth_metadata"] = gateway_snapshot
+        base_meta_ms = int((time.perf_counter() - meta_started) * 1000)
         if user_kwargs:
-            await self._merge_user_and_model_metadata(ctx, meta, user_kwargs)
+            merge_timings = await self._merge_user_and_model_metadata(
+                ctx,
+                meta,
+                user_kwargs,
+                resolved=resolved,
+            )
+            if timings is not None:
+                timings.metadata_ms = base_meta_ms + merge_timings.metadata_ms
+                timings.pricing_ms = merge_timings.pricing_ms
+        elif timings is not None:
+            timings.metadata_ms = base_meta_ms
         return meta
 
     async def prepare_litellm_kwargs(
@@ -162,9 +185,15 @@ class ProxyMetadataBuilder:
         body: dict[str, Any],
         *,
         resolved: ResolvedModelName | None = None,
+        timings: ProxyPrepareTimings | None = None,
     ) -> PreparedLitellmKwargs:
         """拼装 metadata，并把下游单价注入 LiteLLM kwargs。"""
-        metadata = await self.build(ctx, user_kwargs=body)
+        metadata = await self.build(
+            ctx,
+            user_kwargs=body,
+            resolved=resolved,
+            timings=timings,
+        )
         kwargs = dict(body)
         kwargs["metadata"] = metadata
         ensure_litellm_router_team_metadata(
@@ -177,6 +206,10 @@ class ProxyMetadataBuilder:
         client_model = str(raw_model).strip() if raw_model is not None else ""
         model_resolved = resolved
         if client_model and model_resolved is None:
+            from domains.gateway.application.model_or_route_resolution import (
+                resolve_model_or_route,
+            )
+
             model_resolved = await resolve_model_or_route(
                 self._session, ctx.team_id, client_model, user_id=ctx.user_id
             )
@@ -194,7 +227,9 @@ class ProxyMetadataBuilder:
         ctx: ProxyContext,
         meta: dict[str, Any],
         user_kwargs: dict[str, Any],
-    ) -> None:
+        *,
+        resolved: ResolvedModelName | None = None,
+    ) -> _MergeTimings:
         user_meta = user_kwargs.get("metadata") or {}
         if isinstance(user_meta, dict):
             meta.update(
@@ -207,16 +242,22 @@ class ProxyMetadataBuilder:
         raw_model = user_kwargs.get("model")
         virtual_model = str(raw_model).strip() if raw_model is not None else None
         if not virtual_model:
-            return
+            return _MergeTimings()
+        cred_started = time.perf_counter()
         meta.update(
             await self.credential_metadata_for_virtual_model(
-                ctx.team_id, virtual_model, user_id=ctx.user_id
+                ctx.team_id,
+                virtual_model,
+                user_id=ctx.user_id,
+                resolved=resolved,
             )
         )
         snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
         if snap is not None:
             meta["gateway_route_snapshot"] = snap
+        metadata_ms = int((time.perf_counter() - cred_started) * 1000)
         billing_package = "entitlement" if ctx.entitlement_state is not None else None
+        pricing_started = time.perf_counter()
         await attach_downstream_pricing_metadata(
             self._session,
             meta,
@@ -226,7 +267,16 @@ class ProxyMetadataBuilder:
                 ctx.entitlement_state.plan_id if ctx.entitlement_state is not None else None
             ),
             billing_package=billing_package,
+            resolved=resolved,
         )
+        pricing_ms = int((time.perf_counter() - pricing_started) * 1000)
+        return _MergeTimings(metadata_ms=metadata_ms, pricing_ms=pricing_ms)
+
+
+@dataclass(slots=True)
+class _MergeTimings:
+    metadata_ms: int = 0
+    pricing_ms: int = 0
 
 
 __all__ = ["PreparedLitellmKwargs", "ProxyMetadataBuilder"]

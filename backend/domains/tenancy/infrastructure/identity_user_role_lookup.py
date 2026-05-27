@@ -1,29 +1,23 @@
-"""Tenancy 读侧：批量解析用户 role（infrastructure 防腐层，隔离 identity ORM）。"""
+"""Tenancy 读侧：用户 platform role（委托 identity ``UserPlatformRoleLookupPort``）。"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import TYPE_CHECKING
-import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
 
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-
-class IdentityUserRoleLookup:
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
-
-    async def roles_by_user_ids(
-        self, user_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
-        if not user_ids:
-            return {}
-        from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
-
-        unique_ids = list(dict.fromkeys(user_ids))
-        users = await SQLAlchemyUserRepository(self._session).list_by_ids(unique_ids)
-        return {user.id: user.role for user in users}
+from domains.identity.application.ports import UserPlatformRoleLookupPort
+from domains.identity.infrastructure.user_platform_role_lookup import (
+    UserPlatformRoleLookupAdapter,
+)
 
 
-__all__ = ["IdentityUserRoleLookup"]
+def user_platform_role_lookup_for_session(
+    session: AsyncSession,
+) -> UserPlatformRoleLookupPort:
+    """为 tenancy 装配 identity 用户 role 查询端口。"""
+    return UserPlatformRoleLookupAdapter(session)
+
+
+__all__ = [
+    "UserPlatformRoleLookupPort",
+    "user_platform_role_lookup_for_session",
+]

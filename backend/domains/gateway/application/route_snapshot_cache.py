@@ -42,9 +42,19 @@ async def get_route_snapshot_metadata(
     return snap
 
 
+def invalidate_route_snapshot_cache_for_tenant(tenant_id: UUID) -> None:
+    keys = [k for k in _CACHE if k[0] == tenant_id]
+    for key in keys:
+        _CACHE.pop(key, None)
+
+
 def clear_route_snapshot_cache_for_tests() -> None:
     """单测隔离：清空模块级缓存。"""
     _CACHE.clear()
 
 
-__all__ = ["clear_route_snapshot_cache_for_tests", "get_route_snapshot_metadata"]
+__all__ = [
+    "clear_route_snapshot_cache_for_tests",
+    "get_route_snapshot_metadata",
+    "invalidate_route_snapshot_cache_for_tenant",
+]

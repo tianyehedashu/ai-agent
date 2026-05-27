@@ -216,10 +216,31 @@ class GatewayManagementWriteBaseMixin:
             is_platform_admin=is_platform_admin,
         )
 
-    async def reload_litellm_router(self) -> None:
+    async def reload_litellm_router(self, *, tenant_id: uuid.UUID | None = None) -> None:
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_read_caches_for_tenant,
+        )
+        from domains.gateway.application.resolve_model_cache import invalidate_all
+        from domains.gateway.application.route_snapshot_cache import (
+            clear_route_snapshot_cache_for_tests,
+        )
+
+        if tenant_id is not None:
+            invalidate_gateway_read_caches_for_tenant(tenant_id)
+        else:
+            invalidate_all()
+            clear_route_snapshot_cache_for_tests()
+
         from domains.gateway.infrastructure.router_singleton import reload_router
 
         try:
             await reload_router(self._session)
         except Exception:
             logger.exception("LiteLLM Router reload failed")
+
+    def invalidate_tenant_gateway_read_caches(self, tenant_id: uuid.UUID) -> None:
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_read_caches_for_tenant,
+        )
+
+        invalidate_gateway_read_caches_for_tenant(tenant_id)

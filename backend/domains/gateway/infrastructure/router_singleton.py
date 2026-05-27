@@ -589,7 +589,7 @@ async def ensure_router_deployment(
     db: AsyncSession,
     encoded_model_name: str,
 ) -> Router:
-    """若内存 Router 缺少目标 deployment，从 DB 热重载一次（自愈 stale singleton）。"""
+    """若内存 Router 缺少目标 deployment，先尝试增量 ``add_deployment``，再全量热重载。"""
     router = await get_router(db)
     encoded = encoded_model_name.strip()
     if not encoded:
@@ -598,11 +598,123 @@ async def ensure_router_deployment(
     if encoded in live_names:
         return router
     logger.warning(
-        "Router missing deployment %s (live=%d); hot-reloading from DB",
+        "Router missing deployment %s (live=%d); trying incremental add",
         encoded,
         len(live_names),
     )
+    if await _try_incremental_router_deployment(db, encoded):
+        live_after = router_deployment_model_names(router)
+        if encoded in live_after:
+            logger.info("Router incremental deployment added %s", encoded)
+            return router
+    logger.warning(
+        "Router incremental add missed %s; hot-reloading full model_list from DB",
+        encoded,
+    )
     return await reload_router(db)
+
+
+async def _try_incremental_router_deployment(db: AsyncSession, encoded: str) -> bool:
+    deployments = await _build_deployments_for_encoded_model(db, encoded)
+    if not deployments:
+        return False
+    router = get_router_sync()
+    if router is None:
+        return False
+    add_fn = getattr(router, "add_deployment", None)
+    if not callable(add_fn):
+        return False
+    try:
+        for dep in deployments:
+            result = add_fn(deployment=dep)
+            if asyncio.iscoroutine(result):
+                await result
+    except Exception:
+        logger.warning(
+            "Incremental router add_deployment failed for %s",
+            encoded,
+            exc_info=True,
+        )
+        return False
+    return True
+
+
+async def _resolve_router_credential(
+    db: AsyncSession,
+    credential_id: Any,
+) -> ProviderCredential | None:
+    from domains.gateway.infrastructure.repositories.credential_repository import (
+        ProviderCredentialRepository,
+    )
+    from domains.gateway.infrastructure.repositories.system_credential_repository import (
+        SystemProviderCredentialRepository,
+    )
+
+    cred = await ProviderCredentialRepository(db).get(credential_id)
+    if cred is not None and cred.is_active:
+        return cred
+    sys_cred = await SystemProviderCredentialRepository(db).get(credential_id)
+    if sys_cred is not None and sys_cred.is_active:
+        return sys_cred  # type: ignore[return-value]
+    return None
+
+
+async def _build_deployments_for_encoded_model(
+    db: AsyncSession,
+    encoded: str,
+) -> list[dict[str, Any]]:
+    from domains.gateway.domain.router_model_name import decode_router_model_name
+    from domains.gateway.infrastructure.repositories.model_repository import (
+        GatewayModelRepository,
+        GatewayRouteRepository,
+    )
+
+    decoded = decode_router_model_name(encoded)
+    if decoded is None:
+        return []
+    team_id, client_name = decoded
+    model_repo = GatewayModelRepository(db)
+    route_repo = GatewayRouteRepository(db)
+    pricing_lookup = await _load_upstream_pricing_lookup(db)
+
+    record = await model_repo.resolve_by_name(team_id, client_name)
+    route = None
+    if record is None and team_id is not None:
+        route = await route_repo.resolve_by_virtual_model(team_id, client_name)
+        if route is not None:
+            deployments: list[dict[str, Any]] = []
+            for primary in route.primary_models or ():
+                src = await model_repo.resolve_by_name(team_id, primary)
+                if src is None:
+                    continue
+                cred = await _resolve_router_credential(db, src.credential_id)
+                if cred is None:
+                    continue
+                deployments.append(
+                    _build_deployment(
+                        model_name=encoded,
+                        src=src,
+                        cred=cred,
+                        via_route=route.virtual_model,
+                        pricing_lookup=pricing_lookup,
+                    )
+                )
+            return deployments
+
+    if record is None:
+        return []
+
+    cred = await _resolve_router_credential(db, record.credential_id)
+    if cred is None:
+        return []
+    return [
+        _build_deployment(
+            model_name=encoded,
+            src=record,
+            cred=cred,
+            pricing_lookup=pricing_lookup,
+        )
+    ]
 
 
 def get_router_sync() -> Router | None:

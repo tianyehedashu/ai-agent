@@ -9,7 +9,10 @@ from domains.gateway.application.anthropic_native_adapt import (
     estimate_anthropic_request_tokens,
     validate_anthropic_messages_body,
 )
-from domains.gateway.application.proxy_chat_pipeline import prepare_chat_proxy_request
+from domains.gateway.application.proxy_chat_pipeline import (
+    apply_timing_to_metadata,
+    prepare_chat_proxy_request,
+)
 from domains.gateway.application.proxy_response_adapter import (
     adapt_anthropic_response,
     adapt_anthropic_stream,
@@ -103,7 +106,6 @@ class ProxyChatMixin:
         estimate_tokens = sum(
             len(str(m.get("content", ""))) for m in (body.get("messages") or [])
         ) // 4 + int(body.get("max_tokens") or 0)
-        preflight_started = time.perf_counter()
         prepared = await prepare_chat_proxy_request(
             self,
             ctx,
@@ -111,8 +113,14 @@ class ProxyChatMixin:
             estimate_tokens=estimate_tokens,
             require_model=True,
         )
-        use_direct = await self.litellm.should_use_internal_direct_litellm(ctx, prepared.model)
-        preflight_ms = max(0, int((time.perf_counter() - preflight_started) * 1000))
+        direct_started = time.perf_counter()
+        use_direct = await self.litellm.should_use_internal_direct_litellm(
+            ctx, prepared.model, resolved=prepared.resolved
+        )
+        if prepared.timings is not None:
+            prepared.timings.direct_decide_ms = max(
+                0, int((time.perf_counter() - direct_started) * 1000)
+            )
 
         async def _direct() -> Any:
             return await self.litellm.direct_chat_completion(prepared.kwargs)
@@ -135,13 +143,18 @@ class ProxyChatMixin:
             router_call=_router,
         )
         if prepared.stream:
-            ctx.proxy_timing = GatewayProxyTiming(preflight_ms=preflight_ms)
+            if prepared.timings is not None:
+                apply_timing_to_metadata(prepared.metadata, prepared.timings)
+                ctx.proxy_timing = GatewayProxyTiming.from_prepare(prepared.timings)
         else:
             upstream_ms = max(0, int((time.perf_counter() - upstream_started) * 1000))
-            ctx.proxy_timing = GatewayProxyTiming(
-                preflight_ms=preflight_ms,
-                upstream_ms=upstream_ms,
-            )
+            if prepared.timings is not None:
+                apply_timing_to_metadata(
+                    prepared.metadata, prepared.timings, upstream_ms=upstream_ms
+                )
+                ctx.proxy_timing = GatewayProxyTiming.from_prepare(
+                    prepared.timings, upstream_ms=upstream_ms
+                )
         if prepared.stream:
             return adapt_stream(
                 response,
@@ -205,7 +218,9 @@ class ProxyChatMixin:
                 request_id=ctx.request_id,
                 client_model=prepared.model,
             )
-        use_direct = await self.litellm.should_use_internal_direct_litellm(ctx, prepared.model)
+        use_direct = await self.litellm.should_use_internal_direct_litellm(
+            ctx, prepared.model, resolved=prepared.resolved
+        )
 
         async def _direct() -> Any:
             direct_kw = await self.litellm.merge_direct_deployment_litellm_params(
@@ -216,6 +231,7 @@ class ProxyChatMixin:
         async def _router() -> Any:
             return await self.litellm.router_anthropic_messages(prepared.kwargs)
 
+        upstream_started = time.perf_counter()
         response = await invoke_router_with_direct_fallback(
             guard=self.guard,
             litellm=self.litellm,
@@ -226,6 +242,19 @@ class ProxyChatMixin:
             direct_call=_direct,
             router_call=_router,
         )
+        if prepared.stream:
+            if prepared.timings is not None:
+                apply_timing_to_metadata(prepared.metadata, prepared.timings)
+                ctx.proxy_timing = GatewayProxyTiming.from_prepare(prepared.timings)
+        else:
+            upstream_ms = max(0, int((time.perf_counter() - upstream_started) * 1000))
+            if prepared.timings is not None:
+                apply_timing_to_metadata(
+                    prepared.metadata, prepared.timings, upstream_ms=upstream_ms
+                )
+                ctx.proxy_timing = GatewayProxyTiming.from_prepare(
+                    prepared.timings, upstream_ms=upstream_ms
+                )
         if prepared.stream:
             return adapt_anthropic_stream(
                 response,

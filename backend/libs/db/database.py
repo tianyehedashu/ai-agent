@@ -6,6 +6,8 @@ Database Connection Management
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
+import time
+from typing import Any, cast
 
 from sqlalchemy import event
 from sqlalchemy import exc as sa_exc
@@ -153,6 +155,49 @@ def _register_dirty_connection_recycle(engine: AsyncEngine) -> None:
             ctx.is_disconnect = True
 
 
+def _register_slow_query_logging(engine: AsyncEngine) -> None:
+    """记录超过阈值的 SQL（默认 50ms，``gateway_slow_sql_threshold_ms=0`` 关闭）。"""
+    from bootstrap.config import settings
+    from utils.logging import get_logger
+
+    threshold_ms = int(settings.gateway_slow_sql_threshold_ms)
+    if threshold_ms <= 0:
+        return
+    log = get_logger(__name__)
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _before_cursor_execute(
+        _conn: object,
+        _cursor: object,
+        _statement: str,
+        _parameters: object,
+        context: object,
+        _executemany: bool,
+    ) -> None:
+        ctx = cast("Any", context)
+        ctx._ai_agent_query_start = time.perf_counter()
+
+    @event.listens_for(engine.sync_engine, "after_cursor_execute")
+    def _after_cursor_execute(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        context: object,
+        _executemany: bool,
+    ) -> None:
+        ctx = cast("Any", context)
+        started = getattr(ctx, "_ai_agent_query_start", None)
+        if started is None:
+            return
+        elapsed_ms = (time.perf_counter() - float(started)) * 1000.0
+        if elapsed_ms >= threshold_ms:
+            preview = " ".join(statement.split())
+            if len(preview) > 500:
+                preview = preview[:500] + "..."
+            log.warning("Slow SQL (%.1f ms): %s", elapsed_ms, preview)
+
+
 async def init_db() -> None:
     """初始化数据库连接"""
     global _engine, _session_factory
@@ -167,6 +212,7 @@ async def init_db() -> None:
         pool_recycle=300,
     )
     _register_dirty_connection_recycle(_engine)
+    _register_slow_query_logging(_engine)
 
     _session_factory = async_sessionmaker(
         bind=_engine,

@@ -25,6 +25,7 @@ from domains.gateway.application.proxy_metadata_builder import (
     ProxyMetadataBuilder,
 )
 from domains.gateway.application.proxy_non_chat_pipeline import ProxyNonChatMixin
+from domains.gateway.application.proxy_timing import ProxyPrepareTimings
 from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
 
@@ -92,6 +93,7 @@ class ProxyUseCase(ProxyChatMixin, ProxyNonChatMixin):
         body: dict[str, Any],
         *,
         resolved: ResolvedModelName | None = None,
+        timings: ProxyPrepareTimings | None = None,
     ) -> tuple[PreparedLitellmKwargs, dict[str, Any]]:
         """返回 ``PreparedLitellmKwargs`` 与最终 kwargs（供 embedding 等读取 ``resolved``）。"""
         return await build_litellm_invoke(
@@ -101,6 +103,7 @@ class ProxyUseCase(ProxyChatMixin, ProxyNonChatMixin):
             upstream_adapter=self._upstream_adapter,
             prompt_cache=self._prompt_cache,
             resolved=resolved,
+            timings=timings,
         )
 
     async def prepare_litellm_kwargs(

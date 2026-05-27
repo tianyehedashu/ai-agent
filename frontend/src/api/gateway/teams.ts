@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { PaginatedList } from '@/types'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 
@@ -48,6 +49,19 @@ export interface TeamMemberLookup {
   name: string | null
 }
 
+/** 可邀请用户（与 TeamMemberLookup 字段一致） */
+export type TeamInviteCandidate = TeamMemberLookup
+
+export type InviteCandidateScope = 'all_users' | 'shared_teams'
+
+export interface ListTeamInviteCandidatesParams {
+  search?: string
+  page: number
+  page_size?: number
+}
+
+export type TeamInviteCandidateListResponse = PaginatedList<TeamInviteCandidate>
+
 /** GET /teams 可选 query */
 export interface ListGatewayTeamsParams {
   search?: string
@@ -78,6 +92,13 @@ export const teamsApi = {
   /** 按邮箱查找已注册用户（仅 admin+） */
   lookupMemberByEmail: (teamId: string, email: string) =>
     apiClient.get<TeamMemberLookup>(teamGatewayPath(teamId, '/members/lookup'), { email }),
+  /** 分页列出可邀请用户（仅 admin+） */
+  listInviteCandidates: (teamId: string, params: ListTeamInviteCandidatesParams) =>
+    apiClient.get<TeamInviteCandidateListResponse>(teamGatewayPath(teamId, '/members/candidates'), {
+      search: params.search,
+      page: params.page,
+      page_size: params.page_size,
+    }),
   /** 添加成员（仅 owner / admin） */
   addMember: (teamId: string, body: { user_id: string; role: string }) =>
     apiClient.post<TeamMember>(teamGatewayPath(teamId, '/members'), body),

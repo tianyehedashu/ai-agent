@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import uuid
 
     from domains.identity.domain.api_key_types import ApiKeyEntity
+    from libs.api.pagination import PageParams, PaginatedListResponse
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,39 @@ class UserSummaryQueryPort(Protocol):
     async def list_summary_views_by_ids(
         self, user_ids: Sequence[uuid.UUID]
     ) -> dict[uuid.UUID, UserSummaryView]:
+        ...
+
+
+class UserPlatformRoleLookupPort(Protocol):
+    """按用户 ID 批量解析平台 role（tenancy 团队列表过滤 anonymous personal 等）。"""
+
+    async def roles_by_user_ids(
+        self, user_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class InviteCandidateRowView:
+    """可邀请用户摘要（跨域读侧，不含平台 role）。"""
+
+    id: uuid.UUID
+    email: str
+    name: str | None
+
+
+class TeamInviteCandidateQueryPort(Protocol):
+    """团队邀请候选人分页查询（identity 查 User，tenancy 提供 team/membership 过滤参数）。"""
+
+    async def list_team_invite_candidates_page(
+        self,
+        page: PageParams,
+        *,
+        team_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        scope: str,
+        search: str | None = None,
+    ) -> PaginatedListResponse[InviteCandidateRowView]:
         ...
 
 
@@ -90,6 +124,9 @@ __all__ = [
     "ApiKeyGatewayGrantQueryPort",
     "ApiKeyVerificationPort",
     "IdentityApplicationPort",
+    "InviteCandidateRowView",
+    "TeamInviteCandidateQueryPort",
+    "UserPlatformRoleLookupPort",
     "UserSummaryQueryPort",
     "UserSummaryView",
     "user_display_label",

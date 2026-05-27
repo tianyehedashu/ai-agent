@@ -6,7 +6,10 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.model_or_route_resolution import (
+    ResolvedModelName,
+    resolve_model_or_route,
+)
 from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
@@ -53,7 +56,13 @@ class ProxyLiteLLMClient:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
+    async def should_use_internal_direct_litellm(
+        self,
+        ctx: ProxyContext,
+        model: str,
+        *,
+        resolved: ResolvedModelName | None = None,
+    ) -> bool:
         """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
         if not allows_unregistered_gateway_model(
             vkey_is_system=ctx.vkey.is_system if ctx.vkey is not None else None,
@@ -63,14 +72,16 @@ class ProxyLiteLLMClient:
         if ctx.vkey is None or not ctx.vkey.is_system:
             return False
 
-        resolved = await resolve_model_or_route(
-            self._session, ctx.team_id, model, user_id=ctx.user_id
-        )
-        if resolved is None:
+        model_resolved = resolved
+        if model_resolved is None:
+            model_resolved = await resolve_model_or_route(
+                self._session, ctx.team_id, model, user_id=ctx.user_id
+            )
+        if model_resolved is None:
             return True
-        if resolved.route is not None:
+        if model_resolved.route is not None:
             return False
-        return not resolved.record.enabled
+        return not model_resolved.record.enabled
 
     async def direct_chat_completion(self, kwargs: dict[str, Any]) -> Any:
         from litellm import acompletion

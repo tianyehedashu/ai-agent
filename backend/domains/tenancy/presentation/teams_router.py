@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application.user_use_case import UserUseCase
 from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser
+from domains.tenancy.application.team_invite_candidate_reads import TeamInviteCandidateReads
 from domains.tenancy.application.team_member_reads import EnrichedTeamMember, enrich_team_members
 from domains.tenancy.application.team_service import TeamService
 from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
+    TeamInviteCandidateListResponse,
     TeamMemberAdd,
     TeamMemberLookupResponse,
     TeamMemberResponse,
@@ -25,9 +27,11 @@ from domains.tenancy.presentation.team_dependencies import (
     RequiredTeamMember,
     RequiredTeamOwner,
 )
+from domains.tenancy.presentation.team_invite_mappers import to_invite_candidate_list_response
+from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import AuthenticationError, NotFoundError, ValidationError
-from libs.identity_bridge_deps import get_user_use_case
+from libs.identity_bridge_deps import create_user_use_case, get_user_use_case
 
 router = APIRouter(tags=["Tenancy / Teams"])
 
@@ -38,6 +42,16 @@ def _team_service(db: Annotated[AsyncSession, Depends(get_db)]) -> TeamService:
 
 TeamSvc = Annotated[TeamService, Depends(_team_service)]
 UserSvc = Annotated[UserUseCase, Depends(get_user_use_case)]
+PageDep = Annotated[PageParams, Depends(page_query_params)]
+
+
+def _invite_candidate_reads(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TeamInviteCandidateReads:
+    return TeamInviteCandidateReads(create_user_use_case(db))
+
+
+InviteReads = Annotated[TeamInviteCandidateReads, Depends(_invite_candidate_reads)]
 
 
 def _to_member_responses(
@@ -130,7 +144,12 @@ async def update_team(
     team: RequiredTeamAdmin,
     svc: TeamSvc,
 ) -> TeamResponse:
-    updated = await svc.update_team(team_id, name=body.name, settings=body.settings)
+    updated = await svc.update_team(
+        team_id,
+        name=body.name,
+        settings=body.settings,
+        actor_team_role=team.team_role,
+    )
     if updated is None:
         raise NotFoundError("Team")
     return TeamResponse.model_validate(updated)
@@ -163,6 +182,33 @@ async def list_team_members(
     members = await svc.list_team_members(team_id)
     enriched = await enrich_team_members(members, user_service)
     return _to_member_responses(enriched)
+
+
+@router.get(
+    "/teams/{team_id}/members/candidates",
+    response_model=TeamInviteCandidateListResponse,
+)
+async def list_team_invite_candidates(
+    team_id: uuid.UUID,
+    _team: RequiredTeamAdmin,
+    current_user: RequiredAuthUser,
+    page: PageDep,
+    invite_reads: InviteReads,
+    svc: TeamSvc,
+    search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+) -> TeamInviteCandidateListResponse:
+    """分页列出可邀请用户（排除已在团队内的成员；范围见 team.settings.invite_candidate_scope）。"""
+    record = await svc.get_team(team_id)
+    if record is None:
+        raise NotFoundError("Team")
+    result = await invite_reads.list_candidates_page(
+        page,
+        team_id=team_id,
+        actor_user_id=uuid.UUID(current_user.id),
+        team_settings=record.settings,
+        search=search,
+    )
+    return to_invite_candidate_list_response(result)
 
 
 @router.get("/teams/{team_id}/members/lookup", response_model=TeamMemberLookupResponse)

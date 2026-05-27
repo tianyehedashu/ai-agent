@@ -5,15 +5,14 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, LogOut, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Loader2, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
-import type { GatewayTeam, TeamMember, TeamMemberLookup } from '@/api/gateway/teams'
+import type { GatewayTeam, TeamMember } from '@/api/gateway/teams'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +33,7 @@ import {
 import { credentialsTeamListHref } from '@/features/gateway-models/paths'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { AddTeamMembersSheet } from '@/features/gateway-teams/add-team-members-sheet'
 import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam, switchToFallbackTeam } from '@/features/gateway-teams/navigate-team'
@@ -183,19 +183,6 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '更新失败', description: e.message })
-    },
-  })
-
-  const addMemberMutation = useMutation({
-    mutationFn: ({ teamId: tid, ...body }: { teamId: string; user_id: string; role: string }) =>
-      gatewayApi.addMember(tid, { user_id: body.user_id, role: body.role }),
-    onSuccess: () => {
-      invalidateMembers()
-      setOpenMember(false)
-      toast({ title: '成员已添加' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '添加失败', description: e.message })
     },
   })
 
@@ -550,24 +537,14 @@ export default function GatewayTeamsPage(): React.JSX.Element {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={openMember} onOpenChange={setOpenMember}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加成员</DialogTitle>
-            <DialogDescription>通过邮箱查找已注册用户并加入当前团队。</DialogDescription>
-          </DialogHeader>
-          {openMember && teamId ? (
-            <AddMemberForm
-              key={teamId}
-              teamId={teamId}
-              pending={addMemberMutation.isPending}
-              onSubmit={(v) => {
-                addMemberMutation.mutate({ teamId, ...v })
-              }}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <AddTeamMembersSheet
+        open={openMember}
+        onOpenChange={setOpenMember}
+        teamId={membersTeamId}
+        team={currentTeamFromApi}
+        teamRole={teamRole}
+        onMembersAdded={invalidateMembers}
+      />
 
       <ConfirmAlertDialog
         open={deleteTeamOpen}
@@ -684,145 +661,6 @@ function RenameTeamForm({
         >
           {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           保存
-        </Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-function AddMemberForm({
-  teamId,
-  onSubmit,
-  pending,
-}: Readonly<{
-  teamId: string
-  onSubmit: (v: { user_id: string; role: string }) => void
-  pending?: boolean
-}>): React.JSX.Element {
-  const { toast } = useToast()
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('member')
-  const [foundUser, setFoundUser] = useState<TeamMemberLookup | null>(null)
-  const [isLookingUp, setIsLookingUp] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [userId, setUserId] = useState('')
-
-  const handleLookup = async (): Promise<void> => {
-    const trimmed = email.trim()
-    if (!trimmed) {
-      toast({ variant: 'destructive', title: '请输入邮箱' })
-      return
-    }
-    setIsLookingUp(true)
-    setFoundUser(null)
-    try {
-      const user = await gatewayApi.lookupMemberByEmail(teamId, trimmed)
-      setFoundUser(user)
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: '查找失败',
-        description: error instanceof Error ? error.message : '用户不存在',
-      })
-    } finally {
-      setIsLookingUp(false)
-    }
-  }
-
-  const handleSubmit = (): void => {
-    const id = foundUser?.id ?? userId.trim()
-    if (!id) {
-      toast({ variant: 'destructive', title: '请先查找用户或输入用户 ID' })
-      return
-    }
-    onSubmit({ user_id: id, role })
-  }
-
-  return (
-    <>
-      <div className="space-y-3 py-2">
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <Label>邮箱</Label>
-            <Input
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                setFoundUser(null)
-              }}
-              placeholder="user@example.com"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  void handleLookup()
-                }
-              }}
-            />
-          </div>
-          <div className="flex items-end">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={isLookingUp}
-              onClick={() => void handleLookup()}
-            >
-              {isLookingUp ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-              <span className="ml-1.5">查找</span>
-            </Button>
-          </div>
-        </div>
-
-        {foundUser ? (
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            <div className="font-medium">{foundUser.name ?? foundUser.email}</div>
-            <div className="text-xs text-muted-foreground">{foundUser.email}</div>
-          </div>
-        ) : null}
-
-        <div>
-          <Label>角色</Label>
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="member">成员</SelectItem>
-              <SelectItem value="admin">管理员</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-0 text-xs text-muted-foreground"
-            >
-              高级：直接输入用户 ID
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-2">
-            <Label>用户 ID</Label>
-            <Input
-              value={userId}
-              onChange={(e) => {
-                setUserId(e.target.value)
-              }}
-              placeholder="UUID"
-            />
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-      <DialogFooter>
-        <Button onClick={handleSubmit} disabled={pending ? true : !foundUser && !userId.trim()}>
-          {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          添加
         </Button>
       </DialogFooter>
     </>

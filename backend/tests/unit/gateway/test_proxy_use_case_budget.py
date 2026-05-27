@@ -102,6 +102,19 @@ class FakeBudgetRepository:
     def __init__(self, _session: AsyncSession) -> None:
         self._session = _session
 
+    async def get_many_by_plan(self, plan: object) -> dict[tuple[str, uuid.UUID, str, str | None], FakeBudget]:
+        out: dict[tuple[str, uuid.UUID, str, str | None], FakeBudget] = {}
+        for query in plan:  # type: ignore[union-attr]
+            row = await self.get_for(
+                query.target_kind,
+                query.target_id,
+                query.period,
+                model_name=query.model_name,
+            )
+            if row is not None:
+                out[(query.target_kind, query.target_id, query.period, query.model_name)] = row
+        return out
+
     async def get_for(
         self,
         target_kind: str,
@@ -137,15 +150,21 @@ async def test_chat_failure_releases_all_request_reservations(
     budget = RecordingBudgetService()
     session = cast("AsyncSession", object())
 
-    async def use_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def use_direct(_ctx: ProxyContext, _model: str, *, resolved: object | None = None) -> bool:
+        _ = resolved
         return True
 
     async def fail_direct(_kwargs: dict[str, object]) -> object:
         raise RuntimeError("upstream failed")
 
     async def prepare_litellm_invoke(
-        _ctx: ProxyContext, body: dict[str, object]
+        _ctx: ProxyContext,
+        body: dict[str, object],
+        *,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> tuple[PreparedLitellmKwargs, dict[str, object]]:
+        _ = resolved, timings
         kwargs = {**body, "metadata": {}}
         prepared = PreparedLitellmKwargs(
             kwargs=kwargs,
@@ -154,11 +173,23 @@ async def test_chat_failure_releases_all_request_reservations(
         )
         return prepared, kwargs
 
-    async def _none_resolve(
+    async def _fake_resolve(
         _session: object, _team_id: object, _name: str, *, user_id: object | None = None
-    ) -> None:
+    ) -> object:
         _ = user_id
-        return None
+
+        @dataclass(frozen=True)
+        class _Record:
+            capability: str = "chat"
+            enabled: bool = True
+
+        @dataclass(frozen=True)
+        class _Resolved:
+            record: _Record = _Record()
+            route: None = None
+            via_route: None = None
+
+        return _Resolved()
 
     monkeypatch.setattr(proxy_guard, "BudgetRepository", FakeBudgetRepository)
     monkeypatch.setattr(
@@ -166,7 +197,7 @@ async def test_chat_failure_releases_all_request_reservations(
         "_default_budget_repository_factory",
         lambda session: FakeBudgetRepository(session),
     )
-    monkeypatch.setattr(proxy_guard, "resolve_model_or_route", _none_resolve)
+    monkeypatch.setattr(proxy_guard, "resolve_model_or_route", _fake_resolve)
 
     use_case = ProxyUseCase(session, budget_service=budget)
     monkeypatch.setattr(

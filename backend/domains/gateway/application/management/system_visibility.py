@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import uuid
 
 from domains.gateway.domain.errors import CredentialNotFoundError, ManagementEntityNotFoundError
 from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
@@ -25,8 +26,6 @@ from domains.gateway.infrastructure.repositories.system_gateway_grant_repository
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.infrastructure.models.system_gateway import (
@@ -105,7 +104,7 @@ class GatewaySystemVisibilityService:
                 raise CredentialNotFoundError(str(subject_id))
         elif await self._models.get_system(subject_id) is None:
             raise ManagementEntityNotFoundError("system_model", str(subject_id))
-        return await self._grants.create(
+        row = await self._grants.create(
             subject_kind=sk,
             subject_id=subject_id,
             target_kind=tk,
@@ -113,6 +112,8 @@ class GatewaySystemVisibilityService:
             granted_by=granted_by,
             note=note,
         )
+        await self._invalidate_grants_cache_for_target(tk, target_id)
+        return row
 
     async def update_grant(
         self,
@@ -126,6 +127,7 @@ class GatewaySystemVisibilityService:
         row = await self._grants.update(grant_id, enabled=enabled, note=note)
         if row is None:
             raise ManagementEntityNotFoundError("system_grant", str(grant_id))
+        await self._invalidate_grants_cache_for_target(row.target_kind, row.target_id)
         return row
 
     async def delete_grant(
@@ -135,8 +137,30 @@ class GatewaySystemVisibilityService:
         is_platform_admin: bool,
     ) -> None:
         assert_platform_admin(is_platform_admin=is_platform_admin)
+        existing = await self._grants.get(grant_id)
+        if existing is None:
+            raise ManagementEntityNotFoundError("system_grant", str(grant_id))
         if not await self._grants.delete(grant_id):
             raise ManagementEntityNotFoundError("system_grant", str(grant_id))
+        await self._invalidate_grants_cache_for_target(existing.target_kind, existing.target_id)
+
+    async def _invalidate_grants_cache_for_target(
+        self,
+        target_kind: str,
+        target_id: uuid.UUID,
+    ) -> None:
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_grants_cache_for_team,
+        )
+
+        if target_kind == "team":
+            await invalidate_gateway_grants_cache_for_team(target_id)
+        else:
+            from domains.gateway.application.system_grants_cache import (
+                invalidate_all_grants_cache,
+            )
+
+            await invalidate_all_grants_cache()
 
     async def list_grants_for_target(
         self,

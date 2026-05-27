@@ -64,18 +64,13 @@ async def _resolve_personal_team_model(
     )
 
 
-async def resolve_model_or_route(
+async def _resolve_model_or_route_uncached(
     session: AsyncSession,
     team_id: uuid.UUID,
     name: str,
     *,
     user_id: uuid.UUID | None = None,
 ) -> ResolvedModelName | None:
-    """``GatewayModel.name`` 优先，未命中则按 ``GatewayRoute.virtual_model`` 解析主选模型。
-
-    返回 ``None`` 表示该名字既没有对应注册行也没有路由（presentation 层应继续按原 vkey 白名单
-    或 LiteLLM 兜底处理）。
-    """
     cleaned = name.strip() if name else ""
     if not cleaned:
         return None
@@ -110,6 +105,46 @@ async def resolve_model_or_route(
                 via_route=route.virtual_model,
             )
     return None
+
+
+async def resolve_model_or_route(
+    session: AsyncSession,
+    team_id: uuid.UUID,
+    name: str,
+    *,
+    user_id: uuid.UUID | None = None,
+) -> ResolvedModelName | None:
+    """``GatewayModel.name`` 优先，未命中则按 ``GatewayRoute.virtual_model`` 解析主选模型。
+
+    返回 ``None`` 表示该名字既没有对应注册行也没有路由（presentation 层应继续按原 vkey 白名单
+    或 LiteLLM 兜底处理）。
+    """
+    cleaned = name.strip() if name else ""
+    if not cleaned:
+        return None
+
+    from bootstrap.config import settings
+    from domains.gateway.application.resolve_model_cache import (
+        CACHE_MISS,
+        hydrate_resolve_cache_entry,
+        is_negative_resolve_cache,
+        peek_resolve_cache_entry,
+        put_resolve_cache_entry,
+    )
+
+    if settings.gateway_resolve_model_cache_enabled:
+        cached = peek_resolve_cache_entry(team_id, cleaned, user_id=user_id)
+        if cached is not CACHE_MISS:
+            if is_negative_resolve_cache(cached):
+                return None
+            return await hydrate_resolve_cache_entry(session, cached)
+
+    resolved = await _resolve_model_or_route_uncached(
+        session, team_id, cleaned, user_id=user_id
+    )
+    if settings.gateway_resolve_model_cache_enabled:
+        put_resolve_cache_entry(team_id, cleaned, user_id=user_id, resolved=resolved)
+    return resolved
 
 
 __all__ = ["ResolvedModelName", "resolve_model_or_route"]

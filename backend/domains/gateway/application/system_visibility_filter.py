@@ -58,6 +58,28 @@ async def load_system_credentials_by_ids(
     return {row.id: row for row in rows}
 
 
+async def _grant_keys_for_visibility(
+    session: AsyncSession,
+    *,
+    team_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+) -> frozenset[tuple[str, uuid.UUID]]:
+    from domains.gateway.application.system_grants_cache import (
+        get_cached_grant_keys,
+        put_cached_grant_keys,
+    )
+
+    cached = await get_cached_grant_keys(team_id, user_id)
+    if cached is not None:
+        return cached
+    grant_rows = await SystemGatewayGrantRepository(session).list_enabled_for_targets(
+        team_id=team_id,
+        user_id=user_id,
+    )
+    await put_cached_grant_keys(team_id, user_id, grant_rows)
+    return frozenset((g.subject_kind, g.subject_id) for g in grant_rows)
+
+
 async def filter_visible_system_gateway_models(
     session: AsyncSession,
     rows: list[SystemGatewayModel],
@@ -77,11 +99,9 @@ async def filter_visible_system_gateway_models(
     if not snapshots_need_grant_lookup(snapshots):
         return rows
 
-    grant_rows = await SystemGatewayGrantRepository(session).list_enabled_for_targets(
-        team_id=tenant_id,
-        user_id=user_id,
+    granted_keys = await _grant_keys_for_visibility(
+        session, team_id=tenant_id, user_id=user_id
     )
-    granted_keys = {(g.subject_kind, g.subject_id) for g in grant_rows}
     allowed_ids = visible_system_model_ids(snapshots, granted_keys)
     return [row for row in rows if row.id in allowed_ids]
 
@@ -118,11 +138,9 @@ async def filter_visible_system_provider_credentials(
         return list(rows)
     if not system_credentials_need_grant_lookup(rows):
         return list(rows)
-    grant_rows = await SystemGatewayGrantRepository(session).list_enabled_for_targets(
-        team_id=tenant_id,
-        user_id=user_id,
+    granted_keys = await _grant_keys_for_visibility(
+        session, team_id=tenant_id, user_id=user_id
     )
-    granted_keys = {(g.subject_kind, g.subject_id) for g in grant_rows}
     return [
         row
         for row in rows

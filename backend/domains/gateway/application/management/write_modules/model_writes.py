@@ -145,7 +145,7 @@ class ModelWritesMixin:
             row = await self._models.create(tenant_id=tenant_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
             created.append(row)
         if reload_router:
-            await self.reload_litellm_router()
+            await self.reload_litellm_router(tenant_id=tenant_id)
         return created
 
     async def update_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID, fields: dict[str, Any]) -> Any:
@@ -175,7 +175,7 @@ class ModelWritesMixin:
         updated = await self._models.update(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError('model', str(model_id))
-        await self.reload_litellm_router()
+        await self.reload_litellm_router(tenant_id=tenant_id)
         return updated
 
     async def delete_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> None:
@@ -188,6 +188,7 @@ class ModelWritesMixin:
         await self._finalize_gateway_model_deletions(
             deleted_ids=frozenset({model_id}),
             deleted_names=frozenset({model_name}),
+            tenant_id=tenant_id,
         )
 
     async def delete_personal_models_batch(
@@ -251,7 +252,7 @@ class ModelWritesMixin:
             enabled=enabled,
         )
         if reload_router:
-            await self.reload_litellm_router()
+            await self.reload_litellm_router(tenant_id=tenant_id)
         return row
 
     async def create_system_gateway_model(
@@ -437,7 +438,7 @@ class ModelWritesMixin:
                 with suppress(Exception):
                     await repo.delete(r.id)
             raise
-        await self.reload_litellm_router()
+        await self.reload_litellm_router(tenant_id=tenant_id)
         assert route is not None
         return MultiCredentialGatewayModelResult(route=route, models=created_models)
 
@@ -553,7 +554,7 @@ class ModelWritesMixin:
             if updated is None:
                 raise ManagementEntityNotFoundError('model', str(model_id))
             if reload_router:
-                await self.reload_litellm_router()
+                await self.reload_litellm_router(tenant_id=tenant_id)
             return updated
 
         system_existing = await repo.get_system(model_id)
@@ -632,6 +633,7 @@ class ModelWritesMixin:
         *,
         deleted_ids: frozenset[uuid.UUID],
         deleted_names: frozenset[str],
+        tenant_id: uuid.UUID | None = None,
     ) -> tuple[int, int]:
         if not deleted_names:
             return 0, 0
@@ -641,7 +643,7 @@ class ModelWritesMixin:
             model_ids=deleted_ids,
             model_names=deleted_names,
         )
-        await self.reload_litellm_router()
+        await self.reload_litellm_router(tenant_id=tenant_id)
         return grants_removed, budgets_removed
 
     async def delete_gateway_model(
@@ -659,6 +661,7 @@ class ModelWritesMixin:
         await self._finalize_gateway_model_deletions(
             deleted_ids=frozenset({deleted_id}),
             deleted_names=frozenset({deleted_name}),
+            tenant_id=tenant_id,
         )
 
     async def delete_gateway_models_batch(
@@ -698,6 +701,7 @@ class ModelWritesMixin:
             grants_removed, budgets_removed = await self._finalize_gateway_model_deletions(
                 deleted_ids=frozenset(deleted_ids),
                 deleted_names=frozenset(deleted_names),
+                tenant_id=tenant_id,
             )
 
         return GatewayModelBatchDeleteResult(
@@ -737,7 +741,7 @@ class ModelWritesMixin:
             succeeded.append(model_id)
 
         if succeeded:
-            await self.reload_litellm_router()
+            await self.reload_litellm_router(tenant_id=tenant_id)
 
         return GatewayModelBatchResyncCapabilitiesResult(
             succeeded=succeeded,

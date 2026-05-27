@@ -7,13 +7,20 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.identity.application.ports import UserPlatformRoleLookupPort
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot, TeamSnapshot
 from domains.tenancy.domain.policies.gateway_team_list_visibility import (
     is_visible_in_platform_admin_gateway_list,
 )
+from domains.tenancy.domain.policies.team_invite_candidate_scope import (
+    SETTINGS_KEY,
+    validate_invite_candidate_scope_value,
+)
 from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
-from domains.tenancy.domain.policies.team_role import effective_team_role
-from domains.tenancy.infrastructure.identity_user_role_lookup import IdentityUserRoleLookup
+from domains.tenancy.domain.policies.team_role import TeamRole, effective_team_role
+from domains.tenancy.infrastructure.identity_user_role_lookup import (
+    user_platform_role_lookup_for_session,
+)
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from domains.tenancy.infrastructure.models.team import Team, TeamMember
 from domains.tenancy.infrastructure.repositories.team_repository import (
@@ -36,12 +43,15 @@ class TeamService:
         session: AsyncSession,
         *,
         membership: MembershipPort | None = None,
+        user_role_lookup: UserPlatformRoleLookupPort | None = None,
     ) -> None:
         self._session = session
         self._teams = TeamRepository(session)
         self._members = TeamMemberRepository(session)
         self._membership = membership or TenancyMembershipAdapter()
-        self._user_role_lookup = IdentityUserRoleLookup(session)
+        self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(
+            session
+        )
 
     async def _filter_platform_admin_teams(
         self,
@@ -118,8 +128,13 @@ class TeamService:
             )
         existing = await self._members.get(team_id, user_id)
         if existing is not None:
-            return await self._members.update_role(team_id, user_id, role) or existing
-        return await self._members.add(team_id, user_id, role)
+            member = await self._members.update_role(team_id, user_id, role) or existing
+        else:
+            member = await self._members.add(team_id, user_id, role)
+        from domains.tenancy.application.team_cache import invalidate_member
+
+        invalidate_member(team_id, user_id)
+        return member
 
     async def remove_member(self, team_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         team = await self._teams.get(team_id)
@@ -127,7 +142,12 @@ class TeamService:
             return False
         if team.kind == "personal" and team.owner_user_id == user_id:
             raise ValueError("Cannot remove owner from personal team")
-        return await self._members.remove(team_id, user_id)
+        removed = await self._members.remove(team_id, user_id)
+        if removed:
+            from domains.tenancy.application.team_cache import invalidate_member
+
+            invalidate_member(team_id, user_id)
+        return removed
 
     async def list_user_teams(self, user_id: uuid.UUID) -> list[Team]:
         return await self._teams.list_for_user(user_id)
@@ -182,7 +202,22 @@ class TeamService:
         ]
 
     async def get_team(self, team_id: uuid.UUID) -> Team | None:
-        return await self._teams.get(team_id)
+        from bootstrap.config import settings
+        from domains.tenancy.application.team_cache import (
+            CACHE_MISS,
+            peek_cached_team_snapshot,
+            put_cached_team_snapshot,
+            team_from_snapshot,
+        )
+
+        if settings.gateway_team_cache_enabled:
+            cached = peek_cached_team_snapshot(team_id)
+            if cached is not CACHE_MISS:
+                return team_from_snapshot(cached) if cached is not None else None
+        team = await self._teams.get(team_id)
+        if settings.gateway_team_cache_enabled:
+            put_cached_team_snapshot(team_id, team)
+        return team
 
     async def get_personal(self, user_id: uuid.UUID) -> Team | None:
         """获取用户 personal team ORM（同域 application 编排用）。"""
@@ -197,8 +232,28 @@ class TeamService:
         *,
         name: str | None = None,
         settings: dict[str, Any] | None = None,
+        actor_team_role: str | None = None,
     ) -> Team | None:
-        return await self._teams.update(team_id, name=name, settings=settings)
+        merged_settings: dict[str, Any] | None = None
+        if settings is not None:
+            team = await self._teams.get(team_id)
+            if team is None:
+                return None
+            if SETTINGS_KEY in settings and actor_team_role != TeamRole.OWNER.value:
+                raise TeamPermissionDeniedError(
+                    "Only team owner may change invite candidate scope"
+                )
+            merged_settings = {**(team.settings or {}), **settings}
+            if SETTINGS_KEY in settings:
+                validate_invite_candidate_scope_value(settings[SETTINGS_KEY])
+        updated = await self._teams.update(
+            team_id, name=name, settings=merged_settings
+        )
+        if updated is not None:
+            from domains.tenancy.application.team_cache import invalidate_team
+
+            invalidate_team(team_id)
+        return updated
 
     async def delete_shared_team(self, team_id: uuid.UUID) -> None:
         team = await self._teams.get(team_id)

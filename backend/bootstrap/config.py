@@ -340,6 +340,12 @@ class Settings(BaseSettings):
     gateway_router_cooldown_seconds: int = 60
     # 跨进程 cooldown / TPM-RPM 共享 Redis URL（默认复用主 redis）
     gateway_router_redis_url: str | None = None
+    # 热路径：``resolve_model_or_route`` 进程内 LRU+TTL（管理面写路径会失效）
+    gateway_resolve_model_cache_enabled: bool = True
+    # 热路径：``TeamService.get_team`` / ``member_role`` 进程内短 TTL
+    gateway_team_cache_enabled: bool = True
+    # SQLAlchemy 慢查询日志阈值（毫秒）；0 = 关闭
+    gateway_slow_sql_threshold_ms: int = Field(default=50, ge=0)
     # rollup 任务间隔（秒）
     gateway_rollup_interval_seconds: int = 300
     # 告警检查间隔（秒）
