@@ -24,12 +24,14 @@ def build_gateway_model_list_response(
     *,
     include_system_credential: bool = False,
     credentials_by_id: dict[Any, SystemProviderCredential] | None = None,
+    team_credentials_by_id: dict[Any, object] | None = None,
 ) -> GatewayModelListResponse:
     items = [
         build_gateway_model_response(
             row,
             include_system_credential=include_system_credential,
             credentials_by_id=credentials_by_id,
+            team_credentials_by_id=team_credentials_by_id,
         )
         for row in page.items
     ]

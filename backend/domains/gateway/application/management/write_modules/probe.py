@@ -104,8 +104,25 @@ class ProbeWritesMixin:
             return await self._system_creds.get(target.credential_id)
         return await self._creds.get(target.credential_id)
 
-    async def test_gateway_model(self, model_id: uuid.UUID, *, tenant_id: uuid.UUID) -> dict[str, Any]:
+    async def test_gateway_model(
+        self,
+        model_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None = None,
+        team_role: str = "member",
+        is_platform_admin: bool = False,
+    ) -> dict[str, Any]:
         target = await self._resolve_probe_target(model_id, tenant_id=tenant_id)
+        if not target.is_system:
+            await self._assert_team_model_mutation_allowed(
+                credential_id=target.credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+                mutation="update",
+            )
         capability = target.capability
         litellm_model = build_litellm_model_id(target.provider, target.real_model)
         tested_at = datetime.now(UTC)

@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from domains.tenancy.domain.policies.team_role import TeamRole
-
 from domains.gateway.domain.policies.managed_team_resource_policy import (
     ManagedTeamResourceListPlan as ManagedTeamCredentialListPlan,
+)
+from domains.gateway.domain.policies.managed_team_resource_policy import (
     build_managed_team_resource_list_plan as build_managed_team_credential_list_plan,
 )
+from domains.tenancy.domain.policies.team_role import TeamRole
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -38,6 +39,24 @@ def is_writable_gateway_team(
     return role in (TeamRole.OWNER.value, TeamRole.ADMIN.value)
 
 
+def is_readable_collaboration_gateway_team(
+    *,
+    kind: str,
+    role: str,
+    is_platform_admin: bool,
+) -> bool:
+    """协作团队 member+ 可读聚合列表；personal team 不在团队 Tab 展示。"""
+    if is_platform_admin:
+        return True
+    if kind == "personal":
+        return False
+    return role in (
+        TeamRole.OWNER.value,
+        TeamRole.ADMIN.value,
+        TeamRole.MEMBER.value,
+    )
+
+
 def filter_writable_team_ids(
     teams: Iterable[WritableTeamSnapshot],
     *,
@@ -59,5 +78,6 @@ __all__ = [
     "WritableTeamSnapshot",
     "build_managed_team_credential_list_plan",
     "filter_writable_team_ids",
+    "is_readable_collaboration_gateway_team",
     "is_writable_gateway_team",
 ]

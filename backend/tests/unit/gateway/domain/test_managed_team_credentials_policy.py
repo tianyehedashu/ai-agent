@@ -69,6 +69,26 @@ def test_build_managed_team_credential_list_plan_filters_members() -> None:
     assert shared_member.team_id not in plan.tenant_ids
 
 
+def test_build_managed_team_readable_resource_list_plan_includes_members() -> None:
+    from domains.gateway.domain.policies.managed_team_resource_policy import (
+        build_managed_team_readable_resource_list_plan,
+    )
+
+    personal = _snap("personal", TeamRole.OWNER.value)
+    shared_admin = _snap("shared", TeamRole.ADMIN.value)
+    shared_member = _snap("shared", TeamRole.MEMBER.value)
+
+    plan = build_managed_team_readable_resource_list_plan(
+        [personal, shared_admin, shared_member],
+        is_platform_admin=False,
+    )
+
+    assert plan.queried_team_count == 2
+    assert personal.team_id not in plan.tenant_ids
+    assert shared_admin.team_id in plan.tenant_ids
+    assert shared_member.team_id in plan.tenant_ids
+
+
 def test_build_managed_team_resource_list_plan_platform_admin_includes_all() -> None:
     teams = [_snap("shared", TeamRole.MEMBER.value), _snap("shared", TeamRole.ADMIN.value)]
     plan = build_managed_team_resource_list_plan(teams, is_platform_admin=True)

@@ -10,7 +10,10 @@ from domains.gateway.application.management.credential_read_mappers import crede
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.domain.policies.managed_team_credentials_policy import WritableTeamSnapshot
 from domains.gateway.domain.policies.managed_team_resource_policy import (
-    build_managed_team_resource_list_plan,
+    build_managed_team_readable_resource_list_plan,
+)
+from domains.gateway.domain.team_credential_access import (
+    filter_team_credentials_visible_to_actor,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
@@ -54,23 +57,40 @@ async def list_managed_team_credentials_for_actor(
         WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
         for m in memberships
     ]
-    plan = build_managed_team_resource_list_plan(
+    plan = build_managed_team_readable_resource_list_plan(
         snapshots,
         is_platform_admin=is_platform_admin,
     )
     tenant_ids = list(plan.tenant_ids)
+    role_by_tenant = {m.team_id: m.role for m in memberships if m.kind != "personal"}
     cred_repo = ProviderCredentialRepository(session)
 
-    total = await cred_repo.count_team_scope_for_tenants(tenant_ids)
-    tenant_ids_with_credentials = await cred_repo.list_tenant_ids_with_team_scope_for_tenants(
-        tenant_ids
-    )
-    rows = await cred_repo.list_team_scope_for_tenants_page(
+    all_rows = await cred_repo.list_team_scope_for_tenants_page(
         tenant_ids,
-        offset=page_params.offset,
-        limit=page_params.page_size,
+        offset=0,
+        limit=100_000,
     )
-    items = [credential_from_orm(row, encryption_key=encryption_key) for row in rows]
+    visible_rows = []
+    visible_tenant_ids: set[uuid.UUID] = set()
+    for row in all_rows:
+        if row.tenant_id is None:
+            continue
+        team_role = role_by_tenant.get(row.tenant_id, "member")
+        visible = filter_team_credentials_visible_to_actor(
+            [row],
+            actor_user_id=user_id,
+            team_role=team_role,
+            is_platform_admin=False,
+        )
+        if visible:
+            visible_rows.append(row)
+            visible_tenant_ids.add(row.tenant_id)
+
+    total = len(visible_rows)
+    page_rows = visible_rows[
+        page_params.offset : page_params.offset + page_params.page_size
+    ]
+    items = [credential_from_orm(row, encryption_key=encryption_key) for row in page_rows]
     page = build_page(
         items=items,
         total=total,
@@ -82,7 +102,7 @@ async def list_managed_team_credentials_for_actor(
         queried_team_count=plan.queried_team_count,
         queried_personal_team_count=plan.queried_personal_team_count,
         queried_shared_team_count=plan.queried_shared_team_count,
-        tenant_ids_with_credentials=tuple(tenant_ids_with_credentials),
+        tenant_ids_with_credentials=tuple(sorted(visible_tenant_ids)),
     )
 
 

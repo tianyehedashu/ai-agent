@@ -30,7 +30,6 @@ import {
   credentialDetailAddModelsHref,
   credentialDetailHref,
 } from '@/features/gateway-models/paths'
-import { useGatewayTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { Trash2 } from '@/lib/lucide-icons'
 
 export interface ManagedCredentialRowProps {
@@ -38,8 +37,9 @@ export interface ManagedCredentialRowProps {
   routeTeamId: string
   listVariant: 'team' | 'system'
   showAffiliationColumn: boolean
+  teamNameById: Map<string, string>
+  viewerUserId: string | null | undefined
   canWrite: boolean
-  isAdmin: boolean
   isPlatformAdmin: boolean
   onDelete: (c: ProviderCredential) => void
   updateMutation: {
@@ -57,15 +57,15 @@ export function ManagedCredentialRow({
   routeTeamId,
   listVariant,
   showAffiliationColumn,
+  teamNameById,
+  viewerUserId,
   canWrite,
-  isAdmin,
   isPlatformAdmin,
   onDelete,
   updateMutation,
 }: ManagedCredentialRowProps): React.JSX.Element {
-  const teamNameById = useGatewayTeamNameMap()
-  const editable = canEditGatewayCredential(c, canWrite, isPlatformAdmin)
-  const linkable = canLinkToCredentialDetail(c, isAdmin, isPlatformAdmin)
+  const editable = canEditGatewayCredential(c, viewerUserId, canWrite, isPlatformAdmin)
+  const linkable = canLinkToCredentialDetail(c, viewerUserId, canWrite, isPlatformAdmin)
   const detailTeamId = credentialDetailTeamId(c, routeTeamId)
   const configManaged = isConfigManagedSystemCredential(c)
   const updateTeamId = c.tenant_id ?? routeTeamId

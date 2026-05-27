@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -79,6 +80,11 @@ class EntitlementPlan(BaseModel, PolicyTargetMixin):
             "is_active",
             "valid_from",
             "valid_until",
+        ),
+        Index(
+            "ix_entitlement_plans_lifecycle",
+            "valid_until",
+            postgresql_where=text("is_active IS TRUE"),
         ),
     )
 

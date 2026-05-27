@@ -88,6 +88,12 @@ export function useGatewayWritableCollaborationTeams(enabled = true): GatewayTea
   return useMemo(() => filterCollaborationGatewayTeams(writable), [writable])
 }
 
+/** 团队凭据/模型 Tab：membership 内全部协作团队（member 只读 + admin 可写） */
+export function useGatewayMemberCollaborationTeams(enabled = true): GatewayTeam[] {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  return useMemo(() => filterCollaborationGatewayTeams(teams), [teams])
+}
+
 /** 平台 admin 跨团队搜索：按团队名称拉取全站活跃团队（需非空 search） */
 export function useGatewayTeamsBySearch(search: string, enabled: boolean): GatewayTeam[] {
   const trimmedSearch = search.trim()

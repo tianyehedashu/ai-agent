@@ -22,7 +22,6 @@ from domains.gateway.application.gateway_catalog_maintenance import (
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
     CurrentTeam,
-    RequiredTeamAdmin,
 )
 from domains.gateway.presentation.gateway_model_list_response import (
     build_gateway_model_list_response,
@@ -149,6 +148,7 @@ async def list_models(
     )
     include_cred = registry_scope == "system" and team.is_platform_admin
     credentials_by_id = None
+    team_credentials_by_id = None
     if include_cred:
         cred_ids = {
             m.credential_id
@@ -156,10 +156,20 @@ async def list_models(
             if registry_kind_for_merged_row(m) == "system"
         }
         credentials_by_id = await reads.map_system_credentials_by_id(cred_ids)
+    if registry_scope == "team":
+        team_cred_ids = {
+            m.credential_id
+            for m in page.items
+            if registry_kind_for_merged_row(m) == "team"
+        }
+        team_credentials_by_id = await reads.map_team_credentials_display_by_id(
+            team_cred_ids
+        )
     return build_gateway_model_list_response(
         page,
         include_system_credential=include_cred,
         credentials_by_id=credentials_by_id if include_cred else None,
+        team_credentials_by_id=team_credentials_by_id,
     )
 
 
@@ -238,12 +248,18 @@ async def get_model(
         raise NotFoundError("Model")
     include_cred = registry_scope == "system" and team.is_platform_admin
     credentials_by_id = None
+    team_credentials_by_id = None
     if include_cred and registry_kind_for_merged_row(row) == "system":
         credentials_by_id = await reads.map_system_credentials_by_id({row.credential_id})
+    if registry_kind_for_merged_row(row) == "team":
+        team_credentials_by_id = await reads.map_team_credentials_display_by_id(
+            {row.credential_id}
+        )
     return build_gateway_model_response(
         row,
         include_system_credential=include_cred,
         credentials_by_id=credentials_by_id,
+        team_credentials_by_id=team_credentials_by_id,
     )
 
 
@@ -276,13 +292,15 @@ async def admin_credential_stats(
 @router.post("/models", response_model=GatewayModelResponse, status_code=status.HTTP_201_CREATED)
 async def create_model(
     body: GatewayModelCreate,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     reads: MgmtReads,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
     cred = await reads.get_managed_credential_for_team(
         body.credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     model = await writes.create_managed_gateway_model(
@@ -298,10 +316,18 @@ async def create_model(
         tpm_limit=body.tpm_limit,
         tags=body.tags,
         upstream_call_shape=body.upstream_call_shape,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         enabled=body.enabled,
     )
-    return build_gateway_model_response(model)
+    team_credentials_by_id = await reads.map_team_credentials_display_by_id(
+        {model.credential_id}
+    )
+    return build_gateway_model_response(
+        model,
+        team_credentials_by_id=team_credentials_by_id,
+    )
 
 
 @router.post(
@@ -311,7 +337,7 @@ async def create_model(
 )
 async def create_multi_credential_model(
     body: MultiCredentialGatewayModelCreate,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> MultiCredentialGatewayModelResponse:
     """同 ``(provider, real_model)`` 多凭据一键注册 + 自动 ``GatewayRoute``，启用 Router 负载均衡。"""
@@ -322,6 +348,8 @@ async def create_multi_credential_model(
         real_model=body.real_model,
         provider=body.provider,
         credential_ids=list(body.credential_ids),
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         strategy=body.strategy.value,
         weight=body.weight,
@@ -346,12 +374,14 @@ async def create_multi_credential_model(
 async def update_model(
     model_id: uuid.UUID,
     body: GatewayModelUpdate,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> GatewayModelResponse:
     updated = await writes.update_gateway_model(
         model_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         fields=body.model_dump(exclude_unset=True, exclude_none=True),
     )
@@ -361,12 +391,14 @@ async def update_model(
 @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model(
     model_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> None:
     await writes.delete_gateway_model(
         model_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
 
@@ -374,12 +406,14 @@ async def delete_model(
 @router.post("/models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
 async def batch_delete_models(
     payload: GatewayModelBatchDeleteRequest,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> GatewayModelBatchDeleteResponse:
     result = await writes.delete_gateway_models_batch(
         payload.model_ids,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     return GatewayModelBatchDeleteResponse(
@@ -403,12 +437,14 @@ async def batch_delete_models(
 )
 async def batch_resync_model_capabilities(
     payload: GatewayModelBatchResyncCapabilitiesRequest,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> GatewayModelBatchResyncCapabilitiesResponse:
     result = await writes.resync_gateway_models_capabilities_batch(
         payload.model_ids,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     return GatewayModelBatchResyncCapabilitiesResponse(
@@ -427,7 +463,7 @@ async def batch_resync_model_capabilities(
 @router.post("/models/{model_id}/test", response_model=GatewayModelTestResponse)
 async def test_model(
     model_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> GatewayModelTestResponse:
     """对 Gateway 团队模型发起一次最小调用做连通性测试（chat / embedding / 生图 / 视频生成）。
@@ -435,7 +471,13 @@ async def test_model(
     成功/失败均返回 200 + ``success`` 字段，结果同步落库（``last_test_status``
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。
     """
-    result = await writes.test_gateway_model(model_id, tenant_id=team.team_id)
+    result = await writes.test_gateway_model(
+        model_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
+        is_platform_admin=team.is_platform_admin,
+    )
     return GatewayModelTestResponse.model_validate(result)
 
 

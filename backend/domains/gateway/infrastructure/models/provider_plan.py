@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -83,6 +84,11 @@ class ProviderPlan(BaseModel):
             "is_active",
             "valid_from",
             "valid_until",
+        ),
+        Index(
+            "ix_provider_plans_lifecycle",
+            "valid_until",
+            postgresql_where=text("is_active IS TRUE"),
         ),
     )
 

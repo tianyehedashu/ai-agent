@@ -35,10 +35,17 @@ def build_gateway_model_response(
     *,
     include_system_credential: bool = False,
     credentials_by_id: dict | None = None,
+    team_credentials_by_id: dict | None = None,
 ) -> GatewayModelResponse:
     data = tenant_scoped_orm_dict(record)
     kind = registry_kind_for_row(record)
     data["registry_kind"] = kind
+    cred_id = getattr(record, "credential_id", None)
+    if team_credentials_by_id is not None and cred_id is not None:
+        team_cred = team_credentials_by_id.get(cred_id)
+        if team_cred is not None:
+            data["credential_name"] = team_cred.name
+            data["credential_created_by_user_id"] = team_cred.created_by_user_id
     if kind == "system":
         data["visibility"] = getattr(record, "visibility", None)
         if include_system_credential:

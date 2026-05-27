@@ -31,7 +31,7 @@ async def list_managed_team_credentials(
     page: PageDep,
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> ManagedTeamCredentialListResponse:
-    """列出当前用户可管理团队的 team-scope 凭据（跨团队聚合，分页）。"""
+    """列出当前用户 membership 内协作团队的 team-scope 凭据（跨团队聚合，分页）。"""
     is_platform_admin = current_user.role == ADMIN_ROLE
     enc_key = encryption_key()
     result = await list_managed_team_credentials_for_actor(

@@ -277,15 +277,72 @@ class CredentialUpstreamCatalogService:
         self,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         credential_id: uuid.UUID,
     ) -> CredentialProbeResult:
         row = await self._reads.get_managed_credential_for_team(
             credential_id,
             tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
             is_platform_admin=is_platform_admin,
         )
         return await self._probe_credential_row(credential_id=credential_id, row=row)
+
+    async def batch_import_team_models(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+        credential_id: uuid.UUID,
+        provider: str,
+        capability: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        enabled: bool,
+        items: list[tuple[str, str | None]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        cred = await self._reads.get_managed_credential_for_team(
+            credential_id,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
+        if registry_target_for_credential_scope(cred.scope) == "system":
+            return await self._batch_import_system_models(
+                is_platform_admin=is_platform_admin,
+                credential_id=credential_id,
+                provider=provider,
+                capability=capability,
+                weight=weight,
+                rpm_limit=rpm_limit,
+                tpm_limit=tpm_limit,
+                tags=tags,
+                enabled=enabled,
+                items=items,
+            )
+        return await self._batch_import_team_models_for_tenant(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+            credential_id=credential_id,
+            provider=provider,
+            capability=capability,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=tags,
+            enabled=enabled,
+            items=items,
+        )
 
     async def batch_import_personal_models(
         self,
@@ -360,57 +417,12 @@ class CredentialUpstreamCatalogService:
             await self._writes.reload_litellm_router()
         return created, failed
 
-    async def batch_import_team_models(
-        self,
-        *,
-        tenant_id: uuid.UUID,
-        is_platform_admin: bool,
-        credential_id: uuid.UUID,
-        provider: str,
-        capability: str,
-        weight: int,
-        rpm_limit: int | None,
-        tpm_limit: int | None,
-        tags: dict[str, Any] | None,
-        enabled: bool,
-        items: list[tuple[str, str | None]],
-    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-        cred = await self._reads.get_managed_credential_for_team(
-            credential_id,
-            tenant_id=tenant_id,
-            is_platform_admin=is_platform_admin,
-        )
-        if registry_target_for_credential_scope(cred.scope) == "system":
-            return await self._batch_import_system_models(
-                is_platform_admin=is_platform_admin,
-                credential_id=credential_id,
-                provider=provider,
-                capability=capability,
-                weight=weight,
-                rpm_limit=rpm_limit,
-                tpm_limit=tpm_limit,
-                tags=tags,
-                enabled=enabled,
-                items=items,
-            )
-        return await self._batch_import_team_models_for_tenant(
-            tenant_id=tenant_id,
-            is_platform_admin=is_platform_admin,
-            credential_id=credential_id,
-            provider=provider,
-            capability=capability,
-            weight=weight,
-            rpm_limit=rpm_limit,
-            tpm_limit=tpm_limit,
-            tags=tags,
-            enabled=enabled,
-            items=items,
-        )
-
     async def _batch_import_team_models_for_tenant(
         self,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         credential_id: uuid.UUID,
         provider: str,
@@ -443,6 +455,8 @@ class CredentialUpstreamCatalogService:
                 rpm_limit=rpm_limit,
                 tpm_limit=tpm_limit,
                 tags=tags,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
                 is_platform_admin=is_platform_admin,
                 enabled=enabled,
                 reload_router=False,

@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
 import { CollaborationTeamGroupHeader } from '@/features/gateway-teams/collaboration-team-group-header'
+import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
+import { useGatewayTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { Plus, Search } from '@/lib/lucide-icons'
 
 export interface CollaborationTeamsCredentialsGroupedListProps {
@@ -19,8 +21,6 @@ export interface CollaborationTeamsCredentialsGroupedListProps {
   requiresSearch: boolean
   isLoading: boolean
   currentPage: number
-  canWrite: boolean
-  isAdmin: boolean
   isPlatformAdmin: boolean
   viewerUserId?: string | null
   routeTeamId: string
@@ -45,8 +45,6 @@ export function CollaborationTeamsCredentialsGroupedList({
   requiresSearch,
   isLoading,
   currentPage,
-  canWrite,
-  isAdmin,
   isPlatformAdmin,
   viewerUserId,
   routeTeamId,
@@ -56,6 +54,7 @@ export function CollaborationTeamsCredentialsGroupedList({
   onDelete,
   updateMutation,
 }: CollaborationTeamsCredentialsGroupedListProps): React.JSX.Element {
+  const teamNameById = useGatewayTeamNameMap()
   if (requiresSearch) {
     return (
       <div className="px-4 py-10 text-center">
@@ -80,6 +79,7 @@ export function CollaborationTeamsCredentialsGroupedList({
           const hasCredentialsOnServer = tenantIdsWithCredentials.has(team.id)
           const showOffPageHint =
             hasCredentialsOnServer && teamCredentials.length === 0 && currentPage > 1
+          const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
 
           return (
             <section key={team.id} aria-label={`团队 ${team.name} 凭据`}>
@@ -88,31 +88,29 @@ export function CollaborationTeamsCredentialsGroupedList({
                 isPlatformAdmin={isPlatformAdmin}
                 viewerUserId={viewerUserId}
                 actions={
-                  canWrite ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={importPendingTeamId === team.id}
-                        onClick={() => {
-                          onImportForTeam(team.id)
-                        }}
-                      >
-                        {importPendingTeamId === team.id ? '导入中…' : '从配置导入'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => {
-                          onAddForTeam(team.id)
-                        }}
-                      >
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        添加凭据
-                      </Button>
-                    </>
-                  ) : null
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={importPendingTeamId === team.id}
+                      onClick={() => {
+                        onImportForTeam(team.id)
+                      }}
+                    >
+                      {importPendingTeamId === team.id ? '导入中…' : '从配置导入'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        onAddForTeam(team.id)
+                      }}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      添加凭据
+                    </Button>
+                  </>
                 }
               />
               {teamCredentials.length > 0 ? (
@@ -136,8 +134,9 @@ export function CollaborationTeamsCredentialsGroupedList({
                         routeTeamId={routeTeamId}
                         listVariant="team"
                         showAffiliationColumn={false}
-                        canWrite={canWrite}
-                        isAdmin={isAdmin}
+                        teamNameById={teamNameById}
+                        viewerUserId={viewerUserId}
+                        canWrite={teamCanWrite}
                         isPlatformAdmin={isPlatformAdmin}
                         onDelete={onDelete}
                         updateMutation={updateMutation}

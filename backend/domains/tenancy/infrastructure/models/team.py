@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
-from sqlalchemy import Boolean, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,12 @@ class Team(BaseModel):
 
     __table_args__ = (
         UniqueConstraint("owner_user_id", "slug", name="uq_gateway_teams_owner_slug"),
+        Index(
+            "ix_gateway_teams_active_kind_created",
+            "kind",
+            "created_at",
+            postgresql_where=text("is_active IS TRUE"),
+        ),
     )
 
     def __repr__(self) -> str:

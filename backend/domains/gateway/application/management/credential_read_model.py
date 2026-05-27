@@ -28,6 +28,7 @@ class CredentialReadModel:
     effective_api_base_anthropic: str | None = None
     visibility: str | None = None
     api_key_masked: str | None = None
+    created_by_user_id: UUID | None = None
 
 
 __all__ = ["CredentialReadModel"]

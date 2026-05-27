@@ -15,7 +15,7 @@ from domains.gateway.application.model_list_pipeline import (
 )
 from domains.gateway.domain.policies.managed_team_credentials_policy import WritableTeamSnapshot
 from domains.gateway.domain.policies.managed_team_resource_policy import (
-    build_managed_team_resource_list_plan,
+    build_managed_team_readable_resource_list_plan,
 )
 from domains.gateway.domain.policies.model_registry_scope import (
     exclude_user_scope_credentials_for_registry,
@@ -58,7 +58,7 @@ async def list_managed_team_models_for_actor(
         WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
         for m in memberships
     ]
-    plan = build_managed_team_resource_list_plan(
+    plan = build_managed_team_readable_resource_list_plan(
         snapshots,
         is_platform_admin=is_platform_admin,
     )

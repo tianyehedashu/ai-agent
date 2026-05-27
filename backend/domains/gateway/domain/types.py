@@ -294,6 +294,8 @@ class TimeSeriesPoint:
 CONFIG_MANAGED_CREDENTIAL_NAME = "app-config-default"
 CONFIG_MANAGED_BY = "config"
 GATEWAY_MODEL_MANAGED_BY_TAG = "managed_by"
+# 凭据停用级联禁用模型时写入 tags；再次启用凭据时仅恢复带此标记的模型。
+CREDENTIAL_CASCADE_DISABLED_TAG = "disabled_by_credential"
 
 
 def credential_api_scope(
@@ -379,6 +381,7 @@ PERSONAL_MODEL_PROVIDERS: frozenset[str] = frozenset(
 __all__ = [
     "CONFIG_MANAGED_BY",
     "CONFIG_MANAGED_CREDENTIAL_NAME",
+    "CREDENTIAL_CASCADE_DISABLED_TAG",
     "GATEWAY_MODEL_MANAGED_BY_TAG",
     "MANAGED_GATEWAY_CREDENTIAL_PROVIDERS",
     "PERSONAL_MODEL_PROVIDERS",

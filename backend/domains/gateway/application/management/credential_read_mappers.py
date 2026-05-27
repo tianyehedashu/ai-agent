@@ -100,6 +100,7 @@ def credential_from_orm(
         api_key_encrypted=cred.api_key_encrypted,
         visibility=None,
         api_key_masked=api_key_masked,
+        created_by_user_id=cred.created_by_user_id,
     )
 
 

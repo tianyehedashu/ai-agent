@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -147,7 +148,13 @@ class SystemGatewayAlertRule(BaseModel):
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (Index("ix_system_gateway_alert_rules_enabled", "enabled"),)
+    __table_args__ = (
+        Index(
+            "ix_system_gateway_alert_rules_enabled",
+            "name",
+            postgresql_where=text("enabled IS TRUE"),
+        ),
+    )
 
 
 class SystemGatewayGrant(BaseModel):

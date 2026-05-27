@@ -108,6 +108,51 @@ def _prepare_gateway_model_write_fields(
 class ModelWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
+    async def _assert_team_model_mutation_allowed(
+        self,
+        *,
+        credential_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+        mutation: str,
+    ) -> None:
+        from domains.gateway.domain.policies.team_model_access import (
+            assert_can_create_model_on_team_credential,
+            assert_can_delete_team_model_on_credential,
+            assert_can_update_team_model_on_credential,
+        )
+
+        cred_row = await self._creds.get(credential_id)
+        if cred_row is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if cred_row.tenant_id is None or cred_row.scope == "user":
+            return
+        if cred_row.tenant_id != tenant_id:
+            raise CredentialNotFoundError(str(credential_id))
+        if mutation == "create":
+            assert_can_create_model_on_team_credential(
+                cred_row,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
+        elif mutation == "update":
+            assert_can_update_team_model_on_credential(
+                cred_row,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
+        else:
+            assert_can_delete_team_model_on_credential(
+                cred_row,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
+
     async def create_personal_models(self, user_id: uuid.UUID, *, display_name: str, provider: str, model_id: str, credential_id: uuid.UUID, model_types: list[str], tags: dict[str, Any] | None=None, enabled: bool=True, reload_router: bool=True) -> list[Any]:
         from domains.gateway.application.personal_models import (
             capability_for_model_type,
@@ -200,6 +245,8 @@ class ModelWritesMixin:
         return await self.delete_gateway_models_batch(
             model_ids,
             tenant_id=tenant_id,
+            actor_user_id=user_id,
+            team_role="owner",
             is_platform_admin=False,
         )
 
@@ -217,6 +264,8 @@ class ModelWritesMixin:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
         upstream_call_shape: str | None = None,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         enabled: bool = True,
         reload_router: bool = True,
@@ -226,6 +275,20 @@ class ModelWritesMixin:
         )
         if cred is None:
             raise CredentialNotFoundError(str(credential_id))
+        from domains.gateway.domain.policies.team_model_access import (
+            assert_can_create_model_on_team_credential,
+        )
+        from domains.gateway.infrastructure.models.provider_credential import (
+            ProviderCredential,
+        )
+
+        if isinstance(cred, ProviderCredential):
+            assert_can_create_model_on_team_credential(
+                cred,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
         if not team_model_credential_scope_allowed(bindable_credential_scope(cred)):
             raise ValidationError(
                 '系统凭据注册的模型应写入 system_gateway_models；'
@@ -314,6 +377,8 @@ class ModelWritesMixin:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
         upstream_call_shape: str | None = None,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         enabled: bool = True,
         reload_router: bool = True,
@@ -347,6 +412,8 @@ class ModelWritesMixin:
             tpm_limit=tpm_limit,
             tags=tags,
             upstream_call_shape=upstream_call_shape,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
             is_platform_admin=is_platform_admin,
             enabled=enabled,
             reload_router=reload_router,
@@ -361,6 +428,8 @@ class ModelWritesMixin:
         real_model: str,
         provider: str,
         credential_ids: list[uuid.UUID],
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         strategy: str = 'simple-shuffle',
         weight: int = 1,
@@ -427,6 +496,8 @@ class ModelWritesMixin:
                     tpm_limit=tpm_limit,
                     tags=tags,
                     upstream_call_shape=upstream_call_shape,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
                     is_platform_admin=is_platform_admin,
                     enabled=enabled,
                     reload_router=False,
@@ -449,6 +520,8 @@ class ModelWritesMixin:
         existing: Any,
         owner_tenant_id: uuid.UUID | None,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         fields: dict[str, Any],
         block_config_managed_rename: bool,
@@ -463,6 +536,15 @@ class ModelWritesMixin:
             )
             if cred is None:
                 raise CredentialNotFoundError(str(new_cid))
+            if owner_tenant_id is not None:
+                await self._assert_team_model_mutation_allowed(
+                    credential_id=new_cid,
+                    tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
+                    is_platform_admin=is_platform_admin,
+                    mutation="create",
+                )
             if owner_tenant_id is not None and not team_model_credential_scope_allowed(
                 bindable_credential_scope(cred)
             ):
@@ -522,6 +604,8 @@ class ModelWritesMixin:
         model_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         fields: dict[str, Any],
         reload_router: bool = True,
@@ -536,6 +620,14 @@ class ModelWritesMixin:
         if existing is not None:
             if existing.tenant_id is not None and existing.tenant_id != tenant_id:
                 raise ManagementEntityNotFoundError('model', str(model_id))
+            await self._assert_team_model_mutation_allowed(
+                credential_id=existing.credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+                mutation='update',
+            )
             tags = existing.tags or {}
             block_rename = (
                 existing.tenant_id is None
@@ -546,6 +638,8 @@ class ModelWritesMixin:
                 existing=existing,
                 owner_tenant_id=existing.tenant_id,
                 tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
                 is_platform_admin=is_platform_admin,
                 fields=fields,
                 block_config_managed_rename=block_rename,
@@ -567,6 +661,8 @@ class ModelWritesMixin:
             existing=system_existing,
             owner_tenant_id=None,
             tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
             is_platform_admin=is_platform_admin,
             fields=fields,
             block_config_managed_rename=is_config_managed_system_gateway_model(
@@ -585,6 +681,8 @@ class ModelWritesMixin:
         model_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
     ) -> tuple[uuid.UUID, str]:
         """删除单行并返回 (model_id, model_name)；不触发 prune / reload。"""
@@ -593,6 +691,14 @@ class ModelWritesMixin:
         if existing is not None:
             if existing.tenant_id is not None and existing.tenant_id != tenant_id:
                 raise ManagementEntityNotFoundError('model', str(model_id))
+            await self._assert_team_model_mutation_allowed(
+                credential_id=existing.credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+                mutation='delete',
+            )
             model_name = existing.name
             await repo.delete(model_id)
             return model_id, model_name
@@ -651,11 +757,15 @@ class ModelWritesMixin:
         model_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool = False,
     ) -> None:
         deleted_id, deleted_name = await self._delete_gateway_model_row(
             model_id,
             tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
             is_platform_admin=is_platform_admin,
         )
         await self._finalize_gateway_model_deletions(
@@ -669,6 +779,8 @@ class ModelWritesMixin:
         model_ids: list[uuid.UUID],
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool = False,
     ) -> GatewayModelBatchDeleteResult:
         if len(model_ids) > _BATCH_MODEL_OP_MAX:
@@ -686,6 +798,8 @@ class ModelWritesMixin:
                 deleted_id, deleted_name = await self._delete_gateway_model_row(
                     model_id,
                     tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
                     is_platform_admin=is_platform_admin,
                 )
             except (HttpMappableDomainError, ValidationError) as exc:
@@ -716,6 +830,8 @@ class ModelWritesMixin:
         model_ids: list[uuid.UUID],
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool = False,
     ) -> GatewayModelBatchResyncCapabilitiesResult:
         if len(model_ids) > _BATCH_MODEL_OP_MAX:
@@ -731,6 +847,8 @@ class ModelWritesMixin:
                 await self.update_gateway_model(
                     model_id,
                     tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
                     is_platform_admin=is_platform_admin,
                     fields={'resync_capabilities': True},
                     reload_router=False,

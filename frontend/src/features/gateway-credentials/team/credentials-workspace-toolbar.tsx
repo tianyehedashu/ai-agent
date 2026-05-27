@@ -22,7 +22,8 @@ export interface CredentialsWorkspaceToolbarProps {
   teamSearch: string
   onTeamSearchChange: (value: string) => void
   summary?: CredentialsWorkspaceSummary
-  canWrite: boolean
+  /** member+ 可添加团队凭据 */
+  canAdd: boolean
   onAdd: () => void
   isRefreshing?: boolean
   onRefresh?: () => void
@@ -39,7 +40,7 @@ export function CredentialsWorkspaceToolbar({
   teamSearch,
   onTeamSearchChange,
   summary,
-  canWrite,
+  canAdd,
   onAdd,
   isRefreshing = false,
   onRefresh,
@@ -74,7 +75,7 @@ export function CredentialsWorkspaceToolbar({
           />
         ) : null}
 
-        {canWrite ? (
+        {canAdd ? (
           <Button
             size="sm"
             onClick={() => {
@@ -89,13 +90,13 @@ export function CredentialsWorkspaceToolbar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex">
-                  <Button size="sm" disabled aria-label="新增团队凭据（需要团队管理员权限）">
+                  <Button size="sm" disabled aria-label="新增团队凭据（需要协作团队成员身份）">
                     <Plus className="mr-1.5 h-4 w-4" />
                     新增
                   </Button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent>需要团队管理员或更高权限</TooltipContent>
+              <TooltipContent>需要加入协作团队</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

@@ -13,7 +13,9 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     SystemCredentialAdminRequiredError,
 )
+from domains.gateway.domain.policies.credential_model_cascade import was_credential_cascade_disabled
 from domains.gateway.domain.provider_api_base import get_default_api_base
+from domains.gateway.domain.types import CREDENTIAL_CASCADE_DISABLED_TAG
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -35,6 +37,7 @@ async def test_create_team_credential_backfills_default_api_base(db_session, tes
     writes = GatewayManagementWriteService(db_session)
     row = await writes.create_team_credential(
         tenant_id=team.id,
+        created_by_user_id=test_user.id,
         provider="zhipuai",
         name="zhipu-default-base",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
@@ -80,6 +83,8 @@ async def test_update_system_credential_requires_platform_admin(db_session, test
         await writes.update_managed_credential(
             cred.id,
             tenant_id=team.id,
+            actor_user_id=test_user.id,
+            team_role="owner",
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
@@ -120,6 +125,8 @@ async def test_delete_managed_credential_cascades_linked_models(
     await writes.delete_managed_credential(
         cred.id,
         tenant_id=team.id,
+        actor_user_id=test_user.id,
+        team_role="owner",
         is_platform_admin=False,
     )
     await db_session.flush()
@@ -168,6 +175,8 @@ async def test_update_managed_wrong_team_returns_not_found(db_session, test_user
         await writes.update_managed_credential(
             cred.id,
             tenant_id=fake_team,
+            actor_user_id=test_user.id,
+            team_role="owner",
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
@@ -183,6 +192,88 @@ def test_system_credential_admin_error_maps_to_403() -> None:
     ctx = problem_context_from_gateway_domain(SystemCredentialAdminRequiredError())
     assert ctx.status_code == 403
     assert "平台管理员" in str(ctx.detail)
+
+
+@pytest.mark.asyncio
+async def test_deactivate_managed_credential_cascades_model_enabled(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    model_repo = GatewayModelRepository(db_session)
+    cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
+        provider="deepseek",
+        name="inactive-cascade",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    model = await model_repo.create(
+        tenant_id=team.id,
+        name=f"vm-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="deepseek/deepseek-chat",
+        credential_id=cred.id,
+        provider="deepseek",
+        enabled=True,
+    )
+    manual_off = await model_repo.create(
+        tenant_id=team.id,
+        name=f"vm-off-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="deepseek/deepseek-chat",
+        credential_id=cred.id,
+        provider="deepseek",
+        enabled=False,
+    )
+    await db_session.flush()
+    writes = GatewayManagementWriteService(db_session)
+    await writes.update_managed_credential(
+        cred.id,
+        tenant_id=team.id,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+        api_key_encrypted=None,
+        api_base=None,
+        api_bases=None,
+        profile_id=None,
+        extra=None,
+        is_active=False,
+        name=None,
+    )
+    await db_session.flush()
+    refreshed = await model_repo.get(model.id)
+    manual_refreshed = await model_repo.get(manual_off.id)
+    assert refreshed is not None and refreshed.enabled is False
+    assert refreshed.tags is not None
+    assert refreshed.tags.get(CREDENTIAL_CASCADE_DISABLED_TAG) is True
+    assert was_credential_cascade_disabled(refreshed.tags)
+    assert manual_refreshed is not None and manual_refreshed.enabled is False
+    assert not was_credential_cascade_disabled(manual_refreshed.tags)
+
+    await writes.update_managed_credential(
+        cred.id,
+        tenant_id=team.id,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+        api_key_encrypted=None,
+        api_base=None,
+        api_bases=None,
+        profile_id=None,
+        extra=None,
+        is_active=True,
+        name=None,
+    )
+    await db_session.flush()
+    restored = await model_repo.get(model.id)
+    still_off = await model_repo.get(manual_off.id)
+    assert restored is not None and restored.enabled is True
+    assert CREDENTIAL_CASCADE_DISABLED_TAG not in (restored.tags or {})
+    assert not was_credential_cascade_disabled(restored.tags)
+    assert still_off is not None and still_off.enabled is False
 
 
 @pytest.mark.asyncio
@@ -204,6 +295,8 @@ async def test_update_config_managed_system_credential_rejects_rename(
         await writes.update_managed_credential(
             cred.id,
             tenant_id=team.id,
+            actor_user_id=test_user.id,
+            team_role="owner",
             is_platform_admin=True,
             api_key_encrypted=None,
             api_base=None,

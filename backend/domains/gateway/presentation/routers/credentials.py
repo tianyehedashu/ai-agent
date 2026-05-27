@@ -14,7 +14,6 @@ from domains.gateway.presentation.credential_response import (
 )
 from domains.gateway.presentation.deps import (
     CurrentTeam,
-    RequiredTeamAdmin,
 )
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
@@ -51,6 +50,8 @@ async def list_credentials(
 ) -> list[CredentialResponse]:
     creds = await reads.list_credentials_for_team(
         team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         include_system=team.is_platform_admin,
         encryption_key=encryption_key(),
     )
@@ -62,10 +63,11 @@ async def list_credential_summaries(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[CredentialSummaryResponse]:
-    """团队 member 可读：解析模型 credential_id → 显示名（含 system，无密钥）。"""
+    """团队 member 可读：仅 actor 可见的 team 凭据 + system 摘要（无密钥）。"""
     rows = await reads.list_credential_summaries_for_team(
         team.team_id,
         user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     return [build_credential_summary_response(r) for r in rows]
@@ -74,12 +76,14 @@ async def list_credential_summaries(
 @router.get("/credentials/{credential_id}", response_model=CredentialResponse)
 async def get_credential(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     reads: MgmtReads,
 ) -> CredentialResponse:
     row = await reads.get_managed_credential_for_team(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     return build_credential_response(row, encryption_key=encryption_key())
@@ -88,13 +92,15 @@ async def get_credential(
 @router.get("/credentials/{credential_id}/reveal", response_model=dict[str, str])
 async def reveal_managed_credential(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     reads: MgmtReads,
 ) -> dict[str, str]:
     """解密并返回完整 API Key（与 GET 凭据详情相同权限；用于前端显式展示）。"""
     row = await reads.get_managed_credential_for_team(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     plain = decrypt_credential_api_key_for_reveal(
@@ -107,9 +113,11 @@ async def reveal_managed_credential(
 @router.post("/credentials", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED)
 async def create_credential(
     body: ManagedCredentialCreate,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> CredentialResponse:
+    if team.user_id is None:
+        raise AuthenticationError("User context required")
     provider = validate_managed_credential_provider(body.provider)
     encrypted = encrypt_value(body.api_key, encryption_key())
     if body.scope == "system":
@@ -126,6 +134,7 @@ async def create_credential(
     else:
         cred = await writes.create_team_credential(
             tenant_id=team.team_id,
+            created_by_user_id=team.user_id,
             provider=provider,
             name=body.name,
             api_key_encrypted=encrypted,
@@ -141,13 +150,15 @@ async def create_credential(
 async def update_credential(
     credential_id: uuid.UUID,
     body: CredentialUpdate,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> CredentialResponse:
     encrypted = encrypt_value(body.api_key, encryption_key()) if body.api_key else None
     updated = await writes.update_managed_credential(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         api_key_encrypted=encrypted,
         api_base=body.api_base,
@@ -163,12 +174,14 @@ async def update_credential(
 @router.delete("/credentials/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_credential(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> None:
     await writes.delete_managed_credential(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
 
@@ -176,12 +189,14 @@ async def delete_credential(
 @router.post("/credentials/{credential_id}/probe", response_model=CredentialProbeResponse)
 async def probe_managed_credential_endpoint(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     catalog: CatalogSvc,
 ) -> CredentialProbeResponse:
     """POST 触发上游 OpenAI 兼容 ``/v1/models`` 列举（同路径重复调用即刷新）。"""
     result = await catalog.probe_managed_credential(
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         credential_id=credential_id,
     )
@@ -196,12 +211,14 @@ async def probe_managed_credential_endpoint(
 async def batch_import_team_models_endpoint(
     credential_id: uuid.UUID,
     body: TeamGatewayModelBatchImportRequest,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     catalog: CatalogSvc,
 ) -> TeamGatewayModelBatchImportResponse:
     tuples = [(it.upstream_model_id, it.name) for it in body.items]
     created_raw, failed_raw = await catalog.batch_import_team_models(
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
         credential_id=credential_id,
         provider=body.provider.strip().lower(),
@@ -233,13 +250,15 @@ async def batch_import_team_models_endpoint(
 )
 async def import_user_credential(
     body: dict[str, uuid.UUID],
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> CredentialResponse:
     """从用户私有凭据导入到当前团队"""
     user_credential_id = body.get("credential_id")
     if user_credential_id is None:
         raise ValidationError("credential_id required")
+    if team.user_id is None:
+        raise AuthenticationError("User context required")
     new_cred = await writes.import_user_credential_to_team(
         user_credential_id=user_credential_id,
         tenant_id=team.team_id,
@@ -251,7 +270,7 @@ async def import_user_credential(
 
 @router.post("/credentials/import")
 async def import_all_user_credentials(
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     writes: MgmtWrites,
 ) -> dict[str, int]:
     """一键把当前用户的所有 user-scope 凭据导入到当前团队（只复制不删除原凭据）"""

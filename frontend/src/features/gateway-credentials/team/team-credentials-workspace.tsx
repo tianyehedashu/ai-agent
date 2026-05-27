@@ -20,7 +20,10 @@ import {
 import { useManagedTeamCredentialsList } from '@/features/gateway-credentials/use-managed-team-credentials-list'
 import { groupResourcesByTenantId } from '@/features/gateway-teams/resolve-collaboration-teams-candidates'
 import { useCollaborationTeamsOverviewResolution } from '@/features/gateway-teams/use-collaboration-teams-overview-resolution'
-import { useGatewayWritableCollaborationTeams } from '@/features/gateway-teams/use-gateway-teams'
+import {
+  useGatewayMemberCollaborationTeams,
+  useGatewayWritableCollaborationTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useUserStore } from '@/stores/user'
@@ -35,15 +38,16 @@ export function TeamCredentialsWorkspace({
   onAdd,
 }: TeamCredentialsWorkspaceProps): React.JSX.Element {
   const routeTeamId = useGatewayTeamId()
+  const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
-  const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
+  const { isPlatformAdmin } = useGatewayPermission()
   const [teamSearch, setTeamSearch] = useState('')
   const deferredTeamSearch = useDeferredValue(teamSearch)
   const [page, setPage] = useState(1)
   const [importPendingTeamId, setImportPendingTeamId] = useState<string | null>(null)
 
-  const hasCollaborationTeams = writableCollaborationTeams.length > 0
+  const hasCollaborationTeams = memberCollaborationTeams.length > 0
   const teamSearchTrimmed = teamSearch.trim()
   const isListSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
 
@@ -111,6 +115,10 @@ export function TeamCredentialsWorkspace({
     [mutations.importMutation]
   )
 
+  const handleRefresh = useCallback(() => {
+    void refetch()
+  }, [refetch])
+
   const summary = useMemo((): CredentialsWorkspaceSummary | undefined => {
     if (!listData) return undefined
     return {
@@ -157,11 +165,9 @@ export function TeamCredentialsWorkspace({
               teamSearch={teamSearch}
               onTeamSearchChange={handleTeamSearchChange}
               summary={summary}
-              canWrite={canWrite}
+              canAdd={hasCollaborationTeams}
               isRefreshing={isFetching}
-              onRefresh={() => {
-                void refetch()
-              }}
+              onRefresh={handleRefresh}
               onAdd={() => {
                 onAdd(undefined, defaultAddTeamId)
               }}
@@ -185,8 +191,6 @@ export function TeamCredentialsWorkspace({
               requiresSearch={requiresSearch}
               isLoading={showLoading}
               currentPage={page}
-              canWrite={canWrite}
-              isAdmin={isAdmin}
               isPlatformAdmin={isPlatformAdmin}
               viewerUserId={viewerUserId}
               routeTeamId={routeTeamId}

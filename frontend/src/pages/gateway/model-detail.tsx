@@ -31,6 +31,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronLeft, ChevronRight, Loader2 } from '@/lib/lucide-icons'
+import { useUserStore } from '@/stores/user'
 
 const TeamModelDetailPane = lazyWithReload(() =>
   import('@/features/gateway-models/team/team-model-detail-pane').then((m) => ({
@@ -62,7 +63,8 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const { modelId } = useParams<{ modelId: string }>()
   const id = modelId ?? ''
   const [searchParams] = useSearchParams()
-  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''
@@ -74,7 +76,8 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
     !isPersonal && credentialId.length > 0 ? credentialSummariesById.get(credentialId) : undefined
   const credentialBreadcrumbLink = canLinkToCredentialDetail(
     credentialSummary,
-    isAdmin,
+    viewerUserId,
+    canWrite,
     isPlatformAdmin
   )
 

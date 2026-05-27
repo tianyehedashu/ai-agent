@@ -19,6 +19,7 @@ import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Plus } from '@/lib/lucide-icons'
+import { useUserStore } from '@/stores/user'
 
 export interface SystemCredentialsAdminWorkspaceProps {
   mutations: GatewayCredentialMutations
@@ -30,7 +31,8 @@ export function SystemCredentialsAdminWorkspace({
   onAdd,
 }: SystemCredentialsAdminWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const { isPlatformAdmin } = useGatewayPermission()
   const deleteFlow = useCredentialDeleteFlow(mutations, teamId)
 
   const {
@@ -69,8 +71,8 @@ export function SystemCredentialsAdminWorkspace({
         routeTeamId={teamId}
         showEmptyAddButton={false}
         showAffiliationColumn
+        viewerUserId={viewerUserId}
         canWrite={false}
-        isAdmin={isAdmin}
         isPlatformAdmin={isPlatformAdmin}
         listVariant="system"
         emptyHint="暂无系统凭据"

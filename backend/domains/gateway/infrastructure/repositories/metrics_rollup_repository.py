@@ -17,6 +17,29 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+_UPSERT_COLUMNS = (
+    "bucket_at",
+    "tenant_id",
+    "user_id",
+    "vkey_id",
+    "credential_id",
+    "entitlement_plan_id",
+    "provider_plan_id",
+    "provider",
+    "real_model",
+    "capability",
+    "requests",
+    "success_count",
+    "error_count",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "cost_usd",
+    "total_latency_ms",
+    "p95_latency_ms",
+    "cache_hit_count",
+)
+
 
 class GatewayMetricsRollupRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -71,9 +94,11 @@ class GatewayMetricsRollupRepository:
             )
         )
         rows = (await self._session.execute(stmt)).all()
-        upserted = 0
-        for row in rows:
-            values = {
+        if not rows:
+            return 0
+
+        values_list = [
+            {
                 "id": uuid.uuid4(),
                 "bucket_at": row.bucket_at,
                 "tenant_id": row.tenant_id,
@@ -96,17 +121,18 @@ class GatewayMetricsRollupRepository:
                 "p95_latency_ms": 0,
                 "cache_hit_count": int(row.cache_hit_count or 0),
             }
-            stmt_upsert = pg_insert(GatewayMetricsHourly).values(**values)
-            update_cols = {k: stmt_upsert.excluded[k] for k in values if k != "id"}
-            await self._session.execute(
-                stmt_upsert.on_conflict_do_update(
-                    constraint="uq_gateway_metrics_hourly_dim",
-                    set_=update_cols,
-                )
+            for row in rows
+        ]
+        stmt_upsert = pg_insert(GatewayMetricsHourly).values(values_list)
+        update_cols = {col: stmt_upsert.excluded[col] for col in _UPSERT_COLUMNS}
+        await self._session.execute(
+            stmt_upsert.on_conflict_do_update(
+                constraint="uq_gateway_metrics_hourly_dim",
+                set_=update_cols,
             )
-            upserted += 1
+        )
         await self._session.commit()
-        return upserted
+        return len(values_list)
 
 
 __all__ = ["GatewayMetricsRollupRepository"]

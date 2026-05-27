@@ -23,7 +23,8 @@ export function CredentialsEmptyState({
         <Key className="mx-auto h-8 w-8 text-muted-foreground/60" />
         <h3 className="mt-3 text-base font-semibold">尚无协作团队</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          团队 Tab 仅管理协作团队的共享凭据。个人 BYOK 请前往{' '}
+          团队 Tab 展示您已加入的协作团队共享凭据（只读）；密钥已脱敏，详情与变更需团队管理员。个人
+          BYOK 请前往{' '}
           <Link
             to="/gateway/credentials?tab=personal"
             className="text-primary underline-offset-4 hover:underline"

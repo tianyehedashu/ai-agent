@@ -188,8 +188,11 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     if (isAdmin) {
       return '展示您可管理的全部协作团队及其共享凭据；可为任一团队添加上游 API Key。'
     }
-    return '展示您可管理的协作团队及其共享凭据；团队成员可见，密钥已脱敏，详情与变更需团队管理员。'
-  }, [isAdmin])
+    if (writableCollaborationTeams.length > 0) {
+      return '展示您已加入的协作团队及其共享凭据；密钥已脱敏，详情与变更需团队管理员。'
+    }
+    return '展示您已加入的协作团队共享凭据（只读）；密钥已脱敏，增删改需团队管理员。'
+  }, [isAdmin, writableCollaborationTeams.length])
 
   return (
     <div className="space-y-4">

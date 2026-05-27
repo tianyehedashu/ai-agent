@@ -12,8 +12,8 @@ import {
   resolveCollaborationTeamsCandidates,
 } from '@/features/gateway-teams/resolve-collaboration-teams-candidates'
 import {
+  useGatewayMemberCollaborationTeams,
   useGatewayTeamsBySearch,
-  useGatewayWritableCollaborationTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 
 export interface UseCollaborationTeamsOverviewResolutionOptions {
@@ -38,7 +38,7 @@ export function useCollaborationTeamsOverviewResolution({
   enabled,
 }: UseCollaborationTeamsOverviewResolutionOptions): CollaborationTeamsOverviewResolution {
   const deferredTeamSearch = useDeferredValue(teamSearch)
-  const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
+  const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const teamSearchTrimmed = teamSearch.trim()
   const isSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
 
@@ -52,13 +52,13 @@ export function useCollaborationTeamsOverviewResolution({
     if (isPlatformAdmin && deferredTeamSearch.trim().length > 0) {
       return filterCollaborationGatewayTeams(platformAdminSearchTeams)
     }
-    return writableCollaborationTeams
+    return memberCollaborationTeams
   }, [
     deferredTeamSearch,
     enabled,
     isPlatformAdmin,
+    memberCollaborationTeams,
     platformAdminSearchTeams,
-    writableCollaborationTeams,
   ])
 
   const resolution = useMemo(() => {

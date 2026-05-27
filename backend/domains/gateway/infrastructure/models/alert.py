@@ -20,6 +20,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -88,7 +89,14 @@ class GatewayAlertRule(BaseModel, TenantScopedMixin):
 
 
 
-    __table_args__ = (Index("ix_gateway_alert_rules_lookup", "tenant_id", "enabled"),)
+    __table_args__ = (
+        Index("ix_gateway_alert_rules_lookup", "tenant_id", "enabled"),
+        Index(
+            "ix_gateway_alert_rules_enabled",
+            "tenant_id",
+            postgresql_where=text("enabled IS TRUE"),
+        ),
+    )
 
 
 

@@ -1,35 +1,70 @@
 /**
- * Gateway 凭据管理面权限（对齐 backend managed_team_credentials_policy、gateway_admin.py）。
+ * Gateway 凭据管理面权限（对齐 backend team_credential_access.py）。
  *
- * - canEditGatewayCredential：改/删/启用（canWrite + scope）
- * - canLinkToCredentialDetail：详情深链（isAdmin；platform viewer 团队 admin 可读详情）
+ * - canEditGatewayCredential：改/删/启用（创建者私有；legacy NULL + admin+）
+ * - canLinkToCredentialDetail：详情深链（与可读集合一致）
  */
 
 import type { CredentialSummary, ProviderCredential } from '@/api/gateway'
 import type { GatewayTeam } from '@/api/gateway/teams'
 
+export type CredentialOwnerFields = Pick<ProviderCredential, 'scope' | 'created_by_user_id'>
+
 export type CredentialLinkScope =
   | Pick<CredentialSummary, 'scope'>
-  | Pick<ProviderCredential, 'scope'>
+  | Pick<ProviderCredential, 'scope' | 'created_by_user_id'>
+
+export function isLegacySharedTeamCredential(cred: CredentialOwnerFields): boolean {
+  return (
+    cred.scope === 'team' && (cred.created_by_user_id === null || cred.created_by_user_id === '')
+  )
+}
+
+export function actorOwnsTeamCredential(
+  cred: CredentialOwnerFields,
+  viewerUserId: string | null | undefined
+): boolean {
+  return (
+    cred.scope === 'team' &&
+    viewerUserId !== null &&
+    viewerUserId !== undefined &&
+    cred.created_by_user_id === viewerUserId
+  )
+}
 
 export function canEditGatewayCredential(
   c: ProviderCredential,
+  viewerUserId: string | null | undefined,
   canWrite: boolean,
   isPlatformAdmin: boolean
 ): boolean {
-  return (c.scope === 'team' && canWrite) || (c.scope === 'system' && isPlatformAdmin)
+  if (c.scope === 'system') return isPlatformAdmin
+  if (c.scope !== 'team') return false
+  if (actorOwnsTeamCredential(c, viewerUserId)) return true
+  return isLegacySharedTeamCredential(c) && canWrite
 }
 
-/** 团队 admin+ 可打开团队凭据详情；system 凭据仅平台管理员；个人 BYOK 无团队详情页 */
+/** 团队凭据：API 已过滤可见集合；system 仅平台管理员 */
 export function canLinkToCredentialDetail(
   summary: CredentialLinkScope | undefined,
-  isAdmin: boolean,
+  viewerUserId: string | null | undefined,
+  canWrite: boolean,
   isPlatformAdmin: boolean
 ): boolean {
-  if (!summary || !isAdmin) return false
+  if (!summary) return false
   if (summary.scope === 'user') return false
   if (summary.scope === 'system') return isPlatformAdmin
-  return true
+  if (summary.scope !== 'team') return false
+
+  const createdBy = 'created_by_user_id' in summary ? (summary.created_by_user_id ?? null) : null
+  if (actorOwnsTeamCredential({ scope: 'team', created_by_user_id: createdBy }, viewerUserId)) {
+    return true
+  }
+  return isLegacySharedTeamCredential({ scope: 'team', created_by_user_id: createdBy }) && canWrite
+}
+
+export function canCreateTeamCredential(_team: Pick<GatewayTeam, 'kind'>): boolean {
+  return _team.kind !== 'personal'
 }
 
 export function canManageSystemCredentialVisibility(isPlatformAdmin: boolean): boolean {
@@ -52,4 +87,15 @@ export function credentialDetailTeamId(
     return cred.tenant_id
   }
   return routeTeamId
+}
+
+/** 注册模型时可绑定的 team 凭据（仅创建者 + legacy admin 可见集合） */
+export function canBindCredentialForTeamModel(
+  c: ProviderCredential,
+  viewerUserId: string | null | undefined,
+  canWrite: boolean
+): boolean {
+  if (c.scope !== 'team') return false
+  if (actorOwnsTeamCredential(c, viewerUserId)) return true
+  return isLegacySharedTeamCredential(c) && canWrite
 }

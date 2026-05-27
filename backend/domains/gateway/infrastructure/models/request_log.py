@@ -187,6 +187,11 @@ class GatewayRequestLog(Base):
             "route_name",
             "created_at",
         ),
+        Index(
+            "ix_gateway_request_logs_created_at_brin",
+            "created_at",
+            postgresql_using="brin",
+        ),
         # 分区配置（在 alembic 中显式声明 PARTITION BY RANGE (created_at)）
         {"postgresql_partition_by": "RANGE (created_at)"},
     )

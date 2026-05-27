@@ -12,7 +12,11 @@ from httpx import AsyncClient
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.domain.types import CONFIG_MANAGED_BY, GATEWAY_MODEL_MANAGED_BY_TAG
+from domains.gateway.domain.types import (
+    CONFIG_MANAGED_BY,
+    CREDENTIAL_CASCADE_DISABLED_TAG,
+    GATEWAY_MODEL_MANAGED_BY_TAG,
+)
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
@@ -898,6 +902,112 @@ class TestGatewayManagementApi:
         assert all(m["credential_id"] == cid for m in models)
 
     @pytest.mark.asyncio
+    async def test_member_owned_team_credential_admin_cannot_reveal_but_can_delete_model(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """成员创建者私有凭据：admin 不可 reveal；admin 可删关联模型。"""
+        member = User(
+            email=f"priv_cred_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Private Cred Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"PrivateCred-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+        owner_headers = {
+            **auth_headers,
+            "X-Team-Id": str(shared.id),
+        }
+
+        cred_name = f"member-owned-{uuid.uuid4().hex[:6]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=member_headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-member-owned-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_body = r_cred.json()
+        cid = cred_body["id"]
+        assert cred_body.get("created_by_user_id") == str(member.id)
+
+        r_owner_get = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{cid}",
+            headers=owner_headers,
+        )
+        assert r_owner_get.status_code == 404, r_owner_get.text
+
+        r_owner_reveal = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{cid}/reveal",
+            headers=owner_headers,
+        )
+        assert r_owner_reveal.status_code == 404, r_owner_reveal.text
+
+        model_name = f"member-model-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=member_headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+
+        r_owner_create = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=owner_headers,
+            json={
+                "name": f"blocked-{uuid.uuid4().hex[:6]}",
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_owner_create.status_code == 404, r_owner_create.text
+
+        r_owner_delete = await dev_client.delete(
+            f"/api/v1/gateway/teams/{shared.id}/models/{mid}",
+            headers=owner_headers,
+        )
+        assert r_owner_delete.status_code == 204, r_owner_delete.text
+
+        r_member_reveal = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{cid}/reveal",
+            headers=member_headers,
+        )
+        assert r_member_reveal.status_code == 200, r_member_reveal.text
+        assert r_member_reveal.json()["api_key"] == "sk-member-owned-test-key-123456"
+
+    @pytest.mark.asyncio
     async def test_list_models_returns_paginated_envelope(
         self,
         dev_client: AsyncClient,
@@ -1105,6 +1215,79 @@ class TestGatewayManagementApi:
         )
         assert r_models_after.status_code == 200, r_models_after.text
         assert not any(m["id"] == mid for m in _model_list_items(r_models_after.json()))
+
+    @pytest.mark.asyncio
+    async def test_patch_credential_is_active_false_cascades_model_enabled(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """PATCH 停用凭据时，关联模型 enabled=false 并打 disabled_by_credential 标。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        cred_name = f"inactive-cascade-{uuid.uuid4().hex[:8]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-int-inactive-cascade-key-12345678",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        model_name = f"vm-inact-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+
+        r_off = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}",
+            headers=headers,
+            json={"is_active": False},
+        )
+        assert r_off.status_code == 200, r_off.text
+        assert r_off.json()["is_active"] is False
+
+        r_get = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/{mid}",
+            headers=headers,
+        )
+        assert r_get.status_code == 200, r_get.text
+        body = r_get.json()
+        assert body["enabled"] is False
+        assert body.get("tags", {}).get(CREDENTIAL_CASCADE_DISABLED_TAG) is True
+
+        r_on = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}",
+            headers=headers,
+            json={"is_active": True},
+        )
+        assert r_on.status_code == 200, r_on.text
+
+        r_restored = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/{mid}",
+            headers=headers,
+        )
+        assert r_restored.status_code == 200, r_restored.text
+        restored = r_restored.json()
+        assert restored["enabled"] is True
+        assert CREDENTIAL_CASCADE_DISABLED_TAG not in (restored.get("tags") or {})
 
     @pytest.mark.asyncio
     async def test_team_create_model_normalizes_dashscope_real_model(
@@ -2231,8 +2414,7 @@ class TestGatewayManagementApi:
         assert str(sys_cred.id) in by_id
         assert by_id[str(sys_cred.id)]["name"] == sys_name
         assert by_id[str(sys_cred.id)]["scope"] == "system"
-        assert by_id[str(team_cred_id)]["name"] == team_cred_name
-        assert by_id[str(team_cred_id)]["scope"] == "team"
+        assert str(team_cred_id) not in by_id
         for item in summaries:
             assert "api_key_masked" not in item
             assert "api_base" not in item
@@ -2245,14 +2427,14 @@ class TestGatewayManagementApi:
         )
         assert r_list.status_code == 200, r_list.text
         list_ids = {item["id"] for item in r_list.json()}
-        assert str(team_cred_id) in list_ids
+        assert str(team_cred_id) not in list_ids
         assert str(sys_cred.id) not in list_ids
 
         r_sys_detail = await dev_client.get(
             f"/api/v1/gateway/teams/{shared.id}/credentials/{sys_cred.id}",
             headers=member_headers,
         )
-        assert r_sys_detail.status_code == 403, r_sys_detail.text
+        assert r_sys_detail.status_code == 404, r_sys_detail.text
 
     @pytest.mark.asyncio
     async def test_playground_credential_summaries_membership_scope(
@@ -2328,6 +2510,20 @@ class TestGatewayManagementApi:
         assert r_my.status_code == 201, r_my.text
         my_cred_id = r_my.json()["id"]
 
+        member_team_name = f"pg-member-team-{uuid.uuid4().hex[:8]}"
+        r_member_team = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=member_headers,
+            json={
+                "provider": "openai",
+                "name": member_team_name,
+                "api_key": "sk-pg-member-team-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_member_team.status_code == 201, r_member_team.text
+        member_team_id = r_member_team.json()["id"]
+
         r_pg = await dev_client.get(
             "/api/v1/gateway/playground/credential-summaries",
             headers=member_headers,
@@ -2335,9 +2531,11 @@ class TestGatewayManagementApi:
         assert r_pg.status_code == 200, r_pg.text
         rows = r_pg.json()
         by_id = {item["id"]: item for item in rows}
-        assert active_id in by_id
-        assert by_id[active_id]["context_team_id"] == str(shared.id)
-        assert by_id[active_id]["scope"] == "team"
+        assert active_id not in by_id
+        assert inactive_id not in by_id
+        assert member_team_id in by_id
+        assert by_id[member_team_id]["context_team_id"] == str(shared.id)
+        assert by_id[member_team_id]["scope"] == "team"
         assert my_cred_id in by_id
         assert by_id[my_cred_id]["scope"] == "user"
         assert inactive_id not in by_id
@@ -2839,7 +3037,33 @@ class TestGatewayManagementApi:
                 "breakdown_by": "provider",
             },
         )
-        assert bad_breakdown.status_code == 400, bad_breakdown.text
+        assert bad_breakdown.status_code == 422, bad_breakdown.text
+
+        top32 = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_key": str(test_user.id),
+                "breakdown_by": "credential",
+                "top_n": 32,
+            },
+        )
+        assert top32.status_code == 200, top32.text
+
+        over_limit = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_key": str(test_user.id),
+                "breakdown_by": "credential",
+                "top_n": 33,
+            },
+        )
+        assert over_limit.status_code == 422, over_limit.text
 
     @pytest.mark.asyncio
     async def test_admin_credential_stats_pagination_envelope(
@@ -3118,9 +3342,9 @@ class TestManagedTeamCredentialsAggregateApi:
         assert r.status_code == 200, r.text
         payload = r.json()
         names = {item["name"] for item in payload["items"]}
-        assert owner_cred_name in names
+        assert owner_cred_name not in names
         assert payload["queried_team_count"] == 1
-        assert payload["total"] >= 1
+        assert payload["total"] >= 0
 
     @pytest.mark.asyncio
     async def test_list_managed_team_credentials_search_filters_by_team(
@@ -3318,3 +3542,52 @@ class TestManagedTeamModelsAggregateApi:
         assert payload["queried_shared_team_count"] >= 1
         assert "tenant_ids_with_models" in payload
         assert str(shared.id) in {str(t) for t in payload["tenant_ids_with_models"]}
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_models_member_can_read(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"managed_model_member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Managed Model Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"MemberModels-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        owner_model_name = f"owner-model-{uuid.uuid4().hex[:6]}"
+        await self._create_team_model(
+            dev_client,
+            shared.id,
+            auth_headers,
+            model_name=owner_model_name,
+        )
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-models",
+            headers=member_headers,
+            params={"page": 1, "page_size": 50},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        names = {item["name"] for item in payload["items"]}
+        assert owner_model_name in names
+        assert payload["queried_team_count"] == 1
+        assert payload["total"] >= 1

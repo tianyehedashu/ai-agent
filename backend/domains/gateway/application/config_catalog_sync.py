@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bootstrap.config import settings
 from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.catalog_capability import infer_catalog_capability
+from domains.gateway.application.credential_model_cascade import (
+    sync_gateway_models_for_credential_is_active,
+)
 from domains.gateway.application.gateway_catalog_seed import resolve_catalog_seed_models
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
@@ -386,9 +389,16 @@ async def _sync_catalog_models(
         for model_id in plan.model_ids_to_disable:
             await models_repo.update_system(model_id, enabled=False)
             disabled += 1
+
         for cred_id in plan.credential_ids_to_deactivate:
             await creds_repo.update(cred_id, is_active=False)
             credentials_deactivated += 1
+            await sync_gateway_models_for_credential_is_active(
+                session,
+                models_repo,
+                cred_id,
+                is_active=False,
+            )
         newly_disabled_names.extend(plan.affected_model_names)
         if plan.affected_model_names:
             logger.info(

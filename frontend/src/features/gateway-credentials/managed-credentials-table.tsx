@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
+import { useGatewayTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 
 export interface ManagedCredentialsTableProps {
   items: ProviderCredential[] | undefined
@@ -17,8 +18,8 @@ export interface ManagedCredentialsTableProps {
   /** 空态行是否展示「新增」按钮（系统 Tab 已有工具栏时可关闭） */
   showEmptyAddButton?: boolean
   showAffiliationColumn: boolean
+  viewerUserId: string | null | undefined
   canWrite: boolean
-  isAdmin: boolean
   isPlatformAdmin: boolean
   listVariant: 'team' | 'system'
   emptyHint: string
@@ -43,8 +44,8 @@ export function ManagedCredentialsTable({
   routeTeamId,
   showEmptyAddButton = true,
   showAffiliationColumn,
+  viewerUserId,
   canWrite,
-  isAdmin,
   isPlatformAdmin,
   listVariant,
   emptyHint,
@@ -55,6 +56,7 @@ export function ManagedCredentialsTable({
   onDelete,
   updateMutation,
 }: ManagedCredentialsTableProps): React.JSX.Element {
+  const teamNameById = useGatewayTeamNameMap()
   const showAdd = canWrite || isPlatformAdmin
   const showAffiliation = showAffiliationColumn || listVariant === 'system'
   const colCount = showAffiliation ? 8 : 7
@@ -117,8 +119,9 @@ export function ManagedCredentialsTable({
                     routeTeamId={routeTeamId}
                     listVariant={listVariant}
                     showAffiliationColumn={showAffiliationColumn}
+                    teamNameById={teamNameById}
+                    viewerUserId={viewerUserId}
                     canWrite={canWrite}
-                    isAdmin={isAdmin}
                     isPlatformAdmin={isPlatformAdmin}
                     onDelete={onDelete}
                     updateMutation={updateMutation}

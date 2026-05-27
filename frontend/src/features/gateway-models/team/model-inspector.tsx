@@ -99,11 +99,24 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const teamId = useGatewayTeamId()
   const [searchParams] = useSearchParams()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
-  const { currentUser } = useUserStore()
+  const currentUser = useUserStore((s) => s.currentUser)
+  const viewerUserId = currentUser?.id ?? null
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const permissionContext = useMemo(() => ({ preferSystem: scopeTab === 'system' }), [scopeTab])
-  const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin, permissionContext)
-  const canDelete = canDeleteGatewayModel(model, canWrite, isPlatformAdmin, permissionContext)
+  const canManage = canManageGatewayModel(
+    model,
+    viewerUserId,
+    canWrite,
+    isPlatformAdmin,
+    permissionContext
+  )
+  const canDelete = canDeleteGatewayModel(
+    model,
+    viewerUserId,
+    canWrite,
+    isPlatformAdmin,
+    permissionContext
+  )
   const configManaged = isConfigManagedSystemModel(model, permissionContext)
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
@@ -142,7 +155,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const credentialSummary = credentialSummariesById.get(model.credential_id)
   const showCredentialDetailLink = canLinkToCredentialDetail(
     credentialSummary,
-    isAdmin,
+    viewerUserId,
+    canWrite,
     isPlatformAdmin
   )
 

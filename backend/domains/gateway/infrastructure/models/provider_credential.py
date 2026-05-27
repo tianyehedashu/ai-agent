@@ -94,6 +94,12 @@ class ProviderCredential(BaseModel):
         server_default="true",
         nullable=False,
     )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=False,
+        comment="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
+    )
 
     __table_args__ = (
         Index(
@@ -114,6 +120,12 @@ class ProviderCredential(BaseModel):
             postgresql_where=sa.text("scope = 'user'"),
         ),
         Index("ix_provider_credentials_scope_lookup", "scope", "scope_id", "provider"),
+        Index(
+            "ix_provider_credentials_tenant_creator",
+            "tenant_id",
+            "created_by_user_id",
+            postgresql_where=sa.text("tenant_id IS NOT NULL"),
+        ),
     )
 
     def __repr__(self) -> str:

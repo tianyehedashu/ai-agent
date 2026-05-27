@@ -20,6 +20,7 @@ import {
 import { teamModelDetailHref, teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { ModelInventoryRow } from '@/features/gateway-models/team/model-inventory-row'
 import { CollaborationTeamGroupHeader } from '@/features/gateway-teams/collaboration-team-group-header'
+import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
 import { Loader2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 
 export interface CollaborationTeamsModelsGroupedListProps {
@@ -29,7 +30,6 @@ export interface CollaborationTeamsModelsGroupedListProps {
   requiresSearch: boolean
   isLoading: boolean
   currentPage: number
-  canWrite: boolean
   isPlatformAdmin: boolean
   viewerUserId?: string | null
   updatePendingModelId?: string | null
@@ -45,7 +45,6 @@ export function CollaborationTeamsModelsGroupedList({
   requiresSearch,
   isLoading,
   currentPage,
-  canWrite,
   isPlatformAdmin,
   viewerUserId,
   updatePendingModelId,
@@ -88,6 +87,7 @@ export function CollaborationTeamsModelsGroupedList({
             const teamModels = modelsByTeamId.get(team.id) ?? []
             const hasModelsOnServer = tenantIdsWithModels.has(team.id)
             const showOffPageHint = hasModelsOnServer && teamModels.length === 0 && currentPage > 1
+            const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
 
             return (
               <section key={team.id} aria-label={`团队 ${team.name} 模型`}>
@@ -96,7 +96,7 @@ export function CollaborationTeamsModelsGroupedList({
                   isPlatformAdmin={isPlatformAdmin}
                   viewerUserId={viewerUserId}
                   actions={
-                    canWrite ? (
+                    teamCanWrite ? (
                       <Button size="sm" className="h-7 text-xs" asChild>
                         <Link to={teamModelsRegisterHref(team.id)}>
                           <Plus className="mr-1 h-3.5 w-3.5" />
@@ -109,8 +109,18 @@ export function CollaborationTeamsModelsGroupedList({
                 {teamModels.length > 0 ? (
                   <ul className="divide-y">
                     {teamModels.map((model) => {
-                      const canManage = canManageGatewayModel(model, canWrite, isPlatformAdmin)
-                      const canDelete = canDeleteGatewayModel(model, canWrite, isPlatformAdmin)
+                      const canManage = canManageGatewayModel(
+                        model,
+                        viewerUserId,
+                        teamCanWrite,
+                        isPlatformAdmin
+                      )
+                      const canDelete = canDeleteGatewayModel(
+                        model,
+                        viewerUserId,
+                        teamCanWrite,
+                        isPlatformAdmin
+                      )
                       const isUpdating = updatePendingModelId === model.id
                       const isDeleting = deletingModelId === model.id
 

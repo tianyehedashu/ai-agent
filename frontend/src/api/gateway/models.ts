@@ -28,6 +28,10 @@ export interface GatewayModel {
   real_model: string
   credential_id: string
   provider: string
+  /** 绑定 team 凭据展示名（列表 enrich） */
+  credential_name?: string | null
+  /** 绑定 team 凭据创建者 */
+  credential_created_by_user_id?: string | null
   weight: number
   rpm_limit: number | null
   tpm_limit: number | null
@@ -341,6 +345,22 @@ export async function fetchAllGatewayModelPages(
   const all: GatewayModel[] = []
   for (;;) {
     const res = await modelsApi.listModels(teamId, { ...params, page, page_size: pageSize })
+    all.push(...res.items)
+    if (!res.has_next) break
+    page += 1
+  }
+  return all
+}
+
+/** 跨团队 managed-team-models 全量分页拉取（批量运维编排用） */
+export async function fetchAllManagedTeamModelPages(
+  params?: Omit<ListManagedTeamModelsParams, 'page' | 'page_size'>
+): Promise<GatewayModel[]> {
+  const pageSize = 200
+  let page = 1
+  const all: GatewayModel[] = []
+  for (;;) {
+    const res = await modelsApi.listManagedTeamModels({ ...params, page, page_size: pageSize })
     all.push(...res.items)
     if (!res.has_next) break
     page += 1

@@ -90,7 +90,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
-  const { currentUser } = useUserStore()
+  const currentUser = useUserStore((s) => s.currentUser)
+  const viewerUserId = currentUser?.id ?? null
 
   const {
     data: cred,
@@ -105,8 +106,12 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     enabled: id.length > 0,
   })
 
-  const editable = cred ? canEditGatewayCredential(cred, canWrite, isPlatformAdmin) : false
-  const linkable = cred ? canLinkToCredentialDetail(cred, isAdmin, isPlatformAdmin) : false
+  const editable = cred
+    ? canEditGatewayCredential(cred, viewerUserId, canWrite, isPlatformAdmin)
+    : false
+  const linkable = cred
+    ? canLinkToCredentialDetail(cred, viewerUserId, canWrite, isPlatformAdmin)
+    : false
   const ownerTenantId =
     cred?.scope === 'team' && cred.tenant_id !== null && cred.tenant_id !== teamId && linkable
       ? cred.tenant_id

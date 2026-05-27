@@ -769,3 +769,107 @@ export function filterResyncableCapabilityModels<T extends GatewayModel>(
 ): T[] {
   return models.filter(canResync)
 }
+
+/** 解析团队模型归属 tenant（跨团队 batch 路由用） */
+export function resolveGatewayModelTeamId(
+  model: Pick<GatewayModel, 'tenant_id' | 'team_id'>
+): string | null {
+  const tenantId = model.tenant_id ?? model.team_id
+  if (typeof tenantId === 'string' && tenantId !== '') return tenantId
+  return null
+}
+
+/** 按 tenant 分组模型（跨团队 batch delete/resync 编排） */
+export function groupModelsByTeamId(models: readonly GatewayModel[]): Map<string, GatewayModel[]> {
+  const map = new Map<string, GatewayModel[]>()
+  for (const model of models) {
+    const teamId = resolveGatewayModelTeamId(model)
+    if (!teamId) continue
+    const existing = map.get(teamId)
+    if (existing) {
+      existing.push(model)
+    } else {
+      map.set(teamId, [model])
+    }
+  }
+  return map
+}
+
+/** 跨 tenant 顺序 batch-delete：先按 team 分组再 chunk */
+export async function runChunkedBatchDeleteByTeam(
+  models: readonly GatewayModel[],
+  deleteChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchDeleteChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchDeleteChunkResult> {
+  const byTeam = groupModelsByTeamId(models)
+  const merged: BatchDeleteChunkResult = {
+    succeeded: [],
+    failed: [],
+    grants_removed: 0,
+    budgets_removed: 0,
+  }
+  for (const [teamId, teamModels] of byTeam) {
+    const ids = teamModels.map((m) => m.id)
+    const result = await runChunkedBatchDelete(
+      ids,
+      (chunk) => deleteChunkForTeam(teamId, chunk),
+      chunkSize
+    )
+    merged.succeeded.push(...result.succeeded)
+    merged.failed.push(...result.failed)
+    merged.grants_removed += result.grants_removed
+    merged.budgets_removed += result.budgets_removed
+  }
+  return merged
+}
+
+/** 跨 tenant 顺序 batch-resync：先按 team 分组再 chunk */
+export async function runChunkedBatchResyncByTeam(
+  models: readonly GatewayModel[],
+  resyncChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchResyncChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchResyncChunkResult> {
+  const byTeam = groupModelsByTeamId(models)
+  const merged: BatchResyncChunkResult = {
+    succeeded: [],
+    failed: [],
+  }
+  for (const [teamId, teamModels] of byTeam) {
+    const ids = teamModels.map((m) => m.id)
+    const result = await runChunkedBatchResync(
+      ids,
+      (chunk) => resyncChunkForTeam(teamId, chunk),
+      chunkSize
+    )
+    merged.succeeded.push(...result.succeeded)
+    merged.failed.push(...result.failed)
+  }
+  return merged
+}
+
+/** 跨团队批量探活：按 model id 解析 tenant 后路由 test API */
+export function createManagedTeamsTestById(
+  models: readonly GatewayModel[],
+  testModel: (teamId: string, id: string) => Promise<GatewayModelTestResult>
+): (id: string) => Promise<GatewayModelTestResult> {
+  const teamByModelId = new Map<string, string>()
+  for (const model of models) {
+    const teamId = resolveGatewayModelTeamId(model)
+    if (teamId) teamByModelId.set(model.id, teamId)
+  }
+  return (id: string) => {
+    const teamId = teamByModelId.get(id)
+    if (!teamId) {
+      return Promise.reject(new Error(`无法解析模型 ${id} 的团队归属`))
+    }
+    return testModel(teamId, id)
+  }
+}
+
+/** 可探活且当前用户可 update 的模型（跨团队 batch test 前置过滤） */
+export function filterManageableTestableModels<T extends GatewayModel>(
+  models: readonly T[],
+  canManage: (model: T) => boolean
+): T[] {
+  return filterTestableConnectivityModels(models).filter(canManage)
+}

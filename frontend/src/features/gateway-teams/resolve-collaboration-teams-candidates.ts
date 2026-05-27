@@ -5,7 +5,6 @@
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
-import { filterGatewayWritableTeams } from '@/features/gateway-teams/gateway-team-write-policy'
 
 import { filterWritableTeamsBySearch } from './filter-writable-teams-by-search'
 
@@ -53,8 +52,7 @@ export function resolveCollaborationTeamsCandidates({
     return { teams: [], requiresSearch: true }
   }
 
-  const writableCandidates = filterGatewayWritableTeams([...candidateTeams], isPlatformAdmin)
-  const collaborationCandidates = filterCollaborationGatewayTeams(writableCandidates)
+  const collaborationCandidates = filterCollaborationGatewayTeams([...candidateTeams])
   const filtered = filterWritableTeamsBySearch(collaborationCandidates, search, viewerUserId)
 
   return {

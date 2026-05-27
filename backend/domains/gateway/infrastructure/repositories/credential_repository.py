@@ -214,6 +214,7 @@ class ProviderCredentialRepository:
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
+        created_by_user_id: uuid.UUID | None = None,
     ) -> ProviderCredential:
         credential = ProviderCredential(
             tenant_id=tenant_id,
@@ -227,6 +228,7 @@ class ProviderCredentialRepository:
             profile_id=profile_id,
             extra=extra,
             is_active=is_active,
+            created_by_user_id=created_by_user_id,
         )
         self._session.add(credential)
         await self._session.flush()
@@ -244,6 +246,7 @@ class ProviderCredentialRepository:
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
+        created_by_user_id: uuid.UUID | None = None,
     ) -> ProviderCredential:
         return await self.create(
             tenant_id=tenant_id,
@@ -257,6 +260,7 @@ class ProviderCredentialRepository:
             profile_id=profile_id,
             extra=extra,
             is_active=is_active,
+            created_by_user_id=created_by_user_id,
         )
 
     async def update(
@@ -303,6 +307,8 @@ class ProviderCredentialRepository:
         self,
         credential_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        *,
+        created_by_user_id: uuid.UUID | None = None,
     ) -> ProviderCredential | None:
         source = await self.get(credential_id)
         if source is None:
@@ -319,6 +325,7 @@ class ProviderCredentialRepository:
             profile_id=source.profile_id,
             extra=source.extra,
             is_active=True,
+            created_by_user_id=created_by_user_id,
         )
         self._session.add(new_cred)
         await self._session.flush()

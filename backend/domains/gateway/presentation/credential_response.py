@@ -134,6 +134,7 @@ def build_credential_response(
             extra=cred.extra,
         ),
         visibility=vis,
+        created_by_user_id=cred.created_by_user_id,
         created_at=cred.created_at,
         api_key_masked=api_key_masked,
     )
@@ -153,6 +154,7 @@ def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSu
             name=cred.name,
             extra=cred.extra,
         ),
+        created_by_user_id=cred.created_by_user_id,
     )
 
 

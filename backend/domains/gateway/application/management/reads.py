@@ -67,6 +67,10 @@ from domains.gateway.domain.policies.budget_scope_policy import (
 from domains.gateway.domain.policies.model_registry_scope import (
     exclude_user_scope_credentials_for_registry,
 )
+from domains.gateway.domain.team_credential_access import (
+    assert_team_credential_readable_by_actor,
+    filter_team_credentials_visible_to_actor,
+)
 from domains.gateway.domain.types import CredentialScope, credential_api_scope
 from domains.gateway.domain.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
@@ -74,6 +78,7 @@ from domains.gateway.domain.virtual_key_access import (
 )
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayModel,
     SystemProviderCredential,
@@ -193,11 +198,21 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self,
         team_id: UUID,
         *,
+        actor_user_id: UUID | None,
+        team_role: str,
         include_system: bool,
         encryption_key: str | None = None,
     ) -> list[CredentialReadModel]:
         rows = await self._creds.list_for_tenant(team_id)
-        out = [credential_from_orm(c, encryption_key=encryption_key) for c in rows]
+        visible = filter_team_credentials_visible_to_actor(
+            rows,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=include_system,
+        )
+        out = [
+            credential_from_orm(c, encryption_key=encryption_key) for c in visible
+        ]
         if include_system:
             system_rows = await self._system_creds.list_all()
             out.extend(
@@ -211,11 +226,18 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_id: UUID,
         *,
         user_id: UUID | None = None,
+        team_role: str = "member",
         is_platform_admin: bool = False,
     ) -> list[CredentialReadModel]:
         """团队凭据 + 可见 system 凭据（仅摘要字段，无密钥）。"""
         rows = await self._creds.list_for_tenant(team_id)
-        out = [credential_from_orm(c) for c in rows]
+        visible = filter_team_credentials_visible_to_actor(
+            rows,
+            actor_user_id=user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
+        out = [credential_from_orm(c) for c in visible]
         system_rows = await self._system_creds.list_all()
         visible_system = await filter_visible_system_provider_credentials(
             self._session,
@@ -232,6 +254,8 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         credential_id: UUID,
         *,
         tenant_id: UUID,
+        actor_user_id: UUID | None,
+        team_role: str,
         is_platform_admin: bool,
     ) -> CredentialReadModel:
         """与 ``list_credentials_for_team`` 可见集合一致：团队凭据 +（仅平台管理员）系统凭据。"""
@@ -242,13 +266,36 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
+        from domains.gateway.infrastructure.models.provider_credential import (
+            ProviderCredential,
+        )
         from domains.gateway.infrastructure.models.system_gateway import (
             SystemProviderCredential,
         )
 
+        if isinstance(row, ProviderCredential):
+            assert_team_credential_readable_by_actor(
+                row,
+                credential_id=credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
+            return credential_from_orm(row)
         if isinstance(row, SystemProviderCredential):
             return system_credential_from_orm(row)
-        return credential_from_orm(row)
+        raise CredentialNotFoundError(str(credential_id))
+
+    async def map_team_credentials_display_by_id(
+        self,
+        credential_ids: set[UUID],
+    ) -> dict[UUID, ProviderCredential]:
+        """模型列表 enrich：批量加载凭据展示字段（不做读权限过滤）。"""
+        if not credential_ids:
+            return {}
+        rows = await self._creds.list_by_ids(list(credential_ids))
+        return {row.id: row for row in rows}
 
     async def get_user_credential_for_owner(
         self, credential_id: UUID, user_id: UUID

@@ -116,6 +116,24 @@ class GatewayManagementWriteBaseMixin:
         await prune_gateway_model_name_references(self._session, model_names)
         return len(tenant_models) + len(system_models)
 
+    async def _cascade_sync_models_for_credential_is_active(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        is_active: bool,
+    ) -> int:
+        """凭据启用/停用时，同步关联注册模型的 ``enabled``（见 ``credential_model_cascade``）。"""
+        from domains.gateway.application.credential_model_cascade import (
+            sync_gateway_models_for_credential_is_active,
+        )
+
+        return await sync_gateway_models_for_credential_is_active(
+            self._session,
+            self._models,
+            credential_id,
+            is_active=is_active,
+        )
+
     async def _assert_credential_in_team(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
         """与 ``list_credentials_for_team`` 可见集合一致：team-scope 凭据 + 平台管理员可见 system。"""
         row = await self._creds.get_bindable_for_team_gateway_model(credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin)

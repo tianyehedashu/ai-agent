@@ -99,11 +99,13 @@ export type {
   GatewayModelUpdateBody,
   ManagedTeamModelListResponse,
   ListManagedTeamModelsParams,
+  ModelConnectivitySummary,
 } from './models'
 
 export {
   fetchAllAvailableGatewayModels,
   fetchAllGatewayModelPages,
+  fetchAllManagedTeamModelPages,
   fetchGatewayModelIdsForBatch,
 } from './models'
 

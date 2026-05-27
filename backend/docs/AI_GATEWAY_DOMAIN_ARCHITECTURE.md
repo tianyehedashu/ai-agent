@@ -203,6 +203,22 @@ flowchart TB
 
 RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseCase`**。
 
+#### 管理面 RBAC：团队凭据与模型（创建者私有）
+
+**SSOT**：`domain/team_credential_access.py`（凭据读/写/reveal/probe 过滤）、`domain/policies/team_model_access.py`（模型 create/update/delete）。Presentation 层 **`CurrentTeam`（member+）** 仅保证团队成员身份；细粒度授权在 Domain/Application。**平台 admin 无旁路**（对齐 `virtual_key_access.py`）。
+
+| 资源 | 创建 | 查看/改/删凭据 | 基于凭据添加/改模型 | 删模型 |
+|------|------|----------------|---------------------|--------|
+| 自己创建的 team 凭据 | member+ | 仅创建者 | 仅创建者 | 创建者 + team admin |
+| 他人 team 凭据 | — | 不可（404 防枚举） | 不可 | team admin 可删关联模型 |
+| system 凭据 | 平台 admin | 平台 admin + ACL | 平台 admin | 平台 admin |
+| legacy（`created_by_user_id IS NULL`） | — | **保留旧行为**：team admin+ | team admin+ | team admin+ |
+
+- **数据列**：`provider_credentials.created_by_user_id`（团队 scope 创建者；BYOK `scope=user` 不写入）。
+- **读侧**：`list_credentials_for_team` / summaries / `GET /managed-team-credentials` 经 `filter_team_credentials_visible_to_actor`；模型列表经 join 填充 **`credential_name`**、**`credential_created_by_user_id`**（不放宽凭据 reveal）。
+- **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 或 legacy admin 断言。
+- **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
+
 **入口凭据 vs 存储 `tenant_id`**：业务表 `tenant_id` 是行级归属键；代理面 `sk-gw-*` 对调用方是「一个 token 即完整上下文」，解析后仍展开为 `team_id` + `vkey_id` 等正交字段，并非重复标识。
 
 ### 4.1 域划分、术语与用量读模型（`UsageAggregation`）

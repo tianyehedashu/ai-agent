@@ -57,6 +57,7 @@ async def list_playground_credential_summaries_for_actor(
         rows = await reads.list_credential_summaries_for_team(
             membership.team_id,
             user_id=user_id,
+            team_role=membership.role,
             is_platform_admin=is_platform_admin,
         )
         for cred in rows:

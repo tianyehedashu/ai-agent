@@ -21,9 +21,10 @@ import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
 import {
+  canBindCredentialForTeamModel,
   canLinkToCredentialDetail,
-  credentialSummaryLabel,
-} from '@/features/gateway-credentials/credential-summary-display'
+} from '@/features/gateway-credentials/credential-permissions'
+import { credentialSummaryLabel } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import {
@@ -34,6 +35,7 @@ import {
 } from '@/features/gateway-models/constants'
 import {
   canDeleteGatewayModel,
+  canManageGatewayModel,
   canResyncGatewayModelCapabilities,
   isConfigManagedSystemModel,
   isModelBatchSelectable,
@@ -59,6 +61,7 @@ import {
   invalidateGatewayModelAliasDependents,
   invalidateGatewayModelCaches,
   filterDeletableFailedModels,
+  filterManageableTestableModels,
   filterResyncableCapabilityModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
@@ -77,6 +80,7 @@ import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
+import { useUserStore } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadRegisterModelForm } from './register-model-preload'
@@ -121,7 +125,8 @@ export function TeamModelsWorkspace({
   listMode,
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const {
     byId: credentialSummariesById,
     isFetching: directoryFetching,
@@ -134,7 +139,7 @@ export function TeamModelsWorkspace({
   const credentialFilter = searchParams.get('credentialId') ?? ''
   const highlightModelId = searchParams.get('modelId') ?? ''
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
-  const canManageModels = listMode === 'system' ? isPlatformAdmin : canWrite
+  const canManageModels = listMode === 'system' ? isPlatformAdmin : true
   const isRegisterView = pageView === 'register' && canManageModels
 
   const [providerFilter, setProviderFilter] = useState('')
@@ -159,8 +164,7 @@ export function TeamModelsWorkspace({
     () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),
     [listMode]
   )
-  const batchSelectEnabled =
-    (listMode === 'system' && isPlatformAdmin) || (listMode === 'team' && canWrite)
+  const batchSelectEnabled = (listMode === 'system' && isPlatformAdmin) || listMode === 'team'
 
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
 
@@ -286,7 +290,7 @@ export function TeamModelsWorkspace({
   const { data: credentials } = useQuery({
     queryKey: ['gateway', 'credentials', teamId],
     queryFn: () => gatewayApi.listCredentials(teamId),
-    enabled: isRegisterView && canManageModels,
+    enabled: isRegisterView && listMode === 'team',
   })
 
   const filterCredentialSummary = credentialFilter
@@ -294,7 +298,8 @@ export function TeamModelsWorkspace({
     : undefined
   const filterCredentialLink = canLinkToCredentialDetail(
     filterCredentialSummary,
-    isAdmin,
+    viewerUserId,
+    canWrite,
     isPlatformAdmin
   )
   const registerCredentialLocked = isRegisterView && credentialFilter !== ''
@@ -317,9 +322,12 @@ export function TeamModelsWorkspace({
       (credentials ?? []).filter((c) => {
         if (listMode === 'system' && c.scope !== 'system') return false
         if (listMode === 'team' && c.scope === 'system') return false
+        if (listMode === 'team' && !canBindCredentialForTeamModel(c, viewerUserId, canWrite)) {
+          return false
+        }
         return c.is_active || (credentialFilter !== '' && c.id === credentialFilter)
       }),
-    [credentials, credentialFilter, listMode]
+    [credentials, credentialFilter, listMode, viewerUserId, canWrite]
   )
 
   const usageByRouteName = useMemo(() => {
@@ -352,20 +360,37 @@ export function TeamModelsWorkspace({
 
   const checkModelBatchSelectable = useCallback(
     (model: (typeof registryItems)[number]) =>
-      isModelBatchSelectable(model, canWrite, isPlatformAdmin, systemPermContext),
-    [canWrite, isPlatformAdmin, systemPermContext]
+      isModelBatchSelectable(model, viewerUserId, canWrite, isPlatformAdmin, systemPermContext),
+    [viewerUserId, canWrite, isPlatformAdmin, systemPermContext]
   )
 
   const canDeleteModel = useCallback(
     (model: (typeof registryItems)[number]) =>
-      canDeleteGatewayModel(model, canWrite, isPlatformAdmin, systemPermContext),
-    [canWrite, isPlatformAdmin, systemPermContext]
+      canDeleteGatewayModel(model, viewerUserId, canWrite, isPlatformAdmin, systemPermContext),
+    [viewerUserId, canWrite, isPlatformAdmin, systemPermContext]
   )
 
   const canResyncModel = useCallback(
     (model: (typeof registryItems)[number]) =>
-      canResyncGatewayModelCapabilities(model, canWrite, isPlatformAdmin, systemPermContext),
-    [canWrite, isPlatformAdmin, systemPermContext]
+      canResyncGatewayModelCapabilities(
+        model,
+        viewerUserId,
+        canWrite,
+        isPlatformAdmin,
+        systemPermContext
+      ),
+    [viewerUserId, canWrite, isPlatformAdmin, systemPermContext]
+  )
+
+  const canManageModel = useCallback(
+    (model: (typeof registryItems)[number]) =>
+      canManageGatewayModel(model, viewerUserId, canWrite, isPlatformAdmin, systemPermContext),
+    [viewerUserId, canWrite, isPlatformAdmin, systemPermContext]
+  )
+
+  const hasManageableModels = useMemo(
+    () => registryItems.some(canManageModel),
+    [registryItems, canManageModel]
   )
 
   const isConfigManagedModel = useCallback(
@@ -652,25 +677,27 @@ export function TeamModelsWorkspace({
   const handleTestAll = useCallback((): void => {
     void (async () => {
       const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
-      const testable = filterTestableConnectivityModels(all)
+      const testable = filterManageableTestableModels(all, canManageModel)
       if (testable.length === 0) return
       startBatchTest(testable)
     })()
-  }, [teamId, teamListQueryBase, startBatchTest])
+  }, [teamId, teamListQueryBase, canManageModel, startBatchTest])
 
   const handleTestUntested = useCallback((): void => {
     void (async () => {
       const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
       const untested = filterUntestedConnectivityModels(all)
-      if (untested.length === 0) return
-      startBatchTest(untested)
+      const testable = filterManageableTestableModels(untested, canManageModel)
+      if (testable.length === 0) return
+      startBatchTest(testable)
     })()
-  }, [teamId, teamListQueryBase, startBatchTest])
+  }, [teamId, teamListQueryBase, canManageModel, startBatchTest])
 
   const handleTestSelected = useCallback((): void => {
-    if (selectedTestable.length === 0) return
-    startBatchTest(selectedTestable)
-  }, [selectedTestable, startBatchTest])
+    const testable = filterManageableTestableModels(selectedTestable, canManageModel)
+    if (testable.length === 0) return
+    startBatchTest(testable)
+  }, [selectedTestable, canManageModel, startBatchTest])
 
   const handleResyncAll = useCallback((): void => {
     void (async () => {
@@ -844,23 +871,23 @@ export function TeamModelsWorkspace({
               healthFilter={healthFilter}
               onHealthFilterChange={setHealthFilter}
               connectivitySummary={connectivitySummary}
-              canWrite={canManageModels}
+              canWrite={hasManageableModels}
               onTestAll={
-                canManageModels &&
+                hasManageableModels &&
                 (connectivitySummary?.total ?? testableItems.length) > 0 &&
                 !batchBusy
                   ? handleTestAll
                   : undefined
               }
               onTestUntested={
-                canManageModels &&
+                hasManageableModels &&
                 (connectivitySummary?.unknown ?? untestedTestableItems.length) > 0 &&
                 !batchBusy
                   ? handleTestUntested
                   : undefined
               }
               onResyncAll={
-                canManageModels && (listData?.total ?? 0) > 0 && !batchBusy
+                hasManageableModels && (listData?.total ?? 0) > 0 && !batchBusy
                   ? handleResyncAll
                   : undefined
               }
@@ -868,12 +895,12 @@ export function TeamModelsWorkspace({
               batchBusy={batchBusy}
               untestedTestableCount={untestedTestableItems.length}
               onBatchTestSelected={
-                canManageModels && selectedTestable.length > 0 && !batchBusy
+                hasManageableModels && selectedTestable.length > 0 && !batchBusy
                   ? handleTestSelected
                   : undefined
               }
               onBatchResyncSelected={
-                canManageModels && selectedResyncable.length > 0 && !batchBusy
+                hasManageableModels && selectedResyncable.length > 0 && !batchBusy
                   ? handleResyncSelected
                   : undefined
               }
@@ -898,7 +925,7 @@ export function TeamModelsWorkspace({
               batchDeleteLabel={batchDeleteLabel}
               batchDeleteTitle={listMode === 'system' ? '批量删除系统模型' : '批量删除团队模型'}
               onDeleteFailed={
-                canManageModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
+                hasManageableModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
               }
               deletingFailed={batchDeleting}
               onRefreshList={handleRefreshList}

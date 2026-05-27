@@ -104,6 +104,7 @@ class CredentialWritesMixin:
         self,
         *,
         tenant_id: uuid.UUID,
+        created_by_user_id: uuid.UUID,
         provider: str,
         name: str,
         api_key_encrypted: str,
@@ -127,6 +128,7 @@ class CredentialWritesMixin:
             api_bases=stored_bases,
             profile_id=stored_profile,
             extra=extra,
+            created_by_user_id=created_by_user_id,
         )
         await self.reload_litellm_router()
         return ensure_credential_read_model(row)
@@ -171,6 +173,8 @@ class CredentialWritesMixin:
         credential_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
         is_platform_admin: bool,
         api_key_encrypted: str | None,
         api_base: str | None,
@@ -187,6 +191,7 @@ class CredentialWritesMixin:
             )
 
             assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
+            previous_is_active = system_existing.is_active
             if name is not None and name != system_existing.name and is_config_managed_system_credential(
                 scope="system", name=system_existing.name, extra=system_existing.extra
             ):
@@ -214,12 +219,30 @@ class CredentialWritesMixin:
             )
             if updated is None:
                 raise CredentialNotFoundError(str(credential_id))
+            if is_active is not None and is_active != previous_is_active:
+                await self._cascade_sync_models_for_credential_is_active(
+                    credential_id,
+                    is_active=is_active,
+                )
             await self.reload_litellm_router()
             return ensure_credential_read_model(updated)
 
         existing = await self._creds.get(credential_id)
         if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
+        from domains.gateway.domain.team_credential_access import (
+            assert_team_credential_writable_by_actor,
+        )
+
+        assert_team_credential_writable_by_actor(
+            existing,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
+        previous_is_active = existing.is_active
         patch_base, patch_bases, patch_profile = _credential_update_api_fields(
             provider=existing.provider,
             api_base=api_base,
@@ -241,10 +264,23 @@ class CredentialWritesMixin:
         )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
+        if is_active is not None and is_active != previous_is_active:
+            await self._cascade_sync_models_for_credential_is_active(
+                credential_id,
+                is_active=is_active,
+            )
         await self.reload_litellm_router()
         return ensure_credential_read_model(updated)
 
-    async def delete_managed_credential(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
+    async def delete_managed_credential(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> None:
         system_existing = await self._system_creds.get(credential_id)
         if system_existing is not None:
             from domains.gateway.domain.policies.credential_scope import (
@@ -260,6 +296,18 @@ class CredentialWritesMixin:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
+        from domains.gateway.domain.team_credential_access import (
+            assert_team_credential_writable_by_actor,
+        )
+
+        assert_team_credential_writable_by_actor(
+            existing,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
         await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)
         await self.reload_litellm_router()
@@ -270,7 +318,11 @@ class CredentialWritesMixin:
             raise CredentialNotFoundError(str(user_credential_id))
         if src.scope_id != actor_user_id and (not is_platform_admin):
             raise TeamPermissionDeniedError(str(tenant_id))
-        new_cred = await self._creds.copy_to_team(user_credential_id, tenant_id)
+        new_cred = await self._creds.copy_to_team(
+            user_credential_id,
+            tenant_id,
+            created_by_user_id=actor_user_id,
+        )
         if new_cred is None:
             raise CredentialNotFoundError(str(user_credential_id))
         await self.reload_litellm_router()
@@ -280,7 +332,11 @@ class CredentialWritesMixin:
         user_creds = await self._creds.list_for_user(actor_user_id)
         created = 0
         for cred in user_creds:
-            copied = await self._creds.copy_to_team(cred.id, tenant_id)
+            copied = await self._creds.copy_to_team(
+                cred.id,
+                tenant_id,
+                created_by_user_id=actor_user_id,
+            )
             if copied is not None:
                 created += 1
         if created > 0:
@@ -338,6 +394,7 @@ class CredentialWritesMixin:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != 'user' or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
+        previous_is_active = existing.is_active
         if name is not None and name != existing.name:
             dup = await self._creds.find_user_by_provider_and_name(actor_user_id, existing.provider, name)
             if dup is not None:
@@ -363,6 +420,11 @@ class CredentialWritesMixin:
         )
         if updated is None:
             raise CredentialNotFoundError(str(credential_id))
+        if is_active is not None and is_active != previous_is_active:
+            await self._cascade_sync_models_for_credential_is_active(
+                credential_id,
+                is_active=is_active,
+            )
         await self.reload_litellm_router()
         return ensure_credential_read_model(updated)
 

@@ -24,6 +24,7 @@ export interface NormalizedProviderCredential {
   extra: Record<string, unknown> | null
   created_at: string
   api_key_masked: string
+  created_by_user_id?: string | null
 }
 export interface ProviderCredentialWire {
   id: string
@@ -44,6 +45,7 @@ export interface ProviderCredentialWire {
   extra: Record<string, unknown> | null
   created_at: string
   api_key_masked: string
+  created_by_user_id?: string | null
 }
 
 export function normalizeCredentialScope(
@@ -76,5 +78,6 @@ export function normalizeCredential(raw: ProviderCredentialWire): NormalizedProv
     extra: raw.extra,
     created_at: raw.created_at,
     api_key_masked: raw.api_key_masked,
+    created_by_user_id: raw.created_by_user_id ?? null,
   }
 }
