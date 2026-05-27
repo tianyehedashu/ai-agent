@@ -16,6 +16,7 @@ from domains.gateway.domain.upstream_endpoint import effective_api_bases_for_cre
 from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 from domains.gateway.domain.visibility import credential_visibility_for_api
 from domains.gateway.presentation.schemas.common import (
+    CredentialApiBasesBody,
     CredentialResponse,
     CredentialSummaryResponse,
 )
@@ -33,6 +34,28 @@ def mask_plain_secret_for_display(plain: str) -> str:
     prefix = s[:4]
     suffix = s[-4:]
     return f"{prefix}…{suffix}"
+
+
+def credential_api_bases_response(
+    stored: dict[str, str] | None,
+) -> CredentialApiBasesBody | None:
+    if not stored:
+        return None
+    return CredentialApiBasesBody(
+        openai_compat=stored.get("openai_compat"),
+        anthropic_native=stored.get("anthropic_native"),
+    )
+
+
+def credential_api_bases_from_body(
+    body: CredentialApiBasesBody | None,
+) -> dict[str, str | None] | None:
+    if body is None:
+        return None
+    return {
+        "openai_compat": body.openai_compat,
+        "anthropic_native": body.anthropic_native,
+    }
 
 
 def decrypt_credential_api_key_for_reveal(
@@ -83,6 +106,7 @@ def build_credential_response(
             provider=cred.provider,
             profile_id=cred.profile_id,
             api_base=cred.api_base,
+            api_bases=cred.api_bases,
         )
         effective_openai = effective.get("openai_compat")
         effective_anthropic = effective.get("anthropic_native")
@@ -94,6 +118,7 @@ def build_credential_response(
         provider=cred.provider,
         name=cred.name,
         api_base=cred.api_base,
+        api_bases=credential_api_bases_response(cred.api_bases),
         profile_id=cred.profile_id,
         profile_label=profile_label,
         effective_api_base_openai=effective_openai,
@@ -132,6 +157,8 @@ def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSu
 __all__ = [
     "build_credential_response",
     "build_credential_summary_response",
+    "credential_api_bases_from_body",
+    "credential_api_bases_response",
     "decrypt_credential_api_key_for_reveal",
     "mask_plain_secret_for_display",
 ]

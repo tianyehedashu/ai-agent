@@ -14,6 +14,7 @@ from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
     EntitlementPlanExhaustedError,
+    GatewayModelNotFoundError,
     GatewayTeamHeaderInvalidError,
     GatewayTeamHeaderRequiredError,
     GatewayVkeyTeamHeaderMismatchError,
@@ -38,6 +39,7 @@ from libs.exceptions.codes import (
     CREDENTIAL_NOT_FOUND,
     GATEWAY_DOMAIN_ERROR,
     GATEWAY_ENTITLEMENT_EXHAUSTED,
+    GATEWAY_MODEL_NOT_FOUND,
     GATEWAY_TEAM_HEADER_INVALID,
     GATEWAY_TEAM_HEADER_REQUIRED,
     GATEWAY_VKEY_TEAM_HEADER_MISMATCH,
@@ -251,6 +253,16 @@ _DOMAIN_PROBLEM_BUILDERS: list[tuple[tuple[type[Exception], ...], _ProblemBuilde
         ),
     ),
     ((EntitlementPlanExhaustedError,), _entitlement_exhausted_problem),
+    (
+        (GatewayModelNotFoundError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_404_NOT_FOUND),
+            code=GATEWAY_MODEL_NOT_FOUND,
+            extra={"model": exc.model},
+        ),
+    ),
 ]
 
 

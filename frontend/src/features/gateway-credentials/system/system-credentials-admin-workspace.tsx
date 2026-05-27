@@ -56,7 +56,7 @@ export function SystemCredentialsAdminWorkspace({
         items={systemCredentials}
         isLoading={systemLoading}
         routeTeamId={teamId}
-        viewMode="current-team"
+        showEmptyAddButton={false}
         showAffiliationColumn
         canWrite={false}
         isAdmin={isAdmin}

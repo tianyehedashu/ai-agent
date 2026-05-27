@@ -9,6 +9,9 @@ from domains.gateway.domain.policies.managed_team_credentials_policy import (
     build_managed_team_credential_list_plan,
     is_writable_gateway_team,
 )
+from domains.gateway.domain.policies.managed_team_resource_policy import (
+    build_managed_team_resource_list_plan,
+)
 from domains.tenancy.domain.policies.team_role import TeamRole
 
 
@@ -58,17 +61,17 @@ def test_build_managed_team_credential_list_plan_filters_members() -> None:
         is_platform_admin=False,
     )
 
-    assert plan.queried_team_count == 2
-    assert plan.queried_personal_team_count == 1
+    assert plan.queried_team_count == 1
+    assert plan.queried_personal_team_count == 0
     assert plan.queried_shared_team_count == 1
-    assert personal.team_id in plan.tenant_ids
+    assert personal.team_id not in plan.tenant_ids
     assert shared_admin.team_id in plan.tenant_ids
     assert shared_member.team_id not in plan.tenant_ids
 
 
-def test_build_managed_team_credential_list_plan_platform_admin_includes_all() -> None:
+def test_build_managed_team_resource_list_plan_platform_admin_includes_all() -> None:
     teams = [_snap("shared", TeamRole.MEMBER.value), _snap("shared", TeamRole.ADMIN.value)]
-    plan = build_managed_team_credential_list_plan(teams, is_platform_admin=True)
+    plan = build_managed_team_resource_list_plan(teams, is_platform_admin=True)
     assert plan.queried_team_count == 2
     assert plan.queried_personal_team_count == 0
     assert plan.queried_shared_team_count == 2

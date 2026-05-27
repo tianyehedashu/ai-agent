@@ -71,7 +71,12 @@ class ProviderCredential(BaseModel):
     api_base: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
-        comment="自定义 API Base URL",
+        comment="OpenAI-compat API Base URL（legacy 镜像；与 api_bases.openai_compat 同步）",
+    )
+    api_bases: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="各协议 endpoint 覆盖：openai_compat / anthropic_native",
     )
     profile_id: Mapped[str | None] = mapped_column(
         String(64),

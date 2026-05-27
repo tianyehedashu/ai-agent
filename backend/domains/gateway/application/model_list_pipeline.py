@@ -32,6 +32,7 @@ from domains.gateway.infrastructure.repositories.model_list_read_repository impo
 from domains.gateway.infrastructure.repositories.model_list_sql import (
     build_system_list_stmt,
     build_tenant_list_stmt,
+    build_tenants_list_stmt,
 )
 from libs.api.pagination import MAX_PAGE_SIZE, PageParams, slice_page, total_pages
 
@@ -252,6 +253,85 @@ async def _list_tenant_page(
     )
 
 
+async def list_gateway_models_for_tenants_page(
+    session: AsyncSession,
+    tenant_ids: list[uuid.UUID],
+    query: ModelListQuery,
+    *,
+    only_enabled: bool = False,
+    exclude_user_scope_credentials: bool = True,
+) -> ModelListPageResult:
+    """跨 tenant 聚合 team registry 模型分页（managed-team-models 读侧）。"""
+    repo = ModelListReadRepository(session)
+    if not tenant_ids:
+        return ModelListPageResult(
+            items=[],
+            total=0,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+            connectivity_summary=summarize_connectivity([]),
+        )
+    ability = resolved_registry_ability(query)
+    sql_cap = sql_capability_for_registry_ability(ability)
+    if ability and not sql_cap:
+        stmt = build_tenants_list_stmt(
+            tenant_ids=tenant_ids,
+            only_enabled=only_enabled,
+            capability=None,
+            provider=query.provider,
+            credential_id=query.credential_id,
+            exclude_user_scope_credentials=exclude_user_scope_credentials,
+            enabled=query.enabled,
+            q=query.q,
+            connectivity=query.connectivity,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        result = await session.execute(stmt)
+        all_rows = list(result.scalars().all())
+        filtered = _filter_rows_in_memory(all_rows, query)
+        summary = summarize_connectivity(filtered)
+        sorted_rows = sort_registry_rows(
+            filtered,
+            sort_field=query.sort,
+            order=query.order,
+        )
+        page_items, total = slice_page(
+            sorted_rows,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+        )
+        return ModelListPageResult(
+            items=page_items,
+            total=total,
+            page=query.page_params.page,
+            page_size=query.page_params.page_size,
+            connectivity_summary=summary,
+        )
+    items, total, summary = await repo.paginate_tenants(
+        tenant_ids=tenant_ids,
+        only_enabled=only_enabled,
+        exclude_user_scope_credentials=exclude_user_scope_credentials,
+        capability=sql_cap,
+        provider=query.provider,
+        credential_id=query.credential_id,
+        enabled=query.enabled,
+        q=query.q,
+        connectivity=query.connectivity,
+        sort_field=query.sort,
+        order=query.order,
+        offset=query.page_params.offset,
+        limit=query.page_params.page_size,
+    )
+    return ModelListPageResult(
+        items=items,
+        total=total,
+        page=query.page_params.page,
+        page_size=query.page_params.page_size,
+        connectivity_summary=summary,
+    )
+
+
 async def _list_merged_page(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -427,6 +507,7 @@ __all__ = [
     "ModelListPageResult",
     "ModelListQuery",
     "list_gateway_model_ids",
+    "list_gateway_models_for_tenants_page",
     "list_gateway_models_page",
     "list_personal_models_page",
     "resolved_registry_ability",

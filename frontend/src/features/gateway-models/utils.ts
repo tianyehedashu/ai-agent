@@ -610,6 +610,7 @@ export function invalidateGatewayModelCaches(
   options?: { credentialId?: string; usageSummary?: boolean }
 ): void {
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
+  void queryClient.invalidateQueries({ queryKey: ['gateway', 'managed-team-models'] })
   if (options?.credentialId) {
     void queryClient.invalidateQueries({
       queryKey: gatewayModelsByCredentialInvalidatePrefix(options.credentialId),

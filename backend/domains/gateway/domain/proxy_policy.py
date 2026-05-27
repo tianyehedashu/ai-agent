@@ -153,10 +153,39 @@ def first_present_limit(values: Iterable[object | None]) -> object:
     return 0
 
 
+def allows_unregistered_gateway_model(
+    *,
+    vkey_is_system: bool | None,
+    disable_internal_direct_litellm: bool,
+) -> bool:
+    """system vkey 内部桥接允许未注册 model 直连 LiteLLM；其它入口须先解析 Gateway 模型。"""
+    if disable_internal_direct_litellm:
+        return False
+    return vkey_is_system is True
+
+
+_ROUTER_MODEL_MISS_MARKERS: tuple[str, ...] = (
+    "no deployments available",
+    "no healthy deployments",
+    "no deployment",
+    "no models available",
+    "unable to find deployment",
+    "model not found",
+    "could not find model",
+)
+
+
+def is_router_model_miss(exc: Exception) -> bool:
+    """LiteLLM Router 找不到 deployment 时的异常文案识别（compat 错误映射兜底）。"""
+    message = str(exc).lower()
+    return any(marker in message for marker in _ROUTER_MODEL_MISS_MARKERS)
+
+
 __all__ = [
     "BudgetCheckQuery",
     "BudgetReservation",
     "BudgetTarget",
+    "allows_unregistered_gateway_model",
     "assert_capability_allowed",
     "assert_model_allowed",
     "assert_registered_model_capability",
@@ -164,5 +193,6 @@ __all__ = [
     "budget_targets",
     "build_budget_check_plan",
     "first_present_limit",
+    "is_router_model_miss",
     "rate_limit_target",
 ]

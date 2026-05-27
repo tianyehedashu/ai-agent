@@ -168,6 +168,14 @@ class ModelNotAllowedError(GatewayError):
         self.model = model
 
 
+class GatewayModelNotFoundError(GatewayError):
+    """客户端请求的 model 未在 Gateway 注册（无 GatewayModel / GatewayRoute）。"""
+
+    def __init__(self, model: str) -> None:
+        super().__init__(f"未找到已注册的 Gateway 模型: {model}")
+        self.model = model
+
+
 class InvocationPolicyViolationError(GatewayError):
     """出站调用策略违规（思考模式 / 温度等）。"""
 
@@ -268,12 +276,13 @@ __all__ = [
     "CredentialNotFoundError",
     "EntitlementPlanExhaustedError",
     "GatewayError",
+    "GatewayModelNotFoundError",
     "GatewayTeamHeaderInvalidError",
     "GatewayTeamHeaderRequiredError",
     "GatewayVkeyTeamHeaderMismatchError",
     "GuardrailBlockedError",
-    "InvocationPolicyViolationError",
     "HttpMappableDomainError",
+    "InvocationPolicyViolationError",
     "ManagementEntityNotFoundError",
     "ModelNotAllowedError",
     "NoPersonalTeamForProxyError",

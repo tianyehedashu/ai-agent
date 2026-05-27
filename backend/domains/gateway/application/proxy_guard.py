@@ -6,12 +6,13 @@
 
 调用顺序契约（由消费方编排，本类不强制）：
 
-1. :meth:`check_model` + :meth:`check_capability`
-2. :meth:`assert_request_capability_matches_model`（按需）
-3. :meth:`check_limits`
-4. :meth:`check_budget` → 持有 ``reservations``
-5. :meth:`check_entitlement`（失败时调 :meth:`release_budget_reservations`）
-6. 出站调用前 / 失败时：:meth:`release_budget_reservations` +
+1. :meth:`check_model`
+2. :meth:`resolve_and_validate_request_model`（按需；preflight 单次 resolve）
+3. :meth:`check_capability`
+4. :meth:`check_limits`
+5. :meth:`check_budget` → 持有 ``reservations``
+6. :meth:`check_entitlement`（失败时调 :meth:`release_budget_reservations`）
+7. 出站调用前 / 失败时：:meth:`release_budget_reservations` +
    :meth:`release_entitlement_reservations` 释放预扣
 """
 
@@ -21,6 +22,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
+from bootstrap.config import settings
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
     PERIOD_MONTHLY,
@@ -32,11 +34,13 @@ from domains.gateway.application.entitlement_guard import (
     EntitlementGuard,
 )
 from domains.gateway.application.model_or_route_resolution import (
+    ResolvedModelName,
     resolve_model_or_route,
 )
-from domains.gateway.domain.errors import BudgetExceededError
+from domains.gateway.domain.errors import BudgetExceededError, GatewayModelNotFoundError
 from domains.gateway.domain.proxy_policy import (
     BudgetReservation,
+    allows_unregistered_gateway_model,
     assert_capability_allowed,
     assert_model_allowed,
     assert_registered_model_capability,
@@ -88,6 +92,48 @@ class ProxyGuard:
             ctx.vkey.allowed_capabilities if ctx.vkey else ()
         )
         assert_capability_allowed(ctx.capability, allowed_capabilities)
+
+    @staticmethod
+    def _allows_unregistered_gateway_model(ctx: ProxyContext) -> bool:
+        return allows_unregistered_gateway_model(
+            vkey_is_system=ctx.vkey.is_system if ctx.vkey is not None else None,
+            disable_internal_direct_litellm=settings.gateway_proxy_disable_internal_direct_litellm,
+        )
+
+    async def resolve_and_validate_request_model(
+        self,
+        ctx: ProxyContext,
+        model: str,
+        *,
+        match_registered_capability: bool = True,
+    ) -> ResolvedModelName | None:
+        """单次 resolve；校验注册与 capability（system vkey 内部桥接除外）。"""
+        name = model.strip()
+        if not name:
+            return None
+        resolved = await resolve_model_or_route(
+            self._session, ctx.team_id, name, user_id=ctx.user_id
+        )
+        if not self._allows_unregistered_gateway_model(ctx) and resolved is None:
+            raise GatewayModelNotFoundError(name)
+        if match_registered_capability and resolved is not None:
+            assert_registered_model_capability(
+                model_name=name,
+                requested=ctx.capability,
+                registered_capability=str(resolved.record.capability),
+                via_route=resolved.route is not None,
+            )
+        return resolved
+
+    async def assert_gateway_model_registered(
+        self,
+        ctx: ProxyContext,
+        model: str,
+    ) -> None:
+        """客户端 model 须在 Gateway 注册；未注册时不应把裸 model 交给 LiteLLM Router。"""
+        await self.resolve_and_validate_request_model(
+            ctx, model, match_registered_capability=False
+        )
 
     async def assert_request_capability_matches_model(
         self,

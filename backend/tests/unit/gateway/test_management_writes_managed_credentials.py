@@ -39,9 +39,12 @@ async def test_create_team_credential_backfills_default_api_base(db_session, tes
         name="zhipu-default-base",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
+        api_bases=None,
+        profile_id=None,
         extra=None,
     )
-    assert row.api_base == get_default_api_base("zhipuai")
+    assert row.api_base is None
+    assert row.effective_api_base_openai == get_default_api_base("zhipuai")
 
 
 @pytest.mark.asyncio
@@ -55,6 +58,8 @@ async def test_create_system_credential_requires_platform_admin(db_session) -> N
             name="sys-test",
             api_key_encrypted=encrypt_value("sk-fake", encryption_key),
             api_base=None,
+            api_bases=None,
+            profile_id=None,
             extra=None,
         )
 
@@ -78,6 +83,8 @@ async def test_update_system_credential_requires_platform_admin(db_session, test
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
+            api_bases=None,
+            profile_id=None,
             extra=None,
             is_active=None,
             name=None,
@@ -164,6 +171,8 @@ async def test_update_managed_wrong_team_returns_not_found(db_session, test_user
             is_platform_admin=False,
             api_key_encrypted=None,
             api_base=None,
+            api_bases=None,
+            profile_id=None,
             extra=None,
             is_active=True,
             name="x",
@@ -198,6 +207,8 @@ async def test_update_config_managed_system_credential_rejects_rename(
             is_platform_admin=True,
             api_key_encrypted=None,
             api_base=None,
+            api_bases=None,
+            profile_id=None,
             extra=None,
             is_active=None,
             name="new-name",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from binascii import Error as BinasciiError
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cryptography.fernet import InvalidToken
 
@@ -29,12 +29,14 @@ def _credential_profile_display(
     provider: str,
     profile_id: str | None,
     api_base: str | None,
+    api_bases: dict[str, str] | None,
 ) -> tuple[str, str | None, str | None]:
     profile = get_upstream_profile(profile_id, provider=provider)
     effective = effective_api_bases_for_credential(
         provider=provider,
         profile_id=profile_id,
         api_base=api_base,
+        api_bases=api_bases,
     )
     return (
         profile.label,
@@ -51,6 +53,17 @@ def _mask_api_key_encrypted(api_key_encrypted: str, encryption_key: str) -> str:
         return "（无法展示）"
 
 
+def _normalize_stored_api_bases(raw: dict[str, Any] | None) -> dict[str, str] | None:
+    if not raw:
+        return None
+    out: dict[str, str] = {}
+    for key in ("openai_compat", "anthropic_native"):
+        value = raw.get(key)
+        if value is not None and str(value).strip():
+            out[key] = str(value).strip()
+    return out or None
+
+
 def credential_from_orm(
     cred: ProviderCredential,
     *,
@@ -61,10 +74,12 @@ def credential_from_orm(
         if encryption_key
         else None
     )
+    stored_bases = _normalize_stored_api_bases(cred.api_bases)
     profile_label, effective_openai, effective_anthropic = _credential_profile_display(
         provider=cred.provider,
         profile_id=cred.profile_id,
         api_base=cred.api_base,
+        api_bases=stored_bases,
     )
     return CredentialReadModel(
         id=cred.id,
@@ -74,6 +89,7 @@ def credential_from_orm(
         provider=cred.provider,
         name=cred.name,
         api_base=cred.api_base,
+        api_bases=stored_bases,
         profile_id=cred.profile_id,
         profile_label=profile_label,
         effective_api_base_openai=effective_openai,
@@ -97,10 +113,12 @@ def system_credential_from_orm(
         if encryption_key
         else None
     )
+    stored_bases = _normalize_stored_api_bases(cred.api_bases)
     profile_label, effective_openai, effective_anthropic = _credential_profile_display(
         provider=cred.provider,
         profile_id=cred.profile_id,
         api_base=cred.api_base,
+        api_bases=stored_bases,
     )
     return CredentialReadModel(
         id=cred.id,
@@ -110,6 +128,7 @@ def system_credential_from_orm(
         provider=cred.provider,
         name=cred.name,
         api_base=cred.api_base,
+        api_bases=stored_bases,
         profile_id=cred.profile_id,
         profile_label=profile_label,
         effective_api_base_openai=effective_openai,

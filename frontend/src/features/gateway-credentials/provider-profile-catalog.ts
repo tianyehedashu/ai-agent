@@ -17,6 +17,9 @@ function toSpec(item: ProviderProfileItem): UpstreamProfileSpec {
     defaultApiBaseAnthropic: anthropic ?? undefined,
     anthropicDirectHint:
       anthropic && item.provider === 'volcengine' ? `Claude Code 直连根：${anthropic}` : undefined,
+    probeStrategy: item.probe_strategy,
+    probeProtocol: item.probe_protocol,
+    probeSupported: item.probe_supported,
   }
 }
 

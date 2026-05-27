@@ -7,6 +7,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { teamsApi, type GatewayTeam } from '@/api/gateway/teams'
+import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { filterGatewayWritableTeams } from '@/features/gateway-teams/gateway-team-write-policy'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -57,6 +58,32 @@ export function useGatewayWritableTeams(enabled = true): GatewayTeam[] {
   const { isPlatformAdmin } = useGatewayPermission()
 
   return useMemo(() => filterGatewayWritableTeams(teams, isPlatformAdmin), [teams, isPlatformAdmin])
+}
+
+/** 跨团队汇总等管理面：membership 团队 + 可写过滤（对齐后端 list_gateway_team_memberships） */
+export function useGatewayWritableMemberTeams(enabled = true): GatewayTeam[] {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  const { isPlatformAdmin } = useGatewayPermission()
+
+  return useMemo(() => filterGatewayWritableTeams(teams, isPlatformAdmin), [teams, isPlatformAdmin])
+}
+
+/** 团队凭据 Tab：可写协作团队（排除 personal team） */
+export function useGatewayWritableCollaborationTeams(enabled = true): GatewayTeam[] {
+  const writable = useGatewayWritableMemberTeams(enabled)
+  return useMemo(() => filterCollaborationGatewayTeams(writable), [writable])
+}
+
+/** 平台 admin 跨团队搜索：按 name/slug 拉取全站活跃团队（需非空 search） */
+export function useGatewayTeamsBySearch(search: string, enabled: boolean): GatewayTeam[] {
+  const trimmedSearch = search.trim()
+  const { data: teams = [] } = useQuery({
+    queryKey: [...GATEWAY_TEAMS_QUERY_KEY, 'search', trimmedSearch] as const,
+    queryFn: () => teamsApi.listTeams({ search: trimmedSearch }),
+    enabled: enabled && trimmedSearch.length > 0,
+    staleTime: GATEWAY_TEAMS_STALE_MS,
+  })
+  return teams
 }
 
 export function resolveGatewayTeamLabel(teamNameById: Map<string, string>, teamId: string): string {

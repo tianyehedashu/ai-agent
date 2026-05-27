@@ -97,6 +97,7 @@ class SystemProviderCredentialRepository:
         name: str,
         api_key_encrypted: str,
         api_base: str | None = None,
+        api_bases: dict[str, Any] | None = None,
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
@@ -106,6 +107,7 @@ class SystemProviderCredentialRepository:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=api_base,
+            api_bases=api_bases,
             profile_id=profile_id,
             extra=extra,
             is_active=is_active,
@@ -120,6 +122,7 @@ class SystemProviderCredentialRepository:
         *,
         api_key_encrypted: str | None = None,
         api_base: str | None = None,
+        api_bases: dict[str, Any] | None = None,
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool | None = None,
@@ -133,6 +136,8 @@ class SystemProviderCredentialRepository:
             row.api_key_encrypted = api_key_encrypted
         if api_base is not None:
             row.api_base = api_base
+        if api_bases is not None:
+            row.api_bases = api_bases
         if profile_id is not None:
             row.profile_id = profile_id
         if extra is not None:

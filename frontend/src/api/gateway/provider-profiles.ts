@@ -18,6 +18,8 @@ export interface ProviderProfileItem {
   api_bases: ProviderProfileApiBases
   models_list_path: string
   default_call_shape: string
+  probe_strategy: string
+  probe_protocol: string
   probe_supported: boolean
 }
 

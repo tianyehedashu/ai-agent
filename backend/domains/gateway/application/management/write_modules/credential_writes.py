@@ -11,6 +11,7 @@ from domains.gateway.application.management.credential_read_mappers import (
     ensure_credential_read_model,
 )
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.domain.credential_persist import normalize_credential_write_fields
 from domains.gateway.domain.errors import (
     CredentialNameConflictError,
     CredentialNotFoundError,
@@ -19,7 +20,6 @@ from domains.gateway.domain.errors import (
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
-from domains.gateway.domain.credential_persist import normalize_credential_write_fields
 from domains.gateway.domain.types import (
     VirtualKeyBatchRevokeReason,
     is_config_managed_system_credential,
@@ -35,23 +35,28 @@ def _credential_update_api_fields(
     *,
     provider: str,
     api_base: str | None,
+    api_bases: dict[str, str | None] | None,
     profile_id: str | None,
     existing_api_base: str | None,
+    existing_api_bases: dict[str, str] | None,
     existing_profile_id: str | None,
-) -> tuple[str | None, str | None] | tuple[None, str | None]:
-    """更新凭据时：仅当 api_base 或 profile_id 出现在 PATCH 中才重算 base。"""
-    if api_base is None and profile_id is None:
-        return (None, None)
-    stored_base, stored_profile = normalize_credential_write_fields(
+) -> tuple[str | None, dict[str, str] | None, str | None] | tuple[None, None, str | None]:
+    """更新凭据时：endpoint 或 profile_id 出现在 PATCH 中才重算。"""
+    if api_base is None and api_bases is None and profile_id is None:
+        return (None, None, None)
+    stored_base, stored_bases, stored_profile = normalize_credential_write_fields(
         provider=provider,
         profile_id=profile_id,
         api_base=api_base,
+        api_bases=api_bases,
         existing_api_base=existing_api_base,
+        existing_api_bases=existing_api_bases,
         existing_profile_id=existing_profile_id,
     )
-    patch_base = stored_base if api_base is not None or profile_id is not None else None
+    patch_base = stored_base if api_base is not None or profile_id is not None or api_bases is not None else None
+    patch_bases = stored_bases if api_base is not None or profile_id is not None or api_bases is not None else None
     patch_profile = stored_profile if profile_id is not None else None
-    return (patch_base, patch_profile)
+    return (patch_base, patch_bases, patch_profile)
 
 
 class CredentialWritesMixin:
@@ -103,13 +108,15 @@ class CredentialWritesMixin:
         name: str,
         api_key_encrypted: str,
         api_base: str | None,
+        api_bases: dict[str, str | None] | None,
         profile_id: str | None,
         extra: dict[str, Any] | None,
     ) -> CredentialReadModel:
-        stored_base, stored_profile = normalize_credential_write_fields(
+        stored_base, stored_bases, stored_profile = normalize_credential_write_fields(
             provider=provider,
             profile_id=profile_id,
             api_base=api_base,
+            api_bases=api_bases,
         )
         row = await self._creds.create_for_tenant(
             tenant_id=tenant_id,
@@ -117,6 +124,7 @@ class CredentialWritesMixin:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=stored_base,
+            api_bases=stored_bases,
             profile_id=stored_profile,
             extra=extra,
         )
@@ -131,6 +139,7 @@ class CredentialWritesMixin:
         name: str,
         api_key_encrypted: str,
         api_base: str | None,
+        api_bases: dict[str, str | None] | None,
         profile_id: str | None,
         extra: dict[str, Any] | None,
     ) -> CredentialReadModel:
@@ -139,16 +148,18 @@ class CredentialWritesMixin:
         )
 
         assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
-        stored_base, stored_profile = normalize_credential_write_fields(
+        stored_base, stored_bases, stored_profile = normalize_credential_write_fields(
             provider=provider,
             profile_id=profile_id,
             api_base=api_base,
+            api_bases=api_bases,
         )
         row = await self._system_creds.create(
             provider=provider,
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=stored_base,
+            api_bases=stored_bases,
             profile_id=stored_profile,
             extra=extra,
         )
@@ -163,6 +174,7 @@ class CredentialWritesMixin:
         is_platform_admin: bool,
         api_key_encrypted: str | None,
         api_base: str | None,
+        api_bases: dict[str, str | None] | None,
         profile_id: str | None,
         extra: dict[str, Any] | None,
         is_active: bool | None,
@@ -181,17 +193,20 @@ class CredentialWritesMixin:
                 raise ValidationError(
                     "配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥"
                 )
-            patch_base, patch_profile = _credential_update_api_fields(
+            patch_base, patch_bases, patch_profile = _credential_update_api_fields(
                 provider=system_existing.provider,
                 api_base=api_base,
+                api_bases=api_bases,
                 profile_id=profile_id,
                 existing_api_base=system_existing.api_base,
+                existing_api_bases=system_existing.api_bases,
                 existing_profile_id=system_existing.profile_id,
             )
             updated = await self._system_creds.update(
                 credential_id,
                 api_key_encrypted=api_key_encrypted,
                 api_base=patch_base,
+                api_bases=patch_bases,
                 profile_id=patch_profile,
                 extra=extra,
                 is_active=is_active,
@@ -205,17 +220,20 @@ class CredentialWritesMixin:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.tenant_id is None or existing.tenant_id != tenant_id:
             raise CredentialNotFoundError(str(credential_id))
-        patch_base, patch_profile = _credential_update_api_fields(
+        patch_base, patch_bases, patch_profile = _credential_update_api_fields(
             provider=existing.provider,
             api_base=api_base,
+            api_bases=api_bases,
             profile_id=profile_id,
             existing_api_base=existing.api_base,
+            existing_api_bases=existing.api_bases,
             existing_profile_id=existing.profile_id,
         )
         updated = await self._creds.update(
             credential_id,
             api_key_encrypted=api_key_encrypted,
             api_base=patch_base,
+            api_bases=patch_bases,
             profile_id=patch_profile,
             extra=extra,
             is_active=is_active,
@@ -277,16 +295,18 @@ class CredentialWritesMixin:
         name: str,
         api_key_encrypted: str,
         api_base: str | None,
+        api_bases: dict[str, str | None] | None,
         profile_id: str | None,
         extra: dict[str, Any] | None,
     ) -> CredentialReadModel:
         dup = await self._creds.find_user_by_provider_and_name(actor_user_id, provider, name)
         if dup is not None:
             raise CredentialNameConflictError(provider, name)
-        stored_base, stored_profile = normalize_credential_write_fields(
+        stored_base, stored_bases, stored_profile = normalize_credential_write_fields(
             provider=provider,
             profile_id=profile_id,
             api_base=api_base,
+            api_bases=api_bases,
         )
         row = await self._creds.create(
             scope='user',
@@ -295,6 +315,7 @@ class CredentialWritesMixin:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=stored_base,
+            api_bases=stored_bases,
             profile_id=stored_profile,
             extra=extra,
         )
@@ -308,6 +329,7 @@ class CredentialWritesMixin:
         actor_user_id: uuid.UUID,
         api_key_encrypted: str | None,
         api_base: str | None,
+        api_bases: dict[str, str | None] | None,
         profile_id: str | None,
         extra: dict[str, Any] | None,
         is_active: bool | None,
@@ -320,17 +342,20 @@ class CredentialWritesMixin:
             dup = await self._creds.find_user_by_provider_and_name(actor_user_id, existing.provider, name)
             if dup is not None:
                 raise CredentialNameConflictError(existing.provider, name)
-        patch_base, patch_profile = _credential_update_api_fields(
+        patch_base, patch_bases, patch_profile = _credential_update_api_fields(
             provider=existing.provider,
             api_base=api_base,
+            api_bases=api_bases,
             profile_id=profile_id,
             existing_api_base=existing.api_base,
+            existing_api_bases=existing.api_bases,
             existing_profile_id=existing.profile_id,
         )
         updated = await self._creds.update(
             credential_id,
             api_key_encrypted=api_key_encrypted,
             api_base=patch_base,
+            api_bases=patch_bases,
             profile_id=patch_profile,
             extra=extra,
             is_active=is_active,

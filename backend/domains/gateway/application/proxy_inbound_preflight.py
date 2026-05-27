@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
@@ -20,6 +21,7 @@ class ProxyInboundPreflightResult:
 
     model: str | None
     reservations: list[BudgetReservation]
+    resolved: ResolvedModelName | None = None
 
 
 async def run_proxy_inbound_preflight(
@@ -41,9 +43,14 @@ async def run_proxy_inbound_preflight(
 
     if cleaned:
         guard.check_model(cleaned, ctx)
+        resolved = await guard.resolve_and_validate_request_model(
+            ctx,
+            cleaned,
+            match_registered_capability=match_registered_capability,
+        )
+    else:
+        resolved = None
     guard.check_capability(ctx)
-    if cleaned and match_registered_capability:
-        await guard.assert_request_capability_matches_model(ctx, cleaned)
     await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
     reservations = await guard.check_budget(ctx)
     try:
@@ -56,7 +63,11 @@ async def run_proxy_inbound_preflight(
         await guard.release_budget_reservations(reservations)
         raise
 
-    return ProxyInboundPreflightResult(model=cleaned or None, reservations=reservations)
+    return ProxyInboundPreflightResult(
+        model=cleaned or None,
+        reservations=reservations,
+        resolved=resolved,
+    )
 
 
 __all__ = ["ProxyInboundPreflightResult", "run_proxy_inbound_preflight"]

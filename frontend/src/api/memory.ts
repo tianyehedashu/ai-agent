@@ -3,7 +3,7 @@
  */
 
 import { apiV1Path } from '@/api/paths'
-import type { PaginatedResponse } from '@/types'
+import type { PaginatedList } from '@/types'
 
 import { apiClient } from './client'
 
@@ -33,12 +33,20 @@ export const memoryApi = {
   /**
    * 获取记忆列表
    */
-  list(page = 1, pageSize = 20, typeFilter?: string): Promise<PaginatedResponse<Memory>> {
-    return apiClient.get<PaginatedResponse<Memory>>(apiV1Path('/memory/'), {
+  async list(page = 1, pageSize = 20, typeFilter?: string): Promise<PaginatedList<Memory>> {
+    const items = await apiClient.get<Memory[]>(apiV1Path('/memory/'), {
       skip: (page - 1) * pageSize,
       limit: pageSize,
       type_filter: typeFilter,
     })
+    return {
+      items,
+      total: items.length,
+      page,
+      page_size: pageSize,
+      has_next: items.length === pageSize,
+      has_prev: page > 1,
+    }
   },
 
   /**

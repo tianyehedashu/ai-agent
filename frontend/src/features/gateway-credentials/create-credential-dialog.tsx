@@ -7,9 +7,10 @@
  * Provider 候选与差异化 extra 字段由 [`provider-schemas.ts`](./provider-schemas.ts) 驱动。
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useCallback, useMemo, useState } from 'react'
 import type React from 'react'
 
+import type { CredentialApiBases } from '@/api/gateway/credentials'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,12 +33,21 @@ import {
 import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
 import { Eye, EyeOff } from '@/lib/lucide-icons'
 
+import { CredentialApiBasesFields } from './credential-api-bases-fields'
+import {
+  apiBaseRequiredForProtocols,
+  compactApiBasesForSubmit,
+  defaultApiBasesForProfile,
+  EMPTY_API_BASES_FORM,
+  primaryApiBaseFromForm,
+  protocolsForProfile,
+  type CredentialApiBasesFormState,
+} from './credential-api-bases-utils'
 import { ExtraFieldsRenderer } from './credential-extra-fields'
 import { compactExtra, type CredentialExtraValues } from './credential-extra-utils'
 import { useProviderProfilesCatalog } from './hooks/use-provider-profiles-catalog'
 import {
   apiKeyLabelForProvider,
-  defaultApiBaseForProvider,
   defaultProfileIdForProvider,
   extraFieldsForProvider,
   getProviderSchema,
@@ -55,6 +65,7 @@ export interface CreateCredentialValues {
   name: string
   api_key: string
   api_base?: string
+  api_bases?: CredentialApiBases
   profile_id?: string
   extra?: Record<string, string>
 }
@@ -124,8 +135,8 @@ export function CreateCredentialDialog({
   const [provider, setProvider] = useState<string>('')
   const [name, setName] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [apiBase, setApiBase] = useState('')
-  const [apiBaseTouched, setApiBaseTouched] = useState(false)
+  const [apiBases, setApiBases] = useState<CredentialApiBasesFormState>(EMPTY_API_BASES_FORM)
+  const [apiBasesTouched, setApiBasesTouched] = useState(false)
   const [profileId, setProfileId] = useState('')
   const [extra, setExtra] = useState<CredentialExtraValues>({})
   const [showKey, setShowKey] = useState(false)
@@ -143,6 +154,19 @@ export function CreateCredentialDialog({
   const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
   const apiKeyLabel = apiKeyLabelForProvider(provider)
 
+  const profileDefaults = useMemo(
+    () => defaultApiBasesForProfile(activeProfile, schema?.defaultApiBase),
+    [activeProfile, schema?.defaultApiBase]
+  )
+  const activeProtocols = useMemo(
+    () => protocolsForProfile(activeProfile, schema?.defaultApiBase),
+    [activeProfile, schema?.defaultApiBase]
+  )
+  const apiBaseRequired = useMemo(
+    () => apiBaseRequiredForProtocols(activeProtocols, schema?.apiBaseRequired),
+    [activeProtocols, schema?.apiBaseRequired]
+  )
+
   // 打开时重置；按 scope 切换时若当前 provider 不在新 scope 候选中也重置
   useEffect(() => {
     if (!open) return
@@ -152,14 +176,16 @@ export function CreateCredentialDialog({
       defaultProvider && candidates.some((p) => p.id === defaultProvider)
         ? defaultProvider
         : (candidates[0]?.id ?? '')
+    const initialProfile = defaultProfileIdForProvider(initialProvider) ?? ''
+    const initialProfileSpec = getUpstreamProfileSpec(initialProvider, initialProfile || undefined)
+    const initialSchema = getProviderSchema(initialProvider)
     setScope(initialScope)
     setProvider(initialProvider)
     setName('')
     setApiKey('')
-    const initialProfile = defaultProfileIdForProvider(initialProvider) ?? ''
     setProfileId(initialProfile)
-    setApiBase(defaultApiBaseForProvider(initialProvider, initialProfile || undefined))
-    setApiBaseTouched(false)
+    setApiBases(defaultApiBasesForProfile(initialProfileSpec, initialSchema?.defaultApiBase))
+    setApiBasesTouched(false)
     setExtra({})
     setShowKey(false)
     setTeamId(resolveInitialTeamId(teamOptions, defaultTeamId))
@@ -169,11 +195,13 @@ export function CreateCredentialDialog({
     if (!provider) return
     if (!providerOptions.some((p) => p.id === provider)) {
       const next = providerOptions[0]?.id ?? ''
-      setProvider(next)
       const nextProfile = defaultProfileIdForProvider(next) ?? ''
+      const nextSpec = getUpstreamProfileSpec(next, nextProfile || undefined)
+      const nextSchema = getProviderSchema(next)
+      setProvider(next)
       setProfileId(nextProfile)
-      setApiBase(defaultApiBaseForProvider(next, nextProfile || undefined))
-      setApiBaseTouched(false)
+      setApiBases(defaultApiBasesForProfile(nextSpec, nextSchema?.defaultApiBase))
+      setApiBasesTouched(false)
       setExtra({})
     }
   }, [providerOptions, provider])
@@ -188,26 +216,29 @@ export function CreateCredentialDialog({
     setProvider(next)
     setExtra({})
     const nextProfile = defaultProfileIdForProvider(next) ?? ''
+    const nextSpec = getUpstreamProfileSpec(next, nextProfile || undefined)
+    const nextSchema = getProviderSchema(next)
     setProfileId(nextProfile)
-    if (!apiBaseTouched) {
-      setApiBase(defaultApiBaseForProvider(next, nextProfile || undefined))
+    if (!apiBasesTouched) {
+      setApiBases(defaultApiBasesForProfile(nextSpec, nextSchema?.defaultApiBase))
     }
   }
 
   const handleProfileChange = (nextProfile: string): void => {
     setProfileId(nextProfile)
-    if (!apiBaseTouched) {
-      setApiBase(defaultApiBaseForProvider(provider, nextProfile))
+    if (!apiBasesTouched) {
+      const spec = getUpstreamProfileSpec(provider, nextProfile)
+      setApiBases(defaultApiBasesForProfile(spec, schema?.defaultApiBase))
     }
   }
 
-  const handleApiBaseChange = (next: string): void => {
-    setApiBase(next)
-    setApiBaseTouched(true)
-  }
+  const handleApiBasesChange = useCallback((next: CredentialApiBasesFormState): void => {
+    setApiBases(next)
+    setApiBasesTouched(true)
+  }, [])
 
   const requiredExtraMissing = extraFields.some((f) => f.required && !(extra[f.key] ?? '').trim())
-  const apiBaseMissing = (schema?.apiBaseRequired ?? false) && !apiBase.trim()
+  const apiBaseMissing = apiBaseRequired && !primaryApiBaseFromForm(apiBases)
   const teamScopeReady = scope !== 'team' || Boolean(teamId)
   const canSubmit =
     !submitting &&
@@ -221,13 +252,16 @@ export function CreateCredentialDialog({
   const handleSubmit = (): void => {
     if (!canSubmit) return
     const compactedExtra = compactExtra(extra)
+    const submittedBases = compactApiBasesForSubmit(apiBases, profileDefaults)
+    const openaiBase = apiBases.openai_compat.trim() || undefined
     onSubmit({
       scope,
       teamId: scope === 'team' ? teamId : undefined,
       provider,
       name: name.trim(),
       api_key: apiKey.trim(),
-      api_base: apiBase.trim() || undefined,
+      api_base: openaiBase,
+      api_bases: submittedBases,
       profile_id: profileId.trim() || undefined,
       extra: Object.keys(compactedExtra).length > 0 ? compactedExtra : undefined,
     })
@@ -388,33 +422,15 @@ export function CreateCredentialDialog({
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <Label>
-              api_base
-              {schema?.apiBaseRequired ? (
-                <span className="ml-1 text-destructive">*</span>
-              ) : (
-                <span className="ml-1 text-[11px] text-muted-foreground">（可选）</span>
-              )}
-            </Label>
-            <Input
-              type="url"
-              value={apiBase}
-              onChange={(e) => {
-                handleApiBaseChange(e.target.value)
-              }}
-              placeholder={
-                schema?.apiBasePlaceholder ??
-                activeProfile?.defaultApiBaseOpenai ??
-                schema?.defaultApiBase
-              }
-            />
-            {schema?.defaultApiBase && !apiBaseTouched ? (
-              <p className="text-[11px] text-muted-foreground">
-                已自动填充该 provider 的默认地址，可按需修改
-              </p>
-            ) : null}
-          </div>
+          <CredentialApiBasesFields
+            idPrefix="create-cred"
+            apiBases={apiBases}
+            onChange={handleApiBasesChange}
+            activeProfile={activeProfile}
+            providerDefaultApiBase={schema?.defaultApiBase}
+            protocols={activeProtocols}
+            apiBaseRequired={apiBaseRequired}
+          />
 
           <ExtraFieldsRenderer
             fields={extraFields}

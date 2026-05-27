@@ -25,6 +25,7 @@ from domains.gateway.domain.policies.volcengine_video import (
     build_volcengine_video_create_request,
     map_volcengine_video_task_to_openai,
 )
+from domains.gateway.domain.proxy_policy import allows_unregistered_gateway_model
 from domains.gateway.infrastructure.router_singleton import (
     ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
@@ -54,7 +55,10 @@ class ProxyLiteLLMClient:
 
     async def should_use_internal_direct_litellm(self, ctx: ProxyContext, model: str) -> bool:
         """内部 system vkey 在没有注册 Gateway 模型/路由时可直连并继续落日志。"""
-        if settings.gateway_proxy_disable_internal_direct_litellm:
+        if not allows_unregistered_gateway_model(
+            vkey_is_system=ctx.vkey.is_system if ctx.vkey is not None else None,
+            disable_internal_direct_litellm=settings.gateway_proxy_disable_internal_direct_litellm,
+        ):
             return False
         if ctx.vkey is None or not ctx.vkey.is_system:
             return False
@@ -67,21 +71,6 @@ class ProxyLiteLLMClient:
         if resolved.route is not None:
             return False
         return not resolved.record.enabled
-
-    @staticmethod
-    def is_router_model_miss(exc: Exception) -> bool:
-        message = str(exc).lower()
-        return any(
-            marker in message
-            for marker in (
-                "no deployments available",
-                "no deployment",
-                "no models available",
-                "unable to find deployment",
-                "model not found",
-                "could not find model",
-            )
-        )
 
     async def direct_chat_completion(self, kwargs: dict[str, Any]) -> Any:
         from litellm import acompletion

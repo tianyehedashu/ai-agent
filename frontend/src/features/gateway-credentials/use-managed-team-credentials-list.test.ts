@@ -25,6 +25,7 @@ const emptyManagedTeamCredentialListResponse = (): ManagedTeamCredentialListResp
   queried_team_count: 0,
   queried_personal_team_count: 0,
   queried_shared_team_count: 0,
+  tenant_ids_with_credentials: [],
 })
 
 const listManagedTeamCredentialsMock = vi.fn(

@@ -220,6 +220,7 @@ class CredentialUpstreamCatalogService:
         st, url, reason = resolve_openai_compatible_models_list_url(
             provider=row.provider,
             api_base=row.api_base,
+            api_bases=row.api_bases,
             profile_id=row.profile_id,
         )
         if st == "unsupported":

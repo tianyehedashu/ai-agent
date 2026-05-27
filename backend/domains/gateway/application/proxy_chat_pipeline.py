@@ -70,7 +70,9 @@ async def prepare_chat_proxy_request(
     )
     assert preflight.model is not None
 
-    prepared_litellm, kwargs = await use_case.prepare_litellm_invoke(ctx, body)
+    prepared_litellm, kwargs = await use_case.prepare_litellm_invoke(
+        ctx, body, resolved=preflight.resolved
+    )
     kwargs = await inline_vision_image_urls_in_kwargs(use_case.session, kwargs)
     meta = kwargs.get("metadata")
     metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}

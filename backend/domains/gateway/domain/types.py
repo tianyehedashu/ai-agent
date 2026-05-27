@@ -380,7 +380,6 @@ __all__ = [
     "CONFIG_MANAGED_BY",
     "CONFIG_MANAGED_CREDENTIAL_NAME",
     "GATEWAY_MODEL_MANAGED_BY_TAG",
-    "is_config_managed_system_gateway_model",
     "MANAGED_GATEWAY_CREDENTIAL_PROVIDERS",
     "PERSONAL_MODEL_PROVIDERS",
     "PERSONAL_MODEL_TYPES",
@@ -412,5 +411,6 @@ __all__ = [
     "allowed_capabilities_from_storage",
     "credential_api_scope",
     "is_config_managed_system_credential",
+    "is_config_managed_system_gateway_model",
     "normalize_downstream_pricing_scope",
 ]

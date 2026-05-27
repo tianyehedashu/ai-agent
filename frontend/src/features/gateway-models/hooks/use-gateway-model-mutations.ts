@@ -28,9 +28,9 @@ interface GatewayModelMutations {
   updateModelMutation: UseMutationResult<
     GatewayModel,
     Error,
-    { id: string; body: GatewayModelUpdateBody }
+    { id: string; body: GatewayModelUpdateBody; teamId?: string }
   >
-  deleteModelMutation: UseMutationResult<void, Error, string>
+  deleteModelMutation: UseMutationResult<void, Error, { id: string; teamId?: string }>
   testMutation: UseMutationResult<Awaited<ReturnType<typeof gatewayApi.testModel>>, Error, string>
 }
 
@@ -59,8 +59,15 @@ export function useGatewayModelMutations(
   })
 
   const updateModelMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: GatewayModelUpdateBody }) =>
-      gatewayApi.updateModel(teamId, id, body),
+    mutationFn: ({
+      id,
+      body,
+      teamId: overrideTeamId,
+    }: {
+      id: string
+      body: GatewayModelUpdateBody
+      teamId?: string
+    }) => gatewayApi.updateModel(overrideTeamId ?? teamId, id, body),
     onSuccess: (_data, { body }) => {
       invalidateGatewayModelCaches(queryClient, {
         credentialId: filterCredentialId,
@@ -94,8 +101,14 @@ export function useGatewayModelMutations(
   })
 
   const deleteModelMutation = useMutation({
-    mutationFn: async (id: string): Promise<void> => {
-      await gatewayApi.deleteModel(teamId, id)
+    mutationFn: async ({
+      id,
+      teamId: overrideTeamId,
+    }: {
+      id: string
+      teamId?: string
+    }): Promise<void> => {
+      await gatewayApi.deleteModel(overrideTeamId ?? teamId, id)
     },
     onSuccess: () => {
       invalidateGatewayModelCaches(queryClient, {

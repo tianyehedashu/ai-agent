@@ -8,9 +8,9 @@
 import type { CredentialSummary, ProviderCredential } from '@/api/gateway'
 import type { GatewayTeam } from '@/api/gateway/teams'
 
-export type CredentialTableViewMode = 'current-team' | 'cross-team'
-
-type CredentialLinkScope = Pick<CredentialSummary, 'scope'> | Pick<ProviderCredential, 'scope'>
+export type CredentialLinkScope =
+  | Pick<CredentialSummary, 'scope'>
+  | Pick<ProviderCredential, 'scope'>
 
 export function canEditGatewayCredential(
   c: ProviderCredential,
@@ -32,23 +32,8 @@ export function canLinkToCredentialDetail(
   return true
 }
 
-export function canViewCrossTeamCredentialsOverview(
-  canWrite: boolean,
-  writableTeamCount: number
-): boolean {
-  return canWrite && writableTeamCount > 1
-}
-
 export function canManageSystemCredentialVisibility(isPlatformAdmin: boolean): boolean {
   return isPlatformAdmin
-}
-
-export function shouldShowTeamAffiliationColumn(
-  viewMode: CredentialTableViewMode,
-  writableTeamCount: number
-): boolean {
-  if (viewMode === 'cross-team') return true
-  return writableTeamCount > 1
 }
 
 export function isWritableTargetTeam(

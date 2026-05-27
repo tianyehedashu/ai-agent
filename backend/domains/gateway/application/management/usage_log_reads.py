@@ -26,7 +26,7 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsGroupBy,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
-from domains.identity.application.ports import UserSummaryQueryPort, user_display_label
+from domains.identity.application.ports import user_display_label
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.repositories.request_log_repository import (

@@ -11,7 +11,7 @@ import pytest
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.domain.errors import CapabilityNotAllowedError
+from domains.gateway.domain.errors import CapabilityNotAllowedError, GatewayModelNotFoundError
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -84,3 +84,28 @@ async def test_optional_model_skips_model_whitelist(
     )
     assert result.model is None
     assert result.reservations == []
+
+
+@pytest.mark.asyncio
+async def test_preflight_rejects_unregistered_model(db_session: Any) -> None:
+    ctx = ProxyContext(
+        team_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    uc = ProxyUseCase(db_session)
+    with patch(
+        "domains.gateway.application.proxy_guard.resolve_model_or_route",
+        AsyncMock(return_value=None),
+    ), pytest.raises(GatewayModelNotFoundError, match="deepseek-v4-flash"):
+        await run_proxy_inbound_preflight(
+            uc.guard,
+            ctx,
+            capability=GatewayCapability.CHAT,
+            model="deepseek-v4-flash-260425",
+            require_model=True,
+        )

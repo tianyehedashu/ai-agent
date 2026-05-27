@@ -12,11 +12,13 @@ from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
     EntitlementPlanExhaustedError,
+    GatewayModelNotFoundError,
     GuardrailBlockedError,
     InvocationPolicyViolationError,
     ModelNotAllowedError,
     RateLimitExceededError,
 )
+from domains.gateway.domain.proxy_policy import is_router_model_miss
 from libs.exceptions import ExternalServiceError, ValidationError
 
 
@@ -39,6 +41,13 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             message=str(exc),
             openai_error_type="model_not_allowed",
             anthropic_error_type="invalid_request_error",
+        )
+    if isinstance(exc, GatewayModelNotFoundError):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_404_NOT_FOUND,
+            message=str(exc),
+            openai_error_type="model_not_found",
+            anthropic_error_type="not_found_error",
         )
     if isinstance(exc, CapabilityNotAllowedError):
         return ProxyUseCaseBusinessFailure(
@@ -125,6 +134,16 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             message=str(exc),
             openai_error_type="invalid_request",
             anthropic_error_type="invalid_request_error",
+        )
+    if is_router_model_miss(exc):
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_404_NOT_FOUND,
+            message=(
+                "请求的模型未在 Gateway 注册或当前无可用部署，"
+                "请检查凭据与模型配置是否仍有效"
+            ),
+            openai_error_type="model_not_found",
+            anthropic_error_type="not_found_error",
         )
     return None
 

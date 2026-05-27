@@ -128,6 +128,27 @@ class ProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
+    async def list_tenant_ids_with_team_scope_for_tenants(
+        self, tenant_ids: list[uuid.UUID]
+    ) -> list[uuid.UUID]:
+        """给定 tenant 集合，返回其中至少有一条 team-scope 凭据的 tenant_id（去重）。"""
+        if not tenant_ids:
+            return []
+        stmt = (
+            select(ProviderCredential.tenant_id)
+            .where(
+                ProviderCredential.tenant_id.in_(tenant_ids),
+                ProviderCredential.tenant_id.is_not(None),
+                or_(
+                    ProviderCredential.scope.is_(None),
+                    ProviderCredential.scope == "team",
+                ),
+            )
+            .distinct()
+        )
+        result = await self._session.execute(stmt)
+        return [row[0] for row in result.all()]
+
     async def list_team_scope_for_tenants_page(
         self,
         tenant_ids: list[uuid.UUID],
@@ -189,6 +210,7 @@ class ProviderCredentialRepository:
         name: str,
         api_key_encrypted: str,
         api_base: str | None = None,
+        api_bases: dict[str, Any] | None = None,
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
@@ -201,6 +223,7 @@ class ProviderCredentialRepository:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=api_base,
+            api_bases=api_bases,
             profile_id=profile_id,
             extra=extra,
             is_active=is_active,
@@ -217,6 +240,7 @@ class ProviderCredentialRepository:
         name: str,
         api_key_encrypted: str,
         api_base: str | None = None,
+        api_bases: dict[str, Any] | None = None,
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool = True,
@@ -229,6 +253,7 @@ class ProviderCredentialRepository:
             name=name,
             api_key_encrypted=api_key_encrypted,
             api_base=api_base,
+            api_bases=api_bases,
             profile_id=profile_id,
             extra=extra,
             is_active=is_active,
@@ -240,6 +265,7 @@ class ProviderCredentialRepository:
         *,
         api_key_encrypted: str | None = None,
         api_base: str | None = None,
+        api_bases: dict[str, Any] | None = None,
         profile_id: str | None = None,
         extra: dict[str, Any] | None = None,
         is_active: bool | None = None,
@@ -252,6 +278,8 @@ class ProviderCredentialRepository:
             credential.api_key_encrypted = api_key_encrypted
         if api_base is not None:
             credential.api_base = api_base
+        if api_bases is not None:
+            credential.api_bases = api_bases
         if profile_id is not None:
             credential.profile_id = profile_id
         if extra is not None:
@@ -287,6 +315,7 @@ class ProviderCredentialRepository:
             name=source.name,
             api_key_encrypted=source.api_key_encrypted,
             api_base=source.api_base,
+            api_bases=source.api_bases,
             profile_id=source.profile_id,
             extra=source.extra,
             is_active=True,

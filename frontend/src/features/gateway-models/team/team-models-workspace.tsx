@@ -478,11 +478,14 @@ export function TeamModelsWorkspace({
     setRowDeleteOpen(false)
     setPendingRowDeleteId(null)
     setDeletingModelId(id)
-    deleteModelMutation.mutate(id, {
-      onSettled: () => {
-        setDeletingModelId(null)
-      },
-    })
+    deleteModelMutation.mutate(
+      { id },
+      {
+        onSettled: () => {
+          setDeletingModelId(null)
+        },
+      }
+    )
   }, [pendingRowDeleteId, deleteModelMutation])
 
   const selectedModelsForBatch = useMemo(

@@ -90,6 +90,8 @@ export type {
   GatewayModelPreset,
   GatewayModelCreateBody,
   GatewayModelUpdateBody,
+  ManagedTeamModelListResponse,
+  ListManagedTeamModelsParams,
 } from './models'
 
 export {

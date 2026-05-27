@@ -23,9 +23,9 @@ def _system_credential_summary(cred: object | None) -> SystemCredentialSummary |
         return None
     vis = credential_visibility_for_api(getattr(cred, "visibility", None)) or "public"
     return SystemCredentialSummary(
-        id=getattr(cred, "id"),
-        provider=getattr(cred, "provider"),
-        name=getattr(cred, "name"),
+        id=cred.id,
+        provider=cred.provider,
+        name=cred.name,
         visibility=vis,
     )
 

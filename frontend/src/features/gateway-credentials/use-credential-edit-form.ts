@@ -3,13 +3,21 @@ import { useCallback, useMemo, useState } from 'react'
 import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gateway'
 
 import {
+  apiBaseRequiredForProtocols,
+  apiBasesFromCredential,
+  compactApiBasesForSubmit,
+  defaultApiBasesForProfile,
+  primaryApiBaseFromForm,
+  protocolsForProfile,
+  type CredentialApiBasesFormState,
+} from './credential-api-bases-utils'
+import {
   compactExtra,
   extraToFormValues,
   type CredentialExtraValues,
 } from './credential-extra-utils'
 import {
   apiKeyLabelForProvider,
-  defaultApiBaseForProvider,
   defaultProfileIdForProvider,
   extraFieldsForProvider,
   getProviderSchema,
@@ -30,20 +38,20 @@ export interface CredentialEditFormDerived {
   apiKeyLabel: string
   extraFields: ReturnType<typeof extraFieldsForProvider>
   schema: ReturnType<typeof getProviderSchema>
-  defaultApiBase: string
-  baseIsDefault: boolean
+  profileDefaults: CredentialApiBasesFormState
   apiBasePlaceholder: string
   apiBaseRequired: boolean
   hasUnknownExtra: boolean
   profileOptions: ReturnType<typeof profilesForProvider>
   activeProfile: ReturnType<typeof getUpstreamProfileSpec>
+  activeProtocols: ReturnType<typeof protocolsForProfile>
 }
 
 export interface UseCredentialEditFormResult extends CredentialEditFormDerived {
   name: string
   setName: (value: string) => void
-  apiBase: string
-  setApiBase: (value: string) => void
+  apiBases: CredentialApiBasesFormState
+  setApiBases: (value: CredentialApiBasesFormState) => void
   apiKey: string
   setApiKey: (value: string) => void
   profileId: string
@@ -70,31 +78,59 @@ export function useCredentialEditForm({
   configManaged = false,
   trackIsActive = false,
 }: UseCredentialEditFormOptions): UseCredentialEditFormResult {
+  const provider = cred.provider
+  const schema = getProviderSchema(provider)
+  const initialProfile = initialProfileId(cred)
+  const initialActiveProfile = getUpstreamProfileSpec(provider, initialProfile || undefined)
+
   const [name, setName] = useState<string>(() => cred.name)
-  const [apiBase, setApiBase] = useState<string>(() => cred.api_base ?? '')
+  const [apiBases, setApiBases] = useState<CredentialApiBasesFormState>(() =>
+    apiBasesFromCredential(cred, initialActiveProfile, schema?.defaultApiBase)
+  )
   const [apiKey, setApiKey] = useState<string>('')
-  const [profileId, setProfileIdState] = useState<string>(() => initialProfileId(cred))
+  const [profileId, setProfileIdState] = useState<string>(() => initialProfile)
   const [extra, setExtra] = useState<CredentialExtraValues>(() => extraToFormValues(cred.extra))
   const [isActive, setIsActive] = useState<boolean>(() => cred.is_active)
 
-  const provider = cred.provider
-  const schema = getProviderSchema(provider)
   const profileOptions = useMemo(() => profilesForProvider(provider), [provider])
   const activeProfile = useMemo(
     () => getUpstreamProfileSpec(provider, profileId || undefined),
     [provider, profileId]
   )
+  const profileDefaults = useMemo(
+    () => defaultApiBasesForProfile(activeProfile, schema?.defaultApiBase),
+    [activeProfile, schema?.defaultApiBase]
+  )
+  const activeProtocols = useMemo(
+    () => protocolsForProfile(activeProfile, schema?.defaultApiBase),
+    [activeProfile, schema?.defaultApiBase]
+  )
   const extraFields = useMemo(() => extraFieldsForProvider(provider), [provider])
   const apiKeyLabel = apiKeyLabelForProvider(provider)
-  const defaultApiBase = defaultApiBaseForProvider(provider, profileId || undefined)
-  const baseIsDefault = defaultApiBase.length > 0 && apiBase === defaultApiBase
   const apiBasePlaceholder =
     schema?.apiBasePlaceholder ??
     activeProfile?.defaultApiBaseOpenai ??
-    (defaultApiBase.length > 0 ? defaultApiBase : 'https://example.com/v1')
-  const apiBaseRequired = schema?.apiBaseRequired ?? false
-  const apiBaseMissing = apiBaseRequired && !apiBase.trim()
+    (profileDefaults.openai_compat.length > 0
+      ? profileDefaults.openai_compat
+      : 'https://example.com/v1')
+  const apiBaseRequired = useMemo(
+    () => apiBaseRequiredForProtocols(activeProtocols, schema?.apiBaseRequired),
+    [activeProtocols, schema?.apiBaseRequired]
+  )
+  const apiBaseMissing = apiBaseRequired && !primaryApiBaseFromForm(apiBases)
   const requiredExtraMissing = extraFields.some((f) => f.required && !(extra[f.key] ?? '').trim())
+
+  const origProfileId = useMemo(
+    () => (cred.profile_id ?? '').trim() || (defaultProfileIdForProvider(provider) ?? ''),
+    [cred.profile_id, provider]
+  )
+  const origApiBases = useMemo(
+    () => apiBasesFromCredential(cred, initialActiveProfile, schema?.defaultApiBase),
+    [cred, initialActiveProfile, schema?.defaultApiBase]
+  )
+  const apiBasesSynced =
+    apiBases.openai_compat.trim() === origApiBases.openai_compat.trim() &&
+    apiBases.anthropic_native.trim() === origApiBases.anthropic_native.trim()
 
   const compactedNow = useMemo(() => compactExtra(extra), [extra])
   const compactedOrig = useMemo(() => compactExtra(extraToFormValues(cred.extra)), [cred.extra])
@@ -108,11 +144,9 @@ export function useCredentialEditForm({
     return true
   }, [compactedNow, compactedOrig])
 
-  const origProfileId =
-    (cred.profile_id ?? '').trim() || (defaultProfileIdForProvider(provider) ?? '')
   const synced =
     name === cred.name &&
-    (apiBase.trim() || '') === (cred.api_base ?? '') &&
+    apiBasesSynced &&
     apiKey === '' &&
     (profileId.trim() || '') === origProfileId &&
     extraSynced &&
@@ -126,12 +160,12 @@ export function useCredentialEditForm({
 
   const reset = useCallback((): void => {
     setName(cred.name)
-    setApiBase(cred.api_base ?? '')
+    setApiBases(apiBasesFromCredential(cred, initialActiveProfile, schema?.defaultApiBase))
     setApiKey('')
     setProfileIdState(initialProfileId(cred))
     setExtra(extraToFormValues(cred.extra))
     setIsActive(cred.is_active)
-  }, [cred])
+  }, [cred, initialActiveProfile, schema?.defaultApiBase])
 
   const clearApiKey = useCallback((): void => {
     setApiKey('')
@@ -141,16 +175,16 @@ export function useCredentialEditForm({
     (nextProfileId: string): void => {
       setProfileIdState(nextProfileId)
       const spec = getUpstreamProfileSpec(provider, nextProfileId)
-      if (spec?.defaultApiBaseOpenai) {
-        setApiBase(spec.defaultApiBaseOpenai)
-      }
+      setApiBases(defaultApiBasesForProfile(spec, schema?.defaultApiBase))
     },
-    [provider]
+    [provider, schema?.defaultApiBase]
   )
 
   const buildUpdateBody = useCallback((): GatewayCredentialUpdateBody => {
+    const submittedBases = compactApiBasesForSubmit(apiBases, profileDefaults)
     const body: GatewayCredentialUpdateBody = {
-      api_base: apiBase.trim() || null,
+      api_base: apiBases.openai_compat.trim() || null,
+      api_bases: submittedBases ?? null,
       extra: Object.keys(compactedNow).length > 0 ? compactedNow : null,
     }
     if (!configManaged) {
@@ -170,7 +204,7 @@ export function useCredentialEditForm({
     }
     return body
   }, [
-    apiBase,
+    apiBases,
     apiKey,
     compactedNow,
     configManaged,
@@ -178,6 +212,7 @@ export function useCredentialEditForm({
     isActive,
     name,
     origProfileId,
+    profileDefaults,
     profileId,
     trackIsActive,
   ])
@@ -185,8 +220,8 @@ export function useCredentialEditForm({
   return {
     name,
     setName,
-    apiBase,
-    setApiBase,
+    apiBases,
+    setApiBases,
     apiKey,
     setApiKey,
     profileId,
@@ -203,12 +238,12 @@ export function useCredentialEditForm({
     apiKeyLabel,
     extraFields,
     schema,
-    defaultApiBase,
-    baseIsDefault,
+    profileDefaults,
     apiBasePlaceholder,
     apiBaseRequired,
     hasUnknownExtra,
     profileOptions,
     activeProfile,
+    activeProtocols,
   }
 }

@@ -3,7 +3,7 @@
  */
 
 import { apiV1Path } from '@/api/paths'
-import type { Session, Message, PaginatedResponse, ToolCall, MessageRole } from '@/types'
+import type { Session, Message, PaginatedList, ToolCall, MessageRole } from '@/types'
 
 import { apiClient } from './client'
 
@@ -133,19 +133,19 @@ export const sessionApi = {
   /**
    * 获取会话列表
    */
-  async list(page = 1, pageSize = 20): Promise<PaginatedResponse<Session>> {
+  async list(page = 1, pageSize = 20): Promise<PaginatedList<Session>> {
     const backendList = await apiClient.get<BackendSession[]>(apiV1Path('/sessions/'), {
       skip: (page - 1) * pageSize,
       limit: pageSize,
     })
 
-    // 转换为前端期望的PaginatedResponse格式
     return {
       items: backendList.map(toFrontendSession),
-      total: backendList.length, // 后端没有返回total，使用列表长度作为近似值
+      total: backendList.length,
       page,
-      pageSize,
-      hasMore: backendList.length === pageSize, // 如果返回的数量等于pageSize，可能还有更多
+      page_size: pageSize,
+      has_next: backendList.length === pageSize,
+      has_prev: page > 1,
     }
   },
 

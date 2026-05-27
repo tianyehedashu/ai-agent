@@ -26,8 +26,7 @@ import {
   systemModelsBrowseIndexHref,
 } from '@/features/gateway-models/paths'
 import {
-  resolveGatewayTeamLabel,
-  useGatewayTeamNameMap,
+  useGatewayWritableCollaborationTeams,
   useGatewayWritableTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -36,7 +35,6 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2 } from '@/lib/lucide-icons'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 const AddModelsDialog = lazyWithReload(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
@@ -61,23 +59,18 @@ function CredentialsPanelFallback(): React.JSX.Element {
 
 export default function GatewayCredentialsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const teamNameById = useGatewayTeamNameMap()
-  const currentTeam = useGatewayTeamStore((s) => s.current())
-  const currentTeamName = useMemo(() => {
-    if (currentTeam) {
-      return currentTeam.kind === 'personal' ? '个人工作区' : currentTeam.name
-    }
-    return resolveGatewayTeamLabel(teamNameById, teamId)
-  }, [currentTeam, teamId, teamNameById])
   const writableTeams = useGatewayWritableTeams()
+  const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
   const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [pendingProvider, setPendingProvider] = useState<string | undefined>(undefined)
+  const [pendingCreateTeamId, setPendingCreateTeamId] = useState<string | undefined>(undefined)
 
   const closeCreateUi = useCallback((): void => {
     setOpen(false)
     setPendingProvider(undefined)
+    setPendingCreateTeamId(undefined)
   }, [])
 
   const createFlow = useCredentialCreateFlow({
@@ -112,14 +105,18 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   const createSubmitting =
     mutations.createManagedMutation.isPending || mutations.createUserMutation.isPending
 
-  const handleOpenCreate = useCallback((provider?: string): void => {
+  const handleOpenCreate = useCallback((provider?: string, targetTeamId?: string): void => {
     setPendingProvider(provider)
+    setPendingCreateTeamId(targetTeamId)
     setOpen(true)
   }, [])
 
   const handleDialogOpenChange = useCallback((next: boolean): void => {
     setOpen(next)
-    if (!next) setPendingProvider(undefined)
+    if (!next) {
+      setPendingProvider(undefined)
+      setPendingCreateTeamId(undefined)
+    }
   }, [])
 
   const onCreateSubmit = useCallback(
@@ -130,6 +127,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
           name: v.name,
           api_key: v.api_key,
           api_base: v.api_base ?? null,
+          api_bases: v.api_bases ?? null,
+          profile_id: v.profile_id ?? null,
           extra: v.extra,
         })
         return
@@ -150,6 +149,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
             name: v.name,
             api_key: v.api_key,
             api_base: v.api_base,
+            api_bases: v.api_bases ?? null,
+            profile_id: v.profile_id ?? null,
             extra: v.extra,
             scope: v.scope,
           },
@@ -163,6 +164,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
           name: v.name,
           api_key: v.api_key,
           api_base: v.api_base,
+          api_bases: v.api_bases ?? null,
+          profile_id: v.profile_id ?? null,
           extra: v.extra,
           scope: v.scope,
         },
@@ -171,19 +174,22 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     [mutations.createManagedMutation, mutations.createUserMutation, teamId, toast]
   )
 
-  const showCrossTeamOverview = activeTab === 'shared' && canWrite && writableTeams.length > 1
+  const defaultCreateTeamId = useMemo(() => {
+    if (pendingCreateTeamId) return pendingCreateTeamId
+    if (activeTab === 'shared') {
+      return writableCollaborationTeams[0]?.id ?? undefined
+    }
+    return teamId
+  }, [activeTab, pendingCreateTeamId, teamId, writableCollaborationTeams])
 
-  const crossTeamOverviewLabel = isPlatformAdmin ? '全平台汇总' : '全部可管理'
+  const createWritableTeams = activeTab === 'shared' ? writableCollaborationTeams : writableTeams
 
   const sharedTabDescription = useMemo(() => {
     if (isAdmin) {
-      if (showCrossTeamOverview) {
-        return `以下凭据仅属于「${currentTeamName}」。可切换到「${crossTeamOverviewLabel}」查看其它团队，或通过侧栏切换工作区。`
-      }
-      return `以下凭据仅属于「${currentTeamName}」。切换侧栏团队可查看其它团队的凭据。`
+      return '展示您可管理的全部协作团队及其共享凭据；可为任一团队添加上游 API Key。'
     }
-    return `以下凭据属于「${currentTeamName}」，团队成员可见；密钥已脱敏，详情与变更需团队管理员。`
-  }, [crossTeamOverviewLabel, currentTeamName, isAdmin, showCrossTeamOverview])
+    return '展示您可管理的协作团队及其共享凭据；团队成员可见，密钥已脱敏，详情与变更需团队管理员。'
+  }, [isAdmin])
 
   return (
     <div className="space-y-4">
@@ -271,8 +277,8 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
         allowedScopes={allowedScopes}
         defaultScope={defaultScope}
         defaultProvider={pendingProvider}
-        writableTeams={writableTeams}
-        defaultTeamId={teamId}
+        writableTeams={createWritableTeams}
+        defaultTeamId={defaultCreateTeamId}
         routeTeamId={teamId}
         submitting={createSubmitting}
         onSubmit={onCreateSubmit}

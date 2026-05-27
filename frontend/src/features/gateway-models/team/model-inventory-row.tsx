@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 
 import { Link } from 'react-router-dom'
 
@@ -37,6 +37,7 @@ interface ModelInventoryRowProps {
   configManaged?: boolean
   isDeleting?: boolean
   onDelete?: (id: string) => void
+  trailingActions?: ReactNode
 }
 
 export const ModelInventoryRow = memo(function ModelInventoryRow({
@@ -58,6 +59,7 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
   configManaged = false,
   isDeleting = false,
   onDelete,
+  trailingActions,
 }: ModelInventoryRowProps): React.JSX.Element {
   const wsReq = usageRow?.workspace.requests ?? 0
   const wsTok = (usageRow?.workspace.input_tokens ?? 0) + (usageRow?.workspace.output_tokens ?? 0)
@@ -191,6 +193,21 @@ export const ModelInventoryRow = memo(function ModelInventoryRow({
           </div>
         ) : null}
         {mainRow}
+        {trailingActions ? (
+          <div
+            className="flex shrink-0 items-center gap-1 border-l px-2"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+            }}
+            role="presentation"
+          >
+            {trailingActions}
+          </div>
+        ) : null}
       </div>
     </li>
   )

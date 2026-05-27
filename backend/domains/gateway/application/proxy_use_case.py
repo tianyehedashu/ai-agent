@@ -29,6 +29,7 @@ from domains.gateway.application.quota_plan_service import get_quota_plan_servic
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
 
 if TYPE_CHECKING:
+    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -89,6 +90,8 @@ class ProxyUseCase(ProxyChatMixin, ProxyNonChatMixin):
         self,
         ctx: ProxyContext,
         body: dict[str, Any],
+        *,
+        resolved: ResolvedModelName | None = None,
     ) -> tuple[PreparedLitellmKwargs, dict[str, Any]]:
         """返回 ``PreparedLitellmKwargs`` 与最终 kwargs（供 embedding 等读取 ``resolved``）。"""
         return await build_litellm_invoke(
@@ -97,15 +100,18 @@ class ProxyUseCase(ProxyChatMixin, ProxyNonChatMixin):
             body,
             upstream_adapter=self._upstream_adapter,
             prompt_cache=self._prompt_cache,
+            resolved=resolved,
         )
 
     async def prepare_litellm_kwargs(
         self,
         ctx: ProxyContext,
         body: dict[str, Any],
+        *,
+        resolved: ResolvedModelName | None = None,
     ) -> dict[str, Any]:
         """拼装经 upstream 适配与 prompt cache 处理后的 LiteLLM kwargs。"""
-        _prepared, kwargs = await self.prepare_litellm_invoke(ctx, body)
+        _prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=resolved)
         return kwargs
 
 

@@ -8,9 +8,9 @@ import uuid
 
 from domains.gateway.application.management.credential_read_mappers import credential_from_orm
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
-from domains.gateway.domain.policies.managed_team_credentials_policy import (
-    WritableTeamSnapshot,
-    build_managed_team_credential_list_plan,
+from domains.gateway.domain.policies.managed_team_credentials_policy import WritableTeamSnapshot
+from domains.gateway.domain.policies.managed_team_resource_policy import (
+    build_managed_team_resource_list_plan,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
@@ -31,6 +31,7 @@ class ManagedTeamCredentialListPage:
     queried_team_count: int
     queried_personal_team_count: int
     queried_shared_team_count: int
+    tenant_ids_with_credentials: tuple[uuid.UUID, ...]
 
 
 async def list_managed_team_credentials_for_actor(
@@ -53,7 +54,7 @@ async def list_managed_team_credentials_for_actor(
         WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
         for m in memberships
     ]
-    plan = build_managed_team_credential_list_plan(
+    plan = build_managed_team_resource_list_plan(
         snapshots,
         is_platform_admin=is_platform_admin,
     )
@@ -61,6 +62,9 @@ async def list_managed_team_credentials_for_actor(
     cred_repo = ProviderCredentialRepository(session)
 
     total = await cred_repo.count_team_scope_for_tenants(tenant_ids)
+    tenant_ids_with_credentials = await cred_repo.list_tenant_ids_with_team_scope_for_tenants(
+        tenant_ids
+    )
     rows = await cred_repo.list_team_scope_for_tenants_page(
         tenant_ids,
         offset=page_params.offset,
@@ -78,6 +82,7 @@ async def list_managed_team_credentials_for_actor(
         queried_team_count=plan.queried_team_count,
         queried_personal_team_count=plan.queried_personal_team_count,
         queried_shared_team_count=plan.queried_shared_team_count,
+        tenant_ids_with_credentials=tuple(tenant_ids_with_credentials),
     )
 
 

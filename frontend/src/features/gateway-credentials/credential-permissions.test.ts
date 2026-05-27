@@ -7,10 +7,8 @@ import {
   canEditGatewayCredential,
   canLinkToCredentialDetail,
   canManageSystemCredentialVisibility,
-  canViewCrossTeamCredentialsOverview,
   credentialDetailTeamId,
   isWritableTargetTeam,
-  shouldShowTeamAffiliationColumn,
 } from './credential-permissions'
 
 function cred(scope: ProviderCredential['scope']): ProviderCredential {
@@ -80,29 +78,10 @@ describe('canLinkToCredentialDetail', () => {
   })
 })
 
-describe('canViewCrossTeamCredentialsOverview', () => {
-  it('requires write and multiple writable teams', () => {
-    expect(canViewCrossTeamCredentialsOverview(true, 2)).toBe(true)
-    expect(canViewCrossTeamCredentialsOverview(true, 1)).toBe(false)
-    expect(canViewCrossTeamCredentialsOverview(false, 3)).toBe(false)
-  })
-})
-
 describe('canManageSystemCredentialVisibility', () => {
   it('allows platform admin only', () => {
     expect(canManageSystemCredentialVisibility(true)).toBe(true)
     expect(canManageSystemCredentialVisibility(false)).toBe(false)
-  })
-})
-
-describe('shouldShowTeamAffiliationColumn', () => {
-  it('shows in cross-team view always', () => {
-    expect(shouldShowTeamAffiliationColumn('cross-team', 1)).toBe(true)
-  })
-
-  it('shows in current view only for multi-team admins', () => {
-    expect(shouldShowTeamAffiliationColumn('current-team', 2)).toBe(true)
-    expect(shouldShowTeamAffiliationColumn('current-team', 1)).toBe(false)
   })
 })
 

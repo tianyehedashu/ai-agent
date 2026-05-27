@@ -23,6 +23,7 @@ class CredentialReadModel:
     api_key_encrypted: str
     profile_id: str | None = None
     profile_label: str | None = None
+    api_bases: dict[str, str] | None = None
     effective_api_base_openai: str | None = None
     effective_api_base_anthropic: str | None = None
     visibility: str | None = None

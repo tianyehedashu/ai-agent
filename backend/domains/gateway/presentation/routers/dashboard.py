@@ -36,7 +36,6 @@ from domains.gateway.presentation.schemas.common import (
     UsageStatisticsMetricResponse,
     UsageStatisticsResponse,
 )
-
 from libs.exceptions import PermissionDeniedError
 
 from ._common import MgmtReads

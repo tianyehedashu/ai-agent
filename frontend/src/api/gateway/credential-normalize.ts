@@ -1,5 +1,10 @@
 export type NormalizedCredentialScope = 'system' | 'team' | 'user'
 
+export interface CredentialApiBases {
+  openai_compat?: string | null
+  anthropic_native?: string | null
+}
+
 export interface NormalizedProviderCredential {
   id: string
   tenant_id: string | null
@@ -8,6 +13,7 @@ export interface NormalizedProviderCredential {
   provider: string
   name: string
   api_base: string | null
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   profile_label?: string | null
   effective_api_base_openai?: string | null
@@ -27,6 +33,7 @@ export interface ProviderCredentialWire {
   provider: string
   name: string
   api_base: string | null
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   profile_label?: string | null
   effective_api_base_openai?: string | null
@@ -58,6 +65,7 @@ export function normalizeCredential(raw: ProviderCredentialWire): NormalizedProv
     provider: raw.provider,
     name: raw.name,
     api_base: raw.api_base,
+    api_bases: raw.api_bases ?? null,
     profile_id: raw.profile_id ?? null,
     profile_label: raw.profile_label ?? null,
     effective_api_base_openai: raw.effective_api_base_openai ?? null,

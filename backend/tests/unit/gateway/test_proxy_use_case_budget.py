@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application import proxy_guard, proxy_response_adapter
 from domains.gateway.application.budget_service import BudgetCheckResult, BudgetService
+from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
 from domains.gateway.application.proxy_response_adapter import settle_usage
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
@@ -142,10 +143,16 @@ async def test_chat_failure_releases_all_request_reservations(
     async def fail_direct(_kwargs: dict[str, object]) -> object:
         raise RuntimeError("upstream failed")
 
-    async def prepare_litellm_kwargs(
+    async def prepare_litellm_invoke(
         _ctx: ProxyContext, body: dict[str, object]
-    ) -> dict[str, object]:
-        return {**body, "metadata": {}}
+    ) -> tuple[PreparedLitellmKwargs, dict[str, object]]:
+        kwargs = {**body, "metadata": {}}
+        prepared = PreparedLitellmKwargs(
+            kwargs=kwargs,
+            client_model=str(body.get("model", "")),
+            resolved=None,
+        )
+        return prepared, kwargs
 
     async def _none_resolve(
         _session: object, _team_id: object, _name: str, *, user_id: object | None = None
@@ -166,7 +173,7 @@ async def test_chat_failure_releases_all_request_reservations(
         use_case.litellm, "should_use_internal_direct_litellm", use_direct
     )
     monkeypatch.setattr(use_case.litellm, "direct_chat_completion", fail_direct)
-    monkeypatch.setattr(use_case, "prepare_litellm_kwargs", prepare_litellm_kwargs)
+    monkeypatch.setattr(use_case, "prepare_litellm_invoke", prepare_litellm_invoke)
 
     ctx = ProxyContext(
         team_id=team_id,

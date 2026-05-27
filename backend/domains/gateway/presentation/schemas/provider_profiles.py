@@ -1,11 +1,6 @@
-"""上游 Provider Profile SSOT API 响应。"""
+"""GET /api/v1/gateway/provider-profiles — 上游方案 SSOT API 响应。"""
 
-from __future__ import annotations
-
-from pydantic import BaseModel, Field
-
-
-class ProviderProfileApiBaseResponse(BaseModel):
+from __future__ import annotationsfrom pydantic import BaseModel, Fieldclass ProviderProfileApiBaseResponse(BaseModel):
     openai_compat: str | None = None
     anthropic_native: str | None = None
 
@@ -17,6 +12,8 @@ class ProviderProfileResponse(BaseModel):
     api_bases: ProviderProfileApiBaseResponse
     models_list_path: str = "/models"
     default_call_shape: str = "openai_compat"
+    probe_strategy: str = "openai_models_list"
+    probe_protocol: str = "openai_compat"
     probe_supported: bool = True
 
 
@@ -29,3 +26,4 @@ __all__ = [
     "ProviderProfileResponse",
     "ProviderProfilesListResponse",
 ]
+

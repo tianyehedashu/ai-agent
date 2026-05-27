@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from domains.gateway.domain.policies.model_selection import merge_virtual_model_rows_tenant_overrides_system
+from domains.gateway.domain.policies.model_selection import (
+    merge_virtual_model_rows_tenant_overrides_system,
+)
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 

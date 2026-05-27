@@ -67,6 +67,8 @@ function process(data: unknown): User {
 
 禁止新列表使用 legacy `PaginatedResponse`（camelCase）；全量拉取优先 `fetchAllPaginatedPages` 或后端 `/ids`。
 
+**Legacy 兼容**：`agent.ts` / `memory.ts` / `session.ts` 在后端仍为 `skip/limit` + 裸数组时，adapter 内包装为 `PaginatedList`（`total` / `has_next` 为近似值）。不得以此为模板；见 [PAGINATION.md §7.2](../../docs/PAGINATION.md#72-前端-adapter-兼容层过渡非模板)。
+
 ## API 响应与错误
 
 **真源**：[docs/API_RESPONSE.md](../../docs/API_RESPONSE.md)

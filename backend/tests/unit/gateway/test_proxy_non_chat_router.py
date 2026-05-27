@@ -68,6 +68,29 @@ def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
     )
 
 
+def _patch_preflight_model_resolution(
+    use_case: ProxyUseCase,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    record: object | None = None,
+) -> None:
+    async def _resolve(
+        ctx: ProxyContext,
+        model: str,
+        *,
+        match_registered_capability: bool = True,
+    ) -> ResolvedModelName:
+        rec = record or SimpleNamespace(
+            capability=ctx.capability.value,
+            provider="openai",
+            real_model=model,
+            tags={},
+        )
+        return ResolvedModelName(record=rec, route=None, via_route=None)
+
+    monkeypatch.setattr(use_case.guard, "resolve_and_validate_request_model", _resolve)
+
+
 def _prepared_litellm_invoke(body: dict[str, Any]) -> tuple[PreparedLitellmKwargs, dict[str, Any]]:
     client_model = str(body.get("model", "")).strip()
     invoke_kwargs = {"model": client_model, "metadata": {}}
@@ -125,6 +148,7 @@ async def test_non_chat_uses_router_not_direct_litellm(
 
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch)
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -168,6 +192,7 @@ async def test_video_generation_non_volcengine_uses_router(
 
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch)
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -181,7 +206,7 @@ async def test_video_generation_non_volcengine_uses_router(
     monkeypatch.setattr(
         use_case,
         "prepare_litellm_invoke",
-        AsyncMock(side_effect=lambda _ctx, b: _prepared_litellm_invoke(b)),
+        AsyncMock(side_effect=lambda _ctx, b, **_kw: _prepared_litellm_invoke(b)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(
@@ -223,6 +248,7 @@ async def test_volcengine_image_generation_uses_direct_not_router(
 
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch, record=record)
 
     monkeypatch.setattr(
         use_case,
@@ -272,6 +298,7 @@ async def test_volcengine_image_generation_fails_without_image_endpoint(
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
     ctx.capability = GatewayCapability.IMAGE
+    _patch_preflight_model_resolution(use_case, monkeypatch, record=record)
 
     monkeypatch.setattr(
         use_case,
@@ -309,6 +336,7 @@ async def test_volcengine_video_generation_uses_direct_not_router(
 
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch, record=record)
 
     monkeypatch.setattr(
         use_case,
@@ -351,6 +379,7 @@ async def test_audio_speech_uses_router_aspeech(
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
     ctx.capability = GatewayCapability.AUDIO_SPEECH
+    _patch_preflight_model_resolution(use_case, monkeypatch)
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -386,6 +415,7 @@ async def test_non_chat_router_miss_falls_back_to_direct(
 ) -> None:
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch)
 
     calls: list[bool] = []
 

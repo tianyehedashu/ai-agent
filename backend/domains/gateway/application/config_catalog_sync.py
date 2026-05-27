@@ -15,13 +15,10 @@ from domains.gateway.application.catalog_capability import infer_catalog_capabil
 from domains.gateway.application.gateway_catalog_seed import resolve_catalog_seed_models
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
+from domains.gateway.domain.credential_persist import normalize_credential_write_fields
 from domains.gateway.domain.credential_sync_policy import (
     credential_force_env_sync,
     resolve_bootstrap_api_base,
-)
-from domains.gateway.domain.upstream_endpoint import (
-    infer_profile_id_from_env_api_base,
-    resolve_openai_compat_api_base_for_storage,
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
@@ -39,6 +36,7 @@ from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     CONFIG_MANAGED_CREDENTIAL_NAME,
 )
+from domains.gateway.domain.upstream_endpoint import infer_profile_id_from_env_api_base
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
@@ -114,17 +112,23 @@ async def _ensure_system_credential(
         if existing is not None and existing.profile_id
         else infer_profile_id_from_env_api_base(provider, api_base=resolved_base)
     )
-    stored_base = resolve_openai_compat_api_base_for_storage(
+    stored_base, stored_bases, stored_profile_id = normalize_credential_write_fields(
         provider=provider,
         profile_id=profile_id,
         api_base=resolved_base,
+        existing_api_base=existing.api_base if existing is not None else None,
+        existing_api_bases=(
+            dict(existing.api_bases) if existing is not None and existing.api_bases else None
+        ),
+        existing_profile_id=existing.profile_id if existing is not None else None,
     )
     if existing is not None:
         await repo.update(
             existing.id,
             api_key_encrypted=encrypted,
             api_base=stored_base,
-            profile_id=profile_id,
+            api_bases=stored_bases,
+            profile_id=stored_profile_id,
             extra=extra,
             is_active=True,
         )
@@ -135,7 +139,8 @@ async def _ensure_system_credential(
         name=SYSTEM_CREDENTIAL_NAME,
         api_key_encrypted=encrypted,
         api_base=stored_base,
-        profile_id=profile_id,
+        api_bases=stored_bases,
+        profile_id=stored_profile_id,
         extra=extra,
         is_active=True,
     )

@@ -92,6 +92,11 @@ class VirtualKeyBatchRevokeResponse(BaseModel):
 # =============================================================================
 
 
+class CredentialApiBasesBody(BaseModel):
+    openai_compat: str | None = None
+    anthropic_native: str | None = None
+
+
 class UserCredentialCreate(BaseModel):
     """POST /my-credentials：用户私有凭据（无 scope 字段，避免与团队管理 DTO 混淆）"""
 
@@ -99,6 +104,7 @@ class UserCredentialCreate(BaseModel):
     name: str
     api_key: str
     api_base: str | None = None
+    api_bases: CredentialApiBasesBody | None = None
     profile_id: str | None = Field(
         default=None,
         description="上游方案 ID（如 volcengine.coding_plan）；省略则使用 provider.default",
@@ -117,6 +123,7 @@ class ManagedCredentialCreate(BaseModel):
     name: str
     api_key: str
     api_base: str | None = None
+    api_bases: CredentialApiBasesBody | None = None
     profile_id: str | None = Field(
         default=None,
         description="上游方案 ID（如 volcengine.coding_plan）；省略则使用 provider.default",
@@ -129,6 +136,7 @@ class CredentialUpdate(BaseModel):
     name: str | None = None
     api_key: str | None = None
     api_base: str | None = None
+    api_bases: CredentialApiBasesBody | None = None
     profile_id: str | None = None
     extra: dict[str, Any] | None = None
     is_active: bool | None = None
@@ -142,6 +150,7 @@ class CredentialResponse(BaseModel):
     provider: str
     name: str
     api_base: str | None = None
+    api_bases: CredentialApiBasesBody | None = None
     profile_id: str | None = Field(
         default=None,
         description="上游方案 ID；NULL 表示 provider.default",
@@ -206,6 +215,10 @@ class ManagedTeamCredentialListResponse(PaginatedListResponse[CredentialResponse
     queried_shared_team_count: int = Field(
         ge=0,
         description="参与聚合的协作团队数量",
+    )
+    tenant_ids_with_credentials: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="search 过滤范围内至少有一条 team-scope 凭据的 tenant_id（去重）",
     )
 
 
@@ -450,6 +463,27 @@ class ModelConnectivitySummary(BaseModel):
 
 class GatewayModelListResponse(PaginatedListResponse[GatewayModelResponse]):
     connectivity_summary: ModelConnectivitySummary
+
+
+class ManagedTeamModelListResponse(GatewayModelListResponse):
+    """跨可写团队聚合的 team registry 模型列表。"""
+
+    queried_team_count: int = Field(
+        ge=0,
+        description="search 过滤后参与聚合的可写团队数量",
+    )
+    queried_personal_team_count: int = Field(
+        ge=0,
+        description="参与聚合的注册用户 personal team 数量",
+    )
+    queried_shared_team_count: int = Field(
+        ge=0,
+        description="参与聚合的协作团队数量",
+    )
+    tenant_ids_with_models: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="search 过滤范围内至少有一条 team registry 模型的 tenant_id（去重）",
+    )
 
 
 class GatewayModelIdsResponse(BaseModel):
@@ -1119,7 +1153,6 @@ __all__ = [
     "BudgetResponse",
     "BudgetUpsert",
     "CredentialResponse",
-    "ManagedTeamCredentialListResponse",
     "CredentialUpdate",
     "DashboardSummaryResponse",
     "EntitlementPlanCreate",
@@ -1142,6 +1175,8 @@ __all__ = [
     "GatewayModelTestResponse",
     "GatewayModelUpdate",
     "GatewayModelUsageSummaryResponse",
+    "ManagedTeamCredentialListResponse",
+    "ManagedTeamModelListResponse",
     "MarginGroupItemResponse",
     "MarginSummaryResponse",
     "ModelConnectivitySummary",

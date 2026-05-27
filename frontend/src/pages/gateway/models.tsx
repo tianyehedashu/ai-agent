@@ -22,7 +22,10 @@ import {
   teamModelsFilteredHref,
 } from '@/features/gateway-models/paths'
 import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
-import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
+import {
+  preloadTeamModelsGroupedWorkspace,
+  preloadTeamModelsWorkspace,
+} from '@/features/gateway-models/team/preloads'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -32,6 +35,12 @@ import { ChevronLeft, Loader2 } from '@/lib/lucide-icons'
 const PersonalModelsWorkspace = lazyWithReload(() =>
   import('@/features/gateway-models/personal/personal-models-workspace').then((m) => ({
     default: m.PersonalModelsWorkspace,
+  }))
+)
+
+const TeamModelsGroupedWorkspace = lazyWithReload(() =>
+  import('@/features/gateway-models/team/team-models-grouped-workspace').then((m) => ({
+    default: m.TeamModelsGroupedWorkspace,
   }))
 )
 
@@ -171,7 +180,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
             )
           ) : scopeTab === 'shared' ? (
             <>
-              团队自注册别名映射至 LiteLLM 上游；系统预置模型见{' '}
+              展示您可管理的全部协作团队及其自注册模型别名；系统预置模型见{' '}
               <Link
                 to={systemModelsBrowseIndexHref(teamId)}
                 className="text-primary underline-offset-4 hover:underline"
@@ -283,8 +292,8 @@ export default function GatewayModelsPage(): React.JSX.Element {
             <Button variant="ghost" size="sm" className="h-8" asChild>
               <Link
                 to={teamListBackHref}
-                onMouseEnter={preloadTeamModelsWorkspace}
-                onFocus={preloadTeamModelsWorkspace}
+                onMouseEnter={preloadTeamModelsGroupedWorkspace}
+                onFocus={preloadTeamModelsGroupedWorkspace}
               >
                 <ChevronLeft className="mr-1 h-4 w-4" />
                 返回模型列表
@@ -297,7 +306,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
         ) : (
           <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
             <Suspense fallback={<ModelsPanelFallback />}>
-              <TeamModelsWorkspace listMode="team" />
+              <TeamModelsGroupedWorkspace />
             </Suspense>
           </TabsContent>
         )}

@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.model_or_route_resolution import (
+    ResolvedModelName,
+    resolve_model_or_route,
+)
 from domains.gateway.application.pricing.pricing_proxy_metadata import (
     apply_downstream_custom_pricing_kwargs,
     attach_downstream_pricing_metadata,
@@ -28,7 +31,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
     from domains.gateway.application.proxy_context import ProxyContext
 
 
@@ -145,6 +147,8 @@ class ProxyMetadataBuilder:
         self,
         ctx: ProxyContext,
         body: dict[str, Any],
+        *,
+        resolved: ResolvedModelName | None = None,
     ) -> PreparedLitellmKwargs:
         """拼装 metadata，并把下游单价注入 LiteLLM kwargs。"""
         metadata = await self.build(ctx, user_kwargs=body)
@@ -154,17 +158,18 @@ class ProxyMetadataBuilder:
         apply_downstream_custom_pricing_kwargs(kwargs)
         raw_model = kwargs.get("model")
         client_model = str(raw_model).strip() if raw_model is not None else ""
-        resolved = None
-        if client_model:
-            resolved = await resolve_model_or_route(
+        model_resolved = resolved
+        if client_model and model_resolved is None:
+            model_resolved = await resolve_model_or_route(
                 self._session, ctx.team_id, client_model, user_id=ctx.user_id
             )
-            encoded = router_model_name_for_client(ctx.team_id, client_model, resolved)
+        if client_model:
+            encoded = router_model_name_for_client(ctx.team_id, client_model, model_resolved)
             kwargs["model"] = encoded
         return PreparedLitellmKwargs(
             kwargs=kwargs,
             client_model=client_model,
-            resolved=resolved,
+            resolved=model_resolved,
         )
 
     async def _merge_user_and_model_metadata(

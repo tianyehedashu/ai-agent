@@ -50,6 +50,8 @@ async def test_create_system_credential_write_returns_read_model(db_session) -> 
         name=f"sys-write-{uuid.uuid4().hex[:8]}",
         api_key_encrypted=encrypt_value("sk-system-write-test-key", encryption_key),
         api_base="https://api.openai.com/v1",
+        api_bases=None,
+        profile_id=None,
         extra=None,
     )
     assert read_model.scope == "system"
@@ -82,10 +84,10 @@ async def test_build_credential_response_uses_prefilled_masked_without_decrypt(
     db_session,
 ) -> None:
     """read model 已含 api_key_masked 时 build 不再调用 decrypt。"""
+    from datetime import UTC, datetime
     from unittest.mock import patch
 
     from domains.gateway.application.management.credential_read_model import CredentialReadModel
-    from datetime import UTC, datetime
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_id = uuid.uuid4()

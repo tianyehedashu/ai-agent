@@ -181,6 +181,116 @@ def build_tenant_list_stmt(
     return stmt.order_by(*ordering)
 
 
+def _tenant_registry_clauses(
+    *,
+    tenant_ids: list[uuid.UUID],
+    only_enabled: bool,
+    capability: str | None,
+    provider: str | None,
+    credential_id: uuid.UUID | None,
+    exclude_user_scope_credentials: bool,
+    enabled: bool | None,
+    q: str | None,
+    connectivity: ModelListConnectivityFilter,
+) -> list[ColumnElement[bool]]:
+    if not tenant_ids:
+        return [GatewayModel.tenant_id.is_(None)]
+    clauses: list[ColumnElement[bool]] = [GatewayModel.tenant_id.in_(tenant_ids)]
+    if only_enabled:
+        clauses.append(GatewayModel.enabled.is_(True))
+    if enabled is not None:
+        clauses.append(GatewayModel.enabled.is_(enabled))
+    if capability:
+        clauses.append(GatewayModel.capability == capability)
+    if provider is not None:
+        clauses.append(GatewayModel.provider == provider)
+    if credential_id is not None:
+        clauses.append(GatewayModel.credential_id == credential_id)
+    if exclude_user_scope_credentials:
+        user_scoped_subq = select(ProviderCredential.id).where(
+            ProviderCredential.scope == CredentialScope.USER.value
+        )
+        clauses.append(GatewayModel.credential_id.notin_(user_scoped_subq))
+    search = _search_clause(
+        name_col=GatewayModel.name,
+        real_model_col=GatewayModel.real_model,
+        provider_col=GatewayModel.provider,
+        q=q,
+    )
+    if search is not None:
+        clauses.append(search)
+    conn = _connectivity_clause(GatewayModel.last_test_status, connectivity)
+    if conn is not None:
+        clauses.append(conn)
+    return clauses
+
+
+def build_tenants_list_stmt(
+    *,
+    tenant_ids: list[uuid.UUID],
+    only_enabled: bool,
+    capability: str | None,
+    provider: str | None,
+    credential_id: uuid.UUID | None,
+    exclude_user_scope_credentials: bool,
+    enabled: bool | None,
+    q: str | None,
+    connectivity: ModelListConnectivityFilter,
+    sort_field: ModelListSortField,
+    order: ModelListSortOrder,
+) -> Select[tuple[GatewayModel]]:
+    clauses = _tenant_registry_clauses(
+        tenant_ids=tenant_ids,
+        only_enabled=only_enabled,
+        capability=capability,
+        provider=provider,
+        credential_id=credential_id,
+        exclude_user_scope_credentials=exclude_user_scope_credentials,
+        enabled=enabled,
+        q=q,
+        connectivity=connectivity,
+    )
+    sort_col = _sort_column(GatewayModel, sort_field)
+    ordering = [_availability_order(GatewayModel), sort_col.asc()]
+    if order == ModelListSortOrder.DESC:
+        ordering = [_availability_order(GatewayModel), sort_col.desc()]
+    return select(GatewayModel).where(*clauses).order_by(*ordering)
+
+
+async def list_tenant_ids_with_team_registry_for_tenants(
+    session: AsyncSession,
+    *,
+    tenant_ids: list[uuid.UUID],
+    exclude_user_scope_credentials: bool,
+    only_enabled: bool = False,
+    capability: str | None = None,
+    provider: str | None = None,
+    credential_id: uuid.UUID | None = None,
+    enabled: bool | None = None,
+    q: str | None = None,
+    connectivity: ModelListConnectivityFilter = ModelListConnectivityFilter.ALL,
+) -> list[uuid.UUID]:
+    if not tenant_ids:
+        return []
+    base = build_tenants_list_stmt(
+        tenant_ids=tenant_ids,
+        only_enabled=only_enabled,
+        capability=capability,
+        provider=provider,
+        credential_id=credential_id,
+        exclude_user_scope_credentials=exclude_user_scope_credentials,
+        enabled=enabled,
+        q=q,
+        connectivity=connectivity,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+    )
+    subq = base.order_by(None).subquery()
+    stmt = select(subq.c.tenant_id).distinct()
+    result = await session.execute(stmt)
+    return [row[0] for row in result.all()]
+
+
 async def count_from_stmt(session: AsyncSession, stmt: Select[Any]) -> int:
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     result = await session.execute(count_stmt)
@@ -297,10 +407,56 @@ async def summarize_tenant_list(
     }
 
 
+async def summarize_tenants_list(
+    session: AsyncSession,
+    *,
+    tenant_ids: list[uuid.UUID],
+    only_enabled: bool,
+    capability: str | None,
+    provider: str | None,
+    credential_id: uuid.UUID | None,
+    exclude_user_scope_credentials: bool,
+    enabled: bool | None,
+    q: str | None,
+) -> dict[str, int]:
+    base = build_tenants_list_stmt(
+        tenant_ids=tenant_ids,
+        only_enabled=only_enabled,
+        capability=capability,
+        provider=provider,
+        credential_id=credential_id,
+        exclude_user_scope_credentials=exclude_user_scope_credentials,
+        enabled=enabled,
+        q=q,
+        connectivity=ModelListConnectivityFilter.ALL,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+    )
+    subq = base.order_by(None).subquery()
+    summary_stmt = _summary_select(
+        enabled_col=subq.c.enabled,
+        status_col=subq.c.last_test_status,
+    ).select_from(subq)
+    row = (await session.execute(summary_stmt)).one()
+    total = int(row.total or 0)
+    available = int(row.available or 0)
+    return {
+        "total": total,
+        "available": available,
+        "unavailable": total - available,
+        "success": int(row.success or 0),
+        "failed": int(row.failed or 0),
+        "unknown": int(row.unknown or 0),
+    }
+
+
 __all__ = [
     "build_system_list_stmt",
     "build_tenant_list_stmt",
+    "build_tenants_list_stmt",
     "count_from_stmt",
+    "list_tenant_ids_with_team_registry_for_tenants",
     "summarize_system_list",
     "summarize_tenant_list",
+    "summarize_tenants_list",
 ]

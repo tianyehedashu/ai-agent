@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
-from domains.gateway.domain.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream_profile import ProbeStrategy
 from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _ANTHROPIC_UNSUPPORTED = (
     "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，"
@@ -19,6 +22,7 @@ def resolve_openai_compatible_models_list_url(
     provider: str,
     api_base: str | None,
     profile_id: str | None = None,
+    api_bases: Mapping[str, str] | None = None,
 ) -> tuple[Literal["ok", "unsupported"], str | None, str | None]:
     """解析用于列举模型的 URL。
 
@@ -28,16 +32,19 @@ def resolve_openai_compatible_models_list_url(
     p = provider.lower().strip()
     profile = get_upstream_profile(profile_id, provider=p)
 
-    if not profile.probe_supported:
+    if profile.probe_strategy == ProbeStrategy.NONE or not profile.probe_supported:
         reason = profile.probe_unsupported_reason or _ANTHROPIC_UNSUPPORTED
         return ("unsupported", None, reason)
+
+    probe_protocol = profile.probe_protocol
 
     if p == "custom":
         endpoint = resolve_upstream_endpoint(
             provider=p,
             profile_id=profile_id,
             api_base=api_base,
-            protocol=UpstreamProtocol.OPENAI_COMPAT,
+            api_bases=api_bases,
+            protocol=probe_protocol,
         )
         if not endpoint:
             return (
@@ -51,7 +58,8 @@ def resolve_openai_compatible_models_list_url(
         provider=p,
         profile_id=profile_id,
         api_base=api_base,
-        protocol=UpstreamProtocol.OPENAI_COMPAT,
+        api_bases=api_bases,
+        protocol=probe_protocol,
     )
     if not endpoint:
         return (

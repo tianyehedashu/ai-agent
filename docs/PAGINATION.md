@@ -224,3 +224,34 @@ const all = await fetchAllPaginatedPages((page, page_size) =>
 
 旧 endpoint 若仍返回数组，在 PR 中注明迁移计划或 issue；**同一资源的新 endpoint 不得复制旧形态**。  
 Session 等历史 `skip/limit` 在各自域内迁移时仍须最终对齐本 envelope。
+
+### 7.1 待迁移列表（legacy）
+
+| 资源 | 后端现状 | 前端 adapter | 备注 |
+|------|----------|--------------|------|
+| `GET /api/v1/agents/` | 裸 `list[T]`，query `skip` / `limit` | `frontend/src/api/agent.ts` | 侧栏/Agents 页仅取 `.items`，未翻页 |
+| `GET /api/v1/memory/` | 裸 `list[T]`，query `skip` / `limit` | `frontend/src/api/memory.ts` | 同上 |
+| `GET /api/v1/sessions/` | 裸 `list[T]`，query `skip` / `limit` | `frontend/src/api/session.ts` | Chat 侧栏 `list(1, 50)` |
+
+迁移目标：presentation 改 `page` + `page_size` Query，application/repository 返回真实 `total`，响应 `PaginatedListResponse[T]`；集成测试断言 envelope（参考 `test_gateway_management_api.py` 模型列表用例）。
+
+### 7.2 前端 adapter 兼容层（过渡，非模板）
+
+上述 legacy 资源的 `src/api/*.ts` 在**后端未改**前，于 adapter 内将数组包装为 `PaginatedList<T>`，以便：
+
+- 全项目统一使用 `@/types` 的 `PaginatedList`（禁止 `PaginatedResponse` camelCase）；
+- 调用方只依赖 `.items` 时行为不变。
+
+**限制（审查时须知晓）**：
+
+| 字段 | legacy 包装行为 | 与 §2.2 真契约差异 |
+|------|-----------------|-------------------|
+| `total` | 当前页 `items.length` | 非过滤后总条数 |
+| `has_next` | `items.length === page_size` 启发式 | 无服务端 `count` 时不可靠 |
+| query | adapter 仍发 `skip` / `limit` | 未使用 `page` / `page_size` |
+
+**禁止**在新列表 API 或新 adapter 复制此包装；新功能必须后端 envelope + 前端 `page` / `page_size` + 可选 `PaginationControls`（见 Gateway 凭据/模型列表）。
+
+### 7.3 类型弃用
+
+`frontend/src/types/index.ts` 中 `PaginatedResponse` 已 `@deprecated`，仅作历史引用；新代码与文档示例一律 `PaginatedList` + snake_case 字段。

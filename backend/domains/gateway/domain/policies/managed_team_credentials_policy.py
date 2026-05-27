@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING
 
 from domains.tenancy.domain.policies.team_role import TeamRole
 
+from domains.gateway.domain.policies.managed_team_resource_policy import (
+    ManagedTeamResourceListPlan as ManagedTeamCredentialListPlan,
+    build_managed_team_resource_list_plan as build_managed_team_credential_list_plan,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
     import uuid
@@ -17,14 +22,6 @@ class WritableTeamSnapshot:
     team_id: uuid.UUID
     kind: str
     role: str
-
-
-@dataclass(frozen=True)
-class ManagedTeamCredentialListPlan:
-    tenant_ids: tuple[uuid.UUID, ...]
-    queried_team_count: int
-    queried_personal_team_count: int
-    queried_shared_team_count: int
 
 
 def is_writable_gateway_team(
@@ -55,31 +52,6 @@ def filter_writable_team_ids(
             is_platform_admin=is_platform_admin,
         )
     ]
-
-
-def build_managed_team_credential_list_plan(
-    teams: Iterable[WritableTeamSnapshot],
-    *,
-    is_platform_admin: bool,
-) -> ManagedTeamCredentialListPlan:
-    writable = [
-        team
-        for team in teams
-        if is_writable_gateway_team(
-            kind=team.kind,
-            role=team.role,
-            is_platform_admin=is_platform_admin,
-        )
-    ]
-    tenant_ids = tuple(team.team_id for team in writable)
-    personal_count = sum(1 for team in writable if team.kind == "personal")
-    shared_count = sum(1 for team in writable if team.kind == "shared")
-    return ManagedTeamCredentialListPlan(
-        tenant_ids=tenant_ids,
-        queried_team_count=len(tenant_ids),
-        queried_personal_team_count=personal_count,
-        queried_shared_team_count=shared_count,
-    )
 
 
 __all__ = [

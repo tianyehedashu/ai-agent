@@ -31,6 +31,8 @@ async def list_provider_profiles(
             ),
             models_list_path=p.models_list_path,
             default_call_shape=p.default_call_shape.value,
+            probe_strategy=p.probe_strategy.value,
+            probe_protocol=p.probe_protocol.value,
             probe_supported=p.probe_supported,
         )
         for p in list_all_upstream_profiles()

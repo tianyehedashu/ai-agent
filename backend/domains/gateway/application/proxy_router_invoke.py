@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
+from domains.gateway.domain.proxy_policy import is_router_model_miss
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
@@ -30,9 +31,9 @@ async def invoke_router_with_direct_fallback(
             return await direct_call()
         return await router_call()
     except Exception as exc:
-        if ProxyLiteLLMClient.is_router_model_miss(
-            exc
-        ) and await litellm.should_use_internal_direct_litellm(ctx, model):
+        if is_router_model_miss(exc) and await litellm.should_use_internal_direct_litellm(
+            ctx, model
+        ):
             try:
                 return await direct_call()
             except Exception:

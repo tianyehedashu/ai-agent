@@ -170,6 +170,8 @@ async def test_sync_backfills_empty_api_base_from_env(db_session, monkeypatch: p
     row = await cred_repo.get(created_id)
     assert row is not None
     assert row.api_base == CODING_ZHIPU_BASE
+    assert row.api_bases is not None
+    assert row.api_bases.get("openai_compat") == CODING_ZHIPU_BASE
 
 
 def test_merge_config_managed_extra_preserves_force_env_sync() -> None:
@@ -209,5 +211,7 @@ async def test_sync_force_env_sync_overwrites_managed_base(db_session, monkeypat
     row = await cred_repo.get(created_id)
     assert row is not None
     assert row.api_base == CODING_ZHIPU_BASE
+    assert row.api_bases is not None
+    assert row.api_bases.get("openai_compat") == CODING_ZHIPU_BASE
     assert row.extra is not None
     assert row.extra.get(FORCE_ENV_SYNC_EXTRA_KEY) is True

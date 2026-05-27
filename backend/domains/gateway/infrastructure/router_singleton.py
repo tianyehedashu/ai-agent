@@ -167,6 +167,7 @@ def _build_litellm_params(
         provider=provider,
         profile_id=profile_id,
         api_base=credential.api_base,
+        api_bases=credential.api_bases,
         protocol=protocol,
     )
     if endpoint:

@@ -1,5 +1,4 @@
 import type { ProviderCredential } from '@/api/gateway'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -11,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { CredentialApiBasesFields } from './credential-api-bases-fields'
 import { ExtraFieldsRenderer } from './credential-extra-fields'
 import { CurrentApiKeyField } from './current-api-key-field'
 
@@ -42,8 +42,8 @@ export function CredentialEditFields({
     setName,
     apiKey,
     setApiKey,
-    apiBase,
-    setApiBase,
+    apiBases,
+    setApiBases,
     extra,
     setExtra,
     isActive,
@@ -51,15 +51,13 @@ export function CredentialEditFields({
     apiKeyLabel,
     extraFields,
     schema,
-    defaultApiBase,
-    baseIsDefault,
-    apiBasePlaceholder,
     apiBaseRequired,
     hasUnknownExtra,
     profileId,
     setProfileId,
     profileOptions,
     activeProfile,
+    activeProtocols,
   } = form
 
   const credExtra = cred.extra
@@ -142,47 +140,18 @@ export function CredentialEditFields({
               ) : null}
             </div>
           ) : null}
-          <div className={showActiveSwitch ? 'space-y-2' : undefined}>
-            <div className="flex items-center gap-2">
-              <Label htmlFor={`${idPrefix}-base`}>
-                {showActiveSwitch ? 'API Base' : 'api_base'}
-                {apiBaseRequired ? (
-                  <span className="ml-1 text-destructive">*</span>
-                ) : (
-                  <span className="ml-1 text-[11px] text-muted-foreground">（可选）</span>
-                )}
-              </Label>
-              {baseIsDefault ? (
-                <Badge variant="outline" className="px-1 py-0 text-[10px]">
-                  默认
-                </Badge>
-              ) : null}
-            </div>
-            <Input
-              id={`${idPrefix}-base`}
-              type={showActiveSwitch ? 'url' : undefined}
-              className={showActiveSwitch ? undefined : 'mt-1.5'}
-              value={apiBase}
-              onChange={(e) => {
-                setApiBase(e.target.value)
-              }}
-              placeholder={apiBasePlaceholder}
-            />
-            {defaultApiBase.length > 0 && !baseIsDefault ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                该 provider 的默认地址：
-                <button
-                  type="button"
-                  className="ml-1 font-mono text-primary underline-offset-2 hover:underline"
-                  onClick={() => {
-                    setApiBase(defaultApiBase)
-                  }}
-                >
-                  {defaultApiBase}
-                </button>
-              </p>
-            ) : null}
-          </div>
+          <CredentialApiBasesFields
+            idPrefix={`${idPrefix}-bases`}
+            apiBases={apiBases}
+            onChange={setApiBases}
+            activeProfile={activeProfile}
+            providerDefaultApiBase={schema?.defaultApiBase}
+            protocols={activeProtocols}
+            apiBaseRequired={apiBaseRequired}
+            showEffectiveHints
+            effectiveOpenai={cred.effective_api_base_openai}
+            effectiveAnthropic={cred.effective_api_base_anthropic}
+          />
           {extraFields.length > 0 ? (
             <ExtraFieldsRenderer
               fields={extraFields}

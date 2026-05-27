@@ -24,6 +24,7 @@ from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import get_router
 
 if TYPE_CHECKING:
+    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
     from domains.gateway.application.proxy_context import ProxyContext
     from domains.gateway.application.proxy_use_case import ProxyUseCase
 
@@ -65,7 +66,7 @@ class ProxyNonChatMixin:
         capability: GatewayCapability,
         model: str | None,
         require_model: bool = False,
-    ) -> tuple[str | None, list[BudgetReservation]]:
+    ) -> tuple[str | None, list[BudgetReservation], ResolvedModelName | None]:
         result = await run_proxy_inbound_preflight(
             self.guard,
             ctx,
@@ -73,7 +74,7 @@ class ProxyNonChatMixin:
             model=model,
             require_model=require_model,
         )
-        return result.model, result.reservations
+        return result.model, result.reservations, result.resolved
 
     async def embedding(
         self: ProxyUseCase,
@@ -81,7 +82,7 @@ class ProxyNonChatMixin:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         model = str(body.get("model", "")).strip()
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.EMBEDDING,
             model=model,
@@ -89,7 +90,7 @@ class ProxyNonChatMixin:
         )
         assert budget_model is not None
 
-        prepared, kwargs = await self.prepare_litellm_invoke(ctx, body)
+        prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         dashscope_direct = prepared.resolved is not None and should_use_dashscope_direct_embedding(
             prepared.resolved.record.provider,
@@ -127,12 +128,12 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.IMAGE,
             model=optional_body_model(body),
         )
-        prepared, kwargs = await self.prepare_litellm_invoke(ctx, body)
+        prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         volcengine_direct = (
             prepared.resolved is not None
@@ -174,12 +175,12 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.AUDIO_TRANSCRIPTION,
             model=optional_body_model(body),
         )
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
+        kwargs = await self.prepare_litellm_kwargs(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             response = await self._invoke_non_chat_with_router_fallback(
@@ -209,12 +210,12 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any] | bytes:
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.AUDIO_SPEECH,
             model=optional_body_model(body),
         )
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
+        kwargs = await self.prepare_litellm_kwargs(ctx, body, resolved=preflight_resolved)
         meta, up_c, _down_c = pricing_kwargs_from_litellm(kwargs)
         try:
             result = await self._invoke_non_chat_with_router_fallback(
@@ -252,12 +253,12 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.RERANK,
             model=optional_body_model(body),
         )
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
+        kwargs = await self.prepare_litellm_kwargs(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         response = await self._invoke_non_chat_with_router_fallback(
             ctx,
@@ -284,12 +285,12 @@ class ProxyNonChatMixin:
     ) -> dict[str, Any]:
         raw_model = body.get("model")
         model = str(raw_model).strip() if raw_model is not None else ""
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.MODERATION,
             model=model or None,
         )
-        kwargs = await self.prepare_litellm_kwargs(ctx, body)
+        kwargs = await self.prepare_litellm_kwargs(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
         response = await self._invoke_non_chat_with_router_fallback(
             ctx,
@@ -315,7 +316,7 @@ class ProxyNonChatMixin:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         model = str(body.get("model", "")).strip()
-        budget_model, reservations = await self._run_non_chat_preflight(
+        budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.VIDEO_GENERATION,
             model=model,
@@ -323,7 +324,9 @@ class ProxyNonChatMixin:
         )
         assert budget_model is not None
 
-        prepared, invoke_kwargs = await self.prepare_litellm_invoke(ctx, body)
+        prepared, invoke_kwargs = await self.prepare_litellm_invoke(
+            ctx, body, resolved=preflight_resolved
+        )
         meta, up_c, down_c = pricing_kwargs_from_litellm(invoke_kwargs)
         volcengine_direct = (
             prepared.resolved is not None

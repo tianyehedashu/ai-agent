@@ -65,7 +65,6 @@ import {
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
-import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import { useAuthStore } from '@/stores/auth'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
@@ -529,27 +528,31 @@ export function PersonalModelsWorkspace({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="grid max-w-xs gap-1.5">
+          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
             <Label htmlFor="personal-model-search">搜索</Label>
             <Input
               id="personal-model-search"
               value={search}
               placeholder="名称、模型 ID、通道…"
-              className="w-full sm:w-[220px]"
+              className="h-9 w-full"
               onChange={(e) => {
                 setSearch(e.currentTarget.value)
               }}
             />
           </div>
-          <div className="grid max-w-xs gap-1.5">
-            <Label htmlFor="personal-model-channel">按接入通道筛选</Label>
+          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
+            <Label htmlFor="personal-model-channel">接入通道</Label>
             <Select
               value={listChannel}
               onValueChange={(v) => {
                 setListChannel(v)
               }}
             >
-              <SelectTrigger id="personal-model-channel" className="w-full sm:w-[220px]">
+              <SelectTrigger
+                id="personal-model-channel"
+                className="h-9 w-full"
+                aria-label="按接入通道筛选"
+              >
                 <SelectValue placeholder="全部" />
               </SelectTrigger>
               <SelectContent>
@@ -561,14 +564,14 @@ export function PersonalModelsWorkspace({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{PROVIDER_CHANNEL_FILTER_HINT_LONG}</p>
           </div>
-          <div className="grid max-w-xs gap-1.5">
-            <Label htmlFor="personal-model-ability">按能力筛选</Label>
+          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
+            <Label htmlFor="personal-model-ability">能力</Label>
             <RegistryAbilityFilterSelect
+              id="personal-model-ability"
               value={abilityFilter}
               onValueChange={setAbilityFilter}
-              className="h-9 w-full sm:w-[220px]"
+              className="h-9 w-full"
             />
           </div>
         </div>

@@ -143,7 +143,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
 
   const handleConfirmDelete = useCallback((): void => {
     setDeleteOpen(false)
-    deleteModelMutation.mutate(modelId)
+    deleteModelMutation.mutate({ id: modelId })
   }, [modelId, deleteModelMutation])
 
   if (isLoading || (trySystemFallback && systemFallbackLoading && !model)) {

@@ -3,7 +3,7 @@
  */
 
 import { apiV1Path } from '@/api/paths'
-import type { Agent, AgentCreateInput, PaginatedResponse } from '@/types'
+import type { Agent, AgentCreateInput, PaginatedList } from '@/types'
 
 import { apiClient } from './client'
 
@@ -11,11 +11,19 @@ export const agentApi = {
   /**
    * 获取 Agent 列表
    */
-  list(page = 1, pageSize = 20): Promise<PaginatedResponse<Agent>> {
-    return apiClient.get<PaginatedResponse<Agent>>(apiV1Path('/agents/'), {
+  async list(page = 1, pageSize = 20): Promise<PaginatedList<Agent>> {
+    const items = await apiClient.get<Agent[]>(apiV1Path('/agents/'), {
       skip: (page - 1) * pageSize,
       limit: pageSize,
     })
+    return {
+      items,
+      total: items.length,
+      page,
+      page_size: pageSize,
+      has_next: items.length === pageSize,
+      has_prev: page > 1,
+    }
   },
 
   /**

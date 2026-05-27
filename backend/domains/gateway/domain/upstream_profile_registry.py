@@ -5,6 +5,7 @@ from __future__ import annotations
 from domains.gateway.domain.upstream_profile import (
     _DEEPSEEK_V1_NORMALIZE,
     _VOLCENGINE_OPENAI_NORMALIZE,
+    ProbeStrategy,
     UpstreamCallShape,
     UpstreamProfile,
     UpstreamProtocol,
@@ -27,6 +28,8 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         provider="anthropic",
         label="Anthropic 官方",
         api_bases={UpstreamProtocol.ANTHROPIC_NATIVE: "https://api.anthropic.com"},
+        probe_strategy=ProbeStrategy.NONE,
+        probe_protocol=UpstreamProtocol.ANTHROPIC_NATIVE,
         probe_supported=False,
         probe_unsupported_reason=(
             "Anthropic 不提供 OpenAI 兼容的 /v1/models 列举；请手填模型 ID，"

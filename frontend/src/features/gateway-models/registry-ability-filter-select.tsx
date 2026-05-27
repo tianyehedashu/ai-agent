@@ -46,10 +46,12 @@ export const REGISTRY_ABILITY_FILTER_OPTIONS: { value: string; label: string }[]
   }))
 
 export function RegistryAbilityFilterSelect({
+  id,
   value,
   onValueChange,
   className,
 }: {
+  id?: string
   value: string
   onValueChange: (v: string) => void
   className?: string
@@ -62,6 +64,7 @@ export function RegistryAbilityFilterSelect({
       }}
     >
       <SelectTrigger
+        id={id}
         className={className ?? 'h-8 w-[120px] shrink-0 text-xs'}
         aria-label="按模型能力筛选"
       >

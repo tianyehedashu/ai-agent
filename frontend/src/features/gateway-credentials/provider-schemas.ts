@@ -31,6 +31,9 @@ export interface UpstreamProfileSpec {
   defaultApiBaseAnthropic?: string
   /** Claude Code 等直连 Anthropic 根路径提示 */
   anthropicDirectHint?: string
+  probeStrategy?: string
+  probeProtocol?: string
+  probeSupported?: boolean
 }
 
 export interface ProviderCredentialSchema {

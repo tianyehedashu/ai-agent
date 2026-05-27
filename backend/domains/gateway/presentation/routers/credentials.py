@@ -9,6 +9,7 @@ from fastapi import APIRouter, status
 from domains.gateway.presentation.credential_response import (
     build_credential_response,
     build_credential_summary_response,
+    credential_api_bases_from_body,
     decrypt_credential_api_key_for_reveal,
 )
 from domains.gateway.presentation.deps import (
@@ -118,6 +119,7 @@ async def create_credential(
             name=body.name,
             api_key_encrypted=encrypted,
             api_base=body.api_base,
+            api_bases=credential_api_bases_from_body(body.api_bases),
             profile_id=body.profile_id,
             extra=body.extra,
         )
@@ -128,6 +130,7 @@ async def create_credential(
             name=body.name,
             api_key_encrypted=encrypted,
             api_base=body.api_base,
+            api_bases=credential_api_bases_from_body(body.api_bases),
             profile_id=body.profile_id,
             extra=body.extra,
         )
@@ -148,6 +151,7 @@ async def update_credential(
         is_platform_admin=team.is_platform_admin,
         api_key_encrypted=encrypted,
         api_base=body.api_base,
+        api_bases=credential_api_bases_from_body(body.api_bases),
         profile_id=body.profile_id,
         extra=body.extra,
         is_active=body.is_active,

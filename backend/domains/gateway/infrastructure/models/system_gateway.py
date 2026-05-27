@@ -32,7 +32,16 @@ class SystemProviderCredential(BaseModel):
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
-    api_base: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    api_base: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="OpenAI-compat API Base URL（legacy 镜像）",
+    )
+    api_bases: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="各协议 endpoint 覆盖：openai_compat / anthropic_native",
+    )
     profile_id: Mapped[str | None] = mapped_column(
         String(64),
         nullable=True,

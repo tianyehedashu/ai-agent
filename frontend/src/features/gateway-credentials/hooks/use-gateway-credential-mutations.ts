@@ -41,7 +41,7 @@ export interface GatewayCredentialMutations {
       credentialTeamId: string
     }
   >
-  importMutation: UseMutationResult<{ created: number }, Error, void>
+  importMutation: UseMutationResult<{ created: number }, Error, { targetTeamId: string }>
   deleteMutation: UseMutationResult<void, Error, { id: string; credentialTeamId: string }>
 }
 
@@ -102,9 +102,10 @@ export function useGatewayCredentialMutations(
   })
 
   const importMutation = useMutation({
-    mutationFn: () => credentialsApi.importFromUserConfig(teamId),
-    onSuccess: (r) => {
-      invalidateGatewayCredentialCaches(queryClient, { teamId })
+    mutationFn: ({ targetTeamId }: { targetTeamId: string }) =>
+      credentialsApi.importFromUserConfig(targetTeamId),
+    onSuccess: (r, variables) => {
+      invalidateGatewayCredentialCaches(queryClient, { teamId: variables.targetTeamId })
       toast({ title: `已导入 ${String(r.created)} 条` })
     },
     onError: (e: Error) => {

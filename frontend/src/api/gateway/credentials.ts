@@ -28,6 +28,11 @@ export interface CredentialSummary {
   is_config_managed: boolean
 }
 
+export interface CredentialApiBases {
+  openai_compat?: string | null
+  anthropic_native?: string | null
+}
+
 /** 上游凭据列表项（不含明文） */
 export interface ProviderCredential {
   id: string
@@ -38,6 +43,7 @@ export interface ProviderCredential {
   provider: string
   name: string
   api_base: string | null
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   profile_label?: string | null
   effective_api_base_openai?: string | null
@@ -59,6 +65,7 @@ export interface ProviderCredentialCreateBody {
   name: string
   api_key: string
   api_base?: string
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   extra?: Record<string, unknown>
   /** 默认 team；system 仅平台管理员可创建 */
@@ -71,6 +78,7 @@ export interface MyCredentialCreateBody {
   name: string
   api_key: string
   api_base?: string | null
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   extra?: Record<string, unknown>
 }
@@ -80,6 +88,7 @@ export interface GatewayCredentialUpdateBody {
   name?: string | null
   api_key?: string | null
   api_base?: string | null
+  api_bases?: CredentialApiBases | null
   profile_id?: string | null
   extra?: Record<string, unknown> | null
   is_active?: boolean | null
@@ -182,6 +191,8 @@ export interface ManagedTeamCredentialListResponse extends PaginatedList<Provide
   queried_team_count: number
   queried_personal_team_count: number
   queried_shared_team_count: number
+  /** search 过滤范围内至少有一条 team-scope 凭据的 tenant_id（去重） */
+  tenant_ids_with_credentials: string[]
 }
 
 export interface ListManagedTeamCredentialsParams {
@@ -194,6 +205,7 @@ interface ManagedTeamCredentialListWire extends PaginatedList<ProviderCredential
   queried_team_count: number
   queried_personal_team_count: number
   queried_shared_team_count: number
+  tenant_ids_with_credentials: string[]
 }
 
 /** Credentials 资源 API（团队/系统 + 我的 + 探测/批量导入 + 从 app.toml 导入） */
@@ -252,6 +264,7 @@ export const credentialsApi = {
     return {
       ...data,
       items: data.items.map(normalizeCredential),
+      tenant_ids_with_credentials: data.tenant_ids_with_credentials,
     }
   },
 

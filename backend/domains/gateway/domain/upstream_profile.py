@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -22,6 +23,16 @@ class UpstreamCallShape(StrEnum):
 
     OPENAI_COMPAT = "openai_compat"
     ANTHROPIC_NATIVE = "anthropic_native"
+
+
+class ProbeStrategy(StrEnum):
+    """凭据上游模型发现策略。"""
+
+    OPENAI_MODELS_LIST = "openai_models_list"
+    NONE = "none"
+
+
+_VERSION_PATH_SUFFIX = re.compile(r"/v\d+$")
 
 
 @dataclass(frozen=True)
@@ -45,8 +56,8 @@ def _append_suffix_if_missing(suffix: str) -> NormalizeRule:
 
 
 def _ensure_volcengine_openai_compat_base(base: str) -> str:
-    """Volcengine：Coding Plan 根 ``/api/coding`` 补 ``/v3``；标准根 ``/api`` 补 ``/v3``。"""
-    if base.endswith("/v3"):
+    """Volcengine：已有 ``/vN`` 后缀则保留；否则对 ``/api/coding`` 或 ``/api`` 补 ``/v3``。"""
+    if _VERSION_PATH_SUFFIX.search(base):
         return base
     if base.endswith("/api/coding"):
         return f"{base}/v3"
@@ -57,7 +68,7 @@ def _ensure_volcengine_openai_compat_base(base: str) -> str:
 
 _VOLCENGINE_OPENAI_NORMALIZE = NormalizeRule(
     apply=_ensure_volcengine_openai_compat_base,
-    description="volcengine openai-compat: ensure /v3 suffix",
+    description="volcengine openai-compat: ensure /v3 suffix when no version segment",
 )
 _DEEPSEEK_V1_NORMALIZE = _append_suffix_if_missing("/v1")
 
@@ -73,6 +84,8 @@ class UpstreamProfile:
     models_list_path: str = "/models"
     normalize_rules: tuple[NormalizeRule, ...] = field(default_factory=tuple)
     default_call_shape: UpstreamCallShape = UpstreamCallShape.OPENAI_COMPAT
+    probe_strategy: ProbeStrategy = ProbeStrategy.OPENAI_MODELS_LIST
+    probe_protocol: UpstreamProtocol = UpstreamProtocol.OPENAI_COMPAT
     probe_supported: bool = True
     probe_unsupported_reason: str | None = None
 
@@ -86,11 +99,6 @@ class UpstreamProfile:
             for rule in self.normalize_rules:
                 normalized = rule(normalized)
             return normalized
-        anthropic_default = self.api_bases.get(UpstreamProtocol.ANTHROPIC_NATIVE)
-        openai_default = self.api_bases.get(UpstreamProtocol.OPENAI_COMPAT)
-        if anthropic_default is not None and openai_default is not None:
-            # 双根 profile：``api_base`` 列仅存 OpenAI-compat 根
-            return anthropic_default.rstrip("/")
         return normalized
 
 
@@ -103,6 +111,7 @@ __all__ = [
     "_DEEPSEEK_V1_NORMALIZE",
     "_VOLCENGINE_OPENAI_NORMALIZE",
     "NormalizeRule",
+    "ProbeStrategy",
     "UpstreamCallShape",
     "UpstreamProfile",
     "UpstreamProtocol",

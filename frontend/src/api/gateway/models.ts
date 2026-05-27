@@ -210,6 +210,17 @@ export interface GatewayModelListResponse extends PaginatedList<GatewayModel> {
   connectivity_summary: ModelConnectivitySummary
 }
 
+export interface ManagedTeamModelListResponse extends GatewayModelListResponse {
+  queried_team_count: number
+  queried_personal_team_count: number
+  queried_shared_team_count: number
+  tenant_ids_with_models: string[]
+}
+
+export interface ListManagedTeamModelsParams extends Omit<GatewayModelListQuery, 'registry_scope'> {
+  search?: string
+}
+
 export interface GatewayModelIdsResponse {
   ids: string[]
   /** 命中 max_ids 上限时为 true，调用方应提示或分批处理 */
@@ -366,6 +377,16 @@ export const modelsApi = {
       teamGatewayPath(teamId, '/models'),
       buildModelListSearch(params)
     ),
+
+  /** 跨可写团队聚合 team registry 模型（分页） */
+  listManagedTeamModels: (params?: ListManagedTeamModelsParams) => {
+    const search: Record<string, string> = buildModelListSearch(params)
+    if (params?.search) search.search = params.search
+    return apiClient.get<ManagedTeamModelListResponse>(
+      `${GATEWAY_API_BASE}/managed-team-models`,
+      search
+    )
+  },
 
   /** 单条团队/系统注册模型 */
   getModel: (teamId: string, id: string, params?: Pick<GatewayModelListQuery, 'registry_scope'>) =>

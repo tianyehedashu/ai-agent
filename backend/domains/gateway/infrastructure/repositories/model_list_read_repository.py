@@ -14,9 +14,12 @@ from domains.gateway.infrastructure.models.system_gateway import SystemGatewayMo
 from domains.gateway.infrastructure.repositories.model_list_sql import (
     build_system_list_stmt,
     build_tenant_list_stmt,
+    build_tenants_list_stmt,
     count_from_stmt,
+    list_tenant_ids_with_team_registry_for_tenants,
     summarize_system_list,
     summarize_tenant_list,
+    summarize_tenants_list,
 )
 
 if TYPE_CHECKING:
@@ -116,6 +119,79 @@ class ModelListReadRepository:
             q=q,
         )
         return items, total, summary
+
+    async def paginate_tenants(
+        self,
+        *,
+        tenant_ids: list[uuid.UUID],
+        only_enabled: bool,
+        capability: str | None,
+        provider: str | None,
+        credential_id: uuid.UUID | None,
+        exclude_user_scope_credentials: bool,
+        enabled: bool | None,
+        q: str | None,
+        connectivity: ModelListConnectivityFilter,
+        sort_field: ModelListSortField,
+        order: ModelListSortOrder,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[GatewayModel], int, dict[str, int]]:
+        base = build_tenants_list_stmt(
+            tenant_ids=tenant_ids,
+            only_enabled=only_enabled,
+            capability=capability,
+            provider=provider,
+            credential_id=credential_id,
+            exclude_user_scope_credentials=exclude_user_scope_credentials,
+            enabled=enabled,
+            q=q,
+            connectivity=connectivity,
+            sort_field=sort_field,
+            order=order,
+        )
+        total = await count_from_stmt(self._session, base)
+        page_stmt = base.offset(offset).limit(limit)
+        result = await self._session.execute(page_stmt)
+        items = list(result.scalars().all())
+        summary = await summarize_tenants_list(
+            self._session,
+            tenant_ids=tenant_ids,
+            only_enabled=only_enabled,
+            capability=capability,
+            provider=provider,
+            credential_id=credential_id,
+            exclude_user_scope_credentials=exclude_user_scope_credentials,
+            enabled=enabled,
+            q=q,
+        )
+        return items, total, summary
+
+    async def list_tenant_ids_with_team_registry(
+        self,
+        tenant_ids: list[uuid.UUID],
+        *,
+        exclude_user_scope_credentials: bool,
+        only_enabled: bool = False,
+        capability: str | None = None,
+        provider: str | None = None,
+        credential_id: uuid.UUID | None = None,
+        enabled: bool | None = None,
+        q: str | None = None,
+        connectivity: ModelListConnectivityFilter = ModelListConnectivityFilter.ALL,
+    ) -> list[uuid.UUID]:
+        return await list_tenant_ids_with_team_registry_for_tenants(
+            self._session,
+            tenant_ids=tenant_ids,
+            exclude_user_scope_credentials=exclude_user_scope_credentials,
+            only_enabled=only_enabled,
+            capability=capability,
+            provider=provider,
+            credential_id=credential_id,
+            enabled=enabled,
+            q=q,
+            connectivity=connectivity,
+        )
 
 
 __all__ = ["ModelListReadRepository"]

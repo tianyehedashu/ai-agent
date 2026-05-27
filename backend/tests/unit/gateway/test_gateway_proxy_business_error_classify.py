@@ -7,6 +7,7 @@ from fastapi import status
 
 from domains.gateway.domain.errors import (
     BudgetExceededError,
+    GatewayModelNotFoundError,
     ModelNotAllowedError,
     RateLimitExceededError,
 )
@@ -22,6 +23,28 @@ def test_classify_model_not_allowed() -> None:
     assert biz.http_status == status.HTTP_400_BAD_REQUEST
     assert biz.openai_error_type == "model_not_allowed"
     assert biz.anthropic_error_type == "invalid_request_error"
+
+
+def test_classify_gateway_model_not_found() -> None:
+    biz = classify_proxy_use_case_business_error(
+        GatewayModelNotFoundError("deepseek-v4-flash-260425")
+    )
+    assert biz is not None
+    assert biz.http_status == status.HTTP_404_NOT_FOUND
+    assert biz.openai_error_type == "model_not_found"
+    assert biz.anthropic_error_type == "not_found_error"
+    assert "deepseek-v4-flash-260425" in biz.message
+
+
+def test_classify_router_model_miss_maps_404() -> None:
+    exc = RuntimeError(
+        "litellm.BadRequestError: no healthy deployments for model=foo"
+    )
+    biz = classify_proxy_use_case_business_error(exc)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_404_NOT_FOUND
+    assert biz.openai_error_type == "model_not_found"
+    assert "Gateway 注册" in biz.message
 
 
 def test_classify_rate_limit_maps_anthropic_rate_limit_error() -> None:
