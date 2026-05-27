@@ -5,12 +5,14 @@ Identity Presentation Schemas - 身份认证表示层模式
 """
 
 from datetime import datetime
+from typing import Self
 import uuid
 
 from fastapi_users.schemas import BaseUser, BaseUserCreate
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from domains.identity.domain.rbac import Role
+from libs.api.pagination import PaginatedListResponse
 
 # =============================================================================
 # 用户读取模式（FastAPI Users 兼容）
@@ -148,6 +150,38 @@ class PlatformUserSummaryResponse(BaseModel):
     email: str
     name: str | None = None
     role: str
+    is_active: bool
+    is_verified: bool
+    status: str
+    created_at: datetime
+    vendor_creator_id: int | None = None
+    avatar_url: str | None = None
+
+
+class PlatformUserListResponse(PaginatedListResponse[PlatformUserSummaryResponse]):
+    """平台用户分页列表响应。"""
+
+
+class AdminUpdatePlatformUserBody(BaseModel):
+    """平台管理员更新用户请求。"""
+
+    model_config = ConfigDict(strict=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    vendor_creator_id: int | None = Field(default=None)
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> Self:
+        if (
+            self.name is None
+            and self.avatar_url is None
+            and "vendor_creator_id" not in self.model_fields_set
+            and self.is_active is None
+        ):
+            raise ValueError("At least one field must be provided")
+        return self
 
 
 class SetPlatformRoleBody(BaseModel):
@@ -163,8 +197,10 @@ class SetPlatformRoleBody(BaseModel):
 
 
 __all__ = [
+    "AdminUpdatePlatformUserBody",
     "CurrentUser",
     "PasswordChange",
+    "PlatformUserListResponse",
     "PlatformUserSummaryResponse",
     "RefreshTokenRequest",
     "SetPlatformRoleBody",

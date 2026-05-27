@@ -30,7 +30,7 @@ export function useGatewayTeams(enabled = true): UseQueryResult<GatewayTeam[]> {
   })
 }
 
-/** 侧栏切换器：仅 membership，平台 admin 不拉全站 900+ personal team */
+/** membership 团队列表（平台 admin 不拉全站 personal team） */
 export function useGatewayMemberTeams(enabled = true): UseQueryResult<GatewayTeam[]> {
   return useQuery({
     queryKey: GATEWAY_MEMBER_TEAMS_QUERY_KEY,
@@ -53,7 +53,7 @@ export function useGatewayTeamNameMap(enabled = true): Map<string, string> {
   }, [teams, viewerUserId])
 }
 
-/** 与右上角 TeamSwitcher 同源（membership_only） */
+/** 侧栏 / Playground 团队选择器同源（membership_only） */
 export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string> {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)

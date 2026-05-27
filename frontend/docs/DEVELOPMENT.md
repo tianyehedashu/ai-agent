@@ -31,9 +31,32 @@ VITE_API_URL=http://localhost:8000
 
 ## AI Gateway 控制台（可选）
 
-管理端页面位于 `src/pages/gateway/`，团队上下文由 `src/stores/gateway-team.ts` 写入 **`X-Team-Id`**。后端领域架构、RBAC 与分区表注意事项见仓库根目录下后端文档：
+管理端页面位于 `src/pages/gateway/`。团队工作区以 URL `/gateway/teams/:teamId/*` 为 SSOT；无 `:teamId` 的扁平路由（调用指南、侧栏导航链接等）默认使用 **personal team**，不在 UI 提供全局团队切换。浏览器管理 API **不**发送 `X-Team-Id`（团队由路径参数选定）；外部 `/v1/*` 代理的 `sk-*` 才需 `X-Team-Id`。后端领域架构、RBAC 与分区表注意事项见仓库根目录下后端文档：
 
 [`backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`](../../backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)
+
+### 虚拟 Key（`sk-gw-*`）与平台 API Key（`sk-*`）
+
+产品说明集中在文档，控制台页面仅保留标题、团队徽章与操作，不在 UI 重复展开下列规则。
+
+| 形态             | 前缀      | 创建入口                                                    | 团队上下文                                                                                 | 适用入口                        |
+| ---------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------- |
+| **虚拟 Key**     | `sk-gw-*` | AI 网关 → 虚拟 Key                                          | **创建时绑定**当前团队；代理 `/v1/*` **勿传** `X-Team-Id`（传入且与 Key 团队不一致时 400） | OpenAI / Anthropic 兼容 `/v1/*` |
+| **平台 API Key** | `sk-*`    | 设置 → API 密钥（需 `gateway:proxy` scope + Gateway grant） | 请求头 `X-Team-Id` 选择 **已授权**团队；缺省优先 personal grant                            | 同上，且可复用其他 API 能力     |
+
+**模型可见性**：客户端请求中的 `model` 须在该 Key 绑定团队的「模型管理」中注册且凭据可用；控制台试调与管理 API 使用 URL 或 personal 工作区团队上下文。
+
+**控制台 vs 代理**：
+
+- 管理面 `GET/POST … /api/v1/gateway/teams/{team_id}/*`：JWT + 路径 `team_id`，**不**依赖 `X-Team-Id`。
+- 对外代理 `/v1/*`：`sk-gw-*` 团队已写入 Key；`sk-*` 须通过 grant + `X-Team-Id` 选定团队。
+
+**进一步阅读**：
+
+- [`backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`](../../backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md) — 鉴权矩阵、grant、日志聚合
+- [`backend/docs/项目权限规则.md`](../../backend/docs/项目权限规则.md) — §平台 Key vs 虚拟 Key、虚拟 Key 创建者隔离
+- [`backend/docs/gateway/GATEWAY_CURSOR_CLAUDE_CODE.md`](../../backend/docs/gateway/GATEWAY_CURSOR_CLAUDE_CODE.md) — Cursor / Claude Code 集成
+- [`backend/docs/gateway/GATEWAY_THIRDPARTY_CLIENT_GUIDE.md`](../../backend/docs/gateway/GATEWAY_THIRDPARTY_CLIENT_GUIDE.md) — 第三方客户端快速上手
 
 ## 常用命令
 

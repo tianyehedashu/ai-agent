@@ -3,6 +3,7 @@ import { Navigate, useLocation, useRoutes, type RouteObject } from 'react-router
 import { RequirePlatformAdmin } from '@/components/require-platform-admin'
 import {
   AdminStoragePage,
+  AdminUsersPage,
   AgentsPage,
   ChatPage,
   GatewayBudgetsPage,
@@ -63,6 +64,14 @@ const appLayoutRouteConfig: RouteObject[] = [
   },
   { path: '/mcp/system', element: <SystemMCPPage /> },
   { path: '/admin/storage', element: <AdminStoragePage /> },
+  {
+    path: '/admin/users',
+    element: (
+      <RequirePlatformAdmin>
+        <AdminUsersPage />
+      </RequirePlatformAdmin>
+    ),
+  },
   { path: '/video-tasks', element: <VideoTasksPage /> },
   { path: '/video-tasks/history', element: <VideoTasksHistoryPage /> },
   { path: '/video-tasks/:sessionId', element: <VideoTasksPage /> },

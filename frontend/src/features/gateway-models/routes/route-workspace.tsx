@@ -15,16 +15,15 @@ import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gatewa
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 export function RouteWorkspace(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite } = useGatewayPermission()
-  const currentTeam = useGatewayTeamStore((s) => s.current())
+  const currentTeam = useGatewayTeamRecord(teamId)
   const isPersonalTeam = currentTeam?.kind === 'personal'
   const modelsHref = isPersonalTeam
     ? `/gateway/teams/${teamId}/models?tab=personal`

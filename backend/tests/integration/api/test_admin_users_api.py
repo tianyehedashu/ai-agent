@@ -149,3 +149,115 @@ class TestAdminUsersApi:
         )
         assert r.status_code == status.HTTP_200_OK
         assert r.json()["role"] == Role.USER.value
+
+    @pytest.mark.asyncio
+    async def test_list_requires_admin(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get("/api/v1/admin/users", headers=auth_headers)
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_list_paginated_for_admin(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"page": 1, "page_size": 20},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert "items" in data
+        assert "total" in data
+        assert data["total"] >= 1
+        emails = [item["email"] for item in data["items"]]
+        assert test_user.email in emails
+        assert all(item["role"] != "anonymous" for item in data["items"])
+
+    @pytest.mark.asyncio
+    async def test_list_search_by_email(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"search": test_user.email.split("@")[0]},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        emails = [item["email"] for item in r.json()["items"]]
+        assert test_user.email in emails
+
+    @pytest.mark.asyncio
+    async def test_list_filter_by_role(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/admin/users",
+            headers=admin_headers,
+            params={"role": Role.USER.value, "search": test_user.email.split("@")[0]},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        assert all(item["role"] == Role.USER.value for item in r.json()["items"])
+
+    @pytest.mark.asyncio
+    async def test_get_user_by_id(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+    ) -> None:
+        r = await dev_client.get(
+            f"/api/v1/admin/users/{test_user.id}",
+            headers=admin_headers,
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert data["id"] == str(test_user.id)
+        assert data["email"] == test_user.email
+        assert "is_active" in data
+        assert "created_at" in data
+
+    @pytest.mark.asyncio
+    async def test_update_user_profile(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        test_user: User,
+        db_session,
+    ) -> None:
+        r = await dev_client.patch(
+            f"/api/v1/admin/users/{test_user.id}",
+            headers=admin_headers,
+            json={"name": "Updated Name", "is_active": True},
+        )
+        assert r.status_code == status.HTTP_200_OK
+        assert r.json()["name"] == "Updated Name"
+
+        await db_session.refresh(test_user)
+        assert test_user.name == "Updated Name"
+
+    @pytest.mark.asyncio
+    async def test_cannot_deactivate_self(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        admin_user: User,
+    ) -> None:
+        r = await dev_client.patch(
+            f"/api/v1/admin/users/{admin_user.id}",
+            headers=admin_headers,
+            json={"is_active": False},
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST

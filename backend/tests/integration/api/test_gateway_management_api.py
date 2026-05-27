@@ -2017,6 +2017,134 @@ class TestGatewayManagementApi:
         assert r_sys_detail.status_code == 403, r_sys_detail.text
 
     @pytest.mark.asyncio
+    async def test_playground_credential_summaries_membership_scope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """Playground 聚合：仅 membership 内 active 凭据，且含 context_team_id。"""
+        owner = test_user
+        member = User(
+            email=f"pg_cred_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Playground Cred Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Playground Cred Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+
+        active_name = f"pg-active-{uuid.uuid4().hex[:8]}"
+        r_active = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": active_name,
+                "api_key": "sk-pg-active-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_active.status_code == 201, r_active.text
+        active_id = r_active.json()["id"]
+
+        inactive_name = f"pg-inactive-{uuid.uuid4().hex[:8]}"
+        r_inactive = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": inactive_name,
+                "api_key": "sk-pg-inactive-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_inactive.status_code == 201, r_inactive.text
+        inactive_id = r_inactive.json()["id"]
+        r_off = await dev_client.patch(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{inactive_id}",
+            headers=auth_headers,
+            json={"is_active": False},
+        )
+        assert r_off.status_code == 200, r_off.text
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        my_name = f"pg-my-{uuid.uuid4().hex[:8]}"
+        r_my = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=member_headers,
+            json={
+                "provider": "openai",
+                "name": my_name,
+                "api_key": "sk-pg-my-test-key-123456",
+            },
+        )
+        assert r_my.status_code == 201, r_my.text
+        my_cred_id = r_my.json()["id"]
+
+        r_pg = await dev_client.get(
+            "/api/v1/gateway/playground/credential-summaries",
+            headers=member_headers,
+        )
+        assert r_pg.status_code == 200, r_pg.text
+        rows = r_pg.json()
+        by_id = {item["id"]: item for item in rows}
+        assert active_id in by_id
+        assert by_id[active_id]["context_team_id"] == str(shared.id)
+        assert by_id[active_id]["scope"] == "team"
+        assert my_cred_id in by_id
+        assert by_id[my_cred_id]["scope"] == "user"
+        assert inactive_id not in by_id
+        for item in rows:
+            assert "context_team_id" in item
+            assert item["is_active"] is True
+            assert "api_key_masked" not in item
+
+    @pytest.mark.asyncio
+    async def test_playground_credential_summaries_admin_excludes_non_membership_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        admin_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """平台 admin 亦仅聚合 membership；非成员团队凭据不可见。"""
+        ts = TeamService(db_session)
+        foreign = await ts.create_team(name="Foreign PG Team", owner_user_id=test_user.id)
+        await db_session.commit()
+
+        foreign_name = f"pg-foreign-{uuid.uuid4().hex[:8]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{foreign.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": foreign_name,
+                "api_key": "sk-pg-foreign-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        foreign_cred_id = r_cred.json()["id"]
+
+        r_pg = await dev_client.get(
+            "/api/v1/gateway/playground/credential-summaries",
+            headers=admin_headers,
+        )
+        assert r_pg.status_code == 200, r_pg.text
+        ids = {item["id"] for item in r_pg.json()}
+        assert foreign_cred_id not in ids
+
+    @pytest.mark.asyncio
     async def test_create_system_credential_returns_mapped_response(
         self,
         dev_client: AsyncClient,

@@ -62,11 +62,10 @@ import {
   useGatewayWritableTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
 
 const AddModelsDialog = lazyWithReload(() =>
@@ -82,7 +81,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const location = useLocation()
   const writableTeams = useGatewayWritableTeams()
   const teamNameById = useGatewayTeamNameMap()
-  const currentTeam = useGatewayTeamStore((s) => s.current())
+  const currentTeam = useGatewayTeamRecord(teamId)
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()

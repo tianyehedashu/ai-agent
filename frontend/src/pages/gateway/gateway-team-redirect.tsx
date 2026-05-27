@@ -10,6 +10,7 @@ const FLAT_ROUTES = new Set(['guide', 'platform-stats'])
 
 const LEGACY_TEAM_SEGMENTS = new Set([
   'overview',
+  'stats',
   'keys',
   'credentials',
   'models',
@@ -17,23 +18,16 @@ const LEGACY_TEAM_SEGMENTS = new Set([
   'budgets',
   'logs',
   'teams',
+  'members',
   'pricing',
 ])
 
 export default function GatewayTeamRedirect(): React.JSX.Element {
   const location = useLocation()
-  const currentTeamId = useGatewayTeamStore((s) => s.currentTeamId)
   const teams = useGatewayTeamStore((s) => s.teams)
 
-  let preferredTeamId: string | null = currentTeamId
-  if (!preferredTeamId) {
-    const personal = teams.find((t) => t.kind === 'personal')
-    if (personal) {
-      preferredTeamId = personal.id
-    } else if (teams[0]) {
-      preferredTeamId = teams[0].id
-    }
-  }
+  const personal = teams.find((t) => t.kind === 'personal')
+  const preferredTeamId = personal?.id ?? (teams[0] ? teams[0].id : null)
 
   const legacyMatch = /^\/gateway\/([^/]+)(\/.*)?$/.exec(location.pathname)
   if (legacyMatch && preferredTeamId) {

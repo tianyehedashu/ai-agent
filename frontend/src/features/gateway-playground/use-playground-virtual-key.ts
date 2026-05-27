@@ -2,17 +2,16 @@
  * 调用指南「试调虚拟 Key」选择 hook
  *
  * - 不在进入页面时自动创建 vkey；不再持久化明文
- * - 列表数据来自服务端 `listKeys`
+ * - 列表数据来自服务端 `listKeys`（支持多团队聚合）
  * - 上次选中 id 经 `usePlaygroundVkeySelectionStore` 持久化
  * - 切换时按需 `revealKey`，明文仅在内存
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
-import { getCurrentTeamId, useGatewayTeamStore } from '@/stores/gateway-team'
 import { usePlaygroundVkeySelectionStore } from '@/stores/playground-vkey-selection'
 
 import { migrateLegacyPlaygroundVkeyStorage } from './playground-vkey-persist'
@@ -23,6 +22,14 @@ export interface PlaygroundVkeyBootstrap {
   keyId?: string | null
   /** URL `?key_id=` 或导航 state；仅在 listKeys 结果包含该 id 时写入选中（避免跨团队无效 id） */
   preferKeyId?: string | null
+}
+
+export interface UsePlaygroundVirtualKeyOptions {
+  bootstrap?: PlaygroundVkeyBootstrap
+  /** 单团队上下文（兼容旧调用） */
+  teamId?: string | null
+  /** 多团队聚合 Key 列表（Guide：未选凭据时跨 membership） */
+  teamIds?: readonly string[] | null
 }
 
 export interface UsePlaygroundVirtualKeyReturn {
@@ -38,25 +45,65 @@ export interface UsePlaygroundVirtualKeyReturn {
   refreshKeys: () => void
 }
 
+function isVirtualKeyOptions(
+  input: PlaygroundVkeyBootstrap | UsePlaygroundVirtualKeyOptions
+): input is UsePlaygroundVirtualKeyOptions {
+  return 'teamId' in input || 'teamIds' in input || 'bootstrap' in input
+}
+
+function normalizeVirtualKeyOptions(
+  input?: PlaygroundVkeyBootstrap | UsePlaygroundVirtualKeyOptions
+): UsePlaygroundVirtualKeyOptions {
+  if (input === undefined) return {}
+  if (isVirtualKeyOptions(input)) return input
+  return { bootstrap: input }
+}
+
+function resolveTeamIds(options: UsePlaygroundVirtualKeyOptions): string[] {
+  if (options.teamIds && options.teamIds.length > 0) return [...options.teamIds]
+  if (options.teamId) return [options.teamId]
+  return []
+}
+
+function mergeVisibleKeys(results: readonly (VirtualKey[] | undefined)[]): VirtualKey[] {
+  const byId = new Map<string, VirtualKey>()
+  for (const rows of results) {
+    for (const key of rows ?? []) {
+      if (key.is_system || !key.is_active) continue
+      byId.set(key.id, key)
+    }
+  }
+  return Array.from(byId.values())
+}
+
 export function usePlaygroundVirtualKey(
-  bootstrap?: PlaygroundVkeyBootstrap
+  bootstrapOrOptions?: PlaygroundVkeyBootstrap | UsePlaygroundVirtualKeyOptions
 ): UsePlaygroundVirtualKeyReturn {
+  const options = normalizeVirtualKeyOptions(bootstrapOrOptions)
+  const bootstrap = options.bootstrap
+  const { teamId, teamIds: teamIdsOption } = options
+  const teamIds = useMemo(
+    () => resolveTeamIds({ teamId, teamIds: teamIdsOption }),
+    [teamId, teamIdsOption]
+  )
+
   const selectedKeyId = usePlaygroundVkeySelectionStore((s) => s.lastSelectedId)
   const setLastSelectedId = usePlaygroundVkeySelectionStore((s) => s.setLastSelectedId)
-  const currentTeamId = useGatewayTeamStore((s) => s.currentTeamId)
   const explicitlyClearedRef = useRef(false)
-  const prevTeamIdRef = useRef<string | null | undefined>(undefined)
+  const prevTeamScopeRef = useRef<string | undefined>(undefined)
+
+  const teamScopeKey = teamIds.join('|')
 
   useEffect(() => {
-    if (prevTeamIdRef.current === undefined) {
-      prevTeamIdRef.current = currentTeamId
+    if (prevTeamScopeRef.current === undefined) {
+      prevTeamScopeRef.current = teamScopeKey
       return
     }
-    if (prevTeamIdRef.current === currentTeamId) return
-    prevTeamIdRef.current = currentTeamId
+    if (prevTeamScopeRef.current === teamScopeKey) return
+    prevTeamScopeRef.current = teamScopeKey
     explicitlyClearedRef.current = false
     setLastSelectedId(null)
-  }, [currentTeamId, setLastSelectedId])
+  }, [teamScopeKey, setLastSelectedId])
 
   useEffect(() => {
     const migratedId = migrateLegacyPlaygroundVkeyStorage()
@@ -65,30 +112,28 @@ export function usePlaygroundVirtualKey(
     }
   }, [selectedKeyId, setLastSelectedId])
 
-  const keysQuery = useQuery({
-    queryKey: ['gateway', 'keys', currentTeamId],
-    queryFn: () => {
-      const teamId = getCurrentTeamId()
-      if (!teamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.listKeys(teamId)
-    },
-    enabled: Boolean(currentTeamId),
-    staleTime: 30_000,
+  const keysQueries = useQueries({
+    queries: teamIds.map((id) => ({
+      queryKey: ['gateway', 'keys', id, 'playground'] as const,
+      queryFn: () => gatewayApi.listKeys(id),
+      enabled: Boolean(id),
+      staleTime: 30_000,
+    })),
   })
 
-  const visibleKeys = useMemo<VirtualKey[]>(
-    () => (keysQuery.data ?? []).filter((k) => !k.is_system && k.is_active),
-    [keysQuery.data]
-  )
+  const visibleKeys = useMemo(() => mergeVisibleKeys(keysQueries.map((q) => q.data)), [keysQueries])
+
+  const isLoadingKeys = teamIds.length > 0 && keysQueries.some((q) => q.isLoading)
+  const isRefreshingKeys = keysQueries.some((q) => q.isFetching)
 
   useEffect(() => {
-    if (keysQuery.isFetching || !keysQuery.data) return
+    if (isRefreshingKeys) return
     if (selectedKeyId && !visibleKeys.some((k) => k.id === selectedKeyId)) {
       const next = visibleKeys[0]?.id ?? null
       explicitlyClearedRef.current = false
       setLastSelectedId(next)
     }
-  }, [keysQuery.isFetching, keysQuery.data, selectedKeyId, visibleKeys, setLastSelectedId])
+  }, [isRefreshingKeys, selectedKeyId, visibleKeys, setLastSelectedId])
 
   useEffect(() => {
     if (selectedKeyId !== null) return
@@ -100,24 +145,19 @@ export function usePlaygroundVirtualKey(
   const preferKeyId = bootstrap?.preferKeyId ?? null
 
   useEffect(() => {
-    if (!preferKeyId || keysQuery.isFetching || !keysQuery.data) return
+    if (!preferKeyId || isRefreshingKeys) return
     if (!visibleKeys.some((k) => k.id === preferKeyId)) return
     if (selectedKeyId === preferKeyId) return
     explicitlyClearedRef.current = false
     setLastSelectedId(preferKeyId)
-  }, [
-    preferKeyId,
-    keysQuery.isFetching,
-    keysQuery.data,
-    visibleKeys,
-    selectedKeyId,
-    setLastSelectedId,
-  ])
+  }, [preferKeyId, isRefreshingKeys, visibleKeys, selectedKeyId, setLastSelectedId])
 
   const selectedKey = useMemo<VirtualKey | null>(
     () => visibleKeys.find((k) => k.id === selectedKeyId) ?? null,
     [visibleKeys, selectedKeyId]
   )
+
+  const revealTeamId = selectedKey?.team_id ?? teamIds[0]
 
   const bootstrapPlain = bootstrap?.plain?.trim() ?? null
   const bootstrapKeyId = bootstrap?.keyId ?? null
@@ -127,20 +167,22 @@ export function usePlaygroundVirtualKey(
     selectedKeyId !== null &&
     bootstrapKeyId === selectedKeyId
 
-  const revealQuery = useQuery({
-    queryKey: ['gateway', 'keys', currentTeamId, selectedKeyId, 'reveal'] as const,
-    queryFn: () => {
-      if (selectedKeyId === null) {
-        return Promise.reject(new Error('未选择虚拟 Key'))
-      }
-      const teamId = getCurrentTeamId()
-      if (!teamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.revealKey(teamId, selectedKeyId)
-    },
-    enabled: selectedKeyId !== null && selectedKey !== null && !bootstrapActive,
-    staleTime: 5 * 60_000,
-    retry: false,
-  })
+  const revealQuery = useQueries({
+    queries: [
+      {
+        queryKey: ['gateway', 'keys', revealTeamId, selectedKeyId, 'reveal'] as const,
+        queryFn: () => {
+          if (selectedKeyId === null || selectedKey === null) {
+            return Promise.reject(new Error('未选择虚拟 Key'))
+          }
+          return gatewayApi.revealKey(selectedKey.team_id, selectedKeyId)
+        },
+        enabled: selectedKeyId !== null && selectedKey !== null && !bootstrapActive,
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    ],
+  })[0]
 
   const plain = bootstrapActive ? bootstrapPlain : (revealQuery.data?.plain_key ?? null)
   const revealError =
@@ -159,19 +201,21 @@ export function usePlaygroundVirtualKey(
   )
 
   const refreshKeys = useCallback((): void => {
-    void keysQuery.refetch()
-  }, [keysQuery])
+    for (const query of keysQueries) {
+      void query.refetch()
+    }
+  }, [keysQueries])
 
   return {
     keys: visibleKeys,
-    isLoadingKeys: keysQuery.isLoading,
+    isLoadingKeys,
     selectedKey,
     selectedKeyId,
     selectKey,
     plain,
     isRevealing: revealQuery.isFetching && selectedKeyId !== null,
     revealError,
-    isRefreshingKeys: keysQuery.isFetching,
+    isRefreshingKeys,
     refreshKeys,
   }
 }

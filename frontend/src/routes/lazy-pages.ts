@@ -9,6 +9,7 @@ export const AgentsPage = lazyWithReload(() => import('@/pages/agents'))
 export const MCPPage = lazyWithReload(() => import('@/pages/mcp'))
 export const SystemMCPPage = lazyWithReload(() => import('@/pages/mcp/system'))
 export const AdminStoragePage = lazyWithReload(() => import('@/pages/admin/storage'))
+export const AdminUsersPage = lazyWithReload(() => import('@/pages/admin/users'))
 
 export const VideoTasksPage = lazyWithReload(() => import('@/pages/video-tasks'))
 export const VideoTasksHistoryPage = lazyWithReload(() => import('@/pages/video-tasks/history'))

@@ -25,6 +25,7 @@ from domains.gateway.presentation.routers import (
     managed_team_models,
     my_credentials,
     my_models,
+    playground,
     provider_profiles,
     system_visibility,
     team_scoped,
@@ -34,6 +35,7 @@ router = APIRouter(tags=["AI Gateway"])
 
 router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)
+router.include_router(playground.router)
 router.include_router(managed_team_credentials.router)
 router.include_router(managed_team_models.router)
 router.include_router(my_models.router)

@@ -201,6 +201,15 @@ class CredentialSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=False)
 
 
+class PlaygroundCredentialSummaryResponse(CredentialSummaryResponse):
+    """Playground 凭据摘要：附带解析模型/Key 所需的团队上下文。"""
+
+    context_team_id: uuid.UUID | None = Field(
+        default=None,
+        description="team/system 凭据所属租户；user 凭据为 personal team id",
+    )
+
+
 class ManagedTeamCredentialListResponse(PaginatedListResponse[CredentialResponse]):
     """跨可写团队聚合的团队 scope 凭据列表。"""
 

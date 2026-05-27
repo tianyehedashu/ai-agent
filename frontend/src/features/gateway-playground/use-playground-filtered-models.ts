@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useInfiniteQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 
-import type { CredentialSummary } from '@/api/gateway'
 import { gatewayApi } from '@/api/gateway'
 import {
   GATEWAY_MODELS_STALE_MS,
@@ -14,13 +13,15 @@ import {
   playgroundTeamModelsQueryKey,
   resolvePlaygroundTeamRegistryScope,
 } from '@/features/gateway-models/utils'
-import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { MAX_PAGE_SIZE } from '@/lib/pagination'
 
 import {
   isPersonalPlaygroundCredential,
+  PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY,
+  resolvePlaygroundContextTeamId,
   usePlaygroundCredentialOptions,
   type PlaygroundCredentialGroups,
+  type PlaygroundCredentialOption,
 } from './playground-credential-options'
 import { buildPlaygroundCandidateModels } from './playground-model-sources'
 
@@ -33,9 +34,12 @@ export interface UsePlaygroundFilteredModelsOptions {
 }
 
 export interface UsePlaygroundFilteredModelsResult {
-  teamId: string | null
+  /** Playground 工作区 teamId（personal team，不跟随侧栏） */
+  workspaceTeamId: string | null
+  /** 当前凭据/模型/Key 请求实际使用的 teamId */
+  contextTeamId: string | null
   credentialId: string
-  credentialById: Map<string, CredentialSummary>
+  credentialById: Map<string, PlaygroundCredentialOption>
   credentialsLoading: boolean
   credentialsEmpty: boolean
   credentialGroups: PlaygroundCredentialGroups
@@ -68,7 +72,6 @@ export function usePlaygroundFilteredModels(
   const credentialId = options.credentialId ?? ''
   const fetchRoutes = options.includeRoutes ?? false
 
-  const teamId = useResolvedGatewayTeamId()
   const queryClient = useQueryClient()
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [pendingModelName, setPendingModelName] = useState<string | null>(null)
@@ -76,25 +79,32 @@ export function usePlaygroundFilteredModels(
   const {
     grouped: credentialGroups,
     byId: credentialById,
+    workspaceTeamId,
     isLoading: credentialsLoading,
     isFetching: credentialsFetching,
     isEmpty: credentialsEmpty,
-  } = usePlaygroundCredentialOptions(credentialId)
+  } = usePlaygroundCredentialOptions()
+
+  const contextTeamId = useMemo(
+    () => resolvePlaygroundContextTeamId(credentialId, credentialById, workspaceTeamId),
+    [credentialId, credentialById, workspaceTeamId]
+  )
 
   const isPersonalCredential = isPersonalPlaygroundCredential(credentialById, credentialId)
   const teamCredentialFilter = credentialId && !isPersonalCredential ? credentialId : ''
   const teamRegistryScope = resolvePlaygroundTeamRegistryScope(teamCredentialFilter)
-  const includeTeamModels = Boolean(teamId) && (!credentialId || !isPersonalCredential)
+  const includeTeamModels = Boolean(contextTeamId) && (!credentialId || !isPersonalCredential)
   const includeMyModels = !credentialId || isPersonalCredential
-  const includeRoutes = fetchRoutes && Boolean(teamId) && !(credentialId && isPersonalCredential)
+  const includeRoutes =
+    fetchRoutes && Boolean(contextTeamId) && !(credentialId && isPersonalCredential)
 
   const teamModelsQuery = useInfiniteQuery({
-    queryKey: teamId
-      ? [...playgroundTeamModelsQueryKey(teamId, teamCredentialFilter), 'infinite']
+    queryKey: contextTeamId
+      ? [...playgroundTeamModelsQueryKey(contextTeamId, teamCredentialFilter), 'infinite']
       : ['gateway', 'models', 'requestable', 'none'],
     queryFn: ({ pageParam }) => {
-      if (!teamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.listModels(teamId, {
+      if (!contextTeamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.listModels(contextTeamId, {
         registry_scope: teamRegistryScope,
         ...(teamCredentialFilter ? { credential_id: teamCredentialFilter } : {}),
         page: pageParam,
@@ -120,10 +130,10 @@ export function usePlaygroundFilteredModels(
   const [routesQuery] = useQueries({
     queries: [
       {
-        queryKey: ['gateway', 'routes', teamId, credentialId],
+        queryKey: ['gateway', 'routes', contextTeamId, credentialId],
         queryFn: () => {
-          if (!teamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listRoutes(teamId)
+          if (!contextTeamId) return Promise.reject(new Error('未选择团队'))
+          return gatewayApi.listRoutes(contextTeamId)
         },
         enabled: includeRoutes,
         staleTime: GATEWAY_MODELS_STALE_MS,
@@ -244,13 +254,13 @@ export function usePlaygroundFilteredModels(
       refetchTeamModels(),
       refetchMyModels(),
       routesQuery.refetch(),
-      queryClient.invalidateQueries({ queryKey: ['gateway', 'credential-summaries'] }),
-      queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] }),
+      queryClient.invalidateQueries({ queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY] }),
     ])
   }, [queryClient, refetchMyModels, refetchTeamModels, routesQuery])
 
   return {
-    teamId,
+    workspaceTeamId,
+    contextTeamId,
     credentialId,
     credentialById,
     credentialsLoading,

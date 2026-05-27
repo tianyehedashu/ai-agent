@@ -7,6 +7,9 @@
 
 import { useMemo } from 'react'
 
+import { useParams } from 'react-router-dom'
+
+import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
 import { TeamRole, type TeamRoleValue } from '@/types/permissions'
@@ -42,13 +45,15 @@ export interface GatewayPermissionFlags {
 export function useGatewayPermission(): GatewayPermissionFlags {
   const { currentUser } = useUserStore()
   const teams = useGatewayTeamStore((s) => s.teams)
-  const currentTeamId = useGatewayTeamStore((s) => s.currentTeamId)
+  const { teamId: routeTeamId } = useParams<{ teamId?: string }>()
+  const workspaceTeamId = useGatewayWorkspaceTeamId()
+  const resolvedTeamId = routeTeamId ?? workspaceTeamId
 
   return useMemo(() => {
     const role = currentUser?.role as PlatformRoleValue | undefined
     const isPlatformAdmin = role === PlatformRole.ADMIN
     const isPlatformViewer = role === PlatformRole.VIEWER
-    const team = teams.find((t) => t.id === currentTeamId) ?? null
+    const team = teams.find((t) => t.id === resolvedTeamId) ?? null
     const teamRole = (team?.team_role as TeamRoleValue | null | undefined) ?? null
     const isOwner = teamRole === TeamRole.OWNER || isPlatformAdmin
     const isAdmin = isPlatformAdmin || teamRole === TeamRole.OWNER || teamRole === TeamRole.ADMIN
@@ -66,5 +71,5 @@ export function useGatewayPermission(): GatewayPermissionFlags {
       canViewCrossTeam: isPlatformAdmin,
       canViewMargin,
     }
-  }, [currentUser, teams, currentTeamId])
+  }, [currentUser, teams, resolvedTeamId])
 }

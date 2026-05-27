@@ -3,7 +3,6 @@
  */
 
 import { apiV1Path } from '@/api/paths'
-import { getCurrentTeamId } from '@/stores/gateway-team'
 import type { ChatEvent, Checkpoint, CheckpointDiff } from '@/types'
 
 import { apiClient } from './client'
@@ -24,12 +23,6 @@ export interface ChatRequest {
   imageGenStrength?: number | null
 }
 
-// 转换为后端期望的格式（snake_case）
-function gatewayTeamPayload(): Record<string, unknown> {
-  const gatewayTeamId = getCurrentTeamId()
-  return gatewayTeamId ? { gateway_team_id: gatewayTeamId } : {}
-}
-
 function toBackendRequest(request: ChatRequest): Record<string, unknown> {
   return {
     message: request.message,
@@ -39,7 +32,6 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
       ? { enabled_servers: request.mcpConfig.enabledServers }
       : undefined,
     model_ref: request.modelRef === undefined ? undefined : request.modelRef,
-    ...gatewayTeamPayload(),
     gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
     creative_mode: request.creativeMode ?? undefined,
     reference_image_urls: request.referenceImageUrls?.length
@@ -55,7 +47,6 @@ function toBackendResumeBody(sessionId: string, request: ResumeRequest): Record<
     checkpoint_id: request.checkpointId,
     action: request.action,
     modified_args: request.modifiedArgs,
-    ...gatewayTeamPayload(),
   }
 }
 

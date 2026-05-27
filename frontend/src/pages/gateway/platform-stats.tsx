@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { LineChart } from '@/lib/lucide-icons'
-import { getCurrentTeamId } from '@/stores/gateway-team'
 
 function coalesceNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -32,16 +32,16 @@ const RANGE_DAYS: { value: 1 | 7 | 30; label: string }[] = [
 
 export default function GatewayPlatformStatsPage(): React.JSX.Element {
   const { isPlatformAdmin, isAuthenticated } = useGatewayPermission()
+  const teamId = useResolvedGatewayTeamId()
   const [days, setDays] = useState<1 | 7 | 30>(7)
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: ['gateway', 'admin', 'credential-stats', days],
+    queryKey: ['gateway', 'admin', 'credential-stats', teamId, days],
     queryFn: () => {
-      const teamId = getCurrentTeamId()
-      if (!teamId) return Promise.reject(new Error('未选择团队'))
+      if (!teamId) return Promise.reject(new Error('未选择团队，请先在 Gateway 侧栏选择工作区团队'))
       return gatewayApi.adminCredentialStats(teamId, { days })
     },
-    enabled: isAuthenticated && isPlatformAdmin && !!getCurrentTeamId(),
+    enabled: isAuthenticated && isPlatformAdmin && !!teamId,
   })
 
   const sorted = useMemo(() => {
@@ -65,7 +65,8 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
             平台凭据统计
           </h2>
           <p className="text-sm text-muted-foreground">
-            全平台按凭据聚合调用量；关联模型数为引用该凭据的 Gateway 注册模型条数。
+            全平台按凭据聚合调用量；关联模型数为引用该凭据的 Gateway 注册模型条数。API 路径依赖
+            Gateway 侧栏当前工作区团队。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

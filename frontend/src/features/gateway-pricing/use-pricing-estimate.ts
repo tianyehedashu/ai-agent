@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi, type PricingEstimateResult } from '@/api/gateway'
+import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { formatMoney } from '@/lib/money'
-import { getCurrentTeamId } from '@/stores/gateway-team'
 
 export function formatPricingEstimateUsd(result: PricingEstimateResult): string {
   const usd = Number.parseFloat(result.downstream_revenue_usd)
@@ -20,7 +20,7 @@ export function usePricingEstimate(params: {
   isLoading: boolean
   isApiEstimate: boolean
 } {
-  const teamId = getCurrentTeamId()
+  const teamId = useResolvedGatewayTeamId()
   const pin = params.inputTokens ?? 0
   const pout = params.completionTokens ?? 0
   const hasUsage = pin + pout > 0

@@ -5,8 +5,19 @@ User Repository Interface - 用户仓储接口
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 import uuid
+
+
+@dataclass(frozen=True, slots=True)
+class UserListFilters:
+    """平台用户列表筛选条件。"""
+
+    search: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+    exclude_anonymous: bool = True
 
 
 class UserEntity(Protocol):
@@ -63,9 +74,28 @@ class UserRepository(ABC):
         avatar_url: str | None = None,
         hashed_password: str | None = None,
         vendor_creator_id: int | None = None,
+        *,
+        update_vendor_creator_id: bool = False,
         role: str | None = None,
+        is_active: bool | None = None,
     ) -> UserEntity | None:
         """更新用户"""
+        ...
+
+    @abstractmethod
+    async def list_page(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        filters: UserListFilters,
+    ) -> list[UserEntity]:
+        """分页列出用户（按 created_at 降序）。"""
+        ...
+
+    @abstractmethod
+    async def count_filtered(self, filters: UserListFilters) -> int:
+        """统计符合筛选条件的用户数。"""
         ...
 
     @abstractmethod

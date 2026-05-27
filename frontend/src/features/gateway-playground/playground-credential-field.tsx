@@ -21,8 +21,9 @@ import {
 } from '@/features/gateway-credentials/credential-summary-display'
 import { NO_CREDENTIAL } from '@/features/gateway-models/constants'
 import { credentialDetailHref } from '@/features/gateway-models/paths'
+import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 
 import type {
   PlaygroundCredentialGroups,
@@ -48,7 +49,9 @@ export function PlaygroundCredentialField({
   isLoading,
   isEmpty,
 }: Readonly<PlaygroundCredentialFieldProps>): React.JSX.Element {
-  const teamId = useResolvedGatewayTeamId()
+  const workspaceTeamId = useGatewayWorkspaceTeamId()
+  const teamNameById = useGatewayMemberTeamNameMap()
+  const detailTeamId = selectedSummary?.context_team_id ?? workspaceTeamId
   const { isAdmin, isPlatformAdmin } = useGatewayPermission()
   const showDetailLink = canLinkToCredentialDetail(selectedSummary, isAdmin, isPlatformAdmin)
 
@@ -65,9 +68,9 @@ export function PlaygroundCredentialField({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NO_CREDENTIAL}>全部凭据</SelectItem>
-          <CredentialGroup label="个人" items={grouped.personal} />
-          <CredentialGroup label="团队" items={grouped.team} />
-          <CredentialGroup label="系统" items={grouped.system} />
+          <CredentialGroup label="个人" items={grouped.personal} teamNameById={teamNameById} />
+          <CredentialGroup label="团队" items={grouped.team} teamNameById={teamNameById} />
+          <CredentialGroup label="系统" items={grouped.system} teamNameById={teamNameById} />
         </SelectContent>
       </Select>
       {isLoading ? (
@@ -86,9 +89,9 @@ export function PlaygroundCredentialField({
       ) : credentialId && selectedSummary ? (
         <p className="text-xs text-muted-foreground">
           已筛选：
-          {showDetailLink && teamId ? (
+          {showDetailLink && detailTeamId ? (
             <Link
-              to={credentialDetailHref(teamId, credentialId)}
+              to={credentialDetailHref(detailTeamId, credentialId)}
               className="ml-1 text-primary underline-offset-4 hover:underline"
             >
               {credentialSummaryLabel(selectedSummary, credentialId)}
@@ -99,7 +102,8 @@ export function PlaygroundCredentialField({
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          可选：先选凭据再缩小模型列表；未选时展示全部可请求模型。
+          可选：先选凭据再缩小模型列表；未选凭据时可使用各团队虚拟 Key，选团队/系统凭据后 Key
+          与模型会切到对应团队。
         </p>
       )}
     </div>
@@ -109,9 +113,11 @@ export function PlaygroundCredentialField({
 function CredentialGroup({
   label,
   items,
+  teamNameById,
 }: Readonly<{
   label: string
   items: PlaygroundCredentialOption[]
+  teamNameById: ReadonlyMap<string, string>
 }>): React.JSX.Element | null {
   if (items.length === 0) return null
   return (
@@ -125,6 +131,9 @@ function CredentialGroup({
               <span className="text-muted-foreground">
                 {' '}
                 · {credentialProviderLabel(item.provider)}
+                {item.scope !== 'user' && item.context_team_id
+                  ? ` · ${teamNameById.get(item.context_team_id) ?? item.context_team_id.slice(0, 8)}`
+                  : ''}
               </span>
             </span>
             <ScopeBadge scope={item.scope} inactive={!item.is_active} />

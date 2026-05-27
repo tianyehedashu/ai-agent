@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { HardDrive, Loader2, Search } from 'lucide-react'
+import { HardDrive, Loader2, Search, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { adminUsersApi, type PlatformRole, type PlatformUserSummary } from '@/api/adminUsers'
@@ -16,19 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { platformRoleLabel } from '@/features/admin-users/platform-user-role-labels'
 import { useToast } from '@/hooks/use-toast'
 
-const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = {
-  admin: '平台管理员',
-  user: '普通用户',
-  viewer: '只读账号',
-}
-
 function roleLabel(role: string): string {
-  if (role in PLATFORM_ROLE_LABELS) {
-    return PLATFORM_ROLE_LABELS[role as PlatformRole]
-  }
-  return role
+  return platformRoleLabel(role)
 }
 
 export function PlatformAdminPanel(): React.JSX.Element {
@@ -197,7 +189,13 @@ export function PlatformAdminPanel(): React.JSX.Element {
           <CardTitle>运维入口</CardTitle>
           <CardDescription>其他仅平台管理员可用的配置</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/admin/users">
+              <Users className="mr-2 h-4 w-4" />
+              用户管理
+            </Link>
+          </Button>
           <Button variant="outline" asChild>
             <Link to="/admin/storage">
               <HardDrive className="mr-2 h-4 w-4" />

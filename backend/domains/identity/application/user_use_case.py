@@ -4,8 +4,12 @@ User Use Case - 用户用例
 编排用户相关的操作，包括注册、认证、Token 管理。
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING
 import uuid
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
@@ -18,8 +22,12 @@ from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_revoke_admin,
     assert_can_change_platform_role,
 )
+from domains.identity.domain.policies.platform_user_admin_policy import (
+    assert_can_admin_manage_user,
+    assert_can_set_user_active,
+)
 from domains.identity.domain.rbac import Role
-from domains.identity.domain.repositories.user_repository import UserRepository
+from domains.identity.domain.repositories.user_repository import UserListFilters, UserRepository
 from domains.identity.domain.services.password_service import PasswordService
 from domains.identity.infrastructure.authentication import get_jwt_strategy
 from domains.identity.infrastructure.default_tenant_lifecycle import (
@@ -27,9 +35,12 @@ from domains.identity.infrastructure.default_tenant_lifecycle import (
 )
 from domains.identity.infrastructure.models.user import User
 from domains.identity.infrastructure.repositories import SQLAlchemyUserRepository
-from libs.exceptions import AuthenticationError, NotFoundError
+from libs.exceptions import AuthenticationError, NotFoundError, ValidationError
 from libs.iam.deps import get_default_tenant_provisioner
 from libs.iam.tenancy import DefaultTenantProvisionerPort
+
+if TYPE_CHECKING:
+    from libs.api.pagination import PageParams, PaginatedListResponse
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +51,12 @@ class UserSummary:
     email: str
     name: str | None
     role: str
+    is_active: bool
+    is_verified: bool
+    status: str
+    created_at: datetime
+    vendor_creator_id: int | None
+    avatar_url: str | None = None
 
 
 def _user_to_summary(user: User) -> UserSummary:
@@ -48,6 +65,12 @@ def _user_to_summary(user: User) -> UserSummary:
         email=user.email,
         name=user.name,
         role=user.role,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        status=user.status,
+        created_at=user.created_at,
+        vendor_creator_id=user.vendor_creator_id,
+        avatar_url=user.avatar_url,
     )
 
 
@@ -157,6 +180,75 @@ class UserUseCase:
         if user is None:
             raise NotFoundError("User", email.strip())
         return _user_to_summary(user)
+
+    async def get_user_summary(self, user_id: str) -> UserSummary:
+        """按 ID 获取平台用户摘要（管理面）。"""
+        user = await self.get_user_by_id_or_raise(user_id)
+        return _user_to_summary(user)
+
+    async def list_users_page(
+        self,
+        page_params: PageParams,
+        filters: UserListFilters,
+    ) -> PaginatedListResponse[UserSummary]:
+        """分页列出平台用户（默认排除 anonymous）。"""
+        from libs.api.pagination import build_page
+
+        total = await self.user_repo.count_filtered(filters)
+        users = await self.user_repo.list_page(
+            offset=page_params.offset,
+            limit=page_params.page_size,
+            filters=filters,
+        )
+        return build_page(
+            items=[_user_to_summary(user) for user in users],
+            total=total,
+            page=page_params.page,
+            page_size=page_params.page_size,
+        )
+
+    async def admin_update_user(
+        self,
+        *,
+        actor_id: str,
+        actor_role: str,
+        target_user_id: str,
+        name: str | None = None,
+        avatar_url: str | None = None,
+        vendor_creator_id: int | None = None,
+        update_vendor_creator_id: bool = False,
+        is_active: bool | None = None,
+    ) -> UserSummary:
+        """平台管理员更新用户资料与启用状态。"""
+        target = await self.get_user_by_id_or_raise(target_user_id)
+        assert_can_admin_manage_user(actor_role=actor_role, target_current_role=target.role)
+
+        if (
+            name is None
+            and avatar_url is None
+            and not update_vendor_creator_id
+            and is_active is None
+        ):
+            raise ValidationError("At least one field must be provided")
+
+        if is_active is not None:
+            assert_can_set_user_active(
+                actor_id=uuid.UUID(actor_id),
+                target_id=uuid.UUID(target_user_id),
+                new_active=is_active,
+            )
+
+        updated = await self.user_repo.update(
+            uuid.UUID(target_user_id),
+            name=name,
+            avatar_url=avatar_url,
+            vendor_creator_id=vendor_creator_id,
+            update_vendor_creator_id=update_vendor_creator_id,
+            is_active=is_active,
+        )
+        if updated is None:
+            raise NotFoundError("User", target_user_id)
+        return _user_to_summary(updated)
 
     async def list_summaries_by_ids(
         self, user_ids: Sequence[uuid.UUID]

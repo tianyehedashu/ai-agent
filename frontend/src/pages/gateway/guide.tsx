@@ -19,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { resolvePlaygroundVirtualKeyTeamIds } from '@/features/gateway-playground/playground-credential-summaries'
 import {
   PLAYGROUND_MODE_LABELS,
   type PlaygroundMode,
@@ -34,6 +35,7 @@ import {
   gatewayTeamRoutesHref,
 } from '@/features/gateway-teams/gateway-team-paths'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
+import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -49,6 +51,7 @@ import {
   buildGuideSnippets,
   type GuideSnippets,
 } from '@/pages/gateway/guide-snippets'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 const PlaygroundCard = lazy(async () => {
   const mod = await import('@/features/gateway-playground/playground-card')
   return { default: mod.PlaygroundCard }
@@ -101,8 +104,7 @@ function buildTroubleshooting(teamId: string | null): readonly TroubleshootingIt
       title: '模型不存在',
       href: modelsHref,
       linkLabel: '模型',
-      description:
-        '核对三点：① 客户端 model 与 Gateway 注册名完全一致；② sk-gw-* 绑定团队与模型所在团队一致（右上角切换器）；③ 模型已启用且凭据可用。平台 sk-* 需带 X-Team-Id 选择已授权团队。',
+      description: '确认 model 注册名、Key 所属团队与模型管理一致，且模型已启用、凭据可用。',
     },
     { code: '429', title: '限流', href: modelsHref, linkLabel: '查看模型配额' },
     { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
@@ -177,7 +179,37 @@ export default function GatewayGuidePage(): React.JSX.Element {
     }),
     [navState?.vkeyPlain, preferKeyId]
   )
-  const virtualKey = usePlaygroundVirtualKey(vkeyBootstrap)
+
+  const playgroundFilteredModels = usePlaygroundFilteredModels({
+    credentialId,
+    includeRoutes: true,
+  })
+  const {
+    credentialById,
+    credentialsLoading,
+    candidateModels: guideModelCandidates,
+    ensureModelNameLoaded,
+    isRefreshing: playgroundModelsRefreshing,
+    refreshAll: refreshPlaygroundModels,
+  } = playgroundFilteredModels
+
+  const workspaceTeamId = useGatewayWorkspaceTeamId()
+  const membershipTeamIds = useGatewayTeamStore((s) => s.teams.map((t) => t.id))
+  const vkeyTeamIds = useMemo(
+    () =>
+      resolvePlaygroundVirtualKeyTeamIds(
+        credentialId,
+        credentialById,
+        workspaceTeamId,
+        membershipTeamIds
+      ),
+    [credentialId, credentialById, workspaceTeamId, membershipTeamIds]
+  )
+
+  const virtualKey = usePlaygroundVirtualKey({
+    bootstrap: vkeyBootstrap,
+    teamIds: vkeyTeamIds,
+  })
   const { plain: revealedKey, isRevealing } = virtualKey
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
@@ -233,20 +265,6 @@ export default function GatewayGuidePage(): React.JSX.Element {
     )
   }, [gatewayV1Base, displayKey, activeModel, playgroundMode])
 
-  const playgroundFilteredModels = usePlaygroundFilteredModels({
-    credentialId,
-    includeRoutes: true,
-  })
-  const {
-    teamId,
-    credentialById,
-    credentialsLoading,
-    candidateModels: guideModelCandidates,
-    ensureModelNameLoaded,
-    isRefreshing: playgroundModelsRefreshing,
-    refreshAll: refreshPlaygroundModels,
-  } = playgroundFilteredModels
-
   const handlePlaygroundRefresh = useCallback((): void => {
     refreshPlaygroundModels()
     virtualKey.refreshKeys()
@@ -271,7 +289,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
         { replace: true }
       )
     }
-  }, [credentialId, credentialById, credentialsLoading, setSearchParams, teamId])
+  }, [credentialId, credentialById, credentialsLoading, setSearchParams])
 
   const activeModelCapabilities = useMemo(() => {
     const name = activeModel || PLACEHOLDER_MODEL
@@ -323,8 +341,8 @@ export default function GatewayGuidePage(): React.JSX.Element {
   }, [apiFlavor, exampleStream])
 
   const activeAnchor = useActiveGuideAnchor()
-  const quickSteps = useMemo(() => buildQuickSteps(teamId), [teamId])
-  const troubleshooting = useMemo(() => buildTroubleshooting(teamId), [teamId])
+  const quickSteps = useMemo(() => buildQuickSteps(workspaceTeamId), [workspaceTeamId])
+  const troubleshooting = useMemo(() => buildTroubleshooting(workspaceTeamId), [workspaceTeamId])
 
   return (
     <div className="w-full">
@@ -480,7 +498,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
                     <p className="text-sm text-muted-foreground">
                       {mediaModeSnippets.hint}
                       <Link
-                        to={gatewayTeamModelsHref(teamId)}
+                        to={gatewayTeamModelsHref(workspaceTeamId)}
                         className="ml-1 text-primary underline-offset-4 hover:underline"
                       >
                         查看模型

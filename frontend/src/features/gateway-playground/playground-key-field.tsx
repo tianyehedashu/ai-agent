@@ -204,8 +204,7 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
   if (selectedKey) {
     return (
       <p id={hintId} className="text-xs text-muted-foreground">
-        绑定团队：{resolveTeamLabelFromMap(teamNameById, selectedKey.team_id)} ·
-        仅可调用该团队已注册模型
+        绑定团队：{resolveTeamLabelFromMap(teamNameById, selectedKey.team_id)}
       </p>
     )
   }

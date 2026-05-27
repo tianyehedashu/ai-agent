@@ -112,8 +112,9 @@ from libs.iam.tenancy import MembershipPort
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-
-
+    from domains.gateway.application.management.playground_credential_reads import (
+        PlaygroundCredentialSummaryItem,
+    )
 class GatewayManagementReadService(GatewayUsageLogReadMixin):
     """管理 API 只读用例，经仓储访问数据"""
 
@@ -267,6 +268,24 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
     ) -> list[CredentialReadModel]:
         rows = await self._creds.list_for_user(user_id)
         return [credential_from_orm(c, encryption_key=encryption_key) for c in rows]
+
+    async def list_playground_credential_summaries_for_actor(
+        self,
+        user_id: UUID,
+        *,
+        is_platform_admin: bool = False,
+    ) -> list[PlaygroundCredentialSummaryItem]:
+        """Playground / 调用指南：跨 membership 聚合凭据摘要（含 context_team_id）。"""
+        from domains.gateway.application.management.playground_credential_reads import (
+            list_playground_credential_summaries_for_actor,
+        )
+
+        return await list_playground_credential_summaries_for_actor(
+            self._session,
+            self,
+            user_id=user_id,
+            is_platform_admin=is_platform_admin,
+        )
 
     async def list_personal_gateway_models(
         self,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CredentialSummary, ProviderCredential } from '@/api/gateway'
+import type { PlaygroundCredentialSummary } from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway/models'
 import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 
@@ -8,106 +8,129 @@ import {
   filterPlaygroundCredentialOptions,
   groupPlaygroundCredentialOptions,
   isPersonalPlaygroundCredential,
-  mergePlaygroundCredentialOptions,
-  personalCredentialToSummary,
+  isPlaygroundCredentialSelectable,
+  resolvePlaygroundContextTeamId,
 } from './playground-credential-options'
 import { buildPlaygroundCandidateModels } from './playground-model-sources'
 
-const teamSummary: CredentialSummary = {
+const teamSummary: PlaygroundCredentialSummary = {
   id: 'cred-team',
   provider: 'openai',
   name: 'Team OpenAI',
   scope: 'team',
   is_active: true,
   is_config_managed: false,
+  context_team_id: 'team-a',
 }
 
-const inactiveTeamSummary: CredentialSummary = {
+const inactiveTeamSummary: PlaygroundCredentialSummary = {
   ...teamSummary,
   id: 'cred-team-off',
   name: 'Team Off',
   is_active: false,
 }
 
-const systemSummary: CredentialSummary = {
+const systemSummary: PlaygroundCredentialSummary = {
   id: 'cred-sys',
   provider: 'anthropic',
   name: 'Platform Anthropic',
   scope: 'system',
   is_active: true,
   is_config_managed: true,
+  context_team_id: 'team-personal',
 }
 
-const personalCredential: ProviderCredential = {
+const personalSummary: PlaygroundCredentialSummary = {
   id: 'cred-user',
-  tenant_id: null,
-  scope: 'user',
-  scope_id: 'user-1',
   provider: 'openai',
   name: 'My OpenAI',
-  api_base: null,
+  scope: 'user',
   is_active: true,
-  extra: null,
-  created_at: '2026-01-01T00:00:00Z',
-  api_key_masked: 'sk-***',
+  is_config_managed: false,
+  context_team_id: 'team-personal',
 }
 
-describe('mergePlaygroundCredentialOptions', () => {
-  it('merges team summaries and personal credentials without duplicate ids', () => {
-    const merged = mergePlaygroundCredentialOptions(
-      [teamSummary, systemSummary],
-      [personalCredential]
-    )
-    expect(merged).toHaveLength(3)
-    expect(merged.map((c) => c.id).sort()).toEqual(['cred-sys', 'cred-team', 'cred-user'])
+describe('isPlaygroundCredentialSelectable', () => {
+  const membership = new Set(['team-a', 'team-personal'])
+
+  it('allows active user and in-membership team/system credentials', () => {
+    expect(isPlaygroundCredentialSelectable(personalSummary, membership)).toBe(true)
+    expect(isPlaygroundCredentialSelectable(teamSummary, membership)).toBe(true)
+    expect(isPlaygroundCredentialSelectable(systemSummary, membership)).toBe(true)
   })
 
-  it('maps personal credential to user scope summary', () => {
-    expect(personalCredentialToSummary(personalCredential).scope).toBe('user')
+  it('rejects inactive and out-of-membership team credentials', () => {
+    expect(isPlaygroundCredentialSelectable(inactiveTeamSummary, membership)).toBe(false)
+    expect(
+      isPlaygroundCredentialSelectable(
+        { ...teamSummary, id: 'foreign', context_team_id: 'team-foreign' },
+        membership
+      )
+    ).toBe(false)
   })
 })
 
 describe('filterPlaygroundCredentialOptions', () => {
-  it('keeps active credentials only by default', () => {
-    const filtered = filterPlaygroundCredentialOptions([teamSummary, inactiveTeamSummary], '')
+  const membership = new Set(['team-a', 'team-personal'])
+
+  it('keeps active credentials in membership only', () => {
+    const outOfMembership: PlaygroundCredentialSummary = {
+      ...teamSummary,
+      id: 'cred-other-team',
+      context_team_id: 'team-foreign',
+    }
+    const filtered = filterPlaygroundCredentialOptions(
+      [teamSummary, inactiveTeamSummary, outOfMembership],
+      membership
+    )
     expect(filtered.map((c) => c.id)).toEqual(['cred-team'])
   })
 
-  it('retains selected inactive credential', () => {
+  it('excludes inactive credentials even when previously selected', () => {
     const filtered = filterPlaygroundCredentialOptions(
       [teamSummary, inactiveTeamSummary],
-      inactiveTeamSummary.id
+      membership
     )
-    expect(filtered.map((c) => c.id).sort()).toEqual(['cred-team', 'cred-team-off'])
+    expect(filtered.map((c) => c.id)).toEqual(['cred-team'])
   })
 })
 
 describe('groupPlaygroundCredentialOptions', () => {
   it('groups by scope and sorts by name', () => {
-    const grouped = groupPlaygroundCredentialOptions([
-      systemSummary,
-      teamSummary,
-      personalCredentialToSummary(personalCredential),
-    ])
+    const grouped = groupPlaygroundCredentialOptions([systemSummary, teamSummary, personalSummary])
     expect(grouped.personal.map((c) => c.id)).toEqual(['cred-user'])
     expect(grouped.team.map((c) => c.id)).toEqual(['cred-team'])
     expect(grouped.system.map((c) => c.id)).toEqual(['cred-sys'])
   })
 })
 
-describe('isPersonalPlaygroundCredential', () => {
-  it('detects user-scope credential', () => {
-    const byId = new Map(
-      mergePlaygroundCredentialOptions([], [personalCredential]).map((c) => [c.id, c])
-    )
-    expect(isPersonalPlaygroundCredential(byId, 'cred-user')).toBe(true)
-    expect(isPersonalPlaygroundCredential(byId, 'cred-team')).toBe(false)
+describe('resolvePlaygroundContextTeamId', () => {
+  const byId = new Map([
+    [teamSummary.id, teamSummary],
+    [personalSummary.id, personalSummary],
+    [systemSummary.id, systemSummary],
+  ])
+
+  it('uses workspace team when no credential selected', () => {
+    expect(resolvePlaygroundContextTeamId('', byId, 'team-personal')).toBe('team-personal')
   })
 
-  it('accepts credential map lookup', () => {
-    const byId = new Map(
-      mergePlaygroundCredentialOptions([teamSummary], [personalCredential]).map((c) => [c.id, c])
-    )
+  it('uses credential context for team/system credentials', () => {
+    expect(resolvePlaygroundContextTeamId('cred-team', byId, 'team-personal')).toBe('team-a')
+    expect(resolvePlaygroundContextTeamId('cred-sys', byId, 'team-personal')).toBe('team-personal')
+  })
+
+  it('uses workspace team for personal credential', () => {
+    expect(resolvePlaygroundContextTeamId('cred-user', byId, 'team-personal')).toBe('team-personal')
+  })
+})
+
+describe('isPersonalPlaygroundCredential', () => {
+  it('detects user-scope credential', () => {
+    const byId = new Map([
+      [personalSummary.id, personalSummary],
+      [teamSummary.id, teamSummary],
+    ])
     expect(isPersonalPlaygroundCredential(byId, 'cred-user')).toBe(true)
     expect(isPersonalPlaygroundCredential(byId, 'cred-team')).toBe(false)
   })

@@ -92,7 +92,7 @@ export function PlaygroundCard({
   onPlaygroundModeChange,
   virtualKey,
   filteredModels: {
-    teamId,
+    contextTeamId,
     credentialGroups,
     credentialById,
     candidateModels,
@@ -542,7 +542,7 @@ export function PlaygroundCard({
               userEdited={keyFieldUserEdited}
               onSelectKey={handleSelectKey}
               onUserEditedReset={handleUserEditedReset}
-              teamId={teamId}
+              teamId={selectedKey?.team_id ?? contextTeamId}
             />
             <PlaygroundCredentialField
               credentialSelectId={credentialSelectId}

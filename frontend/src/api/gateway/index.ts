@@ -47,6 +47,7 @@ export type {
 
 export type {
   CredentialSummary,
+  PlaygroundCredentialSummary,
   ProviderCredential,
   ProviderCredentialCreateBody,
   MyCredentialCreateBody,

@@ -7,11 +7,34 @@ SQLAlchemy User Repository - 用户仓储实现
 from collections.abc import Sequence
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
-from domains.identity.domain.repositories.user_repository import UserRepository
+from domains.identity.domain.repositories.user_repository import UserListFilters, UserRepository
 from domains.identity.infrastructure.models.user import User
+
+ANONYMOUS_ROLE = "anonymous"
+
+
+def _apply_user_list_filters(stmt: Select[tuple[User]], filters: UserListFilters) -> Select[tuple[User]]:
+    if filters.exclude_anonymous:
+        stmt = stmt.where(User.role != ANONYMOUS_ROLE)
+    if filters.role is not None:
+        stmt = stmt.where(User.role == filters.role)
+    if filters.is_active is not None:
+        stmt = stmt.where(User.is_active == filters.is_active)
+    if filters.search:
+        needle = filters.search.strip().lower()
+        if needle:
+            pattern = f"%{needle}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(User.email).like(pattern),
+                    func.lower(User.name).like(pattern),
+                )
+            )
+    return stmt
 
 
 class SQLAlchemyUserRepository(UserRepository):
@@ -73,7 +96,10 @@ class SQLAlchemyUserRepository(UserRepository):
         avatar_url: str | None = None,
         hashed_password: str | None = None,
         vendor_creator_id: int | None = None,
+        *,
+        update_vendor_creator_id: bool = False,
         role: str | None = None,
+        is_active: bool | None = None,
     ) -> User | None:
         """更新用户"""
         user = await self.get_by_id(user_id)
@@ -86,14 +112,35 @@ class SQLAlchemyUserRepository(UserRepository):
             user.avatar_url = avatar_url
         if hashed_password is not None:
             user.hashed_password = hashed_password
-        if vendor_creator_id is not None:
+        if update_vendor_creator_id:
             user.vendor_creator_id = vendor_creator_id
         if role is not None:
             user.role = role
+        if is_active is not None:
+            user.is_active = is_active
 
         await self.db.flush()
         await self.db.refresh(user)
         return user
+
+    async def list_page(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        filters: UserListFilters,
+    ) -> list[User]:
+        """分页列出用户（按 created_at 降序）。"""
+        stmt = _apply_user_list_filters(select(User), filters)
+        stmt = stmt.order_by(User.created_at.desc()).offset(offset).limit(limit)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_filtered(self, filters: UserListFilters) -> int:
+        """统计符合筛选条件的用户数。"""
+        stmt = _apply_user_list_filters(select(func.count(User.id)), filters)
+        result = await self.db.execute(stmt)
+        return result.scalar() or 0
 
     async def count_all(self) -> int:
         """统计用户总数"""

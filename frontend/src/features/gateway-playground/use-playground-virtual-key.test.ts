@@ -5,7 +5,7 @@
 import React, { act } from 'react'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor, type RenderHookResult } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { VirtualKey } from '@/api/gateway'
@@ -20,33 +20,30 @@ import {
 
 import { usePlaygroundVirtualKey } from './use-playground-virtual-key'
 
+import type { UsePlaygroundVirtualKeyReturn } from './use-playground-virtual-key'
+
 const listKeysMock = vi.fn((): Promise<VirtualKey[]> => Promise.resolve([]))
 const revealKeyMock = vi.fn(
-  (_id: string): Promise<{ plain_key: string }> =>
+  (_teamId: string, _id: string): Promise<{ plain_key: string }> =>
     Promise.reject(new Error('revealKeyMock not configured'))
 )
 
 vi.mock('@/api/gateway', () => ({
   gatewayApi: {
     listKeys: (_teamId: string) => listKeysMock(),
-    revealKey: (_teamId: string, id: string) => revealKeyMock(id),
+    revealKey: (teamId: string, id: string) => revealKeyMock(teamId, id),
   },
-}))
-
-vi.mock('@/stores/gateway-team', () => ({
-  getCurrentTeamId: () => 'team-test',
-  useGatewayTeamStore: (selector: (s: { currentTeamId: string }) => unknown) =>
-    selector({ currentTeamId: 'team-test' }),
 }))
 
 const STORAGE_KEY_V1 = LEGACY_STORAGE_KEYS[0]
 const STORAGE_KEY_V2 = LEGACY_STORAGE_KEYS[1]
+const PLAYGROUND_TEAM = 'team-test'
 
 function makeVKey(id: string, name = 'k', overrides: Partial<VirtualKey> = {}): VirtualKey {
   return {
     id,
-    tenant_id: overrides.tenant_id ?? overrides.team_id ?? 't',
-    team_id: overrides.team_id ?? 't',
+    tenant_id: overrides.tenant_id ?? overrides.team_id ?? PLAYGROUND_TEAM,
+    team_id: overrides.team_id ?? PLAYGROUND_TEAM,
     name,
     masked_key: `sk-gw-***${id.slice(-4)}`,
     allowed_models: [],
@@ -70,6 +67,19 @@ function wrapper(): React.FC<{ children: React.ReactNode }> {
   return ({ children }) => React.createElement(QueryClientProvider, { client: qc }, children)
 }
 
+function renderVirtualKeyHook(
+  options?: Parameters<typeof usePlaygroundVirtualKey>[0]
+): RenderHookResult<UsePlaygroundVirtualKeyReturn, unknown> {
+  return renderHook(
+    () =>
+      usePlaygroundVirtualKey({
+        teamId: PLAYGROUND_TEAM,
+        ...options,
+      }),
+    { wrapper: wrapper() }
+  )
+}
+
 beforeEach(() => {
   window.localStorage.clear()
   resetPlaygroundVkeyLegacyMigration()
@@ -88,7 +98,7 @@ describe('usePlaygroundVirtualKey', () => {
     ])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-PLAIN-K1' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(result.current.keys.map((k) => k.id)).toEqual(['k1'])
@@ -99,7 +109,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-FIRST' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(result.current.selectedKeyId).toBe('k1')
@@ -107,15 +117,17 @@ describe('usePlaygroundVirtualKey', () => {
     await waitFor(() => {
       expect(result.current.plain).toBe('sk-gw-FIRST')
     })
-    expect(revealKeyMock).toHaveBeenCalledWith('k1')
+    expect(revealKeyMock).toHaveBeenCalledWith(PLAYGROUND_TEAM, 'k1')
     expect(readPersistedPlaygroundVkeySelection()).toBe('k1')
   })
 
   test('selectKey 切换：reveal 新 Key 明文,持久化 id', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
-    revealKeyMock.mockImplementation((id: string) => Promise.resolve({ plain_key: `plain-${id}` }))
+    revealKeyMock.mockImplementation((_teamId: string, id: string) =>
+      Promise.resolve({ plain_key: `plain-${id}` })
+    )
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(result.current.plain).toBe('plain-k1')
@@ -136,7 +148,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('k1')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K1' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
     await waitFor(() => {
       expect(result.current.plain).toBe('sk-gw-K1')
     })
@@ -155,7 +167,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('alive')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-ALIVE' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(result.current.selectedKeyId).toBe('alive')
@@ -169,38 +181,33 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('k1'), makeVKey('k2')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K2' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ preferKeyId: 'k2' }), {
-      wrapper: wrapper(),
-    })
+    const { result } = renderVirtualKeyHook({ bootstrap: { preferKeyId: 'k2' } })
 
     await waitFor(() => {
       expect(result.current.selectedKeyId).toBe('k2')
     })
-    expect(revealKeyMock).toHaveBeenCalledWith('k2')
+    expect(revealKeyMock).toHaveBeenCalledWith(PLAYGROUND_TEAM, 'k2')
   })
 
   test('preferKeyId 不在列表时不强行选中', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-K1' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey({ preferKeyId: 'missing' }), {
-      wrapper: wrapper(),
-    })
+    const { result } = renderVirtualKeyHook({ bootstrap: { preferKeyId: 'missing' } })
 
     await waitFor(() => {
       expect(result.current.selectedKeyId).toBe('k1')
     })
-    expect(revealKeyMock).toHaveBeenCalledWith('k1')
+    expect(revealKeyMock).toHaveBeenCalledWith(PLAYGROUND_TEAM, 'k1')
   })
 
   test('bootstrap 命中时跳过 reveal 并直接返回明文', async () => {
     listKeysMock.mockResolvedValue([makeVKey('k1')])
     revealKeyMock.mockResolvedValue({ plain_key: 'should-not-call' })
 
-    const { result } = renderHook(
-      () => usePlaygroundVirtualKey({ plain: 'sk-gw-BOOT', keyId: 'k1' }),
-      { wrapper: wrapper() }
-    )
+    const { result } = renderVirtualKeyHook({
+      bootstrap: { plain: 'sk-gw-BOOT', keyId: 'k1' },
+    })
 
     await waitFor(() => {
       expect(result.current.plain).toBe('sk-gw-BOOT')
@@ -213,7 +220,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('k1')])
     revealKeyMock.mockRejectedValue(new Error('400 decrypt failed'))
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(result.current.revealError?.message).toBe('400 decrypt failed')
@@ -235,7 +242,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('m1', 'migrated'), makeVKey('m2')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-FROM-SERVER' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(window.localStorage.getItem(STORAGE_KEY_V2)).toBeNull()
@@ -250,7 +257,7 @@ describe('usePlaygroundVirtualKey', () => {
     await waitFor(() => {
       expect(result.current.plain).toBe('sk-gw-FROM-SERVER')
     })
-    expect(revealKeyMock).toHaveBeenCalledWith('m1')
+    expect(revealKeyMock).toHaveBeenCalledWith(PLAYGROUND_TEAM, 'm1')
   })
 
   test('迁移 v1 单把缓存', async () => {
@@ -261,7 +268,7 @@ describe('usePlaygroundVirtualKey', () => {
     listKeysMock.mockResolvedValue([makeVKey('legacy')])
     revealKeyMock.mockResolvedValue({ plain_key: 'sk-gw-LEGACY' })
 
-    const { result } = renderHook(() => usePlaygroundVirtualKey(), { wrapper: wrapper() })
+    const { result } = renderVirtualKeyHook()
 
     await waitFor(() => {
       expect(window.localStorage.getItem(STORAGE_KEY_V1)).toBeNull()

@@ -28,6 +28,11 @@ export interface CredentialSummary {
   is_config_managed: boolean
 }
 
+/** Playground 聚合凭据摘要：含解析模型/Key 所需的团队上下文 */
+export interface PlaygroundCredentialSummary extends CredentialSummary {
+  context_team_id: string | null
+}
+
 export interface CredentialApiBases {
   openai_compat?: string | null
   anthropic_native?: string | null
@@ -221,6 +226,11 @@ export const credentialsApi = {
   /** 凭据摘要目录（含 system；团队 member 可读，无密钥字段） */
   listCredentialSummaries: (teamId: string) =>
     apiClient.get<CredentialSummary[]>(teamGatewayPath(teamId, '/credentials/summaries')),
+  /** Playground / 调用指南：跨 membership 聚合个人 + 团队 + 系统凭据摘要 */
+  listPlaygroundCredentialSummaries: () =>
+    apiClient.get<PlaygroundCredentialSummary[]>(
+      `${GATEWAY_API_BASE}/playground/credential-summaries`
+    ),
   /** 获取单条团队/系统凭据详情 */
   getCredential: async (teamId: string, id: string) => {
     const row = await apiClient.get<ProviderCredentialWire>(

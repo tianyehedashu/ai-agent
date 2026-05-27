@@ -22,6 +22,11 @@ class _StubUserUseCase:
                 email="member@example.com",
                 name="Member Name",
                 role="user",
+                is_active=True,
+                is_verified=True,
+                status="active",
+                created_at=datetime.now(UTC),
+                vendor_creator_id=None,
             )
         }
 

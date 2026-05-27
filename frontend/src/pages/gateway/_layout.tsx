@@ -8,9 +8,6 @@ import type React from 'react'
 
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
-import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
-import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
-import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import {
@@ -28,8 +25,6 @@ import {
   Users,
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useGatewayTeamStore } from '@/stores/gateway-team'
-import { useUserStore } from '@/stores/user'
 
 type GatewayNavMatch =
   | 'credentials-default'
@@ -107,23 +102,7 @@ function corruptedFlatGatewayPath(pathname: string): string | null {
 
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin, isAdmin } = useGatewayPermission()
-  const currentTeam = useGatewayTeamStore((s) => s.current())
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
-  const isAnonymous = useUserStore((s) => s.currentUser?.is_anonymous ?? true)
-  const {
-    data: memberTeams,
-    isFetching: memberTeamsFetching,
-    refetch: refetchMemberTeams,
-  } = useGatewayMemberTeams(!isAnonymous)
-  // 侧栏链接须用路由 teamId：store.current() 在 teams 列表未加载时返回 null，
-  // 会退化为 /gateway 并触发 NavLink 前缀匹配，导致多项同时高亮。
   const teamId = useResolvedGatewayTeamId()
-  const sidebarTeamLabel = useMemo(() => {
-    const fromApi = memberTeams?.find((t) => t.id === teamId)
-    if (fromApi) return gatewayTeamDisplayLabel(fromApi, { viewerUserId })
-    if (currentTeam?.kind === 'personal') return '个人工作区'
-    return currentTeam?.name ?? null
-  }, [memberTeams, teamId, viewerUserId, currentTeam])
   const location = useLocation()
   const navigate = useNavigate()
   const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
@@ -195,22 +174,6 @@ export default function GatewayLayout(): React.JSX.Element {
           <Server className="h-4 w-4 shrink-0 text-primary" />
           AI Gateway
         </div>
-        {!isAnonymous ? (
-          <div className="mb-2 flex items-center gap-1 px-2">
-            <div
-              className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-              title={sidebarTeamLabel ?? undefined}
-            >
-              {sidebarTeamLabel ?? '当前团队'}
-            </div>
-            <GatewayRefreshButton
-              isFetching={memberTeamsFetching}
-              ariaLabel="刷新团队列表"
-              className="h-7 w-7 shrink-0"
-              onRefresh={() => refetchMemberTeams()}
-            />
-          </div>
-        ) : null}
         <nav className="flex flex-col gap-1">
           {items.map((it) => {
             const customActive =

@@ -5,7 +5,6 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
@@ -21,7 +20,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { CreateKeyDialog, type CreateKeyValues } from '@/features/gateway-keys/create-key-dialog'
@@ -34,14 +32,13 @@ import {
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
-import { GatewayTeamScopeBanner } from '@/features/gateway-teams/gateway-team-scope-banner'
 import {
   useGatewayMemberTeamNameMap,
   useGatewayMemberTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
-import { ChevronDown, Plus, Trash2 } from '@/lib/lucide-icons'
+import { Plus, Trash2 } from '@/lib/lucide-icons'
 import { useUserStore } from '@/stores/user'
 
 export interface GatewayKeysWorkspaceProps {
@@ -266,7 +263,7 @@ export function GatewayKeysWorkspace({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 space-y-2">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-semibold tracking-tight">虚拟 Key</h2>
               <Badge
@@ -277,29 +274,6 @@ export function GatewayKeysWorkspace({
                 {teamDisplayName}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">
-              <span className="font-mono text-foreground/90">sk-gw-*</span> 仅用于 OpenAI /
-              Anthropic 兼容 <span className="font-mono">/v1/*</span>；创建时绑定当前团队。
-            </p>
-            <Collapsible>
-              <CollapsibleTrigger className="flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-                平台 sk-* 与虚拟 Key 的区别
-                <ChevronDown className="h-3.5 w-3.5" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                若需使用平台 <span className="font-mono">sk-*</span> 并复用其他 API 能力，请到{' '}
-                <Link
-                  to="/settings?tab=api"
-                  className="font-medium text-primary underline underline-offset-2"
-                >
-                  设置 → API 密钥
-                </Link>{' '}
-                创建带 <span className="font-mono">gateway:proxy</span> 作用域的 Key，并在请求头传入{' '}
-                <span className="font-mono">X-Team-Id</span>{' '}
-                选择已授权团队。共享团队对外调用仍建议使用本页的{' '}
-                <span className="font-mono">sk-gw-*</span>。
-              </CollapsibleContent>
-            </Collapsible>
           </div>
           <div className="flex items-center gap-2">
             <GatewayRefreshButton
@@ -310,8 +284,6 @@ export function GatewayKeysWorkspace({
             {createButton}
           </div>
         </div>
-
-        <GatewayTeamScopeBanner teamId={teamId} variant="keys" />
 
         {canManageKeys && selectedIds.size > 0 ? (
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-2">

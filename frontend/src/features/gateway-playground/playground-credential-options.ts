@@ -1,47 +1,41 @@
 /**
- * 调用指南 / Playground 凭据下拉：团队 summaries + 个人 my-credentials，按数据权限合并。
+ * Playground / 调用指南凭据下拉：后端聚合个人 + 各团队 + 系统凭据。
  */
 
 import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { gatewayApi, type CredentialSummary, type ProviderCredential } from '@/api/gateway'
-import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
+import type { PlaygroundCredentialSummary } from '@/api/gateway'
+import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamStore } from '@/stores/gateway-team'
 
-export type PlaygroundCredentialOption = CredentialSummary
+import { fetchPlaygroundCredentialSummaries } from './playground-credential-summaries'
 
-export function personalCredentialToSummary(c: ProviderCredential): PlaygroundCredentialOption {
-  return {
-    id: c.id,
-    provider: c.provider,
-    name: c.name,
-    scope: 'user',
-    is_active: c.is_active,
-    is_config_managed: c.is_config_managed ?? false,
-  }
+export type PlaygroundCredentialOption = PlaygroundCredentialSummary
+
+export const PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY = [
+  'gateway',
+  'playground',
+  'credential-summaries',
+] as const
+
+/** 调用指南可选凭据：membership 内且已启用（与 backend playground_credential_reads 语义一致） */
+export function isPlaygroundCredentialSelectable(
+  c: PlaygroundCredentialOption,
+  membershipTeamIds: ReadonlySet<string>
+): boolean {
+  if (!c.is_active) return false
+  if (c.scope === 'user') return true
+  const teamId = c.context_team_id
+  return Boolean(teamId && membershipTeamIds.has(teamId))
 }
 
-export function mergePlaygroundCredentialOptions(
-  teamSummaries: readonly CredentialSummary[],
-  personalCredentials: readonly ProviderCredential[]
-): PlaygroundCredentialOption[] {
-  const byId = new Map<string, PlaygroundCredentialOption>()
-  for (const c of teamSummaries) {
-    byId.set(c.id, c)
-  }
-  for (const c of personalCredentials) {
-    byId.set(c.id, personalCredentialToSummary(c))
-  }
-  return Array.from(byId.values())
-}
-
-/** 仅展示启用凭据；当前已选但已停用的项仍保留（与模型页一致） */
 export function filterPlaygroundCredentialOptions(
   options: readonly PlaygroundCredentialOption[],
-  selectedCredentialId: string
+  membershipTeamIds: ReadonlySet<string>
 ): PlaygroundCredentialOption[] {
-  return options.filter((c) => c.is_active || c.id === selectedCredentialId)
+  return options.filter((c) => isPlaygroundCredentialSelectable(c, membershipTeamIds))
 }
 
 export interface PlaygroundCredentialGroups {
@@ -77,39 +71,45 @@ export function isPersonalPlaygroundCredential(
   return byId.get(credentialId)?.scope === 'user'
 }
 
+/** 解析模型/Key 请求所用的 teamId */
+export function resolvePlaygroundContextTeamId(
+  credentialId: string,
+  byId: ReadonlyMap<string, PlaygroundCredentialOption>,
+  workspaceTeamId: string | null
+): string | null {
+  if (!credentialId) return workspaceTeamId
+  const cred = byId.get(credentialId)
+  if (!cred || cred.scope === 'user') return workspaceTeamId
+  return cred.context_team_id ?? workspaceTeamId
+}
+
 export interface UsePlaygroundCredentialOptionsReturn {
   grouped: PlaygroundCredentialGroups
   byId: Map<string, PlaygroundCredentialOption>
+  workspaceTeamId: string | null
   isLoading: boolean
   isFetching: boolean
   isEmpty: boolean
 }
 
-export function usePlaygroundCredentialOptions(
-  selectedCredentialId: string
-): UsePlaygroundCredentialOptionsReturn {
+export function usePlaygroundCredentialOptions(): UsePlaygroundCredentialOptionsReturn {
+  const workspaceTeamId = useGatewayWorkspaceTeamId()
+  const teams = useGatewayTeamStore((s) => s.teams)
   const {
-    list: teamSummaries,
-    isLoading: teamLoading,
-    isFetching: teamFetching,
-  } = useGatewayCredentialDirectory()
-  const {
-    data: personalCredentials = [],
-    isLoading: personalLoading,
-    isFetching: personalFetching,
+    data: allOptions = [],
+    isLoading,
+    isFetching,
   } = useQuery({
-    queryKey: ['gateway', 'my-credentials'],
-    queryFn: () => gatewayApi.listMyCredentials(),
+    queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY, teams.map((t) => t.id).join(',')],
+    queryFn: () => fetchPlaygroundCredentialSummaries(teams),
+    enabled: teams.length > 0,
   })
 
-  const allOptions = useMemo(
-    () => mergePlaygroundCredentialOptions(teamSummaries, personalCredentials),
-    [teamSummaries, personalCredentials]
-  )
+  const membershipTeamIds = useMemo(() => new Set(teams.map((t) => t.id)), [teams])
 
   const selectableOptions = useMemo(
-    () => filterPlaygroundCredentialOptions(allOptions, selectedCredentialId),
-    [allOptions, selectedCredentialId]
+    () => filterPlaygroundCredentialOptions(allOptions, membershipTeamIds),
+    [allOptions, membershipTeamIds]
   )
 
   const grouped = useMemo(
@@ -117,13 +117,14 @@ export function usePlaygroundCredentialOptions(
     [selectableOptions]
   )
 
-  const byId = useMemo(() => new Map(allOptions.map((c) => [c.id, c])), [allOptions])
+  const byId = useMemo(() => new Map(selectableOptions.map((c) => [c.id, c])), [selectableOptions])
 
   return {
     grouped,
     byId,
-    isLoading: teamLoading || personalLoading,
-    isFetching: teamFetching || personalFetching,
+    workspaceTeamId,
+    isLoading,
+    isFetching,
     isEmpty: selectableOptions.length === 0,
   }
 }

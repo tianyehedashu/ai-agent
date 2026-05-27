@@ -19,6 +19,7 @@ import {
   Package,
   HardDrive,
   Network,
+  Users,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
@@ -76,6 +77,13 @@ const navigation: NavItem[] = [
   },
   { name: '视频', href: '/video-tasks', icon: Video },
   { name: 'Listing 创作', href: '/listing-studio', icon: Package },
+  {
+    name: '用户管理',
+    href: '/admin/users',
+    icon: Users,
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
   {
     name: '对象存储',
     href: '/admin/storage',

@@ -3,14 +3,14 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi, type MyPriceRow } from '@/api/gateway'
-import { getCurrentTeamId } from '@/stores/gateway-team'
+import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import type { DisplayCurrency } from '@/types/money'
 
 export function useGatewayModelPrices(currency: DisplayCurrency): {
   byName: Map<string, MyPriceRow>
   isLoading: boolean
 } {
-  const teamId = getCurrentTeamId()
+  const teamId = useResolvedGatewayTeamId()
   const { data, isLoading } = useQuery({
     queryKey: ['gateway-pricing-my', teamId, currency],
     queryFn: () => {

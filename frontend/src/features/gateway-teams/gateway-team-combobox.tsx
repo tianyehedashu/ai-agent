@@ -25,6 +25,7 @@ export interface GatewayTeamComboboxProps {
   disabled?: boolean
   placeholder?: string
   className?: string
+  popoverContentClassName?: string
   id?: string
 }
 
@@ -35,6 +36,7 @@ export function GatewayTeamCombobox({
   disabled = false,
   placeholder = '选择团队',
   className,
+  popoverContentClassName,
   id,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -65,7 +67,12 @@ export function GatewayTeamCombobox({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className={cn('w-[var(--radix-popover-trigger-width)] p-0', popoverContentClassName)}
+        align="start"
+        side="bottom"
+        collisionPadding={8}
+      >
         <Command>
           <CommandInput placeholder="搜索团队..." />
           <CommandList>

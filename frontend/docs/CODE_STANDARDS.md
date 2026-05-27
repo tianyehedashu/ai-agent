@@ -54,6 +54,12 @@ function process(data: unknown): User {
 
 路径别名：`@/*` 映射 `src/`；`@/features/*` 显式映射 `src/features/*`（见根目录 `tsconfig.json`）。业务组件优先 `@/features/...`，避免在 `pages/settings/components` 重复实现已迁入 Gateway 的凭据/模型 UI。
 
+## AI Gateway UI
+
+- 个人/团队凭据与模型、虚拟 Key、路由、预算等页面在 **`/gateway/*`** 与 `src/features/gateway-*`；设置页仅保留账户与平台 API Key。
+- **产品说明不进 Banner**：虚拟 Key vs 平台 Key、`X-Team-Id`、模型注册与团队绑定等规则写在 [DEVELOPMENT.md](./DEVELOPMENT.md)（AI Gateway 控制台一节）与后端 Gateway 文档，页面只保留标题、团队徽章、表单字段（如创建时的「绑定团队」）与必要操作提示。
+- 团队上下文 SSOT：URL `/gateway/teams/:teamId/*`；`stores/gateway-team.ts` 仅缓存 membership 列表；扁平路由回退 personal team（`useGatewayWorkspaceTeamId`）。
+
 ## 列表 API 与分页
 
 **真源**：[docs/PAGINATION.md](../../docs/PAGINATION.md)（跨前后端 envelope、分层与 code-check 清单）。

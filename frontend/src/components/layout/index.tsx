@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 
 import { useLocation } from 'react-router-dom'
 
+import { useHydrateGatewayTeamStore } from '@/features/gateway-teams/use-hydrate-gateway-team-store'
 import { installOverlayPointerGuard } from '@/lib/ui-overlay/overlay-pointer-guard'
 import { teardownAllOverlayScopes } from '@/lib/ui-overlay/teardown-overlay-scope'
 
@@ -14,6 +15,8 @@ interface LayoutProps {
 
 export default function Layout({ children }: Readonly<LayoutProps>): React.JSX.Element {
   const { pathname } = useLocation()
+
+  useHydrateGatewayTeamStore()
 
   useEffect(() => {
     teardownAllOverlayScopes()

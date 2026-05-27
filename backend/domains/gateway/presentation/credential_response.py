@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from binascii import Error as BinasciiError
+import uuid
 
 from cryptography.fernet import InvalidToken
 
@@ -19,6 +20,7 @@ from domains.gateway.presentation.schemas.common import (
     CredentialApiBasesBody,
     CredentialResponse,
     CredentialSummaryResponse,
+    PlaygroundCredentialSummaryResponse,
 )
 from libs.crypto import decrypt_value
 from utils.logging import get_logger
@@ -154,9 +156,22 @@ def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSu
     )
 
 
+def build_playground_credential_summary_response(
+    cred: CredentialReadModel,
+    *,
+    context_team_id: uuid.UUID | None,
+) -> PlaygroundCredentialSummaryResponse:
+    """Playground 凭据摘要（含 context_team_id）。"""
+    return PlaygroundCredentialSummaryResponse(
+        **build_credential_summary_response(cred).model_dump(),
+        context_team_id=context_team_id,
+    )
+
+
 __all__ = [
     "build_credential_response",
     "build_credential_summary_response",
+    "build_playground_credential_summary_response",
     "credential_api_bases_from_body",
     "credential_api_bases_response",
     "decrypt_credential_api_key_for_reveal",

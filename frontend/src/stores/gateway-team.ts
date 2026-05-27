@@ -1,10 +1,8 @@
 /**
  * Gateway Team Store
  *
- * 管理当前选中的 AI Gateway 团队上下文。
- * - 持久化到 localStorage
- * - 与 Gateway 路由 `:teamId` 同步；Chat 请求体携带 `gateway_team_id`
- * - 切换 team 时调用方应该 invalidate ['gateway'] 相关查询
+ * 缓存 membership 团队列表（供标签解析、personal 工作区回退等）。
+ * 团队上下文 SSOT 为 URL `/gateway/teams/:teamId/*`；扁平路由用 personal team。
  */
 
 import { create } from 'zustand'
@@ -20,52 +18,27 @@ export interface GatewayTeam {
 
 interface GatewayTeamState {
   teams: GatewayTeam[]
-  currentTeamId: string | null
   setTeams: (teams: GatewayTeam[]) => void
-  setCurrentTeamId: (teamId: string | null) => void
   clear: () => void
-  /** 当前 team 对象 */
-  current: () => GatewayTeam | null
 }
 
 const STORAGE_KEY = 'gateway-team-storage'
 
 export const useGatewayTeamStore = create<GatewayTeamState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       teams: [],
-      currentTeamId: null,
       setTeams: (teams) => {
-        const { currentTeamId } = get()
-        // 保留当前选中（若仍在列表中），否则默认选 personal team
-        const stillExists = currentTeamId && teams.some((t) => t.id === currentTeamId)
-        const preferred =
-          teams.length > 0 ? (teams.find((t) => t.kind === 'personal') ?? teams[0]) : undefined
-        set({
-          teams,
-          currentTeamId: stillExists ? currentTeamId : (preferred?.id ?? null),
-        })
-      },
-      setCurrentTeamId: (teamId) => {
-        set({ currentTeamId: teamId })
+        set({ teams })
       },
       clear: () => {
-        set({ teams: [], currentTeamId: null })
-      },
-      current: () => {
-        const { teams, currentTeamId } = get()
-        return teams.find((t) => t.id === currentTeamId) ?? null
+        set({ teams: [] })
       },
     }),
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        currentTeamId: state.currentTeamId,
-        teams: state.teams,
-      }),
+      partialize: (state) => ({ teams: state.teams }),
     }
   )
 )
-
-export const getCurrentTeamId = (): string | null => useGatewayTeamStore.getState().currentTeamId

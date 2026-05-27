@@ -717,12 +717,12 @@ export function PersonalModelsWorkspace({
             <li>
               在{' '}
               <Link
-                to="/gateway/routes"
+                to={`/gateway/teams/${encodeURIComponent(teamId)}/routes`}
                 className="text-primary underline-offset-4 hover:underline"
               >
                 虚拟路由
               </Link>{' '}
-              编排对外虚拟名（可选；请先在 Header 切换到个人工作区）
+              编排对外虚拟名（可选）
             </li>
           </ol>
           <Button

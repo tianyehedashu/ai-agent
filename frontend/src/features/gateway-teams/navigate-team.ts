@@ -1,8 +1,6 @@
 /**
- * Gateway 团队切换：同步 store、invalidate 查询、保留当前子路径导航。
+ * Gateway 团队切换：invalidate 查询 + 保留当前子路径导航。
  */
-
-import { useGatewayTeamStore } from '@/stores/gateway-team'
 
 import type { QueryClient } from '@tanstack/react-query'
 import type { Location, NavigateFunction } from 'react-router-dom'
@@ -21,13 +19,14 @@ export function switchGatewayTeam(
   location: Location,
   queryClient: QueryClient
 ): void {
-  useGatewayTeamStore.getState().setCurrentTeamId(teamId)
   void queryClient.invalidateQueries({ queryKey: ['gateway'] })
 
   const match = TEAM_PATH_RE.exec(location.pathname)
   if (match) {
     navigate(`/gateway/teams/${teamId}${gatewayTeamPathSuffix(location.pathname)}`)
+    return
   }
+  navigate(`/gateway/teams/${teamId}/overview`)
 }
 
 /** 切换到 personal team；若无 personal 则选列表首项 */
