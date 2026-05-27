@@ -16,3 +16,8 @@ export const GATEWAY_USAGE_AGGREGATION_OPTIONS: readonly {
     description: '按当前登录账号跨团队统计',
   },
 ]
+
+/** 调用统计中「按团队分组 / 团队筛选」仅在跨团队（user）切片下有意义。 */
+export function isCrossTeamUsageStatsEnabled(aggregation: GatewayUsageAggregation): boolean {
+  return aggregation === 'user'
+}

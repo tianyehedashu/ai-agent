@@ -38,6 +38,7 @@ import {
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { isCrossTeamUsageStatsEnabled } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -208,6 +209,22 @@ export default function GatewayStatsPage(): React.JSX.Element {
     }
   }, [model, ensureModelName])
 
+  const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
+
+  useEffect(() => {
+    if (crossTeamStatsEnabled) return
+    setTeamFilterId(ALL_VALUE)
+    setGroupBy((current) => (current === 'team' ? 'credential' : current))
+  }, [crossTeamStatsEnabled])
+
+  const groupOptions = useMemo(
+    () =>
+      crossTeamStatsEnabled
+        ? GROUP_OPTIONS
+        : GROUP_OPTIONS.filter((option) => option.value !== 'team'),
+    [crossTeamStatsEnabled]
+  )
+
   const needsCredentialOptions =
     loadedFilters.has('credential') ||
     loadedFilters.has('provider') ||
@@ -227,7 +244,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const teamsQuery = useQuery({
     queryKey: ['gateway', 'teams'],
     queryFn: () => teamsApi.listTeams(),
-    enabled: loadedFilters.has('team') || teamFilterId !== ALL_VALUE,
+    enabled: crossTeamStatsEnabled && (loadedFilters.has('team') || teamFilterId !== ALL_VALUE),
   })
   const keysQuery = useQuery({
     queryKey: ['gateway', 'keys', teamId],
@@ -286,7 +303,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
       group_by: groupBy,
       credential_id: resettable(credentialId),
       user_id: resettable(userId),
-      team_id: resettable(teamFilterId),
+      team_id: crossTeamStatsEnabled ? resettable(teamFilterId) : undefined,
       model: resettable(model),
       provider: resettable(provider),
       capability: resettable(capability),
@@ -301,6 +318,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
     credentialId,
     userId,
     teamFilterId,
+    crossTeamStatsEnabled,
     model,
     provider,
     capability,
@@ -323,7 +341,9 @@ export default function GatewayStatsPage(): React.JSX.Element {
       value: selectedOptionLabel(credentialOptions, credentialId),
     },
     { key: 'user', label: '人员', value: selectedOptionLabel(memberOptions, userId) },
-    { key: 'team', label: '团队', value: selectedOptionLabel(teamOptions, teamFilterId) },
+    ...(crossTeamStatsEnabled
+      ? [{ key: 'team', label: '团队', value: selectedOptionLabel(teamOptions, teamFilterId) }]
+      : []),
     { key: 'model', label: '模型', value: selectedOptionLabel(modelOptions, model) },
     { key: 'vkey', label: '虚拟 Key', value: selectedOptionLabel(keyOptions, vkeyId) },
     { key: 'provider', label: '提供商', value: selectedOptionLabel(providerOptions, provider) },
@@ -421,7 +441,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
           ) : null}
         </div>
         <div className="flex flex-wrap gap-1">
-          {GROUP_OPTIONS.map((option) => (
+          {groupOptions.map((option) => (
             <Button
               key={option.value}
               type="button"
@@ -487,15 +507,17 @@ export default function GatewayStatsPage(): React.JSX.Element {
                   }}
                   options={memberOptions}
                 />
-                <FilterSelect
-                  label="团队"
-                  value={teamFilterId}
-                  onValueChange={setTeamFilterId}
-                  onRequestOptions={() => {
-                    requestFilter('team')
-                  }}
-                  options={teamOptions}
-                />
+                {crossTeamStatsEnabled ? (
+                  <FilterSelect
+                    label="团队"
+                    value={teamFilterId}
+                    onValueChange={setTeamFilterId}
+                    onRequestOptions={() => {
+                      requestFilter('team')
+                    }}
+                    options={teamOptions}
+                  />
+                ) : null}
                 <FilterSelect
                   label="虚拟 Key"
                   value={vkeyId}
@@ -597,7 +619,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            {GROUP_OPTIONS.find((option) => option.value === groupBy)?.label ?? '维度'}排名
+            {groupOptions.find((option) => option.value === groupBy)?.label ?? '维度'}排名
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
