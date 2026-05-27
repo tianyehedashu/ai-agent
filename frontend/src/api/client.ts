@@ -45,8 +45,10 @@ import {
 // 开发环境为空（使用 vite proxy），生产环境按需配置
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 
+export type ApiQueryParamValue = string | number | boolean | undefined | string[]
+
 interface RequestOptions extends RequestInit {
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, ApiQueryParamValue>
 }
 
 export { ApiError } from '@/api/errors'
@@ -162,10 +164,7 @@ class ApiClient {
    * - 有 baseUrl 时：构建完整 URL（生产环境）
    * - 无 baseUrl 时：返回相对路径（开发环境，由 vite proxy 转发）
    */
-  private buildUrl(
-    path: string,
-    params?: Record<string, string | number | boolean | undefined>
-  ): string {
+  private buildUrl(path: string, params?: Record<string, ApiQueryParamValue>): string {
     const queryString = this.buildQueryString(params)
 
     if (this.baseUrl) {
@@ -177,13 +176,18 @@ class ApiClient {
     return queryString ? `${path}?${queryString}` : path
   }
 
-  private buildQueryString(params?: Record<string, string | number | boolean | undefined>): string {
+  private buildQueryString(params?: Record<string, ApiQueryParamValue>): string {
     if (!params) return ''
     const searchParams = new URLSearchParams()
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined) {
-        searchParams.append(key, String(value))
+      if (value === undefined) continue
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          searchParams.append(key, item)
+        }
+        continue
       }
+      searchParams.append(key, String(value))
     }
     return searchParams.toString()
   }
@@ -263,10 +267,7 @@ class ApiClient {
     return parseResponseBody<T>(response)
   }
 
-  async get<T>(
-    path: string,
-    params?: Record<string, string | number | boolean | undefined>
-  ): Promise<T> {
+  async get<T>(path: string, params?: Record<string, ApiQueryParamValue>): Promise<T> {
     return this.request<T>(path, { method: 'GET', params })
   }
 

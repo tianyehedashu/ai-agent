@@ -577,9 +577,10 @@ class RequestLogRepository:
         *,
         group_by: UsageStatisticsGroupBy,
         filters: UsageStatisticsFilters,
-        limit: int = 50,
-    ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals]:
-        """按指定维度聚合调用统计，并返回同一过滤条件下的总计。"""
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals, int]:
+        """按指定维度聚合调用统计，并返回同一过滤条件下的总计与分组总数。"""
         group_expr = self._usage_statistics_group_expr(group_by)
         snapshot_expr = self._usage_statistics_snapshot_expr(group_by)
         clauses = [
@@ -592,6 +593,17 @@ class RequestLogRepository:
         failure_case = case((GatewayRequestLog.status != "success", 1), else_=0)
         cache_hit_case = case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)
 
+        group_subq = (
+            select(group_expr.label("group_key"))
+            .where(and_(*clauses))
+            .group_by(group_expr)
+            .subquery()
+        )
+        group_total = int(
+            (await self._session.execute(select(func.count()).select_from(group_subq))).scalar_one()
+        )
+
+        offset = max(0, (page - 1) * page_size)
         rows_stmt = (
             select(
                 group_expr.label("group_key"),
@@ -609,7 +621,8 @@ class RequestLogRepository:
             .where(and_(*clauses))
             .group_by(group_expr)
             .order_by(func.count(GatewayRequestLog.id).desc())
-            .limit(limit)
+            .offset(offset)
+            .limit(page_size)
         )
         result = await self._session.execute(rows_stmt)
         items = [
@@ -652,7 +665,7 @@ class RequestLogRepository:
             avg_latency_ms=float(total_row.avg_latency_ms or 0),
             cache_hit_count=int(total_row.cache_hit_count or 0),
         )
-        return items, totals
+        return items, totals, group_total
 
 
 __all__ = [

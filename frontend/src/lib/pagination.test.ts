@@ -1,13 +1,43 @@
+import { act } from 'react'
+
+import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   DEFAULT_PAGE_SIZE,
   IDS_TRUNCATION_HINT,
   MAX_PAGE_SIZE,
+  buildFilterKey,
   fetchAllPaginatedPages,
   totalPages,
+  usePaginationPageForFilters,
   warnIfIdsTruncated,
 } from './pagination'
+
+describe('buildFilterKey', () => {
+  it('joins parts with null separator', () => {
+    expect(buildFilterKey(['a', 1, true, undefined, null])).toBe(
+      ['a', '1', 'true', '', ''].join('\0')
+    )
+  })
+})
+
+describe('usePaginationPageForFilters', () => {
+  it('resets to page 1 when filter key changes', () => {
+    const { result, rerender } = renderHook(
+      ({ filterKey }) => usePaginationPageForFilters(filterKey),
+      { initialProps: { filterKey: 'filters-a' } }
+    )
+
+    act(() => {
+      result.current[1](3)
+    })
+    expect(result.current[0]).toBe(3)
+
+    rerender({ filterKey: 'filters-b' })
+    expect(result.current[0]).toBe(1)
+  })
+})
 
 describe('totalPages', () => {
   it('returns 1 for empty total', () => {

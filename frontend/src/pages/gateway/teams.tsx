@@ -2,11 +2,11 @@
  * AI Gateway · 团队管理
  */
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, LogOut, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import type { GatewayTeam, TeamMember, TeamMemberLookup } from '@/api/gateway/teams'
@@ -31,20 +31,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  GATEWAY_TEAMS_QUERY_KEY,
-  useGatewayTeams,
-} from '@/features/api-key-gateway/use-gateway-teams'
 import { credentialsTeamListHref } from '@/features/gateway-models/paths'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam, switchToFallbackTeam } from '@/features/gateway-teams/navigate-team'
+import {
+  resolveMembersPageFallbackTeamId,
+  resolveMembersPageTeamId,
+} from '@/features/gateway-teams/resolve-members-page-team-id'
 import {
   gatewayTeamMembersQueryKey,
   useGatewayTeamMembers,
 } from '@/features/gateway-teams/use-gateway-team-members'
-import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
+import {
+  GATEWAY_MEMBER_TEAMS_QUERY_KEY,
+  GATEWAY_TEAMS_QUERY_KEY,
+  useGatewayMemberTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -52,6 +57,41 @@ import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
 import { useUserStore } from '@/stores/user'
 import { formatTeamMemberDisplay, teamRoleLabel, TeamRole } from '@/types/permissions'
+
+import type { QueryClient } from '@tanstack/react-query'
+import type { Location, NavigateFunction } from 'react-router-dom'
+
+function membersPageHref(teamId: string): string {
+  return `/gateway/teams/${encodeURIComponent(teamId)}/members`
+}
+
+function invalidateGatewayTeamQueries(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: GATEWAY_TEAMS_QUERY_KEY })
+  void queryClient.invalidateQueries({ queryKey: GATEWAY_MEMBER_TEAMS_QUERY_KEY })
+}
+
+function navigateAfterRemovedTeam(
+  removedTeamId: string,
+  collaborationTeams: readonly GatewayTeam[],
+  allTeams: readonly GatewayTeam[],
+  navigate: NavigateFunction,
+  location: Location,
+  queryClient: QueryClient
+): void {
+  const fallbackTeamId = resolveMembersPageFallbackTeamId(
+    collaborationTeams.filter((team) => team.id !== removedTeamId)
+  )
+  if (fallbackTeamId) {
+    switchGatewayTeam(fallbackTeamId, navigate, location, queryClient)
+    return
+  }
+  switchToFallbackTeam(
+    allTeams.filter((team) => team.id !== removedTeamId),
+    navigate,
+    location,
+    queryClient
+  )
+}
 
 export default function GatewayTeamsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
@@ -68,9 +108,12 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     isError: teamsError,
     isFetching: teamsFetching,
     refetch: refetchTeams,
-  } = useGatewayTeams()
+  } = useGatewayMemberTeams()
 
-  const { isFetching: memberTeamsFetching, refetch: refetchMemberTeams } = useGatewayMemberTeams()
+  const collaborationTeams = useMemo(() => filterCollaborationGatewayTeams(teams ?? []), [teams])
+
+  const activeCollaborationTeam = collaborationTeams.find((team) => team.id === teamId)
+  const membersTeamId = activeCollaborationTeam ? teamId : ''
 
   const {
     data: members,
@@ -78,7 +121,10 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     isError: membersError,
     isFetching: membersFetching,
     refetch: refetchMembers,
-  } = useGatewayTeamMembers(teamId)
+  } = useGatewayTeamMembers(membersTeamId)
+
+  const redirectTeamId =
+    teamsLoading || teamsError ? null : resolveMembersPageTeamId(teamId, teams ?? [])
 
   const [openTeam, setOpenTeam] = useState(false)
   const [openMember, setOpenMember] = useState(false)
@@ -89,14 +135,15 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     null
   )
 
-  const invalidateMembers = (): void => {
-    void queryClient.invalidateQueries({ queryKey: gatewayTeamMembersQueryKey(teamId) })
-  }
+  const invalidateMembers = useCallback((): void => {
+    if (!membersTeamId) return
+    void queryClient.invalidateQueries({ queryKey: gatewayTeamMembersQueryKey(membersTeamId) })
+  }, [membersTeamId, queryClient])
 
   const createTeamMutation = useMutation({
     mutationFn: gatewayApi.createTeam,
     onSuccess: (newTeam) => {
-      void queryClient.invalidateQueries({ queryKey: GATEWAY_TEAMS_QUERY_KEY })
+      invalidateGatewayTeamQueries(queryClient)
       setOpenTeam(false)
       switchGatewayTeam(newTeam.id, navigate, location, queryClient)
       toast({ title: '团队已创建', description: `已切换到「${newTeam.name}」` })
@@ -109,12 +156,17 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const deleteTeamMutation = useMutation({
     mutationFn: (id: string) => gatewayApi.deleteTeam(id),
     onSuccess: (_data, deletedId) => {
-      void queryClient.invalidateQueries({ queryKey: GATEWAY_TEAMS_QUERY_KEY })
+      invalidateGatewayTeamQueries(queryClient)
       toast({ title: '团队已删除' })
       if (deletedId === teamId) {
-        const cached = queryClient.getQueryData<GatewayTeam[]>(GATEWAY_TEAMS_QUERY_KEY)
-        const remaining = (cached ?? []).filter((t) => t.id !== deletedId)
-        switchToFallbackTeam(remaining, navigate, location, queryClient)
+        navigateAfterRemovedTeam(
+          deletedId,
+          collaborationTeams,
+          teams ?? [],
+          navigate,
+          location,
+          queryClient
+        )
       }
     },
     onError: (e: Error) => {
@@ -125,7 +177,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const updateTeamMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => gatewayApi.updateTeam(id, { name }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: GATEWAY_TEAMS_QUERY_KEY })
+      invalidateGatewayTeamQueries(queryClient)
       setOpenRename(false)
       toast({ title: '团队名称已更新' })
     },
@@ -181,13 +233,18 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const leaveTeamMutation = useMutation({
     mutationFn: (tid: string) => gatewayApi.leaveTeam(tid),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: GATEWAY_TEAMS_QUERY_KEY })
+      invalidateGatewayTeamQueries(queryClient)
       invalidateMembers()
       setLeaveTeamOpen(false)
       toast({ title: '已退出团队' })
-      const cached = queryClient.getQueryData<GatewayTeam[]>(GATEWAY_TEAMS_QUERY_KEY)
-      const remaining = (cached ?? []).filter((t) => t.id !== teamId)
-      switchToFallbackTeam(remaining, navigate, location, queryClient)
+      navigateAfterRemovedTeam(
+        teamId,
+        collaborationTeams,
+        teams ?? [],
+        navigate,
+        location,
+        queryClient
+      )
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '退出失败', description: e.message })
@@ -195,28 +252,32 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   })
 
   const cachedTeams = useGatewayTeamStore((s) => s.teams)
-  const currentTeamFromApi = teams?.find((t) => t.id === teamId)
-  const currentTeam = currentTeamFromApi ?? cachedTeams.find((t) => t.id === teamId)
-  const isPersonalTeam = currentTeam?.kind === 'personal'
-  const canAddMember = Boolean(canWrite && teamId && currentTeam && !isPersonalTeam)
-  const canRenameTeam = Boolean(canWrite && currentTeam && !isPersonalTeam)
+  const currentTeamFromApi = activeCollaborationTeam
+  const currentTeam =
+    currentTeamFromApi ?? cachedTeams.find((team) => team.id === teamId && team.kind === 'shared')
+  const canAddMember = Boolean(canWrite && membersTeamId && currentTeamFromApi)
+  const canRenameTeam = Boolean(canWrite && currentTeamFromApi)
   const canLeaveTeam = Boolean(
-    currentTeam && !isPersonalTeam && teamRole !== TeamRole.OWNER && !isPlatformAdmin
+    currentTeamFromApi && teamRole !== TeamRole.OWNER && !isPlatformAdmin
   )
+
+  if (redirectTeamId) {
+    return <Navigate to={membersPageHref(redirectTeamId)} replace />
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">团队管理</h2>
-          <p className="text-sm text-muted-foreground">个人团队不可删除；共享团队可协作管理</p>
+          <p className="text-sm text-muted-foreground">管理共享团队与成员协作</p>
         </div>
         <div className="flex items-center gap-2">
           <GatewayRefreshButton
-            isFetching={combineFetching(teamsFetching, membersFetching, memberTeamsFetching)}
+            isFetching={combineFetching(teamsFetching, membersFetching)}
             ariaLabel="刷新团队"
             onRefresh={() => {
-              void Promise.all([refetchTeams(), refetchMembers(), refetchMemberTeams()])
+              void Promise.all([refetchTeams(), refetchMembers()])
             }}
           />
           {canLeaveTeam ? (
@@ -261,13 +322,11 @@ export default function GatewayTeamsPage(): React.JSX.Element {
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {teams?.map((t: GatewayTeam) => {
+                  {collaborationTeams.map((t: GatewayTeam) => {
                     const isActive = t.id === teamId
-                    const roleLabel =
-                      t.kind === 'personal' ? '个人' : teamRoleLabel(t.team_role ?? 'member')
-                    const canDelete =
-                      (isPlatformAdmin || t.team_role === 'owner') && t.kind !== 'personal'
-                    const canEdit = canWrite && t.kind !== 'personal' && isActive
+                    const roleLabel = teamRoleLabel(t.team_role ?? 'member')
+                    const canDelete = isPlatformAdmin || t.team_role === 'owner'
+                    const canEdit = canWrite && isActive
 
                     return (
                       <tr
@@ -323,10 +382,10 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                       </tr>
                     )
                   })}
-                  {(teams ?? []).length === 0 ? (
+                  {collaborationTeams.length === 0 ? (
                     <tr>
                       <td className="px-4 py-6 text-center text-muted-foreground" colSpan={2}>
-                        暂无团队
+                        暂无共享团队
                       </td>
                     </tr>
                   ) : null}
@@ -342,14 +401,12 @@ export default function GatewayTeamsPage(): React.JSX.Element {
               <span>
                 {currentTeamFromApi
                   ? gatewayTeamDisplayLabel(currentTeamFromApi, { viewerUserId })
-                  : currentTeam?.kind === 'personal'
-                    ? '个人工作区'
-                    : (currentTeam?.name ?? '当前团队成员')}
+                  : '选择或新建共享团队'}
               </span>
               <div className="flex items-center gap-2 normal-case">
-                {teamId ? (
+                {membersTeamId ? (
                   <Link
-                    to={credentialsTeamListHref(teamId)}
+                    to={credentialsTeamListHref(membersTeamId)}
                     className="text-primary underline-offset-4 hover:underline"
                   >
                     查看凭据
@@ -370,12 +427,13 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                 ) : null}
               </div>
             </div>
-            {isPersonalTeam ? (
-              <p className="border-b px-4 py-2 text-xs text-muted-foreground">
-                个人工作区仅本人可见，个人凭据与模型不会共享给其他用户。如需协作请新建共享团队并添加成员。
+            {!membersTeamId ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                {collaborationTeams.length === 0
+                  ? '暂无共享团队，请先新建团队'
+                  : '请选择左侧共享团队'}
               </p>
-            ) : null}
-            {membersLoading ? (
+            ) : membersLoading ? (
               <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 加载中…

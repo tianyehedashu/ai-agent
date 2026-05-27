@@ -9,6 +9,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { PaginatedList } from '@/types'
 
 import { teamGatewayPath } from './_base'
 
@@ -91,12 +92,7 @@ export type GatewayLogsQuery = {
 }
 
 /** GET /logs 响应 */
-export interface GatewayLogsPage {
-  items: GatewayLogItem[]
-  total: number
-  page: number
-  page_size: number
-}
+export type GatewayLogsPage = PaginatedList<GatewayLogItem>
 
 /** Logs / Dashboard 资源 API */
 export const logsApi = {

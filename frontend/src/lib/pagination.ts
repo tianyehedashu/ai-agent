@@ -1,4 +1,6 @@
-import type { PaginatedList } from '@/types'
+import { useCallback, useState } from 'react'
+
+import type { PageQuery, PaginatedList } from '@/types'
 
 /** 与后端 `libs.api.pagination.MAX_PAGE_SIZE` 一致 */
 export const MAX_PAGE_SIZE = 200
@@ -21,6 +23,39 @@ export function warnIfIdsTruncated(
 export function totalPages(total: number, pageSize: number): number {
   if (total <= 0) return 1
   return Math.max(1, Math.ceil(total / pageSize))
+}
+
+/** 将 PageQuery 转为 apiClient GET params */
+export function buildPageQuerySearch(params?: PageQuery): Record<string, string> {
+  const search: Record<string, string> = {}
+  if (params?.page !== undefined) search.page = String(params.page)
+  if (params?.page_size !== undefined) search.page_size = String(params.page_size)
+  return search
+}
+
+/** 筛选维度序列化；用于分页在筛选变化时自动回到第 1 页（无需 useEffect）。 */
+export function buildFilterKey(
+  parts: readonly (string | number | boolean | undefined | null)[]
+): string {
+  return parts.map((part) => String(part ?? '')).join('\0')
+}
+
+/**
+ * 筛选条件变化时页码自动重置为 1（rerender-derived-state-no-effect）。
+ * 翻页仅更新当前 filterKey 下的 page。
+ */
+export function usePaginationPageForFilters(filterKey: string): [number, (page: number) => void] {
+  const [state, setState] = useState({ filterKey, page: 1 })
+  const page = state.filterKey === filterKey ? state.page : 1
+
+  const setPage = useCallback(
+    (next: number) => {
+      setState({ filterKey, page: next })
+    },
+    [filterKey]
+  )
+
+  return [page, setPage]
 }
 
 /**

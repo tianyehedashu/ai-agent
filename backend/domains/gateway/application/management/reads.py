@@ -107,6 +107,7 @@ from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort, User
 from domains.identity.application.user_use_case import UserUseCase
 from domains.tenancy.application.team_service import TeamService
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
+from libs.api.pagination import slice_page
 from libs.iam.tenancy import MembershipPort
 
 if TYPE_CHECKING:
@@ -598,7 +599,13 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             team_id, since=since, until=until, group_by=group_by
         )
 
-    async def list_platform_credential_stats(self, *, days: int) -> list[dict[str, Any]]:
+    async def list_platform_credential_stats(
+        self,
+        *,
+        days: int,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int]:
         """全平台凭据维度调用统计 + 各凭据被 GatewayModel 引用条数（仅平台管理员 HTTP 层应调用）。"""
         end = datetime.now(UTC)
         start = end - timedelta(days=days)
@@ -608,7 +615,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             counts[cid] = counts.get(cid, 0) + cnt
         all_ids = sorted(set(global_usage.keys()) | set(counts.keys()))
         if not all_ids:
-            return []
+            return [], 0
         creds = await self._creds.list_by_ids(all_ids)
         cred_by_id = {c.id: c for c in creds}
         missing_ids = {cid for cid in all_ids if cid not in cred_by_id}
@@ -655,7 +662,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
                 }
             )
         rows.sort(key=lambda r: (-r["requests"], str(r["credential_id"])))
-        return rows
+        return slice_page(rows, page=page, page_size=page_size)
 
 
 __all__ = ["GatewayManagementReadService"]

@@ -181,6 +181,12 @@ class GatewayRequestLog(Base):
             "deployment_gateway_model_id",
             "created_at",
         ),
+        Index(
+            "ix_gateway_request_logs_tenant_route_time",
+            "tenant_id",
+            "route_name",
+            "created_at",
+        ),
         # 分区配置（在 alembic 中显式声明 PARTITION BY RANGE (created_at)）
         {"postgresql_partition_by": "RANGE (created_at)"},
     )

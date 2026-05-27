@@ -111,10 +111,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
         status: statusFilter === 'all' ? undefined : statusFilter,
         capability: capabilityFilter === 'all' ? undefined : capabilityFilter,
       }),
-    getNextPageParam: (lastPage, all) => {
-      const fetched = all.reduce((sum, p) => sum + p.items.length, 0)
-      return fetched < lastPage.total ? all.length + 1 : undefined
-    },
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
   })
 
   const items = useMemo<GatewayLogItem[]>(() => data?.pages.flatMap((p) => p.items) ?? [], [data])

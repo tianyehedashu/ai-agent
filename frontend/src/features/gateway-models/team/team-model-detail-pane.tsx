@@ -65,6 +65,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   })
 
   const resolvedModel = primaryModel ?? systemFallbackModel ?? null
+  const resolvedRouteName = resolvedModel?.name ?? ''
 
   const listHref =
     credentialFilter !== ''
@@ -76,8 +77,13 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
         : teamModelsIndexHref(teamId)
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
-    queryKey: ['gateway', 'models', 'usage-summary', teamId, '', usageDays],
-    queryFn: () => gatewayApi.modelsUsageSummary(teamId, { days: usageDays }),
+    queryKey: ['gateway', 'models', 'usage-summary', teamId, resolvedRouteName, usageDays],
+    queryFn: () =>
+      gatewayApi.modelsUsageSummary(teamId, {
+        days: usageDays,
+        route_names: [resolvedRouteName],
+      }),
+    enabled: resolvedRouteName !== '',
   })
 
   const { data: routes } = useQuery({

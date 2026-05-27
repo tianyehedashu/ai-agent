@@ -28,6 +28,10 @@ from domains.gateway.presentation.gateway_model_list_response import (
     build_gateway_model_list_response,
 )
 from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
+from domains.gateway.presentation.gateway_usage_list_response import (
+    build_gateway_model_usage_summary_response,
+    build_platform_credential_stat_list_response,
+)
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     GatewayModelBatchDeleteFailureItem,
@@ -40,14 +44,17 @@ from domains.gateway.presentation.schemas.common import (
     GatewayModelListResponse,
     GatewayModelPresetResponse,
     GatewayModelResponse,
+    GatewayModelRouteUsageItem,
     GatewayModelTestResponse,
     GatewayModelUpdate,
     GatewayModelUsageSummaryResponse,
     MultiCredentialGatewayModelCreate,
     MultiCredentialGatewayModelResponse,
     PlatformCredentialStatItem,
+    PlatformCredentialStatListResponse,
 )
 from domains.identity.presentation.deps import AdminUser
+from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import NotFoundError, PermissionDeniedError
 
@@ -57,6 +64,7 @@ from ._common import (
 )
 
 router = APIRouter()
+PageDep = Annotated[PageParams, Depends(page_query_params)]
 
 
 @router.get("/models/presets", response_model=list[GatewayModelPresetResponse])
@@ -181,12 +189,37 @@ async def list_model_ids(
 async def models_usage_summary(
     team: CurrentTeam,
     reads: MgmtReads,
+    page: PageDep,
     days: int = Query(7, ge=1, le=90),
     provider: str | None = Query(None, min_length=1, max_length=50),
+    route_names: list[str] | None = Query(
+        default=None,
+        description=(
+            "仅聚合指定 route（与注册模型 name 对齐）。"
+            "传入时忽略 page/page_size，仅返回匹配 route 的用量。"
+        ),
+    ),
 ) -> GatewayModelUsageSummaryResponse:
     """按当前团队注册模型名与请求日志 ``route_name`` 对齐；见 ``UsageAggregation`` 文档。"""
-    raw = await reads.aggregate_gateway_model_route_usage(team, days=days, provider=provider)
-    return GatewayModelUsageSummaryResponse.model_validate(raw)
+    if route_names is not None and len(route_names) > 200:
+        route_names = route_names[:200]
+    items, total, start, end = await reads.aggregate_gateway_model_route_usage(
+        team,
+        days=days,
+        provider=provider,
+        route_names=route_names,
+        page=page.page,
+        page_size=page.page_size,
+    )
+    validated_items = [GatewayModelRouteUsageItem.model_validate(i) for i in items]
+    return build_gateway_model_usage_summary_response(
+        items=validated_items,
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+        start=start,
+        end=end,
+    )
 
 
 @router.get("/models/{model_id}", response_model=GatewayModelResponse)
@@ -214,19 +247,30 @@ async def get_model(
     )
 
 
-@router.get("/admin/credential-stats", response_model=list[PlatformCredentialStatItem])
+@router.get("/admin/credential-stats", response_model=PlatformCredentialStatListResponse)
 async def admin_credential_stats(
     team: CurrentTeam,
     reads: MgmtReads,
+    page: PageDep,
     days: int = Query(7, ge=1, le=90),
-) -> list[PlatformCredentialStatItem]:
+) -> PlatformCredentialStatListResponse:
     if not team.is_platform_admin:
         raise PermissionDeniedError(
             message="Only platform admin can view credential stats",
             resource="credential stats",
         )
-    rows = await reads.list_platform_credential_stats(days=days)
-    return [PlatformCredentialStatItem.model_validate(r) for r in rows]
+    rows, total = await reads.list_platform_credential_stats(
+        days=days,
+        page=page.page,
+        page_size=page.page_size,
+    )
+    stat_items = [PlatformCredentialStatItem.model_validate(r) for r in rows]
+    return build_platform_credential_stat_list_response(
+        items=stat_items,
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+    )
 
 
 @router.post("/models", response_model=GatewayModelResponse, status_code=status.HTTP_201_CREATED)

@@ -5,6 +5,8 @@
  */
 
 import { apiClient } from '@/api/client'
+import { buildPageQuerySearch } from '@/lib/pagination'
+import type { PageQuery, PaginatedList } from '@/types'
 
 import { teamGatewayPath } from './_base'
 
@@ -40,15 +42,14 @@ export interface GatewayUsageStatsItem extends GatewayUsageStatsMetric {
   label: string
 }
 
-export interface GatewayUsageStatsResponse {
+export interface GatewayUsageStatsResponse extends PaginatedList<GatewayUsageStatsItem> {
   start: string
   end: string
   group_by: GatewayUsageStatsGroupBy
   totals: GatewayUsageStatsMetric
-  items: GatewayUsageStatsItem[]
 }
 
-export type GatewayUsageStatsQuery = {
+export type GatewayUsageStatsQuery = PageQuery & {
   days?: number
   usage_aggregation?: GatewayUsageAggregation
   group_by?: GatewayUsageStatsGroupBy
@@ -60,13 +61,29 @@ export type GatewayUsageStatsQuery = {
   capability?: string
   status?: string
   vkey_id?: string
-  limit?: number
+}
+
+function buildUsageStatsSearch(params?: GatewayUsageStatsQuery): Record<string, string | string[]> {
+  const search: Record<string, string | string[]> = buildPageQuerySearch(params)
+  if (!params) return search
+  if (params.days !== undefined) search.days = String(params.days)
+  if (params.usage_aggregation) search.usage_aggregation = params.usage_aggregation
+  if (params.group_by) search.group_by = params.group_by
+  if (params.credential_id) search.credential_id = params.credential_id
+  if (params.user_id) search.user_id = params.user_id
+  if (params.team_id) search.team_id = params.team_id
+  if (params.model) search.model = params.model
+  if (params.provider) search.provider = params.provider
+  if (params.capability) search.capability = params.capability
+  if (params.status) search.status = params.status
+  if (params.vkey_id) search.vkey_id = params.vkey_id
+  return search
 }
 
 export const statsApi = {
   usageStats: (teamId: string, params?: GatewayUsageStatsQuery) =>
     apiClient.get<GatewayUsageStatsResponse>(
       teamGatewayPath(teamId, '/dashboard/statistics'),
-      params
+      buildUsageStatsSearch(params)
     ),
 } as const

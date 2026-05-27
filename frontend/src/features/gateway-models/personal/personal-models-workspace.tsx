@@ -8,7 +8,7 @@
   useState,
 } from 'react'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
@@ -67,6 +67,7 @@ import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
+import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { useAuthStore } from '@/stores/auth'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
@@ -107,8 +108,12 @@ export function PersonalModelsWorkspace({
   const [abilityFilter, setAbilityFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
-  const [page, setPage] = useState(1)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
+  const personalListFilterKey = useMemo(
+    () => buildFilterKey([listChannel, abilityFilter, deferredSearch, healthFilter]),
+    [listChannel, abilityFilter, deferredSearch, healthFilter]
+  )
+  const [page, setPage] = usePaginationPageForFilters(personalListFilterKey)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
@@ -131,10 +136,6 @@ export function PersonalModelsWorkspace({
   })
 
   const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
-
-  useEffect(() => {
-    setPage(1)
-  }, [listChannel, abilityFilter, deferredSearch, healthFilter])
 
   const personalListQueryBase = useMemo(
     () => ({
@@ -174,6 +175,7 @@ export function PersonalModelsWorkspace({
         ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       }),
     enabled: hasAuthSession && !isRegisterView,
+    placeholderData: keepPreviousData,
   })
 
   useEffect(() => {
@@ -182,7 +184,7 @@ export function PersonalModelsWorkspace({
     if (page > maxPage) {
       setPage(maxPage)
     }
-  }, [listData, page])
+  }, [listData, page, setPage])
 
   const items = listData?.items ?? EMPTY_PERSONAL_ITEMS
   const connectivitySummary = listData?.connectivity_summary

@@ -34,6 +34,53 @@ def _model_list_items(payload: dict | list) -> list:
     raise TypeError(f"unexpected models list payload: {type(payload)!r}")
 
 
+_PAGINATED_ENVELOPE_KEYS = ("items", "total", "page", "page_size", "has_next", "has_prev")
+
+
+def _assert_paginated_envelope(payload: dict, *, page: int, page_size: int) -> None:
+    for key in _PAGINATED_ENVELOPE_KEYS:
+        assert key in payload, f"missing pagination field: {key}"
+    assert payload["page"] == page
+    assert payload["page_size"] == page_size
+    assert isinstance(payload["has_next"], bool)
+    assert isinstance(payload["has_prev"], bool)
+
+
+async def _create_team_model_via_api(
+    dev_client: AsyncClient,
+    team_id: uuid.UUID,
+    headers: dict[str, str],
+    *,
+    model_name: str,
+) -> dict[str, object]:
+    cred_name = f"cred-{uuid.uuid4().hex[:6]}"
+    r_cred = await dev_client.post(
+        f"/api/v1/gateway/teams/{team_id}/credentials",
+        headers=headers,
+        json={
+            "provider": "openai",
+            "name": cred_name,
+            "api_key": "sk-usage-summary-test-key",
+            "scope": "team",
+        },
+    )
+    assert r_cred.status_code == 201, r_cred.text
+    cid = r_cred.json()["id"]
+    r_model = await dev_client.post(
+        f"/api/v1/gateway/teams/{team_id}/models",
+        headers=headers,
+        json={
+            "name": model_name,
+            "capability": "chat",
+            "real_model": "gpt-4o-mini",
+            "credential_id": cid,
+            "provider": "openai",
+        },
+    )
+    assert r_model.status_code == 201, r_model.text
+    return r_model.json()
+
+
 @pytest.mark.integration
 class TestGatewayManagementApi:
     @pytest.mark.asyncio
@@ -398,7 +445,9 @@ class TestGatewayManagementApi:
             headers=headers,
         )
         assert logs.status_code == 200, logs.text
-        ids = {item["id"] for item in logs.json()["items"]}
+        logs_payload = logs.json()
+        _assert_paginated_envelope(logs_payload, page=1, page_size=10)
+        ids = {item["id"] for item in logs_payload["items"]}
         assert str(personal_log_id) in ids
         assert str(shared_log_id) in ids
         assert str(other_log_id) not in ids
@@ -2437,6 +2486,171 @@ class TestGatewayManagementApi:
         )
         assert r_get.status_code == 200, r_get.text
         assert r_get.json()["tags"]["supports_vision"] is True
+
+    @pytest.mark.asyncio
+    async def test_dashboard_statistics_pagination_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        now = datetime.now(UTC)
+        cred_ids = [uuid.uuid4() for _ in range(3)]
+        db_session.add_all(
+            [
+                GatewayRequestLog(
+                    id=uuid.uuid4(),
+                    created_at=now,
+                    tenant_id=team.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    credential_id=cred_ids[i],
+                    credential_name_snapshot=f"cred-{i}",
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=10,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id=f"req-stat-{i}",
+                )
+                for i in range(3)
+            ]
+        )
+        await db_session.commit()
+
+        page_size = 2
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics",
+            headers=auth_headers,
+            params={
+                "group_by": "credential",
+                "days": 7,
+                "page": 1,
+                "page_size": page_size,
+            },
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        _assert_paginated_envelope(payload, page=1, page_size=page_size)
+        assert payload["total"] == 3
+        assert payload["has_next"] is True
+        assert payload["has_prev"] is False
+        assert len(payload["items"]) == page_size
+        assert payload["totals"]["requests"] == 3
+        assert payload["group_by"] == "credential"
+
+    @pytest.mark.asyncio
+    async def test_admin_credential_stats_pagination_envelope(
+        self,
+        dev_client: AsyncClient,
+        admin_headers: dict[str, str],
+        db_session,
+        admin_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(admin_user.id)
+        await db_session.commit()
+        page_size = 2
+        for i in range(page_size + 1):
+            r_cred = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/credentials",
+                headers=admin_headers,
+                json={
+                    "provider": "openai",
+                    "name": f"plat-stat-{uuid.uuid4().hex[:6]}-{i}",
+                    "api_key": "sk-platform-stat-test-key",
+                    "scope": "team",
+                },
+            )
+            assert r_cred.status_code == 201, r_cred.text
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/admin/credential-stats",
+            headers=admin_headers,
+            params={"days": 7, "page": 1, "page_size": page_size},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        _assert_paginated_envelope(payload, page=1, page_size=page_size)
+        assert payload["total"] >= page_size + 1
+        assert payload["has_next"] is True
+        assert len(payload["items"]) == page_size
+
+    @pytest.mark.asyncio
+    async def test_models_usage_summary_pagination_and_route_names(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        model_a = f"usage-a-{uuid.uuid4().hex[:6]}"
+        model_b = f"usage-b-{uuid.uuid4().hex[:6]}"
+        await _create_team_model_via_api(
+            dev_client, team.id, auth_headers, model_name=model_a
+        )
+        await _create_team_model_via_api(
+            dev_client, team.id, auth_headers, model_name=model_b
+        )
+        now = datetime.now(UTC)
+        db_session.add(
+            GatewayRequestLog(
+                id=uuid.uuid4(),
+                created_at=now,
+                tenant_id=team.id,
+                user_id=test_user.id,
+                vkey_id=None,
+                capability="chat",
+                route_name=model_a,
+                real_model="gpt-4o-mini",
+                provider="openai",
+                status="success",
+                input_tokens=5,
+                output_tokens=3,
+                cached_tokens=0,
+                cost_usd=Decimal("0.002"),
+                latency_ms=50,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id="req-usage-a",
+            )
+        )
+        await db_session.commit()
+
+        r_page = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "page": 1, "page_size": 1},
+        )
+        assert r_page.status_code == 200, r_page.text
+        page_payload = r_page.json()
+        _assert_paginated_envelope(page_payload, page=1, page_size=1)
+        assert page_payload["total"] >= 2
+        assert page_payload["has_next"] is True
+        assert "start" in page_payload
+        assert "end" in page_payload
+
+        r_scoped = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "route_names": [model_a]},
+        )
+        assert r_scoped.status_code == 200, r_scoped.text
+        scoped_payload = r_scoped.json()
+        _assert_paginated_envelope(scoped_payload, page=1, page_size=20)
+        assert len(scoped_payload["items"]) == 1
+        assert scoped_payload["items"][0]["route_name"] == model_a
+        assert scoped_payload["items"][0]["workspace"]["requests"] >= 1
 
 
 @pytest.mark.integration

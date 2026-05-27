@@ -110,11 +110,14 @@ async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -
         "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
         new=AsyncMock(return_value=[m1, m2]),
     ):
-        raw = await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
-    assert raw["items"][0]["route_name"] == "alpha-model"
-    assert raw["items"][0]["workspace"]["requests"] == 2
-    assert raw["items"][0]["user"]["requests"] == 1
-    assert raw["items"][1]["route_name"] == "beta-model"
+        items, total, start, end = await svc.aggregate_gateway_model_route_usage(
+            ctx, days=7, provider=None
+        )
+    assert total == 2
+    assert items[0]["route_name"] == "alpha-model"
+    assert items[0]["workspace"]["requests"] == 2
+    assert items[0]["user"]["requests"] == 1
+    assert items[1]["route_name"] == "beta-model"
 
 
 @pytest.mark.asyncio
@@ -172,9 +175,12 @@ async def test_aggregate_gateway_model_route_usage_no_models_returns_empty_items
         "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
         new=AsyncMock(return_value=[]),
     ):
-        raw = await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
+        items, total, _start, _end = await svc.aggregate_gateway_model_route_usage(
+            ctx, days=7, provider=None
+        )
 
-    assert raw["items"] == []
+    assert items == []
+    assert total == 0
     svc._logs.aggregate_by_route_names_by_axis.assert_not_called()
     svc._logs.aggregate_by_deployment_ids_by_axis.assert_not_called()
 
@@ -221,8 +227,10 @@ async def test_list_platform_credential_stats_unions_usage_only_and_count_only_c
     )
     svc._creds.list_by_ids = AsyncMock(return_value=[cred_usage, cred_count])
 
-    rows = await svc.list_platform_credential_stats(days=7)
+    rows, total = await svc.list_platform_credential_stats(days=7)
     by_id = {r["credential_id"]: r for r in rows}
+
+    assert total == 2
 
     assert set(by_id) == {usage_only, count_only}
     assert by_id[usage_only]["gateway_model_count"] == 0
@@ -260,8 +268,9 @@ async def test_list_platform_credential_stats_system_credential_scope() -> None:
         is_active=True,
     )
     svc._system_creds.list_by_ids = AsyncMock(return_value=[sys_cred])
-    rows = await svc.list_platform_credential_stats(days=7)
+    rows, total = await svc.list_platform_credential_stats(days=7)
 
+    assert total == 1
     assert len(rows) == 1
     assert rows[0]["scope"] == "system"
     assert rows[0]["name"] == "platform-key"
@@ -285,7 +294,8 @@ async def test_list_platform_credential_stats_merges_tenant_and_system_model_cou
     )
     svc._system_creds.list_by_ids = AsyncMock(return_value=[sys_cred])
 
-    rows = await svc.list_platform_credential_stats(days=7)
+    rows, total = await svc.list_platform_credential_stats(days=7)
+    assert total == 1
     assert len(rows) == 1
     assert rows[0]["gateway_model_count"] == 7
     assert rows[0]["scope"] == "system"
@@ -321,7 +331,8 @@ async def test_list_platform_credential_stats_merges_usage_and_counts() -> None:
     )
     svc._creds.list_by_ids = AsyncMock(return_value=[cred])
 
-    rows = await svc.list_platform_credential_stats(days=1)
+    rows, total = await svc.list_platform_credential_stats(days=1)
+    assert total == 1
     assert len(rows) == 1
     assert rows[0]["credential_id"] == cid
     assert rows[0]["gateway_model_count"] == 2
@@ -371,6 +382,7 @@ async def test_aggregate_usage_statistics_resolves_credential_label() -> None:
                 avg_latency_ms=80.0,
                 cache_hit_count=1,
             ),
+            1,
         )
     )
     svc._creds.list_by_ids = AsyncMock(
@@ -379,16 +391,18 @@ async def test_aggregate_usage_statistics_resolves_credential_label() -> None:
     svc._system_creds.list_by_ids = AsyncMock(return_value=[])
 
     now = MagicMock()
-    summary = await svc.aggregate_usage_statistics(
+    summary, group_total = await svc.aggregate_usage_statistics(
         ctx,
         now,
         now,
         usage_aggregation=UsageAggregation.WORKSPACE,
         group_by=UsageStatisticsGroupBy.CREDENTIAL,
         filters=UsageStatisticsFilters(provider="openai"),
-        limit=10,
+        page=1,
+        page_size=10,
     )
 
+    assert group_total == 1
     assert summary.items[0].label == "生产凭据"
     assert summary.items[0].total_tokens == 20
     assert summary.totals.success_rate == 0.75
@@ -436,19 +450,21 @@ async def test_aggregate_usage_statistics_team_group_resolves_names() -> None:
                 avg_latency_ms=12.0,
                 cache_hit_count=0,
             ),
+            1,
         )
     )
     svc._teams.get_display_names_by_ids = AsyncMock(return_value={team_id: "研发团队"})
 
     now = MagicMock()
-    summary = await svc.aggregate_usage_statistics(
+    summary, _group_total = await svc.aggregate_usage_statistics(
         ctx,
         now,
         now,
         usage_aggregation=UsageAggregation.USER,
         group_by=UsageStatisticsGroupBy.TEAM,
         filters=UsageStatisticsFilters(),
-        limit=10,
+        page=1,
+        page_size=10,
     )
 
     assert summary.items[0].label == "研发团队"
@@ -503,18 +519,20 @@ async def test_aggregate_usage_statistics_user_group_resolves_names() -> None:
                 avg_latency_ms=50.0,
                 cache_hit_count=0,
             ),
+            1,
         )
     )
 
     now = MagicMock()
-    summary = await svc.aggregate_usage_statistics(
+    summary, _group_total = await svc.aggregate_usage_statistics(
         ctx,
         now,
         now,
         usage_aggregation=UsageAggregation.WORKSPACE,
         group_by=UsageStatisticsGroupBy.USER,
         filters=UsageStatisticsFilters(),
-        limit=10,
+        page=1,
+        page_size=10,
     )
 
     user_summaries.list_summary_views_by_ids.assert_awaited_once()

@@ -533,12 +533,6 @@ class GatewayModelRouteUsageItem(BaseModel):
     user: GatewayModelRouteUsageSlice
 
 
-class GatewayModelUsageSummaryResponse(BaseModel):
-    start: datetime
-    end: datetime
-    items: list[GatewayModelRouteUsageItem]
-
-
 class PlatformCredentialStatItem(BaseModel):
     """平台管理员：凭据维度全局调用统计（不含密钥）。"""
 
@@ -555,6 +549,15 @@ class PlatformCredentialStatItem(BaseModel):
     cost_usd: Decimal = Decimal("0")
     success_count: int = 0
     failure_count: int = 0
+
+
+class GatewayModelUsageSummaryResponse(PaginatedListResponse[GatewayModelRouteUsageItem]):
+    start: datetime
+    end: datetime
+
+
+class PlatformCredentialStatListResponse(PaginatedListResponse[PlatformCredentialStatItem]):
+    pass
 
 
 class PersonalModelCreate(BaseModel):
@@ -856,11 +859,8 @@ class RequestLogDetailResponse(RequestLogResponse):
     model_config = ConfigDict(from_attributes=True)
 
 
-class RequestLogListResponse(BaseModel):
-    items: list[RequestLogResponse]
-    total: int
-    page: int
-    page_size: int
+class RequestLogListResponse(PaginatedListResponse[RequestLogResponse]):
+    pass
 
 
 # =============================================================================
@@ -914,12 +914,11 @@ class UsageStatisticsItemResponse(UsageStatisticsMetricResponse):
     label: str
 
 
-class UsageStatisticsResponse(BaseModel):
+class UsageStatisticsResponse(PaginatedListResponse[UsageStatisticsItemResponse]):
     start: datetime
     end: datetime
     group_by: UsageStatisticsGroupBy
     totals: UsageStatisticsMetricResponse
-    items: list[UsageStatisticsItemResponse] = Field(default_factory=list)
 
 
 # =============================================================================
@@ -1198,6 +1197,7 @@ __all__ = [
     "PlanQuotaUpsert",
     "PlanResetStrategy",
     "PlatformCredentialStatItem",
+    "PlatformCredentialStatListResponse",
     "ProviderPlanCostResponse",
     "ProviderPlanCreate",
     "ProviderPlanResponse",

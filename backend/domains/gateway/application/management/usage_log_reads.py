@@ -27,6 +27,7 @@ from domains.gateway.domain.usage_read_model import (
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 from domains.identity.application.ports import user_display_label
+from libs.api.pagination import slice_page
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.repositories.request_log_repository import (
@@ -240,33 +241,36 @@ class GatewayUsageLogReadMixin:
         usage_aggregation: UsageAggregation,
         group_by: UsageStatisticsGroupBy,
         filters: UsageStatisticsFilters,
-        limit: int,
-    ) -> UsageStatisticsSummary:
+        page: int,
+        page_size: int,
+    ) -> tuple[UsageStatisticsSummary, int]:
         axis = self._resolve_usage_axis(
             ctx,
             usage_aggregation,
             vkey_id=filters.vkey_id,
         )
-        rows, totals = await self._logs.aggregate_usage_statistics_by_axis(
+        rows, totals, group_total = await self._logs.aggregate_usage_statistics_by_axis(
             axis,
             start,
             end,
             group_by=group_by,
             filters=filters,
-            limit=limit,
+            page=page,
+            page_size=page_size,
         )
         labels = await self._usage_statistics_labels(rows, group_by)
         items = [
             self._item_from_row(row, labels.get(self._group_key_to_str(row.group_key), "未知"))
             for row in rows
         ]
-        return UsageStatisticsSummary(
+        summary = UsageStatisticsSummary(
             start=start,
             end=end,
             group_by=group_by,
             totals=self._metric_from_totals(totals),
             items=items,
         )
+        return summary, group_total
 
     async def aggregate_gateway_model_route_usage(
         self,
@@ -274,7 +278,10 @@ class GatewayUsageLogReadMixin:
         *,
         days: int,
         provider: str | None = None,
-    ) -> dict[str, Any]:
+        route_names: list[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int, datetime, datetime]:
         end = datetime.now(UTC)
         start = end - timedelta(days=days)
         models = await list_merged_models_for_tenant(
@@ -285,19 +292,27 @@ class GatewayUsageLogReadMixin:
             user_id=ctx.user_id,
         )
         if not models:
-            return {"start": start, "end": end, "items": []}
-        models_sorted = sorted(models, key=lambda m: (m.name, str(m.id)))[:500]
-        route_names = [m.name for m in models_sorted]
-        model_ids = [m.id for m in models_sorted]
+            return [], 0, start, end
+        models_sorted = sorted(models, key=lambda m: (m.name, str(m.id)))
+        if route_names is not None:
+            route_set = set(route_names)
+            models_page = [m for m in models_sorted if m.name in route_set]
+            total = len(models_page)
+        else:
+            models_page, total = slice_page(models_sorted, page=page, page_size=page_size)
+        if not models_page:
+            return [], total, start, end
+        page_route_names = [m.name for m in models_page]
+        model_ids = [m.id for m in models_page]
         snapshot = usage_log_access_from_management_ctx(ctx)
         member_user_id = workspace_axis_member_user_id(snapshot)
         ws_axis = UsageAxis.workspace(ctx.team_id, member_user_id=member_user_id)
         u_axis = UsageAxis.user(ctx.user_id)
         by_ws_route = await self._logs.aggregate_by_route_names_by_axis(
-            ws_axis, route_names, start, end
+            ws_axis, page_route_names, start, end
         )
         by_user_route = await self._logs.aggregate_by_route_names_by_axis(
-            u_axis, route_names, start, end
+            u_axis, page_route_names, start, end
         )
         by_ws_dep = await self._logs.aggregate_by_deployment_ids_by_axis(
             ws_axis, model_ids, start, end
@@ -306,7 +321,7 @@ class GatewayUsageLogReadMixin:
             u_axis, model_ids, start, end
         )
         items: list[dict[str, Any]] = []
-        for m in models_sorted:
+        for m in models_page:
             name = m.name
             w = merge_gateway_usage_slices(
                 by_ws_dep.get(m.id, {}),
@@ -333,7 +348,7 @@ class GatewayUsageLogReadMixin:
                     },
                 }
             )
-        return {"start": start, "end": end, "items": items}
+        return items, total, start, end
 
 
 __all__ = ["GatewayUsageLogReadMixin"]

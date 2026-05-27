@@ -8,7 +8,7 @@ export const GATEWAY_USAGE_AGGREGATION_OPTIONS: readonly {
   {
     value: 'workspace',
     label: '团队',
-    description: '按 Gateway 侧栏当前工作区团队（URL / 团队切换，含个人/共享）统计',
+    description: '按 URL 当前团队（/gateway/teams/:teamId，含个人/共享）统计',
   },
   {
     value: 'user',

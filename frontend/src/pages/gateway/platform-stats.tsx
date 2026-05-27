@@ -2,18 +2,20 @@
  * 平台管理员：凭据维度全局调用统计（不含密钥）
  */
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
 
-import { gatewayApi, type PlatformCredentialStat } from '@/api/gateway'
+import { modelsApi } from '@/api/gateway/models'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { LineChart } from '@/lib/lucide-icons'
+import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 
 function coalesceNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -30,24 +32,30 @@ const RANGE_DAYS: { value: 1 | 7 | 30; label: string }[] = [
   { value: 30, label: '30 天' },
 ]
 
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
+
 export default function GatewayPlatformStatsPage(): React.JSX.Element {
   const { isPlatformAdmin, isAuthenticated } = useGatewayPermission()
   const teamId = useResolvedGatewayTeamId()
   const [days, setDays] = useState<1 | 7 | 30>(7)
+  const [page, setPage] = usePaginationPageForFilters(buildFilterKey([days]))
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: ['gateway', 'admin', 'credential-stats', teamId, days],
+    queryKey: ['gateway', 'admin', 'credential-stats', teamId, days, page],
     queryFn: () => {
-      if (!teamId) return Promise.reject(new Error('未选择团队，请先在 Gateway 侧栏选择工作区团队'))
-      return gatewayApi.adminCredentialStats(teamId, { days })
+      if (!teamId)
+        return Promise.reject(new Error('未解析到团队上下文，请先进入团队工作区或从团队管理页切换'))
+      return modelsApi.adminCredentialStats(teamId, {
+        days,
+        page,
+        page_size: PAGE_SIZE,
+      })
     },
     enabled: isAuthenticated && isPlatformAdmin && !!teamId,
+    placeholderData: keepPreviousData,
   })
 
-  const sorted = useMemo(() => {
-    const rows = data ?? []
-    return [...rows].sort((a, b) => b.requests - a.requests)
-  }, [data])
+  const rows = data?.items ?? []
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -65,8 +73,8 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
             平台凭据统计
           </h2>
           <p className="text-sm text-muted-foreground">
-            全平台按凭据聚合调用量；关联模型数为引用该凭据的 Gateway 注册模型条数。API 路径依赖
-            Gateway 侧栏当前工作区团队。
+            全平台按凭据聚合调用量；关联模型数为引用该凭据的 Gateway 注册模型条数。API 路径依赖 URL
+            中的当前团队（/gateway/teams/:teamId）。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -106,10 +114,10 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
           {isError && (
             <p className="px-6 py-8 text-center text-sm text-destructive">{error.message}</p>
           )}
-          {!isLoading && !isError && sorted.length === 0 ? (
+          {!isLoading && !isError && rows.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-muted-foreground">暂无数据</p>
           ) : null}
-          {!isLoading && !isError && sorted.length > 0 ? (
+          {!isLoading && !isError && rows.length > 0 ? (
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -124,7 +132,7 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((row: PlatformCredentialStat) => (
+                {rows.map((row) => (
                   <tr
                     key={row.credential_id}
                     className="cv-auto-row border-b last:border-0 hover:bg-muted/20"
@@ -161,6 +169,18 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
                 ))}
               </tbody>
             </table>
+          ) : null}
+          {data && data.total > PAGE_SIZE ? (
+            <div className="border-t px-4 py-3">
+              <PaginationControls
+                page={data.page}
+                page_size={data.page_size}
+                total={data.total}
+                has_next={data.has_next}
+                has_prev={data.has_prev}
+                onPageChange={setPage}
+              />
+            </div>
           ) : null}
         </CardContent>
       </Card>

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from domains.gateway.application.management.usage_reads import (
     UsageStatisticsItem,
@@ -27,6 +28,9 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsGroupBy,
 )
 from domains.gateway.presentation.deps import CurrentTeam
+from domains.gateway.presentation.gateway_usage_list_response import (
+    build_usage_statistics_response,
+)
 from domains.gateway.presentation.schemas.common import (
     DashboardClientTypeBreakdown,
     DashboardSummaryResponse,
@@ -36,11 +40,13 @@ from domains.gateway.presentation.schemas.common import (
     UsageStatisticsMetricResponse,
     UsageStatisticsResponse,
 )
+from libs.api.pagination import PageParams, page_query_params
 from libs.exceptions import PermissionDeniedError
 
 from ._common import MgmtReads
 
 router = APIRouter()
+PageDep = Annotated[PageParams, Depends(page_query_params)]
 
 
 def _usage_stats_metric_response(
@@ -132,6 +138,7 @@ async def dashboard_summary(
 async def dashboard_statistics(
     team: CurrentTeam,
     reads: MgmtReads,
+    page: PageDep,
     days: int = Query(7, ge=1, le=365),
     usage_aggregation: UsageAggregation = Query(
         UsageAggregation.WORKSPACE,
@@ -146,11 +153,10 @@ async def dashboard_statistics(
     capability: str | None = Query(default=None, min_length=1, max_length=40),
     status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
     vkey_id: uuid.UUID | None = None,
-    limit: int = Query(50, ge=1, le=200),
 ) -> UsageStatisticsResponse:
     end = datetime.now(UTC)
     start = end - timedelta(days=days)
-    summary = await reads.aggregate_usage_statistics(
+    summary, group_total = await reads.aggregate_usage_statistics(
         team,
         start,
         end,
@@ -166,18 +172,22 @@ async def dashboard_statistics(
             status=status_filter.strip() if status_filter else None,
             vkey_id=vkey_id,
         ),
-        limit=limit,
+        page=page.page,
+        page_size=page.page_size,
     )
     show_cost = can_view_pricing_cost_fields(team)
-    return UsageStatisticsResponse(
-        start=summary.start,
-        end=summary.end,
-        group_by=summary.group_by,
-        totals=_usage_stats_metric_response(summary.totals, show_cost=show_cost),
+    return build_usage_statistics_response(
         items=[
             _usage_statistics_item_response(item, show_cost=show_cost)
             for item in summary.items
         ],
+        total=group_total,
+        page=page.page,
+        page_size=page.page_size,
+        start=summary.start,
+        end=summary.end,
+        group_by=summary.group_by,
+        totals=_usage_stats_metric_response(summary.totals, show_cost=show_cost),
     )
 
 

@@ -8,7 +8,7 @@
   useState,
 } from 'react'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
@@ -76,6 +76,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus } from '@/lib/lucide-icons'
+import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadRegisterModelForm } from './register-model-preload'
@@ -140,7 +141,6 @@ export function TeamModelsWorkspace({
   const [abilityFilter, setAbilityFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
-  const [page, setPage] = useState(1)
   const [usageDays, setUsageDays] = useState<UsagePeriodDays>(7)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
@@ -164,9 +164,19 @@ export function TeamModelsWorkspace({
 
   const registryScope = resolveTeamModelsRegistryScope(listMode, credentialFilter)
 
-  useEffect(() => {
-    setPage(1)
-  }, [registryScope, providerFilter, credentialFilter, abilityFilter, deferredSearch, healthFilter])
+  const modelsListFilterKey = useMemo(
+    () =>
+      buildFilterKey([
+        registryScope,
+        providerFilter,
+        credentialFilter,
+        abilityFilter,
+        deferredSearch,
+        healthFilter,
+      ]),
+    [registryScope, providerFilter, credentialFilter, abilityFilter, deferredSearch, healthFilter]
+  )
+  const [page, setPage] = usePaginationPageForFilters(modelsListFilterKey)
 
   const teamListQueryBase = useMemo(
     () => ({
@@ -230,6 +240,7 @@ export function TeamModelsWorkspace({
         ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
         ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       }),
+    placeholderData: keepPreviousData,
   })
 
   const registryItems = listData?.items ?? EMPTY_REGISTRY_ITEMS
@@ -242,7 +253,10 @@ export function TeamModelsWorkspace({
     if (page > maxPage) {
       setPage(maxPage)
     }
-  }, [listData, page])
+  }, [listData, page, setPage])
+
+  const pageRouteNames = useMemo(() => registryItems.map((m) => m.name), [registryItems])
+  const pageRouteNamesKey = useMemo(() => buildFilterKey(pageRouteNames), [pageRouteNames])
 
   const {
     data: usageSummary,
@@ -250,13 +264,23 @@ export function TeamModelsWorkspace({
     isFetching: usageFetching,
     refetch: refetchUsage,
   } = useQuery({
-    queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
+    queryKey: [
+      'gateway',
+      'models',
+      'usage-summary',
+      teamId,
+      providerFilter,
+      usageDays,
+      pageRouteNamesKey,
+    ],
     queryFn: () =>
       gatewayApi.modelsUsageSummary(teamId, {
         days: usageDays,
         ...(providerFilter ? { provider: providerFilter } : {}),
+        ...(pageRouteNames.length > 0 ? { route_names: pageRouteNames } : {}),
       }),
-    enabled: !isRegisterView,
+    enabled: !isRegisterView && pageRouteNames.length > 0,
+    placeholderData: keepPreviousData,
   })
 
   const { data: credentials } = useQuery({
@@ -298,22 +322,13 @@ export function TeamModelsWorkspace({
     [credentials, credentialFilter, listMode]
   )
 
-  const scopedRouteNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const m of registryItems) {
-      names.add(m.name)
-    }
-    return names
-  }, [registryItems])
-
   const usageByRouteName = useMemo(() => {
     const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
     for (const row of usageSummary?.items ?? []) {
-      if (listMode !== undefined && !scopedRouteNames.has(row.route_name)) continue
       m.set(row.route_name, row)
     }
     return m
-  }, [usageSummary, listMode, scopedRouteNames])
+  }, [usageSummary])
 
   const providerChoices = useMemo(() => {
     const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))

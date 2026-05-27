@@ -5,7 +5,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { credentialsApi } from '@/api/gateway/credentials'
 import { keysApi } from '@/api/gateway/keys'
@@ -18,6 +18,7 @@ import {
   type GatewayUsageStatsQuery,
 } from '@/api/gateway/stats'
 import { teamsApi } from '@/api/gateway/teams'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,10 +45,11 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { LineChart, Settings2, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
+import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { cn } from '@/lib/utils'
 
 const ALL_VALUE = '__all__'
-const LIMIT = 40
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 const RANGE_DAYS: { value: 1 | 7 | 30 | 90; label: string }[] = [
   { value: 1, label: '24 小时' },
@@ -211,6 +213,37 @@ export default function GatewayStatsPage(): React.JSX.Element {
 
   const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
 
+  const statsFilterKey = useMemo(
+    () =>
+      buildFilterKey([
+        days,
+        usageAggregation,
+        groupBy,
+        credentialId,
+        userId,
+        teamFilterId,
+        model,
+        provider,
+        capability,
+        status,
+        vkeyId,
+      ]),
+    [
+      days,
+      usageAggregation,
+      groupBy,
+      credentialId,
+      userId,
+      teamFilterId,
+      model,
+      provider,
+      capability,
+      status,
+      vkeyId,
+    ]
+  )
+  const [page, setPage] = usePaginationPageForFilters(statsFilterKey)
+
   useEffect(() => {
     if (crossTeamStatsEnabled) return
     setTeamFilterId(ALL_VALUE)
@@ -309,7 +342,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
       capability: resettable(capability),
       status: resettable(status),
       vkey_id: resettable(vkeyId),
-      limit: LIMIT,
+      page,
+      page_size: PAGE_SIZE,
     }
   }, [
     days,
@@ -324,11 +358,13 @@ export default function GatewayStatsPage(): React.JSX.Element {
     capability,
     status,
     vkeyId,
+    page,
   ])
 
   const statsQuery = useQuery({
     queryKey: ['gateway', 'usage-stats', teamId, queryParams],
     queryFn: () => statsApi.usageStats(teamId, queryParams),
+    placeholderData: keepPreviousData,
   })
 
   const items = statsQuery.data?.items ?? []
@@ -659,6 +695,18 @@ export default function GatewayStatsPage(): React.JSX.Element {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {statsQuery.data && statsQuery.data.total > PAGE_SIZE ? (
+            <div className="border-t px-4 py-3">
+              <PaginationControls
+                page={statsQuery.data.page}
+                page_size={statsQuery.data.page_size}
+                total={statsQuery.data.total}
+                has_next={statsQuery.data.has_next}
+                has_prev={statsQuery.data.has_prev}
+                onPageChange={setPage}
+              />
             </div>
           ) : null}
         </CardContent>

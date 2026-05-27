@@ -10,6 +10,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import { buildPageQuerySearch } from '@/lib/pagination'
 import type { PageQuery, PaginatedList } from '@/types'
 import type { AvailableModelsResponse, ModelTestStatus, ModelType } from '@/types/user-model'
 
@@ -97,10 +98,9 @@ export interface GatewayModelRouteUsageItem {
 }
 
 /** GET /models/usage-summary；按日志 route_name = 注册名统计 */
-export interface GatewayModelUsageSummary {
+export interface GatewayModelUsageSummary extends PaginatedList<GatewayModelRouteUsageItem> {
   start: string
   end: string
-  items: GatewayModelRouteUsageItem[]
 }
 
 /** GET /admin/credential-stats（仅平台管理员） */
@@ -119,6 +119,8 @@ export interface PlatformCredentialStat {
   success_count: number
   failure_count: number
 }
+
+export type PlatformCredentialStatList = PaginatedList<PlatformCredentialStat>
 
 /** POST /models/{id}/test 与 /my-models/{id}/test 响应 */
 export interface GatewayModelTestResult {
@@ -355,6 +357,31 @@ export async function fetchGatewayModelIdsForBatch(
 }
 
 /** Models 资源 API */
+export interface GatewayModelUsageSummaryQuery extends PageQuery {
+  days?: number
+  provider?: string
+  route_names?: string[]
+}
+
+function buildModelUsageSummarySearch(
+  params?: GatewayModelUsageSummaryQuery
+): Record<string, string | string[]> {
+  const search: Record<string, string | string[]> = buildPageQuerySearch(params)
+  if (!params) return search
+  if (params.days !== undefined) search.days = String(params.days)
+  if (params.provider) search.provider = params.provider
+  if (params.route_names?.length) search.route_names = params.route_names
+  return search
+}
+
+function buildAdminCredentialStatsSearch(
+  params?: PageQuery & { days?: number }
+): Record<string, string> {
+  const search = buildPageQuerySearch(params)
+  if (params?.days !== undefined) search.days = String(params.days)
+  return search
+}
+
 export const modelsApi = {
   /**
    * 列出当前调用方可用的模型（系统模型 + 我的个人模型；按 type / provider / mode 过滤）。
@@ -401,17 +428,18 @@ export const modelsApi = {
       teamGatewayPath(teamId, '/models/ids'),
       buildModelListSearch(params)
     ),
+
   /** 团队模型用量汇总（按 route 维度） */
-  modelsUsageSummary: (teamId: string, params?: { days?: number; provider?: string }) =>
+  modelsUsageSummary: (teamId: string, params?: GatewayModelUsageSummaryQuery) =>
     apiClient.get<GatewayModelUsageSummary>(
       teamGatewayPath(teamId, '/models/usage-summary'),
-      params
+      buildModelUsageSummarySearch(params)
     ),
   /** 平台凭据用量与成功率统计（仅平台管理员） */
-  adminCredentialStats: (teamId: string, params?: { days?: number }) =>
-    apiClient.get<PlatformCredentialStat[]>(
+  adminCredentialStats: (teamId: string, params?: PageQuery & { days?: number }) =>
+    apiClient.get<PlatformCredentialStatList>(
       teamGatewayPath(teamId, '/admin/credential-stats'),
-      params
+      buildAdminCredentialStatsSearch(params)
     ),
   /** 平台预置模型模板（注册团队模型时的可选项） */
   listModelPresets: (teamId: string, params?: { provider?: string }) =>

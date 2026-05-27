@@ -157,28 +157,32 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         avg_latency_ms=123.4,
         cache_hit_count=1,
     )
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 1
     item_result = MagicMock()
     item_result.all.return_value = [item_row]
     total_result = MagicMock()
     total_result.one.return_value = total_row
     session = AsyncMock()
-    session.execute = AsyncMock(side_effect=[item_result, total_result])
+    session.execute = AsyncMock(side_effect=[count_result, item_result, total_result])
 
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
-    items, totals = await repo.aggregate_usage_statistics_by_axis(
+    items, totals, group_total = await repo.aggregate_usage_statistics_by_axis(
         UsageAxis.workspace(uuid.uuid4()),
         now - timedelta(days=1),
         now,
         group_by=UsageStatisticsGroupBy.CREDENTIAL,
         filters=UsageStatisticsFilters(provider="openai"),
-        limit=10,
+        page=1,
+        page_size=10,
     )
 
     assert len(items) == 1
+    assert group_total == 1
     assert items[0].group_key == cid
     assert items[0].requests == 3
     assert items[0].cost_usd == Decimal("0.03")
     assert totals.success_count == 2
     assert totals.cached_tokens == 4
-    assert session.execute.await_count == 2
+    assert session.execute.await_count == 3

@@ -53,7 +53,7 @@ export function useGatewayTeamNameMap(enabled = true): Map<string, string> {
   }, [teams, viewerUserId])
 }
 
-/** 侧栏 / Playground 团队选择器同源（membership_only） */
+/** Playground / 团队管理页等同源（membership_only） */
 export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string> {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
