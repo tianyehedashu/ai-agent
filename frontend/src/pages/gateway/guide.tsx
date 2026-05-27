@@ -21,7 +21,9 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { resolvePlaygroundVirtualKeyTeamIds } from '@/features/gateway-playground/playground-credential-summaries'
 import {
+  ensurePlaygroundSelectionModelLoaded,
   PLAYGROUND_MODE_LABELS,
+  filterPlaygroundRouteCandidates,
   type PlaygroundMode,
 } from '@/features/gateway-playground/playground-mode-filter'
 import { usePlaygroundFilteredModels } from '@/features/gateway-playground/use-playground-filtered-models'
@@ -188,6 +190,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
     credentialById,
     credentialsLoading,
     candidateModels: guideModelCandidates,
+    routes: guideRoutes,
     ensureModelNameLoaded,
     isRefreshing: playgroundModelsRefreshing,
     refreshAll: refreshPlaygroundModels,
@@ -217,6 +220,11 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
   const [exampleStream, setExampleStream] = useState(true)
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
+
+  const guideRouteCandidates = useMemo(
+    () => filterPlaygroundRouteCandidates(guideRoutes, '', guideModelCandidates, playgroundMode),
+    [guideRoutes, guideModelCandidates, playgroundMode]
+  )
 
   const displayKey = revealedKey ?? PLACEHOLDER_KEY
   const clientIntegrationsKeyHint: GuideClientIntegrationsKeyHint = revealedKey
@@ -272,10 +280,14 @@ export default function GatewayGuidePage(): React.JSX.Element {
 
   useEffect(() => {
     const name = activeModel || PLACEHOLDER_MODEL
-    if (name !== PLACEHOLDER_MODEL) {
-      ensureModelNameLoaded(name)
-    }
-  }, [activeModel, ensureModelNameLoaded])
+    if (name === PLACEHOLDER_MODEL) return
+    ensurePlaygroundSelectionModelLoaded(
+      name,
+      guideRouteCandidates,
+      ensureModelNameLoaded,
+      guideRoutes
+    )
+  }, [activeModel, guideRouteCandidates, guideRoutes, ensureModelNameLoaded])
 
   useEffect(() => {
     if (!credentialId || credentialsLoading) return
@@ -661,7 +673,7 @@ const GuideAnchorNav = memo(function GuideAnchorNav({
   return (
     <nav
       aria-label="调用指南目录"
-      className="sticky -top-12 z-30 -mx-6 -mt-12 border-b border-border/60 bg-background/95 px-6 pb-1.5 pt-12 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      className="sticky top-0 z-30 -mx-6 border-b border-border/60 bg-background px-6 py-1.5 shadow-sm"
     >
       <div
         role="tablist"

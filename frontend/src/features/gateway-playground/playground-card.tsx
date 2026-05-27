@@ -48,6 +48,7 @@ import { PlaygroundKeyField } from './playground-key-field'
 import {
   endpointPathForMode,
   filterModelsByMode,
+  ensurePlaygroundSelectionModelLoaded,
   filterPlaygroundRouteCandidates,
   buildModelCandidateIndex,
   PLAYGROUND_MODE_LABELS,
@@ -304,8 +305,13 @@ export function PlaygroundCard({
 
   useEffect(() => {
     if (customModel || !trimmedModel) return
-    ensureModelNameLoaded(trimmedModel)
-  }, [customModel, trimmedModel, ensureModelNameLoaded])
+    ensurePlaygroundSelectionModelLoaded(
+      trimmedModel,
+      routeCandidates,
+      ensureModelNameLoaded,
+      routes
+    )
+  }, [customModel, trimmedModel, routeCandidates, routes, ensureModelNameLoaded])
 
   const modelsListLoaded = teamModelsLoaded && myModelsLoaded
 
@@ -382,12 +388,11 @@ export function PlaygroundCard({
 
   const selectedModelRequestable = useMemo(() => {
     if (customModel) return trimmedModel.length > 0
-    if (selectedRoute) {
-      return selectedRoute.primaryModels.every((name) => modelsByName.has(name))
-    }
+    // 虚拟路由以 virtual_model 名直接请求，不依赖本地分页是否已加载全部主模型
+    if (selectedRoute) return true
     if (selectedCandidate) return true
-    return false
-  }, [customModel, trimmedModel, selectedRoute, selectedCandidate, modelsByName])
+    return trimmedModel.length > 0
+  }, [customModel, trimmedModel, selectedRoute, selectedCandidate])
 
   const canSubmit =
     Boolean(trimmedKey && trimmedModel && trimmedPrompt) &&

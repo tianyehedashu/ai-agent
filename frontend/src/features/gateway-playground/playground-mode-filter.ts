@@ -128,12 +128,40 @@ export function filterPlaygroundRouteCandidates(
   return (routes ?? [])
     .filter((r) => r.enabled)
     .filter((r) => {
+      if (r.primary_models.length === 0) return false
+      // 未选凭据：直接展示已配置主模型的路由，不等待模型分页加载
       if (!credentialId) return true
-      return r.primary_models.length > 0 && r.primary_models.every((name) => modelNames.has(name))
+      return r.primary_models.every((name) => modelNames.has(name))
     })
     .filter((r) => routeSupportsMode(r.primary_models, playgroundMode, modelsByName))
     .map((r) => ({ name: r.virtual_model, primaryModels: r.primary_models }))
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** 选中虚拟路由时预加载其主模型；否则按模型名翻页 */
+export function ensurePlaygroundSelectionModelLoaded(
+  selectedName: string,
+  routeCandidates: readonly PlaygroundRouteCandidate[],
+  ensureModelNameLoaded: (modelName: string) => void,
+  rawRoutes?: readonly { virtual_model: string; primary_models: readonly string[] }[]
+): void {
+  const trimmed = selectedName.trim()
+  if (!trimmed) return
+  const route = routeCandidates.find((r) => r.name === trimmed)
+  if (route) {
+    for (const primary of route.primaryModels) {
+      ensureModelNameLoaded(primary)
+    }
+    return
+  }
+  const rawRoute = rawRoutes?.find((r) => r.virtual_model === trimmed)
+  if (rawRoute) {
+    for (const primary of rawRoute.primary_models) {
+      ensureModelNameLoaded(primary)
+    }
+    return
+  }
+  ensureModelNameLoaded(trimmed)
 }
 
 export function endpointPathForMode(

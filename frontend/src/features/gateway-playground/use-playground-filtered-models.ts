@@ -74,7 +74,7 @@ export function usePlaygroundFilteredModels(
 
   const queryClient = useQueryClient()
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
-  const [pendingModelName, setPendingModelName] = useState<string | null>(null)
+  const [pendingModelNames, setPendingModelNames] = useState<Set<string>>(() => new Set())
 
   const {
     grouped: credentialGroups,
@@ -208,14 +208,20 @@ export function usePlaygroundFilteredModels(
   const ensureModelNameLoaded = useCallback((modelName: string): void => {
     const trimmed = modelName.trim()
     if (!trimmed) return
-    setPendingModelName(trimmed)
+    setPendingModelNames((prev) => {
+      if (prev.has(trimmed)) return prev
+      const next = new Set(prev)
+      next.add(trimmed)
+      return next
+    })
   }, [])
 
-  // 选中模型可能在后续页：按需翻页直至命中或耗尽
+  // 仅对 ensureModelNameLoaded 登记的名字翻页（选中模型/路由时由 UI 触发，避免 mount 拉全量路由主模型）
   useEffect(() => {
-    if (!pendingModelName || candidateNames.has(pendingModelName)) {
-      if (pendingModelName && candidateNames.has(pendingModelName)) {
-        setPendingModelName(null)
+    const unresolved = [...pendingModelNames].filter((name) => !candidateNames.has(name))
+    if (unresolved.length === 0) {
+      if (pendingModelNames.size > 0) {
+        setPendingModelNames(new Set())
       }
       return
     }
@@ -227,9 +233,9 @@ export function usePlaygroundFilteredModels(
       void fetchNextMyPage()
       return
     }
-    setPendingModelName(null)
+    setPendingModelNames(new Set())
   }, [
-    pendingModelName,
+    pendingModelNames,
     candidateNames,
     shouldLoadMoreTeam,
     shouldLoadMoreMy,

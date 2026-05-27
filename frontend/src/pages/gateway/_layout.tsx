@@ -22,6 +22,7 @@ import {
   Route,
   Receipt,
   Server,
+  UserCog,
   Users,
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -161,7 +162,8 @@ export default function GatewayLayout(): React.JSX.Element {
           icon: Network,
           navMatch: 'models-system',
         },
-        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart, end: true }
+        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart, end: true },
+        { to: '/admin/users', label: '用户管理', icon: UserCog, end: true }
       )
     }
     return base

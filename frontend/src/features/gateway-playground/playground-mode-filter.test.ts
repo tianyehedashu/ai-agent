@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ensurePlaygroundSelectionModelLoaded,
   filterModelsByMode,
   filterPlaygroundRouteCandidates,
   type ModelCandidate,
@@ -50,7 +51,12 @@ describe('filterPlaygroundRouteCandidates', () => {
     expect(result.map((r) => r.name)).toEqual(['route-a', 'route-b'])
   })
 
-  it('requires all primary models when credential filter is active', () => {
+  it('shows routes before all primary models are paginated in when no credential filter', () => {
+    const result = filterPlaygroundRouteCandidates(routes, '', [], 'chat')
+    expect(result.map((r) => r.name)).toEqual(['route-a', 'route-b'])
+  })
+
+  it('requires all primary models in loaded candidates when credential filter is active', () => {
     const result = filterPlaygroundRouteCandidates(routes, 'cred-team', [chatModel], 'chat')
     expect(result.map((r) => r.name)).toEqual(['route-b'])
   })
@@ -58,6 +64,41 @@ describe('filterPlaygroundRouteCandidates', () => {
   it('filters routes by playground mode capabilities', () => {
     const result = filterPlaygroundRouteCandidates(routes, '', [chatModel, visionModel], 'vision')
     expect(result.map((r) => r.name)).toEqual(['route-a'])
+  })
+})
+
+describe('ensurePlaygroundSelectionModelLoaded', () => {
+  it('loads primary models when selection is a virtual route', () => {
+    const loaded: string[] = []
+    ensurePlaygroundSelectionModelLoaded(
+      'route-a',
+      [{ name: 'route-a', primaryModels: ['chat-model', 'vision-model'] }],
+      (name) => {
+        loaded.push(name)
+      }
+    )
+    expect(loaded).toEqual(['chat-model', 'vision-model'])
+  })
+
+  it('loads primary models from raw routes when filtered candidates omit the route', () => {
+    const loaded: string[] = []
+    ensurePlaygroundSelectionModelLoaded(
+      'route-a',
+      [],
+      (name) => {
+        loaded.push(name)
+      },
+      [{ virtual_model: 'route-a', primary_models: ['chat-model', 'vision-model'] }]
+    )
+    expect(loaded).toEqual(['chat-model', 'vision-model'])
+  })
+
+  it('loads model name directly when selection is not a route', () => {
+    const loaded: string[] = []
+    ensurePlaygroundSelectionModelLoaded('chat-model', [], (name) => {
+      loaded.push(name)
+    })
+    expect(loaded).toEqual(['chat-model'])
   })
 })
 
