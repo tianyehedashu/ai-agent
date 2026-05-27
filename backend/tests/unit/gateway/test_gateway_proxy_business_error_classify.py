@@ -122,3 +122,37 @@ def test_classify_httpx_upstream_5xx_maps_502() -> None:
 
 def test_classify_unknown_returns_none() -> None:
     assert classify_proxy_use_case_business_error(RuntimeError("x")) is None
+
+
+def test_classify_router_cooldown_maps_429() -> None:
+    from litellm.types.router import RouterRateLimitError
+
+    exc = RouterRateLimitError(
+        model="gw/t/x/deepseek",
+        cooldown_time=60,
+        enable_pre_call_checks=True,
+        cooldown_list=["dep-1"],
+    )
+    biz = classify_proxy_use_case_business_error(exc)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_429_TOO_MANY_REQUESTS
+    assert biz.openai_error_type == "rate_limit_exceeded"
+    assert biz.anthropic_error_type == "rate_limit_error"
+    assert biz.retry_after == 60
+    assert "60 秒后重试" in biz.message
+
+
+def test_classify_litellm_upstream_rate_limit_maps_429() -> None:
+    import litellm
+
+    exc = litellm.RateLimitError(
+        message="Volcengine rate limit exceeded",
+        llm_provider="volcengine",
+        model="deepseek-v4",
+    )
+    biz = classify_proxy_use_case_business_error(exc)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_429_TOO_MANY_REQUESTS
+    assert biz.openai_error_type == "rate_limit_exceeded"
+    assert biz.anthropic_error_type == "rate_limit_error"
+    assert "Volcengine rate limit exceeded" in biz.message

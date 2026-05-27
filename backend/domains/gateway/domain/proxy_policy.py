@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import TYPE_CHECKING
 import uuid
 
@@ -175,8 +176,56 @@ _ROUTER_MODEL_MISS_MARKERS: tuple[str, ...] = (
 )
 
 
+def is_router_deployment_cooldown(exc: Exception) -> bool:
+    """LiteLLM Router 全部 deployment 处于 cooldown（常见原因：上游 429 限流）。"""
+    if type(exc).__name__ in ("RouterRateLimitError", "RouterRateLimitErrorBasic"):
+        return True
+    if getattr(exc, "cooldown_time", None) is not None:
+        return True
+    message = str(exc).lower()
+    return "no deployments available" in message and "try again in" in message
+
+
+def router_cooldown_retry_after(exc: Exception) -> int | None:
+    """从 Router cooldown 异常提取 ``Retry-After`` 秒数。"""
+    cooldown_time = getattr(exc, "cooldown_time", None)
+    if isinstance(cooldown_time, (int, float)) and cooldown_time > 0:
+        return int(cooldown_time)
+    match = re.search(r"try again in (\d+) seconds?", str(exc), flags=re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def upstream_exception_http_status(exc: Exception) -> int | None:
+    """LiteLLM / OpenAI SDK 异常上的 ``status_code``（若存在）。"""
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code
+    return None
+
+
+def upstream_exception_retry_after(exc: Exception) -> int | None:
+    """从上游异常 response headers 提取 ``Retry-After``。"""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    raw = headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return None
+
+
 def is_router_model_miss(exc: Exception) -> bool:
     """LiteLLM Router 找不到 deployment 时的异常文案识别（compat 错误映射兜底）。"""
+    if is_router_deployment_cooldown(exc):
+        return False
     message = str(exc).lower()
     return any(marker in message for marker in _ROUTER_MODEL_MISS_MARKERS)
 
@@ -193,6 +242,10 @@ __all__ = [
     "budget_targets",
     "build_budget_check_plan",
     "first_present_limit",
+    "is_router_deployment_cooldown",
     "is_router_model_miss",
     "rate_limit_target",
+    "router_cooldown_retry_after",
+    "upstream_exception_http_status",
+    "upstream_exception_retry_after",
 ]

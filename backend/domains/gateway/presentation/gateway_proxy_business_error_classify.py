@@ -18,7 +18,13 @@ from domains.gateway.domain.errors import (
     ModelNotAllowedError,
     RateLimitExceededError,
 )
-from domains.gateway.domain.proxy_policy import is_router_model_miss
+from domains.gateway.domain.proxy_policy import (
+    is_router_deployment_cooldown,
+    is_router_model_miss,
+    router_cooldown_retry_after,
+    upstream_exception_http_status,
+    upstream_exception_retry_after,
+)
 from libs.exceptions import ExternalServiceError, ValidationError
 
 
@@ -31,6 +37,28 @@ class ProxyUseCaseBusinessFailure:
     openai_error_type: str
     anthropic_error_type: str
     retry_after: int | None = None
+
+
+def _upstream_rate_limit_failure(
+    exc: Exception,
+    *,
+    retry_after: int | None = None,
+) -> ProxyUseCaseBusinessFailure:
+    message = str(exc)
+    raw_message = getattr(exc, "message", None)
+    if isinstance(raw_message, str) and raw_message.strip():
+        message = raw_message.strip()
+        if message.startswith("litellm."):
+            prefix_end = message.find(": ")
+            if prefix_end >= 0:
+                message = message[prefix_end + 2 :].strip()
+    return ProxyUseCaseBusinessFailure(
+        http_status=status.HTTP_429_TOO_MANY_REQUESTS,
+        message=message,
+        openai_error_type="rate_limit_exceeded",
+        anthropic_error_type="rate_limit_error",
+        retry_after=retry_after,
+    )
 
 
 def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusinessFailure | None:
@@ -77,6 +105,26 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             message=str(exc),
             openai_error_type="entitlement_exhausted",
             anthropic_error_type="rate_limit_error",
+        )
+    if is_router_deployment_cooldown(exc):
+        retry_after = router_cooldown_retry_after(exc)
+        message = (
+            f"模型部署暂不可用（上游限流或冷却中），请在 {retry_after} 秒后重试"
+            if retry_after is not None
+            else "模型部署暂不可用（上游限流或冷却中），请稍后重试"
+        )
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_429_TOO_MANY_REQUESTS,
+            message=message,
+            openai_error_type="rate_limit_exceeded",
+            anthropic_error_type="rate_limit_error",
+            retry_after=retry_after,
+        )
+    upstream_status = upstream_exception_http_status(exc)
+    if upstream_status == status.HTTP_429_TOO_MANY_REQUESTS:
+        return _upstream_rate_limit_failure(
+            exc,
+            retry_after=upstream_exception_retry_after(exc),
         )
     if isinstance(exc, GuardrailBlockedError):
         return ProxyUseCaseBusinessFailure(
