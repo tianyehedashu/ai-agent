@@ -85,7 +85,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     [listData?.tenant_ids_with_models]
   )
 
-  const defaultRegisterTeamId = displayTeams[0]?.id ?? writableCollaborationTeams[0].id
+  const defaultRegisterTeamId = displayTeams[0]?.id ?? writableCollaborationTeams[0]?.id
 
   const handleTeamSearchChange = useCallback((value: string) => {
     setTeamSearch(value)
