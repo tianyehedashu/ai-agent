@@ -827,6 +827,102 @@ class BudgetResponse(BaseModel):
 
 
 # =============================================================================
+# Quota Rules (unified read/write facade)
+# =============================================================================
+
+
+class QuotaRuleKeyResponse(BaseModel):
+    team_id: uuid.UUID
+    layer: Literal["platform", "upstream", "downstream"]
+    user_id: uuid.UUID | None = None
+    credential_id: uuid.UUID | None = None
+    model_name: str | None = None
+    period: str | None = None
+    window_seconds: int | None = None
+    reset_strategy: str | None = None
+    access_kind: Literal["none", "vkey", "apikey_grant"] = "none"
+    access_id: uuid.UUID | None = None
+    quota_label: str | None = None
+    target_kind: str | None = None
+    target_id: uuid.UUID | None = None
+
+
+class QuotaRuleSourceRefResponse(BaseModel):
+    layer: Literal["platform", "upstream", "downstream"]
+    budget_id: uuid.UUID | None = None
+    plan_id: uuid.UUID | None = None
+    quota_id: uuid.UUID | None = None
+
+
+class QuotaRuleLimitsResponse(BaseModel):
+    limit_usd: Decimal | None = None
+    soft_limit_usd: Decimal | None = None
+    limit_tokens: int | None = None
+    limit_requests: int | None = None
+    unit_price_usd_per_token: Decimal | None = None
+    unit_price_usd_per_request: Decimal | None = None
+
+
+class QuotaRuleUsageResponse(BaseModel):
+    current_usd: Decimal = Decimal("0")
+    current_tokens: int = 0
+    current_requests: int = 0
+    reset_at: datetime | None = None
+    budget_reset_at: datetime | None = None
+
+
+class QuotaRuleResponse(BaseModel):
+    key: QuotaRuleKeyResponse
+    source_ref: QuotaRuleSourceRefResponse
+    limits: QuotaRuleLimitsResponse
+    usage: QuotaRuleUsageResponse | None = None
+    plan_label: str | None = None
+    is_active: bool = True
+
+
+class QuotaRuleUpsert(BaseModel):
+    layer: Literal["platform", "upstream", "downstream"]
+    target_kind: str | None = Field(
+        default=None,
+        pattern="^(system|tenant|key|user)$",
+    )
+    target_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
+    credential_id: uuid.UUID | None = None
+    model_name: str | None = Field(default=None, max_length=200)
+    period: str | None = Field(default=None, pattern="^(daily|monthly|total)$")
+    window_seconds: int | None = Field(default=None, ge=0)
+    reset_strategy: str | None = None
+    quota_label: str | None = Field(default=None, max_length=40)
+    access_kind: Literal["none", "vkey", "apikey_grant"] = "none"
+    access_id: uuid.UUID | None = None
+    included_models: list[str] = Field(default_factory=list)
+    limit_usd: Decimal | None = None
+    soft_limit_usd: Decimal | None = None
+    limit_tokens: int | None = None
+    limit_requests: int | None = None
+    unit_price_usd_per_token: Decimal | None = None
+    unit_price_usd_per_request: Decimal | None = None
+    plan_label: str | None = Field(default=None, max_length=100)
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+
+
+class QuotaRuleBatchUpsertRequest(BaseModel):
+    rules: list[QuotaRuleUpsert] = Field(..., min_length=1, max_length=200)
+
+
+class QuotaRuleBatchFailureItem(BaseModel):
+    index: int
+    error: str
+
+
+class QuotaRuleBatchUpsertResponse(BaseModel):
+    succeeded: list[QuotaRuleResponse] = Field(default_factory=list)
+    failed: list[QuotaRuleBatchFailureItem] = Field(default_factory=list)
+
+
+# =============================================================================
 # Logs
 # =============================================================================
 
@@ -1235,7 +1331,15 @@ __all__ = [
     "ProviderPlanCostResponse",
     "ProviderPlanCreate",
     "ProviderPlanResponse",
-    "ProviderPlanUpdate",
+    "QuotaRuleBatchFailureItem",
+    "QuotaRuleBatchUpsertRequest",
+    "QuotaRuleBatchUpsertResponse",
+    "QuotaRuleKeyResponse",
+    "QuotaRuleLimitsResponse",
+    "QuotaRuleResponse",
+    "QuotaRuleSourceRefResponse",
+    "QuotaRuleUpsert",
+    "QuotaRuleUsageResponse",
     "RequestLogDetailResponse",
     "RequestLogListResponse",
     "RequestLogResponse",

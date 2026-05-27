@@ -1098,6 +1098,59 @@ class TestGatewayManagementApi:
         assert vision_alias in text_names
 
     @pytest.mark.asyncio
+    async def test_list_team_models_filters_by_credential_name_q(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """GET .../models?q= 可匹配绑定凭据的展示名。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        unique_cred = f"Acme-Prod-{uuid.uuid4().hex[:8]}"
+        other_cred = f"Other-Key-{uuid.uuid4().hex[:8]}"
+        matched_alias = f"matched-{uuid.uuid4().hex[:6]}"
+        other_alias = f"other-{uuid.uuid4().hex[:6]}"
+
+        for cred_name, alias in ((unique_cred, matched_alias), (other_cred, other_alias)):
+            r_cred = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/credentials",
+                headers=headers,
+                json={
+                    "provider": "openai",
+                    "name": cred_name,
+                    "api_key": "sk-cred-name-filter-test-key-123456789",
+                    "scope": "team",
+                },
+            )
+            assert r_cred.status_code == 201, r_cred.text
+            cid = r_cred.json()["id"]
+            r_model = await dev_client.post(
+                f"/api/v1/gateway/teams/{team.id}/models",
+                headers=headers,
+                json={
+                    "name": alias,
+                    "capability": "chat",
+                    "real_model": "gpt-4o-mini",
+                    "credential_id": cid,
+                    "provider": "openai",
+                },
+            )
+            assert r_model.status_code == 201, r_model.text
+
+        r_q = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            params={"q": unique_cred, "page_size": 50},
+        )
+        assert r_q.status_code == 200, r_q.text
+        names = {m["name"] for m in _model_list_items(r_q.json())}
+        assert matched_alias in names
+        assert other_alias not in names
+
+    @pytest.mark.asyncio
     async def test_list_system_models_connectivity_summary_matches_total(
         self,
         dev_client: AsyncClient,
@@ -3542,6 +3595,9 @@ class TestManagedTeamModelsAggregateApi:
         assert payload["queried_shared_team_count"] >= 1
         assert "tenant_ids_with_models" in payload
         assert str(shared.id) in {str(t) for t in payload["tenant_ids_with_models"]}
+        summary = payload["connectivity_summary"]
+        assert summary["total"] == summary["success"] + summary["failed"] + summary["unknown"]
+        assert summary["total"] >= 1
 
     @pytest.mark.asyncio
     async def test_list_managed_team_models_member_can_read(

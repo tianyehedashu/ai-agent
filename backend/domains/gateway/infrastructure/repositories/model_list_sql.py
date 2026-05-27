@@ -15,7 +15,10 @@ from domains.gateway.domain.policies.model_list_policy import (
 from domains.gateway.domain.types import CredentialScope
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
-from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
+from domains.gateway.infrastructure.models.system_gateway import (
+    SystemGatewayModel,
+    SystemProviderCredential,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -52,6 +55,55 @@ def _search_clause(
         real_model_col.ilike(pattern),
         provider_col.ilike(pattern),
     )
+
+
+def _credential_name_search_clause(
+    credential_id_col: InstrumentedAttribute[Any],
+    *,
+    q: str | None,
+    system_credential: bool,
+) -> ColumnElement[bool] | None:
+    if not q or not q.strip():
+        return None
+    pattern = f"%{q.strip()}%"
+    cred_cls = SystemProviderCredential if system_credential else ProviderCredential
+    return (
+        select(cred_cls.id)
+        .where(
+            cred_cls.id == credential_id_col,
+            cred_cls.name.ilike(pattern),
+        )
+        .exists()
+    )
+
+
+def _registry_q_clause(
+    *,
+    name_col: InstrumentedAttribute[str],
+    real_model_col: InstrumentedAttribute[str],
+    provider_col: InstrumentedAttribute[str],
+    credential_id_col: InstrumentedAttribute[Any],
+    q: str | None,
+    system_credential: bool,
+) -> ColumnElement[bool] | None:
+    model_search = _search_clause(
+        name_col=name_col,
+        real_model_col=real_model_col,
+        provider_col=provider_col,
+        q=q,
+    )
+    cred_search = _credential_name_search_clause(
+        credential_id_col,
+        q=q,
+        system_credential=system_credential,
+    )
+    if model_search is None and cred_search is None:
+        return None
+    if model_search is None:
+        return cred_search
+    if cred_search is None:
+        return model_search
+    return or_(model_search, cred_search)
 
 
 def _availability_order(model_cls: type[GatewayModel] | type[SystemGatewayModel]) -> ColumnElement[int]:
@@ -107,11 +159,13 @@ def build_system_list_stmt(
         clauses.append(SystemGatewayModel.provider == provider)
     if credential_id is not None:
         clauses.append(SystemGatewayModel.credential_id == credential_id)
-    search = _search_clause(
+    search = _registry_q_clause(
         name_col=SystemGatewayModel.name,
         real_model_col=SystemGatewayModel.real_model,
         provider_col=SystemGatewayModel.provider,
+        credential_id_col=SystemGatewayModel.credential_id,
         q=q,
+        system_credential=True,
     )
     if search is not None:
         clauses.append(search)
@@ -160,11 +214,13 @@ def build_tenant_list_stmt(
             ProviderCredential.scope == CredentialScope.USER.value
         )
         clauses.append(GatewayModel.credential_id.notin_(user_scoped_subq))
-    search = _search_clause(
+    search = _registry_q_clause(
         name_col=GatewayModel.name,
         real_model_col=GatewayModel.real_model,
         provider_col=GatewayModel.provider,
+        credential_id_col=GatewayModel.credential_id,
         q=q,
+        system_credential=False,
     )
     if search is not None:
         clauses.append(search)
@@ -211,11 +267,13 @@ def _tenant_registry_clauses(
             ProviderCredential.scope == CredentialScope.USER.value
         )
         clauses.append(GatewayModel.credential_id.notin_(user_scoped_subq))
-    search = _search_clause(
+    search = _registry_q_clause(
         name_col=GatewayModel.name,
         real_model_col=GatewayModel.real_model,
         provider_col=GatewayModel.provider,
+        credential_id_col=GatewayModel.credential_id,
         q=q,
+        system_credential=False,
     )
     if search is not None:
         clauses.append(search)

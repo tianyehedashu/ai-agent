@@ -795,21 +795,54 @@ export function groupModelsByTeamId(models: readonly GatewayModel[]): Map<string
   return map
 }
 
+/** 按 tenant 分组模型 id（跨团队 batch 已缓存 team 归属时使用） */
+export function groupModelIdsByTeamId(
+  ids: readonly string[],
+  resolveTeamId: (id: string) => string | null
+): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const id of ids) {
+    const teamId = resolveTeamId(id)
+    if (!teamId) continue
+    const existing = map.get(teamId)
+    if (existing) {
+      existing.push(id)
+    } else {
+      map.set(teamId, [id])
+    }
+  }
+  return map
+}
+
 /** 跨 tenant 顺序 batch-delete：先按 team 分组再 chunk */
 export async function runChunkedBatchDeleteByTeam(
   models: readonly GatewayModel[],
   deleteChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchDeleteChunkResult>,
   chunkSize = BATCH_DELETE_MAX
 ): Promise<BatchDeleteChunkResult> {
-  const byTeam = groupModelsByTeamId(models)
+  const idsByTeam = new Map<string, string[]>()
+  for (const [teamId, teamModels] of groupModelsByTeamId(models)) {
+    idsByTeam.set(
+      teamId,
+      teamModels.map((m) => m.id)
+    )
+  }
+  return runChunkedBatchDeleteByTeamIds(idsByTeam, deleteChunkForTeam, chunkSize)
+}
+
+/** 跨 tenant 顺序 batch-delete（已知 team 归属的 id 分组） */
+export async function runChunkedBatchDeleteByTeamIds(
+  idsByTeam: ReadonlyMap<string, readonly string[]>,
+  deleteChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchDeleteChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchDeleteChunkResult> {
   const merged: BatchDeleteChunkResult = {
     succeeded: [],
     failed: [],
     grants_removed: 0,
     budgets_removed: 0,
   }
-  for (const [teamId, teamModels] of byTeam) {
-    const ids = teamModels.map((m) => m.id)
+  for (const [teamId, ids] of idsByTeam) {
     const result = await runChunkedBatchDelete(
       ids,
       (chunk) => deleteChunkForTeam(teamId, chunk),
@@ -829,13 +862,27 @@ export async function runChunkedBatchResyncByTeam(
   resyncChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchResyncChunkResult>,
   chunkSize = BATCH_DELETE_MAX
 ): Promise<BatchResyncChunkResult> {
-  const byTeam = groupModelsByTeamId(models)
+  const idsByTeam = new Map<string, string[]>()
+  for (const [teamId, teamModels] of groupModelsByTeamId(models)) {
+    idsByTeam.set(
+      teamId,
+      teamModels.map((m) => m.id)
+    )
+  }
+  return runChunkedBatchResyncByTeamIds(idsByTeam, resyncChunkForTeam, chunkSize)
+}
+
+/** 跨 tenant 顺序 batch-resync（已知 team 归属的 id 分组） */
+export async function runChunkedBatchResyncByTeamIds(
+  idsByTeam: ReadonlyMap<string, readonly string[]>,
+  resyncChunkForTeam: (teamId: string, chunk: string[]) => Promise<BatchResyncChunkResult>,
+  chunkSize = BATCH_DELETE_MAX
+): Promise<BatchResyncChunkResult> {
   const merged: BatchResyncChunkResult = {
     succeeded: [],
     failed: [],
   }
-  for (const [teamId, teamModels] of byTeam) {
-    const ids = teamModels.map((m) => m.id)
+  for (const [teamId, ids] of idsByTeam) {
     const result = await runChunkedBatchResync(
       ids,
       (chunk) => resyncChunkForTeam(teamId, chunk),

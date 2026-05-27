@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from domains.gateway.domain.policies.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
@@ -10,6 +12,7 @@ from domains.gateway.domain.policies.model_list_policy import (
 from domains.gateway.infrastructure.repositories.model_list_sql import (
     _summary_select,
     build_system_list_stmt,
+    build_tenant_list_stmt,
 )
 
 
@@ -38,3 +41,41 @@ def test_summary_select_aggregates_subquery_columns_not_base_table() -> None:
     assert "anon_1.enabled" in compiled
     assert "anon_1.last_test_status" in compiled
     assert "system_gateway_models" not in outer
+
+
+def test_registry_q_clause_includes_credential_name_exists() -> None:
+    """q 筛选须匹配凭据展示名（team 凭据 EXISTS 子查询）。"""
+    stmt = build_tenant_list_stmt(
+        tenant_id=uuid.uuid4(),
+        only_enabled=False,
+        capability=None,
+        provider=None,
+        credential_id=None,
+        exclude_user_scope_credentials=False,
+        enabled=None,
+        q="Acme Prod",
+        connectivity=ModelListConnectivityFilter.ALL,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+    )
+    compiled = str(stmt.compile()).lower()
+    assert "provider_credentials" in compiled
+    assert "exists" in compiled
+    assert "name" in compiled
+
+
+def test_system_registry_q_clause_includes_system_credential_name_exists() -> None:
+    stmt = build_system_list_stmt(
+        only_enabled=False,
+        capability=None,
+        provider=None,
+        credential_id=None,
+        enabled=None,
+        q="platform-key",
+        connectivity=ModelListConnectivityFilter.ALL,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+    )
+    compiled = str(stmt.compile()).lower()
+    assert "system_provider_credentials" in compiled
+    assert "exists" in compiled

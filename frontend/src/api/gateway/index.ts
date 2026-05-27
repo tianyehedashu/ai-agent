@@ -23,6 +23,7 @@ import { modelsApi } from './models'
 import { myModelsApi } from './my-models'
 import { pricingApi } from './pricing'
 import { providerProfilesApi } from './provider-profiles'
+import { quotaRulesApi } from './quota-rules'
 import { routesApi } from './routes'
 import { statsApi } from './stats'
 import { systemVisibilityApi } from './system-visibility'
@@ -122,6 +123,14 @@ export type { GatewayRoute, GatewayRouteCreateBody, GatewayRouteUpdateBody } fro
 export type { GatewayBudget, BudgetUpsertBody } from './budgets'
 
 export type {
+  QuotaRule,
+  QuotaRuleLayer,
+  QuotaRuleUpsertBody,
+  QuotaRuleBatchUpsertResponse,
+  ListQuotaRulesParams,
+} from './quota-rules'
+
+export type {
   GatewayUsageAggregation,
   GatewayLogItem,
   GatewayLogDetail,
@@ -192,6 +201,7 @@ export {
   myModelsApi,
   routesApi,
   budgetsApi,
+  quotaRulesApi,
   logsApi,
   statsApi,
   alertsApi,
@@ -216,6 +226,7 @@ export const gatewayApi = {
   ...myModelsApi,
   ...routesApi,
   ...budgetsApi,
+  ...quotaRulesApi,
   ...logsApi,
   ...statsApi,
   ...alertsApi,

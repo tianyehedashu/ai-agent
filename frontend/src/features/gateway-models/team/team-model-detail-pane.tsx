@@ -117,9 +117,9 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
 
   const handleTest = useCallback(
     (id: string): void => {
-      testMutation.mutate(id)
+      testMutation.mutate({ id, teamId: teamId !== '' ? teamId : undefined })
     },
-    [testMutation]
+    [testMutation, teamId]
   )
 
   const handleSave = useCallback(
@@ -178,7 +178,7 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
         usageDays={usageDays}
         usageRow={usageByRouteName.get(model.name)}
         usageLoading={usageLoading}
-        isTesting={testMutation.isPending && testMutation.variables === model.id}
+        isTesting={testMutation.isPending && testMutation.variables.id === model.id}
         isSaving={updateModelMutation.isPending}
         isDeleting={deleteModelMutation.isPending}
         onTest={handleTest}

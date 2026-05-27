@@ -14,6 +14,7 @@ from . import (
     models,
     plans,
     pricing,
+    quota_rules,
     routes,
     virtual_keys,
 )
@@ -25,6 +26,7 @@ router.include_router(credentials.router)
 router.include_router(models.router)
 router.include_router(routes.router)
 router.include_router(budgets.router)
+router.include_router(quota_rules.router)
 router.include_router(logs.router)
 router.include_router(dashboard.router)
 router.include_router(alerts.router)

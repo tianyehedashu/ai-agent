@@ -11,16 +11,16 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2 } from '@/lib/lucide-icons'
 
-const BudgetAdminWorkspace = lazyWithReload(() =>
-  import('@/features/gateway-budget/budget-admin-workspace').then((m) => ({
-    default: m.BudgetAdminWorkspace,
+const QuotaCenterWorkspace = lazyWithReload(() =>
+  import('@/features/gateway-budget/quota-center-workspace').then((m) => ({
+    default: m.QuotaCenterWorkspace,
   }))
 )
 
 const adminWorkspaceFallback = (
   <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
     <Loader2 className="h-4 w-4 animate-spin" />
-    加载预算管理…
+    加载配额中心…
   </div>
 )
 
@@ -33,7 +33,7 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
   const { isAdmin } = useGatewayPermission()
 
   useEffect(() => {
-    document.title = '预算配额 · AI Gateway'
+    document.title = '配额中心 · AI Gateway'
   }, [])
 
   if (!isAdmin) {
@@ -42,7 +42,7 @@ export default function GatewayBudgetsPage(): React.JSX.Element {
 
   return (
     <Suspense fallback={adminWorkspaceFallback}>
-      <BudgetAdminWorkspace />
+      <QuotaCenterWorkspace />
     </Suspense>
   )
 }

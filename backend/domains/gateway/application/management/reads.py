@@ -41,7 +41,10 @@ from domains.gateway.application.management.usage_reads import (
     ProviderPlanCostReadModel,
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
-from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
+from domains.gateway.application.management.quota_rule_read_model import (
+    QuotaRuleListFilters,
+    QuotaRuleReadModel,
+)
 from domains.gateway.application.model_list_pipeline import (
     ModelListIdsResult,
     ModelListPageResult,
@@ -537,8 +540,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
 
         if plan.fetch_user:
-            members = await self._teams.list_team_members(tenant_id)
-            user_ids = [m.user_id for m in members]
+            user_ids = list(await self.list_team_member_user_ids(tenant_id))
             if user_ids:
                 budgets.extend(await self._budgets.list_for_target_ids("user", user_ids))
 
@@ -555,6 +557,10 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
 
         filters = normalize_budget_list_filters(target_kind, model_name)
         return filter_budget_rows(budgets, filters)
+
+    async def list_team_member_user_ids(self, tenant_id: UUID) -> frozenset[UUID]:
+        members = await self._teams.list_team_members(tenant_id)
+        return frozenset(m.user_id for m in members)
 
     async def list_alert_rules(self, team_id: UUID) -> list[AlertRuleSummary]:
         rows = await self._alerts.list_rules_for_tenant(team_id)
@@ -710,6 +716,30 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             )
         rows.sort(key=lambda r: (-r["requests"], str(r["credential_id"])))
         return slice_page(rows, page=page, page_size=page_size)
+
+    async def list_quota_rules_for_team(
+        self,
+        team_id: UUID,
+        *,
+        actor_user_id: UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+        is_team_admin: bool,
+        filters: QuotaRuleListFilters | None = None,
+    ) -> list[QuotaRuleReadModel]:
+        from domains.gateway.application.management.quota_rule_assembler import (
+            assemble_team_quota_rules,
+        )
+
+        return await assemble_team_quota_rules(
+            self,
+            team_id,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+            is_team_admin=is_team_admin,
+            filters=filters,
+        )
 
 
 __all__ = ["GatewayManagementReadService"]

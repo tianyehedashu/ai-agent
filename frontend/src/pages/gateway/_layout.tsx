@@ -139,7 +139,7 @@ export default function GatewayLayout(): React.JSX.Element {
         ? [
             {
               to: gatewayTeamNavHref(teamId, 'budgets'),
-              label: '预算配额',
+              label: '配额中心',
               icon: Receipt,
               end: true,
             },

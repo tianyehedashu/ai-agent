@@ -139,14 +139,14 @@ export function SystemGrantsPanel({
         <SheetHeader>
           <SheetTitle>可见性授权</SheetTitle>
           <SheetDescription className="text-left">
-            {subjectLabel} — restricted 时仅下列 team/user 可见。配额与定价请在预算/定价页配置。
+            {subjectLabel} — restricted 时仅下列 team/user 可见。配额与定价请在配额中心/定价页配置。
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           <Button variant="outline" size="sm" className="h-7" asChild>
             <Link to={budgetsAdminHref(teamId)}>
-              预算配额
+              配额中心
               <ExternalLink className="ml-1 h-3 w-3" />
             </Link>
           </Button>

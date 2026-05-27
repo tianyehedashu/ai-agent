@@ -5,6 +5,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
@@ -21,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { budgetsAdminHref } from '@/features/gateway-budget/paths'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { CreateKeyDialog, type CreateKeyValues } from '@/features/gateway-keys/create-key-dialog'
 import { KeysWorkspaceTable } from '@/features/gateway-keys/keys-workspace-table'
@@ -50,7 +52,7 @@ export function GatewayKeysWorkspace({
 }: Readonly<GatewayKeysWorkspaceProps>): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const { isMember, isPlatformViewer } = useGatewayPermission()
+  const { isMember, isPlatformViewer, isAdmin } = useGatewayPermission()
   const canManageKeys = isMember && !isPlatformViewer
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
   const keysQueryKey = useMemo(() => ['gateway', 'keys', teamId] as const, [teamId])
@@ -276,6 +278,11 @@ export function GatewayKeysWorkspace({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={budgetsAdminHref(teamId, { layer: 'platform' })}>配额中心</Link>
+              </Button>
+            ) : null}
             <GatewayRefreshButton
               isFetching={isRefreshing}
               ariaLabel="刷新虚拟 Key"

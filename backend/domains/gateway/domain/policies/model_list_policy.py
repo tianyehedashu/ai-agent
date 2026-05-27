@@ -129,12 +129,15 @@ def matches_search(
     real_model: str,
     provider: str,
     q: str | None,
+    credential_name: str | None = None,
 ) -> bool:
     if not q or not q.strip():
         return True
     needle = q.strip().lower()
     haystack = (name, real_model, provider)
-    return any(needle in field.lower() for field in haystack)
+    if any(needle in field.lower() for field in haystack):
+        return True
+    return bool(credential_name and needle in credential_name.lower())
 
 
 def _sort_key_for_field(

@@ -228,7 +228,7 @@ export const ModelInventory = memo(function ModelInventory({
               onChange={(e) => {
                 onSearchChange(e.target.value)
               }}
-              placeholder="搜索别名、底模、通道…"
+              placeholder="搜索别名、底模、通道、凭据…"
               className="h-8 pl-8 text-sm"
               aria-label="搜索模型"
             />

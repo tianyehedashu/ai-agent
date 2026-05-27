@@ -23,7 +23,7 @@ function modelMatchesSingle(budget: GatewayBudget, modelName: string): boolean {
   return budget.model_name === modelName
 }
 
-/** 按资源上下文过滤可见预算（成员只读嵌入页使用）。 */
+/** @deprecated 嵌入页请改用 matchQuotaRulesForContext */
 export function matchBudgetsForContext(
   budgets: GatewayBudget[],
   ctx: BudgetViewContext
@@ -64,3 +64,5 @@ export function matchBudgetsForContext(
       return budgets.filter((b) => b.target_kind === 'key' && b.target_id === ctx.keyId)
   }
 }
+
+export { matchQuotaRulesForContext } from './quota-rule-utils'

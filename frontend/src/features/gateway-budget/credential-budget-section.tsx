@@ -48,6 +48,8 @@ export function CredentialBudgetSection({
       teamId={teamId}
       isAdmin={isAdmin}
       modelPrefill={modelPrefill}
+      credentialPrefill={credentialId}
+      layerPrefill="upstream"
       context={budgetContext}
       modelsLoading={modelsLoading}
     />

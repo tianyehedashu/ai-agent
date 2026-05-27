@@ -22,6 +22,7 @@ import {
   filterProxyCallableModels,
   filterRegistryRequestableModels,
   groupModelsByTeamId,
+  groupModelIdsByTeamId,
   resolveGatewayModelTeamId,
   runChunkedBatchDeleteByTeam,
   runChunkedBatchResyncByTeam,
@@ -666,108 +667,14 @@ describe('groupModelsByTeamId', () => {
   })
 })
 
-describe('runChunkedBatchDeleteByTeam', () => {
-  it('calls delete per team with chunked ids', async () => {
-    const calls: Array<{ teamId: string; chunk: string[] }> = []
-    const result = await runChunkedBatchDeleteByTeam(
-      [
-        model({ id: '1', tenant_id: 'team-a', last_test_status: null }),
-        model({ id: '2', tenant_id: 'team-b', last_test_status: null }),
-      ],
-      (teamId, chunk) => {
-        calls.push({ teamId, chunk })
-        return Promise.resolve({
-          succeeded: chunk,
-          failed: [],
-          grants_removed: 0,
-          budgets_removed: 0,
-        })
-      }
-    )
-    expect(calls).toEqual([
-      { teamId: 'team-a', chunk: ['1'] },
-      { teamId: 'team-b', chunk: ['2'] },
-    ])
-    expect(result.succeeded).toEqual(['1', '2'])
-  })
-})
-
-describe('runChunkedBatchResyncByTeam', () => {
-  it('calls resync per team', async () => {
-    const calls: string[] = []
-    await runChunkedBatchResyncByTeam(
-      [model({ id: '1', tenant_id: 'team-a', last_test_status: null })],
-      (teamId, chunk) => {
-        calls.push(`${teamId}:${chunk.join(',')}`)
-        return Promise.resolve({ succeeded: chunk, failed: [] })
-      }
-    )
-    expect(calls).toEqual(['team-a:1'])
-  })
-})
-
-describe('createManagedTeamsTestById', () => {
-  it('routes test to correct team', async () => {
-    const testModel = (teamId: string, id: string): Promise<GatewayModelTestResult> =>
-      Promise.resolve({
-        success: true,
-        message: `${teamId}/${id}`,
-        model: id,
-        status: 'success' as const,
-        tested_at: '',
-        reason: null,
-      })
-    const testById = createManagedTeamsTestById(
-      [model({ id: 'm1', tenant_id: 'team-x', last_test_status: null })],
-      testModel
-    )
-    const result = await testById('m1')
-    expect(result.message).toBe('team-x/m1')
-  })
-})
-
-describe('filterManageableTestableModels', () => {
-  it('filters by testable capability and canManage', () => {
-    const items = filterManageableTestableModels(
-      [
-        model({ id: '1', capability: 'chat', last_test_status: null }),
-        model({ id: '2', capability: 'moderation', last_test_status: null }),
-      ],
-      (m) => m.id === '1'
-    )
-    expect(items.map((m) => m.id)).toEqual(['1'])
-  })
-})
-
-describe('resolveGatewayModelTeamId', () => {
-  it('prefers tenant_id over team_id', () => {
-    expect(
-      resolveGatewayModelTeamId(model({ tenant_id: 'a', team_id: 'b', last_test_status: null }))
-    ).toBe('a')
-  })
-
-  it('falls back to team_id', () => {
-    expect(
-      resolveGatewayModelTeamId(model({ tenant_id: null, team_id: 'b', last_test_status: null }))
-    ).toBe('b')
-  })
-
-  it('returns null when both missing', () => {
-    expect(
-      resolveGatewayModelTeamId(model({ tenant_id: null, team_id: null, last_test_status: null }))
-    ).toBeNull()
-  })
-})
-
-describe('groupModelsByTeamId', () => {
-  it('groups models by tenant', () => {
-    const grouped = groupModelsByTeamId([
-      model({ id: '1', tenant_id: 'team-a', last_test_status: null }),
-      model({ id: '2', tenant_id: 'team-b', last_test_status: null }),
-      model({ id: '3', tenant_id: 'team-a', last_test_status: null }),
-    ])
-    expect(grouped.get('team-a')?.map((m) => m.id)).toEqual(['1', '3'])
-    expect(grouped.get('team-b')?.map((m) => m.id)).toEqual(['2'])
+describe('groupModelIdsByTeamId', () => {
+  it('groups ids using resolver', () => {
+    const resolve = (id: string): string | null =>
+      id === '2' ? null : id === '3' ? 'team-a' : 'team-b'
+    const grouped = groupModelIdsByTeamId(['1', '2', '3'], resolve)
+    expect(grouped.get('team-b')).toEqual(['1'])
+    expect(grouped.get('team-a')).toEqual(['3'])
+    expect(grouped.has('team-c')).toBe(false)
   })
 })
 

@@ -8,6 +8,9 @@ import uuid
 
 from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
 from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
+from domains.gateway.application.model_credential_enrichment import (
+    build_credential_name_map_for_models,
+)
 from domains.gateway.domain.policies.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
@@ -96,6 +99,8 @@ def sql_capability_for_registry_ability(ability: str | None) -> str | None:
 def _filter_rows_in_memory(
     rows: list[GatewayRegistryModelRow],
     query: ModelListQuery,
+    *,
+    credential_names: dict[uuid.UUID, str] | None = None,
 ) -> list[GatewayRegistryModelRow]:
     ability = resolved_registry_ability(query)
     filtered: list[GatewayRegistryModelRow] = []
@@ -110,15 +115,27 @@ def _filter_rows_in_memory(
             continue
         if not matches_connectivity_filter(row.last_test_status, query.connectivity):
             continue
+        cred_name = credential_names.get(row.credential_id) if credential_names else None
         if not matches_search(
             name=row.name,
             real_model=row.real_model,
             provider=row.provider,
             q=query.q,
+            credential_name=cred_name,
         ):
             continue
         filtered.append(row)
     return filtered
+
+
+async def _credential_names_for_search(
+    session: AsyncSession,
+    rows: list[GatewayRegistryModelRow],
+    q: str | None,
+) -> dict[uuid.UUID, str] | None:
+    if not q or not q.strip():
+        return None
+    return await build_credential_name_map_for_models(session, rows)
 
 
 async def _list_system_page(
@@ -143,7 +160,8 @@ async def _list_system_page(
         )
         result = await repo._session.execute(stmt)
         all_rows = list(result.scalars().all())
-        filtered = _filter_rows_in_memory(all_rows, query)
+        cred_names = await _credential_names_for_search(repo._session, all_rows, query.q)
+        filtered = _filter_rows_in_memory(all_rows, query, credential_names=cred_names)
         summary = summarize_connectivity(filtered)
         sorted_rows = sort_registry_rows(
             filtered,
@@ -210,7 +228,8 @@ async def _list_tenant_page(
         )
         result = await repo._session.execute(stmt)
         all_rows = list(result.scalars().all())
-        filtered = _filter_rows_in_memory(all_rows, query)
+        cred_names = await _credential_names_for_search(repo._session, all_rows, query.q)
+        filtered = _filter_rows_in_memory(all_rows, query, credential_names=cred_names)
         summary = summarize_connectivity(filtered)
         sorted_rows = sort_registry_rows(
             filtered,
@@ -289,7 +308,8 @@ async def list_gateway_models_for_tenants_page(
         )
         result = await session.execute(stmt)
         all_rows = list(result.scalars().all())
-        filtered = _filter_rows_in_memory(all_rows, query)
+        cred_names = await _credential_names_for_search(session, all_rows, query.q)
+        filtered = _filter_rows_in_memory(all_rows, query, credential_names=cred_names)
         summary = summarize_connectivity(filtered)
         sorted_rows = sort_registry_rows(
             filtered,
@@ -364,9 +384,10 @@ async def _list_merged_page(
         capability=query.capability,
         enabled=query.enabled,
     )
-    summary_rows = _filter_rows_in_memory(merged, summary_query)
+    cred_names = await _credential_names_for_search(session, merged, query.q)
+    summary_rows = _filter_rows_in_memory(merged, summary_query, credential_names=cred_names)
     summary = summarize_connectivity(summary_rows)
-    filtered = _filter_rows_in_memory(merged, query)
+    filtered = _filter_rows_in_memory(merged, query, credential_names=cred_names)
     sorted_rows = sort_registry_rows(
         filtered,
         sort_field=query.sort,
@@ -495,7 +516,8 @@ async def list_gateway_model_ids(
     )
     if registry_scope == "requestable":
         merged = [row for row in merged if is_connectivity_requestable(row.last_test_status)]
-    filtered = _filter_rows_in_memory(merged, query)
+    cred_names = await _credential_names_for_search(session, merged, query.q)
+    filtered = _filter_rows_in_memory(merged, query, credential_names=cred_names)
     sorted_rows = sort_registry_rows(filtered, sort_field=query.sort, order=query.order)
     ids = [row.id for row in sorted_rows[:max_ids]]
     return ModelListIdsResult(ids=ids, truncated=len(sorted_rows) > max_ids)

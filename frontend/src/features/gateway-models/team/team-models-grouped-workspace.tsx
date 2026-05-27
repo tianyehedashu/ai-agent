@@ -74,7 +74,10 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
 
   const hasCollaborationTeams = memberCollaborationTeams.length > 0
   const teamSearchTrimmed = teamSearch.trim()
-  const isListSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
+  const modelSearchTrimmed = modelSearch.trim()
+  const isDeferredTeamSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
+  const isModelSearchStale = deferredModelSearch.trim() !== modelSearchTrimmed
+  const isListSearchStale = isDeferredTeamSearchStale || isModelSearchStale
 
   const listQueryBase = useMemo(
     () => ({
@@ -100,11 +103,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
 
   const { updateModelMutation, deleteModelMutation } = useGatewayModelMutations()
 
-  const {
-    teams: displayTeams,
-    requiresSearch,
-    isSearchStale: isTeamsSearchStale,
-  } = useCollaborationTeamsOverviewResolution({
+  const { teams: displayTeams, requiresSearch } = useCollaborationTeamsOverviewResolution({
     teamSearch,
     queriedTeamCount: listData?.queried_team_count,
     isPlatformAdmin,
@@ -160,7 +159,32 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     [registryItems, canManageModel]
   )
 
-  const batchOps = useGatewayModelConnectivityBatchOps({
+  const {
+    batchTestState,
+    batchBusy,
+    batchTesting,
+    batchDeleting,
+    batchResyncing,
+    testableItems: batchTestableItems,
+    untestedTestableItems: batchUntestedTestableItems,
+    failedDeletableCount,
+    failedDeletableModels,
+    deleteFailedLabel,
+    handleTestAll,
+    handleTestUntested,
+    handleResyncAll,
+    handleDeleteFailed,
+    handleConfirmDeleteFailed,
+    retestFailed,
+    scrollToFirstFailed,
+    deleteFailedOpen,
+    setDeleteFailedOpen,
+    batchFailedOpen,
+    setBatchFailedOpen,
+    batchFailedItems,
+    batchFailedDialogTitle,
+    batchFailedDialogDescription,
+  } = useGatewayModelConnectivityBatchOps({
     scope: 'managed-teams',
     registryItems,
     connectivitySummary,
@@ -233,7 +257,11 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     [deleteModelMutation]
   )
 
-  const showLoading = isLoading || isListSearchStale || isTeamsSearchStale
+  const handleRefresh = useCallback(() => {
+    void refetch()
+  }, [refetch])
+
+  const showLoading = isLoading || isListSearchStale
   const summaryLabel =
     listData !== undefined
       ? isPlatformAdmin
@@ -266,9 +294,9 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   return (
     <Card>
       <ConnectivityBatchTestBanner
-        state={batchOps.batchTestState}
-        onRetestFailed={batchOps.retestFailed}
-        onScrollToFirstFailed={batchOps.scrollToFirstFailed}
+        state={batchTestState}
+        onRetestFailed={retestFailed}
+        onScrollToFirstFailed={scrollToFirstFailed}
       />
       <div className="space-y-2.5 border-b p-3">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -295,7 +323,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
               onChange={(e) => {
                 handleModelSearchChange(e.target.value)
               }}
-              placeholder="搜索别名、底模、通道…"
+              placeholder="搜索别名、底模、通道、凭据…"
               className="h-8 w-[180px] text-sm"
               aria-label="按模型名称筛选"
             />
@@ -328,7 +356,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
             <GatewayRefreshButton
               isFetching={isFetching}
               ariaLabel="刷新团队模型"
-              onRefresh={() => refetch()}
+              onRefresh={handleRefresh}
             />
             {canWrite ? (
               <Button size="sm" asChild>
@@ -348,33 +376,31 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
           canWrite={hasManageableModels}
           onTestAll={
             hasManageableModels &&
-            (connectivitySummary?.total ?? batchOps.testableItems.length) > 0 &&
-            !batchOps.batchBusy
-              ? batchOps.handleTestAll
+            (connectivitySummary?.total ?? batchTestableItems.length) > 0 &&
+            !batchBusy
+              ? handleTestAll
               : undefined
           }
           onTestUntested={
             hasManageableModels &&
-            (connectivitySummary?.unknown ?? batchOps.untestedTestableItems.length) > 0 &&
-            !batchOps.batchBusy
-              ? batchOps.handleTestUntested
+            (connectivitySummary?.unknown ?? batchUntestedTestableItems.length) > 0 &&
+            !batchBusy
+              ? handleTestUntested
               : undefined
           }
           onResyncAll={
-            hasManageableModels && (listData?.total ?? 0) > 0 && !batchOps.batchBusy
-              ? batchOps.handleResyncAll
+            hasManageableModels && (listData?.total ?? 0) > 0 && !batchBusy
+              ? handleResyncAll
               : undefined
           }
-          resyncingAll={batchOps.batchResyncing}
-          batchBusy={batchOps.batchBusy}
-          untestedTestableCount={batchOps.untestedTestableItems.length}
-          testingAll={batchOps.batchTesting}
+          resyncingAll={batchResyncing}
+          batchBusy={batchBusy}
+          untestedTestableCount={batchUntestedTestableItems.length}
+          testingAll={batchTesting}
           onDeleteFailed={
-            hasManageableModels && batchOps.failedDeletableCount > 0
-              ? batchOps.handleDeleteFailed
-              : undefined
+            hasManageableModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
           }
-          deletingFailed={batchOps.batchDeleting}
+          deletingFailed={batchDeleting}
         />
         <p className="sr-only">{PROVIDER_CHANNEL_FILTER_HINT_GATEWAY}</p>
       </div>
@@ -397,23 +423,23 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
       {tableFooter ? <div className="border-t px-3 py-2">{tableFooter}</div> : null}
 
       <ModelBatchDeleteConfirmDialog
-        open={batchOps.deleteFailedOpen}
-        onOpenChange={batchOps.setDeleteFailedOpen}
+        open={deleteFailedOpen}
+        onOpenChange={setDeleteFailedOpen}
         title="删除不可用模型"
         description={
-          batchOps.deleteFailedLabel ||
-          `确定删除 ${String(batchOps.failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+          deleteFailedLabel ||
+          `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
         }
-        pending={batchOps.batchDeleting}
-        onConfirm={batchOps.handleConfirmDeleteFailed}
+        pending={batchDeleting}
+        onConfirm={handleConfirmDeleteFailed}
       />
 
       <ModelBatchDeleteFailedDialog
-        open={batchOps.batchFailedOpen}
-        onOpenChange={batchOps.setBatchFailedOpen}
-        failedItems={batchOps.batchFailedItems}
-        title={batchOps.batchFailedDialogTitle}
-        description={batchOps.batchFailedDialogDescription}
+        open={batchFailedOpen}
+        onOpenChange={setBatchFailedOpen}
+        failedItems={batchFailedItems}
+        title={batchFailedDialogTitle}
+        description={batchFailedDialogDescription}
       />
     </Card>
   )

@@ -1,21 +1,9 @@
-﻿import {
-  Suspense,
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+﻿import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
-import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import {
-  fetchAllGatewayModelPages,
-  gatewayApi,
-  type GatewayModelBatchDeleteFailureItem,
-} from '@/api/gateway'
+import { gatewayApi } from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway/models'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
@@ -40,9 +28,7 @@ import {
   isConfigManagedSystemModel,
   isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
-import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
-import { useChunkedModelBatchResync } from '@/features/gateway-models/hooks/use-chunked-model-batch-resync'
-import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
+import { useGatewayModelConnectivityBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
   ModelBatchDeleteConfirmDialog,
@@ -56,27 +42,16 @@ import {
   teamModelDetailHref,
 } from '@/features/gateway-models/paths'
 import {
-  createBatchConnectivityCachePatcher,
   gatewayModelsListQueryKey,
-  invalidateGatewayModelAliasDependents,
-  invalidateGatewayModelCaches,
-  filterDeletableFailedModels,
-  filterManageableTestableModels,
   filterResyncableCapabilityModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
-  filterUntestedConnectivityModels,
-  formatBatchDeleteConfirmLabel,
-  formatDeleteFailedConfirmLabel,
   resolveTeamModelsRegistryScope,
-  type BatchDeleteChunkResult,
-  type BatchResyncChunkResult,
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
@@ -132,9 +107,7 @@ export function TeamModelsWorkspace({
     isFetching: directoryFetching,
     refetch: refetchDirectory,
   } = useGatewayCredentialDirectory()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
   const highlightModelId = searchParams.get('modelId') ?? ''
@@ -150,15 +123,9 @@ export function TeamModelsWorkspace({
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
-  const [batchFailedOpen, setBatchFailedOpen] = useState(false)
-  const [batchFailedItems, setBatchFailedItems] = useState<GatewayModelBatchDeleteFailureItem[]>([])
-  const [batchFailedDialogTitle, setBatchFailedDialogTitle] = useState('部分模型未能删除')
-  const [batchFailedDialogDescription, setBatchFailedDialogDescription] =
-    useState('以下条目未删除成功，其余已处理。')
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
   const [rowDeleteOpen, setRowDeleteOpen] = useState(false)
   const [pendingRowDeleteId, setPendingRowDeleteId] = useState<string | null>(null)
-  const [deleteFailedOpen, setDeleteFailedOpen] = useState(false)
 
   const systemPermContext = useMemo(
     () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),
@@ -393,6 +360,60 @@ export function TeamModelsWorkspace({
     [registryItems, canManageModel]
   )
 
+  const handleBatchDeleteSucceeded = useCallback((succeeded: readonly string[]) => {
+    setBatchDeleteOpen(false)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of succeeded) {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
+  const {
+    batchTestState,
+    batchBusy,
+    batchTesting,
+    batchDeleting,
+    batchResyncing,
+    testableItems: batchTestableItems,
+    untestedTestableItems: batchUntestedTestableItems,
+    failedDeletableCount,
+    failedDeletableModels,
+    deleteFailedLabel,
+    handleTestAll,
+    handleTestUntested,
+    handleTestSelected,
+    handleResyncAll,
+    handleResyncSelected,
+    handleDeleteFailed,
+    handleConfirmDeleteFailed,
+    runBatchDelete,
+    retestFailed,
+    scrollToFirstFailed,
+    deleteFailedOpen,
+    setDeleteFailedOpen,
+    batchFailedOpen,
+    setBatchFailedOpen,
+    batchFailedItems,
+    batchFailedDialogTitle,
+    batchFailedDialogDescription,
+    formatBatchDeleteLabel,
+  } = useGatewayModelConnectivityBatchOps({
+    scope: 'single-team',
+    teamId,
+    listQueryBase: teamListQueryBase,
+    registryItems,
+    connectivitySummary,
+    credentialId: credentialFilter || undefined,
+    canShowBatchOps: hasManageableModels,
+    canDeleteModel,
+    canResyncModel,
+    canManageModel,
+    onBatchDeleteSucceeded: handleBatchDeleteSucceeded,
+  })
+
   const isConfigManagedModel = useCallback(
     (model: (typeof registryItems)[number]) => isConfigManagedSystemModel(model, systemPermContext),
     [systemPermContext]
@@ -410,79 +431,55 @@ export function TeamModelsWorkspace({
     },
   })
 
-  const handleBatchDeleteComplete = useCallback(
-    (result: BatchDeleteChunkResult): void => {
-      invalidateGatewayModelCaches(queryClient, {
-        credentialId: credentialFilter || undefined,
-        usageSummary: true,
-      })
-      invalidateGatewayModelAliasDependents(queryClient)
-      setBatchDeleteOpen(false)
-      setDeleteFailedOpen(false)
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        for (const id of result.succeeded) {
-          next.delete(id)
-        }
-        return next
-      })
-      if (result.failed.length > 0) {
-        setBatchFailedDialogTitle('部分模型未能删除')
-        setBatchFailedDialogDescription('以下条目未删除成功，其余已处理。')
-        setBatchFailedItems(result.failed)
-        setBatchFailedOpen(true)
-      } else if (result.succeeded.length > 0) {
-        const cleanupParts: string[] = []
-        if (result.grants_removed > 0) {
-          cleanupParts.push(`${String(result.grants_removed)} 条授权`)
-        }
-        if (result.budgets_removed > 0) {
-          cleanupParts.push(`${String(result.budgets_removed)} 条预算`)
-        }
-        const cleanupHint = cleanupParts.length > 0 ? `，已清理 ${cleanupParts.join('、')}` : ''
-        toast({
-          title: `已删除 ${String(result.succeeded.length)} 个模型${cleanupHint}`,
-        })
-      }
-    },
-    [queryClient, credentialFilter, toast]
+  const selectedModelsForBatch = useMemo(
+    () => filteredModels.filter((m) => visibleSelectedIds.has(m.id)),
+    [filteredModels, visibleSelectedIds]
   )
 
-  const deleteTeamModelChunk = useCallback(
-    (chunk: string[]) => gatewayApi.batchDeleteModels(teamId, chunk),
-    [teamId]
+  const selectedTestable = useMemo(
+    () => filterTestableConnectivityModels(selectedModelsForBatch),
+    [selectedModelsForBatch]
   )
 
-  const { batchDeleting, runBatchDelete: runTeamBatchDelete } = useChunkedModelBatchDelete({
-    deleteChunk: deleteTeamModelChunk,
-    onComplete: handleBatchDeleteComplete,
-  })
-
-  const handleBatchResyncComplete = useCallback(
-    (result: BatchResyncChunkResult): void => {
-      invalidateGatewayModelCaches(queryClient, {
-        credentialId: credentialFilter || undefined,
-        usageSummary: true,
-      })
-      if (result.failed.length > 0) {
-        setBatchFailedDialogTitle('部分模型未能同步能力')
-        setBatchFailedDialogDescription('以下条目未同步成功，其余已处理。')
-        setBatchFailedItems(result.failed)
-        setBatchFailedOpen(true)
-      }
-    },
-    [queryClient, credentialFilter]
+  const selectedResyncable = useMemo(
+    () => filterResyncableCapabilityModels(selectedModelsForBatch, canResyncModel),
+    [selectedModelsForBatch, canResyncModel]
   )
 
-  const resyncTeamModelChunk = useCallback(
-    (chunk: string[]) => gatewayApi.batchResyncCapabilities(teamId, chunk),
-    [teamId]
+  const batchDeleteLabel = useMemo(
+    (): string => formatBatchDeleteLabel(selectedModelsForBatch),
+    [formatBatchDeleteLabel, selectedModelsForBatch]
   )
 
-  const { batchResyncing, runBatchResync: runTeamBatchResync } = useChunkedModelBatchResync({
-    resyncChunk: resyncTeamModelChunk,
-    onComplete: handleBatchResyncComplete,
-  })
+  const handleConfirmBatchDelete = useCallback((): void => {
+    if (visibleSelectedIds.size === 0) return
+    runBatchDelete([...visibleSelectedIds])
+  }, [visibleSelectedIds, runBatchDelete])
+
+  const handleBatchTestSelected = useCallback((): void => {
+    handleTestSelected(selectedModelsForBatch)
+  }, [handleTestSelected, selectedModelsForBatch])
+
+  const handleBatchResyncSelectedClick = useCallback((): void => {
+    handleResyncSelected(selectedModelsForBatch)
+  }, [handleResyncSelected, selectedModelsForBatch])
+
+  const registryItemsById = useMemo(() => {
+    const map = new Map<string, GatewayModel>()
+    for (const model of registryItems) {
+      map.set(model.id, model)
+    }
+    return map
+  }, [registryItems])
+
+  const getModelHref = useCallback(
+    (modelId: string) =>
+      teamModelDetailHref(teamId, modelId, {
+        credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+        tab: listMode === 'system' ? 'system' : 'shared',
+      }),
+    [teamId, credentialFilter, listMode]
+  )
 
   const handleToggleSelect = useCallback((id: string, selected: boolean): void => {
     setSelectedIds((prev) => {
@@ -514,13 +511,8 @@ export function TeamModelsWorkspace({
     [filteredModels, checkModelBatchSelectable]
   )
 
-  const pendingRowDeleteModel = useMemo(
-    () =>
-      pendingRowDeleteId !== null
-        ? (registryItems.find((m) => m.id === pendingRowDeleteId) ?? null)
-        : null,
-    [registryItems, pendingRowDeleteId]
-  )
+  const pendingRowDeleteModel =
+    pendingRowDeleteId !== null ? (registryItemsById.get(pendingRowDeleteId) ?? null) : null
 
   const handleDeleteModel = useCallback((id: string): void => {
     setPendingRowDeleteId(id)
@@ -543,63 +535,6 @@ export function TeamModelsWorkspace({
     )
   }, [pendingRowDeleteId, deleteModelMutation])
 
-  const selectedModelsForBatch = useMemo(
-    () => filteredModels.filter((m) => visibleSelectedIds.has(m.id)),
-    [filteredModels, visibleSelectedIds]
-  )
-
-  const batchDeleteLabel = useMemo(
-    (): string => formatBatchDeleteConfirmLabel(selectedModelsForBatch.map((m) => m.name)),
-    [selectedModelsForBatch]
-  )
-
-  const handleConfirmBatchDelete = useCallback((): void => {
-    if (visibleSelectedIds.size === 0) return
-    runTeamBatchDelete([...visibleSelectedIds])
-  }, [visibleSelectedIds, runTeamBatchDelete])
-
-  const failedDeletableModels = useMemo(
-    () => filterDeletableFailedModels(registryItems, canDeleteModel),
-    [registryItems, canDeleteModel]
-  )
-
-  const failedDeletableCount = connectivitySummary?.failed ?? failedDeletableModels.length
-
-  const deleteFailedLabel = useMemo(
-    (): string =>
-      formatDeleteFailedConfirmLabel(
-        failedDeletableCount,
-        failedDeletableModels.map((m) => m.name)
-      ),
-    [failedDeletableCount, failedDeletableModels]
-  )
-
-  const handleDeleteFailed = useCallback((): void => {
-    if (failedDeletableCount === 0) return
-    setDeleteFailedOpen(true)
-  }, [failedDeletableCount])
-
-  const handleConfirmDeleteFailed = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllGatewayModelPages(teamId, {
-        ...teamListQueryBase,
-        connectivity: 'failed',
-      })
-      const deletable = filterDeletableFailedModels(all, canDeleteModel)
-      if (deletable.length === 0) return
-      runTeamBatchDelete(deletable.map((m) => m.id))
-    })()
-  }, [teamId, teamListQueryBase, canDeleteModel, runTeamBatchDelete])
-
-  const getModelHref = useCallback(
-    (modelId: string) =>
-      teamModelDetailHref(teamId, modelId, {
-        credentialId: credentialFilter !== '' ? credentialFilter : undefined,
-        tab: listMode === 'system' ? 'system' : 'shared',
-      }),
-    [teamId, credentialFilter, listMode]
-  )
-
   const clearCredentialFilter = useCallback((): void => {
     setSearchParams(
       (prev) => {
@@ -611,110 +546,6 @@ export function TeamModelsWorkspace({
       { replace: true }
     )
   }, [setSearchParams])
-
-  const testableItems = useMemo(
-    () => filterTestableConnectivityModels(registryItems),
-    [registryItems]
-  )
-
-  const untestedTestableItems = useMemo(
-    () => filterUntestedConnectivityModels(registryItems),
-    [registryItems]
-  )
-
-  const selectedTestable = useMemo(
-    () => filterTestableConnectivityModels(selectedModelsForBatch),
-    [selectedModelsForBatch]
-  )
-
-  const selectedResyncable = useMemo(
-    () => filterResyncableCapabilityModels(selectedModelsForBatch, canResyncModel),
-    [selectedModelsForBatch, canResyncModel]
-  )
-
-  const onBatchItemComplete = useMemo(
-    () => createBatchConnectivityCachePatcher(queryClient, 'team'),
-    [queryClient]
-  )
-
-  const {
-    state: batchTestState,
-    start: startBatchTest,
-    retestFailed,
-  } = useConnectivityBatchTest({
-    testById: (id) => gatewayApi.testModel(teamId, id),
-    onItemComplete: onBatchItemComplete,
-    invalidate: () => {
-      invalidateGatewayModelCaches(queryClient, {
-        credentialId: credentialFilter || undefined,
-        usageSummary: true,
-      })
-    },
-    onComplete: (failed) => {
-      if (failed.length === 0) {
-        toast({ title: '批量测试完成' })
-      } else {
-        toast({
-          variant: 'destructive',
-          title: '批量测试完成',
-          description: `${String(failed.length)} 个模型探活失败`,
-        })
-      }
-    },
-  })
-
-  const batchFailedIdsRef = useRef(batchTestState.failedIds)
-  batchFailedIdsRef.current = batchTestState.failedIds
-
-  const scrollToFirstFailed = useCallback((): void => {
-    const first = batchFailedIdsRef.current[0]
-    if (!first) return
-    document
-      .querySelector(`[data-connectivity-model-id="${first}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [])
-
-  const handleTestAll = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
-      const testable = filterManageableTestableModels(all, canManageModel)
-      if (testable.length === 0) return
-      startBatchTest(testable)
-    })()
-  }, [teamId, teamListQueryBase, canManageModel, startBatchTest])
-
-  const handleTestUntested = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
-      const untested = filterUntestedConnectivityModels(all)
-      const testable = filterManageableTestableModels(untested, canManageModel)
-      if (testable.length === 0) return
-      startBatchTest(testable)
-    })()
-  }, [teamId, teamListQueryBase, canManageModel, startBatchTest])
-
-  const handleTestSelected = useCallback((): void => {
-    const testable = filterManageableTestableModels(selectedTestable, canManageModel)
-    if (testable.length === 0) return
-    startBatchTest(testable)
-  }, [selectedTestable, canManageModel, startBatchTest])
-
-  const handleResyncAll = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllGatewayModelPages(teamId, teamListQueryBase)
-      const resyncable = filterResyncableCapabilityModels(all, canResyncModel)
-      if (resyncable.length === 0) return
-      runTeamBatchResync(resyncable.map((m) => m.id))
-    })()
-  }, [teamId, teamListQueryBase, canResyncModel, runTeamBatchResync])
-
-  const handleResyncSelected = useCallback((): void => {
-    if (selectedResyncable.length === 0) return
-    runTeamBatchResync(selectedResyncable.map((m) => m.id))
-  }, [selectedResyncable, runTeamBatchResync])
-
-  const batchTesting = batchTestState.running
-  const batchBusy = batchTesting || batchResyncing || batchDeleting
 
   const handleCreateSubmit = useCallback(
     (body: Parameters<typeof gatewayApi.createModel>[1]) => {
@@ -874,14 +705,14 @@ export function TeamModelsWorkspace({
               canWrite={hasManageableModels}
               onTestAll={
                 hasManageableModels &&
-                (connectivitySummary?.total ?? testableItems.length) > 0 &&
+                (connectivitySummary?.total ?? batchTestableItems.length) > 0 &&
                 !batchBusy
                   ? handleTestAll
                   : undefined
               }
               onTestUntested={
                 hasManageableModels &&
-                (connectivitySummary?.unknown ?? untestedTestableItems.length) > 0 &&
+                (connectivitySummary?.unknown ?? batchUntestedTestableItems.length) > 0 &&
                 !batchBusy
                   ? handleTestUntested
                   : undefined
@@ -893,15 +724,15 @@ export function TeamModelsWorkspace({
               }
               resyncingAll={batchResyncing}
               batchBusy={batchBusy}
-              untestedTestableCount={untestedTestableItems.length}
+              untestedTestableCount={batchUntestedTestableItems.length}
               onBatchTestSelected={
                 hasManageableModels && selectedTestable.length > 0 && !batchBusy
-                  ? handleTestSelected
+                  ? handleBatchTestSelected
                   : undefined
               }
               onBatchResyncSelected={
                 hasManageableModels && selectedResyncable.length > 0 && !batchBusy
-                  ? handleResyncSelected
+                  ? handleBatchResyncSelectedClick
                   : undefined
               }
               testingAll={batchTesting}

@@ -9,6 +9,9 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
+from domains.gateway.application.model_credential_enrichment import (
+    build_credential_name_map_for_models,
+)
 from domains.gateway.application.pricing.fx_port import FxRatePort
 from domains.gateway.application.pricing.money_projector import MoneyProjector
 from domains.gateway.application.pricing.pricing_management import (
@@ -18,7 +21,6 @@ from domains.gateway.application.pricing.pricing_management import (
 )
 from domains.gateway.application.pricing.pricing_model_enrichment import (
     PricingModelRef,
-    build_credential_name_map_for_models,
     build_pricing_model_ref_map,
     resolve_pricing_model_ref,
 )

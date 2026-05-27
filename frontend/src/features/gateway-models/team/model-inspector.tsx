@@ -647,6 +647,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               teamId={teamId}
               isAdmin={isAdmin}
               modelPrefill={model.name}
+              layerPrefill="platform"
               context={{
                 kind: 'team_model',
                 modelName: model.name,

@@ -48,6 +48,20 @@ def test_is_model_unavailable() -> None:
 def test_matches_search() -> None:
     assert matches_search(name="gpt-a", real_model="x", provider="openai", q="gpt")
     assert not matches_search(name="gpt-a", real_model="x", provider="openai", q="claude")
+    assert matches_search(
+        name="gpt-a",
+        real_model="x",
+        provider="openai",
+        q="生产",
+        credential_name="OpenAI 生产",
+    )
+    assert not matches_search(
+        name="gpt-a",
+        real_model="x",
+        provider="openai",
+        q="staging",
+        credential_name="OpenAI 生产",
+    )
 
 
 def test_sort_puts_unavailable_last() -> None:
