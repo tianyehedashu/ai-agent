@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from domains.gateway.domain.thinking_param import is_deepseek_v4_model_id
+
 _PROVIDER_MAX_OUTPUT: dict[str, int] = {
     "deepseek": 65536,
     "dashscope": 8192,
@@ -29,12 +31,20 @@ def is_deepseek_reasoner(client_model: str, real_model: str) -> bool:
     )
 
 
+def is_deepseek_thinking_model(client_model: str, real_model: str) -> bool:
+    """DeepSeek reasoner 或 V4 Pro/Flash：tool call 多轮须回传 reasoning_content。"""
+    combined = f"{real_model} {client_model}".lower()
+    if is_deepseek_reasoner(client_model, real_model):
+        return True
+    return is_deepseek_v4_model_id(combined)
+
+
 def preprocess_messages_for_reasoner(
     client_model: str,
     real_model: str,
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    if not is_deepseek_reasoner(client_model, real_model):
+    if not is_deepseek_thinking_model(client_model, real_model):
         return messages
     processed: list[dict[str, Any]] = []
     for msg in messages:
@@ -106,6 +116,7 @@ __all__ = [
     "adapt_kwargs_by_capability",
     "clamp_max_tokens",
     "is_deepseek_reasoner",
+    "is_deepseek_thinking_model",
     "max_output_tokens_limit",
     "preprocess_messages_for_reasoner",
 ]

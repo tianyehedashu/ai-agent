@@ -22,6 +22,7 @@ class LiteLLMToolCall(TypedDict):
 class LiteLLMMessage(TypedDict, total=False):
     role: str
     content: str | None
+    reasoning_content: str
     tool_calls: list[LiteLLMToolCall]
     tool_call_id: str
 
@@ -41,6 +42,9 @@ def convert_langchain_message(msg: BaseMessage) -> LiteLLMMessage:
         return LiteLLMMessage(role="user", content=str(msg.content))
     if isinstance(msg, AIMessage):
         result = LiteLLMMessage(role="assistant", content=msg.content or "")
+        reasoning = msg.additional_kwargs.get("reasoning_content")
+        if reasoning is not None:
+            result["reasoning_content"] = str(reasoning)
         if msg.tool_calls:
             result["tool_calls"] = [convert_langchain_tool_call(tc) for tc in msg.tool_calls]
         return result

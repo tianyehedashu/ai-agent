@@ -17,6 +17,7 @@ from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_DEEPSEEK_V4,
     THINKING_PARAM_NONE,
 )
 
@@ -50,6 +51,56 @@ def _strip_enable_thinking(adapted: dict[str, Any]) -> None:
 
 def _strip_thinking_block(adapted: dict[str, Any]) -> None:
     adapted.pop("thinking", None)
+
+
+def _extra_body_thinking_type(kwargs: dict[str, Any]) -> str | None:
+    extra = _extra_body_dict(kwargs)
+    if extra is None:
+        return None
+    thinking = extra.get("thinking")
+    if not isinstance(thinking, dict):
+        return None
+    raw = thinking.get("type")
+    return raw if isinstance(raw, str) else None
+
+
+def _top_level_thinking_type(kwargs: dict[str, Any]) -> str | None:
+    raw = kwargs.get("thinking")
+    if not isinstance(raw, dict):
+        return None
+    top_type = raw.get("type")
+    return top_type if isinstance(top_type, str) else None
+
+
+def _translate_anthropic_thinking_to_extra_body(adapted: dict[str, Any]) -> None:
+    """Claude Code ``POST /v1/messages`` 顶层 thinking → ``extra_body.thinking``（DeepSeek V4）。"""
+    top_type = _top_level_thinking_type(adapted)
+    if top_type not in ("enabled", "disabled"):
+        return
+    extra = dict(_extra_body_dict(adapted) or {})
+    if "thinking" in extra:
+        return
+    extra["thinking"] = {"type": top_type}
+    adapted["extra_body"] = extra
+
+
+def _apply_deepseek_v4_thinking(adapted: dict[str, Any]) -> None:
+    _translate_anthropic_thinking_to_extra_body(adapted)
+    _strip_thinking_block(adapted)
+    if _extra_body_thinking_type(adapted) not in ("enabled", "disabled"):
+        _strip_extra_body_thinking(adapted)
+
+
+def _strip_extra_body_thinking(adapted: dict[str, Any]) -> None:
+    extra = _extra_body_dict(adapted)
+    if extra is None or "thinking" not in extra:
+        return
+    new_extra = dict(extra)
+    new_extra.pop("thinking", None)
+    if new_extra:
+        adapted["extra_body"] = new_extra
+    else:
+        adapted.pop("extra_body", None)
 
 
 def validate_invocation_kwargs(
@@ -86,9 +137,14 @@ def _apply_thinking_kwargs(adapted: dict[str, Any], snap: ModelCapabilitySnapsho
     if snap.thinking_param == THINKING_PARAM_NONE:
         _strip_enable_thinking(adapted)
         _strip_thinking_block(adapted)
+        _strip_extra_body_thinking(adapted)
         return
 
-    if snap.thinking_param in (THINKING_PARAM_BUILTIN, THINKING_PARAM_ANTHROPIC):
+    if snap.thinking_param in (
+        THINKING_PARAM_BUILTIN,
+        THINKING_PARAM_ANTHROPIC,
+        THINKING_PARAM_DEEPSEEK_V4,
+    ):
         _strip_enable_thinking(adapted)
 
     if snap.thinking_param == THINKING_PARAM_DASHSCOPE:
@@ -99,8 +155,13 @@ def _apply_thinking_kwargs(adapted: dict[str, Any], snap: ModelCapabilitySnapsho
     if snap.thinking_param == THINKING_PARAM_ANTHROPIC:
         return
 
+    if snap.thinking_param == THINKING_PARAM_DEEPSEEK_V4:
+        _apply_deepseek_v4_thinking(adapted)
+        return
+
     if snap.thinking_param == THINKING_PARAM_BUILTIN:
         _strip_thinking_block(adapted)
+        _strip_extra_body_thinking(adapted)
 
 
 def _clamp_temperature_value(value: float) -> float:
@@ -166,6 +227,8 @@ def client_thinking_request_fields(
     if not enabled:
         if snap.thinking_param == THINKING_PARAM_DASHSCOPE:
             return {"enable_thinking": False, "extra_body": {"enable_thinking": False}}
+        if snap.thinking_param == THINKING_PARAM_DEEPSEEK_V4:
+            return {"extra_body": {"thinking": {"type": "disabled"}}}
         return {}
 
     if snap.thinking_param == THINKING_PARAM_DASHSCOPE:
@@ -176,6 +239,8 @@ def client_thinking_request_fields(
         }
     if snap.thinking_param == THINKING_PARAM_ANTHROPIC:
         return {"thinking": {"type": "enabled", "budget_tokens": 8000}}
+    if snap.thinking_param == THINKING_PARAM_DEEPSEEK_V4:
+        return {"extra_body": {"thinking": {"type": "enabled"}}}
     return {}
 
 

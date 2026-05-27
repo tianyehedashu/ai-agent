@@ -7,12 +7,14 @@ export type ThinkingParam =
   | 'dashscope_enable_thinking'
   | 'builtin_reasoning'
   | 'anthropic_extended'
+  | 'deepseek_v4_thinking'
 
 const THINKING_PARAMS: readonly ThinkingParam[] = [
   'none',
   'dashscope_enable_thinking',
   'builtin_reasoning',
   'anthropic_extended',
+  'deepseek_v4_thinking',
 ]
 
 export type TemperaturePolicy = 'client' | 'fixed_1' | 'probe_0'
@@ -72,6 +74,10 @@ export function resolveThinkingParamForModel(
   }
   if (lower.includes('qwq') || lower.includes('reasoner')) {
     return 'builtin_reasoning'
+  }
+  // 弱推断：须与 backend thinking_param.is_deepseek_v4_model_id 同步
+  if (/deepseek-v4-(pro|flash)/.test(lower)) {
+    return 'deepseek_v4_thinking'
   }
   return 'none'
 }

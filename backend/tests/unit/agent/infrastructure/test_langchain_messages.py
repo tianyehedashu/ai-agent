@@ -32,6 +32,12 @@ def test_convert_ai_message_with_tool_calls() -> None:
     assert "path" in row["tool_calls"][0]["function"]["arguments"]
 
 
+def test_convert_ai_message_with_reasoning_content() -> None:
+    msg = AIMessage(content="answer", additional_kwargs={"reasoning_content": "thought"})
+    row = convert_langchain_message(msg)
+    assert row["reasoning_content"] == "thought"
+
+
 def test_convert_tool_message() -> None:
     row = convert_langchain_message(
         ToolMessage(content="file contents", tool_call_id="call_1"),

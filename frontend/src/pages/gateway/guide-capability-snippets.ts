@@ -312,6 +312,7 @@ await fetch("${baseUrl}/chat/completions", {
       title: 'Extended Thinking / 深度思考',
       description:
         '仅部分模型支持可分离的思考输出。DashScope Qwen3：extra_body.enable_thinking + 建议 stream；' +
+        'DeepSeek V4 Pro/Flash：extra_body.thinking.type = enabled/disabled；' +
         'DeepSeek Reasoner / QwQ：无需开关，读 reasoning_content；普通对话模型勿传 enable_thinking。',
       openai: {
         curl: `# --- DashScope Qwen3（须 stream + enable_thinking）---
@@ -359,7 +360,15 @@ for chunk in stream:
     if delta.content:
         print(delta.content, end="", flush=True)
 
-# 非流式：extra_body={"enable_thinking": False}  # DashScope 要求显式关闭`,
+# 非流式：extra_body={"enable_thinking": False}  # DashScope 要求显式关闭
+
+# --- DeepSeek V4 Pro/Flash（OpenAI 兼容 + extra_body.thinking）---
+# stream = client.chat.completions.create(
+#     model="${model}",
+#     messages=messages,
+#     extra_body={"thinking": {"type": "enabled"}},
+#     stream=True,
+# )`,
       },
       anthropic: {
         curl: `curl "${baseUrl}/messages" \\

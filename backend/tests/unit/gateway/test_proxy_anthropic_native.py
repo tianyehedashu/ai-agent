@@ -4,16 +4,23 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 import logging
+from types import SimpleNamespace
 from typing import Any
 import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_response_adapter import (
     enrich_anthropic_response_cost,
 )
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_ANTHROPIC,
+    THINKING_PARAM_DEEPSEEK_V4,
+    THINKING_PARAM_NONE,
+)
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 from domains.gateway.infrastructure.router_singleton import (
     filter_litellm_params_for_direct_anthropic,
@@ -53,6 +60,48 @@ class _NoopBudget:
 
     async def commit(self, **_kwargs: object) -> None:
         return None
+
+
+def _patch_anthropic_preflight(
+    use_case: ProxyUseCase,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    provider: str = "anthropic",
+    real_model: str = "claude-test",
+    tags: dict[str, Any] | None = None,
+) -> None:
+    """Mock 入站 preflight 模型解析，避免集成 DB 依赖。"""
+    default_tags: dict[str, Any] = {
+        "thinking_param": THINKING_PARAM_ANTHROPIC,
+        "supports_reasoning": True,
+    }
+    record = SimpleNamespace(
+        capability="chat",
+        provider=provider,
+        real_model=real_model,
+        tags=tags if tags is not None else default_tags,
+        upstream_call_shape=None,
+    )
+
+    async def _resolve(
+        _ctx: ProxyContext,
+        _model: str,
+        *,
+        match_registered_capability: bool = True,
+    ) -> ResolvedModelName:
+        _ = match_registered_capability
+        return ResolvedModelName(record=record, route=None, via_route=None)
+
+    async def _limits(_ctx: ProxyContext, *, estimate_tokens: int = 0) -> None:
+        _ = estimate_tokens
+        return None
+
+    async def _budget(_ctx: ProxyContext) -> list[object]:
+        return []
+
+    monkeypatch.setattr(use_case.guard, "resolve_and_validate_request_model", _resolve)
+    monkeypatch.setattr(use_case.guard, "check_limits", _limits)
+    monkeypatch.setattr(use_case.guard, "check_budget", _budget)
 
 
 def test_filter_litellm_params_strips_router_only_keys() -> None:
@@ -133,6 +182,7 @@ async def test_anthropic_messages_passes_body_fields_to_router(
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    _patch_anthropic_preflight(use_case, monkeypatch)
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -218,6 +268,7 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    _patch_anthropic_preflight(use_case, monkeypatch)
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -264,12 +315,7 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """volcengine 上游：协议私有 ``context_management`` / ``anthropic_version`` 被剥离并产 warning 日志。
-
-    ``thinking`` 不在本策略清单（由模型粒度 ``thinking_param`` 体系按 GatewayModel.tags
-    处理），fake_metadata 没接通真实 ``UpstreamAdapter``，故此处验证 ``thinking`` **未**
-    被 provider 粒度策略剥离。
-    """
+    """volcengine 上游：协议私有 ``context_management`` / ``anthropic_version`` 被剥离并产 warning 日志。"""
 
     captured: dict[str, Any] = {}
 
@@ -296,6 +342,13 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    _patch_anthropic_preflight(
+        use_case,
+        monkeypatch,
+        provider="volcengine",
+        real_model="glm-4-7-251222",
+        tags={"thinking_param": THINKING_PARAM_NONE, "supports_reasoning": False},
+    )
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -322,7 +375,6 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
         "messages": [{"role": "user", "content": "Hi"}],
         "context_management": {"edits": [{"type": "clear_tool_uses_20250919"}]},
         "anthropic_version": "2023-06-01",
-        "thinking": {"type": "enabled", "budget_tokens": 1024},
         "top_p": 0.8,
     }
 
@@ -332,8 +384,6 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
     assert isinstance(result, dict)
     assert "context_management" not in captured
     assert "anthropic_version" not in captured
-    # ``thinking`` 留给 invocation_policy；本策略不应剥离。
-    assert captured.get("thinking") == {"type": "enabled", "budget_tokens": 1024}
     assert captured.get("top_p") == 0.8
     assert captured["messages"] == body["messages"]
 
@@ -378,6 +428,12 @@ async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
         guardrail_enabled=False,
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    _patch_anthropic_preflight(
+        use_case,
+        monkeypatch,
+        provider="anthropic",
+        real_model="claude-opus-4-7",
+    )
 
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
@@ -410,3 +466,80 @@ async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
 
     assert captured.get("context_management") == body["context_management"]
     assert captured.get("thinking") == body["thinking"]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_translates_thinking_for_deepseek_v4(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claude Code 经 ``/v1/messages`` 调用 DeepSeek V4：顶层 thinking → extra_body.thinking。"""
+
+    captured: dict[str, Any] = {}
+
+    async def fake_router_anthropic(kwargs: dict[str, Any]) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "id": "msg_v4",
+            "type": "message",
+            "role": "assistant",
+            "model": kwargs.get("model"),
+            "content": [{"type": "text", "text": "ok"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-v4",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    _patch_anthropic_preflight(
+        use_case,
+        monkeypatch,
+        provider="volcengine",
+        real_model="deepseek-v4-pro-260425",
+        tags={
+            "thinking_param": THINKING_PARAM_DEEPSEEK_V4,
+            "supports_reasoning": True,
+        },
+    )
+
+    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+        return False
+
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
+
+    async def fake_metadata(
+        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        _ = user_kwargs
+        return {"gateway_request_id": "req-v4", "gateway_provider": "volcengine"}
+
+    monkeypatch.setattr(use_case.metadata_builder, "build", fake_metadata)
+
+    async def noop_entitlement(*_a: object, **_k: object) -> None:
+        return None
+
+    monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
+
+    body: dict[str, Any] = {
+        "model": "deepseek-v4-pro-260425",
+        "max_tokens": 64,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+    }
+
+    await use_case.anthropic_messages(ctx, body)
+
+    assert "thinking" not in captured
+    extra_body = captured.get("extra_body")
+    assert isinstance(extra_body, dict)
+    assert extra_body.get("thinking") == {"type": "enabled"}

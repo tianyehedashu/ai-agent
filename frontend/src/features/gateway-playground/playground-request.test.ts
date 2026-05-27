@@ -47,6 +47,18 @@ describe('buildPlaygroundRequestBody', () => {
     expect(body.extra_body).toEqual({ enable_thinking: true })
   })
 
+  test('DeepSeek V4 思考模式注入 extra_body.thinking', () => {
+    const body = buildPlaygroundRequestBody({
+      model: 'deepseek-v4-pro-260425',
+      prompt: 'hi',
+      stream: true,
+      flavor: 'openai',
+      enableThinking: true,
+      thinkingParam: 'deepseek_v4_thinking',
+    })
+    expect(body.extra_body).toEqual({ thinking: { type: 'enabled' } })
+  })
+
   test('Anthropic 思考模式注入 thinking 块', () => {
     const body = buildPlaygroundRequestBody({
       model: 'claude-opus-4',

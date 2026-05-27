@@ -6,7 +6,7 @@ from domains.gateway.application.invocation_overrides import merge_invocation_ov
 from domains.gateway.application.ports import InvocationOverrides
 from domains.gateway.domain.errors import InvocationPolicyViolationError
 from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
-from domains.gateway.domain.thinking_param import THINKING_PARAM_DASHSCOPE, THINKING_PARAM_NONE
+from domains.gateway.domain.thinking_param import THINKING_PARAM_DASHSCOPE, THINKING_PARAM_DEEPSEEK_V4, THINKING_PARAM_NONE
 
 
 def test_merge_temperature_override() -> None:
@@ -50,3 +50,14 @@ def test_merge_thinking_disabled_on_unsupported_model_raises() -> None:
             InvocationOverrides(thinking_enabled=True),
             capabilities=snap,
         )
+
+
+def test_merge_thinking_deepseek_v4_extra_body() -> None:
+    snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_DEEPSEEK_V4)
+    body: dict = {}
+    merge_invocation_overrides_into_body(
+        body,
+        InvocationOverrides(thinking_enabled=True),
+        capabilities=snap,
+    )
+    assert body["extra_body"] == {"thinking": {"type": "enabled"}}

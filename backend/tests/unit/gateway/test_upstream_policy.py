@@ -5,6 +5,7 @@ from domains.gateway.domain.policies.invocation_policy import apply_invocation_k
 from domains.gateway.domain.upstream_policy import (
     clamp_max_tokens,
     is_deepseek_reasoner,
+    is_deepseek_thinking_model,
     preprocess_messages_for_reasoner,
 )
 from domains.gateway.domain.temperature_policy import TEMPERATURE_POLICY_FIXED_1
@@ -42,3 +43,22 @@ def test_reasoning_model_strips_response_format() -> None:
 
 def test_is_deepseek_reasoner() -> None:
     assert is_deepseek_reasoner("x", "deepseek-reasoner")
+
+
+def test_deepseek_v4_message_padding() -> None:
+    messages = [
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner(
+        "deepseek-v4-pro-260425",
+        "deepseek-v4-pro",
+        messages,
+    )
+    assert out[0].get("reasoning_content") == ""
+
+
+def test_is_deepseek_thinking_model_v4() -> None:
+    assert is_deepseek_thinking_model("deepseek-v4-pro-260425", "deepseek-v4-pro")

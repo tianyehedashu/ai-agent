@@ -418,9 +418,18 @@ class LangGraphAgentEngine:
             ]
 
             # 返回带工具调用的 AI 消息，并设置待处理的工具调用
-            # 包含 reasoning_content 供事件发送使用
+            # reasoning_content 写入 additional_kwargs，供多轮回传上游
+            ai_kwargs: dict[str, Any] = {}
+            if reasoning_content is not None:
+                ai_kwargs["reasoning_content"] = reasoning_content
             return {
-                "messages": [AIMessage(content=final_content, tool_calls=tool_calls_dict)],
+                "messages": [
+                    AIMessage(
+                        content=final_content,
+                        tool_calls=tool_calls_dict,
+                        additional_kwargs=ai_kwargs,
+                    )
+                ],
                 "pending_tool_calls": tool_calls_dict,
                 "tool_iteration": view.tool_iteration + 1,
                 "reasoning_content": reasoning_content,  # 传递推理内容

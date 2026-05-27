@@ -108,6 +108,9 @@ CURSOR_ALIASES: tuple[str, ...] = (
     "claude-sonnet-4-6",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
+    # ===== DeepSeek V4（OpenAI 兼容 + extra_body.thinking） =====
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
     # ===== Google Gemini =====
     "gemini-2.5-pro",
     "gemini-2.5-flash",

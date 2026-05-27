@@ -53,6 +53,42 @@
       "description": "复杂推理，输出思维链"
     },
     {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro",
+      "provider": "deepseek",
+      "litellm_model": "deepseek/deepseek-v4-pro",
+      "context_window": 128000,
+      "input_price": 2.0,
+      "output_price": 8.0,
+      "supports_vision": false,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "deepseek_v4_thinking",
+      "recommended_for": [
+        "reasoning",
+        "general"
+      ],
+      "description": "DeepSeek V4 Pro，extra_body.thinking 可开关思考模式"
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "provider": "deepseek",
+      "litellm_model": "deepseek/deepseek-v4-flash",
+      "context_window": 128000,
+      "input_price": 1.0,
+      "output_price": 4.0,
+      "supports_vision": false,
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "thinking_param": "deepseek_v4_thinking",
+      "recommended_for": [
+        "reasoning",
+        "general"
+      ],
+      "description": "DeepSeek V4 Flash，extra_body.thinking 可开关思考模式"
+    },
+    {
       "id": "dashscope/qwen-turbo",
       "name": "通义千问 Turbo",
       "provider": "dashscope",

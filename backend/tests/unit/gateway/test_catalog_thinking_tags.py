@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.application.config_catalog_sync import build_tags_from_seed_model
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_DEEPSEEK_V4,
     THINKING_PARAM_NONE,
 )
 
@@ -87,3 +88,19 @@ def test_claude_opus_47_anthropic_extended() -> None:
     )
     assert tags["thinking_param"] == THINKING_PARAM_ANTHROPIC
     assert tags["supports_reasoning"] is True
+
+
+def test_deepseek_v4_pro_extra_body_thinking() -> None:
+    tags = _tags(
+        CatalogSeedModel(
+            id="deepseek/deepseek-v4-pro",
+            name="DeepSeek V4 Pro",
+            provider="deepseek",
+            litellm_model="deepseek/deepseek-v4-pro",
+            supports_reasoning=True,
+            thinking_param="deepseek_v4_thinking",
+        )
+    )
+    assert tags["thinking_param"] == THINKING_PARAM_DEEPSEEK_V4
+    assert tags["supports_reasoning"] is True
+    assert tags["temperature_policy"] == "fixed_1"

@@ -36,6 +36,10 @@ describe('resolveThinkingParamForModel', () => {
   it('无 API 时按模型名推断 reasoner', () => {
     expect(resolveThinkingParamForModel('deepseek-reasoner')).toBe('builtin_reasoning')
   })
+
+  it('无 API 时按模型名推断 deepseek v4', () => {
+    expect(resolveThinkingParamForModel('deepseek-v4-pro-260425')).toBe('deepseek_v4_thinking')
+  })
 })
 
 describe('thinkingParamLabel', () => {
@@ -57,6 +61,14 @@ describe('thinkingHintForModel', () => {
     })
     expect(hint).toContain('enable_thinking')
     expect(hint).toContain('stream')
+  })
+
+  it('DeepSeek V4 提示 extra_body.thinking', () => {
+    const hint = thinkingHintForModel('deepseek-v4-pro-260425', 'openai', {
+      thinking_param: 'deepseek_v4_thinking',
+    })
+    expect(hint).toContain('extra_body.thinking')
+    expect(hint).toContain('reasoning_content')
   })
 })
 

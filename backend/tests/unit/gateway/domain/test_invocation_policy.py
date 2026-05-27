@@ -18,6 +18,7 @@ from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_DEEPSEEK_V4,
     THINKING_PARAM_NONE,
 )
 
@@ -29,12 +30,14 @@ def test_none_strips_thinking_fields() -> None:
         {
             "enable_thinking": True,
             "thinking": {"type": "enabled", "budget_tokens": 1024},
+            "extra_body": {"thinking": {"type": "enabled"}},
             "temperature": 0.5,
         },
         validate=False,
     )
     assert "enable_thinking" not in out
     assert "thinking" not in out
+    assert "extra_body" not in out or "thinking" not in out.get("extra_body", {})
     assert out["temperature"] == 0.5
 
 
@@ -44,12 +47,14 @@ def test_none_strips_thinking_with_validate() -> None:
     body = {
         "enable_thinking": True,
         "thinking": {"type": "enabled", "budget_tokens": 1024},
+        "extra_body": {"thinking": {"type": "enabled"}},
         "temperature": 0.5,
     }
     validate_invocation_kwargs(snap, body)
     out = apply_invocation_kwargs(snap, body)
     assert "enable_thinking" not in out
     assert "thinking" not in out
+    assert "extra_body" not in out or "thinking" not in out.get("extra_body", {})
     assert out["temperature"] == 0.5
 
 
@@ -121,3 +126,55 @@ def test_validate_thinking_toggle_rejects_none_param() -> None:
     snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_NONE)
     with pytest.raises(InvocationPolicyViolationError):
         validate_client_thinking_toggle(snap, enabled=True)
+
+
+def test_deepseek_v4_preserves_extra_body_thinking() -> None:
+    snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_DEEPSEEK_V4)
+    out = apply_invocation_kwargs(
+        snap,
+        {
+            "enable_thinking": True,
+            "thinking": {"type": "enabled", "budget_tokens": 8000},
+            "extra_body": {"thinking": {"type": "enabled"}},
+        },
+        validate=False,
+    )
+    assert "enable_thinking" not in out
+    assert "thinking" not in out
+    assert out["extra_body"] == {"thinking": {"type": "enabled"}}
+
+
+def test_deepseek_v4_translates_claude_code_top_level_thinking() -> None:
+    """Claude Code /v1/messages 仅传顶层 thinking 时须落到 extra_body.thinking。"""
+    snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_DEEPSEEK_V4)
+    out = apply_invocation_kwargs(
+        snap,
+        {
+            "model": "deepseek-v4-pro-260425",
+            "max_tokens": 8192,
+            "messages": [{"role": "user", "content": "hi"}],
+            "thinking": {"type": "enabled", "budget_tokens": 1024},
+        },
+        validate=False,
+    )
+    assert "thinking" not in out
+    assert out["extra_body"] == {"thinking": {"type": "enabled"}}
+
+
+def test_deepseek_v4_strips_top_level_thinking_when_not_requested() -> None:
+    snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_DEEPSEEK_V4)
+    out = apply_invocation_kwargs(
+        snap,
+        {"messages": [{"role": "user", "content": "hi"}]},
+        validate=False,
+    )
+    assert "thinking" not in out
+    assert "extra_body" not in out
+
+
+def test_client_thinking_fields_deepseek_v4() -> None:
+    snap = ModelCapabilitySnapshot(thinking_param=THINKING_PARAM_DEEPSEEK_V4)
+    fields = client_thinking_request_fields(snap, enabled=True)
+    assert fields == {"extra_body": {"thinking": {"type": "enabled"}}}
+    disabled = client_thinking_request_fields(snap, enabled=False)
+    assert disabled == {"extra_body": {"thinking": {"type": "disabled"}}}

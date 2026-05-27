@@ -9,6 +9,8 @@
 
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 
+import type { ThinkingParam } from '@/features/gateway-shared/thinking-param'
+
 import {
   extractAnthropicDeltaText,
   extractAnthropicError,
@@ -72,6 +74,7 @@ interface CallParams {
   /** 视觉理解：OpenAI 多模态 content */
   imageUrl?: string
   enableThinking?: boolean
+  thinkingParam?: ThinkingParam
   temperature?: number
 }
 
@@ -153,6 +156,7 @@ export function usePlaygroundCall(): UsePlaygroundCallReturn {
           flavor: params.flavor,
           maxTokens: params.maxTokens,
           enableThinking: params.enableThinking,
+          thinkingParam: params.thinkingParam,
           temperature: params.temperature,
         })
     const body = JSON.stringify(bodyObject)

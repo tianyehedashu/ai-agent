@@ -331,6 +331,7 @@ export function PlaygroundCard({
 
   const thinkingFlavorMatch =
     (thinkingParam === 'dashscope_enable_thinking' && apiFlavor === 'openai') ||
+    (thinkingParam === 'deepseek_v4_thinking' && apiFlavor === 'openai') ||
     (thinkingParam === 'anthropic_extended' && apiFlavor === 'anthropic')
 
   const thinkingSwitchInteractive = playgroundMode === 'chat' && thinkingFlavorMatch
@@ -464,6 +465,7 @@ export function PlaygroundCard({
       stream: thinkingEnabled && thinkingParam === 'dashscope_enable_thinking' ? true : stream,
       flavor: apiFlavor,
       enableThinking: thinkingSwitchInteractive ? thinkingEnabled : false,
+      thinkingParam,
       temperature: temperatureInteractive ? temperature : undefined,
     })
   }

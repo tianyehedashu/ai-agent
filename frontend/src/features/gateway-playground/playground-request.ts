@@ -2,6 +2,8 @@
  * Playground 请求体构建与展示用脱敏（纯函数，便于单测）
  */
 
+import type { ThinkingParam } from '@/features/gateway-shared/thinking-param'
+
 import type { PlaygroundApiFlavor } from './types'
 
 export interface BuildPlaygroundRequestBodyParams {
@@ -10,8 +12,9 @@ export interface BuildPlaygroundRequestBodyParams {
   stream: boolean
   flavor: PlaygroundApiFlavor
   maxTokens?: number
-  /** DashScope Qwen3：extra_body.enable_thinking；开启时建议 stream */
+  /** DashScope Qwen3：extra_body.enable_thinking；DeepSeek V4：extra_body.thinking */
   enableThinking?: boolean
+  thinkingParam?: ThinkingParam
   /** Anthropic Extended Thinking */
   anthropicThinkingBudgetTokens?: number
   /** 仅 temperature_policy=client 时写入 */
@@ -47,12 +50,21 @@ export function buildPlaygroundRequestBody(
     messages: [{ role: 'user', content: params.prompt }],
   }
   if (params.enableThinking) {
-    body.extra_body = { enable_thinking: true }
+    if (params.thinkingParam === 'deepseek_v4_thinking') {
+      body.extra_body = buildDeepSeekV4ThinkingExtraBody(true)
+    } else {
+      body.extra_body = { enable_thinking: true }
+    }
   }
   if (params.temperature !== undefined) {
     body.temperature = params.temperature
   }
   return body
+}
+
+/** DeepSeek V4：OpenAI SDK 经 extra_body 传 thinking 开关 */
+export function buildDeepSeekV4ThinkingExtraBody(enabled: boolean): Record<string, unknown> {
+  return { thinking: { type: enabled ? 'enabled' : 'disabled' } }
 }
 
 export interface BuildVisionRequestBodyParams {
