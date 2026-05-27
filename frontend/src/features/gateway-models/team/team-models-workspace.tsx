@@ -70,6 +70,7 @@ import {
   type BatchResyncChunkResult,
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -120,7 +121,11 @@ export function TeamModelsWorkspace({
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
-  const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
+  const {
+    byId: credentialSummariesById,
+    isFetching: directoryFetching,
+    refetch: refetchDirectory,
+  } = useGatewayCredentialDirectory()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -197,7 +202,12 @@ export function TeamModelsWorkspace({
     )
   }, [setSearchParams])
 
-  const { data: listData, isLoading } = useQuery({
+  const {
+    data: listData,
+    isLoading,
+    isFetching: listFetching,
+    refetch: refetchList,
+  } = useQuery({
     queryKey: gatewayModelsListQueryKey(
       teamId,
       registryScope,
@@ -234,7 +244,12 @@ export function TeamModelsWorkspace({
     }
   }, [listData, page])
 
-  const { data: usageSummary, isLoading: usageLoading } = useQuery({
+  const {
+    data: usageSummary,
+    isLoading: usageLoading,
+    isFetching: usageFetching,
+    refetch: refetchUsage,
+  } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, providerFilter, usageDays],
     queryFn: () =>
       gatewayApi.modelsUsageSummary(teamId, {
@@ -666,6 +681,12 @@ export function TeamModelsWorkspace({
     [createMutation]
   )
 
+  const handleRefreshList = useCallback((): void => {
+    void Promise.all([refetchList(), refetchUsage(), refetchDirectory()])
+  }, [refetchDirectory, refetchList, refetchUsage])
+
+  const isRefreshingList = combineFetching(listFetching, usageFetching, directoryFetching)
+
   const showEmptyOnboarding =
     !isRegisterView &&
     !isLoading &&
@@ -865,6 +886,8 @@ export function TeamModelsWorkspace({
                 canManageModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
               }
               deletingFailed={batchDeleting}
+              onRefreshList={handleRefreshList}
+              isRefreshingList={isRefreshingList}
             />
           </Suspense>
           {listData && listData.total > 0 ? (

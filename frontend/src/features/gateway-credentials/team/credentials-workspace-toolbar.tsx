@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { Plus, Search } from '@/lib/lucide-icons'
 
 export interface CredentialsWorkspaceSummary {
@@ -23,6 +24,8 @@ export interface CredentialsWorkspaceToolbarProps {
   summary?: CredentialsWorkspaceSummary
   canWrite: boolean
   onAdd: () => void
+  isRefreshing?: boolean
+  onRefresh?: () => void
 }
 
 function formatSummaryBadge(summary: CredentialsWorkspaceSummary): string {
@@ -38,6 +41,8 @@ export function CredentialsWorkspaceToolbar({
   summary,
   canWrite,
   onAdd,
+  isRefreshing = false,
+  onRefresh,
 }: CredentialsWorkspaceToolbarProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -60,6 +65,14 @@ export function CredentialsWorkspaceToolbar({
             aria-label="按团队名称筛选凭据"
           />
         </div>
+
+        {onRefresh ? (
+          <GatewayRefreshButton
+            isFetching={isRefreshing}
+            ariaLabel="刷新团队凭据"
+            onRefresh={onRefresh}
+          />
+        ) : null}
 
         {canWrite ? (
           <Button

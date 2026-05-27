@@ -31,6 +31,7 @@ export interface UseInfiniteGatewayModelPagesResult {
   items: GatewayModel[]
   isLoading: boolean
   isSuccess: boolean
+  isFetching: boolean
   isFetchingNextPage: boolean
   hasNextPage: boolean
   onPickerOpenChange: (open: boolean) => void
@@ -77,16 +78,24 @@ export function useInfiniteGatewayModelPages(
     ]
   )
 
-  const { data, isLoading, isSuccess, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } =
-    useInfiniteQuery({
-      queryKey,
-      queryFn: ({ pageParam }) =>
-        gatewayApi.listModels(teamId, { ...params, page: pageParam, page_size: MAX_PAGE_SIZE }),
-      initialPageParam: 1,
-      getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
-      enabled: enabled && teamId.length > 0,
-      staleTime: GATEWAY_MODELS_STALE_MS,
-    })
+  const {
+    data,
+    isLoading,
+    isSuccess,
+    isFetching,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey,
+    queryFn: ({ pageParam }) =>
+      gatewayApi.listModels(teamId, { ...params, page: pageParam, page_size: MAX_PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    enabled: enabled && teamId.length > 0,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
 
   const items = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
 
@@ -146,6 +155,7 @@ export function useInfiniteGatewayModelPages(
     items,
     isLoading,
     isSuccess,
+    isFetching,
     isFetchingNextPage,
     hasNextPage,
     onPickerOpenChange,

@@ -33,6 +33,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import {
   credentialDisplayText,
   credentialDisplayTitle,
@@ -49,7 +50,6 @@ import {
   Copy,
   Database,
   Receipt,
-  RefreshCw,
   Route,
   Server,
   ShieldAlert,
@@ -244,19 +244,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
               清空筛选
             </Button>
           ) : null}
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-9 w-9"
-            title="刷新"
-            aria-label="刷新日志"
-            disabled={isFetching}
-            onClick={() => {
-              void refetch()
-            }}
-          >
-            <RefreshCw className={cn('h-4 w-4', isFetching ? 'animate-spin' : '')} />
-          </Button>
+          <GatewayRefreshButton
+            isFetching={isFetching}
+            ariaLabel="刷新日志"
+            onRefresh={() => refetch()}
+          />
         </div>
       </div>
 

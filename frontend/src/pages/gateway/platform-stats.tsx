@@ -10,6 +10,7 @@ import { Navigate } from 'react-router-dom'
 import { gatewayApi, type PlatformCredentialStat } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { LineChart } from '@/lib/lucide-icons'
 import { getCurrentTeamId } from '@/stores/gateway-team'
@@ -33,7 +34,7 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
   const { isPlatformAdmin, isAuthenticated } = useGatewayPermission()
   const [days, setDays] = useState<1 | 7 | 30>(7)
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['gateway', 'admin', 'credential-stats', days],
     queryFn: () => {
       const teamId = getCurrentTeamId()
@@ -67,21 +68,28 @@ export default function GatewayPlatformStatsPage(): React.JSX.Element {
             全平台按凭据聚合调用量；关联模型数为引用该凭据的 Gateway 注册模型条数。
           </p>
         </div>
-        <div className="flex flex-wrap gap-1 rounded-md border bg-background p-0.5">
-          {RANGE_DAYS.map((r) => (
-            <Button
-              key={r.value}
-              size="sm"
-              variant={days === r.value ? 'default' : 'ghost'}
-              className="h-8 px-3 text-xs"
-              type="button"
-              onClick={() => {
-                setDays(r.value)
-              }}
-            >
-              {r.label}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 rounded-md border bg-background p-0.5">
+            {RANGE_DAYS.map((r) => (
+              <Button
+                key={r.value}
+                size="sm"
+                variant={days === r.value ? 'default' : 'ghost'}
+                className="h-8 px-3 text-xs"
+                type="button"
+                onClick={() => {
+                  setDays(r.value)
+                }}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
+          <GatewayRefreshButton
+            isFetching={isFetching}
+            ariaLabel="刷新平台凭据统计"
+            onRefresh={() => refetch()}
+          />
         </div>
       </div>
 

@@ -53,6 +53,8 @@ export interface BudgetAdminWorkspaceState {
   clearSelection: () => void
   submitForm: (values: BudgetFormValues) => void
   confirmDelete: () => void
+  isRefreshing: boolean
+  refresh: () => void
 }
 
 export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
@@ -78,7 +80,12 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
 
   const modelNameParam = modelFilter.trim() !== '' ? modelFilter.trim() : undefined
 
-  const { data: items, isLoading } = useQuery({
+  const {
+    data: items,
+    isLoading,
+    isFetching: budgetsFetching,
+    refetch: refetchBudgets,
+  } = useQuery({
     queryKey: gatewayBudgetsQueryKey(teamId, {
       target_kind: activeTab,
       model_name: modelNameParam,
@@ -90,13 +97,21 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
       }),
   })
 
-  const { data: keys = [] } = useQuery({
+  const {
+    data: keys = [],
+    isFetching: keysFetching,
+    refetch: refetchKeys,
+  } = useQuery({
     queryKey: ['gateway', 'keys', teamId],
     queryFn: () => gatewayApi.listKeys(teamId),
     enabled: activeTab === 'key' || createValues.target_kind === 'key',
   })
 
-  const { data: members = [] } = useQuery({
+  const {
+    data: members = [],
+    isFetching: membersFetching,
+    refetch: refetchMembers,
+  } = useQuery({
     queryKey: ['gateway', 'members', teamId],
     queryFn: () => gatewayApi.listMembers(teamId),
     enabled: activeTab === 'user' || createValues.target_kind === 'user',
@@ -108,6 +123,8 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
   const {
     items: models,
     isLoading: modelsQueryLoading,
+    isFetching: modelsFetching,
+    refetch: refetchModels,
     onPickerOpenChange: onModelPickerOpenChange,
   } = useInfiniteGatewayModelPages(
     teamId,
@@ -121,7 +138,12 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     }
   }, [createOpen, onModelPickerOpenChange])
 
-  const { data: routes = [], isLoading: routesQueryLoading } = useQuery({
+  const {
+    data: routes = [],
+    isLoading: routesQueryLoading,
+    isFetching: routesFetching,
+    refetch: refetchRoutes,
+  } = useQuery({
     queryKey: ['gateway', 'routes', teamId],
     queryFn: () => gatewayApi.listRoutes(teamId),
     staleTime: GATEWAY_MODELS_STALE_MS,
@@ -291,6 +313,19 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     }
   }, [deleteMutation, deleteTarget])
 
+  const isRefreshing =
+    budgetsFetching || keysFetching || membersFetching || modelsFetching || routesFetching
+
+  const refresh = useCallback((): void => {
+    void Promise.all([
+      refetchBudgets(),
+      refetchKeys(),
+      refetchMembers(),
+      refetchModels(),
+      refetchRoutes(),
+    ])
+  }, [refetchBudgets, refetchKeys, refetchMembers, refetchModels, refetchRoutes])
+
   return {
     teamId,
     tabs,
@@ -323,5 +358,7 @@ export function useBudgetAdminWorkspace(): BudgetAdminWorkspaceState {
     clearSelection,
     submitForm,
     confirmDelete,
+    isRefreshing,
+    refresh,
   }
 }

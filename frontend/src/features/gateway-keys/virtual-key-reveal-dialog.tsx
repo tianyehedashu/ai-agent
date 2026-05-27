@@ -24,16 +24,19 @@ export interface VirtualKeyRevealTarget {
   id: string
   name: string
   masked_key: string
+  team_id?: string
 }
 
 export interface VirtualKeyRevealDialogProps {
   teamId: string
+  teamDisplayName?: string
   target: VirtualKeyRevealTarget | null
   onClose: () => void
 }
 
 export function VirtualKeyRevealDialog({
   teamId,
+  teamDisplayName,
   target,
   onClose,
 }: Readonly<VirtualKeyRevealDialogProps>): React.JSX.Element {
@@ -76,6 +79,25 @@ export function VirtualKeyRevealDialog({
             )}
           </DialogDescription>
         </DialogHeader>
+
+        {teamDisplayName ? (
+          <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">绑定团队：</span>
+            <span className="font-medium">{teamDisplayName}</span>
+            {target?.team_id ? (
+              <span
+                className="mt-1 block font-mono text-xs text-muted-foreground"
+                title={target.team_id}
+              >
+                {target.team_id}
+              </span>
+            ) : (
+              <span className="mt-1 block font-mono text-xs text-muted-foreground" title={teamId}>
+                {teamId}
+              </span>
+            )}
+          </div>
+        ) : null}
 
         <div className="space-y-4">
           {plainKey ? (

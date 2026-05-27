@@ -36,6 +36,8 @@ import {
   useGatewayTeams,
 } from '@/features/api-key-gateway/use-gateway-teams'
 import { credentialsTeamListHref } from '@/features/gateway-models/paths'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam, switchToFallbackTeam } from '@/features/gateway-teams/navigate-team'
 import {
@@ -59,12 +61,20 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const { canWrite, isPlatformAdmin, teamRole } = useGatewayPermission()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
 
-  const { data: teams, isLoading: teamsLoading, isError: teamsError } = useGatewayTeams()
+  const {
+    data: teams,
+    isLoading: teamsLoading,
+    isError: teamsError,
+    isFetching: teamsFetching,
+    refetch: refetchTeams,
+  } = useGatewayTeams()
 
   const {
     data: members,
     isLoading: membersLoading,
     isError: membersError,
+    isFetching: membersFetching,
+    refetch: refetchMembers,
   } = useGatewayTeamMembers(teamId)
 
   const [openTeam, setOpenTeam] = useState(false)
@@ -199,6 +209,13 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">个人团队不可删除；共享团队可协作管理</p>
         </div>
         <div className="flex items-center gap-2">
+          <GatewayRefreshButton
+            isFetching={combineFetching(teamsFetching, membersFetching)}
+            ariaLabel="刷新团队"
+            onRefresh={() => {
+              void Promise.all([refetchTeams(), refetchMembers()])
+            }}
+          />
           {canLeaveTeam ? (
             <Button
               size="sm"

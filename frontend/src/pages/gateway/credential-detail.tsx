@@ -54,6 +54,7 @@ import {
   credentialsTeamListHref,
 } from '@/features/gateway-models/paths'
 import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-models/query-keys'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
 import {
   resolveGatewayTeamLabel,
@@ -97,6 +98,8 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
     isLoading,
     isError,
     error,
+    isFetching,
+    refetch: refetchCredential,
   } = useQuery({
     queryKey: ['gateway', 'credential', teamId, id],
     queryFn: () => gatewayApi.getCredential(teamId, id),
@@ -202,6 +205,17 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const handleDeleteConfirm = useCallback(() => {
     deleteMutation.mutate()
   }, [deleteMutation])
+
+  const handleRefresh = useCallback((): void => {
+    void Promise.all([
+      refetchCredential(),
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, id] }),
+      queryClient.invalidateQueries({
+        queryKey: gatewayModelsByCredentialInvalidatePrefix(id, teamId),
+      }),
+    ])
+    invalidateCredentialSummariesCache(queryClient)
+  }, [id, queryClient, refetchCredential, teamId])
 
   if (!id) {
     return (
@@ -324,6 +338,11 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         </div>
         {editable ? (
           <div className="flex flex-wrap items-center gap-2">
+            <GatewayRefreshButton
+              isFetching={isFetching}
+              ariaLabel="刷新凭据详情"
+              onRefresh={handleRefresh}
+            />
             <div className="flex items-center gap-2 rounded-md border px-3 py-2">
               <Label htmlFor="cred-header-active" className="cursor-pointer text-sm font-normal">
                 {cred.is_active ? '已启用' : '已禁用'}
@@ -356,9 +375,16 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             </Button>
           </div>
         ) : (
-          <span className="text-sm text-muted-foreground">
-            {cred.is_active ? '已启用' : '已禁用'}
-          </span>
+          <div className="flex items-center gap-2">
+            <GatewayRefreshButton
+              isFetching={isFetching}
+              ariaLabel="刷新凭据详情"
+              onRefresh={handleRefresh}
+            />
+            <span className="text-sm text-muted-foreground">
+              {cred.is_active ? '已启用' : '已禁用'}
+            </span>
+          </div>
         )}
       </div>
 

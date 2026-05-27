@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 
 import type { CredentialSummary } from '@/api/gateway'
 import { gatewayApi } from '@/api/gateway'
@@ -52,6 +52,8 @@ export interface UsePlaygroundFilteredModelsResult {
   onModelPickerOpenChange: (open: boolean) => void
   /** 选中模型名不在已加载页时，按需拉取下一页直至命中或耗尽 */
   ensureModelNameLoaded: (modelName: string) => void
+  isRefreshing: boolean
+  refreshAll: () => void
 }
 
 /** 父级注入 PlaygroundCard 的快照，避免同页重复跑 hook */
@@ -67,6 +69,7 @@ export function usePlaygroundFilteredModels(
   const fetchRoutes = options.includeRoutes ?? false
 
   const teamId = useResolvedGatewayTeamId()
+  const queryClient = useQueryClient()
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [pendingModelName, setPendingModelName] = useState<string | null>(null)
 
@@ -131,6 +134,8 @@ export function usePlaygroundFilteredModels(
     fetchNextPage: fetchNextTeamPage,
     hasNextPage: teamHasNextPage,
     isFetchingNextPage: isFetchingNextTeamPage,
+    isFetching: teamModelsFetching,
+    refetch: refetchTeamModels,
     data: teamData,
     isLoading: teamModelsLoading,
     isSuccess: teamModelsSuccess,
@@ -140,6 +145,8 @@ export function usePlaygroundFilteredModels(
     fetchNextPage: fetchNextMyPage,
     hasNextPage: myHasNextPage,
     isFetchingNextPage: isFetchingNextMyPage,
+    isFetching: myModelsFetching,
+    refetch: refetchMyModels,
     data: myData,
     isLoading: myModelsLoading,
     isSuccess: myModelsSuccess,
@@ -228,6 +235,19 @@ export function usePlaygroundFilteredModels(
   const modelsLoading =
     teamModelsLoading || myModelsLoading || routesQuery.isLoading || credentialsLoading
 
+  const isRefreshing =
+    teamModelsFetching || myModelsFetching || routesQuery.isFetching || credentialsLoading
+
+  const refreshAll = useCallback((): void => {
+    void Promise.all([
+      refetchTeamModels(),
+      refetchMyModels(),
+      routesQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'credential-summaries'] }),
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] }),
+    ])
+  }, [queryClient, refetchMyModels, refetchTeamModels, routesQuery])
+
   return {
     teamId,
     credentialId,
@@ -246,5 +266,7 @@ export function usePlaygroundFilteredModels(
     myModelsLoaded: !includeMyModels || myModelsSuccess,
     onModelPickerOpenChange,
     ensureModelNameLoaded,
+    isRefreshing,
+    refreshAll,
   }
 }

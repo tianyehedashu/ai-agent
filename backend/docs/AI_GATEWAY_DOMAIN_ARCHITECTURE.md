@@ -246,7 +246,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 | 概念 | 含义 | 存储 / 生命周期 |
 |------|------|-----------------|
-| **入站 · 虚拟 Key（vkey）** | 客户端调用 **`/v1/*`** 的 Bearer / `x-api-key`，前缀 **`sk-gw-*`**；团队绑定、模型白名单、RPM/TPM、key 级预算与网关日志策略以 **Gateway** 表为准。 | `gateway_virtual_keys` |
+| **入站 · 虚拟 Key（vkey）** | 客户端调用 **`/v1/*`** 的 Bearer / `x-api-key`，前缀 **`sk-gw-*`**；团队绑定、模型白名单、RPM/TPM、key 级预算与网关日志策略以 **Gateway** 表为准。管理台 **虚拟 Key** 页展示所属团队；代理 404 含「当前调用团队」。详见 [GATEWAY_CURSOR_CLAUDE_CODE.md](gateway/GATEWAY_CURSOR_CLAUDE_CODE.md)。 | `gateway_virtual_keys` |
 | **入站 · 平台 API Key** | 同一 **`/v1/*`** 入口支持 Identity 签发的 **`sk-*`**，且 scope 含 **`gateway:proxy`**；团队必须命中 `api_key_gateway_grants`。`X-Team-Id` 只负责选择 grant，不能扩大租户权限；grant 可配置模型白名单、能力白名单与 RPM/TPM。与 vkey **不合并为一张表**：吊销、scope、多能力复用由 **Identity** 负责；Gateway grant 是代理面的授权真源。 | Identity API Key + `api_key_gateway_grants` |
 | **出站 · Provider 凭据** | LiteLLM 向上游（OpenAI、Anthropic 等）发起请求时使用的 Key/Base，即 **`provider_credentials`**（system / team / user scope）。 | Gateway 凭据池 |
 

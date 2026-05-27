@@ -15,6 +15,7 @@ import { useCredentialDeleteFlow } from '@/features/gateway-credentials/hooks/us
 import type { GatewayCredentialMutations } from '@/features/gateway-credentials/hooks/use-gateway-credential-mutations'
 import { ManagedCredentialsTable } from '@/features/gateway-credentials/managed-credentials-table'
 import { systemCredentialsTabQueryKey } from '@/features/gateway-credentials/query-keys'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Plus } from '@/lib/lucide-icons'
@@ -32,7 +33,12 @@ export function SystemCredentialsAdminWorkspace({
   const { isAdmin, isPlatformAdmin } = useGatewayPermission()
   const deleteFlow = useCredentialDeleteFlow(mutations, teamId)
 
-  const { data: systemItems, isLoading: systemLoading } = useQuery({
+  const {
+    data: systemItems,
+    isLoading: systemLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: systemCredentialsTabQueryKey(teamId),
     queryFn: () => credentialsApi.listCredentials(teamId),
   })
@@ -45,7 +51,12 @@ export function SystemCredentialsAdminWorkspace({
 
   return (
     <TabsContent value="system" className="mt-4 space-y-3 focus-visible:outline-none">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <GatewayRefreshButton
+          isFetching={isFetching}
+          ariaLabel="刷新系统凭据"
+          onRefresh={() => refetch()}
+        />
         <Button size="sm" onClick={handleAdd}>
           <Plus className="mr-1.5 h-4 w-4" />
           新增

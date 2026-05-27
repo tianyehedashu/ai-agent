@@ -2,8 +2,9 @@
  * AI Gateway · 模型详情（个人 / 团队深链）
  */
 
-import { Suspense } from 'react'
+import { Suspense, useCallback } from 'react'
 
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ import {
 } from '@/features/gateway-models/paths'
 import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
 import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
@@ -79,6 +81,19 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const teamLabel = useGatewayModelLabel(isPersonal ? '' : id, credentialId)
   const personalLabel = usePersonalModelLabel(isPersonal ? id : '')
   const modelLabel = isPersonal ? personalLabel : teamLabel
+
+  const queryClient = useQueryClient()
+  const modelDetailFetching = useIsFetching({
+    queryKey: isPersonal ? ['gateway', 'my-models', id] : ['gateway', 'models', teamId, id],
+  })
+  const handleRefresh = useCallback((): void => {
+    void Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: isPersonal ? ['gateway', 'my-models', id] : ['gateway', 'models', teamId, id],
+      }),
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'credential-summaries', teamId] }),
+    ])
+  }, [id, isPersonal, queryClient, teamId])
 
   const backHref = isPersonal
     ? personalModelsIndexHref(teamId)
@@ -159,6 +174,11 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
             {backLabel}
           </Link>
         </Button>
+        <GatewayRefreshButton
+          isFetching={modelDetailFetching > 0}
+          ariaLabel="刷新模型详情"
+          onRefresh={handleRefresh}
+        />
         {!isPersonal && credentialId.length > 0 ? (
           <Button variant="ghost" size="sm" className="h-8" asChild>
             <Link

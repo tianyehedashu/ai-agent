@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import { systemModelsBrowseIndexHref } from '@/features/gateway-models/paths'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
 
@@ -79,7 +80,7 @@ function SystemCredentialsBrowseTable({
 
 export function SystemCredentialsBrowseWorkspace(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { list, isLoading } = useGatewayCredentialDirectory()
+  const { list, isLoading, isFetching, refetch } = useGatewayCredentialDirectory()
 
   const systemCredentials = useMemo(() => list.filter((c) => c.scope === 'system'), [list])
 
@@ -106,5 +107,16 @@ export function SystemCredentialsBrowseWorkspace(): React.JSX.Element {
     )
   }
 
-  return <SystemCredentialsBrowseTable items={systemCredentials} />
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <GatewayRefreshButton
+          isFetching={isFetching}
+          ariaLabel="刷新系统凭据"
+          onRefresh={() => refetch()}
+        />
+      </div>
+      <SystemCredentialsBrowseTable items={systemCredentials} />
+    </div>
+  )
 }

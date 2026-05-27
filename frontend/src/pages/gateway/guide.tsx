@@ -25,7 +25,14 @@ import {
 } from '@/features/gateway-playground/playground-mode-filter'
 import { usePlaygroundFilteredModels } from '@/features/gateway-playground/use-playground-filtered-models'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { thinkingHintForModel } from '@/features/gateway-shared/thinking-param'
+import {
+  gatewayTeamKeysHref,
+  gatewayTeamModelsHref,
+  gatewayTeamRoutesHref,
+} from '@/features/gateway-teams/gateway-team-paths'
 import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import { Check, Copy, ExternalLink, FileText, ChevronDown, Terminal, Zap } from '@/lib/lucide-icons'
@@ -68,18 +75,39 @@ const PLACEHOLDER_MODEL = 'claude-opus-4-7'
 type ApiFlavor = 'openai' | 'anthropic'
 type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-sse'
 
-const QUICK_STEPS = [
-  { step: 1, title: '创建虚拟 Key', href: '/gateway/keys' },
-  { step: 2, title: '选择模型或路由', href: '/gateway/routes' },
-  { step: 3, title: '复制示例并调用', href: '#examples' },
-] as const
+type QuickStep = { step: number; title: string; href: string }
+type TroubleshootingItem = {
+  code: string
+  title: string
+  href: string
+  linkLabel: string
+  description?: string
+}
 
-const TROUBLESHOOTING = [
-  { code: '401', title: '鉴权失败', href: '/gateway/keys', linkLabel: '虚拟 Key' },
-  { code: '404', title: '模型不存在', href: '/gateway/models', linkLabel: '模型' },
-  { code: '429', title: '限流', href: '/gateway/models', linkLabel: '查看模型配额' },
-  { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
-] as const
+function buildQuickSteps(teamId: string | null): readonly QuickStep[] {
+  return [
+    { step: 1, title: '创建虚拟 Key', href: gatewayTeamKeysHref(teamId) },
+    { step: 2, title: '选择模型或路由', href: gatewayTeamRoutesHref(teamId) },
+    { step: 3, title: '复制示例并调用', href: '#examples' },
+  ]
+}
+
+function buildTroubleshooting(teamId: string | null): readonly TroubleshootingItem[] {
+  const modelsHref = gatewayTeamModelsHref(teamId)
+  return [
+    { code: '401', title: '鉴权失败', href: gatewayTeamKeysHref(teamId), linkLabel: '虚拟 Key' },
+    {
+      code: '404',
+      title: '模型不存在',
+      href: modelsHref,
+      linkLabel: '模型',
+      description:
+        '核对三点：① 客户端 model 与 Gateway 注册名完全一致；② sk-gw-* 绑定团队与模型所在团队一致（右上角切换器）；③ 模型已启用且凭据可用。平台 sk-* 需带 X-Team-Id 选择已授权团队。',
+    },
+    { code: '429', title: '限流', href: modelsHref, linkLabel: '查看模型配额' },
+    { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
+  ]
+}
 
 const GUIDE_NAV_ITEMS = [
   ['#playground', '在线试调'],
@@ -90,9 +118,6 @@ const GUIDE_NAV_ITEMS = [
 ] as const
 
 const GUIDE_CARD_CLASS = 'border-border/60 bg-background shadow-sm'
-
-type QuickStep = (typeof QUICK_STEPS)[number]
-type TroubleshootingItem = (typeof TROUBLESHOOTING)[number]
 
 const GUIDE_NAV_IDS = GUIDE_NAV_ITEMS.map(([href]) => href.slice(1))
 
@@ -218,7 +243,14 @@ export default function GatewayGuidePage(): React.JSX.Element {
     credentialsLoading,
     candidateModels: guideModelCandidates,
     ensureModelNameLoaded,
+    isRefreshing: playgroundModelsRefreshing,
+    refreshAll: refreshPlaygroundModels,
   } = playgroundFilteredModels
+
+  const handlePlaygroundRefresh = useCallback((): void => {
+    refreshPlaygroundModels()
+    virtualKey.refreshKeys()
+  }, [refreshPlaygroundModels, virtualKey])
 
   useEffect(() => {
     const name = activeModel || PLACEHOLDER_MODEL
@@ -291,6 +323,8 @@ export default function GatewayGuidePage(): React.JSX.Element {
   }, [apiFlavor, exampleStream])
 
   const activeAnchor = useActiveGuideAnchor()
+  const quickSteps = useMemo(() => buildQuickSteps(teamId), [teamId])
+  const troubleshooting = useMemo(() => buildTroubleshooting(teamId), [teamId])
 
   return (
     <div className="w-full">
@@ -306,7 +340,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
             快速上手
           </h3>
           <div className="grid gap-3 rounded-xl border border-border/60 bg-background p-3 shadow-sm md:grid-cols-3">
-            {QUICK_STEPS.map((item) => (
+            {quickSteps.map((item) => (
               <QuickStepItem key={item.step} item={item} />
             ))}
           </div>
@@ -316,6 +350,13 @@ export default function GatewayGuidePage(): React.JSX.Element {
           <h3 id="playground-heading" className="sr-only">
             在线试调
           </h3>
+          <div className="mb-2 flex justify-end">
+            <GatewayRefreshButton
+              isFetching={combineFetching(playgroundModelsRefreshing, virtualKey.isRefreshingKeys)}
+              ariaLabel="刷新试调数据"
+              onRefresh={handlePlaygroundRefresh}
+            />
+          </div>
           <Suspense fallback={<GuideSectionFallback />}>
             <PlaygroundCard
               baseUrl={gatewayV1Base}
@@ -439,7 +480,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
                     <p className="text-sm text-muted-foreground">
                       {mediaModeSnippets.hint}
                       <Link
-                        to="/gateway/models"
+                        to={gatewayTeamModelsHref(teamId)}
                         className="ml-1 text-primary underline-offset-4 hover:underline"
                       >
                         查看模型
@@ -546,7 +587,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
             </CardHeader>
             <CardContent className="pt-5">
               <div className="grid gap-3 md:grid-cols-2">
-                {TROUBLESHOOTING.map((item) => (
+                {troubleshooting.map((item) => (
                   <TroubleshootingCard key={item.code} item={item} />
                 ))}
               </div>
@@ -745,6 +786,7 @@ function ResponseExamples({
 }
 
 function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>): React.JSX.Element {
+  const description = 'description' in item ? item.description : undefined
   return (
     <div className="rounded-lg border p-3">
       <div className="flex items-start justify-between gap-3">
@@ -755,6 +797,9 @@ function TroubleshootingCard({ item }: Readonly<{ item: TroubleshootingItem }>):
             </Badge>
             {item.title}
           </div>
+          {description ? (
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          ) : null}
         </div>
         <Link
           to={item.href}

@@ -34,6 +34,8 @@ export interface UsePlaygroundVirtualKeyReturn {
   plain: string | null
   isRevealing: boolean
   revealError: Error | null
+  isRefreshingKeys: boolean
+  refreshKeys: () => void
 }
 
 export function usePlaygroundVirtualKey(
@@ -156,6 +158,10 @@ export function usePlaygroundVirtualKey(
     [setLastSelectedId]
   )
 
+  const refreshKeys = useCallback((): void => {
+    void keysQuery.refetch()
+  }, [keysQuery])
+
   return {
     keys: visibleKeys,
     isLoadingKeys: keysQuery.isLoading,
@@ -165,5 +171,7 @@ export function usePlaygroundVirtualKey(
     plain,
     isRevealing: revealQuery.isFetching && selectedKeyId !== null,
     revealError,
+    isRefreshingKeys: keysQuery.isFetching,
+    refreshKeys,
   }
 }

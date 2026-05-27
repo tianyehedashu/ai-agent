@@ -81,6 +81,12 @@ export const GuideClientIntegrationsSection = memo(function GuideClientIntegrati
           第三方客户端集成
         </CardTitle>
         <p className="text-sm text-muted-foreground">{keyHintText}</p>
+        <p className="text-sm text-muted-foreground">
+          虚拟 Key（<span className="font-mono">sk-gw-*</span>
+          ）在创建时绑定团队，仅可调用该团队已注册模型；与 模型名、右上角团队切换器须一致。平台{' '}
+          <span className="font-mono">sk-*</span> 需另配{' '}
+          <span className="font-mono">X-Team-Id</span>。
+        </p>
       </CardHeader>
       <CardContent className="pt-0">
         <Tabs defaultValue={defaultTab}>

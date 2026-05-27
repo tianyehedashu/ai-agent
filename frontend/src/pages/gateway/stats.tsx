@@ -37,10 +37,11 @@ import {
 } from '@/components/ui/sheet'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { LineChart, RefreshCw, Settings2, X } from '@/lib/lucide-icons'
+import { LineChart, Settings2, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -395,20 +396,11 @@ export default function GatewayStatsPage(): React.JSX.Element {
               </Badge>
             ) : null}
           </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-9 w-9"
-            title="刷新"
-            aria-label="刷新统计"
-            disabled={statsQuery.isFetching}
-            onClick={() => {
-              void statsQuery.refetch()
-            }}
-          >
-            <RefreshCw className={cn('h-4 w-4', statsQuery.isFetching ? 'animate-spin' : '')} />
-          </Button>
+          <GatewayRefreshButton
+            isFetching={statsQuery.isFetching}
+            ariaLabel="刷新统计"
+            onRefresh={() => statsQuery.refetch()}
+          />
         </div>
       </div>
 

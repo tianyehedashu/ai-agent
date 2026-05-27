@@ -19,12 +19,19 @@ export interface GatewayCredentialDirectory {
   list: CredentialSummary[]
   byId: Map<string, CredentialSummary>
   isLoading: boolean
+  isFetching: boolean
+  refetch: () => Promise<unknown>
 }
 
 export function useGatewayCredentialDirectory(): GatewayCredentialDirectory {
   const teamId = useResolvedGatewayTeamId()
 
-  const { data: list = [], isLoading } = useQuery({
+  const {
+    data: list = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: teamId
       ? credentialSummariesQueryKey(teamId)
       : ['gateway', 'credential-summaries', 'none'],
@@ -43,7 +50,7 @@ export function useGatewayCredentialDirectory(): GatewayCredentialDirectory {
     return m
   }, [list])
 
-  return { list, byId, isLoading }
+  return { list, byId, isLoading, isFetching, refetch }
 }
 
 /** 凭据变更后刷新摘要目录 */

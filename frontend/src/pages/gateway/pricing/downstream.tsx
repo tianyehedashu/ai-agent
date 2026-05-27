@@ -16,6 +16,7 @@ import {
   PricingModelLabel,
 } from '@/features/gateway-pricing/pricing-model-label'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Pencil, RefreshCw, RotateCcw } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -107,6 +108,11 @@ export default function GatewayPricingDownstreamPage(): React.JSX.Element {
           />
           一键同步上游
         </Button>
+        <GatewayRefreshButton
+          isFetching={downstreamQuery.isFetching}
+          ariaLabel="刷新下游售价"
+          onRefresh={() => downstreamQuery.refetch()}
+        />
         <span className="text-xs text-muted-foreground">为尚未覆盖的模型创建「跟随上游」售价</span>
       </div>
 

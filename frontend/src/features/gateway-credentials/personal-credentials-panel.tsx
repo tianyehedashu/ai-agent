@@ -31,6 +31,8 @@ import { Switch } from '@/components/ui/switch'
 import { PersonalCredentialBudgetInline } from '@/features/gateway-budget/personal-credential-budget-inline'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
 import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
@@ -76,12 +78,21 @@ export function PersonalCredentialsPanel({
   )
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
 
-  const { data: credentials = [], isLoading } = useQuery({
+  const {
+    data: credentials = [],
+    isLoading,
+    isFetching,
+    refetch: refetchCredentials,
+  } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
     queryFn: () => gatewayApi.listMyCredentials(),
     enabled: hasAuthSession,
   })
-  const { data: personalBudgets = [] } = useGatewayBudgets(teamId)
+  const {
+    data: personalBudgets = [],
+    isFetching: budgetsFetching,
+    refetch: refetchBudgets,
+  } = useGatewayBudgets(teamId)
   const { items: myModels } = useInfinitePersonalModelPages(undefined, {
     enabled: hasAuthSession,
     prefetchMode: 'idle',
@@ -112,6 +123,16 @@ export function PersonalCredentialsPanel({
     void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
     invalidateCredentialSummariesCache(queryClient)
   }, [queryClient])
+
+  const handleRefresh = useCallback((): void => {
+    void Promise.all([
+      refetchCredentials(),
+      refetchBudgets(),
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] }),
+    ])
+  }, [queryClient, refetchBudgets, refetchCredentials])
+
+  const isRefreshing = combineFetching(isFetching, budgetsFetching)
 
   const openEdit = useCallback((c: ProviderCredential): void => {
     setEditCred(c)
@@ -344,6 +365,13 @@ export function PersonalCredentialsPanel({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base">提供商凭据</CardTitle>
+          {hasAuthSession ? (
+            <GatewayRefreshButton
+              isFetching={isRefreshing}
+              ariaLabel="刷新个人凭据"
+              onRefresh={handleRefresh}
+            />
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">{credentialsBody}</CardContent>
       </Card>

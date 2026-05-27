@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
 
@@ -20,7 +21,12 @@ function BrowseFallback(): React.JSX.Element {
 export function SystemModelsBrowseWorkspace(): React.JSX.Element {
   const teamId = useGatewayTeamId()
 
-  const { items: requestableItems, isLoading } = useInfiniteGatewayModelPages(
+  const {
+    items: requestableItems,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useInfiniteGatewayModelPages(
     teamId,
     { registry_scope: 'requestable' },
     { prefetchMode: 'idle' }
@@ -47,5 +53,16 @@ export function SystemModelsBrowseWorkspace(): React.JSX.Element {
     )
   }
 
-  return <SystemCallableModelsList models={systemModels} />
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <GatewayRefreshButton
+          isFetching={isFetching}
+          ariaLabel="刷新系统模型"
+          onRefresh={() => refetch()}
+        />
+      </div>
+      <SystemCallableModelsList models={systemModels} />
+    </div>
+  )
 }

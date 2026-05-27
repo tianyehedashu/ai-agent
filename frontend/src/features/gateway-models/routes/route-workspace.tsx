@@ -12,6 +12,8 @@ import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/us
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
 import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -37,7 +39,12 @@ export function RouteWorkspace(): React.JSX.Element {
   const [createMode, setCreateMode] = useState(false)
   const [createFormKey, setCreateFormKey] = useState(0)
 
-  const { data: routes, isLoading } = useQuery({
+  const {
+    data: routes,
+    isLoading,
+    isFetching: routesFetching,
+    refetch: refetchRoutes,
+  } = useQuery({
     queryKey: ['gateway', 'routes', teamId],
     queryFn: () => gatewayApi.listRoutes(teamId),
     staleTime: GATEWAY_MODELS_STALE_MS,
@@ -45,7 +52,12 @@ export function RouteWorkspace(): React.JSX.Element {
 
   const needsRouteModels = createMode || selectedId !== null
 
-  const { items: models, isLoading: modelsLoading } = useInfiniteGatewayModelPages(
+  const {
+    items: models,
+    isLoading: modelsLoading,
+    isFetching: modelsFetching,
+    refetch: refetchModels,
+  } = useInfiniteGatewayModelPages(
     teamId,
     { registry_scope: 'callable' },
     { enabled: needsRouteModels, prefetchMode: 'idle' }
@@ -207,15 +219,29 @@ export function RouteWorkspace(): React.JSX.Element {
       <div className="grid min-h-[480px] gap-4 lg:grid-cols-[minmax(260px,320px)_1fr]">
         <div className="flex min-h-0 flex-col rounded-lg border bg-card">
           <div className="border-b p-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value)
+                  }}
+                  placeholder="搜索虚拟名…"
+                  className="h-8 pl-8 text-sm"
+                />
+              </div>
+              <GatewayRefreshButton
+                isFetching={combineFetching(
+                  routesFetching,
+                  needsRouteModels ? modelsFetching : false
+                )}
+                ariaLabel="刷新虚拟路由"
+                onRefresh={() => {
+                  const tasks: Promise<unknown>[] = [refetchRoutes()]
+                  if (needsRouteModels) tasks.push(refetchModels())
+                  void Promise.all(tasks)
                 }}
-                placeholder="搜索虚拟名…"
-                className="h-8 pl-8 text-sm"
               />
             </div>
           </div>

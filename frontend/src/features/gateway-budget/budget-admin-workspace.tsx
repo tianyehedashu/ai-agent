@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 
 import { TAB_LABELS } from './budget-admin-constants'
 import { BudgetAdminCreatePanel } from './budget-admin-create-panel'
@@ -35,11 +36,18 @@ export function BudgetAdminWorkspace(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">预算配额管理</h2>
-        <p className="text-sm text-muted-foreground">
-          按团队 / 用户 / 虚拟 Key / 系统设置 Gateway 消费上限；可选单模型计量。
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold">预算配额管理</h2>
+          <p className="text-sm text-muted-foreground">
+            按团队 / 用户 / 虚拟 Key / 系统设置 Gateway 消费上限；可选单模型计量。
+          </p>
+        </div>
+        <GatewayRefreshButton
+          isFetching={ws.isRefreshing}
+          ariaLabel="刷新预算配额"
+          onRefresh={ws.refresh}
+        />
       </div>
 
       <Tabs value={ws.activeTab} onValueChange={ws.handleTabChange}>

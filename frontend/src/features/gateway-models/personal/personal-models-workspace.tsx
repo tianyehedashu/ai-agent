@@ -62,6 +62,8 @@ import {
   formatDeleteFailedConfirmLabel,
   type BatchDeleteChunkResult,
 } from '@/features/gateway-models/utils'
+import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
@@ -118,7 +120,11 @@ export function PersonalModelsWorkspace({
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
-  const { data: credentials = [] } = useQuery({
+  const {
+    data: credentials = [],
+    isFetching: credentialsFetching,
+    refetch: refetchCredentials,
+  } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
     queryFn: () => gatewayApi.listMyCredentials(),
     enabled: hasAuthSession,
@@ -145,7 +151,12 @@ export function PersonalModelsWorkspace({
     healthFilter !== 'all' ||
     deferredSearch.trim() !== ''
 
-  const { data: listData, isLoading } = useQuery({
+  const {
+    data: listData,
+    isLoading,
+    isFetching: listFetching,
+    refetch: refetchList,
+  } = useQuery({
     queryKey: [
       'gateway',
       'my-models',
@@ -188,6 +199,12 @@ export function PersonalModelsWorkspace({
       { replace: true }
     )
   }, [setSearchParams])
+
+  const handleRefresh = useCallback((): void => {
+    void Promise.all([refetchList(), refetchCredentials()])
+  }, [refetchCredentials, refetchList])
+
+  const isRefreshing = combineFetching(listFetching, credentialsFetching)
 
   const onBatchItemComplete = useMemo(
     () => createBatchConnectivityCachePatcher(queryClient, 'personal'),
@@ -600,6 +617,11 @@ export function PersonalModelsWorkspace({
               deletingFailed={batchDeleting}
             />
           ) : null}
+          <GatewayRefreshButton
+            isFetching={isRefreshing}
+            ariaLabel="刷新个人模型"
+            onRefresh={handleRefresh}
+          />
           <Button
             size="sm"
             className={items.length > 0 ? 'ml-auto' : undefined}

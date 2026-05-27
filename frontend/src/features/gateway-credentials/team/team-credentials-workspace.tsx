@@ -47,7 +47,12 @@ export function TeamCredentialsWorkspace({
   const teamSearchTrimmed = teamSearch.trim()
   const isListSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
 
-  const { data: listData, isLoading } = useManagedTeamCredentialsList({
+  const {
+    data: listData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useManagedTeamCredentialsList({
     search: deferredTeamSearch,
     page,
     enabled: hasCollaborationTeams,
@@ -153,6 +158,10 @@ export function TeamCredentialsWorkspace({
               onTeamSearchChange={handleTeamSearchChange}
               summary={summary}
               canWrite={canWrite}
+              isRefreshing={isFetching}
+              onRefresh={() => {
+                void refetch()
+              }}
               onAdd={() => {
                 onAdd(undefined, defaultAddTeamId)
               }}

@@ -171,9 +171,14 @@ class ModelNotAllowedError(GatewayError):
 class GatewayModelNotFoundError(GatewayError):
     """客户端请求的 model 未在 Gateway 注册（无 GatewayModel / GatewayRoute）。"""
 
-    def __init__(self, model: str) -> None:
-        super().__init__(f"未找到已注册的 Gateway 模型: {model}")
+    def __init__(self, model: str, *, team_label: str | None = None) -> None:
+        if team_label:
+            message = f"未找到已注册的 Gateway 模型: {model}（当前调用团队: {team_label}）"
+        else:
+            message = f"未找到已注册的 Gateway 模型: {model}"
+        super().__init__(message)
         self.model = model
+        self.team_label = team_label
 
 
 class InvocationPolicyViolationError(GatewayError):

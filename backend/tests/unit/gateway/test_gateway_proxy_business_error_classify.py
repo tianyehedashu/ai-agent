@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
 from fastapi import status
+import httpx
 
 from domains.gateway.domain.errors import (
     BudgetExceededError,
@@ -34,6 +34,14 @@ def test_classify_gateway_model_not_found() -> None:
     assert biz.openai_error_type == "model_not_found"
     assert biz.anthropic_error_type == "not_found_error"
     assert "deepseek-v4-flash-260425" in biz.message
+
+
+def test_classify_gateway_model_not_found_with_team_label() -> None:
+    biz = classify_proxy_use_case_business_error(
+        GatewayModelNotFoundError("m1", team_label="研发")
+    )
+    assert biz is not None
+    assert "当前调用团队: 研发" in biz.message
 
 
 def test_classify_router_model_miss_maps_404() -> None:

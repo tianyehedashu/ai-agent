@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { Info, Loader2, Plus, RefreshCw, Search, Trash2 } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
 import { cn } from '@/lib/utils'
@@ -101,6 +102,8 @@ interface ModelInventoryProps {
   batchDeleteTitle?: string
   onDeleteFailed?: () => void
   deletingFailed?: boolean
+  onRefreshList?: () => void
+  isRefreshingList?: boolean
 }
 
 export const ModelInventory = memo(function ModelInventory({
@@ -156,6 +159,8 @@ export const ModelInventory = memo(function ModelInventory({
   batchDeleteTitle = '批量删除模型',
   onDeleteFailed,
   deletingFailed = false,
+  onRefreshList,
+  isRefreshingList = false,
 }: ModelInventoryProps): React.JSX.Element {
   const selectableModels = batchSelectEnabled
     ? models.filter((m) => isModelBatchSelectable?.(m) ?? false)
@@ -268,6 +273,14 @@ export const ModelInventory = memo(function ModelInventory({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {onRefreshList ? (
+            <GatewayRefreshButton
+              isFetching={isRefreshingList}
+              ariaLabel="刷新模型列表"
+              className="h-8 w-8 shrink-0"
+              onRefresh={onRefreshList}
+            />
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

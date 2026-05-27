@@ -35,6 +35,7 @@ import {
   findModelsMissingUpstream,
   UPSTREAM_DISPLAY_CURRENCY,
 } from '@/features/gateway-pricing/upstream-pricing-view'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2, Plus, RefreshCw } from '@/lib/lucide-icons'
 
@@ -81,6 +82,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
   const {
     items: models,
     isLoading: modelsLoading,
+    isFetching: modelsFetching,
     refetch: refetchModels,
   } = useInfiniteGatewayModelPages(teamId, { registry_scope: 'callable' }, { prefetchMode: 'idle' })
 
@@ -180,6 +182,7 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
 
   const tableLoading = upstreamQuery.isLoading || providersQuery.isLoading || modelsLoading
   const tableError = upstreamQuery.isError || providersQuery.isError
+  const isRefreshing = upstreamQuery.isFetching || providersQuery.isFetching || modelsFetching
   const showMissingBanner = modelsMissingUpstream.length > 0
 
   return (
@@ -220,6 +223,11 @@ export default function GatewayPricingUpstreamPage(): React.JSX.Element {
           />
           从 LiteLLM 同步
         </Button>
+        <GatewayRefreshButton
+          isFetching={isRefreshing}
+          ariaLabel="刷新上游成本"
+          onRefresh={handleRetry}
+        />
         {visibleRows.length > 0 ? (
           <span className="text-xs text-muted-foreground">共 {visibleRows.length} 条</span>
         ) : null}

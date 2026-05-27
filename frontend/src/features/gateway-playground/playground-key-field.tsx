@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type React from 'react'
 
 import { Link } from 'react-router-dom'
@@ -15,6 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { gatewayTeamKeysHref } from '@/features/gateway-teams/gateway-team-paths'
+import { resolveTeamLabelFromMap } from '@/features/gateway-teams/gateway-team-resolve-label'
+import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { formatGatewayManagementError } from '@/lib/gateway-api-error'
 import { Eye, EyeOff, Loader2 } from '@/lib/lucide-icons'
 
@@ -35,6 +38,8 @@ export interface PlaygroundKeyFieldProps {
   userEdited: boolean
   onSelectKey: (id: string | null) => void
   onUserEditedReset: () => void
+  /** 当前 Playground 团队，用于「创建 Key」链接 */
+  teamId?: string | null
 }
 
 export const PlaygroundKeyField = memo(function PlaygroundKeyField({
@@ -52,7 +57,10 @@ export const PlaygroundKeyField = memo(function PlaygroundKeyField({
   userEdited: _userEdited,
   onSelectKey,
   onUserEditedReset,
+  teamId,
 }: Readonly<PlaygroundKeyFieldProps>): React.JSX.Element {
+  const teamNameById = useGatewayMemberTeamNameMap()
+  const keysCreateHref = useMemo(() => gatewayTeamKeysHref(teamId), [teamId])
   const hasVirtualKeys = virtualKeys.length > 0
   const manualMode =
     !hasVirtualKeys || selectedKeyId === null || (revealError !== null && selectedKey !== null)
@@ -85,7 +93,13 @@ export const PlaygroundKeyField = memo(function PlaygroundKeyField({
               {virtualKeys.map((k) => (
                 <SelectItem key={k.id} value={k.id}>
                   <span className="flex w-full min-w-0 items-center gap-2">
-                    <span className="truncate text-foreground/90">{k.name}</span>
+                    <span className="truncate text-foreground/90">
+                      {k.name}
+                      <span className="text-muted-foreground">
+                        {' '}
+                        · {resolveTeamLabelFromMap(teamNameById, k.team_id)}
+                      </span>
+                    </span>
                     <span
                       className="shrink-0 font-mono text-xs text-muted-foreground"
                       translate="no"
@@ -138,6 +152,8 @@ export const PlaygroundKeyField = memo(function PlaygroundKeyField({
         selectedKey={selectedKey}
         keysCount={virtualKeys.length}
         revealError={revealError}
+        teamNameById={teamNameById}
+        keysCreateHref={keysCreateHref}
       />
     </div>
   )
@@ -150,6 +166,8 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
   selectedKey,
   keysCount,
   revealError,
+  teamNameById,
+  keysCreateHref,
 }: Readonly<{
   hintId: string
   isLoadingKeys: boolean
@@ -157,6 +175,8 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
   selectedKey: VirtualKey | null
   keysCount: number
   revealError: Error | null
+  teamNameById: ReadonlyMap<string, string>
+  keysCreateHref: string
 }>): React.JSX.Element | null {
   if (isLoadingKeys) {
     return (
@@ -181,11 +201,19 @@ const PlaygroundApiKeyHint = memo(function PlaygroundApiKeyHint({
       </p>
     )
   }
+  if (selectedKey) {
+    return (
+      <p id={hintId} className="text-xs text-muted-foreground">
+        绑定团队：{resolveTeamLabelFromMap(teamNameById, selectedKey.team_id)} ·
+        仅可调用该团队已注册模型
+      </p>
+    )
+  }
   if (keysCount === 0) {
     return (
       <p id={hintId} className="text-xs text-muted-foreground">
         暂无 Key。{' '}
-        <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
+        <Link to={keysCreateHref} className="text-primary underline-offset-4 hover:underline">
           创建
         </Link>
       </p>

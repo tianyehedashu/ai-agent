@@ -53,6 +53,20 @@ export function useGatewayTeamNameMap(enabled = true): Map<string, string> {
   }, [teams, viewerUserId])
 }
 
+/** 与右上角 TeamSwitcher 同源（membership_only） */
+export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string> {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+
+  return useMemo(() => {
+    const map = new Map<string, string>()
+    for (const team of teams) {
+      map.set(team.id, gatewayTeamDisplayLabel(team, { viewerUserId }))
+    }
+    return map
+  }, [teams, viewerUserId])
+}
+
 export function useGatewayWritableTeams(enabled = true): GatewayTeam[] {
   const { data: teams = [] } = useGatewayTeams(enabled)
   const { isPlatformAdmin } = useGatewayPermission()

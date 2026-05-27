@@ -24,6 +24,7 @@ import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-ga
 import { teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { CollaborationTeamsModelsGroupedList } from '@/features/gateway-models/team/collaboration-teams-models-grouped-list'
 import { useManagedTeamModelsList } from '@/features/gateway-models/use-managed-team-models-list'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import {
   groupModelsByTenantId,
   useCollaborationTeamsOverviewResolution,
@@ -53,7 +54,12 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const teamSearchTrimmed = teamSearch.trim()
   const isListSearchStale = deferredTeamSearch.trim() !== teamSearchTrimmed
 
-  const { data: listData, isLoading } = useManagedTeamModelsList({
+  const {
+    data: listData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useManagedTeamModelsList({
     enabled: hasCollaborationTeams,
     search: deferredTeamSearch,
     page,
@@ -204,6 +210,11 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
               <SelectItem value="unknown">未测</SelectItem>
             </SelectContent>
           </Select>
+          <GatewayRefreshButton
+            isFetching={isFetching}
+            ariaLabel="刷新团队模型"
+            onRefresh={() => refetch()}
+          />
           {canWrite ? (
             <Button size="sm" asChild>
               <Link to={teamModelsRegisterHref(defaultRegisterTeamId)}>

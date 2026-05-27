@@ -9,6 +9,7 @@ import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { formatRateLine } from '@/features/gateway-pricing/format'
 import { PricingTable, type PricingTableColumn } from '@/features/gateway-pricing/pricing-table'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { cn } from '@/lib/utils'
 
@@ -41,43 +42,52 @@ export default function GatewayPricingMyPricesPage(): React.JSX.Element {
   }, [pricesQuery.data, targetModel])
 
   return (
-    <PricingTable
-      columns={columns}
-      loading={pricesQuery.isLoading}
-      error={pricesQuery.isError}
-      empty={rows.length === 0}
-      onRetry={() => {
-        void pricesQuery.refetch()
-      }}
-    >
-      {rows.map((row) => {
-        const highlighted =
-          Boolean(targetModel) &&
-          (row.model_name === targetModel || row.gateway_model_id === targetModel)
-        return (
-          <tr
-            key={row.gateway_model_id ?? row.model_name}
-            className={cn('cv-auto-row border-t', highlighted ? 'bg-primary/5' : undefined)}
-          >
-            <td className="px-3 py-2 font-medium">{row.model_name}</td>
-            <td className="px-3 py-2 text-sm text-muted-foreground">
-              {row.provider && row.credential_name
-                ? `${providerLabel(row.provider)} · ${row.credential_name}`
-                : (row.credential_name ?? row.provider ?? '—')}
-            </td>
-            <td className="px-3 py-2 tabular-nums">
-              {formatRateLine(
-                row.input_cost_per_million_display,
-                row.output_cost_per_million_display,
-                currency
-              )}
-            </td>
-            <td className="px-3 py-2 text-muted-foreground">
-              {row.inheritance_strategy === 'mirror' ? '跟随上游' : '团队覆盖'}
-            </td>
-          </tr>
-        )
-      })}
-    </PricingTable>
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <GatewayRefreshButton
+          isFetching={pricesQuery.isFetching}
+          ariaLabel="刷新我的价格"
+          onRefresh={() => pricesQuery.refetch()}
+        />
+      </div>
+      <PricingTable
+        columns={columns}
+        loading={pricesQuery.isLoading}
+        error={pricesQuery.isError}
+        empty={rows.length === 0}
+        onRetry={() => {
+          void pricesQuery.refetch()
+        }}
+      >
+        {rows.map((row) => {
+          const highlighted =
+            Boolean(targetModel) &&
+            (row.model_name === targetModel || row.gateway_model_id === targetModel)
+          return (
+            <tr
+              key={row.gateway_model_id ?? row.model_name}
+              className={cn('cv-auto-row border-t', highlighted ? 'bg-primary/5' : undefined)}
+            >
+              <td className="px-3 py-2 font-medium">{row.model_name}</td>
+              <td className="px-3 py-2 text-sm text-muted-foreground">
+                {row.provider && row.credential_name
+                  ? `${providerLabel(row.provider)} · ${row.credential_name}`
+                  : (row.credential_name ?? row.provider ?? '—')}
+              </td>
+              <td className="px-3 py-2 tabular-nums">
+                {formatRateLine(
+                  row.input_cost_per_million_display,
+                  row.output_cost_per_million_display,
+                  currency
+                )}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">
+                {row.inheritance_strategy === 'mirror' ? '跟随上游' : '团队覆盖'}
+              </td>
+            </tr>
+          )
+        })}
+      </PricingTable>
+    </div>
   )
 }

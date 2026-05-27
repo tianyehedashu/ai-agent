@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query'
 import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -43,7 +44,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['gateway', 'dashboard', teamId, usageAggregation, days],
     queryFn: () => gatewayApi.dashboard(teamId, { days, usage_aggregation: usageAggregation }),
   })
@@ -74,6 +75,11 @@ export default function GatewayOverviewPage(): React.JSX.Element {
               </Button>
             ))}
           </div>
+          <GatewayRefreshButton
+            isFetching={isFetching}
+            ariaLabel="刷新概览"
+            onRefresh={() => refetch()}
+          />
         </div>
       </div>
 

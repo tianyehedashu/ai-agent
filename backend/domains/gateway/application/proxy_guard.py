@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING
+import uuid
 
 from bootstrap.config import settings
 from domains.gateway.application.budget_service import (
@@ -100,6 +101,31 @@ class ProxyGuard:
             disable_internal_direct_litellm=settings.gateway_proxy_disable_internal_direct_litellm,
         )
 
+    async def _team_label_for_proxy(
+        self,
+        team_id: uuid.UUID,
+        viewer_user_id: uuid.UUID | None,
+    ) -> str:
+        from domains.identity.application.user_display import resolve_user_display_snapshot
+        from domains.tenancy.application.team_service import TeamService
+        from domains.tenancy.domain.team_display_label import format_team_display_label
+
+        team = await TeamService(self._session).get_team(team_id)
+        if team is None:
+            return str(team_id)[:8]
+        owner_hint: str | None = None
+        if team.kind == "personal" and (
+            viewer_user_id is None or viewer_user_id != team.owner_user_id
+        ):
+            owner_hint = await resolve_user_display_snapshot(self._session, team.owner_user_id)
+        return format_team_display_label(
+            kind=team.kind,
+            name=team.name,
+            owner_user_id=team.owner_user_id,
+            viewer_user_id=viewer_user_id,
+            owner_hint=owner_hint,
+        )
+
     async def resolve_and_validate_request_model(
         self,
         ctx: ProxyContext,
@@ -115,7 +141,8 @@ class ProxyGuard:
             self._session, ctx.team_id, name, user_id=ctx.user_id
         )
         if not self._allows_unregistered_gateway_model(ctx) and resolved is None:
-            raise GatewayModelNotFoundError(name)
+            team_label = await self._team_label_for_proxy(ctx.team_id, ctx.user_id)
+            raise GatewayModelNotFoundError(name, team_label=team_label)
         if match_registered_capability and resolved is not None:
             assert_registered_model_capability(
                 model_name=name,
