@@ -21,6 +21,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { GatewayTeamCommandItems } from '@/features/gateway-teams/gateway-team-command-items'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
@@ -40,7 +41,11 @@ export default function TeamSwitcher(): React.JSX.Element | null {
   const viewerUserId = currentUser?.id ?? null
   const isAnonymous = currentUser?.is_anonymous ?? true
 
-  const { data: teams } = useGatewayMemberTeams(!isAnonymous)
+  const {
+    data: teams,
+    isFetching: memberTeamsFetching,
+    refetch: refetchMemberTeams,
+  } = useGatewayMemberTeams(!isAnonymous)
 
   useEffect(() => {
     if (teams) {
@@ -86,6 +91,14 @@ export default function TeamSwitcher(): React.JSX.Element | null {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[260px] p-0" align="end">
+        <div className="flex items-center justify-end border-b px-2 py-1">
+          <GatewayRefreshButton
+            isFetching={memberTeamsFetching}
+            ariaLabel="刷新团队列表"
+            className="h-7 w-7"
+            onRefresh={() => refetchMemberTeams()}
+          />
+        </div>
         <Command>
           <CommandInput placeholder="搜索团队..." />
           <CommandList>

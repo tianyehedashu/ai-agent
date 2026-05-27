@@ -81,14 +81,23 @@ export interface UsePlaygroundCredentialOptionsReturn {
   grouped: PlaygroundCredentialGroups
   byId: Map<string, PlaygroundCredentialOption>
   isLoading: boolean
+  isFetching: boolean
   isEmpty: boolean
 }
 
 export function usePlaygroundCredentialOptions(
   selectedCredentialId: string
 ): UsePlaygroundCredentialOptionsReturn {
-  const { list: teamSummaries, isLoading: teamLoading } = useGatewayCredentialDirectory()
-  const { data: personalCredentials = [], isLoading: personalLoading } = useQuery({
+  const {
+    list: teamSummaries,
+    isLoading: teamLoading,
+    isFetching: teamFetching,
+  } = useGatewayCredentialDirectory()
+  const {
+    data: personalCredentials = [],
+    isLoading: personalLoading,
+    isFetching: personalFetching,
+  } = useQuery({
     queryKey: ['gateway', 'my-credentials'],
     queryFn: () => gatewayApi.listMyCredentials(),
   })
@@ -114,6 +123,7 @@ export function usePlaygroundCredentialOptions(
     grouped,
     byId,
     isLoading: teamLoading || personalLoading,
+    isFetching: teamFetching || personalFetching,
     isEmpty: selectableOptions.length === 0,
   }
 }

@@ -77,6 +77,7 @@ export function usePlaygroundFilteredModels(
     grouped: credentialGroups,
     byId: credentialById,
     isLoading: credentialsLoading,
+    isFetching: credentialsFetching,
     isEmpty: credentialsEmpty,
   } = usePlaygroundCredentialOptions(credentialId)
 
@@ -236,7 +237,7 @@ export function usePlaygroundFilteredModels(
     teamModelsLoading || myModelsLoading || routesQuery.isLoading || credentialsLoading
 
   const isRefreshing =
-    teamModelsFetching || myModelsFetching || routesQuery.isFetching || credentialsLoading
+    teamModelsFetching || myModelsFetching || routesQuery.isFetching || credentialsFetching
 
   const refreshAll = useCallback((): void => {
     void Promise.all([

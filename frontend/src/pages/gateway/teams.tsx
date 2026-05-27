@@ -44,6 +44,7 @@ import {
   gatewayTeamMembersQueryKey,
   useGatewayTeamMembers,
 } from '@/features/gateway-teams/use-gateway-team-members'
+import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -68,6 +69,8 @@ export default function GatewayTeamsPage(): React.JSX.Element {
     isFetching: teamsFetching,
     refetch: refetchTeams,
   } = useGatewayTeams()
+
+  const { isFetching: memberTeamsFetching, refetch: refetchMemberTeams } = useGatewayMemberTeams()
 
   const {
     data: members,
@@ -210,10 +213,10 @@ export default function GatewayTeamsPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           <GatewayRefreshButton
-            isFetching={combineFetching(teamsFetching, membersFetching)}
+            isFetching={combineFetching(teamsFetching, membersFetching, memberTeamsFetching)}
             ariaLabel="刷新团队"
             onRefresh={() => {
-              void Promise.all([refetchTeams(), refetchMembers()])
+              void Promise.all([refetchTeams(), refetchMembers(), refetchMemberTeams()])
             }}
           />
           {canLeaveTeam ? (

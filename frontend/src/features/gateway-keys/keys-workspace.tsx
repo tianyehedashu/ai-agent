@@ -4,7 +4,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { gatewayApi, type VirtualKey } from '@/api/gateway'
@@ -102,6 +102,11 @@ export function GatewayKeysWorkspace({
 
   const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
+  const entitlementsFetching =
+    useIsFetching({
+      queryKey: ['gateway', 'keys', teamId],
+      predicate: (query) => query.queryKey.length === 5 && query.queryKey[4] === 'entitlements',
+    }) > 0
   const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(teamId, visibleVkeyIds)
 
   const showEntitlementsColumn = useMemo(
@@ -236,7 +241,7 @@ export function GatewayKeysWorkspace({
     ])
   }, [queryClient, refetchBudgets, refetchKeys, teamId])
 
-  const isRefreshing = combineFetching(isFetching, budgetsFetching)
+  const isRefreshing = combineFetching(isFetching, budgetsFetching, entitlementsFetching)
 
   const createButton = canManageKeys ? (
     <Button size="sm" onClick={handleCreateClick}>
