@@ -38,7 +38,6 @@ export function CollaborationTeamGroupHeader({
             {roleSubtitle}
           </Badge>
         </div>
-        <p className="truncate font-mono text-[11px] text-muted-foreground">{team.slug}</p>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>

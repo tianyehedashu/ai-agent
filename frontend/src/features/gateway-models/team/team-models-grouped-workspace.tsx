@@ -175,7 +175,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
               }}
               placeholder="按团队筛选"
               className="h-8 pl-8 text-sm"
-              aria-label="按团队名称或 slug 筛选"
+              aria-label="按团队名称筛选"
             />
           </div>
           <Input

@@ -70,7 +70,7 @@ export function CollaborationTeamsModelsGroupedList({
         <Search className="mx-auto h-8 w-8 text-muted-foreground/60" aria-hidden />
         <h3 className="mt-3 text-base font-semibold">团队数量较多</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          请使用上方搜索框按团队名称或 slug 筛选，再为对应团队添加模型。
+          请使用上方搜索框按团队名称筛选，再为对应团队添加模型。
         </p>
       </div>
     )

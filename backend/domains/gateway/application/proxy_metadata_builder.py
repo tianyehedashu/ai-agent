@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from bootstrap.config import settings
 from domains.gateway.application.model_or_route_resolution import (
@@ -32,6 +33,15 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.application.proxy_context import ProxyContext
+
+
+def _uuid_from_metadata_value(value: object) -> uuid.UUID | None:
+    if value is None:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,9 +102,12 @@ class ProxyMetadataBuilder:
     ) -> dict[str, Any]:
         """生成单次代理调用的 Gateway metadata。"""
         team = await TeamService(self._session).get_team(ctx.team_id)
+        effective_user_id = ctx.user_id
+        if effective_user_id is None and team is not None and team.kind == "personal":
+            effective_user_id = team.owner_user_id
         verbose_log = bool(ctx.store_full_messages)
         team_id_str = str(ctx.team_id)
-        user_id_str = str(ctx.user_id) if ctx.user_id else None
+        user_id_str = str(effective_user_id) if effective_user_id else None
         meta: dict[str, Any] = {
             "gateway_team_id": team_id_str,
             # LiteLLM Router async 路径 filter_team_based_models 要求与 model_info.team_id 一致
@@ -154,7 +167,11 @@ class ProxyMetadataBuilder:
         metadata = await self.build(ctx, user_kwargs=body)
         kwargs = dict(body)
         kwargs["metadata"] = metadata
-        ensure_litellm_router_team_metadata(kwargs, ctx.team_id)
+        ensure_litellm_router_team_metadata(
+            kwargs,
+            ctx.team_id,
+            user_id=_uuid_from_metadata_value(metadata.get("gateway_user_id")),
+        )
         apply_downstream_custom_pricing_kwargs(kwargs)
         raw_model = kwargs.get("model")
         client_model = str(raw_model).strip() if raw_model is not None else ""

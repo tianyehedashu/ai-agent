@@ -29,6 +29,9 @@ from domains.gateway.infrastructure.callbacks.cost_calculation import (
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     extract_gateway_metadata as _extract_gateway_metadata,
 )
+from domains.gateway.infrastructure.callbacks.request_log_persist_helpers import (
+    gateway_provider_for_persist,
+)
 from domains.gateway.infrastructure.gateway_log_sampling import (
     should_persist_request_log_row,
 )
@@ -456,20 +459,6 @@ def _deployment_from_model_info_kwargs(
     return None, None
 
 
-def _gateway_provider_for_persist(kwargs: dict[str, Any], metadata: dict[str, Any]) -> Any | None:
-    provider = metadata.get("gateway_provider")
-    if provider is not None:
-        return provider
-    for container_key in ("litellm_params", "standard_logging_object"):
-        container = kwargs.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        mi = container.get("model_info")
-        if isinstance(mi, dict) and mi.get("gateway_provider"):
-            return mi.get("gateway_provider")
-    return None
-
-
 def _credential_snapshots_for_persist(
     metadata: dict[str, Any], kwargs: dict[str, Any]
 ) -> tuple[uuid.UUID | None, str | None]:
@@ -569,18 +558,35 @@ async def _resolve_persist_user_id(
     *,
     user_id: uuid.UUID | None,
     vkey_id: uuid.UUID | None,
+    team_id: uuid.UUID | None = None,
+    platform_api_key_id: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
-    """metadata 缺 user_id 时，从非系统 vkey 创建者回填（供「我」聚合）。"""
-    if user_id is not None or vkey_id is None:
+    """metadata 缺 user_id 时，从 vkey / 平台 Key / personal team owner 回填。"""
+    if user_id is not None:
         return user_id
-    from domains.gateway.infrastructure.repositories.virtual_key_repository import (
-        VirtualKeyRepository,
-    )
+    if vkey_id is not None:
+        from domains.gateway.infrastructure.repositories.virtual_key_repository import (
+            VirtualKeyRepository,
+        )
 
-    vkey = await VirtualKeyRepository(session).get(vkey_id)
-    if vkey is None or vkey.is_system:
-        return None
-    return vkey.created_by_user_id
+        vkey = await VirtualKeyRepository(session).get(vkey_id)
+        if vkey is not None and not vkey.is_system and vkey.created_by_user_id is not None:
+            return vkey.created_by_user_id
+    if platform_api_key_id is not None:
+        from domains.identity.infrastructure.repositories.api_key_repository import (
+            ApiKeyRepository,
+        )
+
+        api_key = await ApiKeyRepository(session).get_by_id(platform_api_key_id)
+        if api_key is not None:
+            return uuid.UUID(str(api_key.user_id))
+    if team_id is not None:
+        from domains.tenancy.application.team_service import TeamService
+
+        team = await TeamService(session).get_team(team_id)
+        if team is not None and team.kind == "personal":
+            return team.owner_user_id
+    return None
 
 
 async def _persist_event(
@@ -613,12 +619,26 @@ async def _persist_event(
 
     capability = str(metadata.get("gateway_capability", "chat"))
     route_name = metadata.get("gateway_route_name") or kwargs.get("model")
-    real_model = getattr(response_obj, "model", None) or kwargs.get("model")
-    provider = _gateway_provider_for_persist(kwargs, metadata)
+    response_model_raw = getattr(response_obj, "model", None)
+    response_model = (
+        str(response_model_raw).strip()
+        if isinstance(response_model_raw, str) and response_model_raw.strip()
+        else None
+    )
+    real_model = response_model or kwargs.get("model")
+    real_model_str = str(real_model).strip() if isinstance(real_model, str) and real_model.strip() else None
+    route_name_str = str(route_name).strip() if isinstance(route_name, str) and route_name.strip() else None
 
     cred_id, cred_name_snap = _credential_snapshots_for_persist(metadata, kwargs)
 
     deploy_id, deploy_name = _deployment_from_model_info_kwargs(kwargs)
+
+    provider = gateway_provider_for_persist(
+        kwargs,
+        metadata,
+        response_model=response_model,
+        model_hints=(real_model_str, route_name_str, deploy_name),
+    )
 
     entitlement_plan_id = _to_uuid(metadata.get("gateway_entitlement_plan_id"))
     provider_plan_id = _to_uuid(metadata.get("gateway_provider_plan_id"))
@@ -717,6 +737,10 @@ async def _persist_event(
                     session,
                     user_id=user_id,
                     vkey_id=vkey_id,
+                    team_id=team_id,
+                    platform_api_key_id=_to_uuid(
+                        metadata.get("gateway_platform_api_key_id")
+                    ),
                 )
                 await RequestLogRepository(session).insert(
                     team_id=team_id,

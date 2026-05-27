@@ -30,7 +30,7 @@ export function GatewayTeamCommandItems({
       {teams.map((team) => (
         <CommandItem
           key={team.id}
-          value={gatewayTeamCommandItemValue(team)}
+          value={gatewayTeamCommandItemValue(team, { viewerUserId })}
           onSelect={() => {
             onSelectTeam(team.id)
           }}

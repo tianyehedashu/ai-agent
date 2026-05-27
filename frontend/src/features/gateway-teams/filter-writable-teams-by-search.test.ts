@@ -31,8 +31,9 @@ describe('filterWritableTeamsBySearch', () => {
     expect(filterWritableTeamsBySearch([teamA, teamB], '')).toEqual([teamA, teamB])
   })
 
-  it('filters by name or slug', () => {
+  it('filters by display label or name', () => {
     expect(filterWritableTeamsBySearch([teamA, teamB], 'alpha')).toEqual([teamA])
-    expect(filterWritableTeamsBySearch([teamA, teamB], 'personal-user')).toEqual([teamB])
+    expect(filterWritableTeamsBySearch([teamA, teamB], '个人工作区', 'user-1')).toEqual([teamB])
+    expect(filterWritableTeamsBySearch([teamA, teamB], 'personal')).toEqual([teamB])
   })
 })

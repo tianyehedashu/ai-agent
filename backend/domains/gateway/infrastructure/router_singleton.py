@@ -244,6 +244,7 @@ def _build_deployment(
             "capability": src.capability,
             "weight": src.weight,
             "gateway_model_name": src.name,
+            "gateway_provider": src.provider,
             "gateway_credential_id": str(cred.id),
             "gateway_credential_name": cred.name,
             "gateway_credential_scope": credential_api_scope(

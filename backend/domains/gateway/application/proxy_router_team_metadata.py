@@ -78,12 +78,23 @@ def _write_attribution_to_buckets(kwargs: dict[str, Any], attribution: dict[str,
 def ensure_litellm_router_team_metadata(
     kwargs: dict[str, Any],
     team_id: uuid.UUID | None = None,
+    *,
+    user_id: uuid.UUID | None = None,
 ) -> None:
     """确保 Router 双桶 metadata 含团队/用户/vkey 归因（供 filter 与 CustomLogger）。"""
     attribution = _canonical_router_attribution(kwargs)
     tid = _resolve_team_id(kwargs, team_id)
     if tid is not None:
         attribution["user_api_key_team_id"] = tid
+    if user_id is not None:
+        uid = str(user_id)
+        attribution["user_api_key_user_id"] = uid
+        auth = attribution.get("user_api_key_auth_metadata")
+        auth_dict: dict[str, Any] = dict(auth) if isinstance(auth, dict) else {}
+        auth_dict["gateway_user_id"] = uid
+        if tid is not None:
+            auth_dict.setdefault("gateway_team_id", tid)
+        attribution["user_api_key_auth_metadata"] = auth_dict
     _write_attribution_to_buckets(kwargs, attribution)
 
 

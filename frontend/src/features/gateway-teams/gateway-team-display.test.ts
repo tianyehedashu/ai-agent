@@ -4,6 +4,7 @@ import type { GatewayTeam } from '@/api/gateway/teams'
 
 import {
   gatewayCrossTeamOverviewTabLabel,
+  gatewayTeamCommandItemValue,
   gatewayTeamDisplayLabel,
   gatewayTeamRoleSubtitle,
 } from './gateway-team-display'
@@ -66,5 +67,30 @@ describe('gatewayTeamRoleSubtitle', () => {
 
   it('shows owner label for platform admin who is team owner', () => {
     expect(gatewayTeamRoleSubtitle(team({ id: 'o1', team_role: 'owner' }), true)).toBe('所有者')
+  })
+})
+
+describe('gatewayTeamCommandItemValue', () => {
+  it('includes display label and name for shared team', () => {
+    const value = gatewayTeamCommandItemValue(team({ id: 's1', name: 'Alpha', kind: 'shared' }), {
+      viewerUserId: 'u1',
+    })
+    expect(value).toContain('Alpha')
+    expect(value).not.toContain('alpha')
+  })
+
+  it('includes owner email for cmdk search on foreign personal team', () => {
+    const value = gatewayTeamCommandItemValue(
+      team({
+        id: 'p2',
+        kind: 'personal',
+        name: 'Personal',
+        owner_user_id: 'u2',
+        owner_email: 'alice@example.com',
+      }),
+      { viewerUserId: 'u1' }
+    )
+    expect(value).toContain('个人 · alice@example.com')
+    expect(value).toContain('alice@example.com')
   })
 })

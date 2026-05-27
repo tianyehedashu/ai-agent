@@ -55,9 +55,9 @@ export function CredentialsWorkspaceToolbar({
             onChange={(e) => {
               onTeamSearchChange(e.target.value)
             }}
-            placeholder="按团队名称或 slug 筛选"
+            placeholder="按团队名称筛选"
             className="h-8 pl-8 text-sm"
-            aria-label="按团队名称或 slug 筛选凭据"
+            aria-label="按团队名称筛选凭据"
           />
         </div>
 

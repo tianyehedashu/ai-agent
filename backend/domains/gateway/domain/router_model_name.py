@@ -26,6 +26,12 @@ def encode_router_model_name(team_id: uuid.UUID | None, client_name: str) -> str
     return f"{ROUTER_SYS_PREFIX}{name}"
 
 
+def is_router_encoded_model_name(value: str) -> bool:
+    """是否为 Gateway Router 编码后的 ``model_name``（``gw/t/`` 或 ``gw/s/`` 前缀）。"""
+    stripped = value.strip()
+    return stripped.startswith(ROUTER_TEAM_PREFIX) or stripped.startswith(ROUTER_SYS_PREFIX)
+
+
 def decode_router_model_name(router_name: str) -> tuple[uuid.UUID | None, str] | None:
     """解析编码后的 Router ``model_name``；非本方案编码则返回 ``None``。"""
     if router_name.startswith(ROUTER_TEAM_PREFIX):
@@ -48,4 +54,5 @@ __all__ = [
     "decode_router_model_name",
     "deployment_scope_team_id",
     "encode_router_model_name",
+    "is_router_encoded_model_name",
 ]

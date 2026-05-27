@@ -74,7 +74,7 @@ export function useGatewayWritableCollaborationTeams(enabled = true): GatewayTea
   return useMemo(() => filterCollaborationGatewayTeams(writable), [writable])
 }
 
-/** 平台 admin 跨团队搜索：按 name/slug 拉取全站活跃团队（需非空 search） */
+/** 平台 admin 跨团队搜索：按团队名称拉取全站活跃团队（需非空 search） */
 export function useGatewayTeamsBySearch(search: string, enabled: boolean): GatewayTeam[] {
   const trimmedSearch = search.trim()
   const { data: teams = [] } = useQuery({

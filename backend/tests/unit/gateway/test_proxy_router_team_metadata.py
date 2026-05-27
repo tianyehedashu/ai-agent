@@ -46,6 +46,18 @@ def test_ensure_litellm_router_team_metadata_explicit_team_id() -> None:
     assert kwargs["metadata"]["user_api_key_team_id"] == str(team_id)
 
 
+def test_ensure_litellm_router_team_metadata_explicit_user_id() -> None:
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    kwargs: dict = {}
+    ensure_litellm_router_team_metadata(kwargs, team_id, user_id=user_id)
+    assert kwargs["metadata"]["user_api_key_user_id"] == str(user_id)
+    auth = kwargs["metadata"]["user_api_key_auth_metadata"]
+    assert auth["gateway_user_id"] == str(user_id)
+    assert auth["gateway_team_id"] == str(team_id)
+    assert kwargs["litellm_metadata"]["user_api_key_user_id"] == str(user_id)
+
+
 def test_ensure_litellm_router_team_metadata_mirrors_user_and_auth_to_litellm_metadata() -> None:
     team_id = uuid.uuid4()
     user_id = uuid.uuid4()

@@ -25,8 +25,15 @@ export function gatewayTeamDisplayLabel(
   return team.name
 }
 
-export function gatewayTeamCommandItemValue(team: GatewayTeam): string {
-  return `${team.name} ${team.slug}`
+/** cmdk 搜索用：仅包含业务可读字段，不含 slug。 */
+export function gatewayTeamCommandItemValue(
+  team: GatewayTeam,
+  options?: GatewayTeamDisplayOptions
+): string {
+  const parts = [gatewayTeamDisplayLabel(team, options), team.name]
+  if (team.owner_name) parts.push(team.owner_name)
+  if (team.owner_email) parts.push(team.owner_email)
+  return parts.join(' ')
 }
 
 /**

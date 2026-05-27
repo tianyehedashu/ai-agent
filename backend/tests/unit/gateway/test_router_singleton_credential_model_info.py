@@ -36,3 +36,4 @@ def test_models_to_deployments_includes_credential_model_info() -> None:
     assert info["gateway_credential_id"] == str(cred_id)
     assert info["gateway_credential_name"] == "work"
     assert info["gateway_credential_scope"] == "user"
+    assert info["gateway_provider"] == "openai"

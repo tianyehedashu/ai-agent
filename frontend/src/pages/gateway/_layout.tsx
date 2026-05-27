@@ -8,7 +8,10 @@ import type React from 'react'
 
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
+import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
+import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import {
   BarChart3,
   BookOpen,
@@ -25,6 +28,7 @@ import {
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
+import { useUserStore } from '@/stores/user'
 
 type GatewayNavMatch =
   | 'credentials-default'
@@ -103,7 +107,18 @@ function corruptedFlatGatewayPath(pathname: string): string | null {
 export default function GatewayLayout(): React.JSX.Element {
   const { isPlatformAdmin, isAdmin } = useGatewayPermission()
   const currentTeam = useGatewayTeamStore((s) => s.current())
-  const teamId = currentTeam?.id
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const isAnonymous = useUserStore((s) => s.currentUser?.is_anonymous ?? true)
+  const { data: memberTeams } = useGatewayMemberTeams(!isAnonymous)
+  // 侧栏链接须用路由 teamId：store.current() 在 teams 列表未加载时返回 null，
+  // 会退化为 /gateway 并触发 NavLink 前缀匹配，导致多项同时高亮。
+  const teamId = useResolvedGatewayTeamId()
+  const sidebarTeamLabel = useMemo(() => {
+    const fromApi = memberTeams?.find((t) => t.id === teamId)
+    if (fromApi) return gatewayTeamDisplayLabel(fromApi, { viewerUserId })
+    if (currentTeam?.kind === 'personal') return '个人工作区'
+    return currentTeam?.name ?? null
+  }, [memberTeams, teamId, viewerUserId, currentTeam])
   const location = useLocation()
   const navigate = useNavigate()
   const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
@@ -118,9 +133,9 @@ export default function GatewayLayout(): React.JSX.Element {
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
       { to: gatewayTeamNavHref(teamId, 'overview'), label: '概览', icon: BarChart3, end: true },
-      { to: gatewayTeamNavHref(teamId, 'stats'), label: '调用统计', icon: LineChart },
-      { to: '/gateway/guide', label: '调用指南', icon: BookOpen },
-      { to: gatewayTeamNavHref(teamId, 'keys'), label: '虚拟 Key', icon: Key },
+      { to: gatewayTeamNavHref(teamId, 'stats'), label: '调用统计', icon: LineChart, end: true },
+      { to: '/gateway/guide', label: '调用指南', icon: BookOpen, end: true },
+      { to: gatewayTeamNavHref(teamId, 'keys'), label: '虚拟 Key', icon: Key, end: true },
       {
         to: gatewayTeamNavHref(teamId, 'credentials'),
         label: '凭据',
@@ -134,12 +149,19 @@ export default function GatewayLayout(): React.JSX.Element {
         navMatch: 'models-default',
       },
       { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
-      { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route },
+      { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route, end: true },
       ...(isAdmin
-        ? [{ to: gatewayTeamNavHref(teamId, 'budgets'), label: '预算配额', icon: Receipt }]
+        ? [
+            {
+              to: gatewayTeamNavHref(teamId, 'budgets'),
+              label: '预算配额',
+              icon: Receipt,
+              end: true,
+            },
+          ]
         : []),
-      { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText },
-      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队管理', icon: Users },
+      { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText, end: true },
+      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队管理', icon: Users, end: true },
     ]
     if (isPlatformAdmin) {
       base.push(
@@ -155,7 +177,7 @@ export default function GatewayLayout(): React.JSX.Element {
           icon: Network,
           navMatch: 'models-system',
         },
-        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart }
+        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart, end: true }
       )
     }
     return base
@@ -168,12 +190,12 @@ export default function GatewayLayout(): React.JSX.Element {
           <Server className="h-4 w-4 shrink-0 text-primary" />
           AI Gateway
         </div>
-        {currentTeam ? (
+        {sidebarTeamLabel ? (
           <div
             className="mb-2 truncate px-2 text-xs text-muted-foreground"
-            title={currentTeam.name}
+            title={sidebarTeamLabel}
           >
-            {currentTeam.name}
+            {sidebarTeamLabel}
           </div>
         ) : null}
         <nav className="flex flex-col gap-1">

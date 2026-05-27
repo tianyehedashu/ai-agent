@@ -36,6 +36,7 @@ import {
   useGatewayTeams,
 } from '@/features/api-key-gateway/use-gateway-teams'
 import { credentialsTeamListHref } from '@/features/gateway-models/paths'
+import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import { switchGatewayTeam, switchToFallbackTeam } from '@/features/gateway-teams/navigate-team'
 import {
   gatewayTeamMembersQueryKey,
@@ -46,6 +47,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
+import { useUserStore } from '@/stores/user'
 import { formatTeamMemberDisplay, teamRoleLabel, TeamRole } from '@/types/permissions'
 
 export default function GatewayTeamsPage(): React.JSX.Element {
@@ -55,6 +57,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin, teamRole } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
 
   const { data: teams, isLoading: teamsLoading, isError: teamsError } = useGatewayTeams()
 
@@ -179,8 +182,8 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   })
 
   const cachedTeams = useGatewayTeamStore((s) => s.teams)
-  const currentTeam =
-    teams?.find((t) => t.id === teamId) ?? cachedTeams.find((t) => t.id === teamId)
+  const currentTeamFromApi = teams?.find((t) => t.id === teamId)
+  const currentTeam = currentTeamFromApi ?? cachedTeams.find((t) => t.id === teamId)
   const isPersonalTeam = currentTeam?.kind === 'personal'
   const canAddMember = Boolean(canWrite && teamId && currentTeam && !isPersonalTeam)
   const canRenameTeam = Boolean(canWrite && currentTeam && !isPersonalTeam)
@@ -262,10 +265,10 @@ export default function GatewayTeamsPage(): React.JSX.Element {
                               switchGatewayTeam(t.id, navigate, location, queryClient)
                             }}
                           >
-                            <div className="font-medium">{t.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {roleLabel} · {t.slug}
+                            <div className="font-medium">
+                              {gatewayTeamDisplayLabel(t, { viewerUserId })}
                             </div>
+                            <div className="text-xs text-muted-foreground">{roleLabel}</div>
                           </button>
                         </td>
                         <td className="px-4 py-2 text-right">
@@ -317,7 +320,11 @@ export default function GatewayTeamsPage(): React.JSX.Element {
           <CardContent className="p-0">
             <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-xs uppercase text-muted-foreground">
               <span>
-                {currentTeam ? `${currentTeam.name} · ${currentTeam.slug}` : '当前团队成员'}
+                {currentTeamFromApi
+                  ? gatewayTeamDisplayLabel(currentTeamFromApi, { viewerUserId })
+                  : currentTeam?.kind === 'personal'
+                    ? '个人工作区'
+                    : (currentTeam?.name ?? '当前团队成员')}
               </span>
               <div className="flex items-center gap-2 normal-case">
                 {teamId ? (
@@ -530,31 +537,21 @@ function CreateTeamForm({
   onSubmit,
   pending,
 }: Readonly<{
-  onSubmit: (v: { name: string; slug?: string }) => void
+  onSubmit: (v: { name: string }) => void
   pending?: boolean
 }>): React.JSX.Element {
   const [name, setName] = useState('')
-  const [slug, setSlug] = useState('')
   return (
     <>
       <div className="space-y-3 py-2">
         <div>
-          <Label>名称</Label>
+          <Label>团队名称</Label>
           <Input
             value={name}
             onChange={(e) => {
               setName(e.target.value)
             }}
-          />
-        </div>
-        <div>
-          <Label>Slug（可选）</Label>
-          <Input
-            value={slug}
-            onChange={(e) => {
-              setSlug(e.target.value)
-            }}
-            placeholder="auto-generated"
+            placeholder="例如：产品团队"
           />
         </div>
       </div>
@@ -562,7 +559,7 @@ function CreateTeamForm({
         <Button
           onClick={() => {
             if (!name) return
-            onSubmit({ name, slug: slug || undefined })
+            onSubmit({ name })
           }}
           disabled={!name || pending}
         >
