@@ -22,15 +22,16 @@ from domains.gateway.domain.policies.usage_log_visibility import (
     workspace_axis_member_user_id,
 )
 from domains.gateway.domain.usage_axis import UsageAxis
-from domains.gateway.domain.usage_statistics_breakdown import (
-    ensure_usage_statistics_breakdown_by,
-    normalize_usage_statistics_parent_group_key,
-)
 from domains.gateway.domain.usage_read_model import (
     UsageAggregation,
+    UsageStatisticsBreakdownBy,
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
     UsageStatisticsParentScope,
+)
+from domains.gateway.domain.usage_statistics_breakdown import (
+    breakdown_by_to_group_by,
+    normalize_usage_statistics_parent_group_key,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 from domains.identity.application.ports import user_display_label
@@ -289,14 +290,14 @@ class GatewayUsageLogReadMixin:
         filters: UsageStatisticsFilters,
         parent_group_by: UsageStatisticsGroupBy,
         parent_group_key: str,
-        breakdown_by: UsageStatisticsGroupBy,
+        breakdown_by: UsageStatisticsBreakdownBy,
         top_n: int,
     ) -> UsageStatisticsBreakdownSummary:
-        ensure_usage_statistics_breakdown_by(breakdown_by)
         normalized_parent_key = normalize_usage_statistics_parent_group_key(
             parent_group_by,
             parent_group_key,
         )
+        breakdown_group_by = breakdown_by_to_group_by(breakdown_by)
         axis = self._resolve_usage_axis(
             ctx,
             usage_aggregation,
@@ -317,13 +318,13 @@ class GatewayUsageLogReadMixin:
             axis,
             start,
             end,
-            group_by=breakdown_by,
+            group_by=breakdown_group_by,
             filters=filters,
             page=1,
             page_size=top_n,
             parent_scope=parent_scope,
         )
-        labels = await self._usage_statistics_labels(rows, breakdown_by)
+        labels = await self._usage_statistics_labels(rows, breakdown_group_by)
         items: list[UsageStatisticsBreakdownSlice] = []
         for row in rows:
             key = self._group_key_to_str(row.group_key)

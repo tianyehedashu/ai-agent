@@ -12,6 +12,7 @@ import pytest
 from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.domain.usage_read_model import (
     UsageAggregation,
+    UsageStatisticsBreakdownBy,
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
 )
@@ -89,7 +90,7 @@ async def test_aggregate_usage_statistics_breakdown_computes_share() -> None:
         filters=UsageStatisticsFilters(),
         parent_group_by=UsageStatisticsGroupBy.USER,
         parent_group_key=str(member_id),
-        breakdown_by=UsageStatisticsGroupBy.CREDENTIAL,
+        breakdown_by=UsageStatisticsBreakdownBy.CREDENTIAL,
         top_n=3,
     )
 

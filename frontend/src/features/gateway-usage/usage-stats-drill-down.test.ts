@@ -7,6 +7,7 @@ import {
   drillDownNextState,
   shouldShowBreakdownColumns,
 } from './usage-stats-drill-down'
+import { getUsageStatsIdentityColumnHeaders } from './usage-stats-group-options'
 
 const baseFilters = {
   credentialId: GATEWAY_FILTER_ALL,
@@ -69,5 +70,11 @@ describe('shouldShowBreakdownColumns', () => {
     expect(shouldShowBreakdownColumns('user')).toBe(true)
     expect(shouldShowBreakdownColumns('credential')).toBe(false)
     expect(shouldShowBreakdownColumns('model')).toBe(false)
+  })
+})
+
+describe('getUsageStatsIdentityColumnHeaders', () => {
+  it('uses 人员 as first column when groupBy is user', () => {
+    expect(getUsageStatsIdentityColumnHeaders('user')[0]).toBe('人员')
   })
 })

@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
-from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
+from domains.gateway.domain.usage_read_model import (
+    UsageStatisticsBreakdownBy,
+    UsageStatisticsGroupBy,
+)
 from libs.api.pagination import PaginatedListResponse
 
 # =============================================================================
@@ -177,6 +180,10 @@ class CredentialResponse(BaseModel):
         default=None,
         description="系统凭据可见性；团队/BYOK 凭据无此字段",
     )
+    created_by_user_id: uuid.UUID | None = Field(
+        default=None,
+        description="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
+    )
     created_at: datetime
     api_key_masked: str = Field(
         description="解密后仅用于展示的掩码，不包含完整密钥",
@@ -196,6 +203,10 @@ class CredentialSummaryResponse(BaseModel):
     is_config_managed: bool = Field(
         default=False,
         description="app.toml/环境变量同步托管的 system 凭据",
+    )
+    created_by_user_id: uuid.UUID | None = Field(
+        default=None,
+        description="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
     )
 
     model_config = ConfigDict(from_attributes=False)
@@ -438,6 +449,14 @@ class GatewayModelResponse(BaseModel):
     system_credential: SystemCredentialSummary | None = Field(
         default=None,
         description="平台管理员视角：系统模型绑定的厂商凭据摘要",
+    )
+    credential_name: str | None = Field(
+        default=None,
+        description="绑定凭据展示名（模型列表 enrich，非凭据 API 泄露）",
+    )
+    credential_created_by_user_id: uuid.UUID | None = Field(
+        default=None,
+        description="绑定 team 凭据创建者；前端模型权限判断",
     )
     created_at: datetime
 
@@ -931,7 +950,7 @@ class UsageStatisticsBreakdownSliceResponse(BaseModel):
 class UsageStatisticsBreakdownResponse(BaseModel):
     parent_group_by: UsageStatisticsGroupBy
     parent_group_key: str
-    breakdown_by: UsageStatisticsGroupBy
+    breakdown_by: UsageStatisticsBreakdownBy
     parent_requests: int
     items: list[UsageStatisticsBreakdownSliceResponse] = Field(default_factory=list)
 

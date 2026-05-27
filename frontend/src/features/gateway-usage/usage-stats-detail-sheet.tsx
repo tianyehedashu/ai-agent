@@ -8,6 +8,7 @@ import {
   statsApi,
   type GatewayUsageStatsGroupBy,
   type GatewayUsageStatsItem,
+  type UsageStatisticsBreakdownResponse,
 } from '@/api/gateway/stats'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,13 +18,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  usageStatsBreakdownQueryKey,
-  type UsageStatsBreakdownBaseQuery,
-} from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
+import { UsageStatsBreakdownList } from '@/features/gateway-usage/usage-stats-breakdown-list'
+import type { UsageStatsBreakdownBaseQuery } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { ExternalLink } from '@/lib/lucide-icons'
+import { buildFilterKey } from '@/lib/pagination'
 
 const DETAIL_TOP_N = 10
+
+interface DetailBreakdownBundle {
+  credential?: UsageStatisticsBreakdownResponse
+  model?: UsageStatisticsBreakdownResponse
+}
 
 interface UsageStatsDetailSheetProps {
   open: boolean
@@ -36,72 +41,37 @@ interface UsageStatsDetailSheetProps {
   logsNavigationState: Record<string, string | undefined>
 }
 
-function BreakdownList({
-  title,
-  teamId,
-  baseQuery,
-  parentGroupBy,
-  parentGroupKey,
-  breakdownBy,
-  sheetOpen,
-}: Readonly<{
-  title: string
-  teamId: string
-  baseQuery: UsageStatsBreakdownBaseQuery
-  parentGroupBy: GatewayUsageStatsGroupBy
-  parentGroupKey: string
-  breakdownBy: 'credential' | 'model'
-  sheetOpen: boolean
-}>): React.JSX.Element {
-  const enabled = sheetOpen && parentGroupKey.trim().length > 0
-  const { data, isLoading, isError } = useQuery({
-    queryKey: usageStatsBreakdownQueryKey(
-      teamId,
-      baseQuery,
-      parentGroupBy,
-      parentGroupKey,
-      breakdownBy,
-      DETAIL_TOP_N
-    ),
-    queryFn: () =>
-      statsApi.usageStatsBreakdown(teamId, {
-        ...baseQuery,
-        parent_group_by: parentGroupBy,
-        parent_group_key: parentGroupKey,
-        breakdown_by: breakdownBy,
-        top_n: DETAIL_TOP_N,
-      }),
-    enabled,
-    staleTime: 60_000,
-  })
-
-  return (
-    <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-muted-foreground">{title}</h4>
-      {isLoading ? <p className="text-sm text-muted-foreground">加载中…</p> : null}
-      {isError ? <p className="text-sm text-destructive">加载失败</p> : null}
-      {!isLoading && !isError && (data?.items.length ?? 0) === 0 ? (
-        <p className="text-sm text-muted-foreground">暂无数据</p>
-      ) : null}
-      {data && data.items.length > 0 ? (
-        <ul className="space-y-2 text-sm">
-          {data.items.map((slice) => (
-            <li
-              key={`${breakdownBy}-${slice.group_key}`}
-              className="flex items-center justify-between gap-2 border-b border-dashed pb-2 last:border-0"
-            >
-              <span className="min-w-0 truncate font-medium" title={slice.label}>
-                {slice.label}
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {slice.requests.toLocaleString()}（{(slice.share * 100).toFixed(1)}%）
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  )
+function detailBreakdownQueryKey(
+  teamId: string,
+  baseQuery: UsageStatsBreakdownBaseQuery,
+  parentGroupBy: GatewayUsageStatsGroupBy,
+  parentGroupKey: string,
+  topN: number,
+  fetchCredential: boolean,
+  fetchModel: boolean
+): readonly (string | number | boolean)[] {
+  return [
+    'gateway',
+    'usage-stats-detail-breakdown',
+    teamId,
+    buildFilterKey([
+      baseQuery.days ?? 7,
+      baseQuery.usage_aggregation ?? 'workspace',
+      baseQuery.credential_id ?? '',
+      baseQuery.user_id ?? '',
+      baseQuery.team_id ?? '',
+      baseQuery.model ?? '',
+      baseQuery.provider ?? '',
+      baseQuery.capability ?? '',
+      baseQuery.status ?? '',
+      baseQuery.vkey_id ?? '',
+    ]),
+    parentGroupBy,
+    parentGroupKey,
+    topN,
+    fetchCredential,
+    fetchModel,
+  ] as const
 }
 
 export function UsageStatsDetailSheet({
@@ -114,9 +84,47 @@ export function UsageStatsDetailSheet({
   sheetOpen,
   logsNavigationState,
 }: Readonly<UsageStatsDetailSheetProps>): React.JSX.Element {
-  const parentKey = item?.group_key ?? ''
+  const parentKey = item?.group_key.trim() ?? ''
   const showCredentialBreakdown = groupBy !== 'credential'
   const showModelBreakdown = groupBy !== 'model'
+  const fetchEnabled = sheetOpen && parentKey.length > 0
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: detailBreakdownQueryKey(
+      teamId,
+      baseQuery,
+      groupBy,
+      parentKey,
+      DETAIL_TOP_N,
+      showCredentialBreakdown,
+      showModelBreakdown
+    ),
+    queryFn: async (): Promise<DetailBreakdownBundle> => {
+      const shared = {
+        ...baseQuery,
+        parent_group_by: groupBy,
+        parent_group_key: parentKey,
+        top_n: DETAIL_TOP_N,
+      }
+      const [credential, model] = await Promise.all([
+        showCredentialBreakdown
+          ? statsApi.usageStatsBreakdown(teamId, {
+              ...shared,
+              breakdown_by: 'credential',
+            })
+          : Promise.resolve(undefined),
+        showModelBreakdown
+          ? statsApi.usageStatsBreakdown(teamId, {
+              ...shared,
+              breakdown_by: 'model',
+            })
+          : Promise.resolve(undefined),
+      ])
+      return { credential, model }
+    },
+    enabled: fetchEnabled,
+    staleTime: 60_000,
+  })
 
   const logsHref = useMemo(() => `/gateway/teams/${teamId}/logs`, [teamId])
 
@@ -134,26 +142,22 @@ export function UsageStatsDetailSheet({
         {item ? (
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto py-2">
             {showCredentialBreakdown ? (
-              <BreakdownList
-                title="凭据分布"
-                teamId={teamId}
-                baseQuery={baseQuery}
-                parentGroupBy={groupBy}
-                parentGroupKey={parentKey}
-                breakdownBy="credential"
-                sheetOpen={sheetOpen}
-              />
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-muted-foreground">凭据分布</h4>
+                {isError ? <p className="text-sm text-destructive">加载失败</p> : null}
+                <UsageStatsBreakdownList
+                  data={data?.credential}
+                  loading={isLoading}
+                  variant="sheet"
+                />
+              </div>
             ) : null}
             {showModelBreakdown ? (
-              <BreakdownList
-                title="模型分布"
-                teamId={teamId}
-                baseQuery={baseQuery}
-                parentGroupBy={groupBy}
-                parentGroupKey={parentKey}
-                breakdownBy="model"
-                sheetOpen={sheetOpen}
-              />
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-muted-foreground">模型分布</h4>
+                {isError ? <p className="text-sm text-destructive">加载失败</p> : null}
+                <UsageStatsBreakdownList data={data?.model} loading={isLoading} variant="sheet" />
+              </div>
             ) : null}
             <Button variant="outline" size="sm" className="w-full gap-2" asChild>
               <Link to={logsHref} state={{ usageStatsFilters: logsNavigationState }}>

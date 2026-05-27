@@ -15,7 +15,10 @@ from domains.gateway.domain.margin_read_model import (
     margin_group_column_label,
     resolve_margin_group_label,
 )
-from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
+from domains.gateway.domain.usage_read_model import (
+    UsageStatisticsBreakdownBy,
+    UsageStatisticsGroupBy,
+)
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -118,7 +121,7 @@ class UsageStatisticsBreakdownSlice:
 class UsageStatisticsBreakdownSummary:
     parent_group_by: UsageStatisticsGroupBy
     parent_group_key: str
-    breakdown_by: UsageStatisticsGroupBy
+    breakdown_by: UsageStatisticsBreakdownBy
     parent_requests: int
     items: list[UsageStatisticsBreakdownSlice] = field(default_factory=list)
 

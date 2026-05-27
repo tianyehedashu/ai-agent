@@ -1,18 +1,18 @@
 import { useMemo } from 'react'
 
-import { useQueries } from '@tanstack/react-query'
+import { keepPreviousData, useQueries } from '@tanstack/react-query'
 
 import {
   statsApi,
   type GatewayUsageStatsBreakdownQuery,
   type GatewayUsageStatsGroupBy,
   type GatewayUsageStatsItem,
-  type UsageStatisticsBreakdownBy,
   type UsageStatisticsBreakdownResponse,
 } from '@/api/gateway/stats'
 import { buildFilterKey } from '@/lib/pagination'
 
-const TOP_N = 3
+export const TABLE_MODEL_TOP_N = 1
+export const TABLE_CREDENTIAL_TOP_N = 32
 
 export type UsageStatsBreakdownBaseQuery = Omit<
   GatewayUsageStatsBreakdownQuery,
@@ -45,8 +45,8 @@ export function usageStatsBreakdownQueryKey(
   baseQuery: UsageStatsBreakdownBaseQuery,
   parentGroupBy: GatewayUsageStatsGroupBy,
   parentGroupKey: string,
-  breakdownBy: UsageStatisticsBreakdownBy,
-  topN: number = TOP_N
+  breakdownBy: 'credential' | 'model',
+  topN: number
 ): readonly (string | number)[] {
   return [
     'gateway',
@@ -60,11 +60,57 @@ export function usageStatsBreakdownQueryKey(
   ] as const
 }
 
-interface BreakdownQueryDef {
+function usageStatsRowBreakdownQueryKey(
+  teamId: string,
+  baseQuery: UsageStatsBreakdownBaseQuery,
+  parentGroupBy: GatewayUsageStatsGroupBy,
+  parentGroupKey: string,
+  modelTopN: number,
+  credentialTopN: number
+): readonly (string | number)[] {
+  return [
+    'gateway',
+    'usage-stats-row-breakdown',
+    teamId,
+    breakdownBaseQueryKey(teamId, baseQuery),
+    parentGroupBy,
+    parentGroupKey,
+    modelTopN,
+    credentialTopN,
+  ] as const
+}
+
+interface RowBreakdownQueryDef {
   rowKey: string
-  breakdownBy: UsageStatisticsBreakdownBy
   queryKey: readonly (string | number)[]
-  queryFn: () => Promise<UsageStatisticsBreakdownResponse>
+  queryFn: () => Promise<UsageStatsRowBreakdown>
+}
+
+async function fetchRowBreakdown(
+  teamId: string,
+  baseQuery: UsageStatsBreakdownBaseQuery,
+  parentGroupBy: GatewayUsageStatsGroupBy,
+  rowKey: string,
+  credentialTopN: number
+): Promise<UsageStatsRowBreakdown> {
+  const shared = {
+    ...baseQuery,
+    parent_group_by: parentGroupBy,
+    parent_group_key: rowKey,
+  }
+  const [model, credential] = await Promise.all([
+    statsApi.usageStatsBreakdown(teamId, {
+      ...shared,
+      breakdown_by: 'model',
+      top_n: TABLE_MODEL_TOP_N,
+    }),
+    statsApi.usageStatsBreakdown(teamId, {
+      ...shared,
+      breakdown_by: 'credential',
+      top_n: credentialTopN,
+    }),
+  ])
+  return { model, credential }
 }
 
 export function useUsageStatsBreakdownBatch({
@@ -73,77 +119,76 @@ export function useUsageStatsBreakdownBatch({
   parentGroupBy,
   items,
   enabled,
+  credentialTopN = TABLE_CREDENTIAL_TOP_N,
 }: {
   teamId: string
   baseQuery: UsageStatsBreakdownBaseQuery
   parentGroupBy: GatewayUsageStatsGroupBy
   items: readonly GatewayUsageStatsItem[]
   enabled: boolean
+  credentialTopN?: number
 }): {
   breakdownByRowKey: ReadonlyMap<string, UsageStatsRowBreakdown>
+  loadingRowKeys: ReadonlySet<string>
   isLoading: boolean
   isFetching: boolean
 } {
-  const queryDefs = useMemo((): BreakdownQueryDef[] => {
+  const effectiveCredentialTopN = Math.min(Math.max(1, credentialTopN), TABLE_CREDENTIAL_TOP_N)
+
+  const queryDefs = useMemo((): RowBreakdownQueryDef[] => {
     if (!enabled) return []
-    const defs: BreakdownQueryDef[] = []
+    const defs: RowBreakdownQueryDef[] = []
     for (const item of items) {
       const rowKey = item.group_key.trim()
       if (!rowKey) continue
-      for (const breakdownBy of ['credential', 'model'] as const) {
-        defs.push({
+      defs.push({
+        rowKey,
+        queryKey: usageStatsRowBreakdownQueryKey(
+          teamId,
+          baseQuery,
+          parentGroupBy,
           rowKey,
-          breakdownBy,
-          queryKey: usageStatsBreakdownQueryKey(
-            teamId,
-            baseQuery,
-            parentGroupBy,
-            rowKey,
-            breakdownBy,
-            TOP_N
-          ),
-          queryFn: () =>
-            statsApi.usageStatsBreakdown(teamId, {
-              ...baseQuery,
-              parent_group_by: parentGroupBy,
-              parent_group_key: rowKey,
-              breakdown_by: breakdownBy,
-              top_n: TOP_N,
-            }),
-        })
-      }
+          TABLE_MODEL_TOP_N,
+          effectiveCredentialTopN
+        ),
+        queryFn: () =>
+          fetchRowBreakdown(teamId, baseQuery, parentGroupBy, rowKey, effectiveCredentialTopN),
+      })
     }
     return defs
-  }, [enabled, items, teamId, parentGroupBy, baseQuery])
+  }, [enabled, items, teamId, parentGroupBy, baseQuery, effectiveCredentialTopN])
 
-  const results = useQueries({
-    queries: queryDefs.map((def) => ({
-      queryKey: def.queryKey,
-      queryFn: def.queryFn,
-      enabled: enabled && queryDefs.length > 0,
-      staleTime: 60_000,
-    })),
-  })
+  const queries = useMemo(
+    () =>
+      queryDefs.map((def) => ({
+        queryKey: def.queryKey,
+        queryFn: def.queryFn,
+        enabled: enabled && queryDefs.length > 0,
+        staleTime: 60_000,
+        placeholderData: keepPreviousData,
+      })),
+    [queryDefs, enabled]
+  )
 
-  const breakdownByRowKey = useMemo((): ReadonlyMap<string, UsageStatsRowBreakdown> => {
+  const results = useQueries({ queries })
+
+  const { breakdownByRowKey, loadingRowKeys } = useMemo(() => {
     const map = new Map<string, UsageStatsRowBreakdown>()
+    const loading = new Set<string>()
     queryDefs.forEach((def, index) => {
-      const data = results[index]?.data
-      if (!data) return
-      const existing = map.get(def.rowKey) ?? {}
-      if (def.breakdownBy === 'credential') {
-        map.set(def.rowKey, { ...existing, credential: data })
-      } else {
-        map.set(def.rowKey, { ...existing, model: data })
+      const result = results[index]
+      if (result.isLoading) {
+        loading.add(def.rowKey)
+      }
+      if (result.data !== undefined) {
+        map.set(def.rowKey, result.data)
       }
     })
-    return map
+    return { breakdownByRowKey: map, loadingRowKeys: loading }
   }, [queryDefs, results])
 
   const isLoading = enabled && results.some((result) => result.isLoading)
   const isFetching = enabled && results.some((result) => result.isFetching)
 
-  return { breakdownByRowKey, isLoading, isFetching }
+  return { breakdownByRowKey, loadingRowKeys, isLoading, isFetching }
 }
-
-export { TOP_N as USAGE_STATS_BREAKDOWN_TOP_N }

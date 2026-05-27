@@ -1,0 +1,221 @@
+import { memo, useCallback } from 'react'
+import type React from 'react'
+
+import type { GatewayUsageStatsItem } from '@/api/gateway/stats'
+import { Button } from '@/components/ui/button'
+import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
+import { UsageStatsBreakdownCredentials } from '@/features/gateway-usage/usage-stats-breakdown-credentials'
+import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats-breakdown-primary'
+import type { UsageStatsRowBreakdown } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
+import { BarChart3 } from '@/lib/lucide-icons'
+import { coalesceMoney, formatMoney } from '@/lib/money'
+import { cn } from '@/lib/utils'
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function formatCompact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`
+  return value.toLocaleString()
+}
+
+export interface UsageStatsRankingTableProps {
+  items: readonly GatewayUsageStatsItem[]
+  maxRequests: number
+  showCost: boolean
+  showBreakdownCols: boolean
+  identityColumnHeaders: readonly [string, string, string]
+  breakdownByRowKey: ReadonlyMap<string, UsageStatsRowBreakdown>
+  loadingRowKeys: ReadonlySet<string>
+  credentialTopN: number
+  onDrill: (item: GatewayUsageStatsItem) => void
+  onShowDetail: (item: GatewayUsageStatsItem) => void
+}
+
+const StatsRow = memo(function StatsRow({
+  item,
+  maxRequests,
+  showCost,
+  showBreakdownCols,
+  rowBreakdown,
+  rowBreakdownLoading,
+  credentialTopN,
+  onDrill,
+  onShowDetail,
+}: Readonly<{
+  item: GatewayUsageStatsItem
+  maxRequests: number
+  showCost: boolean
+  showBreakdownCols: boolean
+  rowBreakdown?: UsageStatsRowBreakdown
+  rowBreakdownLoading: boolean
+  credentialTopN: number
+  onDrill: (item: GatewayUsageStatsItem) => void
+  onShowDetail: (item: GatewayUsageStatsItem) => void
+}>): React.JSX.Element {
+  const width = Math.max(4, (item.requests / maxRequests) * 100)
+  const rowKey = item.group_key.trim()
+  const canDrill = rowKey.length > 0
+
+  const handleDrill = useCallback(() => {
+    onDrill(item)
+  }, [item, onDrill])
+
+  const handleShowDetail = useCallback(() => {
+    onShowDetail(item)
+  }, [item, onShowDetail])
+
+  return (
+    <tr className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          className={cn(
+            'min-w-0 text-left',
+            canDrill && 'cursor-pointer rounded-sm hover:underline'
+          )}
+          disabled={!canDrill}
+          onClick={canDrill ? handleDrill : undefined}
+          title={canDrill ? '点击钻取下一维度' : undefined}
+        >
+          <div className="truncate font-medium">{item.label}</div>
+          {item.group_key ? (
+            <div className="truncate font-mono text-[10px] text-muted-foreground">
+              {item.group_key}
+            </div>
+          ) : null}
+        </button>
+      </td>
+      {showBreakdownCols ? (
+        <>
+          <td className="px-4 py-3 align-top">
+            <UsageStatsBreakdownPrimary data={rowBreakdown?.model} loading={rowBreakdownLoading} />
+          </td>
+          <td className="px-4 py-3 align-top">
+            <UsageStatsBreakdownCredentials
+              data={rowBreakdown?.credential}
+              loading={rowBreakdownLoading}
+              requestedTopN={credentialTopN}
+            />
+          </td>
+        </>
+      ) : null}
+      <td className="px-4 py-3">
+        <div className="flex min-w-[180px] items-center gap-3">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${width.toString()}%` }}
+            />
+          </div>
+          <span className="w-16 text-right tabular-nums">{item.requests.toLocaleString()}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums">
+        <span
+          className={cn(
+            item.success_rate >= 0.98
+              ? 'text-emerald-600'
+              : item.success_rate >= 0.9
+                ? 'text-amber-600'
+                : 'text-destructive'
+          )}
+        >
+          {formatPercent(item.success_rate)}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums">{formatCompact(item.total_tokens)}</td>
+      {showCost ? (
+        <td className="px-4 py-3 text-right tabular-nums">
+          {formatMoney(coalesceMoney(item.cost_usd), {
+            currency: GATEWAY_DISPLAY_CURRENCY,
+            precision: 4,
+          })}
+        </td>
+      ) : null}
+      <td className="px-4 py-3 text-right tabular-nums">{formatPercent(item.cache_hit_rate)}</td>
+      <td className="px-4 py-3 text-right tabular-nums">
+        {Math.round(item.avg_latency_ms).toLocaleString()}ms
+      </td>
+      <td className="px-4 py-3 text-right">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          onClick={handleShowDetail}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          分布
+        </Button>
+      </td>
+    </tr>
+  )
+})
+
+export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
+  items,
+  maxRequests,
+  showCost,
+  showBreakdownCols,
+  identityColumnHeaders,
+  breakdownByRowKey,
+  loadingRowKeys,
+  credentialTopN,
+  onDrill,
+  onShowDetail,
+}: Readonly<UsageStatsRankingTableProps>): React.JSX.Element {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[1040px] text-sm">
+        <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
+          <tr>
+            {showBreakdownCols ? (
+              <>
+                <th className="w-[200px] px-4 py-2 text-left font-medium">
+                  {identityColumnHeaders[0]}
+                </th>
+                <th className="w-[140px] px-4 py-2 text-left font-medium">
+                  {identityColumnHeaders[1]}
+                </th>
+                <th className="min-w-[200px] px-4 py-2 text-left font-medium">
+                  {identityColumnHeaders[2]}
+                </th>
+              </>
+            ) : (
+              <th className="w-[220px] px-4 py-2 text-left font-medium">维度</th>
+            )}
+            <th className="px-4 py-2 text-left font-medium">请求</th>
+            <th className="px-4 py-2 text-right font-medium">成功率</th>
+            <th className="px-4 py-2 text-right font-medium">Tokens</th>
+            {showCost ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
+            <th className="px-4 py-2 text-right font-medium">缓存</th>
+            <th className="px-4 py-2 text-right font-medium">延迟</th>
+            <th className="w-[72px] px-4 py-2 text-right font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const rowKey = item.group_key.trim()
+            return (
+              <StatsRow
+                key={`${item.group_key}-${item.label}`}
+                item={item}
+                maxRequests={maxRequests}
+                showCost={showCost}
+                showBreakdownCols={showBreakdownCols}
+                rowBreakdown={breakdownByRowKey.get(rowKey)}
+                rowBreakdownLoading={loadingRowKeys.has(rowKey)}
+                credentialTopN={credentialTopN}
+                onDrill={onDrill}
+                onShowDetail={onShowDetail}
+              />
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+})

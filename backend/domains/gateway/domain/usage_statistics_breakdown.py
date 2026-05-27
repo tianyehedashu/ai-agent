@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
-from libs.exceptions import ValidationError
-
-_BREAKDOWN_BY_VALUES = frozenset(
-    {
-        UsageStatisticsGroupBy.CREDENTIAL,
-        UsageStatisticsGroupBy.MODEL,
-    }
+from domains.gateway.domain.usage_read_model import (
+    UsageStatisticsBreakdownBy,
+    UsageStatisticsGroupBy,
 )
+from libs.exceptions import ValidationError
 
 _UUID_PARENT_GROUP_BY = frozenset(
     {
@@ -24,14 +20,9 @@ _UUID_PARENT_GROUP_BY = frozenset(
 )
 
 
-def ensure_usage_statistics_breakdown_by(group_by: UsageStatisticsGroupBy) -> None:
-    """breakdown 仅允许按凭据或模型二次分组。"""
-    if group_by in _BREAKDOWN_BY_VALUES:
-        return
-    raise ValidationError(
-        "breakdown_by must be credential or model",
-        details={"field": "breakdown_by", "value": group_by},
-    )
+def breakdown_by_to_group_by(breakdown_by: UsageStatisticsBreakdownBy) -> UsageStatisticsGroupBy:
+    """将 breakdown 维度映射为统计分组维度（同名字面量）。"""
+    return UsageStatisticsGroupBy(breakdown_by.value)
 
 
 def normalize_usage_statistics_parent_group_key(
@@ -55,6 +46,6 @@ def normalize_usage_statistics_parent_group_key(
 
 
 __all__ = [
-    "ensure_usage_statistics_breakdown_by",
+    "breakdown_by_to_group_by",
     "normalize_usage_statistics_parent_group_key",
 ]

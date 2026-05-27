@@ -52,6 +52,13 @@ class UsageStatisticsGroupBy(StrEnum):
     STATUS = "status"
 
 
+class UsageStatisticsBreakdownBy(StrEnum):
+    """行内 breakdown 二次分组（仅凭据 / 模型）。"""
+
+    CREDENTIAL = "credential"
+    MODEL = "model"
+
+
 @dataclass(frozen=True)
 class UsageStatisticsFilters:
     """调用统计的可组合过滤条件（纯值对象）。"""
@@ -86,6 +93,7 @@ USAGE_AGGREGATION_QUERY_DESCRIPTION = (
 __all__ = [
     "USAGE_AGGREGATION_QUERY_DESCRIPTION",
     "UsageAggregation",
+    "UsageStatisticsBreakdownBy",
     "UsageStatisticsFilters",
     "UsageStatisticsGroupBy",
     "UsageStatisticsParentScope",

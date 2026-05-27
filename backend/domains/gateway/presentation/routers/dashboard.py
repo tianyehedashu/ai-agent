@@ -25,12 +25,9 @@ from domains.gateway.domain.policies.pricing_visibility import (
 from domains.gateway.domain.usage_read_model import (
     USAGE_AGGREGATION_QUERY_DESCRIPTION,
     UsageAggregation,
+    UsageStatisticsBreakdownBy,
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
-)
-from domains.gateway.domain.usage_statistics_breakdown import (
-    ensure_usage_statistics_breakdown_by,
-    normalize_usage_statistics_parent_group_key,
 )
 from domains.gateway.presentation.deps import CurrentTeam
 from domains.gateway.presentation.gateway_usage_list_response import (
@@ -232,8 +229,8 @@ async def dashboard_statistics_breakdown(
     ),
     parent_group_by: UsageStatisticsGroupBy = Query(...),
     parent_group_key: str = Query(..., min_length=0, max_length=200),
-    breakdown_by: UsageStatisticsGroupBy = Query(...),
-    top_n: int = Query(3, ge=1, le=5),
+    breakdown_by: UsageStatisticsBreakdownBy = Query(...),
+    top_n: int = Query(3, ge=1, le=32),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
     team_id: uuid.UUID | None = None,
@@ -243,11 +240,6 @@ async def dashboard_statistics_breakdown(
     status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
     vkey_id: uuid.UUID | None = None,
 ) -> UsageStatisticsBreakdownResponse:
-    ensure_usage_statistics_breakdown_by(breakdown_by)
-    normalized_parent_key = normalize_usage_statistics_parent_group_key(
-        parent_group_by,
-        parent_group_key,
-    )
     end = datetime.now(UTC)
     start = end - timedelta(days=days)
     summary = await reads.aggregate_usage_statistics_breakdown(
@@ -266,7 +258,7 @@ async def dashboard_statistics_breakdown(
             vkey_id=vkey_id,
         ),
         parent_group_by=parent_group_by,
-        parent_group_key=normalized_parent_key,
+        parent_group_key=parent_group_key,
         breakdown_by=breakdown_by,
         top_n=top_n,
     )

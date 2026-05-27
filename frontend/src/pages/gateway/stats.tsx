@@ -2,7 +2,7 @@
  * AI Gateway · 调用统计
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -40,7 +40,6 @@ import {
 } from '@/features/gateway-usage/gateway-filter-combobox'
 import { isCrossTeamUsageStatsEnabled } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
-import { UsageStatsBreakdownList } from '@/features/gateway-usage/usage-stats-breakdown-list'
 import { UsageStatsDetailSheet } from '@/features/gateway-usage/usage-stats-detail-sheet'
 import {
   applyDrillSegmentToFilterState,
@@ -52,35 +51,29 @@ import {
   type UsageStatsFilterState,
 } from '@/features/gateway-usage/usage-stats-drill-down'
 import {
+  getUsageStatsIdentityColumnHeaders,
+  USAGE_STATS_GROUP_OPTIONS,
+} from '@/features/gateway-usage/usage-stats-group-options'
+import { UsageStatsRankingTable } from '@/features/gateway-usage/usage-stats-ranking-table'
+import {
+  TABLE_CREDENTIAL_TOP_N,
   useUsageStatsBreakdownBatch,
   type UsageStatsBreakdownBaseQuery,
-  type UsageStatsRowBreakdown,
 } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { BarChart3, ChevronRight, LineChart, Settings2, X } from '@/lib/lucide-icons'
+import { ChevronRight, LineChart, Settings2, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
-import { cn } from '@/lib/utils'
-
 const PAGE_SIZE = DEFAULT_PAGE_SIZE
+
+const EMPTY_STATS_ITEMS: GatewayUsageStatsItem[] = []
 
 const RANGE_DAYS: { value: 1 | 7 | 30 | 90; label: string }[] = [
   { value: 1, label: '24 小时' },
   { value: 7, label: '7 天' },
   { value: 30, label: '30 天' },
   { value: 90, label: '90 天' },
-]
-
-const GROUP_OPTIONS: { value: GatewayUsageStatsGroupBy; label: string }[] = [
-  { value: 'credential', label: '凭据' },
-  { value: 'user', label: '人员' },
-  { value: 'team', label: '团队' },
-  { value: 'model', label: '模型' },
-  { value: 'vkey', label: '虚拟 Key' },
-  { value: 'provider', label: '提供商' },
-  { value: 'capability', label: '能力' },
-  { value: 'status', label: '状态' },
 ]
 
 const STATUS_OPTIONS: GatewayFilterOption[] = [
@@ -273,8 +266,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const groupOptions = useMemo(
     () =>
       crossTeamStatsEnabled
-        ? GROUP_OPTIONS
-        : GROUP_OPTIONS.filter((option) => option.value !== 'team'),
+        ? USAGE_STATS_GROUP_OPTIONS
+        : USAGE_STATS_GROUP_OPTIONS.filter((option) => option.value !== 'team'),
     [crossTeamStatsEnabled]
   )
 
@@ -364,94 +357,128 @@ export default function GatewayStatsPage(): React.JSX.Element {
   })
 
   const showBreakdownCols = shouldShowBreakdownColumns(groupBy)
-  const items = statsQuery.data?.items ?? []
+  const identityColumnHeaders = useMemo(
+    () => getUsageStatsIdentityColumnHeaders(groupBy),
+    [groupBy]
+  )
 
-  const { breakdownByRowKey, isLoading: breakdownLoading } = useUsageStatsBreakdownBatch({
+  const items = useMemo(() => statsQuery.data?.items ?? EMPTY_STATS_ITEMS, [statsQuery.data?.items])
+
+  const tableCredentialTopN = useMemo(() => {
+    const teamCredentialCount = credentialsQuery.data?.length ?? TABLE_CREDENTIAL_TOP_N
+    return Math.min(Math.max(1, teamCredentialCount), TABLE_CREDENTIAL_TOP_N)
+  }, [credentialsQuery.data?.length])
+
+  const breakdownEnabled = showBreakdownCols && items.length > 0 && statsQuery.data !== undefined
+
+  const { breakdownByRowKey, loadingRowKeys } = useUsageStatsBreakdownBatch({
     teamId,
     baseQuery: breakdownBaseQuery,
     parentGroupBy: groupBy,
     items,
-    enabled: showBreakdownCols && items.length > 0 && !statsQuery.isLoading,
+    enabled: breakdownEnabled,
+    credentialTopN: tableCredentialTopN,
   })
 
-  const activeFilters = [
-    {
-      key: 'credential' as const,
-      filterKey: 'credential_id' as StatsFilterKey,
-      label: '凭据',
-      value: selectedOptionLabel(credentialOptions, filterState.credentialId),
-      clear: () => {
-        setFilterField('credentialId', GATEWAY_FILTER_ALL)
-      },
-    },
-    {
-      key: 'user' as const,
-      filterKey: 'user_id' as StatsFilterKey,
-      label: '人员',
-      value: selectedOptionLabel(memberOptions, filterState.userId),
-      clear: () => {
-        setFilterField('userId', GATEWAY_FILTER_ALL)
-      },
-    },
-    ...(crossTeamStatsEnabled
-      ? [
-          {
-            key: 'team' as const,
-            filterKey: 'team_id' as StatsFilterKey,
-            label: '团队',
-            value: teamOptions.find((t) => t.id === filterState.teamFilterId)?.name ?? '',
-            clear: () => {
-              setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
-            },
+  const activeFilters = useMemo(
+    () =>
+      [
+        {
+          key: 'credential' as const,
+          filterKey: 'credential_id' as StatsFilterKey,
+          label: '凭据',
+          value: selectedOptionLabel(credentialOptions, filterState.credentialId),
+          clear: () => {
+            setFilterField('credentialId', GATEWAY_FILTER_ALL)
           },
-        ]
-      : []),
-    {
-      key: 'model' as const,
-      filterKey: 'model' as StatsFilterKey,
-      label: '模型',
-      value: selectedOptionLabel(modelOptions, filterState.model),
-      clear: () => {
-        setFilterField('model', GATEWAY_FILTER_ALL)
-      },
-    },
-    {
-      key: 'vkey' as const,
-      filterKey: 'vkey_id' as StatsFilterKey,
-      label: '虚拟 Key',
-      value: selectedOptionLabel(keyOptions, filterState.vkeyId),
-      clear: () => {
-        setFilterField('vkeyId', GATEWAY_FILTER_ALL)
-      },
-    },
-    {
-      key: 'provider' as const,
-      filterKey: 'provider' as StatsFilterKey,
-      label: '提供商',
-      value: selectedOptionLabel(providerOptions, filterState.provider),
-      clear: () => {
-        setFilterField('provider', GATEWAY_FILTER_ALL)
-      },
-    },
-    {
-      key: 'capability' as const,
-      filterKey: 'capability' as StatsFilterKey,
-      label: '能力',
-      value: selectedOptionLabel(CAPABILITY_OPTIONS, filterState.capability),
-      clear: () => {
-        setFilterField('capability', GATEWAY_FILTER_ALL)
-      },
-    },
-    {
-      key: 'status' as const,
-      filterKey: 'status' as StatsFilterKey,
-      label: '状态',
-      value: selectedOptionLabel(STATUS_OPTIONS, filterState.status),
-      clear: () => {
-        setFilterField('status', GATEWAY_FILTER_ALL)
-      },
-    },
-  ].filter((filter) => filter.value.length > 0 && filter.value !== GATEWAY_FILTER_ALL)
+        },
+        {
+          key: 'user' as const,
+          filterKey: 'user_id' as StatsFilterKey,
+          label: '人员',
+          value: selectedOptionLabel(memberOptions, filterState.userId),
+          clear: () => {
+            setFilterField('userId', GATEWAY_FILTER_ALL)
+          },
+        },
+        ...(crossTeamStatsEnabled
+          ? [
+              {
+                key: 'team' as const,
+                filterKey: 'team_id' as StatsFilterKey,
+                label: '团队',
+                value: teamOptions.find((t) => t.id === filterState.teamFilterId)?.name ?? '',
+                clear: () => {
+                  setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
+                },
+              },
+            ]
+          : []),
+        {
+          key: 'model' as const,
+          filterKey: 'model' as StatsFilterKey,
+          label: '模型',
+          value: selectedOptionLabel(modelOptions, filterState.model),
+          clear: () => {
+            setFilterField('model', GATEWAY_FILTER_ALL)
+          },
+        },
+        {
+          key: 'vkey' as const,
+          filterKey: 'vkey_id' as StatsFilterKey,
+          label: '虚拟 Key',
+          value: selectedOptionLabel(keyOptions, filterState.vkeyId),
+          clear: () => {
+            setFilterField('vkeyId', GATEWAY_FILTER_ALL)
+          },
+        },
+        {
+          key: 'provider' as const,
+          filterKey: 'provider' as StatsFilterKey,
+          label: '提供商',
+          value: selectedOptionLabel(providerOptions, filterState.provider),
+          clear: () => {
+            setFilterField('provider', GATEWAY_FILTER_ALL)
+          },
+        },
+        {
+          key: 'capability' as const,
+          filterKey: 'capability' as StatsFilterKey,
+          label: '能力',
+          value: selectedOptionLabel(CAPABILITY_OPTIONS, filterState.capability),
+          clear: () => {
+            setFilterField('capability', GATEWAY_FILTER_ALL)
+          },
+        },
+        {
+          key: 'status' as const,
+          filterKey: 'status' as StatsFilterKey,
+          label: '状态',
+          value: selectedOptionLabel(STATUS_OPTIONS, filterState.status),
+          clear: () => {
+            setFilterField('status', GATEWAY_FILTER_ALL)
+          },
+        },
+      ].filter((filter) => filter.value.length > 0 && filter.value !== GATEWAY_FILTER_ALL),
+    [
+      credentialOptions,
+      filterState.credentialId,
+      filterState.userId,
+      filterState.teamFilterId,
+      filterState.model,
+      filterState.vkeyId,
+      filterState.provider,
+      filterState.capability,
+      filterState.status,
+      memberOptions,
+      crossTeamStatsEnabled,
+      teamOptions,
+      modelOptions,
+      keyOptions,
+      providerOptions,
+      setFilterField,
+    ]
+  )
 
   const activeFilterCount = activeFilters.length
 
@@ -501,7 +528,13 @@ export default function GatewayStatsPage(): React.JSX.Element {
     [groupBy, setPage]
   )
 
-  const maxRequests = Math.max(...items.map((item) => item.requests), 1)
+  const maxRequests = useMemo(() => Math.max(...items.map((item) => item.requests), 1), [items])
+
+  const handleShowDetail = useCallback((row: GatewayUsageStatsItem): void => {
+    setDetailItem(row)
+    setDetailOpen(true)
+  }, [])
+
   const totals = statsQuery.data?.totals
 
   const logsNavigationState = useMemo(
@@ -851,48 +884,18 @@ export default function GatewayStatsPage(): React.JSX.Element {
             <div className="px-6 py-10 text-center text-sm text-muted-foreground">暂无数据</div>
           ) : null}
           {!statsQuery.isLoading && !statsQuery.isError && items.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
-                <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="w-[220px] px-4 py-2 text-left font-medium">维度</th>
-                    {showBreakdownCols ? (
-                      <>
-                        <th className="w-[160px] px-4 py-2 text-left font-medium">主要凭据</th>
-                        <th className="w-[160px] px-4 py-2 text-left font-medium">主要模型</th>
-                      </>
-                    ) : null}
-                    <th className="px-4 py-2 text-left font-medium">请求</th>
-                    <th className="px-4 py-2 text-right font-medium">成功率</th>
-                    <th className="px-4 py-2 text-right font-medium">Tokens</th>
-                    {isAdmin ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
-                    <th className="px-4 py-2 text-right font-medium">缓存</th>
-                    <th className="px-4 py-2 text-right font-medium">延迟</th>
-                    <th className="w-[72px] px-4 py-2 text-right font-medium">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <StatsRow
-                      key={`${item.group_key}-${item.label}`}
-                      item={item}
-                      maxRequests={maxRequests}
-                      showCost={isAdmin}
-                      showBreakdownCols={showBreakdownCols}
-                      rowBreakdown={breakdownByRowKey.get(item.group_key.trim())}
-                      breakdownLoading={breakdownLoading}
-                      onDrill={() => {
-                        handleRowDrill(item)
-                      }}
-                      onShowDetail={() => {
-                        setDetailItem(item)
-                        setDetailOpen(true)
-                      }}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <UsageStatsRankingTable
+              items={items}
+              maxRequests={maxRequests}
+              showCost={isAdmin}
+              showBreakdownCols={showBreakdownCols}
+              identityColumnHeaders={identityColumnHeaders}
+              breakdownByRowKey={breakdownByRowKey}
+              loadingRowKeys={loadingRowKeys}
+              credentialTopN={tableCredentialTopN}
+              onDrill={handleRowDrill}
+              onShowDetail={handleShowDetail}
+            />
           ) : null}
           {statsQuery.data && statsQuery.data.total > PAGE_SIZE ? (
             <div className="border-t px-4 py-3">
@@ -956,109 +959,3 @@ function MetricCard({
     </Card>
   )
 }
-
-const StatsRow = memo(function StatsRow({
-  item,
-  maxRequests,
-  showCost,
-  showBreakdownCols,
-  rowBreakdown,
-  breakdownLoading,
-  onDrill,
-  onShowDetail,
-}: Readonly<{
-  item: GatewayUsageStatsItem
-  maxRequests: number
-  showCost: boolean
-  showBreakdownCols: boolean
-  rowBreakdown?: UsageStatsRowBreakdown
-  breakdownLoading: boolean
-  onDrill: () => void
-  onShowDetail: () => void
-}>): React.JSX.Element {
-  const width = Math.max(4, (item.requests / maxRequests) * 100)
-  const canDrill = item.group_key.trim().length > 0
-
-  return (
-    <tr className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
-      <td className="px-4 py-3">
-        <button
-          type="button"
-          className={cn(
-            'min-w-0 text-left',
-            canDrill && 'cursor-pointer rounded-sm hover:underline'
-          )}
-          disabled={!canDrill}
-          onClick={canDrill ? onDrill : undefined}
-          title={canDrill ? '点击钻取下一维度' : undefined}
-        >
-          <div className="truncate font-medium">{item.label}</div>
-          {item.group_key ? (
-            <div className="truncate font-mono text-[10px] text-muted-foreground">
-              {item.group_key}
-            </div>
-          ) : null}
-        </button>
-      </td>
-      {showBreakdownCols ? (
-        <>
-          <td className="px-4 py-3 align-top">
-            <UsageStatsBreakdownList data={rowBreakdown?.credential} loading={breakdownLoading} />
-          </td>
-          <td className="px-4 py-3 align-top">
-            <UsageStatsBreakdownList data={rowBreakdown?.model} loading={breakdownLoading} />
-          </td>
-        </>
-      ) : null}
-      <td className="px-4 py-3">
-        <div className="flex min-w-[180px] items-center gap-3">
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary"
-              style={{ width: `${width.toString()}%` }}
-            />
-          </div>
-          <span className="w-16 text-right tabular-nums">{item.requests.toLocaleString()}</span>
-        </div>
-      </td>
-      <td className="px-4 py-3 text-right tabular-nums">
-        <span
-          className={cn(
-            item.success_rate >= 0.98
-              ? 'text-emerald-600'
-              : item.success_rate >= 0.9
-                ? 'text-amber-600'
-                : 'text-destructive'
-          )}
-        >
-          {formatPercent(item.success_rate)}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-right tabular-nums">{formatCompact(item.total_tokens)}</td>
-      {showCost ? (
-        <td className="px-4 py-3 text-right tabular-nums">
-          {formatMoney(coalesceMoney(item.cost_usd), {
-            currency: GATEWAY_DISPLAY_CURRENCY,
-            precision: 4,
-          })}
-        </td>
-      ) : null}
-      <td className="px-4 py-3 text-right tabular-nums">{formatPercent(item.cache_hit_rate)}</td>
-      <td className="px-4 py-3 text-right tabular-nums">
-        {Math.round(item.avg_latency_ms).toLocaleString()}ms
-      </td>
-      <td className="px-4 py-3 text-right">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1 px-2 text-xs"
-          onClick={onShowDetail}
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-          分布
-        </Button>
-      </td>
-    </tr>
-  )
-})

@@ -118,3 +118,9 @@ export function clearDrillSegmentsFromFilterState(
 export function shouldShowBreakdownColumns(groupBy: GatewayUsageStatsGroupBy): boolean {
   return groupBy !== 'credential' && groupBy !== 'model'
 }
+
+export {
+  getUsageStatsIdentityColumnHeaders,
+  USAGE_STATS_GROUP_OPTIONS,
+  usageStatsGroupLabel,
+} from './usage-stats-group-options'
