@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.system_visibility_filter import (
     system_credential_visible_to_subject,
@@ -20,7 +21,6 @@ from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayModel,
     SystemProviderCredential,
 )
-from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.infrastructure.repositories.system_gateway_grant_repository import (
     SystemGatewayGrantRepository,
 )
@@ -31,9 +31,7 @@ def test_system_credential_visible_to_subject_pure() -> None:
     cid = uuid.uuid4()
     assert system_credential_visible_to_subject(cid, "public", set()) is True
     assert system_credential_visible_to_subject(cid, "restricted", set()) is False
-    assert system_credential_visible_to_subject(
-        cid, "restricted", {("credential", cid)}
-    ) is True
+    assert system_credential_visible_to_subject(cid, "restricted", {("credential", cid)}) is True
 
 
 def test_visible_system_model_ids_pure_policy() -> None:
@@ -47,9 +45,7 @@ def test_visible_system_model_ids_pure_policy() -> None:
     )
     granted = {("team", uuid.uuid4())}
     assert mid not in visible_system_model_ids([snap], granted)
-    assert mid in visible_system_model_ids(
-        [snap], {("credential", cid)}
-    )
+    assert mid in visible_system_model_ids([snap], {("credential", cid)})
 
 
 def test_effective_visibility_inherit_follows_credential() -> None:
@@ -81,9 +77,7 @@ async def test_restricted_credential_hides_models_without_grant(db_session, test
     db_session.add(model)
     await db_session.flush()
 
-    visible = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
+    visible = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name not in {r.name for r in visible}
 
 
@@ -119,9 +113,7 @@ async def test_credential_grant_allows_team(db_session, test_user) -> None:
     )
     await db_session.flush()
 
-    visible = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
+    visible = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name in {r.name for r in visible}
 
 
@@ -159,9 +151,7 @@ async def test_model_grant_overrides_restricted_credential_without_credential_gr
     )
     await db_session.flush()
 
-    visible = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
+    visible = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name in {r.name for r in visible}
 
 
@@ -198,12 +188,8 @@ async def test_user_grant_visible_for_user_target(db_session, test_user) -> None
     )
     await db_session.flush()
 
-    visible_self = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
-    visible_other = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=other_user
-    )
+    visible_self = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
+    visible_other = await list_merged_models_for_tenant(db_session, team.id, user_id=other_user)
     assert model.name in {r.name for r in visible_self}
     assert model.name not in {r.name for r in visible_other}
 
@@ -232,9 +218,7 @@ async def test_restricted_model_requires_grant_even_if_credential_public(
     db_session.add(model)
     await db_session.flush()
 
-    visible = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
+    visible = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name not in {r.name for r in visible}
 
     db_session.add(
@@ -247,9 +231,7 @@ async def test_restricted_model_requires_grant_even_if_credential_public(
         )
     )
     await db_session.flush()
-    visible2 = await list_merged_models_for_tenant(
-        db_session, team.id, user_id=test_user.id
-    )
+    visible2 = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name in {r.name for r in visible2}
 
 

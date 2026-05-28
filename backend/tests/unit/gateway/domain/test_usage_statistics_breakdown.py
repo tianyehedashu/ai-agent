@@ -28,13 +28,10 @@ def test_breakdown_by_to_group_by_maps_credential_and_model() -> None:
 
 def test_normalize_parent_key_accepts_valid_uuid() -> None:
     uid = uuid.uuid4()
-    assert (
-        normalize_usage_statistics_parent_group_key(
-            UsageStatisticsGroupBy.USER,
-            str(uid),
-        )
-        == str(uid)
-    )
+    assert normalize_usage_statistics_parent_group_key(
+        UsageStatisticsGroupBy.USER,
+        str(uid),
+    ) == str(uid)
 
 
 def test_normalize_parent_key_rejects_invalid_uuid() -> None:

@@ -346,7 +346,9 @@ async def upload_image(
 async def create_image_gen_task(
     current_user: AuthUser,
     image_gen_service: ProductImageGenTaskUseCase = Depends(get_product_image_gen_task_service),
-    model_resolution_service: ChatModelResolutionUseCase = Depends(get_chat_model_resolution_service),
+    model_resolution_service: ChatModelResolutionUseCase = Depends(
+        get_chat_model_resolution_service
+    ),
     body: CreateImageGenTaskBody | None = None,
 ) -> dict[str, Any]:
     """创建 8 图生成任务。

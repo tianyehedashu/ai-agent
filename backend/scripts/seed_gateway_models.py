@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import sys
 from pathlib import Path
+import sys
 
 # 保证 backend 根在 sys.path
 _BACKEND = Path(__file__).resolve().parents[1]

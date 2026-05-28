@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+
 class GatewayModelRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -134,7 +135,9 @@ class GatewayModelRepository:
         )
         return merge_named_rows_tenant_overrides_system(tenant_rows, system_rows)
 
-    async def get_for_tenant(self, model_id: uuid.UUID, tenant_id: uuid.UUID) -> GatewayModel | None:
+    async def get_for_tenant(
+        self, model_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> GatewayModel | None:
         row = await self.get(model_id)
         if row is None or row.tenant_id != tenant_id:
             return None

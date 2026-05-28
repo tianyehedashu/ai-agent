@@ -27,9 +27,7 @@ async def get_route_snapshot_metadata(
         payload, ts = hit
         if now - ts < _TTL_SEC:
             return payload
-    route = await GatewayRouteRepository(session).resolve_by_virtual_model(
-        team_id, virtual_model
-    )
+    route = await GatewayRouteRepository(session).resolve_by_virtual_model(team_id, virtual_model)
     if route is None:
         _CACHE[key] = (None, now)
         return None

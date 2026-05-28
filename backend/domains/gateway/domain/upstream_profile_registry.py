@@ -77,9 +77,7 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         id="zhipuai.coding_plan",
         provider="zhipuai",
         label="智谱 Coding Plan",
-        api_bases={
-            UpstreamProtocol.OPENAI_COMPAT: "https://open.bigmodel.cn/api/coding/paas/v4"
-        },
+        api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://open.bigmodel.cn/api/coding/paas/v4"},
     ),
     UpstreamProfile(
         id="zhipuai.default",

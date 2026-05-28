@@ -74,9 +74,7 @@ async def test_batch_delete_system_models_partial_success(db_session, test_user)
 
 
 @pytest.mark.asyncio
-async def test_batch_delete_requires_platform_admin_for_system_rows(
-    db_session, test_user
-) -> None:
+async def test_batch_delete_requires_platform_admin_for_system_rows(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred = await SystemProviderCredentialRepository(db_session).create(
@@ -160,9 +158,7 @@ async def test_batch_delete_prunes_grants_and_budgets(db_session, test_user) -> 
     assert result.grants_removed >= 1
     assert result.budgets_removed >= 1
     grants_repo = SystemGatewayGrantRepository(db_session)
-    assert (
-        await grants_repo.list_for_target("model", model.id) == []
-    )
+    assert await grants_repo.list_for_target("model", model.id) == []
 
 
 @pytest.mark.asyncio

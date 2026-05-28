@@ -26,10 +26,7 @@ def provider_plan_to_response(model: ProviderPlanReadModel) -> ProviderPlanRespo
         auto_renew=model.auto_renew,
         notes=model.notes,
         extra=model.extra,
-        quotas=[
-            PlanQuotaResponse.model_validate(q)
-            for q in model.quotas
-        ],
+        quotas=[PlanQuotaResponse.model_validate(q) for q in model.quotas],
     )
 
 
@@ -47,10 +44,7 @@ def entitlement_plan_to_response(model: EntitlementPlanReadModel) -> Entitlement
         auto_renew=model.auto_renew,
         notes=model.notes,
         extra=model.extra,
-        quotas=[
-            EntitlementPlanQuotaResponse.model_validate(q)
-            for q in model.quotas
-        ],
+        quotas=[EntitlementPlanQuotaResponse.model_validate(q) for q in model.quotas],
     )
 
 

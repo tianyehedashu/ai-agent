@@ -35,12 +35,8 @@ def _base_stmt(
         User.id.not_in(exclude_members),
     )
     if scope == "shared_teams":
-        actor_teams = select(TeamMember.team_id).where(
-            TeamMember.user_id == actor_user_id
-        )
-        shared_users = select(TeamMember.user_id).where(
-            TeamMember.team_id.in_(actor_teams)
-        )
+        actor_teams = select(TeamMember.team_id).where(TeamMember.user_id == actor_user_id)
+        shared_users = select(TeamMember.user_id).where(TeamMember.team_id.in_(actor_teams))
         stmt = stmt.where(User.id.in_(shared_users))
     if search:
         needle = search.strip().lower()
@@ -78,8 +74,7 @@ class UserInviteCandidateRepository:
         stmt = stmt.order_by(User.created_at.desc()).offset(offset).limit(limit)
         result = await self._session.execute(stmt)
         return [
-            InviteCandidateRow(id=u.id, email=u.email, name=u.name)
-            for u in result.scalars().all()
+            InviteCandidateRow(id=u.id, email=u.email, name=u.name) for u in result.scalars().all()
         ]
 
     async def count(

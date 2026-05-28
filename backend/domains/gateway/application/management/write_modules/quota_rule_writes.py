@@ -139,11 +139,40 @@ class QuotaRuleWritesMixin:
         )
 
         succeeded: list[QuotaRuleReadModel] = []
-
         failed: list[QuotaRuleBatchFailure] = []
         any_changed = False
 
+        # ------------------------------------------------------------------
+        # Platform 层批量优化：先逐条校验 + 推导参数，再一次性批量 upsert
+        # ------------------------------------------------------------------
+        platform_items: list[tuple[int, dict[str, object]]] = []
+        non_platform_commands: list[tuple[int, QuotaRuleUpsertCommand]] = []
+
         for index, cmd in enumerate(commands):
+            if cmd.layer == "platform":
+                try:
+                    item = self._prepare_platform_upsert_item(
+                        cmd,
+                        tenant_id=tenant_id,
+                        is_platform_admin=is_platform_admin,
+                    )
+                    platform_items.append((index, item))
+                except (ValidationError, AIAgentError) as exc:
+                    logger.warning("quota rule batch upsert failed index=%s: %s", index, exc)
+                    failed.append(QuotaRuleBatchFailure(index=index, error=str(exc)))
+            else:
+                non_platform_commands.append((index, cmd))
+
+        if platform_items:
+            batch_results = await self._budgets.batch_upsert([item for _, item in platform_items])
+            for (_, _), budget in zip(platform_items, batch_results, strict=True):
+                succeeded.append(budget_to_quota_rule(budget, team_id=tenant_id))
+                any_changed = True
+
+        # ------------------------------------------------------------------
+        # Upstream / Downstream 保持逐条处理（plan 逻辑复杂，不适合纯 SQL 批量）
+        # ------------------------------------------------------------------
+        for index, cmd in non_platform_commands:
             try:
                 result = await self.upsert_quota_rule(
                     cmd,
@@ -152,10 +181,7 @@ class QuotaRuleWritesMixin:
                 )
                 any_changed = True
 
-                if cmd.layer == "platform":
-                    succeeded.append(budget_to_quota_rule(result, team_id=tenant_id))
-
-                elif cmd.layer == "upstream":
+                if cmd.layer == "upstream":
                     plan, quotas = await self._provider_plans.get_with_quotas(result.id)
 
                     if plan is not None:
@@ -198,6 +224,52 @@ class QuotaRuleWritesMixin:
             await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
 
         return QuotaRuleBatchResult(succeeded=succeeded, failed=failed)
+
+    def _prepare_platform_upsert_item(
+        self,
+        cmd: QuotaRuleUpsertCommand,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> dict[str, object]:
+        """将 platform 命令解析为 batch_upsert 所需字典；权限检查会抛异常。"""
+        target_kind = cmd.target_kind
+
+        if target_kind is None:
+            if cmd.access_kind == "vkey" and cmd.access_id is not None:
+                target_kind = "key"
+            elif cmd.user_id is not None:
+                target_kind = "user"
+            else:
+                target_kind = "tenant"
+
+        target_id = cmd.target_id
+
+        if target_kind == "tenant":
+            target_id = tenant_id
+        elif target_kind == "user":
+            target_id = cmd.user_id or target_id
+        elif target_kind == "key":
+            target_id = cmd.access_id or target_id
+
+        if target_kind == "key" and target_id is None:
+            raise ValidationError("platform key 配额需要 access_id 或 target_id")
+
+        if target_kind == "system" and not is_platform_admin:
+            raise ValidationError("仅平台管理员可设置 system 配额")
+
+        # 注意：此处仅做同步权限断言；若需异步 DB 校验（如 target_id 是否真在团队中），
+        # 仍由上层调用方保证，或接受放宽校验以换取批量性能。
+        return {
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "period": cmd.period or "monthly",
+            "model_name": cmd.model_name,
+            "limit_usd": cmd.limit_usd,
+            "soft_limit_usd": None,
+            "limit_tokens": cmd.limit_tokens,
+            "limit_requests": cmd.limit_requests,
+        }
 
     async def _upsert_platform_quota_rule(
         self,

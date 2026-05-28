@@ -19,9 +19,7 @@ from libs.crypto import derive_encryption_key, encrypt_value
 
 
 @pytest.mark.asyncio
-async def test_update_system_gateway_model_requires_platform_admin(
-    db_session, test_user
-) -> None:
+async def test_update_system_gateway_model_requires_platform_admin(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred = await SystemProviderCredentialRepository(db_session).create(

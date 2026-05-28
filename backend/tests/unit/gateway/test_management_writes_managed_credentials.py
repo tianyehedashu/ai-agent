@@ -97,9 +97,7 @@ async def test_update_system_credential_requires_platform_admin(db_session, test
 
 
 @pytest.mark.asyncio
-async def test_delete_managed_credential_cascades_linked_models(
-    db_session, test_user
-) -> None:
+async def test_delete_managed_credential_cascades_linked_models(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = ProviderCredentialRepository(db_session)
@@ -195,9 +193,7 @@ def test_system_credential_admin_error_maps_to_403() -> None:
 
 
 @pytest.mark.asyncio
-async def test_deactivate_managed_credential_cascades_model_enabled(
-    db_session, test_user
-) -> None:
+async def test_deactivate_managed_credential_cascades_model_enabled(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = ProviderCredentialRepository(db_session)

@@ -167,3 +167,60 @@ class TestGatewayModelsAvailableApi:
                 assert sm.get("is_system") is True
                 assert "display_name" in sm
                 assert "id" in sm
+
+    @pytest.mark.asyncio
+    async def test_available_with_gateway_team_id_includes_team_registry(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """gateway_team_id 注入后 system_models 含该团队租户注册行（与 Chat / 调用指南工作区一致）"""
+        r_teams = await dev_client.get("/api/v1/gateway/teams", headers=auth_headers)
+        assert r_teams.status_code == status.HTTP_200_OK, r_teams.text
+        personal = next(t for t in r_teams.json() if t.get("kind") == "personal")
+        team_id = personal["id"]
+
+        cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"avail-team-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-avail-team-int-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert cred.status_code == status.HTTP_201_CREATED, cred.text
+        cred_id = cred.json()["id"]
+
+        model_name = f"avail-team-{uuid.uuid4().hex[:8]}"
+        model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_id}/models",
+            headers=auth_headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cred_id,
+                "provider": "openai",
+            },
+        )
+        assert model.status_code == status.HTTP_201_CREATED, model.text
+
+        r_without = await dev_client.get(
+            _AVAILABLE,
+            params={"type": "text"},
+            headers=auth_headers,
+        )
+        assert r_without.status_code == status.HTTP_200_OK
+        ids_without = {m["id"] for m in _paginated_items(r_without.json()["system_models"])}
+
+        r_with = await dev_client.get(
+            _AVAILABLE,
+            params={"type": "text", "gateway_team_id": team_id},
+            headers=auth_headers,
+        )
+        assert r_with.status_code == status.HTTP_200_OK
+        ids_with = {m["id"] for m in _paginated_items(r_with.json()["system_models"])}
+        assert model_name in ids_with
+        assert model_name not in ids_without

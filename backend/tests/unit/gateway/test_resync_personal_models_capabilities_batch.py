@@ -62,9 +62,7 @@ async def test_resync_personal_models_capabilities_batch_success(
         AsyncMock(),
     )
 
-    result = await writes.resync_personal_models_capabilities_batch(
-        test_user.id, [model_id]
-    )
+    result = await writes.resync_personal_models_capabilities_batch(test_user.id, [model_id])
 
     assert result.succeeded == [model_id]
     assert result.failed == []
@@ -76,9 +74,7 @@ async def test_resync_personal_models_capabilities_batch_unknown_id_fails(
 ) -> None:
     writes = GatewayManagementWriteService(db_session)
     unknown_id = uuid.uuid4()
-    result = await writes.resync_personal_models_capabilities_batch(
-        test_user.id, [unknown_id]
-    )
+    result = await writes.resync_personal_models_capabilities_batch(test_user.id, [unknown_id])
     assert result.succeeded == []
     assert len(result.failed) == 1
     assert result.failed[0].id == unknown_id

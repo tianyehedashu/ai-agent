@@ -15,8 +15,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import sys
 from pathlib import Path
+import sys
 
 from dotenv import load_dotenv
 
@@ -74,7 +74,9 @@ async def main() -> int:
         any_pass = any_pass or ok
 
     if any_pass:
-        print("\nAt least one model PASS — consider enabling gateway_dashscope_embedding_via_litellm")
+        print(
+            "\nAt least one model PASS — consider enabling gateway_dashscope_embedding_via_litellm"
+        )
         return 0
     print("\nAll probes FAIL — keep DashScope direct embedding path")
     return 1

@@ -11,7 +11,6 @@ from starlette.responses import Response
 
 from domains.agent.domain.mcp.scopes import MCPServerScope
 from domains.agent.infrastructure.mcp_server.auth_middleware import verify_mcp_access
-from libs.exceptions import NotFoundError
 from domains.agent.infrastructure.mcp_server.context import (
     mcp_user_id_var,
     mcp_vendor_creator_id_var,
@@ -27,6 +26,7 @@ from domains.agent.infrastructure.repositories.mcp_dynamic_prompt_repository imp
 from domains.agent.infrastructure.repositories.mcp_dynamic_tool_repository import (
     MCPDynamicToolRepository,
 )
+from libs.exceptions import NotFoundError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:

@@ -30,7 +30,10 @@ def test_inbound_injects_anthropic_beta_header() -> None:
 def test_inbound_skips_when_metadata_disable() -> None:
     mw = PromptCacheMiddleware()
     out = mw.inbound(
-        {"messages": [{"role": "system", "content": "x" * 5000}], "metadata": {"gateway_prompt_cache": False}},
+        {
+            "messages": [{"role": "system", "content": "x" * 5000}],
+            "metadata": {"gateway_prompt_cache": False},
+        },
         model="claude-3-5-sonnet",
         tags={"prompt_cache": True},
     )

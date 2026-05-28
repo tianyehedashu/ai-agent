@@ -9,19 +9,19 @@ import pytest
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.virtual_key_service import generate_vkey
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.tenancy.application.team_service import TeamService
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+
+
 @pytest.mark.asyncio
 async def test_delete_gateway_model_prunes_vkey_allowed_list(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    cred = await create_tenant_test_credential(
-        db_session, team.id, name="prune-test-cred"
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="prune-test-cred")
     model_name = f"prune-vm-{uuid.uuid4().hex[:6]}"
     model = await GatewayModelRepository(db_session).create(
         tenant_id=team.id,

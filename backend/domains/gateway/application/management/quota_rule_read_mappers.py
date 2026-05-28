@@ -198,24 +198,18 @@ def filter_quota_rules(
         result = [
             r
             for r in result
-            if r.key.user_id == user_id
-            or (r.key.user_id is None and r.key.layer == "platform")
+            if r.key.user_id == user_id or (r.key.user_id is None and r.key.layer == "platform")
         ]
     if credential_id is not None:
         result = [r for r in result if r.key.credential_id == credential_id]
     if model_name is not None:
         normalized = model_name.strip()
-        result = [
-            r
-            for r in result
-            if r.key.model_name == normalized or r.key.model_name is None
-        ]
+        result = [r for r in result if r.key.model_name == normalized or r.key.model_name is None]
     if period is not None:
         result = [
             r
             for r in result
-            if r.key.period == period
-            or (r.key.period is None and r.key.window_seconds is not None)
+            if r.key.period == period or (r.key.period is None and r.key.window_seconds is not None)
         ]
     return result
 

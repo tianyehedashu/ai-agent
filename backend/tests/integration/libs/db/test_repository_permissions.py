@@ -113,9 +113,7 @@ class TestSessionRepositoryPermissions:
         other_session, other_tenant = await _add_session_for_user(
             db_session, other_user, title="Other User Session"
         )
-        user_tenant = await PersonalTeamProvisioner(db_session).ensure_personal_team(
-            test_user.id
-        )
+        user_tenant = await PersonalTeamProvisioner(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
 
         ctx = PermissionContext(
@@ -214,9 +212,7 @@ class TestAgentRepositoryPermissions:
         self, db_session: AsyncSession, test_user: User
     ):
         """测试: find_by_user 根据权限上下文过滤"""
-        agent1, tenant1 = await _add_agent_for_user(
-            db_session, test_user, name="User 1 Agent"
-        )
+        agent1, tenant1 = await _add_agent_for_user(db_session, test_user, name="User 1 Agent")
 
         other_user = User(
             email="other@example.com",

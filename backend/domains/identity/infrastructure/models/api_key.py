@@ -267,9 +267,7 @@ class ApiKeyGatewayGrant(BaseModel, TimestampMixin):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "api_key_id", "tenant_id", name="uq_api_key_gateway_grants_key_tenant"
-        ),
+        UniqueConstraint("api_key_id", "tenant_id", name="uq_api_key_gateway_grants_key_tenant"),
         Index("ix_api_key_gateway_grants_user_tenant", "user_id", "tenant_id"),
     )
 

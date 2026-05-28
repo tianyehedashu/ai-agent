@@ -91,9 +91,7 @@ class GatewayStreamChunk:
 class LitellmCapabilityHintPort(Protocol):
     """查询 LiteLLM 内置价目表中的能力标记（catalog 写侧 / 探测 enrich）。"""
 
-    def get_model_hints(
-        self, *, provider: str, real_model: str
-    ) -> LitellmModelInfoHints | None:
+    def get_model_hints(self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
         """已映射模型返回 hint 子集；未映射或 litellm 不可用返回 None。"""
 
     def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
@@ -148,9 +146,7 @@ class ListingStudioLocalImagePort(Protocol):
         ...
 
 
-ListingStudioLocalImagePortFactory = Callable[
-    [AsyncSession], ListingStudioLocalImagePort
-]
+ListingStudioLocalImagePortFactory = Callable[[AsyncSession], ListingStudioLocalImagePort]
 
 
 __all__ = [

@@ -10,7 +10,9 @@ from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.tenant_resolve import resolve_tenant_id_for_write
 
 
-class ListingStudioPromptTemplateRepository(TenantScopedRepositoryBase[ListingStudioPromptTemplate]):
+class ListingStudioPromptTemplateRepository(
+    TenantScopedRepositoryBase[ListingStudioPromptTemplate]
+):
     @property
     def model_class(self) -> type[ListingStudioPromptTemplate]:
         return ListingStudioPromptTemplate

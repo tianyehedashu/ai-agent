@@ -21,9 +21,7 @@ class TeamRepository:
     async def get(self, team_id: uuid.UUID) -> Team | None:
         return await self._session.get(Team, team_id)
 
-    async def get_display_names_by_ids(
-        self, team_ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+    async def get_display_names_by_ids(self, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         """批量解析团队展示名（供跨域读模型标签等）。"""
         if not team_ids:
             return {}
@@ -70,9 +68,7 @@ class TeamRepository:
     async def list_all_active(self) -> list[Team]:
         """列出全部活跃团队（平台 admin Gateway 管理面）。"""
         stmt = (
-            select(Team)
-            .where(Team.is_active.is_(True))
-            .order_by(Team.kind.desc(), Team.created_at)
+            select(Team).where(Team.is_active.is_(True)).order_by(Team.kind.desc(), Team.created_at)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -152,9 +148,7 @@ class TeamMemberRepository:
 
     async def list_roles_for_user(self, user_id: uuid.UUID) -> dict[uuid.UUID, str]:
         """单次查询用户全部 team_id → role（Gateway 团队列表避免 N+1）。"""
-        stmt = select(TeamMember.team_id, TeamMember.role).where(
-            TeamMember.user_id == user_id
-        )
+        stmt = select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user_id)
         result = await self._session.execute(stmt)
         return dict(result.all())
 

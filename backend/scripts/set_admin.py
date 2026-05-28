@@ -46,10 +46,7 @@ async def list_users() -> None:
     session, engine = await _session_factory()
     try:
         result = await session.execute(
-            text(
-                "SELECT id, email, name, role, is_active FROM users "
-                "ORDER BY created_at DESC"
-            )
+            text("SELECT id, email, name, role, is_active FROM users ORDER BY created_at DESC")
         )
         users = result.fetchall()
         if not users:

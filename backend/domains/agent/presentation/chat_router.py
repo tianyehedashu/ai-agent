@@ -215,9 +215,7 @@ async def chat(
     async def event_generator():
         try:
             async with AsyncExitStack() as stack:
-                await stack.enter_async_context(
-                    _optional_permission_scope(permission_context)
-                )
+                await stack.enter_async_context(_optional_permission_scope(permission_context))
                 db = await stack.enter_async_context(get_session_context())
                 chat_service = await _build_stream_chat_service(db, http_request)
                 mcp_config_dict = (
@@ -289,9 +287,7 @@ async def resume_execution(
     async def event_generator():
         try:
             async with AsyncExitStack() as stack:
-                await stack.enter_async_context(
-                    _optional_permission_scope(permission_context)
-                )
+                await stack.enter_async_context(_optional_permission_scope(permission_context))
                 db = await stack.enter_async_context(get_session_context())
                 chat_service = await _build_stream_chat_service(db, http_request)
                 async for event in chat_service.resume(
@@ -375,12 +371,8 @@ async def diff_checkpoints(
     checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
 ) -> DiffResponse:
     """对比两个检查点"""
-    session_id_1 = await checkpoint_service.resolve_session_id_or_raise(
-        request.checkpoint_id_1
-    )
-    session_id_2 = await checkpoint_service.resolve_session_id_or_raise(
-        request.checkpoint_id_2
-    )
+    session_id_1 = await checkpoint_service.resolve_session_id_or_raise(request.checkpoint_id_1)
+    session_id_2 = await checkpoint_service.resolve_session_id_or_raise(request.checkpoint_id_2)
     await _assert_checkpoint_session_accessible(
         session_service,
         session_id=session_id_1,

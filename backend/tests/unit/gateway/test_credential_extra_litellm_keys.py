@@ -20,8 +20,16 @@ from domains.gateway.infrastructure.router_singleton import _build_litellm_param
     [
         ("openai", ("organization", "project_id"), ("aws_region_name",)),
         ("azure", ("api_version",), ("organization",)),
-        ("bedrock", ("aws_secret_access_key", "aws_region_name", "aws_session_token"), ("api_version",)),
-        ("vertex_ai", ("vertex_project", "vertex_location", "vertex_credentials"), ("api_version",)),
+        (
+            "bedrock",
+            ("aws_secret_access_key", "aws_region_name", "aws_session_token"),
+            ("api_version",),
+        ),
+        (
+            "vertex_ai",
+            ("vertex_project", "vertex_location", "vertex_credentials"),
+            ("api_version",),
+        ),
         ("dashscope", ("workspace_id",), ("api_version",)),
         ("volcengine", ("region", "endpoint_id"), ("workspace_id",)),
     ],

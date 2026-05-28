@@ -50,9 +50,7 @@ async def test_list_callable_system_model_names_excludes_restricted_without_gran
     )
     await db_session.flush()
 
-    names = await list_callable_system_model_names(
-        db_session, team.id, user_id=test_user.id
-    )
+    names = await list_callable_system_model_names(db_session, team.id, user_id=test_user.id)
     assert model_name not in names
 
 
@@ -91,15 +89,11 @@ async def test_list_callable_system_model_names_includes_after_team_grant(
     )
     await db_session.flush()
 
-    names = await list_callable_system_model_names(
-        db_session, team.id, user_id=test_user.id
-    )
+    names = await list_callable_system_model_names(db_session, team.id, user_id=test_user.id)
     assert model_name in names
 
     reads = GatewayManagementReadService(db_session)
-    via_reads = await reads.list_callable_system_model_names(
-        team.id, user_id=test_user.id
-    )
+    via_reads = await reads.list_callable_system_model_names(team.id, user_id=test_user.id)
     assert model_name in via_reads
 
 
@@ -143,13 +137,9 @@ async def test_list_merged_apply_visibility_filter_false_includes_restricted(
 
 
 @pytest.mark.asyncio
-async def test_resolve_by_name_visible_team_row_without_grant(
-    db_session, test_user
-) -> None:
+async def test_resolve_by_name_visible_team_row_without_grant(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    cred = await create_tenant_test_credential(
-        db_session, team.id, name="team-resolve-cred"
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="team-resolve-cred")
     model_name = f"team-only-{uuid.uuid4().hex[:8]}"
     db_session.add(
         GatewayModel(
@@ -163,9 +153,7 @@ async def test_resolve_by_name_visible_team_row_without_grant(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, model_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, model_name, user_id=test_user.id)
     assert resolved is not None
     assert registry_kind_for_merged_row(resolved) == "team"
 
@@ -196,16 +184,12 @@ async def test_resolve_by_name_visible_restricted_system_none_without_grant(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, model_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, model_name, user_id=test_user.id)
     assert resolved is None
 
 
 @pytest.mark.asyncio
-async def test_resolve_by_name_visible_restricted_system_with_grant(
-    db_session, test_user
-) -> None:
+async def test_resolve_by_name_visible_restricted_system_with_grant(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = SystemProviderCredential(
         provider="cohere",
@@ -237,9 +221,7 @@ async def test_resolve_by_name_visible_restricted_system_with_grant(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, model_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, model_name, user_id=test_user.id)
     assert resolved is not None
     assert resolved.name == model_name
     assert registry_kind_for_merged_row(resolved) == "system"
@@ -285,9 +267,7 @@ async def test_resolve_by_name_visible_prefers_tenant_over_restricted_system(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, shared_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, shared_name, user_id=test_user.id)
     assert resolved is not None
     assert registry_kind_for_merged_row(resolved) == "team"
     repo = GatewayModelRepository(db_session)
@@ -335,9 +315,7 @@ async def test_resolve_by_name_visible_skips_disabled_tenant_for_system(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, shared_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, shared_name, user_id=test_user.id)
     assert resolved is not None
     assert registry_kind_for_merged_row(resolved) == "system"
     assert resolved.real_model == "gpt-disabled-sys"
@@ -348,9 +326,7 @@ async def test_resolve_by_name_visible_disabled_tenant_without_system_is_none(
     db_session, test_user
 ) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
-    cred = await create_tenant_test_credential(
-        db_session, team.id, name="disabled-only-cred"
-    )
+    cred = await create_tenant_test_credential(db_session, team.id, name="disabled-only-cred")
     model_name = f"disabled-only-{uuid.uuid4().hex[:8]}"
     db_session.add(
         GatewayModel(
@@ -365,7 +341,5 @@ async def test_resolve_by_name_visible_disabled_tenant_without_system_is_none(
     )
     await db_session.flush()
 
-    resolved = await resolve_by_name_visible(
-        db_session, team.id, model_name, user_id=test_user.id
-    )
+    resolved = await resolve_by_name_visible(db_session, team.id, model_name, user_id=test_user.id)
     assert resolved is None

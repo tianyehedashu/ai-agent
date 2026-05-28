@@ -15,7 +15,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _rename_team_id_to_tenant_id(table: str, *, not_null: bool, drop_indexes: tuple[str, ...]) -> None:
+def _rename_team_id_to_tenant_id(
+    table: str, *, not_null: bool, drop_indexes: tuple[str, ...]
+) -> None:
     for idx in drop_indexes:
         op.drop_index(idx, table_name=table)
     op.execute(f"ALTER TABLE {table} RENAME COLUMN team_id TO tenant_id")
@@ -41,9 +43,7 @@ def upgrade() -> None:
     )
 
     # gateway_routes
-    op.drop_constraint(
-        "uq_gateway_routes_team_virtual_model", "gateway_routes", type_="unique"
-    )
+    op.drop_constraint("uq_gateway_routes_team_virtual_model", "gateway_routes", type_="unique")
     _rename_team_id_to_tenant_id(
         "gateway_routes", not_null=True, drop_indexes=("ix_gateway_routes_team",)
     )
@@ -89,9 +89,7 @@ def upgrade() -> None:
     op.drop_index("ix_api_key_gateway_grants_user_team", table_name="api_key_gateway_grants")
     op.drop_index("ix_api_key_gateway_grants_team_id", table_name="api_key_gateway_grants")
     op.execute("ALTER TABLE api_key_gateway_grants RENAME COLUMN team_id TO tenant_id")
-    op.create_index(
-        "ix_api_key_gateway_grants_tenant_id", "api_key_gateway_grants", ["tenant_id"]
-    )
+    op.create_index("ix_api_key_gateway_grants_tenant_id", "api_key_gateway_grants", ["tenant_id"])
     op.create_index(
         "ix_api_key_gateway_grants_user_tenant",
         "api_key_gateway_grants",
@@ -151,9 +149,7 @@ def downgrade() -> None:
         ["team_id", "enabled"],
     )
 
-    op.drop_constraint(
-        "uq_gateway_routes_tenant_virtual_model", "gateway_routes", type_="unique"
-    )
+    op.drop_constraint("uq_gateway_routes_tenant_virtual_model", "gateway_routes", type_="unique")
     _rename_tenant_id_to_team_id("gateway_routes", not_null=True)
     op.create_unique_constraint(
         "uq_gateway_routes_team_virtual_model",

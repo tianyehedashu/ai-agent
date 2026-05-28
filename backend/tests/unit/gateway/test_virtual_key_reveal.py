@@ -106,9 +106,7 @@ async def test_get_virtual_key_rejects_system_key(db_session, test_user) -> None
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_get_virtual_key_non_creator_cannot_read(
-    db_session, test_user
-) -> None:
+async def test_get_virtual_key_non_creator_cannot_read(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     key_id = await _create_vkey(db_session, team_id=team.id, user_id=test_user.id)
     reads = GatewayManagementReadService(db_session)

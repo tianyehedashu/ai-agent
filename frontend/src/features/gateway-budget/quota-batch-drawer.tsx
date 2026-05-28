@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -21,6 +23,7 @@ import { Loader2 } from '@/lib/lucide-icons'
 import { OverlayScope } from '@/lib/ui-overlay'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
+import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
   patchQuotaBatchFormForLayer,
@@ -71,6 +74,17 @@ function MetaListPlaceholder({
   return null
 }
 
+function useFilteredOptions(
+  options: { id: string; label: string }[],
+  query: string
+): { id: string; label: string }[] {
+  return useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return options
+    return options.filter((o) => o.label.toLowerCase().includes(q))
+  }, [options, query])
+}
+
 export function QuotaBatchDrawer({
   open,
   onOpenChange,
@@ -88,6 +102,14 @@ export function QuotaBatchDrawer({
   modelsLoading = false,
   onModelPickerOpenChange,
 }: QuotaBatchDrawerProps): React.JSX.Element {
+  const [memberQuery, setMemberQuery] = useState('')
+  const [keyQuery, setKeyQuery] = useState('')
+  const [credQuery, setCredQuery] = useState('')
+
+  const filteredMembers = useFilteredOptions(memberOptions, memberQuery)
+  const filteredKeys = useFilteredOptions(keyOptions, keyQuery)
+  const filteredCreds = useFilteredOptions(credentialOptions, credQuery)
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex max-h-[100dvh] w-full flex-col sm:max-w-lg">
@@ -166,13 +188,21 @@ export function QuotaBatchDrawer({
                 {values.subjectMode === 'users' ? (
                   <div className="space-y-2">
                     <Label>成员（可多选）</Label>
+                    <Input
+                      value={memberQuery}
+                      onChange={(e) => {
+                        setMemberQuery(e.target.value)
+                      }}
+                      placeholder="搜索成员…"
+                      className="h-8 text-xs"
+                    />
                     <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
                       <MetaListPlaceholder
                         loading={metaLoading}
-                        empty={!metaLoading && memberOptions.length === 0}
-                        emptyHint="暂无成员，请先在团队页添加成员。"
+                        empty={!metaLoading && filteredMembers.length === 0}
+                        emptyHint={memberQuery ? '无匹配成员' : '暂无成员，请先在团队页添加成员。'}
                       />
-                      {memberOptions.map((m) => (
+                      {filteredMembers.map((m) => (
                         <label
                           key={m.id}
                           className="flex cursor-pointer items-center gap-2 text-sm"
@@ -196,13 +226,21 @@ export function QuotaBatchDrawer({
                 {values.subjectMode === 'keys' ? (
                   <div className="space-y-2">
                     <Label>虚拟 Key（可多选）</Label>
+                    <Input
+                      value={keyQuery}
+                      onChange={(e) => {
+                        setKeyQuery(e.target.value)
+                      }}
+                      placeholder="搜索 Key…"
+                      className="h-8 text-xs"
+                    />
                     <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
                       <MetaListPlaceholder
                         loading={metaLoading}
-                        empty={!metaLoading && keyOptions.length === 0}
-                        emptyHint="暂无虚拟 Key，请先在 Key 页创建。"
+                        empty={!metaLoading && filteredKeys.length === 0}
+                        emptyHint={keyQuery ? '无匹配 Key' : '暂无虚拟 Key，请先在 Key 页创建。'}
                       />
-                      {keyOptions.map((k) => (
+                      {filteredKeys.map((k) => (
                         <label
                           key={k.id}
                           className="flex cursor-pointer items-center gap-2 text-sm"
@@ -263,13 +301,21 @@ export function QuotaBatchDrawer({
                 {!values.allCredentials ? (
                   <div className="space-y-2">
                     <Label>凭据（可多选）</Label>
+                    <Input
+                      value={credQuery}
+                      onChange={(e) => {
+                        setCredQuery(e.target.value)
+                      }}
+                      placeholder="搜索凭据…"
+                      className="h-8 text-xs"
+                    />
                     <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
                       <MetaListPlaceholder
                         loading={metaLoading}
-                        empty={!metaLoading && credentialOptions.length === 0}
-                        emptyHint="暂无凭据，请先在凭据页添加。"
+                        empty={!metaLoading && filteredCreds.length === 0}
+                        emptyHint={credQuery ? '无匹配凭据' : '暂无凭据，请先在凭据页添加。'}
                       />
-                      {credentialOptions.map((c) => (
+                      {filteredCreds.map((c) => (
                         <label
                           key={c.id}
                           className="flex cursor-pointer items-center gap-2 text-sm"
@@ -366,6 +412,28 @@ export function QuotaBatchDrawer({
                 </div>
               </>
             ) : null}
+
+            <div className="space-y-2 border-t pt-4">
+              <p className="text-sm font-medium">模板预设</p>
+              <div className="flex flex-wrap gap-2">
+                {QUOTA_TEMPLATES.map((t) => (
+                  <Button
+                    key={t.label}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={disabled}
+                    onClick={() => {
+                      onChange(applyQuotaTemplate(values, t))
+                    }}
+                  >
+                    {t.label}
+                    <span className="ml-1 text-[10px] text-muted-foreground">{t.description}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
 
             <div className="space-y-2 border-t pt-4">
               <p className="text-sm font-medium">限额与模型</p>

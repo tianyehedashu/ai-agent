@@ -53,12 +53,8 @@ class EvaluationUseCase:
         parsed = [ToolCall.model_validate(tc) for tc in tool_calls]
         evaluator = self.tool_accuracy_evaluator()
         for tool_call in parsed:
-            expected_tool = (
-                expected_tools.get(tool_call.id) if expected_tools else None
-            )
-            expected_arg = (
-                expected_args.get(tool_call.id) if expected_args else None
-            )
+            expected_tool = expected_tools.get(tool_call.id) if expected_tools else None
+            expected_arg = expected_args.get(tool_call.id) if expected_args else None
             evaluator.evaluate_tool_call(
                 tool_call=tool_call,
                 expected_tool=expected_tool,

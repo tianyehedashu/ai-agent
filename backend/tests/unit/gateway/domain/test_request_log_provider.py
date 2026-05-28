@@ -21,10 +21,13 @@ def test_infer_provider_from_model_hint_infers_doubao() -> None:
 
 
 def test_infer_provider_from_model_hints_returns_first_match() -> None:
-    assert infer_provider_from_model_hints(
-        "gw/t/00000000-0000-0000-0000-000000000001/my-virtual",
-        "doubao-seedance-2-0-260128",
-    ) == "volcengine"
+    assert (
+        infer_provider_from_model_hints(
+            "gw/t/00000000-0000-0000-0000-000000000001/my-virtual",
+            "doubao-seedance-2-0-260128",
+        )
+        == "volcengine"
+    )
 
 
 def test_resolve_prefers_metadata_provider() -> None:

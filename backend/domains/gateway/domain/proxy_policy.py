@@ -141,11 +141,14 @@ def proxy_budget_targets(
     vkey_id: uuid.UUID | None,
 ) -> tuple[BudgetTarget, ...]:
     """代理热路径预算扫描：全局 system + tenant/user/key。"""
-    return (("system", None), *budget_targets(
-        tenant_id=tenant_id,
-        user_id=user_id,
-        vkey_id=vkey_id,
-    ))
+    return (
+        ("system", None),
+        *budget_targets(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            vkey_id=vkey_id,
+        ),
+    )
 
 
 def budget_model_keys(model_name: str | None) -> tuple[str | None, ...]:

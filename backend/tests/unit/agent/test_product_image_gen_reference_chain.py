@@ -50,8 +50,18 @@ async def test_background_chain_uses_slot1_for_slot2() -> None:
     mock_composer.compose_for_owner = AsyncMock(return_value=MagicMock())
 
     prompts = [
-        {"slot": 1, "prompt": "white bg", "reference_image_url": "https://source.jpg", "provider": "volcengine"},
-        {"slot": 2, "prompt": "lifestyle", "reference_image_url": "https://source.jpg", "provider": "volcengine"},
+        {
+            "slot": 1,
+            "prompt": "white bg",
+            "reference_image_url": "https://source.jpg",
+            "provider": "volcengine",
+        },
+        {
+            "slot": 2,
+            "prompt": "lifestyle",
+            "reference_image_url": "https://source.jpg",
+            "provider": "volcengine",
+        },
     ]
 
     with (

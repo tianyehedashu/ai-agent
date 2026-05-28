@@ -40,11 +40,14 @@ async def test_aggregate_managed_team_models_route_usage_adds_team_id() -> None:
             return [row_a], 1, SimpleNamespace(), SimpleNamespace()
         return [row_b], 1, SimpleNamespace(), SimpleNamespace()
 
-    with patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
-    ) as team_svc_cls, patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
-    ) as reads_cls:
+    with (
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+        ) as team_svc_cls,
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+        ) as reads_cls,
+    ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
             return_value=[membership_a, membership_b]
         )
@@ -79,11 +82,14 @@ async def test_aggregate_managed_team_models_route_usage_route_names_filter() ->
         "user": {"requests": 0},
     }
 
-    with patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
-    ) as team_svc_cls, patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
-    ) as reads_cls:
+    with (
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+        ) as team_svc_cls,
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+        ) as reads_cls,
+    ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
             return_value=[membership]
         )
@@ -118,15 +124,16 @@ async def test_aggregate_managed_team_models_route_usage_excludes_unreadable_tea
         SimpleNamespace(team_id=unreadable_team, role="viewer", kind="shared"),
     ]
 
-    aggregate_mock = AsyncMock(
-        return_value=([], 0, SimpleNamespace(), SimpleNamespace())
-    )
+    aggregate_mock = AsyncMock(return_value=([], 0, SimpleNamespace(), SimpleNamespace()))
 
-    with patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
-    ) as team_svc_cls, patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
-    ) as reads_cls:
+    with (
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+        ) as team_svc_cls,
+        patch(
+            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+        ) as reads_cls,
+    ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
             return_value=memberships
         )
@@ -152,9 +159,7 @@ async def test_aggregate_managed_team_models_route_usage_no_shared_teams() -> No
     with patch(
         "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
     ) as team_svc_cls:
-        team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
-            return_value=[personal]
-        )
+        team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(return_value=[personal])
 
         items, total, start, end = await aggregate_managed_team_models_route_usage(
             session,

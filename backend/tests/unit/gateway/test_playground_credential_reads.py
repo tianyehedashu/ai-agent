@@ -89,9 +89,7 @@ async def test_list_playground_credential_summaries_merges_user_team_and_system(
 
     listing = _FakeListing(
         memberships=[
-            GatewayTeamMembershipSnapshot(
-                team_id=personal_team, kind="personal", role="owner"
-            ),
+            GatewayTeamMembershipSnapshot(team_id=personal_team, kind="personal", role="owner"),
             GatewayTeamMembershipSnapshot(team_id=shared_team, kind="shared", role="member"),
         ]
     )
@@ -135,9 +133,7 @@ async def test_list_playground_credential_summaries_skips_inactive() -> None:
 
     listing = _FakeListing(
         memberships=[
-            GatewayTeamMembershipSnapshot(
-                team_id=personal_team, kind="personal", role="owner"
-            ),
+            GatewayTeamMembershipSnapshot(team_id=personal_team, kind="personal", role="owner"),
         ]
     )
     reads = AsyncMock()

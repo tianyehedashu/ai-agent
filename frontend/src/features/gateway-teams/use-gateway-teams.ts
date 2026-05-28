@@ -99,6 +99,12 @@ export function useGatewayWritableMemberTeams(enabled = true): GatewayTeam[] {
   return useMemo(() => filterGatewayWritableTeams(teams, isPlatformAdmin), [teams, isPlatformAdmin])
 }
 
+/** 虚拟 Key 创建绑定工作区：membership 内全部团队（member+ 可建，对齐后端 RequiredTeamMember） */
+export function useGatewayVkeyTargetTeams(enabled = true): GatewayTeam[] {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  return teams
+}
+
 /** 团队凭据 Tab：可写协作团队（排除 personal team） */
 export function useGatewayWritableCollaborationTeams(enabled = true): GatewayTeam[] {
   const writable = useGatewayWritableMemberTeams(enabled)

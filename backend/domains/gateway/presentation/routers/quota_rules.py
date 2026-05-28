@@ -42,6 +42,7 @@ async def list_quota_rules(
     credential_id: uuid.UUID | None = Query(default=None),
     model_name: str | None = Query(default=None, max_length=200),
     period: str | None = Query(default=None, pattern="^(daily|monthly|total)$"),
+    include_usage: bool = Query(default=False),
 ) -> list[QuotaRuleResponse]:
     filters = QuotaRuleListFilters(
         layer=cast("QuotaRuleLayer | None", layer),
@@ -57,6 +58,7 @@ async def list_quota_rules(
         is_platform_admin=team.is_platform_admin,
         is_team_admin=is_team_admin_or_platform(team),
         filters=filters,
+        include_usage=include_usage,
     )
     return [quota_rule_to_response(row) for row in rows]
 
@@ -76,8 +78,7 @@ async def batch_upsert_quota_rules(
     return QuotaRuleBatchUpsertResponse(
         succeeded=[quota_rule_to_response(row) for row in result.succeeded],
         failed=[
-            QuotaRuleBatchFailureItem(index=item.index, error=item.error)
-            for item in result.failed
+            QuotaRuleBatchFailureItem(index=item.index, error=item.error) for item in result.failed
         ],
     )
 

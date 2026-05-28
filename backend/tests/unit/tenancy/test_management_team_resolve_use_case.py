@@ -33,9 +33,7 @@ async def test_resolve_platform_admin_without_membership_gets_synthetic_admin(
 
 
 @pytest.mark.asyncio
-async def test_resolve_non_admin_without_membership_denied(
-    db_session, test_user: User
-) -> None:
+async def test_resolve_non_admin_without_membership_denied(db_session, test_user: User) -> None:
     svc = TeamService(db_session)
     await svc.ensure_personal_team(test_user.id)
     other = User(

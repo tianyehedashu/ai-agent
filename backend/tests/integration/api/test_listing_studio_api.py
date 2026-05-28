@@ -10,8 +10,6 @@ import pytest
 
 from libs.api.paths import api_v1_path
 
-from libs.api.paths import api_v1_path
-
 
 @pytest.mark.integration
 class TestListingStudioJobApi:
@@ -343,6 +341,7 @@ class TestListingStudioRunPipelineApi:
         auth_headers: dict,
     ):
         """一键执行返回 202 与 job_id"""
+
         async def _noop_pipeline(**_kwargs: object) -> None:
             return None
 

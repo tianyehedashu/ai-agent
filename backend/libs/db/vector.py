@@ -155,9 +155,7 @@ class QdrantVectorIndex(VectorIndexAdapter):
 
 class ChromaVectorIndex(VectorIndexAdapter):
     def __init__(self, *, persist_directory: str | None = None) -> None:
-        self.persist_directory = persist_directory or os.environ.get(
-            "CHROMA_PATH", "./chroma_data"
-        )
+        self.persist_directory = persist_directory or os.environ.get("CHROMA_PATH", "./chroma_data")
         self._client = None
         self._collections: dict[str, Any] = {}
 

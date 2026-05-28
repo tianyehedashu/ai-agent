@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from fastapi import Request, status
+import pytest
 
 from libs.api.problem_details import (
     error_type_uri,

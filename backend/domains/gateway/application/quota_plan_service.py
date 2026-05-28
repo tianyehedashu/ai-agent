@@ -127,10 +127,7 @@ class QuotaPlanService:
                         earliest_minute_in_window=snap.earliest_minute_in_window,
                     ),
                 )
-            if (
-                limit_tokens is not None
-                and 0 < limit_tokens <= snap.used_tokens + estimate_tokens
-            ):
+            if limit_tokens is not None and 0 < limit_tokens <= snap.used_tokens + estimate_tokens:
                 return QuotaPlanCheckResult(
                     allowed=False,
                     snapshots=snapshots,

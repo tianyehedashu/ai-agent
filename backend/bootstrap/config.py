@@ -117,7 +117,9 @@ class Settings(BaseSettings):
 
     # 火山引擎 (字节跳动豆包)
     volcengine_api_key: SecretStr | None = None
-    volcengine_api_base: str = Field(default_factory=lambda: _default_provider_api_base("volcengine"))
+    volcengine_api_base: str = Field(
+        default_factory=lambda: _default_provider_api_base("volcengine")
+    )
     volcengine_endpoint_id: str | None = None  # 通用接入点 (兼容旧配置)
     volcengine_chat_endpoint_id: str | None = None  # 对话模型接入点 (Doubao-pro/lite)
     volcengine_image_endpoint_id: str | None = None  # 图像生成接入点 (Seedream)

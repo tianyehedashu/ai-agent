@@ -40,6 +40,7 @@ from domains.identity.presentation.deps import (
     RequiredAuthUser,
     get_user_uuid,
 )
+from domains.tenancy.presentation.team_dependencies import merge_optional_gateway_team
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import NotFoundError
@@ -237,6 +238,10 @@ async def list_available_models_for_chat(
         None,
         description="创作模式：chat→text；image_gen；video（与 type 二选一，type 优先）",
     ),
+    gateway_team_id: uuid.UUID | None = Query(
+        None,
+        description="可选：Gateway 工作区团队（与 POST /chat gateway_team_id 一致；默认 personal 工作区）",
+    ),
 ) -> AvailableModelsListResponse:
     """聊天/产品信息模型选择器：系统目录 + personal gateway_models（分页）。"""
     validate_optional_provider(query.provider)
@@ -247,6 +252,12 @@ async def list_available_models_for_chat(
     user_id: uuid.UUID | None = None
     if current_user is not None and not current_user.is_anonymous:
         user_id = uuid.UUID(current_user.id)
+        await merge_optional_gateway_team(
+            db,
+            user_id=user_id,
+            platform_user_role=current_user.role,
+            team_id=gateway_team_id,
+        )
     raw = await list_available_models_page(
         catalog,
         db,

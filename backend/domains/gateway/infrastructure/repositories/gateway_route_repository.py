@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+
 class GatewayRouteRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -61,11 +62,7 @@ class GatewayRouteRepository:
         clauses: list[object] = [GatewayRoute.tenant_id.in_(tenant_ids)]
         if only_enabled:
             clauses.append(GatewayRoute.enabled.is_(True))
-        stmt = (
-            select(GatewayRoute)
-            .where(*clauses)
-            .order_by(GatewayRoute.virtual_model)
-        )
+        stmt = select(GatewayRoute).where(*clauses).order_by(GatewayRoute.virtual_model)
         result = await self._session.execute(stmt)
         all_tenant_rows = list(result.scalars().all())
 
@@ -277,5 +274,6 @@ class GatewayRouteRepository:
             if changed:
                 updated += 1
         return updated
+
 
 __all__ = ["GatewayRouteRepository"]

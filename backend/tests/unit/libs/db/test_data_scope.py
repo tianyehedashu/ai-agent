@@ -5,12 +5,15 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import select
 
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from libs.db.data_scope_clause import DataScopeEnforcer
 from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
-from libs.iam.permission_context import PermissionContext, clear_permission_context, set_permission_context
+from libs.iam.permission_context import (
+    PermissionContext,
+    clear_permission_context,
+    set_permission_context,
+)
 
 
 @pytest.fixture(autouse=True)

@@ -332,7 +332,9 @@ def _routes_to_virtual_deployments(
                 continue
             deployments.append(
                 _build_deployment(
-                    model_name=encode_router_model_name(deployment_scope_team_id(r), r.virtual_model),
+                    model_name=encode_router_model_name(
+                        deployment_scope_team_id(r), r.virtual_model
+                    ),
                     src=src,
                     cred=cred,
                     via_route=r.virtual_model,

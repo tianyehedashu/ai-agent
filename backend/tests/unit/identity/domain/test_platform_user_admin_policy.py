@@ -17,7 +17,9 @@ from libs.exceptions import PermissionDeniedError, ValidationError
 
 def test_assert_can_admin_manage_user_requires_admin() -> None:
     with pytest.raises(PermissionDeniedError):
-        assert_can_admin_manage_user(actor_role=Role.USER.value, target_current_role=Role.USER.value)
+        assert_can_admin_manage_user(
+            actor_role=Role.USER.value, target_current_role=Role.USER.value
+        )
 
 
 def test_assert_can_admin_manage_user_rejects_anonymous() -> None:

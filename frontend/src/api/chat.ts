@@ -17,6 +17,8 @@ export interface ChatRequest {
   modelRef?: string | null
   /** 本条请求是否请求扩展网关调用日志（需服务端允许客户端开关） */
   gatewayVerboseRequestLog?: boolean
+  /** Gateway 工作区团队（与 GET /models/available gateway_team_id 一致） */
+  gatewayTeamId?: string
   /** chat=Agent；image_gen=直连生图 */
   creativeMode?: 'chat' | 'image_gen'
   referenceImageUrls?: string[]
@@ -33,6 +35,7 @@ function toBackendRequest(request: ChatRequest): Record<string, unknown> {
       : undefined,
     model_ref: request.modelRef === undefined ? undefined : request.modelRef,
     gateway_verbose_request_log: request.gatewayVerboseRequestLog ?? undefined,
+    gateway_team_id: request.gatewayTeamId ?? undefined,
     creative_mode: request.creativeMode ?? undefined,
     reference_image_urls: request.referenceImageUrls?.length
       ? request.referenceImageUrls

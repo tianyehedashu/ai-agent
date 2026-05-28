@@ -38,9 +38,7 @@ async def test_list_budgets_for_tenant_and_user_includes_visible_key_budgets() -
     )
     svc._budgets.list_for_target_ids = AsyncMock(return_value=[key_budget])
 
-    rows = await svc.list_budgets_for_tenant_and_user(
-        tenant_id, user_id, actor_user_id=user_id
-    )
+    rows = await svc.list_budgets_for_tenant_and_user(tenant_id, user_id, actor_user_id=user_id)
 
     assert rows == [tenant_budget, user_budget, key_budget]
     svc._budgets.list_for_target_ids.assert_awaited_once_with("key", [key_id])
@@ -64,12 +62,8 @@ async def test_list_budgets_for_team_admin_merges_all_scopes() -> None:
             ("system", None): [system_budget],
         }.get((kind, tid), [])
     )
-    svc._teams.list_team_members = AsyncMock(
-        return_value=[SimpleNamespace(user_id=member_id)]
-    )
-    svc._vkeys.list_for_tenant = AsyncMock(
-        return_value=[SimpleNamespace(id=key_id)]
-    )
+    svc._teams.list_team_members = AsyncMock(return_value=[SimpleNamespace(user_id=member_id)])
+    svc._vkeys.list_for_tenant = AsyncMock(return_value=[SimpleNamespace(id=key_id)])
     svc._budgets.list_for_target_ids = AsyncMock(
         side_effect=lambda kind, _ids: {
             "user": [user_budget],

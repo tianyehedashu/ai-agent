@@ -84,9 +84,7 @@ class ProxyGuard:
         self._session = session
         self._budget = budget_service
         self._entitlement_guard = entitlement_guard
-        self._budget_repo_factory = (
-            budget_repository_factory or _default_budget_repository_factory
-        )
+        self._budget_repo_factory = budget_repository_factory or _default_budget_repository_factory
 
     # ---------------------------------------------------------------------
     # 模型与能力校验
@@ -166,9 +164,7 @@ class ProxyGuard:
         model: str,
     ) -> None:
         """客户端 model 须在 Gateway 注册；未注册时不应把裸 model 交给 LiteLLM Router。"""
-        await self.resolve_and_validate_request_model(
-            ctx, model, match_registered_capability=False
-        )
+        await self.resolve_and_validate_request_model(ctx, model, match_registered_capability=False)
 
     async def assert_request_capability_matches_model(
         self,
@@ -253,28 +249,13 @@ class ProxyGuard:
 
         budget_by_coord = await get_cached_budget_by_plan(plan, load_budget_rows)
 
-        active: list[tuple[BudgetCheckQuery, BudgetConfigRow]] = []
-        usage_coords: list[BudgetUsageCoord] = []
+        check_items: list[tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]] = []
         for query in plan:
             budget = budget_by_coord.get(
                 (query.target_kind, query.target_id, query.period, query.model_name)
             )
             if budget is None:
                 continue
-            active.append((query, budget))
-            target_id_str = str(query.target_id) if query.target_id is not None else None
-            usage_coords.append(
-                BudgetUsageCoord(
-                    target_kind=query.target_kind,
-                    target_id=target_id_str,
-                    period=query.period,
-                    model_segment=redis_model_segment_for_budget(budget.model_name),
-                )
-            )
-        usage_by_coord = await self._budget.read_budget_usage_batch(usage_coords)
-
-        reservations: list[BudgetReservation] = []
-        for query, budget in active:
             target_id_str = str(query.target_id) if query.target_id is not None else None
             usage_coord = BudgetUsageCoord(
                 target_kind=query.target_kind,
@@ -282,6 +263,13 @@ class ProxyGuard:
                 period=query.period,
                 model_segment=redis_model_segment_for_budget(budget.model_name),
             )
+            check_items.append((query, budget, usage_coord, target_id_str))
+
+        usage_coords = [item[2] for item in check_items]
+        usage_by_coord = await self._budget.read_budget_usage_batch(usage_coords)
+
+        reservations: list[BudgetReservation] = []
+        for query, budget, usage_coord, target_id_str in check_items:
             prefetched = usage_by_coord.get(usage_coord)
             check = await self._budget.check_budget(
                 target_kind=query.target_kind,
@@ -315,44 +303,38 @@ class ProxyGuard:
                         else check.used_requests
                     ),
                 )
-            needs_reserve = (
-                (budget.limit_requests is not None and budget.limit_requests > 0)
-                or (
-                    budget.limit_tokens is not None
-                    and budget.limit_tokens > 0
-                    and estimate_tokens > 0
+            # 无 token/request 限额时跳过 reserve，减少 Redis 写入
+            if (budget.limit_requests is None or budget.limit_requests <= 0) and (
+                budget.limit_tokens is None or budget.limit_tokens <= 0 or estimate_tokens <= 0
+            ):
+                continue
+            try:
+                reserved_requests, reserved_tokens = await self._budget.reserve(
+                    target_kind=query.target_kind,
+                    target_id=target_id_str,
+                    period=query.period,
+                    limit_requests=budget.limit_requests,
+                    limit_tokens=budget.limit_tokens,
+                    estimate_tokens=estimate_tokens,
+                    budget_model_name=budget.model_name,
                 )
-            )
-            if needs_reserve:
-                try:
-                    reserved_requests, reserved_tokens = await self._budget.reserve(
+            except Exception:
+                await self.release_budget_reservations(reservations)
+                raise
+            if reserved_requests or reserved_tokens:
+                reservations.append(
+                    BudgetReservation(
                         target_kind=query.target_kind,
                         target_id=target_id_str,
                         period=query.period,
-                        limit_requests=budget.limit_requests,
-                        limit_tokens=budget.limit_tokens,
-                        estimate_tokens=estimate_tokens,
                         budget_model_name=budget.model_name,
+                        reserved_requests=reserved_requests,
+                        reserved_tokens=reserved_tokens,
                     )
-                except Exception:
-                    await self.release_budget_reservations(reservations)
-                    raise
-                if reserved_requests or reserved_tokens:
-                    reservations.append(
-                        BudgetReservation(
-                            target_kind=query.target_kind,
-                            target_id=target_id_str,
-                            period=query.period,
-                            budget_model_name=budget.model_name,
-                            reserved_requests=reserved_requests,
-                            reserved_tokens=reserved_tokens,
-                        )
-                    )
+                )
         return reservations
 
-    async def release_budget_reservations(
-        self, reservations: list[BudgetReservation]
-    ) -> None:
+    async def release_budget_reservations(self, reservations: list[BudgetReservation]) -> None:
         for reservation in reservations:
             with suppress(Exception):
                 await self._budget.release(

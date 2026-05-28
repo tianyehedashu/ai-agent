@@ -1,15 +1,21 @@
-import { memo } from 'react'
+/**
+ * 配额中心表格：支持列排序、批量选择、行删除。
+ */
+
+import { memo, useMemo, useState } from 'react'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Loader2, Trash2 } from '@/lib/lucide-icons'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ArrowDown, ArrowUp, Loader2, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
   LAYER_LABELS,
+  LAYER_ORDER,
   quotaRuleRowId,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
@@ -24,23 +30,110 @@ export interface QuotaCenterTableProps {
   labelContext: QuotaRuleLabelContext
   onSelect: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
+  onBatchDelete?: (rules: QuotaRule[]) => void
 }
+
+type SortKey = 'layer' | 'subject' | 'model' | 'period' | 'usage' | 'limit'
+type SortDir = 'asc' | 'desc'
+
+interface SortState {
+  key: SortKey
+  dir: SortDir
+}
+
+function getSortValue(rule: QuotaRule, key: SortKey, ctx: QuotaRuleLabelContext): string | number {
+  switch (key) {
+    case 'layer':
+      return LAYER_ORDER[rule.key.layer]
+    case 'subject':
+      return resolveQuotaRuleSubjectLabel(rule, ctx)
+    case 'model':
+      return rule.key.model_name ?? ''
+    case 'period':
+      return formatQuotaRulePeriod(rule)
+    case 'usage': {
+      const { ratio } = computeQuotaRuleUsageRatio(rule)
+      return ratio
+    }
+    case 'limit': {
+      const lu = rule.limits.limit_usd
+      const lt = rule.limits.limit_tokens
+      if (lu !== null) return lu
+      if (lt !== null) return lt
+      return 0
+    }
+    default:
+      return 0
+  }
+}
+
+function sortRules(rules: QuotaRule[], sort: SortState, ctx: QuotaRuleLabelContext): QuotaRule[] {
+  const arr = [...rules]
+  arr.sort((a, b) => {
+    const va = getSortValue(a, sort.key, ctx)
+    const vb = getSortValue(b, sort.key, ctx)
+    if (typeof va === 'string' && typeof vb === 'string') {
+      return sort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+    }
+    const na = typeof va === 'number' ? va : 0
+    const nb = typeof vb === 'number' ? vb : 0
+    return sort.dir === 'asc' ? na - nb : nb - na
+  })
+  return arr
+}
+
+const SortHeader = memo(function SortHeader({
+  label,
+  sortKey,
+  currentSort,
+  onSort,
+}: {
+  label: string
+  sortKey: SortKey
+  currentSort: SortState | null
+  onSort: (key: SortKey) => void
+}) {
+  const active = currentSort?.key === sortKey
+  return (
+    <th
+      className="cursor-pointer select-none px-4 py-2 text-left font-medium"
+      onClick={() => {
+        onSort(sortKey)
+      }}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          currentSort.dir === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : null}
+      </span>
+    </th>
+  )
+})
 
 interface QuotaCenterTableRowProps {
   rule: QuotaRule
   isSelected: boolean
+  isChecked: boolean
   formDisabled: boolean
   labelContext: QuotaRuleLabelContext
   onSelect: (rule: QuotaRule) => void
+  onToggleCheck: (rule: QuotaRule, checked: boolean) => void
   onDelete: (rule: QuotaRule) => void
 }
 
 const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   rule,
   isSelected,
+  isChecked,
   formDisabled,
   labelContext,
   onSelect,
+  onToggleCheck,
   onDelete,
 }: QuotaCenterTableRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
@@ -60,6 +153,20 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         onSelect(rule)
       }}
     >
+      <td
+        className="px-4 py-2"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
+        <Checkbox
+          checked={isChecked}
+          onCheckedChange={(v) => {
+            onToggleCheck(rule, v === true)
+          }}
+          aria-label="选择此行"
+        />
+      </td>
       <td className="px-4 py-2 text-xs">{LAYER_LABELS[rule.key.layer]}</td>
       <td className="px-4 py-2 text-xs">{resolveQuotaRuleSubjectLabel(rule, labelContext)}</td>
       <td className="max-w-[120px] truncate px-4 py-2 text-xs">
@@ -98,15 +205,19 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
-      <td className="px-4 py-2">
+      <td
+        className="px-4 py-2"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
         {canDelete ? (
           <Button
             size="icon"
             variant="ghost"
             className="h-7 w-7"
             disabled={formDisabled}
-            onClick={(e) => {
-              e.stopPropagation()
+            onClick={() => {
               onDelete(rule)
             }}
           >
@@ -126,27 +237,113 @@ export function QuotaCenterTable({
   labelContext,
   onSelect,
   onDelete,
+  onBatchDelete,
 }: QuotaCenterTableProps): React.JSX.Element {
+  const [sort, setSort] = useState<SortState | null>({ key: 'usage', dir: 'desc' })
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+
+  const sortedItems = useMemo(() => {
+    if (!sort) return items
+    return sortRules(items, sort, labelContext)
+  }, [items, sort, labelContext])
+
+  const handleSort = (key: SortKey): void => {
+    setSort((prev) => {
+      if (prev?.key === key) {
+        return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key, dir: 'desc' }
+    })
+  }
+
+  const allChecked =
+    sortedItems.length > 0 && sortedItems.every((r) => checkedIds.has(quotaRuleRowId(r)))
+  const someChecked = sortedItems.some((r) => checkedIds.has(quotaRuleRowId(r)))
+
+  const toggleAll = (): void => {
+    if (allChecked) {
+      setCheckedIds((prev) => {
+        const next = new Set(prev)
+        for (const r of sortedItems) next.delete(quotaRuleRowId(r))
+        return next
+      })
+    } else {
+      setCheckedIds((prev) => {
+        const next = new Set(prev)
+        for (const r of sortedItems) next.add(quotaRuleRowId(r))
+        return next
+      })
+    }
+  }
+
+  const toggleRow = (rule: QuotaRule, checked: boolean): void => {
+    const id = quotaRuleRowId(rule)
+    setCheckedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  const checkedRules = useMemo(
+    () => sortedItems.filter((r) => checkedIds.has(quotaRuleRowId(r))),
+    [sortedItems, checkedIds]
+  )
+
+  const handleBatchDelete = (): void => {
+    if (checkedRules.length === 0) return
+    onBatchDelete?.(checkedRules)
+    setCheckedIds(new Set())
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
+        {someChecked ? (
+          <div className="flex items-center gap-3 border-b bg-muted/20 px-4 py-2">
+            <span className="text-xs text-muted-foreground">已选 {checkedRules.length} 条</span>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs"
+              disabled={formDisabled}
+              onClick={handleBatchDelete}
+            >
+              <Trash2 className="mr-1 h-3 w-3" />
+              批量删除
+            </Button>
+          </div>
+        ) : null}
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-4 py-2 text-left font-medium">层级</th>
-              <th className="px-4 py-2 text-left font-medium">主体</th>
+              <th className="px-4 py-2 text-left">
+                <Checkbox
+                  checked={allChecked ? true : someChecked ? 'indeterminate' : false}
+                  onCheckedChange={toggleAll}
+                  aria-label="全选"
+                />
+              </th>
+              <SortHeader label="层级" sortKey="layer" currentSort={sort} onSort={handleSort} />
+              <SortHeader label="主体" sortKey="subject" currentSort={sort} onSort={handleSort} />
               <th className="px-4 py-2 text-left font-medium">凭据</th>
-              <th className="px-4 py-2 text-left font-medium">模型</th>
-              <th className="px-4 py-2 text-left font-medium">周期</th>
-              <th className="px-4 py-2 text-left font-medium">已用 / 限额</th>
-              <th className="px-4 py-2 text-left font-medium">使用率</th>
+              <SortHeader label="模型" sortKey="model" currentSort={sort} onSort={handleSort} />
+              <SortHeader label="周期" sortKey="period" currentSort={sort} onSort={handleSort} />
+              <SortHeader
+                label="已用 / 限额"
+                sortKey="limit"
+                currentSort={sort}
+                onSort={handleSort}
+              />
+              <SortHeader label="使用率" sortKey="usage" currentSort={sort} onSort={handleSort} />
               <th className="px-4 py-2 text-left font-medium" />
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                   <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
                   加载中…
                 </td>
@@ -154,21 +351,23 @@ export function QuotaCenterTable({
             ) : null}
             {!isLoading && items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                   暂无配额规则
                 </td>
               </tr>
             ) : null}
-            {items.map((rule) => {
+            {sortedItems.map((rule) => {
               const rowId = quotaRuleRowId(rule)
               return (
                 <QuotaCenterTableRow
                   key={rowId}
                   rule={rule}
                   isSelected={selectedId === rowId}
+                  isChecked={checkedIds.has(rowId)}
                   formDisabled={formDisabled}
                   labelContext={labelContext}
                   onSelect={onSelect}
+                  onToggleCheck={toggleRow}
                   onDelete={onDelete}
                 />
               )

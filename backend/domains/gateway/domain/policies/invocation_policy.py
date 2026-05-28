@@ -184,16 +184,18 @@ def _apply_temperature_kwargs(adapted: dict[str, Any], snap: ModelCapabilitySnap
         try:
             temp = float(raw)
         except (TypeError, ValueError) as exc:
-            raise InvocationPolicyViolationError(
-                f"temperature 须为数字，收到: {raw!r}"
-            ) from exc
+            raise InvocationPolicyViolationError(f"temperature 须为数字，收到: {raw!r}") from exc
         adapted["temperature"] = _clamp_temperature_value(temp)
         return
     adapted["temperature"] = snap.temperature_default
 
 
 def _apply_capability_strips(adapted: dict[str, Any], snap: ModelCapabilitySnapshot) -> None:
-    if snap.supports_reasoning or snap.thinking_param != THINKING_PARAM_NONE or not snap.supports_json_mode:
+    if (
+        snap.supports_reasoning
+        or snap.thinking_param != THINKING_PARAM_NONE
+        or not snap.supports_json_mode
+    ):
         adapted.pop("response_format", None)
     if not snap.supports_tools:
         adapted.pop("tools", None)
@@ -213,9 +215,7 @@ def validate_client_thinking_toggle(
             "无法解析模型能力，无法开启思考模式；请确认 model 已注册且 enabled"
         )
     if snap.thinking_param == THINKING_PARAM_NONE:
-        raise InvocationPolicyViolationError(
-            "当前模型不支持思考模式，请勿设置 thinking_enabled"
-        )
+        raise InvocationPolicyViolationError("当前模型不支持思考模式，请勿设置 thinking_enabled")
 
 
 def client_thinking_request_fields(

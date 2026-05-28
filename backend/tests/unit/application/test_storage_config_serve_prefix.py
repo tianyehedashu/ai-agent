@@ -14,8 +14,9 @@ from libs.api.paths import LEGACY_LISTING_STUDIO_IMAGES_PREFIX
 @pytest.mark.unit
 class TestStorageConfigServePrefix:
     def test_row_to_snapshot_overrides_legacy_default(self) -> None:
-        with patch("libs.api.paths.settings.root_path", "/ai-agent"), patch(
-            "libs.api.paths.settings.api_prefix", "/api/v1"
+        with (
+            patch("libs.api.paths.settings.root_path", "/ai-agent"),
+            patch("libs.api.paths.settings.api_prefix", "/api/v1"),
         ):
             row = SimpleNamespace(
                 storage_type="local",
@@ -32,12 +33,13 @@ class TestStorageConfigServePrefix:
                 is_active=True,
             )
             svc = StorageConfigService.__new__(StorageConfigService)
-            snapshot = svc._row_to_snapshot(row)  # noqa: SLF001 — 单测验证映射规则
+            snapshot = svc._row_to_snapshot(row)
             assert snapshot.local_serve_prefix == "/ai-agent/api/v1/listing-studio/images"
 
     def test_row_to_snapshot_keeps_custom_prefix(self) -> None:
-        with patch("libs.api.paths.settings.root_path", "/ai-agent"), patch(
-            "libs.api.paths.settings.api_prefix", "/api/v1"
+        with (
+            patch("libs.api.paths.settings.root_path", "/ai-agent"),
+            patch("libs.api.paths.settings.api_prefix", "/api/v1"),
         ):
             row = SimpleNamespace(
                 storage_type="local",
@@ -54,5 +56,5 @@ class TestStorageConfigServePrefix:
                 is_active=True,
             )
             svc = StorageConfigService.__new__(StorageConfigService)
-            snapshot = svc._row_to_snapshot(row)  # noqa: SLF001
+            snapshot = svc._row_to_snapshot(row)
             assert snapshot.local_serve_prefix == "/cdn/images"

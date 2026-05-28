@@ -265,9 +265,7 @@ class ApiKeyRepository(TenantScopedRepositoryBase[ApiKey]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_gateway_grant_by_id(
-        self, grant_id: uuid.UUID
-    ) -> ApiKeyGatewayGrant | None:
+    async def get_gateway_grant_by_id(self, grant_id: uuid.UUID) -> ApiKeyGatewayGrant | None:
         """按 grant ID 查询 Gateway 授权行。"""
         stmt = select(ApiKeyGatewayGrant).where(ApiKeyGatewayGrant.id == grant_id)
         result = await self.db.execute(stmt)

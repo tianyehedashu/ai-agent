@@ -111,9 +111,7 @@ class TestChatUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            session = await build_session_use_case(db_session).create_session(
-                user_id=str(user.id)
-            )
+            session = await build_session_use_case(db_session).create_session(user_id=str(user.id))
             message = "Hello"
 
             mock_event = AgentEvent(
@@ -271,9 +269,7 @@ class TestChatUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            session = await build_session_use_case(db_session).create_session(
-                user_id=str(user.id)
-            )
+            session = await build_session_use_case(db_session).create_session(user_id=str(user.id))
             session_id = str(session.id)
 
             # Mock LLM Gateway 避免实际 API 调用
@@ -338,6 +334,7 @@ class TestChatUseCase:
             mock_llm_response = AsyncMock()
             mock_llm_response.content = "Python 编程学习"
             service.llm_gateway.chat = AsyncMock(return_value=mock_llm_response)
+
             # Mock get_session_context 返回测试会话，用于后台任务
             @asynccontextmanager
             async def mock_session_context():

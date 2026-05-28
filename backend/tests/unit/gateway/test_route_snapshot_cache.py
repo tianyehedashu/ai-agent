@@ -49,11 +49,15 @@ async def test_get_route_snapshot_metadata_second_call_hits_cache(
     r1 = await get_route_snapshot_metadata(session, team_id, "vm1")
     r2 = await get_route_snapshot_metadata(session, team_id, "vm1")
 
-    assert r1 == r2 == {
-        "virtual_model": "vm1",
-        "primary_models": ["m1"],
-        "strategy": "fallback",
-    }
+    assert (
+        r1
+        == r2
+        == {
+            "virtual_model": "vm1",
+            "primary_models": ["m1"],
+            "strategy": "fallback",
+        }
+    )
     assert repo_instance.resolve_by_virtual_model.await_count == 1
 
 

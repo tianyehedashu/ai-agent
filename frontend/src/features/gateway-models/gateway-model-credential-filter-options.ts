@@ -6,7 +6,7 @@ import type { GatewayModel } from '@/api/gateway'
 import {
   formatGatewayModelCredentialFilterLabel,
   type GatewayModelCredentialFilterOption,
-} from '@/features/gateway-models/gateway-model-credential-filter-select'
+} from '@/features/gateway-models/gateway-model-credential-filter-label'
 
 const UUID_FRAGMENT = /^[0-9a-f]{8}$/i
 

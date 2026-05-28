@@ -17,9 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.execute("DROP INDEX IF EXISTS ix_gateway_models_legacy_user_model_id")
-    op.execute(
-        "ALTER TABLE gateway_models DROP COLUMN IF EXISTS legacy_user_model_id"
-    )
+    op.execute("ALTER TABLE gateway_models DROP COLUMN IF EXISTS legacy_user_model_id")
 
 
 def downgrade() -> None:

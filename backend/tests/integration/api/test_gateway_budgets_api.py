@@ -42,7 +42,9 @@ class TestGatewayBudgetsApi:
         )
         assert r.status_code == 200, r.text
         rows = r.json()
-        assert any(row["target_kind"] == "tenant" and row["target_id"] == str(team.id) for row in rows)
+        assert any(
+            row["target_kind"] == "tenant" and row["target_id"] == str(team.id) for row in rows
+        )
 
     @pytest.mark.asyncio
     async def test_delete_rejects_cross_tenant_budget(
@@ -155,8 +157,7 @@ class TestGatewayBudgetsApi:
         await db_session.commit()
 
         r = await dev_client.get(
-            f"/api/v1/gateway/teams/{team.id}/budgets"
-            f"?target_kind=user&model_name=gpt-4",
+            f"/api/v1/gateway/teams/{team.id}/budgets?target_kind=user&model_name=gpt-4",
             headers=auth_headers,
         )
         assert r.status_code == 200, r.text

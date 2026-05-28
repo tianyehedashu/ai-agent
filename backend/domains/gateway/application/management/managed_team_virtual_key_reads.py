@@ -132,9 +132,7 @@ async def list_managed_team_vkey_entitlements_for_actor(
     ent_repo = EntitlementPlanRepository(session)
     rows_by_vkey = await ent_repo.list_with_quotas_for_vkeys(vkey_ids)
     entitlements_by_vkey_id = {
-        vkey_id: tuple(
-            entitlement_plan_from_orm(plan, quotas) for plan, quotas in plan_rows
-        )
+        vkey_id: tuple(entitlement_plan_from_orm(plan, quotas) for plan, quotas in plan_rows)
         for vkey_id, plan_rows in rows_by_vkey.items()
     }
     return ManagedTeamVkeyEntitlementsPage(entitlements_by_vkey_id=entitlements_by_vkey_id)

@@ -298,7 +298,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 | ``GET /api/v1/openai/v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
 | ``GET /api/v1/gateway/teams/{team_id}/models`` | 管理 UI（JWT + 团队路径） | 含 disabled；可按 provider / credential / ``?type=`` 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
 | ``GET /api/v1/gateway/my-models`` | 个人模型管理 UI | 同上 | 同上 | 同上 |
-| ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
+| ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行；已登录时可传 ``?gateway_team_id=``（与 ``POST /chat`` 请求体同名字段）合并该团队租户注册行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
 
 **能力筛选（``?type=``）**：推断与匹配单一真源为 ``domain/registry_model_types.py``（``infer_model_types_from_tags``、``matches_registry_ability_filter``）。有推导 ``model_types`` 时按成员匹配（例如 ``chat`` + ``supports_vision`` 同时命中 ``type=text`` 与 ``type=image``）；无推导 types 时回退 ``capability`` 列相等（``embedding`` 等）。列表查询参数 ``type`` 与 ``/models/available`` 一致；``?capability=`` 已弃用，仅作短期兼容。写目录种子仍用 ``infer_catalog_capability``，与读侧推导正交。
 
@@ -490,7 +490,7 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ### 6.3 前后端契约
 
-- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider`）；个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
+- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider` / **`gateway_team_id`**，默认 `useGatewayWorkspaceTeamId()` personal 工作区）；发送对话时 `POST /chat` 携带相同 **`gateway_team_id`**。个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
 - `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `mcp`、`account` 等）深链到对应设置子页；**模型与凭据**均在 **AI Gateway**（`/gateway/models?tab=personal|team`、`/gateway/credentials?tab=personal|team`）。旧 `?tab=credentials`、`?tab=models`、`?view=gateway` 会重定向到 Gateway 个人 Tab。**已移除**设置内嵌的 `credentials-tab` / `model-tab` / `provider-config-tab` 等组件；个人凭据 UI 复用 `features/gateway-credentials/personal-credentials-panel.tsx`（仅由 Gateway 凭据页等挂载）。
 - `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；设置页创建/编辑 Key 时可配置 **Gateway 团队授权**（模型/能力/RPM/TPM/guardrail）。`gateway:admin` / `gateway:read` 与 Agent/Session 等 scope 在 UI 标注「预留」— 当前 HTTP 鉴权以 JWT 或 MCP/`gateway:proxy` 为准。

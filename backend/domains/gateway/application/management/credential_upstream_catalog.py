@@ -44,9 +44,7 @@ logger = get_logger(__name__)
 _ImportItemT = TypeVar("_ImportItemT")
 
 
-def _append_import_failure(
-    failed: list[dict[str, str]], upstream_id: str, reason: str
-) -> None:
+def _append_import_failure(failed: list[dict[str, str]], upstream_id: str, reason: str) -> None:
     failed.append({"upstream_model_id": upstream_id, "reason": reason})
 
 
@@ -68,9 +66,7 @@ async def _run_batch_import_loop(
             continue
         existing = match_registered_names(provider_norm, mid, registered_rows)
         if existing:
-            _append_import_failure(
-                failed, mid, format_already_registered_reason(existing)
-            )
+            _append_import_failure(failed, mid, format_already_registered_reason(existing))
             continue
         try:
             entry = await import_one(mid, item)
@@ -82,9 +78,7 @@ async def _run_batch_import_loop(
             continue
         except Exception:
             logger.exception("%s unexpected error upstream_model_id=%s", log_tag, mid)
-            _append_import_failure(
-                failed, mid, "导入失败（内部错误），请稍后重试。"
-            )
+            _append_import_failure(failed, mid, "导入失败（内部错误），请稍后重试。")
             continue
         if entry is None:
             continue
@@ -176,9 +170,7 @@ class CredentialUpstreamCatalogService:
                 UpstreamModelItem(
                     id=mid,
                     owned_by=ob,
-                    inferred_model_types=list(
-                        infer_upstream_model_types_for_catalog("", mid, ob)
-                    ),
+                    inferred_model_types=list(infer_upstream_model_types_for_catalog("", mid, ob)),
                 )
                 for mid, ob in raw.items
             )
@@ -438,9 +430,7 @@ class CredentialUpstreamCatalogService:
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items = list(items)
 
-        async def import_one(
-            mid: str, payload: tuple[str, str | None]
-        ) -> dict[str, Any] | None:
+        async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
             _upstream_id, name_override = payload
             base_name = (name_override or "").strip() or _slugify_alias(mid)
             unique_name = await self._unique_team_model_name(tenant_id, base_name)
@@ -494,9 +484,7 @@ class CredentialUpstreamCatalogService:
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items = list(items)
 
-        async def import_one(
-            mid: str, payload: tuple[str, str | None]
-        ) -> dict[str, Any] | None:
+        async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
             _upstream_id, name_override = payload
             base_name = (name_override or "").strip() or _slugify_alias(mid)
             unique_name = await self._unique_system_model_name(base_name)

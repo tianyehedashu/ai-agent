@@ -8,12 +8,11 @@ import pytest
 
 from domains.agent.application.agent_use_case import AgentUseCase
 from domains.identity.infrastructure.models.user import User
+from libs.exceptions import NotFoundError
 from libs.iam.permission_context import (
-    PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import NotFoundError
 
 
 @pytest.mark.unit

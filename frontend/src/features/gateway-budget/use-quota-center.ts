@@ -229,6 +229,7 @@ export interface QuotaCenterState {
   submitBatch: () => void
   batchPending: boolean
   confirmDelete: (rule: QuotaRule) => void
+  confirmBatchDelete: (rules: QuotaRule[]) => Promise<void>
   deletePending: boolean
   refresh: () => void
   memberOptions: { id: string; label: string }[]
@@ -261,6 +262,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       layer: layerFilter === 'all' ? undefined : (layerFilter as QuotaRuleLayer),
       model_name: modelFilter || undefined,
       period: periodFilter === 'all' ? undefined : (periodFilter as 'daily' | 'monthly' | 'total'),
+      include_usage: true,
     }),
     [layerFilter, modelFilter, periodFilter]
   )
@@ -456,6 +458,40 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [deleteMutation, toast]
   )
 
+  const confirmBatchDelete = useCallback(
+    async (rules: QuotaRule[]) => {
+      const deletable = rules.filter((r) => r.source_ref.budget_id !== null)
+      if (deletable.length === 0) {
+        toast({
+          title: '所选规则均不可删除（计划类配额请至凭据/Key 页管理）',
+          variant: 'destructive',
+        })
+        return
+      }
+      let succeeded = 0
+      let failed = 0
+      for (const rule of deletable) {
+        const budgetId = rule.source_ref.budget_id
+        if (!budgetId) continue
+        try {
+          await deleteMutation.mutateAsync(budgetId)
+          succeeded++
+        } catch {
+          failed++
+        }
+      }
+      if (failed > 0) {
+        toast({
+          title: `批量删除完成：${String(succeeded)} 条成功，${String(failed)} 条失败`,
+          variant: failed === deletable.length ? 'destructive' : 'default',
+        })
+      } else {
+        toast({ title: `已删除 ${String(succeeded)} 条配额规则` })
+      }
+    },
+    [deleteMutation, toast]
+  )
+
   const selectRule = useCallback((rule: QuotaRule) => {
     setSelectedId(quotaRuleRowId(rule))
   }, [])
@@ -490,6 +526,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     submitBatch,
     batchPending: batchMutation.isPending,
     confirmDelete,
+    confirmBatchDelete,
     deletePending: deleteMutation.isPending,
     refresh,
     memberOptions,

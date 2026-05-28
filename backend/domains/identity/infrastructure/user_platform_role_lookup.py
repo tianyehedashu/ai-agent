@@ -13,9 +13,7 @@ class UserPlatformRoleLookupAdapter(UserPlatformRoleLookupPort):
     def __init__(self, session: AsyncSession) -> None:
         self._users = SQLAlchemyUserRepository(session)
 
-    async def roles_by_user_ids(
-        self, user_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+    async def roles_by_user_ids(self, user_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, str]:
         if not user_ids:
             return {}
         unique_ids = list(dict.fromkeys(user_ids))

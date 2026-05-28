@@ -33,10 +33,13 @@ async def test_embedding_preflight_rejects_chat_registered_model(db_session: Any
         guardrail_enabled=False,
     )
     uc = ProxyUseCase(db_session)
-    with patch(
-        "domains.gateway.application.proxy_guard.resolve_model_or_route",
-        AsyncMock(return_value=_resolved("chat")),
-    ), pytest.raises(CapabilityNotAllowedError):
+    with (
+        patch(
+            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            AsyncMock(return_value=_resolved("chat")),
+        ),
+        pytest.raises(CapabilityNotAllowedError),
+    ):
         await run_proxy_inbound_preflight(
             uc.guard,
             ctx,
@@ -98,10 +101,13 @@ async def test_preflight_rejects_unregistered_model(db_session: Any) -> None:
         guardrail_enabled=False,
     )
     uc = ProxyUseCase(db_session)
-    with patch(
-        "domains.gateway.application.proxy_guard.resolve_model_or_route",
-        AsyncMock(return_value=None),
-    ), pytest.raises(GatewayModelNotFoundError, match="deepseek-v4-flash"):
+    with (
+        patch(
+            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            AsyncMock(return_value=None),
+        ),
+        pytest.raises(GatewayModelNotFoundError, match="deepseek-v4-flash"),
+    ):
         await run_proxy_inbound_preflight(
             uc.guard,
             ctx,

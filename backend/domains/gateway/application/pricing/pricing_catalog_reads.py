@@ -205,9 +205,7 @@ class PricingCatalogReadService:
         for row in rows:
             try:
                 model_ref = (
-                    ref_map.get(row.gateway_model_id)
-                    if row.gateway_model_id is not None
-                    else None
+                    ref_map.get(row.gateway_model_id) if row.gateway_model_id is not None else None
                 )
                 out.append(
                     downstream_row_to_response_dict(

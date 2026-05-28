@@ -120,6 +120,31 @@ describe('gatewayApi.listAvailableModels', () => {
     expect(url).toContain('mode=chat')
   })
 
+  it('附带 gateway_team_id query', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        system_models: {
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+          has_next: false,
+          has_prev: false,
+        },
+        user_models: {
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+          has_next: false,
+          has_prev: false,
+        },
+      })
+    )
+    await gatewayApi.listAvailableModels('text', undefined, { gatewayTeamId: TEAM_ID })
+    expect(getLastFetchUrl()).toContain(`gateway_team_id=${TEAM_ID}`)
+  })
+
   it('附带 page 与 page_size query', async () => {
     mockFetch.mockResolvedValueOnce(
       createMockResponse({

@@ -337,9 +337,7 @@ async def tool_execution_error_handler(
     exc: ToolExecutionError,
 ) -> JSONResponse:
     logger.error("Tool execution error: %s - %s", exc.tool_name, exc.message)
-    return problem_response_from_agent_error(
-        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @app.exception_handler(CheckpointError)
@@ -348,9 +346,7 @@ async def checkpoint_error_handler(
     exc: CheckpointError,
 ) -> JSONResponse:
     logger.error("Checkpoint error: %s", exc.message)
-    return problem_response_from_agent_error(
-        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @app.exception_handler(AIAgentError)
@@ -359,9 +355,7 @@ async def ai_agent_error_handler(
     exc: AIAgentError,
 ) -> JSONResponse:
     logger.error("AI Agent error: %s", exc.message)
-    return problem_response_from_agent_error(
-        request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return problem_response_from_agent_error(request, exc, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @app.exception_handler(Exception)
@@ -510,6 +504,7 @@ async def health() -> dict[str, str]:
 
 # Docker 本地探针：ROOT_PATH 非空时保留根级 /health
 if settings.root_path.strip("/"):
+
     @app.get("/health")
     async def health_root_alias() -> dict[str, str]:
         """健康检查（无服务前缀别名，便于容器内 curl localhost:8000/health）"""

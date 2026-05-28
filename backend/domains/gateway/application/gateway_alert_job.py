@@ -69,11 +69,7 @@ async def run_gateway_alert_cycle() -> None:
                 )
                 channels = snapshot.channels or {}
                 raw_url = channels.get("webhook")
-                if (
-                    isinstance(raw_url, str)
-                    and raw_url.strip()
-                    and payload is not None
-                ):
+                if isinstance(raw_url, str) and raw_url.strip() and payload is not None:
                     webhook_queue.append((raw_url.strip(), payload))
             except Exception as exc:  # pragma: no cover
                 logger.warning(

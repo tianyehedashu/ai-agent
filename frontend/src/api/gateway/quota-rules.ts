@@ -97,6 +97,7 @@ export interface ListQuotaRulesParams {
   credential_id?: string
   model_name?: string
   period?: 'daily' | 'monthly' | 'total'
+  include_usage?: boolean
 }
 
 export const quotaRulesApi = {
@@ -107,6 +108,7 @@ export const quotaRulesApi = {
     if (params?.credential_id) search.set('credential_id', params.credential_id)
     if (params?.model_name) search.set('model_name', params.model_name)
     if (params?.period) search.set('period', params.period)
+    if (params?.include_usage) search.set('include_usage', 'true')
     const qs = search.toString()
     const path = qs ? `/quota-rules?${qs}` : '/quota-rules'
     return apiClient.get<QuotaRule[]>(teamGatewayPath(teamId, path))

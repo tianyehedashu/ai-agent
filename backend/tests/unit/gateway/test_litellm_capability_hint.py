@@ -16,9 +16,7 @@ class _FakeHint:
     def __init__(self, hints: LitellmModelInfoHints | None) -> None:
         self._hints = hints
 
-    def get_model_hints(
-        self, *, provider: str, real_model: str
-    ) -> LitellmModelInfoHints | None:
+    def get_model_hints(self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
         _ = provider, real_model
         return self._hints
 

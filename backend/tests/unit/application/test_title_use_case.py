@@ -11,7 +11,6 @@ from domains.identity.infrastructure.models.user import User
 from domains.session.application import TitleUseCase
 from domains.session.application.ports import TitleLlmChatResult
 from libs.iam.permission_context import (
-    PermissionContext,
     clear_permission_context,
     set_permission_context,
 )

@@ -77,9 +77,7 @@ async def test_audit_reports_missing_primary_and_fallback_names(db_session, test
     await db_session.flush()
 
     report = await audit_gateway_routes(db_session)
-    fields_with_missing = {
-        (i.virtual_model, i.field, i.missing_names) for i in report.issues
-    }
+    fields_with_missing = {(i.virtual_model, i.field, i.missing_names) for i in report.issues}
     assert (virtual, "primary_models", (missing,)) in fields_with_missing
     assert (virtual, "fallbacks_general", (missing,)) in fields_with_missing
 

@@ -66,9 +66,9 @@ def build_volcengine_video_create_request(
     watermark: bool = False,
 ) -> VolcengineVideoCreateRequest:
     """根据凭据与 prompt 构建 Seedance 视频任务创建请求。"""
-    base = (resolve_effective_api_base("volcengine", api_base) or DEFAULT_VOLCENGINE_API_BASE).rstrip(
-        "/"
-    )
+    base = (
+        resolve_effective_api_base("volcengine", api_base) or DEFAULT_VOLCENGINE_API_BASE
+    ).rstrip("/")
     upstream_model = normalize_volcengine_video_model(model_id)
     duration = parse_video_duration_seconds(seconds)
     return VolcengineVideoCreateRequest(

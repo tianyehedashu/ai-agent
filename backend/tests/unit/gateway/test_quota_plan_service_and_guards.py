@@ -108,7 +108,9 @@ class _FakeRedis:
     async def get(self, key: str) -> str | None:
         return self.values.get(key)
 
-    async def zrange(self, key: str, _start: int, _end: int, *, withscores: bool = False) -> list[Any]:
+    async def zrange(
+        self, key: str, _start: int, _end: int, *, withscores: bool = False
+    ) -> list[Any]:
         items = sorted(self.zsets.get(key, {}).items(), key=lambda item: item[1])
         if withscores:
             return items
@@ -263,7 +265,9 @@ class _FakeEntitlementRepo:
     def __init__(self, _session: object) -> None:
         pass
 
-    async def get_active_for_scope(self, *_args: object, **_kwargs: object) -> _FakeEntitlementPlan | None:
+    async def get_active_for_scope(
+        self, *_args: object, **_kwargs: object
+    ) -> _FakeEntitlementPlan | None:
         return self.plan
 
     async def list_quotas(self, _plan_id: uuid.UUID) -> list[_FakeEntitlementQuota]:
@@ -371,7 +375,9 @@ async def test_entitlement_guard_exhaustion_is_hard_429_semantics(
         valid_until=now + timedelta(days=1),
     )
     _FakeEntitlementRepo.quotas = [
-        _FakeEntitlementQuota(id=uuid.uuid4(), label="daily", window_seconds=86400, limit_requests=1)
+        _FakeEntitlementQuota(
+            id=uuid.uuid4(), label="daily", window_seconds=86400, limit_requests=1
+        )
     ]
     monkeypatch.setattr(entitlement_guard_module, "EntitlementPlanRepository", _FakeEntitlementRepo)
 
@@ -431,7 +437,9 @@ class _FakeProviderRepo:
     def __init__(self, _session: object) -> None:
         pass
 
-    async def get_active_for_credential_model(self, *_args: object, **_kwargs: object) -> _FakeProviderPlan | None:
+    async def get_active_for_credential_model(
+        self, *_args: object, **_kwargs: object
+    ) -> _FakeProviderPlan | None:
         return self.plan
 
     async def get(self, _plan_id: uuid.UUID) -> _FakeProviderPlan | None:
@@ -529,4 +537,3 @@ async def test_provider_plan_guard_mark_upstream_exhausted_forces_quota(
     assert forced_plan_id == plan_id
     assert specs[0].reset_strategy == "calendar_daily_utc"
     assert reason == "upstream_signal:RateLimitError"
-

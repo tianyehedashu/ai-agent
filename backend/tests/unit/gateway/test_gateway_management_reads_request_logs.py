@@ -47,7 +47,9 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
         return [log_own_vkey, log_platform_own], 2
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
-    svc._vkeys.list_for_tenant = AsyncMock(side_effect=AssertionError("member list must not list vkeys"))
+    svc._vkeys.list_for_tenant = AsyncMock(
+        side_effect=AssertionError("member list must not list vkeys")
+    )
 
     items, total = await svc.list_request_logs(
         ctx,
@@ -89,7 +91,9 @@ async def test_list_request_logs_admin_no_extra_filter() -> None:
         return rows, 1
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
-    svc._vkeys.list_for_tenant = AsyncMock(side_effect=AssertionError("admin path must not list vkeys"))
+    svc._vkeys.list_for_tenant = AsyncMock(
+        side_effect=AssertionError("admin path must not list vkeys")
+    )
 
     items, total = await svc.list_request_logs(
         ctx,
@@ -224,9 +228,7 @@ def test_resolve_usage_axis_member_keeps_filter_when_vkey_filter_set() -> None:
         is_platform_admin=False,
     )
 
-    axis = GatewayManagementReadService._resolve_usage_axis(
-        ctx_member, UsageAggregation.WORKSPACE
-    )
+    axis = GatewayManagementReadService._resolve_usage_axis(ctx_member, UsageAggregation.WORKSPACE)
     assert axis.is_workspace() and axis.member_user_id == uid
 
     axis2 = GatewayManagementReadService._resolve_usage_axis(
@@ -234,9 +236,7 @@ def test_resolve_usage_axis_member_keeps_filter_when_vkey_filter_set() -> None:
     )
     assert axis2.is_workspace() and axis2.member_user_id == uid
 
-    axis3 = GatewayManagementReadService._resolve_usage_axis(
-        ctx_member, UsageAggregation.USER
-    )
+    axis3 = GatewayManagementReadService._resolve_usage_axis(ctx_member, UsageAggregation.USER)
     assert axis3.is_user() and axis3.user_id == uid
 
     ctx_admin = ManagementTeamContext(
@@ -246,7 +246,5 @@ def test_resolve_usage_axis_member_keeps_filter_when_vkey_filter_set() -> None:
         user_id=uid,
         is_platform_admin=True,
     )
-    axis4 = GatewayManagementReadService._resolve_usage_axis(
-        ctx_admin, UsageAggregation.WORKSPACE
-    )
+    axis4 = GatewayManagementReadService._resolve_usage_axis(ctx_admin, UsageAggregation.WORKSPACE)
     assert axis4.is_workspace() and axis4.member_user_id is None

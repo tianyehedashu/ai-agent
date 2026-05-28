@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from libs.exceptions import AuthenticationError
 from fastapi.security import HTTPAuthorizationCredentials
 import pytest
 
 from domains.gateway.presentation.deps import pick_gateway_proxy_plain_token
+from libs.exceptions import AuthenticationError
 
 
 def test_pick_token_prefers_bearer_over_x_api_key() -> None:

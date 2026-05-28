@@ -18,9 +18,7 @@ def test_timing_response_headers_non_stream() -> None:
         pricing_ms=20,
         direct_decide_ms=10,
     )
-    headers = timing_response_headers(
-        GatewayProxyTiming.from_prepare(prepare, upstream_ms=7100)
-    )
+    headers = timing_response_headers(GatewayProxyTiming.from_prepare(prepare, upstream_ms=7100))
     assert headers[HEADER_GATEWAY_PREFLIGHT_MS] == "120"
     assert headers[HEADER_GATEWAY_UPSTREAM_MS] == "7100"
     assert headers[HEADER_GATEWAY_TIMING] == format_timing_breakdown(

@@ -2,13 +2,13 @@
 
 from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
 from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.temperature_policy import TEMPERATURE_POLICY_FIXED_1
 from domains.gateway.domain.upstream_policy import (
     clamp_max_tokens,
     is_deepseek_reasoner,
     is_deepseek_thinking_model,
     preprocess_messages_for_reasoner,
 )
-from domains.gateway.domain.temperature_policy import TEMPERATURE_POLICY_FIXED_1
 
 
 def test_deepseek_reasoner_message_padding() -> None:

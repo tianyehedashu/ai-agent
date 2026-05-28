@@ -8,13 +8,13 @@ import pytest
 
 from domains.identity.presentation.deps import ADMIN_ROLE, check_tenant_access
 from domains.identity.presentation.schemas import CurrentUser
+from libs.exceptions import PermissionDeniedError
 from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
 from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import PermissionDeniedError
 
 pytestmark = pytest.mark.unit
 

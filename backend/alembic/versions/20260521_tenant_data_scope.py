@@ -82,12 +82,8 @@ def upgrade() -> None:
         sa.Column("virtual_model", sa.String(200), nullable=False),
         sa.Column("primary_models", postgresql.ARRAY(sa.String(200)), nullable=False),
         sa.Column("fallbacks_general", postgresql.ARRAY(sa.String(200)), nullable=False),
-        sa.Column(
-            "fallbacks_content_policy", postgresql.ARRAY(sa.String(200)), nullable=False
-        ),
-        sa.Column(
-            "fallbacks_context_window", postgresql.ARRAY(sa.String(200)), nullable=False
-        ),
+        sa.Column("fallbacks_content_policy", postgresql.ARRAY(sa.String(200)), nullable=False),
+        sa.Column("fallbacks_context_window", postgresql.ARRAY(sa.String(200)), nullable=False),
         sa.Column("strategy", sa.String(40), server_default="simple-shuffle", nullable=False),
         sa.Column("retry_policy", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("enabled", sa.Boolean(), server_default="true", nullable=False),

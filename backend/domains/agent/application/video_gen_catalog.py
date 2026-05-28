@@ -57,7 +57,9 @@ def _fallback_duration_set(vendor_model_id: str) -> set[int]:
     return {5, 10, 15}
 
 
-def allowed_durations_for_video_model(catalog: list[dict[str, Any]], vendor_model_id: str) -> set[int]:
+def allowed_durations_for_video_model(
+    catalog: list[dict[str, Any]], vendor_model_id: str
+) -> set[int]:
     """从合并目录解析某 ``value``（厂商 model 字符串）允许的时长集合。"""
     for entry in catalog:
         if str(entry.get("value")) == vendor_model_id:

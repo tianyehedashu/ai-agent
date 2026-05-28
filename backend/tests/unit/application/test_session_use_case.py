@@ -11,12 +11,12 @@ from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from domains.session.domain.entities import SessionOwner
 from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
+from libs.exceptions import NotFoundError
 from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import NotFoundError
 
 
 @pytest.mark.unit
@@ -56,9 +56,7 @@ class TestSessionUseCase:
             title="Test Session",
         )
 
-        expected_tenant = await PersonalTeamProvisioner(db_session).ensure_personal_team(
-            user.id
-        )
+        expected_tenant = await PersonalTeamProvisioner(db_session).ensure_personal_team(user.id)
         assert session.id is not None
         assert session.tenant_id == expected_tenant
         assert session.title == "Test Session"

@@ -45,8 +45,11 @@ from domains.agent.application.mcp_dynamic_tool_use_case import (  # noqa: TC001
 )
 from domains.agent.application.mcp_server_facade import (
     SERVER_MAP,
+    build_prompt,
+    build_tool_fn,
     get_mcp_server_info,
     list_mcp_servers_summary,
+    verify_mcp_access,
 )
 from domains.agent.application.mcp_server_facade import (
     get_mcp_server as _get_server,
@@ -55,10 +58,7 @@ from domains.agent.application.mcp_server_facade import (
     handle_mcp_streamable_request as _handle_mcp_request,
 )
 from domains.agent.application.mcp_server_facade import (
-    build_prompt,
-    build_tool_fn,
     scope_to_cursor_name as _scope_to_cursor_name,
-    verify_mcp_access,
 )
 from domains.agent.domain.mcp.scopes import MCPServerScope
 from domains.identity.presentation.deps import (
@@ -83,6 +83,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 router = APIRouter()
+
 
 @router.get("/client-config", include_in_schema=False)
 async def mcp_client_config(request: Request):

@@ -626,8 +626,12 @@ async def _persist_event(
         else None
     )
     real_model = response_model or kwargs.get("model")
-    real_model_str = str(real_model).strip() if isinstance(real_model, str) and real_model.strip() else None
-    route_name_str = str(route_name).strip() if isinstance(route_name, str) and route_name.strip() else None
+    real_model_str = (
+        str(real_model).strip() if isinstance(real_model, str) and real_model.strip() else None
+    )
+    route_name_str = (
+        str(route_name).strip() if isinstance(route_name, str) and route_name.strip() else None
+    )
 
     cred_id, cred_name_snap = _credential_snapshots_for_persist(metadata, kwargs)
 
@@ -738,9 +742,7 @@ async def _persist_event(
                     user_id=user_id,
                     vkey_id=vkey_id,
                     team_id=team_id,
-                    platform_api_key_id=_to_uuid(
-                        metadata.get("gateway_platform_api_key_id")
-                    ),
+                    platform_api_key_id=_to_uuid(metadata.get("gateway_platform_api_key_id")),
                 )
                 await RequestLogRepository(session).insert(
                     team_id=team_id,

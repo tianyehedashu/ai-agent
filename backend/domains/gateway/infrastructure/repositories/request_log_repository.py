@@ -620,9 +620,7 @@ class RequestLogRepository:
         ):
             return group_expr == key
         if parent.group_by == UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL:
-            raise ValueError(
-                "breakdown is not supported for user_model_credential grouping"
-            )
+            raise ValueError("breakdown is not supported for user_model_credential grouping")
         raise ValueError(f"Unknown parent group_by: {parent.group_by!r}")
 
     async def count_usage_requests_by_axis(

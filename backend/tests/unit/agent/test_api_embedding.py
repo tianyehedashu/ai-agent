@@ -13,12 +13,15 @@ async def test_api_embedding_calls_gateway_proxy() -> None:
     proxy.embedding = AsyncMock(return_value=[[0.1, 0.2]])
     emb = APIEmbedding(model="text-embedding-3-small", gateway_proxy=proxy)
     uid = __import__("uuid").uuid4()
-    with patch(
-        "domains.agent.infrastructure.llm.embeddings.resolve_internal_gateway_user_id",
-        return_value=uid,
-    ), patch(
-        "domains.agent.infrastructure.llm.embeddings.resolve_gateway_bridge_attribution",
-        return_value=MagicMock(actor_user_id=uid, billing_team_id=uid),
+    with (
+        patch(
+            "domains.agent.infrastructure.llm.embeddings.resolve_internal_gateway_user_id",
+            return_value=uid,
+        ),
+        patch(
+            "domains.agent.infrastructure.llm.embeddings.resolve_gateway_bridge_attribution",
+            return_value=MagicMock(actor_user_id=uid, billing_team_id=uid),
+        ),
     ):
         vec = await emb.embed("hello")
     assert vec == [0.1, 0.2]

@@ -182,8 +182,7 @@ async def dashboard_statistics(
     show_cost = can_view_pricing_cost_fields(team)
     return build_usage_statistics_response(
         items=[
-            _usage_statistics_item_response(item, show_cost=show_cost)
-            for item in summary.items
+            _usage_statistics_item_response(item, show_cost=show_cost) for item in summary.items
         ],
         total=group_total,
         page=page.page,

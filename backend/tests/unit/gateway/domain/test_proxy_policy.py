@@ -40,9 +40,7 @@ def test_allows_unregistered_gateway_model(
 
 
 def test_is_router_model_miss_recognizes_healthy_deployments_error() -> None:
-    exc = RuntimeError(
-        "litellm.BadRequestError: no healthy deployments for model=foo"
-    )
+    exc = RuntimeError("litellm.BadRequestError: no healthy deployments for model=foo")
     assert is_router_model_miss(exc) is True
 
 
@@ -65,9 +63,7 @@ def test_is_router_deployment_cooldown_recognizes_router_rate_limit_error() -> N
 
 
 def test_is_router_deployment_cooldown_from_message() -> None:
-    exc = RuntimeError(
-        "No deployments available for selected model, Try again in 45 seconds."
-    )
+    exc = RuntimeError("No deployments available for selected model, Try again in 45 seconds.")
     assert is_router_deployment_cooldown(exc) is True
     assert is_router_model_miss(exc) is False
     assert router_cooldown_retry_after(exc) == 45

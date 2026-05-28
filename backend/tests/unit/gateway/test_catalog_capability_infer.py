@@ -6,9 +6,9 @@ from dataclasses import replace
 
 import pytest
 
-from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.application.catalog_capability import infer_catalog_capability
 from domains.gateway.application.config_catalog_sync import model_types_for_gateway_registration
+from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
 from domains.gateway.domain.registry_model_types import infer_model_types_from_tags
 
 

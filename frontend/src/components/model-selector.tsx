@@ -37,6 +37,8 @@ type SelectorModel = (SystemModel | UserModel) & {
 interface ModelSelectorProps {
   modelType?: ModelType
   listMode?: ModelListMode
+  /** Gateway 工作区团队（与 POST /chat gateway_team_id 一致） */
+  gatewayTeamId?: string | null
   value?: string | null
   onChange: (modelId: string | null) => void
   placeholder?: string
@@ -57,6 +59,7 @@ function isSelectableModel(model: SelectorModel): boolean {
 export function ModelSelector({
   modelType,
   listMode,
+  gatewayTeamId,
   value,
   onChange,
   placeholder = '默认模型',
@@ -68,6 +71,9 @@ export function ModelSelector({
   const [selectOpen, setSelectOpen] = useState(false)
 
   const providerForApi = showProviderFilter && channel !== CHANNEL_ALL ? channel : undefined
+  /** 传入 gatewayTeamId 时等待 personal 工作区就绪，避免无 team 的首轮请求 */
+  const modelsQueryEnabled = gatewayTeamId === undefined || gatewayTeamId !== null
+  const waitingForTeam = gatewayTeamId === null
 
   const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
@@ -76,10 +82,12 @@ export function ModelSelector({
         modelType,
         listMode ?? '',
         showProviderFilter ? channel : '',
+        gatewayTeamId ?? '',
       ],
       queryFn: ({ pageParam }) =>
         gatewayApi.listAvailableModels(modelType, providerForApi, {
           ...(listMode ? { mode: listMode } : {}),
+          ...(gatewayTeamId ? { gatewayTeamId } : {}),
           page: pageParam,
           page_size: SELECTOR_PAGE_SIZE,
         }),
@@ -92,7 +100,10 @@ export function ModelSelector({
       },
       staleTime: 30_000,
       retry: 1,
+      enabled: modelsQueryEnabled,
     })
+
+  const showLoading = isLoading || waitingForTeam
 
   // 仅在下拉打开时继续翻页，避免 mount 时拉全量
   useEffect(() => {
@@ -189,10 +200,10 @@ export function ModelSelector({
       value={value ?? '__default__'}
       onValueChange={handleChange}
       onOpenChange={handleMainOpenChange}
-      disabled={disabled || isLoading}
+      disabled={disabled || showLoading}
     >
       <SelectTrigger className={className}>
-        {isLoading ? (
+        {showLoading ? (
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             加载中...
@@ -267,7 +278,7 @@ export function ModelSelector({
 
   return (
     <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-      <Select value={channel} onValueChange={setChannel} disabled={disabled || isLoading}>
+      <Select value={channel} onValueChange={setChannel} disabled={disabled || showLoading}>
         <SelectTrigger
           className="h-7 w-full min-w-[6.5rem] max-w-[9rem] border-0 bg-muted/30 text-[11px] shadow-none sm:h-8 sm:text-xs"
           title={PROVIDER_CHANNEL_FILTER_HINT_LONG}

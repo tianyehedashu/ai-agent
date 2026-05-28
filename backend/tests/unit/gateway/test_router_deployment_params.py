@@ -12,13 +12,13 @@ from domains.gateway.application.router_deployment_params import (
     resolve_deployment_litellm_params,
     resolve_volcengine_image_deployment,
 )
-from libs.exceptions import ValidationError
 from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayModel,
     SystemProviderCredential,
 )
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
+from libs.exceptions import ValidationError
 
 
 @pytest.mark.asyncio

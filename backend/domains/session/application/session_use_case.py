@@ -67,7 +67,9 @@ class SessionUseCase:
             sandbox_service: 沙箱生命周期服务（可选，用于会话删除时联动清理沙箱）
         """
         if message_service is None:
-            raise ValueError("message_service is required; inject MessageUseCase from composition root")
+            raise ValueError(
+                "message_service is required; inject MessageUseCase from composition root"
+            )
         self.db = db
         self.session_repo = session_repo or SessionRepository(db)
         self.message_service = message_service

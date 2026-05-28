@@ -30,8 +30,9 @@ from domains.gateway.application.quota_plan_service import get_quota_plan_servic
 from domains.gateway.application.upstream_adapter import UpstreamAdapter
 
 if TYPE_CHECKING:
-    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 
 
 class ProxyUseCase(ProxyChatMixin, ProxyNonChatMixin):

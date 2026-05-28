@@ -29,15 +29,9 @@ if TYPE_CHECKING:
 
     from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 
-_NO_VISIBLE_TEXT_MODELS_MSG = (
-    "无可用文本模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
-)
-_NO_VISIBLE_VISION_MODELS_MSG = (
-    "无可用视觉模型。请先在 Gateway 配置支持 vision 的模型并同步目录。"
-)
-_NO_VISIBLE_IMAGE_GEN_MODELS_MSG = (
-    "无可用图像生成模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
-)
+_NO_VISIBLE_TEXT_MODELS_MSG = "无可用文本模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
+_NO_VISIBLE_VISION_MODELS_MSG = "无可用视觉模型。请先在 Gateway 配置支持 vision 的模型并同步目录。"
+_NO_VISIBLE_IMAGE_GEN_MODELS_MSG = "无可用图像生成模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
 
 VALID_MODEL_TYPES = PERSONAL_MODEL_TYPES
 
@@ -223,7 +217,9 @@ class ChatModelResolutionUseCase:
             raise ValidationError(_NO_VISIBLE_TEXT_MODELS_MSG)
         return ResolvedModel(model=picked)
 
-    def _resolve_default_vision_model(self, allowed_image_system_ids: frozenset[str]) -> ResolvedModel:
+    def _resolve_default_vision_model(
+        self, allowed_image_system_ids: frozenset[str]
+    ) -> ResolvedModel:
         picked = pick_scenario_from_visible(
             env_override=settings.vision_model,
             visible_ids=allowed_image_system_ids,

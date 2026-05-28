@@ -104,9 +104,7 @@ class S3ImageStore:
                 async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as http:
                     response = await http.head(probe_url)
                     if response.status_code >= 400:
-                        raise OSError(
-                            f"公开 URL 不可访问 ({response.status_code}): {probe_url}"
-                        )
+                        raise OSError(f"公开 URL 不可访问 ({response.status_code}): {probe_url}")
             finally:
                 await client.delete_object(Bucket=self._bucket, Key=probe_key)
 

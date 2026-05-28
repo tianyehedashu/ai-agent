@@ -337,11 +337,7 @@ class BudgetService:
         返回 ``(reserved_requests, reserved_tokens)``。
         """
         reserve_requests = limit_requests is not None and limit_requests > 0
-        reserve_tokens = (
-            limit_tokens is not None
-            and limit_tokens > 0
-            and estimate_tokens > 0
-        )
+        reserve_tokens = limit_tokens is not None and limit_tokens > 0 and estimate_tokens > 0
         if not reserve_requests and not reserve_tokens:
             return (0, 0)
 

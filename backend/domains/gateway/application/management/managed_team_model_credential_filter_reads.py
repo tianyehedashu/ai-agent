@@ -40,8 +40,7 @@ async def list_managed_team_model_credential_filters_for_actor(
         is_platform_admin=is_platform_admin,
     )
     snapshots = [
-        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
-        for m in memberships
+        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role) for m in memberships
     ]
     plan = build_managed_team_readable_resource_list_plan(
         snapshots,

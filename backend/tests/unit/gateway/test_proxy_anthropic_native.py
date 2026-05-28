@@ -187,12 +187,8 @@ async def test_anthropic_messages_passes_body_fields_to_router(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(
-        use_case.litellm, "should_use_internal_direct_litellm", no_direct
-    )
-    monkeypatch.setattr(
-        use_case.litellm, "router_anthropic_messages", fake_router_anthropic
-    )
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
         _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
@@ -273,12 +269,8 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(
-        use_case.litellm, "should_use_internal_direct_litellm", no_direct
-    )
-    monkeypatch.setattr(
-        use_case.litellm, "router_anthropic_messages", fake_router_anthropic
-    )
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
+    monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
         _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None

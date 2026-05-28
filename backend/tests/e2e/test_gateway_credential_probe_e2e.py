@@ -17,7 +17,13 @@ import uuid
 import httpx
 import pytest
 
-from tests.e2e.config import E2E_API_BASE_URL as API_BASE_URL, e2e_api_v1_path, e2e_service_health_path
+from tests.e2e.config import (
+    E2E_API_BASE_URL as API_BASE_URL,
+)
+from tests.e2e.config import (
+    e2e_api_v1_path,
+    e2e_service_health_path,
+)
 
 
 def _require_e2e_credentials() -> tuple[str, str]:
@@ -45,7 +51,9 @@ class TestGatewayCredentialProbeE2E:
         self, http: httpx.Client
     ) -> None:
         email, password = _require_e2e_credentials()
-        tr = http.post(e2e_api_v1_path("auth", "token"), json={"email": email, "password": password})
+        tr = http.post(
+            e2e_api_v1_path("auth", "token"), json={"email": email, "password": password}
+        )
         assert tr.status_code == 200, tr.text
         token = tr.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}

@@ -49,13 +49,10 @@ from domains.tenancy.application.team_service import TeamService
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-
 logger = get_logger(__name__)
-
 
 
 class GatewayManagementWriteBaseMixin:
@@ -94,9 +91,11 @@ class GatewayManagementWriteBaseMixin:
         )
         return await self._ensure_personal_tenant_id(user_id)
 
-    async def _assert_user_owns_credential(self, user_id: uuid.UUID, credential_id: uuid.UUID) -> None:
+    async def _assert_user_owns_credential(
+        self, user_id: uuid.UUID, credential_id: uuid.UUID
+    ) -> None:
         cred = await self._creds.get(credential_id)
-        if cred is None or cred.scope != 'user' or cred.scope_id != user_id:
+        if cred is None or cred.scope != "user" or cred.scope_id != user_id:
             raise CredentialNotFoundError(str(credential_id))
 
     async def _cascade_delete_models_for_credential(self, credential_id: uuid.UUID) -> int:
@@ -134,46 +133,58 @@ class GatewayManagementWriteBaseMixin:
             is_active=is_active,
         )
 
-    async def _assert_credential_in_team(self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
+    async def _assert_credential_in_team(
+        self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
+    ) -> None:
         """与 ``list_credentials_for_team`` 可见集合一致：team-scope 凭据 + 平台管理员可见 system。"""
-        row = await self._creds.get_bindable_for_team_gateway_model(credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin)
+        row = await self._creds.get_bindable_for_team_gateway_model(
+            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+        )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
 
-    async def _assert_provider_plan_in_credential(self, plan_id: uuid.UUID, *, credential_id: uuid.UUID) -> ProviderPlan:
+    async def _assert_provider_plan_in_credential(
+        self, plan_id: uuid.UUID, *, credential_id: uuid.UUID
+    ) -> ProviderPlan:
         plan = await self._provider_plans.get(plan_id)
         if plan is None or plan.credential_id != credential_id:
-            raise ManagementEntityNotFoundError('provider_plan', str(plan_id))
+            raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
         return plan
 
-    async def _assert_vkey_in_team(self, vkey_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
+    async def _assert_vkey_in_team(
+        self, vkey_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
+    ) -> None:
         record = await self._vkeys.get(vkey_id)
         if record is None:
             raise VirtualKeyNotFoundError(str(vkey_id))
         if not is_platform_admin and record.tenant_id != tenant_id:
             raise VirtualKeyNotFoundError(str(vkey_id))
 
-    async def _assert_apikey_grant_in_team(self, grant_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
+    async def _assert_apikey_grant_in_team(
+        self, grant_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
+    ) -> None:
         await self._access.assert_apikey_grant_in_team(
             grant_id,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
 
-    async def _assert_entitlement_plan_in_team(self, plan_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> EntitlementPlan:
+    async def _assert_entitlement_plan_in_team(
+        self, plan_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
+    ) -> EntitlementPlan:
         plan = await self._entitlement_plans.get(plan_id)
         if plan is None:
-            raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
-        if plan.target_kind == 'vkey':
+            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
+        if plan.target_kind == "vkey":
             await self._assert_vkey_in_team(
                 plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
             )
-        elif plan.target_kind == 'apikey_grant':
+        elif plan.target_kind == "apikey_grant":
             await self._assert_apikey_grant_in_team(
                 plan.target_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
             )
         else:
-            raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
+            raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))
         return plan
 
     async def _assert_budget_target_in_team(

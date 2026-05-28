@@ -49,9 +49,7 @@ class TeamService:
         self._teams = TeamRepository(session)
         self._members = TeamMemberRepository(session)
         self._membership = membership or TenancyMembershipAdapter()
-        self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(
-            session
-        )
+        self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(session)
 
     async def _filter_platform_admin_teams(
         self,
@@ -61,9 +59,7 @@ class TeamService:
     ) -> list[Team]:
         if not exclude_anonymous_personal:
             return teams
-        personal_owner_ids = list(
-            {team.owner_user_id for team in teams if team.kind == "personal"}
-        )
+        personal_owner_ids = list({team.owner_user_id for team in teams if team.kind == "personal"})
         roles = await self._user_role_lookup.roles_by_user_ids(personal_owner_ids)
         return [
             team
@@ -112,9 +108,7 @@ class TeamService:
         await self._members.add(team.id, owner_user_id, role="owner")
         return team
 
-    async def add_member(
-        self, team_id: uuid.UUID, user_id: uuid.UUID, role: str
-    ) -> TeamMember:
+    async def add_member(self, team_id: uuid.UUID, user_id: uuid.UUID, role: str) -> TeamMember:
         team = await self._teams.get(team_id)
         if team is None:
             raise TeamNotFoundError(str(team_id))
@@ -123,9 +117,7 @@ class TeamService:
         if role == "owner" and user_id != team.owner_user_id:
             raise ValueError("Only the team owner may hold the owner role")
         if team.kind == "personal" and user_id != team.owner_user_id:
-            raise ValueError(
-                "Personal teams cannot have members other than the owner"
-            )
+            raise ValueError("Personal teams cannot have members other than the owner")
         existing = await self._members.get(team_id, user_id)
         if existing is not None:
             member = await self._members.update_role(team_id, user_id, role) or existing
@@ -156,9 +148,7 @@ class TeamService:
         self, user_id: uuid.UUID
     ) -> list[tuple[Team, str | None]]:
         teams = await self.list_user_teams(user_id)
-        roles = await self._membership.member_roles_for_user(
-            self._session, user_id=user_id
-        )
+        roles = await self._membership.member_roles_for_user(self._session, user_id=user_id)
         return [(team, roles.get(TenantId(team.id))) for team in teams]
 
     async def list_teams_for_gateway(
@@ -176,9 +166,7 @@ class TeamService:
                 (team, role)
                 for team, role in membership_items
                 if role is not None
-                and team_metadata_matches_search(
-                    name=team.name, slug=team.slug, search=search
-                )
+                and team_metadata_matches_search(name=team.name, slug=team.slug, search=search)
             ]
 
         teams = await self._teams.list_all_active()
@@ -186,9 +174,7 @@ class TeamService:
             teams,
             exclude_anonymous_personal=exclude_anonymous_personal,
         )
-        roles = await self._membership.member_roles_for_user(
-            self._session, user_id=user_id
-        )
+        roles = await self._membership.member_roles_for_user(self._session, user_id=user_id)
         return [
             (
                 team,
@@ -240,15 +226,11 @@ class TeamService:
             if team is None:
                 return None
             if SETTINGS_KEY in settings and actor_team_role != TeamRole.OWNER.value:
-                raise TeamPermissionDeniedError(
-                    "Only team owner may change invite candidate scope"
-                )
+                raise TeamPermissionDeniedError("Only team owner may change invite candidate scope")
             merged_settings = {**(team.settings or {}), **settings}
             if SETTINGS_KEY in settings:
                 validate_invite_candidate_scope_value(settings[SETTINGS_KEY])
-        updated = await self._teams.update(
-            team_id, name=name, settings=merged_settings
-        )
+        updated = await self._teams.update(team_id, name=name, settings=merged_settings)
         if updated is not None:
             from domains.tenancy.application.team_cache import invalidate_team
 
@@ -263,9 +245,7 @@ class TeamService:
             raise ValueError("Cannot delete personal team")
         await self._teams.delete(team_id)
 
-    async def get_display_names_by_ids(
-        self, team_ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+    async def get_display_names_by_ids(self, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         return await self._teams.get_display_names_by_ids(team_ids)
 
     @staticmethod

@@ -161,9 +161,7 @@ async def test_non_chat_uses_router_not_direct_litellm(
         direct_called = True
         raise AssertionError("direct litellm must not be called when router succeeds")
 
-    monkeypatch.setattr(
-        use_case.litellm, "should_use_internal_direct_litellm", no_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(
         use_case,
         "prepare_litellm_kwargs",
@@ -209,23 +207,17 @@ async def test_video_generation_non_volcengine_uses_router(
     async def block_direct(_kwargs: dict[str, Any]) -> dict[str, Any]:
         raise AssertionError("direct litellm must not be called when router succeeds")
 
-    monkeypatch.setattr(
-        use_case.litellm, "should_use_internal_direct_litellm", no_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(
         use_case,
         "prepare_litellm_invoke",
         AsyncMock(side_effect=lambda _ctx, b, **_kw: _prepared_litellm_invoke(b)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
-    monkeypatch.setattr(
-        use_case.guard, "assert_request_capability_matches_model", AsyncMock()
-    )
+    monkeypatch.setattr(use_case.guard, "assert_request_capability_matches_model", AsyncMock())
     monkeypatch.setattr(use_case.litellm, "direct_video_generation", block_direct)
     volcengine_direct = AsyncMock()
-    monkeypatch.setattr(
-        use_case.litellm, "volcengine_direct_video_generation", volcengine_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "volcengine_direct_video_generation", volcengine_direct)
 
     with patch(
         "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
@@ -266,9 +258,7 @@ async def test_volcengine_image_generation_uses_direct_not_router(
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     volcengine_direct = AsyncMock(return_value={"data": [{"b64_json": "abc"}]})
-    monkeypatch.setattr(
-        use_case.litellm, "volcengine_direct_image_generation", volcengine_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "volcengine_direct_image_generation", volcengine_direct)
     router_image = AsyncMock()
     monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
     monkeypatch.setattr(
@@ -353,9 +343,7 @@ async def test_volcengine_video_generation_uses_direct_not_router(
         AsyncMock(return_value=(prepared, invoke_kwargs)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
-    monkeypatch.setattr(
-        use_case.guard, "assert_request_capability_matches_model", AsyncMock()
-    )
+    monkeypatch.setattr(use_case.guard, "assert_request_capability_matches_model", AsyncMock())
     volcengine_direct = AsyncMock(
         return_value={
             "id": "cgt-test",
@@ -364,9 +352,7 @@ async def test_volcengine_video_generation_uses_direct_not_router(
             "model": "doubao-seedance-1-0-lite-t2v-250428",
         }
     )
-    monkeypatch.setattr(
-        use_case.litellm, "volcengine_direct_video_generation", volcengine_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "volcengine_direct_video_generation", volcengine_direct)
     router_video = AsyncMock()
     monkeypatch.setattr(use_case.litellm, "router_video_generation", router_video)
 
@@ -393,9 +379,7 @@ async def test_audio_speech_uses_router_aspeech(
     async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
         return False
 
-    monkeypatch.setattr(
-        use_case.litellm, "should_use_internal_direct_litellm", no_direct
-    )
+    monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(
         use_case,
         "prepare_litellm_kwargs",
@@ -442,9 +426,7 @@ async def test_non_chat_router_miss_falls_back_to_direct(
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
 
-    router_fn = AsyncMock(
-        side_effect=RuntimeError("No deployments available for cohere-rerank")
-    )
+    router_fn = AsyncMock(side_effect=RuntimeError("No deployments available for cohere-rerank"))
     router = MagicMock(arerank=router_fn)
     direct_rerank = AsyncMock(return_value={"fallback": True})
     monkeypatch.setattr(use_case.litellm, "direct_rerank", direct_rerank)

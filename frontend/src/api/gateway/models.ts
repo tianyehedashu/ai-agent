@@ -270,6 +270,8 @@ export interface AvailableModelsListQuery extends PageQuery {
   sort?: 'name' | 'created_at' | 'provider' | 'last_tested_at'
   order?: 'asc' | 'desc'
   provider?: string
+  /** Gateway 工作区团队（与 POST /chat gateway_team_id 一致） */
+  gatewayTeamId?: string
 }
 
 function buildModelListSearch(params?: GatewayModelListQuery): Record<string, string> {
@@ -307,6 +309,7 @@ function buildAvailableModelsSearch(
   }
   if (options?.sort) search.sort = options.sort
   if (options?.order) search.order = options.order
+  if (options?.gatewayTeamId) search.gateway_team_id = options.gatewayTeamId
   return search
 }
 

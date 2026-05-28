@@ -7,16 +7,8 @@ from pathlib import Path
 
 # 已有文件可能依赖 gateway.domain.types / scenario_defaults_policy；本测试仅约束新策略模块。
 CHECK_PATHS = [
-    Path(__file__).resolve().parents[2]
-    / "domains"
-    / "agent"
-    / "application"
-    / "chat_agent_run.py",
-    Path(__file__).resolve().parents[2]
-    / "domains"
-    / "agent"
-    / "application"
-    / "chat_use_case.py",
+    Path(__file__).resolve().parents[2] / "domains" / "agent" / "application" / "chat_agent_run.py",
+    Path(__file__).resolve().parents[2] / "domains" / "agent" / "application" / "chat_use_case.py",
     Path(__file__).resolve().parents[2]
     / "domains"
     / "agent"

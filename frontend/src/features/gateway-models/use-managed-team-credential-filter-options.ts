@@ -9,7 +9,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { modelsApi } from '@/api/gateway/models'
-import type { GatewayModelCredentialFilterOption } from '@/features/gateway-models/gateway-model-credential-filter-select'
+import type { GatewayModelCredentialFilterOption } from '@/features/gateway-models/gateway-model-credential-filter-label'
 import { fetchPlaygroundCredentialSummaries } from '@/features/gateway-playground/playground-credential-summaries'
 import {
   useGatewayMemberTeamNameMap,

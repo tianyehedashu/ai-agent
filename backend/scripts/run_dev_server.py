@@ -55,7 +55,7 @@ def _format_port_busy_message(host: str, port: int) -> str:
     return (
         f"\n端口 {port} 已被占用，无法启动开发服务器（WinError 10013 / EADDRINUSE）。\n"
         "常见原因：另一个 make dev / make dev-stable 仍在运行。\n"
-        f"排查：netstat -ano | findstr \":{port}\"\n"
+        f'排查：netstat -ano | findstr ":{port}"\n'
         f"结束进程：taskkill /PID <PID> /F\n"
         f"或改用其他端口：uv run python scripts/run_dev_server.py --port {port + 1}\n"
     )

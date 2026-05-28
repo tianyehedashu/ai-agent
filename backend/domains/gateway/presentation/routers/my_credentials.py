@@ -148,9 +148,7 @@ async def batch_import_my_models_endpoint(
     user_id = get_user_uuid(current_user)
     provider = validate_personal_model_provider(body.provider)
     if body.items:
-        import_items = [
-            (item.upstream_model_id, tuple(item.model_types)) for item in body.items
-        ]
+        import_items = [(item.upstream_model_id, tuple(item.model_types)) for item in body.items]
         legacy_ids: list[str] | None = None
         legacy_types: list[str] | None = None
     else:

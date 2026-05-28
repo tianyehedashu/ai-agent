@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from pathlib import Path
+import sys
 
 _BACKEND = Path(__file__).resolve().parents[1]
 if str(_BACKEND) not in sys.path:

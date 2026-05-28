@@ -29,9 +29,7 @@ _LEGACY_FK_NAMES = ("team_id_fkey", "tenant_id_fkey")
 
 def _drop_tenant_team_fk(table: str) -> None:
     for name in _LEGACY_FK_NAMES:
-        op.execute(
-            sa.text(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_{name}")
-        )
+        op.execute(sa.text(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_{name}"))
 
 
 def _add_tenant_team_fk(table: str) -> None:

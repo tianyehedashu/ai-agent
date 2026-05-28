@@ -16,9 +16,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "ALTER TABLE provider_credentials DROP COLUMN IF EXISTS legacy_user_model_id"
-    )
+    op.execute("ALTER TABLE provider_credentials DROP COLUMN IF EXISTS legacy_user_model_id")
 
 
 def downgrade() -> None:

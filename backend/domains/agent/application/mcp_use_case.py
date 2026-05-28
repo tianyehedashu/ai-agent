@@ -57,9 +57,7 @@ class MCPManagementUseCase:
         self.db = db
         self.repository = MCPServerRepository(db)
 
-    async def _get_server_or_raise(
-        self, server_id: uuid.UUID
-    ) -> MCPServer | SystemMCPServer:
+    async def _get_server_or_raise(self, server_id: uuid.UUID) -> MCPServer | SystemMCPServer:
         server = await self.repository.get_by_id(server_id)
         if not server:
             raise NotFoundError("MCP Server", str(server_id))
@@ -119,8 +117,7 @@ class MCPManagementUseCase:
         return MCPServersListResponse(
             system_servers=[mcp_server_to_response(server) for server in system_servers],
             user_servers=[
-                mcp_server_to_response(server, owner_user_id=owner_id)
-                for server in user_servers
+                mcp_server_to_response(server, owner_user_id=owner_id) for server in user_servers
             ],
         )
 

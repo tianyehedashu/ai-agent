@@ -143,12 +143,15 @@ def _write(
         return False
     if not content.strip():
         content = _NO_OP_SQL
-    full = _ops_header(
-        stem=stem,
-        revision=revision,
-        down_revision=down_revision,
-        direction=direction,
-    ) + content
+    full = (
+        _ops_header(
+            stem=stem,
+            revision=revision,
+            down_revision=down_revision,
+            direction=direction,
+        )
+        + content
+    )
     if not full.endswith("\n"):
         full += "\n"
     path.write_text(full, encoding="utf-8")

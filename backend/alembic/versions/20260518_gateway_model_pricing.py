@@ -169,7 +169,9 @@ def upgrade() -> None:
             name="ck_downstream_pricing_strategy_columns",
         ),
     )
-    op.create_index("ix_downstream_model_pricing_scope_id", "downstream_model_pricing", ["scope_id"])
+    op.create_index(
+        "ix_downstream_model_pricing_scope_id", "downstream_model_pricing", ["scope_id"]
+    )
     op.create_index(
         "ix_downstream_model_pricing_gateway_model_id",
         "downstream_model_pricing",

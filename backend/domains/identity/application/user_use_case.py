@@ -309,9 +309,7 @@ class UserUseCase:
             self._platform_role_lookup = UserPlatformRoleLookupAdapter(self.db)
         return self._platform_role_lookup
 
-    async def roles_by_user_ids(
-        self, user_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+    async def roles_by_user_ids(self, user_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, str]:
         """``UserPlatformRoleLookupPort``：批量解析平台 role。"""
         return await self._platform_role_lookup_impl().roles_by_user_ids(user_ids)
 
@@ -352,15 +350,16 @@ class UserUseCase:
         )
         return build_page(
             items=[
-                InviteCandidateRowView(id=row.id, email=row.email, name=row.name)
-                for row in rows
+                InviteCandidateRowView(id=row.id, email=row.email, name=row.name) for row in rows
             ],
             total=total,
             page=page.page,
             page_size=page.page_size,
         )
 
-    async def bootstrap_set_admin_by_email(self, email: str, *, revoke: bool = False) -> UserSummary:
+    async def bootstrap_set_admin_by_email(
+        self, email: str, *, revoke: bool = False
+    ) -> UserSummary:
         """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""
         user = await self.user_repo.get_by_email_insensitive(email)
         if user is None:

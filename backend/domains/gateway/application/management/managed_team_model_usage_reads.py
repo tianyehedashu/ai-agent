@@ -40,8 +40,7 @@ async def aggregate_managed_team_models_route_usage(
         search=team_search,
     )
     snapshots = [
-        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
-        for m in memberships
+        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role) for m in memberships
     ]
     plan = build_managed_team_readable_resource_list_plan(
         snapshots,
@@ -49,12 +48,8 @@ async def aggregate_managed_team_models_route_usage(
     )
     allowed_tenant_ids = set(plan.tenant_ids)
     tenant_ids = list(plan.tenant_ids)
-    role_by_tenant = {
-        m.team_id: m.role for m in memberships if m.team_id in allowed_tenant_ids
-    }
-    kind_by_tenant = {
-        m.team_id: m.kind for m in memberships if m.team_id in allowed_tenant_ids
-    }
+    role_by_tenant = {m.team_id: m.role for m in memberships if m.team_id in allowed_tenant_ids}
+    kind_by_tenant = {m.team_id: m.kind for m in memberships if m.team_id in allowed_tenant_ids}
 
     if not tenant_ids:
         end = datetime.now(UTC)

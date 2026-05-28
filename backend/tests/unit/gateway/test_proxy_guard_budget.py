@@ -46,9 +46,9 @@ def _ctx(*, team_id: uuid.UUID) -> ProxyContext:
     )
 
 
-def _tenant_monthly_row(team_id: uuid.UUID) -> tuple[
-    tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow
-]:
+def _tenant_monthly_row(
+    team_id: uuid.UUID,
+) -> tuple[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow]:
     row = BudgetConfigRow(
         target_kind="tenant",
         target_id=team_id,

@@ -15,7 +15,6 @@ from domains.identity.application import UserUseCase
 from domains.identity.infrastructure.models.user import User
 from domains.session.application import SessionUseCase
 from libs.iam.permission_context import (
-    PermissionContext,
     clear_permission_context,
     set_permission_context,
 )

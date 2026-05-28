@@ -376,6 +376,7 @@ class ProviderCredentialRepository:
         await self._session.flush()
         return new_cred
 
+
 __all__ = [
     "EffectiveProviderSummary",
     "ProviderCredentialRepository",

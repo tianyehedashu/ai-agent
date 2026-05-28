@@ -43,9 +43,7 @@ def test_merge_tenant_overrides_system_name() -> None:
 def test_merge_respects_only_enabled_false_for_disabled_tenant_rows() -> None:
     tenant = [_Row("enabled"), _Row("disabled", enabled=False)]
     system = [_Row("sys-only")]
-    merged = merge_named_rows_tenant_overrides_system(
-        tenant, system, only_enabled=False
-    )
+    merged = merge_named_rows_tenant_overrides_system(tenant, system, only_enabled=False)
     assert {r.name for r in merged} == {"enabled", "disabled", "sys-only"}
 
 

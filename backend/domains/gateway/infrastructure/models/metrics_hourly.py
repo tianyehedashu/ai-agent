@@ -84,7 +84,9 @@ class GatewayMetricsHourly(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return f"<GatewayMetricsHourly {self.bucket_at} tenant={self.tenant_id} req={self.requests}>"
+        return (
+            f"<GatewayMetricsHourly {self.bucket_at} tenant={self.tenant_id} req={self.requests}>"
+        )
 
 
 __all__ = ["GatewayMetricsHourly"]

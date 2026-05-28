@@ -21,8 +21,8 @@ from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogUsageTotals,
 )
 from domains.gateway.presentation.schemas.common import PlatformCredentialStatItem
-from domains.tenancy.domain.management_context import ManagementTeamContext
 from domains.identity.application.ports import UserSummaryView
+from domains.tenancy.domain.management_context import ManagementTeamContext
 
 
 @pytest.mark.asyncio

@@ -6,14 +6,8 @@ from domains.gateway.domain.upstream_catalog_policy import derive_client_facing_
 
 
 def test_strip_anthropic_compact_date_suffix() -> None:
-    assert (
-        derive_client_facing_model_alias("claude-sonnet-4-5-20250929")
-        == "claude-sonnet-4-5"
-    )
-    assert (
-        derive_client_facing_model_alias("claude-opus-4-1-20250805")
-        == "claude-opus-4-1"
-    )
+    assert derive_client_facing_model_alias("claude-sonnet-4-5-20250929") == "claude-sonnet-4-5"
+    assert derive_client_facing_model_alias("claude-opus-4-1-20250805") == "claude-opus-4-1"
 
 
 def test_strip_openai_dashed_date_suffix() -> None:

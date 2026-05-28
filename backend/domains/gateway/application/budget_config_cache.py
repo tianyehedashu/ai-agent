@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-import hashlib
 import json
 import time
 from typing import TYPE_CHECKING
@@ -23,14 +22,11 @@ logger = get_logger(__name__)
 _TTL_SEC = 60.0
 _LOCAL_MAX = 2048
 _REDIS_VERSION_KEY = "gw:budget_cfg:ver"
-_REDIS_ENTRY_PREFIX = "gw:budget_cfg:"
+_REDIS_ENTRY_PREFIX = "gw:budget_cfg:entry:"
 
-_LocalKey = tuple[str, str]
-_LocalEntry = tuple[
-    dict[tuple[str, uuid.UUID | None, str, str | None], "BudgetConfigRow"],
-    float,
-]
-_LOCAL: dict[_LocalKey, _LocalEntry] = {}
+_Coord = tuple[str, uuid.UUID | None, str, str | None]
+_LocalEntry = tuple["BudgetConfigRow", float]
+_LOCAL: dict[tuple[str, *_Coord], _LocalEntry] = {}
 
 
 @dataclass(frozen=True)
@@ -64,40 +60,61 @@ def budget_config_coord_key(
     return (row.target_kind, row.target_id, row.period, row.model_name)
 
 
-def plan_cache_fingerprint(plan: tuple[BudgetCheckQuery, ...] | list[BudgetCheckQuery]) -> str:
-    parts = sorted(
-        f"{q.target_kind}:{q.target_id}:{q.period}:{q.model_name or ''}" for q in plan
-    )
-    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]
+def _coord_to_local_key(version: str, coord: _Coord) -> tuple[str, *_Coord]:
+    return (version, *coord)
+
+
+def _coord_to_redis_key(version: str, coord: _Coord) -> str:
+    target_kind, target_id, period, model_name = coord
+    tid = str(target_id) if target_id is not None else "_"
+    mname = model_name if model_name is not None else "_"
+    return f"{_REDIS_ENTRY_PREFIX}{version}:{target_kind}:{tid}:{period}:{mname}"
 
 
 async def get_cached_budget_by_plan(
     plan: tuple[BudgetCheckQuery, ...],
-    loader: Callable[[], Awaitable[dict[tuple[str, uuid.UUID | None, str, str | None], GatewayBudget]]],
-) -> dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow]:
-    """命中返回配置快照；未命中经 ``loader`` 查库并回填缓存。"""
+    loader: Callable[[], Awaitable[dict[_Coord, GatewayBudget]]],
+) -> dict[_Coord, BudgetConfigRow]:
+    """按 coord 细粒度缓存：先逐条命中本地/Redis，未命中部分批量查库并逐条回填。"""
     if not plan:
         return {}
     version = await _get_version()
-    fp = plan_cache_fingerprint(plan)
-    local_key: _LocalKey = (version, fp)
-    local_hit = _get_local(local_key)
-    if local_hit is not None:
-        return local_hit
 
-    redis_hit = await _get_redis(local_key)
-    if redis_hit is not None:
-        _put_local(local_key, redis_hit)
-        return redis_hit
+    hits: dict[_Coord, BudgetConfigRow] = {}
+    misses: list[BudgetCheckQuery] = []
 
+    # 1. 本地缓存逐条命中
+    for query in plan:
+        coord: _Coord = (query.target_kind, query.target_id, query.period, query.model_name)
+        row = _get_local_by_coord(version, coord)
+        if row is not None:
+            hits[coord] = row
+        else:
+            misses.append(query)
+
+    # 2. Redis 逐条命中
+    redis_misses: list[BudgetCheckQuery] = []
+    for query in misses:
+        coord = (query.target_kind, query.target_id, query.period, query.model_name)
+        row = await _get_redis_by_coord(version, coord)
+        if row is not None:
+            hits[coord] = row
+            _put_local_by_coord(version, coord, row)
+        else:
+            redis_misses.append(query)
+
+    if not redis_misses:
+        return hits
+
+    # 3. 批量查库（仍查整个 plan，利用 get_many_by_plan 的 OR 查询效率）
     raw = await loader()
-    snapshot: dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow] = {}
     for row in raw.values():
         config = budget_config_row_from_orm(row)
-        snapshot[budget_config_coord_key(config)] = config
-    _put_local(local_key, snapshot)
-    await _put_redis(local_key, snapshot)
-    return snapshot
+        coord = budget_config_coord_key(config)
+        hits[coord] = config
+        _put_local_by_coord(version, coord, config)
+        await _put_redis_by_coord(version, coord, config)
+    return hits
 
 
 async def invalidate_budget_config_cache() -> None:
@@ -129,36 +146,32 @@ async def _get_version() -> str:
         return "0"
 
 
-def _get_local(key: _LocalKey) -> dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow] | None:
+def _get_local_by_coord(version: str, coord: _Coord) -> BudgetConfigRow | None:
+    key = _coord_to_local_key(version, coord)
     hit = _LOCAL.get(key)
     if hit is None:
         return None
-    snapshot, ts = hit
+    row, ts = hit
     if time.monotonic() - ts >= _TTL_SEC:
         _LOCAL.pop(key, None)
         return None
-    return snapshot
+    return row
 
 
-def _put_local(
-    key: _LocalKey,
-    snapshot: dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow],
-) -> None:
+def _put_local_by_coord(version: str, coord: _Coord, row: BudgetConfigRow) -> None:
+    key = _coord_to_local_key(version, coord)
     if len(_LOCAL) >= _LOCAL_MAX:
         oldest = min(_LOCAL.items(), key=lambda item: item[1][1])[0]
         _LOCAL.pop(oldest, None)
-    _LOCAL[key] = (snapshot, time.monotonic())
+    _LOCAL[key] = (row, time.monotonic())
 
 
-async def _get_redis(
-    key: _LocalKey,
-) -> dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow] | None:
+async def _get_redis_by_coord(version: str, coord: _Coord) -> BudgetConfigRow | None:
     redis = await _get_redis_client()
     if redis is None:
         return None
-    version, fp = key
     try:
-        raw = await redis.get(f"{_REDIS_ENTRY_PREFIX}{version}:{fp}")
+        raw = await redis.get(_coord_to_redis_key(version, coord))
     except Exception:
         logger.warning("Redis budget config cache read failed", exc_info=True)
         return None
@@ -166,47 +179,38 @@ async def _get_redis(
         return None
     try:
         payload = json.loads(raw)
-        out: dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow] = {}
-        for item in payload:
-            tid = uuid.UUID(item["target_id"]) if item.get("target_id") else None
-            row = BudgetConfigRow(
-                target_kind=item["target_kind"],
-                target_id=tid,
-                period=item["period"],
-                model_name=item.get("model_name"),
-                limit_usd=Decimal(item["limit_usd"]) if item.get("limit_usd") is not None else None,
-                limit_tokens=item.get("limit_tokens"),
-                limit_requests=item.get("limit_requests"),
-            )
-            out[budget_config_coord_key(row)] = row
-        return out
+        tid = uuid.UUID(payload["target_id"]) if payload.get("target_id") else None
+        return BudgetConfigRow(
+            target_kind=payload["target_kind"],
+            target_id=tid,
+            period=payload["period"],
+            model_name=payload.get("model_name"),
+            limit_usd=Decimal(payload["limit_usd"])
+            if payload.get("limit_usd") is not None
+            else None,
+            limit_tokens=payload.get("limit_tokens"),
+            limit_requests=payload.get("limit_requests"),
+        )
     except (TypeError, ValueError, json.JSONDecodeError, KeyError):
         return None
 
 
-async def _put_redis(
-    key: _LocalKey,
-    snapshot: dict[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow],
-) -> None:
+async def _put_redis_by_coord(version: str, coord: _Coord, row: BudgetConfigRow) -> None:
     redis = await _get_redis_client()
     if redis is None:
         return
-    version, fp = key
-    payload = [
-        {
-            "target_kind": row.target_kind,
-            "target_id": str(row.target_id) if row.target_id is not None else None,
-            "period": row.period,
-            "model_name": row.model_name,
-            "limit_usd": str(row.limit_usd) if row.limit_usd is not None else None,
-            "limit_tokens": row.limit_tokens,
-            "limit_requests": row.limit_requests,
-        }
-        for row in snapshot.values()
-    ]
+    payload = {
+        "target_kind": row.target_kind,
+        "target_id": str(row.target_id) if row.target_id is not None else None,
+        "period": row.period,
+        "model_name": row.model_name,
+        "limit_usd": str(row.limit_usd) if row.limit_usd is not None else None,
+        "limit_tokens": row.limit_tokens,
+        "limit_requests": row.limit_requests,
+    }
     try:
         await redis.set(
-            f"{_REDIS_ENTRY_PREFIX}{version}:{fp}",
+            _coord_to_redis_key(version, coord),
             json.dumps(payload),
             ex=int(_TTL_SEC),
         )
@@ -230,5 +234,4 @@ __all__ = [
     "clear_budget_config_cache_for_tests",
     "get_cached_budget_by_plan",
     "invalidate_budget_config_cache",
-    "plan_cache_fingerprint",
 ]

@@ -65,7 +65,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="My Job",
@@ -85,7 +87,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             await use_case.create_job(
                 principal_id=str(user.id),
                 title="J1",
@@ -108,7 +112,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             with pytest.raises(NotFoundError):
                 await use_case.get_job(uuid.uuid4())
         finally:
@@ -122,7 +128,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="With Steps",
@@ -142,7 +150,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="To Delete",
@@ -161,7 +171,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="Run Step",
@@ -185,7 +197,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="Run Step Job",
@@ -240,7 +254,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="Vision Test",
@@ -300,7 +316,9 @@ class TestListingStudioUseCase:
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
         try:
-            use_case = ListingStudioUseCase(db_session, catalog=get_model_catalog_adapter(db_session))
+            use_case = ListingStudioUseCase(
+                db_session, catalog=get_model_catalog_adapter(db_session)
+            )
             job = await use_case.create_job(
                 principal_id=str(user.id),
                 title="Text Model Test",

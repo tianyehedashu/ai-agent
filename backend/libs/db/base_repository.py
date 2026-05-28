@@ -28,8 +28,7 @@ class TenantScopedRepositoryBase(ABC, Generic[T]):
 
     @property
     @abstractmethod
-    def model_class(self) -> type[T]:
-        ...
+    def model_class(self) -> type[T]: ...
 
     def _apply_tenant_scope(self, query: Select) -> Select:
         require_permission_context()
@@ -50,9 +49,7 @@ class TenantScopedRepositoryBase(ABC, Generic[T]):
                 query = query.where(getattr(self.model_class, field) == value)
         if order_by and hasattr(self.model_class, order_by):
             order_column = getattr(self.model_class, order_by)
-            query = query.order_by(
-                order_column.desc() if order_desc else order_column.asc()
-            )
+            query = query.order_by(order_column.desc() if order_desc else order_column.asc())
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())

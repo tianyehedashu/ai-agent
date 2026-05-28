@@ -157,9 +157,7 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
     if isinstance(exc, httpx.HTTPStatusError):
         upstream_status = exc.response.status_code
         http_status = (
-            status.HTTP_502_BAD_GATEWAY
-            if upstream_status >= 500
-            else status.HTTP_400_BAD_REQUEST
+            status.HTTP_502_BAD_GATEWAY if upstream_status >= 500 else status.HTTP_400_BAD_REQUEST
         )
         message = str(exc)
         with suppress(Exception):
@@ -186,10 +184,7 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
     if is_router_model_miss(exc):
         return ProxyUseCaseBusinessFailure(
             http_status=status.HTTP_404_NOT_FOUND,
-            message=(
-                "请求的模型未在 Gateway 注册或当前无可用部署，"
-                "请检查凭据与模型配置是否仍有效"
-            ),
+            message=("请求的模型未在 Gateway 注册或当前无可用部署，请检查凭据与模型配置是否仍有效"),
             openai_error_type="model_not_found",
             anthropic_error_type="not_found_error",
         )

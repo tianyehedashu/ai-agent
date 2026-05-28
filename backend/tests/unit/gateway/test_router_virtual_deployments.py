@@ -43,7 +43,9 @@ def _mk_model(
     return m
 
 
-def _mk_cred(*, id_: uuid.UUID, name: str = "cred", tenant_id: uuid.UUID | None = None) -> MagicMock:
+def _mk_cred(
+    *, id_: uuid.UUID, name: str = "cred", tenant_id: uuid.UUID | None = None
+) -> MagicMock:
     cred = MagicMock()
     cred.id = id_
     cred.name = name
@@ -87,7 +89,9 @@ def test_virtual_route_creates_one_deployment_per_primary(monkeypatch) -> None:
         name="gpt-4o-b", real_model="gpt-4o", provider="openai", cred_id=cred_b, tenant_id=team
     )
     creds = {cred_a: _mk_cred(id_=cred_a, name="ka"), cred_b: _mk_cred(id_=cred_b, name="kb")}
-    route = _mk_route(virtual_model="smart-4o", primary_models=["gpt-4o-a", "gpt-4o-b"], tenant_id=team)
+    route = _mk_route(
+        virtual_model="smart-4o", primary_models=["gpt-4o-a", "gpt-4o-b"], tenant_id=team
+    )
 
     base = _models_to_deployments([m_a, m_b], creds)
     reserved = frozenset(m.name for m in (m_a, m_b))
@@ -226,9 +230,7 @@ def test_virtual_route_falls_back_to_global_gateway_model(monkeypatch) -> None:
         name="global-gpt", real_model="gpt-4o", provider="openai", cred_id=cred, tenant_id=None
     )
     creds = {cred: _mk_cred(id_=cred)}
-    route = _mk_route(
-        virtual_model="team-virtual", primary_models=["global-gpt"], tenant_id=team
-    )
+    route = _mk_route(virtual_model="team-virtual", primary_models=["global-gpt"], tenant_id=team)
     virtuals = _routes_to_virtual_deployments(
         [route], [global_model], creds, reserved_model_names=frozenset({"global-gpt"})
     )

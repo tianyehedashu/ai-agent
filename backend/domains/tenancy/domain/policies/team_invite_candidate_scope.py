@@ -40,9 +40,7 @@ def validate_invite_candidate_scope_value(value: object) -> InviteCandidateScope
         return INVITE_CANDIDATE_SCOPE_SHARED_TEAMS
     if value == INVITE_CANDIDATE_SCOPE_ALL_USERS:
         return INVITE_CANDIDATE_SCOPE_ALL_USERS
-    raise ValueError(
-        f"Invalid {SETTINGS_KEY}; expected 'all_users' or 'shared_teams'"
-    )
+    raise ValueError(f"Invalid {SETTINGS_KEY}; expected 'all_users' or 'shared_teams'")
 
 
 __all__ = [

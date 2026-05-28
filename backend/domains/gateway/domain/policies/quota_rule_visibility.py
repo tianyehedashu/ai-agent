@@ -49,10 +49,7 @@ def quota_rule_visible_to_member(
     if key.layer == "platform":
         return _platform_rule_visible(key, ctx)
     if key.layer == "upstream":
-        return (
-            key.credential_id is not None
-            and key.credential_id in ctx.visible_credential_ids
-        )
+        return key.credential_id is not None and key.credential_id in ctx.visible_credential_ids
     if key.layer == "downstream":
         if key.access_kind == "vkey":
             return key.access_id is not None and key.access_id in ctx.visible_vkey_ids

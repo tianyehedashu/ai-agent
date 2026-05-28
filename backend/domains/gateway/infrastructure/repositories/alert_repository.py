@@ -49,9 +49,7 @@ class GatewayAlertRepository(TenantScopedRepositoryBase[GatewayAlertRule]):
         clauses: list[object] = []
         if only_enabled:
             clauses.append(SystemGatewayAlertRule.enabled.is_(True))
-        stmt = select(SystemGatewayAlertRule).where(*clauses).order_by(
-            SystemGatewayAlertRule.name
-        )
+        stmt = select(SystemGatewayAlertRule).where(*clauses).order_by(SystemGatewayAlertRule.name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -111,10 +109,14 @@ class GatewayAlertRepository(TenantScopedRepositoryBase[GatewayAlertRule]):
     async def list_all_enabled_rules(self) -> list[AlertRuleSnapshot]:
         """租户 + 系统级所有已启用规则（告警 job 用）。"""
         tenant_rows = (
-            await self._session.execute(
-                select(GatewayAlertRule).where(GatewayAlertRule.enabled.is_(True))
+            (
+                await self._session.execute(
+                    select(GatewayAlertRule).where(GatewayAlertRule.enabled.is_(True))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         system_rows = await self.list_system(only_enabled=True)
         snapshots: list[AlertRuleSnapshot] = [
             AlertRuleSnapshot(
@@ -201,7 +203,9 @@ class GatewayAlertRepository(TenantScopedRepositoryBase[GatewayAlertRule]):
             )
         if metric == "budget_usage":
             sub = base_q.subquery()
-            total = (await self._session.execute(select(func.sum(sub.c.cost_usd)))).scalar_one() or 0
+            total = (
+                await self._session.execute(select(func.sum(sub.c.cost_usd)))
+            ).scalar_one() or 0
             return AlertMetricAggregates(
                 metric=metric,
                 cost_sum=float(total),

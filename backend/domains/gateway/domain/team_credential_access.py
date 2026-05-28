@@ -28,10 +28,7 @@ def actor_owns_team_credential(
     created_by_user_id: UUID | None,
     actor_user_id: UUID,
 ) -> bool:
-    return (
-        created_by_user_id is not None
-        and created_by_user_id == actor_user_id
-    )
+    return created_by_user_id is not None and created_by_user_id == actor_user_id
 
 
 def is_team_admin_role(team_role: str) -> bool:
@@ -95,11 +92,7 @@ def assert_team_credential_readable_by_actor(
     is_platform_admin: bool,
 ) -> TeamCredentialAccessView:
     """校验 actor 是否可读团队凭据；失败抛 CredentialNotFoundError（防枚举）。"""
-    if (
-        record is None
-        or record.tenant_id is None
-        or record.tenant_id != tenant_id
-    ):
+    if record is None or record.tenant_id is None or record.tenant_id != tenant_id:
         raise CredentialNotFoundError(str(credential_id))
     if not can_read_team_credential(
         created_by_user_id=record.created_by_user_id,
@@ -120,11 +113,7 @@ def assert_team_credential_writable_by_actor(
     team_role: str,
     is_platform_admin: bool,
 ) -> TeamCredentialAccessView:
-    if (
-        record is None
-        or record.tenant_id is None
-        or record.tenant_id != tenant_id
-    ):
+    if record is None or record.tenant_id is None or record.tenant_id != tenant_id:
         raise CredentialNotFoundError(str(credential_id))
     if not can_write_team_credential(
         created_by_user_id=record.created_by_user_id,

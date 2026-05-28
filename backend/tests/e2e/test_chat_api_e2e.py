@@ -49,6 +49,8 @@ import pytest
 
 from tests.e2e.config import (
     E2E_API_BASE_URL as API_BASE_URL,
+)
+from tests.e2e.config import (
     append_sse_data_line,
     e2e_api_v1_path,
     e2e_service_health_path,

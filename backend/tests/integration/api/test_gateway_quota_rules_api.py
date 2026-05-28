@@ -5,7 +5,6 @@ Gateway 配额规则统一 API 集成测试。
 from __future__ import annotations
 
 from decimal import Decimal
-import uuid
 
 from httpx import AsyncClient
 import pytest

@@ -7,11 +7,11 @@ import uuid
 
 import pytest
 
-from domains.tenancy.application.default_tenant_provisioner import (
-    TenancyDefaultTenantProvisioner,
-)
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
+)
+from domains.tenancy.application.default_tenant_provisioner import (
+    TenancyDefaultTenantProvisioner,
 )
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from libs.iam.external_idp import (

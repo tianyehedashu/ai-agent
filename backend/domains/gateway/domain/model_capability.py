@@ -77,9 +77,7 @@ def tags_to_capability_snapshot(
     )
     if thinking_param != THINKING_PARAM_NONE:
         supports_reasoning = True
-    temperature_policy = resolve_temperature_policy_from_tags(
-        tags, thinking_param=thinking_param
-    )
+    temperature_policy = resolve_temperature_policy_from_tags(tags, thinking_param=thinking_param)
     temperature_default = resolve_temperature_default_from_tags(tags)
     return ModelCapabilitySnapshot(
         supports_tools=bool(tags.get("supports_tools", True)),

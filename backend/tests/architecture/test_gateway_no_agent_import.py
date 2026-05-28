@@ -22,8 +22,10 @@ def test_gateway_domain_has_no_agent_import() -> None:
                 for alias in node.names:
                     if alias.name.startswith(FORBIDDEN_PREFIX):
                         violations.append(f"{path}: import {alias.name}")
-            elif isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(
-                FORBIDDEN_PREFIX
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith(FORBIDDEN_PREFIX)
             ):
                 violations.append(f"{path}: from {node.module}")
     assert not violations, "\n".join(violations)

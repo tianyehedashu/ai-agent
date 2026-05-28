@@ -99,7 +99,9 @@ async def list_model_grants(
     return [_grant_to_response(r) for r in rows]
 
 
-@router.post("/grants", response_model=SystemGatewayGrantResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/grants", response_model=SystemGatewayGrantResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_grant(
     body: SystemGatewayGrantCreate,
     team: CurrentTeam,

@@ -105,8 +105,8 @@ async def test_post_messages_stream_sse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_stream() -> AsyncIterator[bytes]:
-        yield b"event: message_start\ndata: {\"type\":\"message_start\"}\n\n"
-        yield b"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+        yield b'event: message_start\ndata: {"type":"message_start"}\n\n'
+        yield b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
 
     async def fake_anthropic_messages(
         self: ProxyUseCase,

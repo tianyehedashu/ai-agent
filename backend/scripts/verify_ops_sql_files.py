@@ -64,8 +64,10 @@ def main() -> int:
             if expected_down != file_down:
                 mismatches.append(f"{stem}.down.sql")
             stem_ok = (
-                stem not in {m.split(".")[0] for m in mismatches} or not mismatches
-            ) and f"{stem}.up.sql" not in mismatches and f"{stem}.down.sql" not in mismatches
+                (stem not in {m.split(".")[0] for m in mismatches} or not mismatches)
+                and f"{stem}.up.sql" not in mismatches
+                and f"{stem}.down.sql" not in mismatches
+            )
             if stem_ok:
                 ok += 1
         except (ValueError, RuntimeError) as exc:

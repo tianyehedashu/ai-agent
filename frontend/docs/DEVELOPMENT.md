@@ -46,6 +46,8 @@ VITE_API_URL=http://localhost:8000
 
 **模型可见性**：客户端请求中的 `model` 须在该 Key 绑定团队的「模型管理」中注册且凭据可用；控制台试调与管理 API 使用 URL 或 personal 工作区团队上下文。
 
+**产品对话（Chat）**：模型下拉与发送均携带 `gateway_team_id`（默认 `useGatewayWorkspaceTeamId()` 解析的 personal 工作区），对应 `GET /api/v1/gateway/models/available?gateway_team_id=…` 与 `POST /api/v1/chat` 请求体中的同名字段；与调用指南 Playground 在未选凭据时的默认团队语义一致。
+
 **控制台 vs 代理**：
 
 - 管理面 `GET/POST … /api/v1/gateway/teams/{team_id}/*`：JWT + 路径 `team_id`，**不**依赖 `X-Team-Id`。

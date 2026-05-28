@@ -104,4 +104,3 @@ class TestUpstreamQuotaSignal:
             error_message="too many requests, retry later",
             status_code=429,
         )
-

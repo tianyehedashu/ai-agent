@@ -19,6 +19,7 @@ CASCADE_DELETE_ORPHAN = "all, delete-orphan"
 if TYPE_CHECKING:
     from domains.agent.infrastructure.models.memory import Memory
 
+
 class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
     """用户模型（FastAPI Users）"""
 

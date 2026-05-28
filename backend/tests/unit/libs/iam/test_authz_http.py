@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from fastapi import status
+import pytest
 
 from libs.exceptions import PermissionDeniedError, TeamPermissionDeniedError
 from libs.iam.authz_http import map_authz_error_to_problem

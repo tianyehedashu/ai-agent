@@ -34,6 +34,7 @@ interface UseChatReturn {
     content: string,
     options?: {
       modelRef?: string | null
+      gatewayTeamId?: string
       gatewayVerboseRequestLog?: boolean
       creativeMode?: 'chat' | 'image_gen'
       referenceImageUrls?: string[]
@@ -367,6 +368,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       content: string,
       options?: {
         modelRef?: string | null
+        gatewayTeamId?: string
         gatewayVerboseRequestLog?: boolean
         creativeMode?: 'chat' | 'image_gen'
         referenceImageUrls?: string[]
@@ -420,6 +422,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             agentId,
             mcpConfig,
             modelRef: options?.modelRef === undefined ? undefined : options.modelRef,
+            gatewayTeamId: options?.gatewayTeamId,
             gatewayVerboseRequestLog: options?.gatewayVerboseRequestLog ?? undefined,
             creativeMode: options?.creativeMode,
             referenceImageUrls: options?.referenceImageUrls,

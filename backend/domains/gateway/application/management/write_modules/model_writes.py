@@ -153,25 +153,40 @@ class ModelWritesMixin:
                 is_platform_admin=is_platform_admin,
             )
 
-    async def create_personal_models(self, user_id: uuid.UUID, *, display_name: str, provider: str, model_id: str, credential_id: uuid.UUID, model_types: list[str], tags: dict[str, Any] | None=None, enabled: bool=True, reload_router: bool=True) -> list[Any]:
+    async def create_personal_models(
+        self,
+        user_id: uuid.UUID,
+        *,
+        display_name: str,
+        provider: str,
+        model_id: str,
+        credential_id: uuid.UUID,
+        model_types: list[str],
+        tags: dict[str, Any] | None = None,
+        enabled: bool = True,
+        reload_router: bool = True,
+    ) -> list[Any]:
         from domains.gateway.application.personal_models import (
             capability_for_model_type,
             personal_model_alias,
             tags_for_model_type,
         )
+
         if provider not in PERSONAL_MODEL_PROVIDERS:
-            raise ValidationError(f'不支持的提供商: {provider}')
+            raise ValidationError(f"不支持的提供商: {provider}")
         if not model_types:
-            raise ValidationError('model_types 不能为空')
+            raise ValidationError("model_types 不能为空")
         invalid = set(model_types) - PERSONAL_MODEL_TYPES
         if invalid:
-            raise ValidationError(f'无效的模型类型: {sorted(invalid)}')
+            raise ValidationError(f"无效的模型类型: {sorted(invalid)}")
         await self._assert_user_owns_credential(user_id, credential_id)
         cred_row = await self._creds.get(credential_id)
         if cred_row is None:
             raise CredentialNotFoundError(str(credential_id))
         if cred_row.provider.strip().lower() != provider.strip().lower():
-            raise ValidationError(f'凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致')
+            raise ValidationError(
+                f"凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致"
+            )
         tenant_id = await self._ensure_personal_tenant_id(user_id)
         real_model = build_litellm_model_id(provider, model_id)
         created: list[Any] = []
@@ -183,43 +198,61 @@ class ModelWritesMixin:
                 suffix += 1
                 alias = personal_model_alias(display_name, mtype, suffix=suffix)
             mtags = tags_for_model_type(mtype)
-            mtags['display_name'] = display_name
+            mtags["display_name"] = display_name
             if tags:
                 mtags.update({k: v for k, v in tags.items() if v is not None})
             mtags = build_gateway_model_tags(mtags, provider=provider, real_model=real_model)
-            row = await self._models.create(tenant_id=tenant_id, name=alias, capability=cap, real_model=real_model, credential_id=credential_id, provider=provider, weight=1, rpm_limit=None, tpm_limit=None, tags=mtags, enabled=enabled)
+            row = await self._models.create(
+                tenant_id=tenant_id,
+                name=alias,
+                capability=cap,
+                real_model=real_model,
+                credential_id=credential_id,
+                provider=provider,
+                weight=1,
+                rpm_limit=None,
+                tpm_limit=None,
+                tags=mtags,
+                enabled=enabled,
+            )
             created.append(row)
         if reload_router:
             await self.reload_litellm_router(tenant_id=tenant_id)
         return created
 
-    async def update_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID, fields: dict[str, Any]) -> Any:
+    async def update_personal_model(
+        self, user_id: uuid.UUID, model_id: uuid.UUID, fields: dict[str, Any]
+    ) -> Any:
         tenant_id = await self._ensure_personal_tenant_id(user_id)
         existing = await self._models.get_for_tenant(model_id, tenant_id)
         if existing is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
         update_fields: dict[str, Any] = {}
-        if 'credential_id' in fields and fields['credential_id'] is not None:
-            await self._assert_user_owns_credential(user_id, fields['credential_id'])
-            nrow = await self._creds.get(fields['credential_id'])
+        if "credential_id" in fields and fields["credential_id"] is not None:
+            await self._assert_user_owns_credential(user_id, fields["credential_id"])
+            nrow = await self._creds.get(fields["credential_id"])
             if nrow is None:
-                raise CredentialNotFoundError(str(fields['credential_id']))
+                raise CredentialNotFoundError(str(fields["credential_id"]))
             if nrow.provider.strip().lower() != existing.provider.strip().lower():
-                raise ValidationError(f'凭据提供商为 {nrow.provider}，与当前模型的 provider（{existing.provider}）不一致')
-            update_fields['credential_id'] = fields['credential_id']
-        if fields.get('model_id') is not None:
-            update_fields['real_model'] = build_litellm_model_id(existing.provider, str(fields['model_id']))
-        if fields.get('is_active') is not None:
-            update_fields['enabled'] = fields['is_active']
-        if fields.get('display_name') is not None:
+                raise ValidationError(
+                    f"凭据提供商为 {nrow.provider}，与当前模型的 provider（{existing.provider}）不一致"
+                )
+            update_fields["credential_id"] = fields["credential_id"]
+        if fields.get("model_id") is not None:
+            update_fields["real_model"] = build_litellm_model_id(
+                existing.provider, str(fields["model_id"])
+            )
+        if fields.get("is_active") is not None:
+            update_fields["enabled"] = fields["is_active"]
+        if fields.get("display_name") is not None:
             merged_tags = dict(existing.tags or {})
-            merged_tags['display_name'] = fields['display_name']
-            update_fields['tags'] = merged_tags
+            merged_tags["display_name"] = fields["display_name"]
+            update_fields["tags"] = merged_tags
         if not update_fields:
             return existing
         updated = await self._models.update(model_id, **update_fields)
         if updated is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
         await self.reload_litellm_router(tenant_id=tenant_id)
         return updated
 
@@ -227,7 +260,7 @@ class ModelWritesMixin:
         tenant_id = await self._ensure_personal_tenant_id(user_id)
         existing = await self._models.get_for_tenant(model_id, tenant_id)
         if existing is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
         model_name = existing.name
         await self._models.delete(model_id)
         await self._finalize_gateway_model_deletions(
@@ -305,8 +338,8 @@ class ModelWritesMixin:
             )
         if not team_model_credential_scope_allowed(bindable_credential_scope(cred)):
             raise ValidationError(
-                '系统凭据注册的模型应写入 system_gateway_models；'
-                '请使用 create_system_gateway_model 或系统凭据批量导入'
+                "系统凭据注册的模型应写入 system_gateway_models；"
+                "请使用 create_system_gateway_model 或系统凭据批量导入"
             )
         prepared = _prepare_gateway_model_write_fields(
             provider=provider,
@@ -445,7 +478,7 @@ class ModelWritesMixin:
         actor_user_id: uuid.UUID | None,
         team_role: str,
         is_platform_admin: bool,
-        strategy: str = 'simple-shuffle',
+        strategy: str = "simple-shuffle",
         weight: int = 1,
         rpm_limit: int | None = None,
         tpm_limit: int | None = None,
@@ -455,27 +488,27 @@ class ModelWritesMixin:
     ) -> MultiCredentialGatewayModelResult:
         """为同一 ``(provider, real_model)`` 在多个凭据上一键注册并生成 ``GatewayRoute``。
 
-            - 每个 ``credential_id`` 都建一行 ``GatewayModel``，别名为 ``<name>--<credentialId 短哈希>``；
-            - 自动创建 ``GatewayRoute(virtual_model=name, primary_models=[...all aliases])``，
-              客户端调用 ``model=name`` 时由 Router 在多 deployment 间按 ``strategy`` 调度；
-            - 与 Phase 2 ``_routes_to_virtual_deployments`` 联动后激活原生负载均衡（least-busy /
-              cost-based / weighted-shuffle）。
-            - 若 ``name`` 已被 ``GatewayModel`` / ``GatewayRoute`` 占用，全部回滚并抛 ``ValidationError``。
-            """
-        cleaned_name = (name or '').strip()
+        - 每个 ``credential_id`` 都建一行 ``GatewayModel``，别名为 ``<name>--<credentialId 短哈希>``；
+        - 自动创建 ``GatewayRoute(virtual_model=name, primary_models=[...all aliases])``，
+          客户端调用 ``model=name`` 时由 Router 在多 deployment 间按 ``strategy`` 调度；
+        - 与 Phase 2 ``_routes_to_virtual_deployments`` 联动后激活原生负载均衡（least-busy /
+          cost-based / weighted-shuffle）。
+        - 若 ``name`` 已被 ``GatewayModel`` / ``GatewayRoute`` 占用，全部回滚并抛 ``ValidationError``。
+        """
+        cleaned_name = (name or "").strip()
         if not cleaned_name:
-            raise ValidationError('虚拟模型名不能为空')
+            raise ValidationError("虚拟模型名不能为空")
         if not credential_ids:
-            raise ValidationError('credential_ids 不能为空')
+            raise ValidationError("credential_ids 不能为空")
         if len(set(credential_ids)) != len(credential_ids):
-            raise ValidationError('credential_ids 不能包含重复项')
+            raise ValidationError("credential_ids 不能包含重复项")
         strategy_norm = validate_routing_strategy(strategy)
         repo = self._models
         if await repo.name_exists_for_tenant(tenant_id, cleaned_name):
-            raise ValidationError(f'虚拟模型名 {cleaned_name} 与现有 GatewayModel 别名冲突')
+            raise ValidationError(f"虚拟模型名 {cleaned_name} 与现有 GatewayModel 别名冲突")
         existing_route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
         if existing_route is not None:
-            raise ValidationError(f'虚拟模型名 {cleaned_name} 已存在 GatewayRoute')
+            raise ValidationError(f"虚拟模型名 {cleaned_name} 已存在 GatewayRoute")
         for cid in credential_ids:
             bindable = await self._creds.get_bindable_for_team_gateway_model(
                 cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
@@ -483,21 +516,20 @@ class ModelWritesMixin:
             if bindable is None:
                 raise CredentialNotFoundError(str(cid))
             if not team_model_credential_scope_allowed(bindable_credential_scope(bindable)):
-                raise ValidationError(
-                    '多凭据注册不支持系统凭据；请使用系统模型单独注册或批量导入'
-                )
+                raise ValidationError("多凭据注册不支持系统凭据；请使用系统模型单独注册或批量导入")
         from domains.gateway.infrastructure.models.gateway_model import GatewayModel
+
         created_models: list[GatewayModel] = []
         route = None
         try:
             for cid in credential_ids:
                 short = uuid.UUID(str(cid)).hex[:8]
-                alias = f'{cleaned_name}--{short}'
+                alias = f"{cleaned_name}--{short}"
                 suffix = 0
                 base_alias = alias
                 while await repo.name_exists_for_tenant(tenant_id, alias):
                     suffix += 1
-                    alias = f'{base_alias}-{suffix}'
+                    alias = f"{base_alias}-{suffix}"
                 row = await self.create_gateway_model(
                     tenant_id=tenant_id,
                     name=alias,
@@ -517,7 +549,12 @@ class ModelWritesMixin:
                     reload_router=False,
                 )
                 created_models.append(row)
-            route = await self._routes.create(tenant_id=tenant_id, virtual_model=cleaned_name, primary_models=[m.name for m in created_models], strategy=strategy_norm)
+            route = await self._routes.create(
+                tenant_id=tenant_id,
+                virtual_model=cleaned_name,
+                primary_models=[m.name for m in created_models],
+                strategy=strategy_norm,
+            )
         except Exception:
             for r in created_models:
                 with suppress(Exception):
@@ -542,9 +579,11 @@ class ModelWritesMixin:
     ) -> dict[str, Any]:
         repo = self._models
         update_fields = dict(fields)
-        if 'credential_id' in update_fields and update_fields['credential_id'] is not None:
-            new_cid_raw = update_fields['credential_id']
-            new_cid = new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
+        if "credential_id" in update_fields and update_fields["credential_id"] is not None:
+            new_cid_raw = update_fields["credential_id"]
+            new_cid = (
+                new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
+            )
             cred = await self._creds.get_bindable_for_team_gateway_model(
                 new_cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
             )
@@ -562,49 +601,47 @@ class ModelWritesMixin:
             if owner_tenant_id is not None and not team_model_credential_scope_allowed(
                 bindable_credential_scope(cred)
             ):
-                raise ValidationError('团队模型不可绑定系统凭据')
+                raise ValidationError("团队模型不可绑定系统凭据")
             if cred.provider.strip().lower() != existing.provider.strip().lower():
-                raise ValidationError(f'凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致')
-        if 'real_model' in update_fields and update_fields['real_model'] is not None:
-            raw_rm = str(update_fields['real_model']).strip()
+                raise ValidationError(
+                    f"凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致"
+                )
+        if "real_model" in update_fields and update_fields["real_model"] is not None:
+            raw_rm = str(update_fields["real_model"]).strip()
             if not raw_rm:
-                raise ValidationError('上游模型 ID 不能为空')
+                raise ValidationError("上游模型 ID 不能为空")
             prefix_msg = litellm_prefix_violation_message(existing.provider, raw_rm)
             if prefix_msg:
                 raise ValidationError(prefix_msg)
-            update_fields['real_model'] = build_litellm_model_id(existing.provider, raw_rm)
-        resync_capabilities = bool(update_fields.pop('resync_capabilities', False))
-        if resync_capabilities and is_config_managed_system_gateway_model(
-            tags=existing.tags
-        ):
-            raise ValidationError('配置托管的系统模型不可从 LiteLLM 同步能力')
-        if resync_capabilities or 'real_model' in update_fields or 'tags' in update_fields:
+            update_fields["real_model"] = build_litellm_model_id(existing.provider, raw_rm)
+        resync_capabilities = bool(update_fields.pop("resync_capabilities", False))
+        if resync_capabilities and is_config_managed_system_gateway_model(tags=existing.tags):
+            raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
+        if resync_capabilities or "real_model" in update_fields or "tags" in update_fields:
             merged_tags = dict(existing.tags or {})
-            if isinstance(update_fields.get('tags'), dict):
-                merged_tags.update(update_fields['tags'])
+            if isinstance(update_fields.get("tags"), dict):
+                merged_tags.update(update_fields["tags"])
             if resync_capabilities:
                 merged_tags = strip_litellm_capability_tags(merged_tags)
-            real_for_tags = str(
-                update_fields.get('real_model') or existing.real_model
-            ).strip()
-            update_fields['tags'] = build_gateway_model_tags(
+            real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
+            update_fields["tags"] = build_gateway_model_tags(
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,
                 skip_hints=is_config_managed_system_gateway_model(tags=existing.tags),
-                hint_mode='resync' if resync_capabilities else 'fill_missing',
+                hint_mode="resync" if resync_capabilities else "fill_missing",
             )
-        new_name_raw = update_fields.get('name')
+        new_name_raw = update_fields.get("name")
         if new_name_raw is not None:
             new_name = str(new_name_raw).strip()
             if not new_name:
-                raise ValidationError('注册别名不能为空')
-            update_fields['name'] = new_name
+                raise ValidationError("注册别名不能为空")
+            update_fields["name"] = new_name
             if new_name != existing.name:
                 if block_config_managed_rename:
-                    raise ValidationError('配置托管的系统模型不可修改注册别名')
+                    raise ValidationError("配置托管的系统模型不可修改注册别名")
                 if await repo.name_exists_in_scope(owner_tenant_id, new_name, exclude_id=model_id):
-                    raise ValidationError(f'注册别名已存在: {new_name}')
+                    raise ValidationError(f"注册别名已存在: {new_name}")
                 await rename_gateway_model_name_references(
                     self._session,
                     tenant_id=owner_tenant_id,
@@ -633,14 +670,14 @@ class ModelWritesMixin:
         existing = await repo.get(model_id)
         if existing is not None:
             if existing.tenant_id is not None and existing.tenant_id != tenant_id:
-                raise ManagementEntityNotFoundError('model', str(model_id))
+                raise ManagementEntityNotFoundError("model", str(model_id))
             await self._assert_team_model_mutation_allowed(
                 credential_id=existing.credential_id,
                 tenant_id=tenant_id,
                 actor_user_id=actor_user_id,
                 team_role=team_role,
                 is_platform_admin=is_platform_admin,
-                mutation='update',
+                mutation="update",
             )
             tags = existing.tags or {}
             block_rename = (
@@ -660,14 +697,14 @@ class ModelWritesMixin:
             )
             updated = await repo.update(model_id, **update_fields)
             if updated is None:
-                raise ManagementEntityNotFoundError('model', str(model_id))
+                raise ManagementEntityNotFoundError("model", str(model_id))
             if reload_router:
                 await self.reload_litellm_router(tenant_id=tenant_id)
             return updated
 
         system_existing = await repo.get_system(model_id)
         if system_existing is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
 
         assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
         update_fields = await self._apply_gateway_model_update_fields(
@@ -685,7 +722,7 @@ class ModelWritesMixin:
         )
         updated = await repo.update_system(model_id, **update_fields)
         if updated is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
         if reload_router:
             await self.reload_litellm_router()
         return updated
@@ -704,14 +741,14 @@ class ModelWritesMixin:
         existing = await repo.get(model_id)
         if existing is not None:
             if existing.tenant_id is not None and existing.tenant_id != tenant_id:
-                raise ManagementEntityNotFoundError('model', str(model_id))
+                raise ManagementEntityNotFoundError("model", str(model_id))
             await self._assert_team_model_mutation_allowed(
                 credential_id=existing.credential_id,
                 tenant_id=tenant_id,
                 actor_user_id=actor_user_id,
                 team_role=team_role,
                 is_platform_admin=is_platform_admin,
-                mutation='delete',
+                mutation="delete",
             )
             model_name = existing.name
             await repo.delete(model_id)
@@ -719,7 +756,7 @@ class ModelWritesMixin:
 
         system_existing = await repo.get_system(model_id)
         if system_existing is None:
-            raise ManagementEntityNotFoundError('model', str(model_id))
+            raise ManagementEntityNotFoundError("model", str(model_id))
 
         from domains.gateway.domain.policies.credential_scope import (
             assert_system_credential_mutation_allowed,
@@ -729,7 +766,7 @@ class ModelWritesMixin:
         assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
         if is_config_managed_system_gateway_model(tags=system_existing.tags):
             raise ValidationError(
-                '配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理'
+                "配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理"
             )
         model_name = system_existing.name
         await repo.delete_system(model_id)
@@ -740,8 +777,8 @@ class ModelWritesMixin:
         model_id: uuid.UUID,
         exc: BaseException,
     ) -> GatewayModelBatchOperationFailure:
-        code = getattr(exc, 'code', None) or exc.__class__.__name__
-        message = getattr(exc, 'message', None) or str(exc)
+        code = getattr(exc, "code", None) or exc.__class__.__name__
+        message = getattr(exc, "message", None) or str(exc)
         return GatewayModelBatchOperationFailure(
             id=model_id,
             code=str(code),
@@ -799,7 +836,7 @@ class ModelWritesMixin:
     ) -> GatewayModelBatchDeleteResult:
         if len(model_ids) > _BATCH_MODEL_OP_MAX:
             raise ValidationError(
-                f'单次最多删除 {_BATCH_MODEL_OP_MAX} 个模型',
+                f"单次最多删除 {_BATCH_MODEL_OP_MAX} 个模型",
             )
         unique_ids = list(dict.fromkeys(model_ids))
         succeeded: list[uuid.UUID] = []
@@ -850,7 +887,7 @@ class ModelWritesMixin:
     ) -> GatewayModelBatchResyncCapabilitiesResult:
         if len(model_ids) > _BATCH_MODEL_OP_MAX:
             raise ValidationError(
-                f'单次最多同步 {_BATCH_MODEL_OP_MAX} 个模型能力',
+                f"单次最多同步 {_BATCH_MODEL_OP_MAX} 个模型能力",
             )
         unique_ids = list(dict.fromkeys(model_ids))
         succeeded: list[uuid.UUID] = []
@@ -864,7 +901,7 @@ class ModelWritesMixin:
                     actor_user_id=actor_user_id,
                     team_role=team_role,
                     is_platform_admin=is_platform_admin,
-                    fields={'resync_capabilities': True},
+                    fields={"resync_capabilities": True},
                     reload_router=False,
                 )
             except (HttpMappableDomainError, ValidationError) as exc:

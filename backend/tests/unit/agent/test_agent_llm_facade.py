@@ -102,8 +102,11 @@ async def test_chat_proxy_error_propagates(facade: AgentLlmFacade) -> None:
 
 @pytest.mark.asyncio
 async def test_bridge_failure_when_no_user_id(facade: AgentLlmFacade) -> None:
-    with patch(
-        "domains.agent.infrastructure.llm.agent_llm_facade.resolve_internal_gateway_user_id",
-        return_value=None,
-    ), pytest.raises(RuntimeError, match="内部桥接"):
+    with (
+        patch(
+            "domains.agent.infrastructure.llm.agent_llm_facade.resolve_internal_gateway_user_id",
+            return_value=None,
+        ),
+        pytest.raises(RuntimeError, match="内部桥接"),
+    ):
         await facade.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4")

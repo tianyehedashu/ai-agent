@@ -92,9 +92,7 @@ async def test_resolve_returns_none_when_name_unknown(db_session, test_user) -> 
 
 
 @pytest.mark.asyncio
-async def test_resolve_personal_model_via_shared_team_context(
-    db_session, test_user
-) -> None:
+async def test_resolve_personal_model_via_shared_team_context(db_session, test_user) -> None:
     """共享团队 vkey 试调个人凭据模型时，应解析到 personal team 注册行。"""
     teams = TeamService(db_session)
     personal = await teams.ensure_personal_team(test_user.id)
@@ -128,9 +126,7 @@ async def test_resolve_personal_model_via_shared_team_context(
     )
     await db_session.flush()
 
-    resolved = await resolve_model_or_route(
-        db_session, shared.id, alias, user_id=test_user.id
-    )
+    resolved = await resolve_model_or_route(db_session, shared.id, alias, user_id=test_user.id)
     assert resolved is not None
     assert resolved.route is None
     assert resolved.record.id == model.id
@@ -138,9 +134,7 @@ async def test_resolve_personal_model_via_shared_team_context(
 
 
 @pytest.mark.asyncio
-async def test_resolve_personal_when_shared_has_disabled_duplicate(
-    db_session, test_user
-) -> None:
+async def test_resolve_personal_when_shared_has_disabled_duplicate(db_session, test_user) -> None:
     """共享团队存在同名 disabled 模型时，应回退到 personal team 注册行。"""
     teams = TeamService(db_session)
     personal = await teams.ensure_personal_team(test_user.id)
@@ -170,9 +164,7 @@ async def test_resolve_personal_when_shared_has_disabled_duplicate(
     )
     await db_session.flush()
 
-    resolved = await resolve_model_or_route(
-        db_session, shared.id, alias, user_id=test_user.id
-    )
+    resolved = await resolve_model_or_route(db_session, shared.id, alias, user_id=test_user.id)
     assert resolved is not None
     assert resolved.record.id == personal_model.id
     assert resolved.record.tenant_id == personal.id
@@ -211,18 +203,14 @@ async def test_resolve_prefers_personal_when_shared_has_enabled_duplicate(
     )
     await db_session.flush()
 
-    resolved = await resolve_model_or_route(
-        db_session, shared.id, alias, user_id=test_user.id
-    )
+    resolved = await resolve_model_or_route(db_session, shared.id, alias, user_id=test_user.id)
     assert resolved is not None
     assert resolved.record.id == personal_model.id
     assert resolved.record.tenant_id == personal.id
 
 
 @pytest.mark.asyncio
-async def test_resolve_personal_when_shared_has_inactive_credential(
-    db_session, test_user
-) -> None:
+async def test_resolve_personal_when_shared_has_inactive_credential(db_session, test_user) -> None:
     """共享团队同名 enabled 模型但凭据 inactive 时，应回退 personal team。"""
     teams = TeamService(db_session)
     personal = await teams.ensure_personal_team(test_user.id)
@@ -265,9 +253,7 @@ async def test_resolve_personal_when_shared_has_inactive_credential(
     )
     await db_session.flush()
 
-    resolved = await resolve_model_or_route(
-        db_session, shared.id, alias, user_id=test_user.id
-    )
+    resolved = await resolve_model_or_route(db_session, shared.id, alias, user_id=test_user.id)
     assert resolved is not None
     assert resolved.record.id == personal_model.id
     assert resolved.record.tenant_id == personal.id

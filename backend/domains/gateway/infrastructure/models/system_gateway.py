@@ -138,9 +138,7 @@ class SystemGatewayAlertRule(BaseModel):
     window_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="5", default=5
     )
-    channels: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, server_default="{}"
-    )
+    channels: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )

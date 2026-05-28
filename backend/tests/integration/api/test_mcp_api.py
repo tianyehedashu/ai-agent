@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.agent.infrastructure.models.mcp_server import MCPServer
 from domains.agent.infrastructure.models.system_mcp_server import SystemMCPServer
 from domains.identity.infrastructure.models.user import User
 

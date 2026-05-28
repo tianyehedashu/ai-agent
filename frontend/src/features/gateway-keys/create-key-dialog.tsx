@@ -29,19 +29,19 @@ export interface CreateKeyValues {
 }
 
 function resolveInitialTeamId(
-  writableTeams: readonly GatewayTeam[],
+  targetTeams: readonly GatewayTeam[],
   defaultTeamId: string | undefined
 ): string {
-  if (defaultTeamId && writableTeams.some((team) => team.id === defaultTeamId)) {
+  if (defaultTeamId && targetTeams.some((team) => team.id === defaultTeamId)) {
     return defaultTeamId
   }
-  return writableTeams[0]?.id ?? ''
+  return targetTeams[0]?.id ?? ''
 }
 
 export interface CreateKeyDialogProps {
   open: boolean
   routeTeamId: string
-  writableTeams: readonly GatewayTeam[]
+  targetTeams: readonly GatewayTeam[]
   onOpenChange: (open: boolean) => void
   onSubmit: (targetTeamId: string, values: CreateKeyValues) => void
   plaintext: string | null
@@ -51,7 +51,7 @@ export interface CreateKeyDialogProps {
 export function CreateKeyDialog({
   open,
   routeTeamId,
-  writableTeams,
+  targetTeams,
   onOpenChange,
   onSubmit,
   plaintext,
@@ -71,8 +71,8 @@ export function CreateKeyDialog({
   )
 
   const selectedTeam = useMemo(
-    () => writableTeams.find((team) => team.id === targetTeamId) ?? null,
-    [writableTeams, targetTeamId]
+    () => targetTeams.find((team) => team.id === targetTeamId) ?? null,
+    [targetTeams, targetTeamId]
   )
   const workspaceLabel = selectedTeam ? gatewayWorkspaceLabel(selectedTeam, { viewerUserId }) : '—'
   const crossWorkspaceTarget =
@@ -80,11 +80,11 @@ export function CreateKeyDialog({
 
   useEffect(() => {
     if (!open || plaintext) return
-    setTargetTeamId(resolveInitialTeamId(writableTeams, routeTeamId))
-  }, [open, plaintext, routeTeamId, writableTeams])
+    setTargetTeamId(resolveInitialTeamId(targetTeams, routeTeamId))
+  }, [open, plaintext, routeTeamId, targetTeams])
 
   const canSubmit =
-    values.name.trim().length > 0 && targetTeamId.length > 0 && writableTeams.length > 0
+    values.name.trim().length > 0 && targetTeamId.length > 0 && targetTeams.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,12 +130,12 @@ export function CreateKeyDialog({
                 id="key-target-workspace"
                 value={targetTeamId}
                 onChange={setTargetTeamId}
-                teams={writableTeams}
-                disabled={writableTeams.length === 0}
-                placeholder={writableTeams.length === 0 ? '无可绑定的工作区' : '选择工作区'}
+                teams={targetTeams}
+                disabled={targetTeams.length === 0}
+                placeholder={targetTeams.length === 0 ? '无可绑定的工作区' : '选择工作区'}
                 labelForTeam={labelForTeam}
               />
-              {writableTeams.length === 0 ? (
+              {targetTeams.length === 0 ? (
                 <p className="text-[11px] text-destructive">
                   当前账号没有可创建虚拟 Key 的工作区。
                 </p>

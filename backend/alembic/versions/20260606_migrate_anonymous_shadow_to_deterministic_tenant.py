@@ -35,9 +35,10 @@ def _existing_tenant_tables(conn: sa.Connection) -> tuple[str, ...]:
 def upgrade() -> None:
     conn = op.get_bind()
     tenant_tables = _existing_tenant_tables(conn)
-    rows = conn.execute(
-        sa.text(
-            """
+    rows = (
+        conn.execute(
+            sa.text(
+                """
             SELECT u.id AS user_id,
                    u.settings->>'anonymous_cookie_id' AS cookie_id,
                    t.id AS team_id
@@ -49,8 +50,11 @@ def upgrade() -> None:
             WHERE u.role = 'anonymous'
               AND u.settings->>'anonymous_cookie_id' IS NOT NULL
             """
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     shadow_team_ids: set[uuid.UUID] = set()
     shadow_user_ids: set[uuid.UUID] = set()

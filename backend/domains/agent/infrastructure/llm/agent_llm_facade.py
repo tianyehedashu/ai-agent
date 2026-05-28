@@ -23,9 +23,9 @@ from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
 from domains.gateway.application.ports import (
     GatewayCallContext,
-    InvocationOverrides,
     GatewayResponse,
     GatewayStreamChunk,
+    InvocationOverrides,
 )
 from libs.config.interfaces import LLMConfigProtocol  # noqa: TC001 — __init__ 运行期使用
 from utils.logging import get_logger
@@ -112,7 +112,9 @@ class AgentLlmFacade:
             )
         return parsed or None
 
-    def _response_from_gateway(self, result: GatewayResponse, model_fallback: str) -> AgentLlmResponse:
+    def _response_from_gateway(
+        self, result: GatewayResponse, model_fallback: str
+    ) -> AgentLlmResponse:
         return AgentLlmResponse(
             content=result.content,
             reasoning_content=result.reasoning_content,

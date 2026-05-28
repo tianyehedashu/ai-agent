@@ -135,9 +135,8 @@ class ProxyNonChatMixin:
         )
         prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        volcengine_direct = (
-            prepared.resolved is not None
-            and should_use_volcengine_direct_image(prepared.resolved.record.provider)
+        volcengine_direct = prepared.resolved is not None and should_use_volcengine_direct_image(
+            prepared.resolved.record.provider
         )
         try:
             if volcengine_direct:
@@ -328,9 +327,8 @@ class ProxyNonChatMixin:
             ctx, body, resolved=preflight_resolved
         )
         meta, up_c, down_c = pricing_kwargs_from_litellm(invoke_kwargs)
-        volcengine_direct = (
-            prepared.resolved is not None
-            and should_use_volcengine_direct_video(prepared.resolved.record.provider)
+        volcengine_direct = prepared.resolved is not None and should_use_volcengine_direct_video(
+            prepared.resolved.record.provider
         )
         try:
             if volcengine_direct:

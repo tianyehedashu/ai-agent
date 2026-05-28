@@ -75,11 +75,7 @@ async def list_model_presets(
     """返回已同步到 DB 的配置托管全局模型目录。"""
     _ = team
     system_models = await reads.list_system_gateway_models(only_enabled=True)
-    cfg_rows = [
-        m
-        for m in system_models
-        if (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG
-    ]
+    cfg_rows = [m for m in system_models if (m.tags or {}).get(MANAGED_BY_KEY) == MANAGED_CONFIG]
     presets: list[GatewayModelPresetResponse] = [
         GatewayModelPresetResponse(
             id=m.name,
@@ -153,16 +149,12 @@ async def list_models(
     team_credentials_by_id = None
     if include_cred:
         cred_ids = {
-            m.credential_id
-            for m in page.items
-            if registry_kind_for_merged_row(m) == "system"
+            m.credential_id for m in page.items if registry_kind_for_merged_row(m) == "system"
         }
         credentials_by_id = await reads.map_system_credentials_by_id(cred_ids)
     if registry_scope == "team":
         team_cred_ids = {
-            m.credential_id
-            for m in page.items
-            if registry_kind_for_merged_row(m) == "team"
+            m.credential_id for m in page.items if registry_kind_for_merged_row(m) == "team"
         }
         team_credentials_by_id = await reads.map_team_credentials_display_by_id(
             team_cred_ids,

@@ -16,12 +16,12 @@ from domains.agent.application.chat_model_resolution_use_case import (
 )
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.identity.infrastructure.models.user import User
+from libs.exceptions import ValidationError
 from libs.iam.permission_context import (
     PermissionContext,
     clear_permission_context,
     set_permission_context,
 )
-from libs.exceptions import ValidationError
 
 
 @pytest.mark.unit
@@ -208,6 +208,36 @@ class TestGetAvailableModels:
         assert len(deepseek_only) <= len(text_models)
         for m in deepseek_only:
             assert m["provider"] == "deepseek"
+
+
+@pytest.mark.unit
+class TestVisibleTextSystemModelIds:
+    @pytest.mark.asyncio
+    async def test_uses_permission_team(self, db_session):
+        team_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        try:
+            set_permission_context(
+                PermissionContext(
+                    user_id=user_id,
+                    role="user",
+                    team_id=team_id,
+                    team_role="owner",
+                )
+            )
+            catalog = AsyncMock()
+            catalog.list_visible_models = AsyncMock(
+                return_value=[{"id": "team-chat-model", "display_name": "Team Chat"}]
+            )
+            uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
+            ids = await uc.visible_text_system_model_ids()
+            catalog.list_visible_models.assert_awaited_once_with(
+                billing_team_id=team_id,
+                model_type="text",
+            )
+            assert ids == frozenset(["team-chat-model"])
+        finally:
+            clear_permission_context()
 
 
 @pytest.mark.unit

@@ -149,7 +149,9 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
 
         mode = (creative_mode or "chat").strip().lower()
         if mode not in ("chat", "image_gen"):
-            yield AgentEvent.error(error=f"不支持的创作模式: {creative_mode}", session_id=session_id)
+            yield AgentEvent.error(
+                error=f"不支持的创作模式: {creative_mode}", session_id=session_id
+            )
             return
 
         ref_urls = self._normalize_reference_image_urls(reference_image_urls or [])
@@ -177,7 +179,11 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         event_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
         self._event_queues[session_id] = event_queue
 
-        session_cfg = session.config if session and isinstance(getattr(session, "config", None), dict) else None
+        session_cfg = (
+            session.config
+            if session and isinstance(getattr(session, "config", None), dict)
+            else None
+        )
         log_override = resolve_internal_store_full_messages(
             request_explicit=gateway_verbose_request_log,
             session_config=session_cfg,
@@ -227,16 +233,18 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                     return
 
             try:
-                engine, session_recreated_event, picked_chat_model_for_persist = (
-                    await self._prepare_agent_engine(
-                        agent_id,
-                        session_id,
-                        user_id,
-                        session,
-                        model_ref,
-                        request_temperature=temperature,
-                        thinking_enabled=thinking_enabled,
-                    )
+                (
+                    engine,
+                    session_recreated_event,
+                    picked_chat_model_for_persist,
+                ) = await self._prepare_agent_engine(
+                    agent_id,
+                    session_id,
+                    user_id,
+                    session,
+                    model_ref,
+                    request_temperature=temperature,
+                    thinking_enabled=thinking_enabled,
                 )
             except ValidationError as e:
                 yield AgentEvent.error(error=e.message, session_id=session_id)
@@ -443,7 +451,9 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         return out
 
     @staticmethod
-    def _build_user_message_metadata(creative_mode: str, reference_image_urls: list[str]) -> dict[str, Any]:
+    def _build_user_message_metadata(
+        creative_mode: str, reference_image_urls: list[str]
+    ) -> dict[str, Any]:
         meta: dict[str, Any] = {"creative_mode": creative_mode}
         if reference_image_urls:
             meta["reference_image_urls"] = reference_image_urls
@@ -460,10 +470,16 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
     ) -> list[dict[str, Any]]:
         picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id)
         if picked is None:
-            raise ValidationError("未选择对话模型，无法发送带参考图的对话（请先选择支持视觉的模型）")
-        caps = await self._model_catalog.resolve_capabilities(picked) if self._model_catalog else None
+            raise ValidationError(
+                "未选择对话模型，无法发送带参考图的对话（请先选择支持视觉的模型）"
+            )
+        caps = (
+            await self._model_catalog.resolve_capabilities(picked) if self._model_catalog else None
+        )
         if caps is None or not caps.supports_vision:
-            raise ValidationError("当前对话模型不支持视觉输入，请更换支持「图片理解」的模型或移除参考图")
+            raise ValidationError(
+                "当前对话模型不支持视觉输入，请更换支持「图片理解」的模型或移除参考图"
+            )
         max_refs = caps.max_reference_images if caps.max_reference_images > 0 else 8
         if len(reference_image_urls) > max_refs:
             raise ValidationError(f"参考图过多：当前模型最多接受 {max_refs} 张")

@@ -5,8 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from pydantic import SecretStr
+import pytest
 
 from bootstrap.config import Settings
 from domains.gateway.application.credential_env_audit import log_config_managed_api_base_drift

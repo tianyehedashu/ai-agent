@@ -10,7 +10,6 @@ from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.application.model_reference_prune import rename_gateway_model_name_references
 from domains.gateway.domain.virtual_key_service import generate_vkey
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -20,6 +19,7 @@ from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 
 
 @pytest.mark.asyncio
@@ -219,7 +219,7 @@ async def test_update_global_gateway_model_name_conflict(db_session) -> None:
     from domains.gateway.infrastructure.repositories.system_credential_repository import (
         SystemProviderCredentialRepository,
     )
-    from libs.crypto import derive_encryption_key, encrypt_value
+    from libs.crypto import derive_encryption_key
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred = await SystemProviderCredentialRepository(db_session).create(

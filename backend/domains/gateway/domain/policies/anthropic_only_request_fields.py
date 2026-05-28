@@ -108,9 +108,7 @@ def resolve_fields_to_strip(
         return []
     preserve = _preserve_fields_from_tags(model_tags)
     return [
-        key
-        for key in _ANTHROPIC_ONLY_REQUEST_FIELD_ORDER
-        if key in kwargs and key not in preserve
+        key for key in _ANTHROPIC_ONLY_REQUEST_FIELD_ORDER if key in kwargs and key not in preserve
     ]
 
 

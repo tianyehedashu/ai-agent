@@ -19,10 +19,7 @@ class TestResolveProductSourceImageUrl:
         )
 
     def test_falls_back_to_input(self) -> None:
-        assert (
-            resolve_product_source_image_url(None, ["https://input.jpg"])
-            == "https://input.jpg"
-        )
+        assert resolve_product_source_image_url(None, ["https://input.jpg"]) == "https://input.jpg"
 
     def test_empty_returns_none(self) -> None:
         assert resolve_product_source_image_url(None, []) is None

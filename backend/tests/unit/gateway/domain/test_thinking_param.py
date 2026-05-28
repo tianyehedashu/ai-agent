@@ -66,8 +66,7 @@ def test_infer_anthropic_extended() -> None:
 
 def test_infer_none_for_qwen_turbo() -> None:
     assert (
-        infer_thinking_param(provider="dashscope", real_model="qwen-turbo")
-        == THINKING_PARAM_NONE
+        infer_thinking_param(provider="dashscope", real_model="qwen-turbo") == THINKING_PARAM_NONE
     )
 
 

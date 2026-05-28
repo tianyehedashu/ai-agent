@@ -2,6 +2,9 @@
  * Gateway / Listing Studio Lucide 图标：直连 ESM 子模块，避免 dev 冷启动加载全量 barrel。
  */
 export { default as AlertCircle } from 'lucide-react/dist/esm/icons/alert-circle'
+export { default as ArrowDown } from 'lucide-react/dist/esm/icons/arrow-down'
+export { default as ArrowUp } from 'lucide-react/dist/esm/icons/arrow-up'
+export { default as LayoutGrid } from 'lucide-react/dist/esm/icons/layout-grid'
 export { default as AlertTriangle } from 'lucide-react/dist/esm/icons/alert-triangle'
 export { default as ArrowLeft } from 'lucide-react/dist/esm/icons/arrow-left'
 export { default as BarChart3 } from 'lucide-react/dist/esm/icons/bar-chart-3'

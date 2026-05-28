@@ -40,9 +40,8 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_expired_token_returns_401_in_dev_mode(self):
         """测试: 开发模式下过期 token 返回 401（不再降级）"""
-        from libs.exceptions import TokenError
-
         from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import TokenError
 
         request = self._create_mock_request()
         credentials = self._create_mock_credentials("expired-jwt-token")
@@ -70,9 +69,8 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_expired_token_returns_401_in_production(self):
         """测试: 生产模式下过期 token 返回 401"""
-        from libs.exceptions import TokenError
-
         from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import TokenError
 
         request = self._create_mock_request()
         credentials = self._create_mock_credentials("expired-token")
@@ -100,9 +98,8 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_expired_token_does_not_set_degraded_flag(self):
         """测试: 过期 token 不再设置 token_degraded 标记"""
-        from libs.exceptions import TokenError
-
         from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import TokenError
 
         request = self._create_mock_request()
         credentials = self._create_mock_credentials("expired-jwt")
@@ -182,9 +179,8 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_no_token_returns_401_in_production(self):
         """测试: 生产模式下无 token 返回 401"""
-        from libs.exceptions import AuthenticationError
-
         from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import AuthenticationError
 
         request = self._create_mock_request()
         mock_db = AsyncMock()

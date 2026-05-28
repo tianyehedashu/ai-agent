@@ -43,7 +43,7 @@ import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import {
   useGatewayMemberWorkspaceNameMap,
-  useGatewayWritableMemberTeams,
+  useGatewayVkeyTargetTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
@@ -73,8 +73,8 @@ export function GatewayKeysWorkspace({
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { isMember, isPlatformViewer, isAdmin } = useGatewayPermission()
-  const writableTeams = useGatewayWritableMemberTeams()
-  const canManageKeys = isMember && !isPlatformViewer && writableTeams.length > 0
+  const targetTeams = useGatewayVkeyTargetTeams()
+  const canManageKeys = isMember && !isPlatformViewer && targetTeams.length > 0
   const workspaceNameById = useGatewayMemberWorkspaceNameMap()
 
   const [open, setOpen] = useState(false)
@@ -297,7 +297,7 @@ export function GatewayKeysWorkspace({
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        {writableTeams.length === 0 ? '无可绑定的工作区' : '需团队成员权限'}
+        {targetTeams.length === 0 ? '无可绑定的工作区' : '需团队成员权限'}
       </TooltipContent>
     </Tooltip>
   )
@@ -373,7 +373,7 @@ export function GatewayKeysWorkspace({
         <CreateKeyDialog
           open={open}
           routeTeamId={teamId}
-          writableTeams={writableTeams}
+          targetTeams={targetTeams}
           onOpenChange={handleCreateDialogOpenChange}
           createdKeyId={createdKeyId}
           onSubmit={handleCreateSubmit}

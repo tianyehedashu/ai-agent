@@ -64,7 +64,9 @@ async def _seed_byok_and_team_models(
 
 
 @pytest.mark.asyncio
-async def test_list_gateway_models_registry_scope_team_excludes_system(db_session, test_user) -> None:
+async def test_list_gateway_models_registry_scope_team_excludes_system(
+    db_session, test_user
+) -> None:
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
@@ -73,9 +75,7 @@ async def test_list_gateway_models_registry_scope_team_excludes_system(db_sessio
     callable_rows = await reads.list_gateway_models(
         team.id, registry_scope="callable", only_enabled=True
     )
-    team_rows = await reads.list_gateway_models(
-        team.id, registry_scope="team", only_enabled=False
-    )
+    team_rows = await reads.list_gateway_models(team.id, registry_scope="team", only_enabled=False)
     if not callable_rows:
         pytest.skip("catalog sync produced no system models")
 
@@ -182,4 +182,3 @@ async def test_callable_scope_still_includes_byok(db_session, test_user) -> None
     names = {r.name for r in callable_rows}
     assert byok_name in names
     assert team_name in names
-

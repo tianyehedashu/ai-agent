@@ -7,7 +7,7 @@ import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-cur
 import { UsageStatsBreakdownCredentials } from '@/features/gateway-usage/usage-stats-breakdown-credentials'
 import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats-breakdown-primary'
 import type { UsageStatsRowBreakdown } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
-import { BarChart3 } from '@/lib/lucide-icons'
+import { BarChart3, Shield } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { formatCompact, formatPercent } from '@/lib/number'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,7 @@ export interface UsageStatsRankingTableProps {
   credentialTopN: number
   onDrill: (item: GatewayUsageStatsItem) => void
   onShowDetail: (item: GatewayUsageStatsItem) => void
+  onSetQuota?: (item: GatewayUsageStatsItem) => void
 }
 
 const StatsRow = memo(function StatsRow({
@@ -35,6 +36,7 @@ const StatsRow = memo(function StatsRow({
   credentialTopN,
   onDrill,
   onShowDetail,
+  onSetQuota,
 }: Readonly<{
   item: GatewayUsageStatsItem
   maxRequests: number
@@ -45,6 +47,7 @@ const StatsRow = memo(function StatsRow({
   credentialTopN: number
   onDrill: (item: GatewayUsageStatsItem) => void
   onShowDetail: (item: GatewayUsageStatsItem) => void
+  onSetQuota?: (item: GatewayUsageStatsItem) => void
 }>): React.JSX.Element {
   const width = Math.max(4, (item.requests / maxRequests) * 100)
   const rowKey = item.group_key.trim()
@@ -57,6 +60,10 @@ const StatsRow = memo(function StatsRow({
   const handleShowDetail = useCallback(() => {
     onShowDetail(item)
   }, [item, onShowDetail])
+
+  const handleSetQuota = useCallback(() => {
+    onSetQuota?.(item)
+  }, [item, onSetQuota])
 
   return (
     <tr className="cv-auto-row border-b last:border-0 hover:bg-muted/20">
@@ -131,16 +138,30 @@ const StatsRow = memo(function StatsRow({
         {Math.round(item.avg_latency_ms).toLocaleString()}ms
       </td>
       <td className="px-4 py-3 text-right">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1 px-2 text-xs"
-          onClick={handleShowDetail}
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-          分布
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          {onSetQuota ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2 text-xs"
+              onClick={handleSetQuota}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              配额
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 px-2 text-xs"
+            onClick={handleShowDetail}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            分布
+          </Button>
+        </div>
       </td>
     </tr>
   )
@@ -157,6 +178,7 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
   credentialTopN,
   onDrill,
   onShowDetail,
+  onSetQuota,
 }: Readonly<UsageStatsRankingTableProps>): React.JSX.Element {
   return (
     <div className="overflow-x-auto">
@@ -184,7 +206,7 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
             {showCost ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
             <th className="px-4 py-2 text-right font-medium">缓存</th>
             <th className="px-4 py-2 text-right font-medium">延迟</th>
-            <th className="w-[72px] px-4 py-2 text-right font-medium">操作</th>
+            <th className="w-[120px] px-4 py-2 text-right font-medium">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -202,6 +224,7 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
                 credentialTopN={credentialTopN}
                 onDrill={onDrill}
                 onShowDetail={onShowDetail}
+                onSetQuota={onSetQuota}
               />
             )
           })}

@@ -27,9 +27,7 @@ class UpstreamCapabilityFlags:
 
 def is_deepseek_reasoner(client_model: str, real_model: str) -> bool:
     combined = f"{real_model} {client_model}".lower()
-    return "deepseek-reasoner" in combined or (
-        "deepseek" in combined and "reasoner" in combined
-    )
+    return "deepseek-reasoner" in combined or ("deepseek" in combined and "reasoner" in combined)
 
 
 def is_deepseek_thinking_model(client_model: str, real_model: str) -> bool:
@@ -104,9 +102,7 @@ def adapt_kwargs_by_capability(
         supports_reasoning=flags.supports_reasoning,
         supports_json_mode=flags.supports_json_mode,
         temperature_policy=(
-            TEMPERATURE_POLICY_FIXED_1
-            if flags.supports_reasoning
-            else TEMPERATURE_POLICY_CLIENT
+            TEMPERATURE_POLICY_FIXED_1 if flags.supports_reasoning else TEMPERATURE_POLICY_CLIENT
         ),
     )
     return apply_invocation_kwargs(snap, kwargs, validate=False)

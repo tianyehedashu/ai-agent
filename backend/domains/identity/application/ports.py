@@ -40,17 +40,13 @@ class UserSummaryQueryPort(Protocol):
 
     async def list_summary_views_by_ids(
         self, user_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, UserSummaryView]:
-        ...
+    ) -> dict[uuid.UUID, UserSummaryView]: ...
 
 
 class UserPlatformRoleLookupPort(Protocol):
     """按用户 ID 批量解析平台 role（tenancy 团队列表过滤 anonymous personal 等）。"""
 
-    async def roles_by_user_ids(
-        self, user_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
-        ...
+    async def roles_by_user_ids(self, user_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, str]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +69,7 @@ class TeamInviteCandidateQueryPort(Protocol):
         actor_user_id: uuid.UUID,
         scope: str,
         search: str | None = None,
-    ) -> PaginatedListResponse[InviteCandidateRowView]:
-        ...
+    ) -> PaginatedListResponse[InviteCandidateRowView]: ...
 
 
 class IdentityApplicationPort(Protocol):

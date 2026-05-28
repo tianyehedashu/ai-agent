@@ -18,7 +18,7 @@ class _FakeCatalog:
     def __init__(self, items: list[dict[str, object]]) -> None:
         self._items = items
 
-    async def list_visible_models(self, *, billing_team_id, model_type, user_id=None, **_kw):  # noqa: ANN001
+    async def list_visible_models(self, *, billing_team_id, model_type, user_id=None, **_kw):
         _ = billing_team_id, user_id
         if model_type is None:
             return self._items
@@ -27,7 +27,9 @@ class _FakeCatalog:
 
 @pytest.mark.asyncio
 async def test_resolve_scenario_default_env_valid(monkeypatch) -> None:
-    monkeypatch.setattr("domains.gateway.application.scenario_defaults.settings.default_model", "m-a")
+    monkeypatch.setattr(
+        "domains.gateway.application.scenario_defaults.settings.default_model", "m-a"
+    )
     catalog = _FakeCatalog(
         [
             {"id": "m-a", "model_types": ["text"]},
@@ -39,7 +41,9 @@ async def test_resolve_scenario_default_env_valid(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_scenario_default_env_invalid_falls_back_first(monkeypatch) -> None:
-    monkeypatch.setattr("domains.gateway.application.scenario_defaults.settings.default_model", "missing")
+    monkeypatch.setattr(
+        "domains.gateway.application.scenario_defaults.settings.default_model", "missing"
+    )
     catalog = _FakeCatalog(
         [
             {"id": "m-first", "model_types": ["text"]},

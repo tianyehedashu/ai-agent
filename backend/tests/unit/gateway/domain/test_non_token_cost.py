@@ -29,7 +29,9 @@ def test_merge_non_token_extra_from_litellm() -> None:
 
 
 def test_estimate_non_token_cost_from_extra_image() -> None:
-    response = {"data": [{"url": "https://example.com/a.png"}, {"url": "https://example.com/b.png"}]}
+    response = {
+        "data": [{"url": "https://example.com/a.png"}, {"url": "https://example.com/b.png"}]
+    }
     cost = estimate_non_token_cost_from_extra(
         {"input_cost_per_image": 0.02},
         response,

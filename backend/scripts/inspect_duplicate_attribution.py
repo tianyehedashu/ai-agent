@@ -59,25 +59,25 @@ async def _dup_personal_teams(session, user_filter: uuid.UUID | None) -> None:
     for owner, n in rows:
         print(f"  owner={owner}  n={n}")
         detail = (
-            await session.execute(
-                select(Team)
-                .where(
-                    Team.owner_user_id == owner,
-                    Team.kind == "personal",
-                    Team.is_active.is_(True),
+            (
+                await session.execute(
+                    select(Team)
+                    .where(
+                        Team.owner_user_id == owner,
+                        Team.kind == "personal",
+                        Team.is_active.is_(True),
+                    )
+                    .order_by(Team.created_at)
                 )
-                .order_by(Team.created_at)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for t in detail:
-            print(
-                f"    - id={t.id}  slug={t.slug}  created_at={t.created_at}  name={t.name}"
-            )
+            print(f"    - id={t.id}  slug={t.slug}  created_at={t.created_at}  name={t.name}")
 
 
-async def _dup_system_vkeys(
-    session, team_filter: uuid.UUID | None, *, do_fix: bool
-) -> None:
+async def _dup_system_vkeys(session, team_filter: uuid.UUID | None, *, do_fix: bool) -> None:
     print(
         "\n[2/2] Duplicate system GatewayVirtualKey rows "
         "(team_id + is_system=True + is_active=True)"
@@ -104,16 +104,20 @@ async def _dup_system_vkeys(
     for team_id, n in rows:
         print(f"  team={team_id}  n={n}")
         detail = (
-            await session.execute(
-                select(GatewayVirtualKey)
-                .where(
-                    GatewayVirtualKey.team_id == team_id,
-                    GatewayVirtualKey.is_system.is_(True),
-                    GatewayVirtualKey.is_active.is_(True),
+            (
+                await session.execute(
+                    select(GatewayVirtualKey)
+                    .where(
+                        GatewayVirtualKey.team_id == team_id,
+                        GatewayVirtualKey.is_system.is_(True),
+                        GatewayVirtualKey.is_active.is_(True),
+                    )
+                    .order_by(GatewayVirtualKey.created_at)
                 )
-                .order_by(GatewayVirtualKey.created_at)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         dup_ids: list[uuid.UUID] = []
         for idx, k in enumerate(detail):
             tag = "KEEP" if idx == 0 else ("FIX " if do_fix else "DUP ")

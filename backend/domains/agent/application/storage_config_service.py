@@ -118,7 +118,8 @@ class StorageConfigService:
             s3_region=s3_region,
             s3_endpoint_url=s3_endpoint_url,
             s3_access_key=s3_access_key,
-            s3_secret_key=s3_secret_key or (
+            s3_secret_key=s3_secret_key
+            or (
                 decrypt_value(existing.s3_secret_key_encrypted, self._encryption_key)
                 if existing and existing.s3_secret_key_encrypted
                 else None

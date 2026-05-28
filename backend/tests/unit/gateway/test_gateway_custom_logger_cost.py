@@ -28,9 +28,7 @@ def test_calc_cost_prefers_litellm_hidden_response_cost() -> None:
 
 
 def test_calc_cost_reads_hidden_params_object() -> None:
-    response = SimpleNamespace(
-        _hidden_params=SimpleNamespace(response_cost=Decimal("0.000456"))
-    )
+    response = SimpleNamespace(_hidden_params=SimpleNamespace(response_cost=Decimal("0.000456")))
 
     cost, _source = _calc_cost({"model": "virtual-model"}, response)
     assert cost == Decimal("0.000456")

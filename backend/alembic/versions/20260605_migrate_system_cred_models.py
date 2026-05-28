@@ -68,8 +68,7 @@ def upgrade() -> None:
         if existing is not None:
             same_upstream = (
                 str(existing.real_model) == str(row.real_model)
-                and str(existing.provider).strip().lower()
-                == str(row.provider).strip().lower()
+                and str(existing.provider).strip().lower() == str(row.provider).strip().lower()
             )
             if not same_upstream:
                 suffix = str(row_id).replace("-", "")[:8]
@@ -90,9 +89,7 @@ def upgrade() -> None:
                     sa.text("DELETE FROM gateway_models WHERE id = :id"),
                     {"id": row_id},
                 )
-                _prune_orphans_for_deleted_model(
-                    conn, model_id=row_id, model_name=row.name
-                )
+                _prune_orphans_for_deleted_model(conn, model_id=row_id, model_name=row.name)
                 continue
 
         conn.execute(

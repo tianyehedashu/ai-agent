@@ -26,9 +26,7 @@ def _iter_presentation_py_files() -> list[Path]:
     for bc in PRESENTATION_ROOT.iterdir():
         presentation_dir = bc / "presentation"
         if presentation_dir.is_dir():
-            files.extend(
-                p for p in presentation_dir.rglob("*.py") if "__pycache__" not in str(p)
-            )
+            files.extend(p for p in presentation_dir.rglob("*.py") if "__pycache__" not in str(p))
     return files
 
 

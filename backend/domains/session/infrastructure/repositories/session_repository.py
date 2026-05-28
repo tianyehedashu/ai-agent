@@ -204,9 +204,7 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
 
     async def list_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
         tenant_id = await self._personal_tenant_id(user_id)
-        result = await self.db.execute(
-            select(Session.id).where(Session.tenant_id == tenant_id)
-        )
+        result = await self.db.execute(select(Session.id).where(Session.tenant_id == tenant_id))
         return list(result.scalars().all())
 
     async def reassign_anonymous_to_user(
@@ -221,8 +219,6 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
         if anon_tenant == user_tenant:
             return 0
         result = await self.db.execute(
-            update(Session)
-            .where(Session.tenant_id == anon_tenant)
-            .values(tenant_id=user_tenant)
+            update(Session).where(Session.tenant_id == anon_tenant).values(tenant_id=user_tenant)
         )
         return result.rowcount or 0

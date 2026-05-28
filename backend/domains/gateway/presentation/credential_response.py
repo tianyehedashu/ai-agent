@@ -100,9 +100,9 @@ def build_credential_response(
             api_key_masked = "（无法展示）"
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     vis = credential_visibility_for_api(cred.visibility) if api_scope == "system" else None
-    profile_label = cred.profile_label or get_upstream_profile(
-        cred.profile_id, provider=cred.provider
-    ).label
+    profile_label = (
+        cred.profile_label or get_upstream_profile(cred.profile_id, provider=cred.provider).label
+    )
     if cred.effective_api_base_openai or cred.effective_api_base_anthropic:
         effective_openai = cred.effective_api_base_openai
         effective_anthropic = cred.effective_api_base_anthropic
@@ -147,9 +147,9 @@ def build_credential_response(
 def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialResponse:
     """团队 member 可见：展示名/通道/状态等，不含密钥与 api_base/extra。"""
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
-    profile_label = cred.profile_label or get_upstream_profile(
-        cred.profile_id, provider=cred.provider
-    ).label
+    profile_label = (
+        cred.profile_label or get_upstream_profile(cred.profile_id, provider=cred.provider).label
+    )
     return CredentialResponse(
         id=cred.id,
         tenant_id=cred.tenant_id,

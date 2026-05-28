@@ -30,14 +30,18 @@ def test_uses_image_endpoint_id_as_model() -> None:
 
 def test_strips_trailing_slash_from_base() -> None:
     req = build_volcengine_image_probe_request(
-        api_key="k", api_base="https://example.com/api/v3/", image_endpoint_id="ep",
+        api_key="k",
+        api_base="https://example.com/api/v3/",
+        image_endpoint_id="ep",
     )
     assert req.url == "https://example.com/api/v3/images/generations"
 
 
 def test_falls_back_to_default_api_base_when_none() -> None:
     req = build_volcengine_image_probe_request(
-        api_key="k", api_base=None, image_endpoint_id="ep",
+        api_key="k",
+        api_base=None,
+        image_endpoint_id="ep",
     )
     assert req.url.startswith(DEFAULT_VOLCENGINE_API_BASE)
     assert req.url.endswith("/images/generations")

@@ -77,16 +77,19 @@ async def test_list_managed_team_keys_filters_by_actor_and_paginates() -> None:
         return_value=[personal_id]
     )
 
-    with patch(
-        "domains.gateway.application.management.managed_team_virtual_key_reads.VirtualKeyRepository",
-        return_value=vkey_repo,
-    ), patch(
-        "domains.gateway.application.management.managed_team_virtual_key_reads.virtual_key_from_orm",
-        side_effect=lambda row: MagicMock(
-            id=row.id,
-            tenant_id=row.tenant_id,
-            team_id=row.tenant_id,
-            name=row.name,
+    with (
+        patch(
+            "domains.gateway.application.management.managed_team_virtual_key_reads.VirtualKeyRepository",
+            return_value=vkey_repo,
+        ),
+        patch(
+            "domains.gateway.application.management.managed_team_virtual_key_reads.virtual_key_from_orm",
+            side_effect=lambda row: MagicMock(
+                id=row.id,
+                tenant_id=row.tenant_id,
+                team_id=row.tenant_id,
+                name=row.name,
+            ),
         ),
     ):
         result = await list_managed_team_virtual_keys_for_actor(

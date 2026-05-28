@@ -31,17 +31,11 @@ def upgrade() -> None:
         "ALTER INDEX uq_gateway_budgets_scope_period_model "
         "RENAME TO uq_gateway_budgets_target_period_model"
     )
-    op.execute(
-        "ALTER INDEX ix_gateway_budgets_lookup "
-        "RENAME TO ix_gateway_budgets_target_lookup"
-    )
+    op.execute("ALTER INDEX ix_gateway_budgets_lookup RENAME TO ix_gateway_budgets_target_lookup")
 
 
 def downgrade() -> None:
-    op.execute(
-        "ALTER INDEX ix_gateway_budgets_target_lookup "
-        "RENAME TO ix_gateway_budgets_lookup"
-    )
+    op.execute("ALTER INDEX ix_gateway_budgets_target_lookup RENAME TO ix_gateway_budgets_lookup")
     op.execute(
         "ALTER INDEX uq_gateway_budgets_target_period_model "
         "RENAME TO uq_gateway_budgets_scope_period_model"

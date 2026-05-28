@@ -33,9 +33,7 @@ class TestMemoryService:
     @asynccontextmanager
     async def _user_context(self, db_session):
         user = await self._create_test_user(db_session)
-        set_permission_context(
-            await permission_context_for_user(db_session, user_id=user.id)
-        )
+        set_permission_context(await permission_context_for_user(db_session, user_id=user.id))
         try:
             yield user
         finally:

@@ -23,9 +23,7 @@ class LitellmCapabilityHintAdapter:
             return f"{prov}/{rm}"
         return rm
 
-    def get_model_hints(
-        self, *, provider: str, real_model: str
-    ) -> LitellmModelInfoHints | None:
+    def get_model_hints(self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
         model_id = self._resolve_model_id(provider, real_model)
         if not model_id:
             return None

@@ -48,12 +48,8 @@ async def _create_vkey(
 async def test_revoke_virtual_keys_batch_revokes_multiple(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     writes = GatewayManagementWriteService(db_session)
-    key_a = await _create_vkey(
-        db_session, team_id=team.id, user_id=test_user.id, name="key-a"
-    )
-    key_b = await _create_vkey(
-        db_session, team_id=team.id, user_id=test_user.id, name="key-b"
-    )
+    key_a = await _create_vkey(db_session, team_id=team.id, user_id=test_user.id, name="key-a")
+    key_b = await _create_vkey(db_session, team_id=team.id, user_id=test_user.id, name="key-b")
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [key_a, key_b],
@@ -93,14 +89,10 @@ async def test_revoke_virtual_keys_batch_reports_not_found(db_session, test_user
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_revoke_virtual_keys_batch_reports_permission_denied(
-    db_session, test_user
-) -> None:
+async def test_revoke_virtual_keys_batch_reports_permission_denied(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     writes = GatewayManagementWriteService(db_session)
-    key_id = await _create_vkey(
-        db_session, team_id=team.id, user_id=test_user.id, name="owner-key"
-    )
+    key_id = await _create_vkey(db_session, team_id=team.id, user_id=test_user.id, name="owner-key")
     other_member = uuid.uuid4()
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
@@ -149,9 +141,7 @@ async def test_revoke_virtual_keys_batch_rejects_system_key(db_session, test_use
 async def test_revoke_virtual_keys_batch_deduplicates_ids(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     writes = GatewayManagementWriteService(db_session)
-    key_id = await _create_vkey(
-        db_session, team_id=team.id, user_id=test_user.id, name="dup-key"
-    )
+    key_id = await _create_vkey(db_session, team_id=team.id, user_id=test_user.id, name="dup-key")
 
     revoked, failed = await writes.revoke_virtual_keys_batch(
         [key_id, key_id],

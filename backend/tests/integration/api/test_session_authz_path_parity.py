@@ -71,8 +71,5 @@ class TestSessionAuthzPathParity:
         assert chat_resp.status_code == status.HTTP_200_OK
         body = chat_resp.text.lower()
         assert (
-            "not found" in body
-            or "permission" in body
-            or "don't have" in body
-            or "error" in body
+            "not found" in body or "permission" in body or "don't have" in body or "error" in body
         )

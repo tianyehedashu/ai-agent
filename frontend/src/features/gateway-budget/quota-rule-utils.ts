@@ -8,6 +8,12 @@ export const LAYER_LABELS: Record<QuotaRuleLayer, string> = {
   downstream: '下游权益',
 }
 
+export const LAYER_ORDER: Record<QuotaRuleLayer, number> = {
+  platform: 0,
+  upstream: 1,
+  downstream: 2,
+}
+
 export function quotaRuleRowId(rule: QuotaRule): string {
   const ref = rule.source_ref
   if (ref.budget_id) return `budget:${ref.budget_id}`
@@ -146,10 +152,10 @@ export function quotaListParamsForContext(
 ): ListQuotaRulesParams | undefined {
   switch (context.kind) {
     case 'personal':
-      return { user_id: context.userId }
+      return { user_id: context.userId, include_usage: true }
     case 'team_model':
-      return { model_name: context.modelName }
+      return { model_name: context.modelName, include_usage: true }
     default:
-      return undefined
+      return { include_usage: true }
   }
 }

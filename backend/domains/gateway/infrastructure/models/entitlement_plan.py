@@ -35,9 +35,7 @@ class EntitlementPlan(BaseModel, PolicyTargetMixin):
         nullable=False,
         comment="挂载类型：vkey / apikey_grant",
     )
-    target_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     label: Mapped[str] = mapped_column(
         String(100),
         nullable=False,

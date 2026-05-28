@@ -120,7 +120,9 @@ def _registry_q_clause(
     return or_(model_search, cred_search)
 
 
-def _availability_order(model_cls: type[GatewayModel] | type[SystemGatewayModel]) -> ColumnElement[int]:
+def _availability_order(
+    model_cls: type[GatewayModel] | type[SystemGatewayModel],
+) -> ColumnElement[int]:
     """ORDER BY tier；镜像 domain ``is_registry_connectivity_available``（不含 entitlement）。"""
     return case(
         (

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 
 import { credentialsApi } from '@/api/gateway/credentials'
 import { keysApi } from '@/api/gateway/keys'
@@ -29,6 +30,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { budgetsAdminHref } from '@/features/gateway-budget/paths'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -536,6 +538,19 @@ export default function GatewayStatsPage(): React.JSX.Element {
     setDetailOpen(true)
   }, [])
 
+  const navigate = useNavigate()
+
+  const handleSetQuota = useCallback(
+    (item: GatewayUsageStatsItem): void => {
+      const params: { layer?: string; model?: string; credential?: string; user?: string } = {}
+      if (groupBy === 'model') params.model = item.group_key
+      else if (groupBy === 'user') params.user = item.group_key
+      else if (groupBy === 'credential') params.credential = item.group_key
+      navigate(budgetsAdminHref(teamId, params))
+    },
+    [groupBy, navigate, teamId]
+  )
+
   const totals = statsQuery.data?.totals
 
   const logsNavigationState = useMemo(
@@ -575,157 +590,28 @@ export default function GatewayStatsPage(): React.JSX.Element {
               </Button>
             ))}
           </div>
+          <div className="hidden h-6 w-px bg-border sm:block" />
+          <div className="flex flex-wrap gap-1">
+            {groupOptions.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={groupBy === option.value ? 'default' : 'ghost'}
+                className="h-7 px-2.5 text-xs"
+                onClick={() => {
+                  setGroupBy(option.value)
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
           <GatewayRefreshButton
             isFetching={statsQuery.isFetching}
             ariaLabel="刷新统计"
             onRefresh={() => statsQuery.refetch()}
           />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 rounded-lg border bg-background p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <GatewayFilterCombobox
-            value={filterState.credentialId}
-            onChange={(v) => {
-              setFilterField('credentialId', v)
-            }}
-            options={credentialOptions}
-            placeholder="凭据"
-            searchPlaceholder="搜索凭据…"
-            loading={credentialsQuery.isLoading}
-            className="w-[min(100%,11rem)]"
-          />
-          <GatewayFilterCombobox
-            value={filterState.userId}
-            onChange={(v) => {
-              setFilterField('userId', v)
-            }}
-            options={memberOptions}
-            placeholder="人员"
-            searchPlaceholder="搜索人员…"
-            loading={membersQuery.isLoading}
-            className="w-[min(100%,11rem)]"
-          />
-          <GatewayFilterCombobox
-            value={filterState.model}
-            onChange={(v) => {
-              setFilterField('model', v)
-            }}
-            options={modelOptions}
-            placeholder="模型"
-            searchPlaceholder="搜索模型…"
-            onOpenChange={(open) => {
-              if (open) onModelPickerOpenChange(true)
-            }}
-            className="w-[min(100%,11rem)]"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant={activeFilterCount > 0 ? 'default' : 'outline'}
-            className="h-9 gap-2"
-            onClick={() => {
-              setFiltersOpen(true)
-            }}
-          >
-            <Settings2 className="h-4 w-4" />
-            更多筛选
-            {activeFilterCount > 0 ? (
-              <Badge variant="secondary" className="ml-0.5 px-1.5">
-                {activeFilterCount}
-              </Badge>
-            ) : null}
-          </Button>
-        </div>
-
-        {(drillSegments.length > 0 || activeFilterCount > 0) && (
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {drillSegments.length > 0 ? (
-              <nav aria-label="钻取路径" className="flex flex-wrap items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={resetDrillToRoot}
-                >
-                  全部
-                </Button>
-                {drillSegments.map((segment, index) => (
-                  <span
-                    key={`${segment.filterKey}-${segment.filterValue}`}
-                    className="flex items-center gap-1"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 max-w-[200px] truncate px-2"
-                      title={segment.label}
-                      onClick={() => {
-                        popDrillToIndex(index)
-                      }}
-                    >
-                      {segment.label}
-                    </Button>
-                  </span>
-                ))}
-              </nav>
-            ) : null}
-            {activeFilterCount > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {activeFilters.map((filter) => (
-                  <Badge
-                    key={filter.key}
-                    variant="outline"
-                    className="max-w-[240px] gap-1 truncate font-normal"
-                  >
-                    <span className="text-muted-foreground">{filter.label}</span>
-                    <span className="truncate">{filter.value}</span>
-                    <button
-                      type="button"
-                      className="rounded-sm hover:bg-muted"
-                      aria-label={`移除${filter.label}筛选`}
-                      onClick={filter.clear}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2"
-                  onClick={clearManualFilters}
-                >
-                  清空筛选
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-3 rounded-lg border bg-background p-3">
-        <div className="text-xs font-medium text-muted-foreground">分析维度</div>
-        <div className="flex flex-wrap gap-1">
-          {groupOptions.map((option) => (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant={groupBy === option.value ? 'default' : 'outline'}
-              className="h-8 px-3 text-xs"
-              onClick={() => {
-                setGroupBy(option.value)
-              }}
-            >
-              {option.label}
-            </Button>
-          ))}
         </div>
       </div>
 
@@ -867,10 +753,137 @@ export default function GatewayStatsPage(): React.JSX.Element {
       </div>
 
       <Card ref={tableAnchorRef}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            {groupOptions.find((option) => option.value === groupBy)?.label ?? '维度'}排名
-          </CardTitle>
+        <CardHeader className="space-y-3 pb-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <CardTitle className="pt-1 text-base">
+              {groupOptions.find((option) => option.value === groupBy)?.label ?? '维度'}排名
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <GatewayFilterCombobox
+                value={filterState.credentialId}
+                onChange={(v) => {
+                  setFilterField('credentialId', v)
+                }}
+                options={credentialOptions}
+                placeholder="凭据"
+                searchPlaceholder="搜索凭据…"
+                loading={credentialsQuery.isLoading}
+                active={filterState.credentialId !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,10rem)]"
+              />
+              <GatewayFilterCombobox
+                value={filterState.userId}
+                onChange={(v) => {
+                  setFilterField('userId', v)
+                }}
+                options={memberOptions}
+                placeholder="人员"
+                searchPlaceholder="搜索人员…"
+                loading={membersQuery.isLoading}
+                active={filterState.userId !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,10rem)]"
+              />
+              <GatewayFilterCombobox
+                value={filterState.model}
+                onChange={(v) => {
+                  setFilterField('model', v)
+                }}
+                options={modelOptions}
+                placeholder="模型"
+                searchPlaceholder="搜索模型…"
+                onOpenChange={(open) => {
+                  if (open) onModelPickerOpenChange(true)
+                }}
+                active={filterState.model !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,10rem)]"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant={activeFilterCount > 0 ? 'default' : 'outline'}
+                className="h-9 gap-1.5 text-xs"
+                onClick={() => {
+                  setFiltersOpen(true)
+                }}
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                筛选
+                {activeFilterCount > 0 ? (
+                  <Badge variant="secondary" className="ml-0.5 px-1.5 text-[10px]">
+                    {activeFilterCount}
+                  </Badge>
+                ) : null}
+              </Button>
+            </div>
+          </div>
+          {(drillSegments.length > 0 || activeFilterCount > 0) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {drillSegments.length > 0 ? (
+                <nav aria-label="钻取路径" className="flex flex-wrap items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={resetDrillToRoot}
+                  >
+                    全部
+                  </Button>
+                  {drillSegments.map((segment, index) => (
+                    <span
+                      key={`${segment.filterKey}-${segment.filterValue}`}
+                      className="flex items-center gap-1"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 max-w-[200px] truncate px-2"
+                        title={segment.label}
+                        onClick={() => {
+                          popDrillToIndex(index)
+                        }}
+                      >
+                        {segment.label}
+                      </Button>
+                    </span>
+                  ))}
+                </nav>
+              ) : null}
+              {activeFilterCount > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {activeFilters.map((filter) => (
+                    <Badge
+                      key={filter.key}
+                      variant="outline"
+                      className="max-w-[240px] gap-1 truncate font-normal"
+                    >
+                      <span className="text-muted-foreground">{filter.label}</span>
+                      <span className="truncate">{filter.value}</span>
+                      <button
+                        type="button"
+                        className="rounded-sm hover:bg-muted"
+                        aria-label={`移除${filter.label}筛选`}
+                        onClick={filter.clear}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2"
+                    onClick={clearManualFilters}
+                  >
+                    清空筛选
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {statsQuery.isLoading ? (
@@ -899,6 +912,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 credentialTopN={tableCredentialTopN}
                 onDrill={handleRowDrill}
                 onShowDetail={handleShowDetail}
+                onSetQuota={handleSetQuota}
               />
             )
           ) : null}

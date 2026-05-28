@@ -6,9 +6,9 @@ LiteLLM kwargs 经 ``ProxyUseCase.prepare_litellm_invoke`` 拼装（保留 ``res
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+import time
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName

@@ -12,9 +12,18 @@ from libs.exceptions import ValidationError
 
 
 def test_effective_guardrail_requires_global_and_vkey():
-    assert effective_guardrail_enabled(global_guardrail_enabled=False, vkey_guardrail_enabled=True) is False
-    assert effective_guardrail_enabled(global_guardrail_enabled=True, vkey_guardrail_enabled=False) is False
-    assert effective_guardrail_enabled(global_guardrail_enabled=True, vkey_guardrail_enabled=True) is True
+    assert (
+        effective_guardrail_enabled(global_guardrail_enabled=False, vkey_guardrail_enabled=True)
+        is False
+    )
+    assert (
+        effective_guardrail_enabled(global_guardrail_enabled=True, vkey_guardrail_enabled=False)
+        is False
+    )
+    assert (
+        effective_guardrail_enabled(global_guardrail_enabled=True, vkey_guardrail_enabled=True)
+        is True
+    )
 
 
 def test_assert_create_rejects_when_global_off():

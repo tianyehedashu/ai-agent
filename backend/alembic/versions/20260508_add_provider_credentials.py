@@ -37,17 +37,13 @@ def upgrade() -> None:
         sa.Column("api_key_encrypted", sa.Text, nullable=False),
         sa.Column("api_base", sa.String(500), nullable=True),
         sa.Column("extra", postgresql.JSONB, nullable=True),
-        sa.Column(
-            "is_active", sa.Boolean, nullable=False, server_default="true"
-        ),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.Column(
             "legacy_user_provider_config_id",
             postgresql.UUID(as_uuid=True),
             nullable=True,
         ),
-        sa.Column(
-            "legacy_user_model_id", postgresql.UUID(as_uuid=True), nullable=True
-        ),
+        sa.Column("legacy_user_model_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -61,19 +57,16 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
         sa.UniqueConstraint(
-            "scope", "scope_id", "provider", "name",
+            "scope",
+            "scope_id",
+            "provider",
+            "name",
             name="uq_provider_credentials_scope_name",
         ),
     )
-    op.create_index(
-        "ix_provider_credentials_scope", "provider_credentials", ["scope"]
-    )
-    op.create_index(
-        "ix_provider_credentials_scope_id", "provider_credentials", ["scope_id"]
-    )
-    op.create_index(
-        "ix_provider_credentials_provider", "provider_credentials", ["provider"]
-    )
+    op.create_index("ix_provider_credentials_scope", "provider_credentials", ["scope"])
+    op.create_index("ix_provider_credentials_scope_id", "provider_credentials", ["scope_id"])
+    op.create_index("ix_provider_credentials_provider", "provider_credentials", ["provider"])
     op.create_index(
         "ix_provider_credentials_scope_lookup",
         "provider_credentials",
@@ -140,16 +133,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_provider_credentials_scope_lookup", table_name="provider_credentials"
-    )
-    op.drop_index(
-        "ix_provider_credentials_provider", table_name="provider_credentials"
-    )
-    op.drop_index(
-        "ix_provider_credentials_scope_id", table_name="provider_credentials"
-    )
-    op.drop_index(
-        "ix_provider_credentials_scope", table_name="provider_credentials"
-    )
+    op.drop_index("ix_provider_credentials_scope_lookup", table_name="provider_credentials")
+    op.drop_index("ix_provider_credentials_provider", table_name="provider_credentials")
+    op.drop_index("ix_provider_credentials_scope_id", table_name="provider_credentials")
+    op.drop_index("ix_provider_credentials_scope", table_name="provider_credentials")
     op.drop_table("provider_credentials")

@@ -77,9 +77,7 @@ def matches_registry_ability_filter(
     """注册表 ``?type=`` / 选择器能力筛选：有推导 types 则成员匹配，否则 capability 相等。"""
     key = filter_value.strip().lower()
     types = (
-        model_types
-        if model_types is not None
-        else infer_model_types_from_tags(tags, capability)
+        model_types if model_types is not None else infer_model_types_from_tags(tags, capability)
     )
     if types:
         return key in types

@@ -93,11 +93,15 @@ def availability_tier(
     last_test_status: str | None,
     entitlement_status: EntitlementListStatus = "none",
 ) -> int:
-    return 1 if is_model_unavailable(
-        enabled=enabled,
-        last_test_status=last_test_status,
-        entitlement_status=entitlement_status,
-    ) else 0
+    return (
+        1
+        if is_model_unavailable(
+            enabled=enabled,
+            last_test_status=last_test_status,
+            entitlement_status=entitlement_status,
+        )
+        else 0
+    )
 
 
 def matches_connectivity_filter(
@@ -248,7 +252,11 @@ def summarize_selector_items(items: Sequence[dict[str, object]]) -> dict[str, in
     available = unavailable = 0
     for item in items:
         last_test_status = item.get("last_test_status")
-        status = last_test_status if isinstance(last_test_status, str) or last_test_status is None else None
+        status = (
+            last_test_status
+            if isinstance(last_test_status, str) or last_test_status is None
+            else None
+        )
         key = connectivity_health_key(status)
         if key == ModelListConnectivityFilter.SUCCESS:
             success += 1
@@ -284,7 +292,11 @@ def sort_selector_items(
 ) -> list[dict[str, object]]:
     def tier(item: dict[str, object]) -> int:
         last_test_status = item.get("last_test_status")
-        status = last_test_status if isinstance(last_test_status, str) or last_test_status is None else None
+        status = (
+            last_test_status
+            if isinstance(last_test_status, str) or last_test_status is None
+            else None
+        )
         entitlement = parse_entitlement_list_status(item.get("entitlement_status", "none"))
         return availability_tier(
             enabled=bool(item.get("is_active", item.get("enabled", True))),
@@ -292,7 +304,9 @@ def sort_selector_items(
             entitlement_status=entitlement,
         )
 
-    sorted_items = sorted(items, key=lambda item: (tier(item), _selector_sort_key(item, sort_field)))
+    sorted_items = sorted(
+        items, key=lambda item: (tier(item), _selector_sort_key(item, sort_field))
+    )
     if order == ModelListSortOrder.DESC:
         available = [i for i in sorted_items if tier(i) == 0]
         unavailable = [i for i in sorted_items if tier(i) == 1]

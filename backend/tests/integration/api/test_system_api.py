@@ -30,9 +30,7 @@ class TestSystemAPI:
             assert "provider" in model
 
     @pytest.mark.asyncio
-    async def test_list_models_simple_includes_zhipuai_catalog(
-        self, client: AsyncClient
-    ):
+    async def test_list_models_simple_includes_zhipuai_catalog(self, client: AsyncClient):
         """测试: 静态模型目录包含智谱 GLM（凭据由 Gateway 管理，不随 settings API Key 过滤）"""
         response = await client.get("/api/v1/system/models/simple")
 

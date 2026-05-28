@@ -16,15 +16,9 @@ from libs.exceptions import ValidationError
 def test_chat_with_vision_matches_image_and_text_filters() -> None:
     tags = {"supports_vision": True}
     cap = "chat"
-    assert matches_registry_ability_filter(
-        tags=tags, capability=cap, filter_value="image"
-    )
-    assert matches_registry_ability_filter(
-        tags=tags, capability=cap, filter_value="text"
-    )
-    assert not matches_registry_ability_filter(
-        tags=tags, capability=cap, filter_value="embedding"
-    )
+    assert matches_registry_ability_filter(tags=tags, capability=cap, filter_value="image")
+    assert matches_registry_ability_filter(tags=tags, capability=cap, filter_value="text")
+    assert not matches_registry_ability_filter(tags=tags, capability=cap, filter_value="embedding")
 
 
 def test_embedding_sql_capability_only() -> None:

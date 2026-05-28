@@ -75,9 +75,7 @@ class TeamInviteCandidateResponse(BaseModel):
     name: str | None = None
 
 
-class TeamInviteCandidateListResponse(
-    PaginatedListResponse[TeamInviteCandidateResponse]
-):
+class TeamInviteCandidateListResponse(PaginatedListResponse[TeamInviteCandidateResponse]):
     """可邀请用户分页列表。"""
 
 

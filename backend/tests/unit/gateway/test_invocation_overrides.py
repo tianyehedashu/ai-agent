@@ -6,7 +6,11 @@ from domains.gateway.application.invocation_overrides import merge_invocation_ov
 from domains.gateway.application.ports import InvocationOverrides
 from domains.gateway.domain.errors import InvocationPolicyViolationError
 from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
-from domains.gateway.domain.thinking_param import THINKING_PARAM_DASHSCOPE, THINKING_PARAM_DEEPSEEK_V4, THINKING_PARAM_NONE
+from domains.gateway.domain.thinking_param import (
+    THINKING_PARAM_DASHSCOPE,
+    THINKING_PARAM_DEEPSEEK_V4,
+    THINKING_PARAM_NONE,
+)
 
 
 def test_merge_temperature_override() -> None:

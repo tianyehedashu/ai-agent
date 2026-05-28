@@ -798,12 +798,16 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         is_platform_admin: bool,
         is_team_admin: bool,
         filters: QuotaRuleListFilters | None = None,
+        include_usage: bool = False,
     ) -> list[QuotaRuleReadModel]:
         from domains.gateway.application.management.quota_rule_assembler import (
             assemble_team_quota_rules,
         )
+        from domains.gateway.application.management.quota_usage_snapshot import (
+            enrich_quota_rules_with_usage,
+        )
 
-        return await assemble_team_quota_rules(
+        rules = await assemble_team_quota_rules(
             self,
             team_id,
             actor_user_id=actor_user_id,
@@ -812,6 +816,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             is_team_admin=is_team_admin,
             filters=filters,
         )
+        if include_usage:
+            rules = await enrich_quota_rules_with_usage(rules)
+        return rules
 
     async def aggregate_personal_model_route_usage(
         self,

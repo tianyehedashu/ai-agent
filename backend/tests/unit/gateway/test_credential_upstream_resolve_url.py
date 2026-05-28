@@ -50,7 +50,9 @@ def test_resolve_url(
     expected_status: str,
     expected_url: str | None,
 ) -> None:
-    st, url, reason = resolve_openai_compatible_models_list_url(provider=provider, api_base=api_base)
+    st, url, reason = resolve_openai_compatible_models_list_url(
+        provider=provider, api_base=api_base
+    )
     assert st == expected_status
     if expected_status == "unsupported":
         assert url is None

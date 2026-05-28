@@ -360,9 +360,7 @@ class TestGatewayManagementApi:
         await db_session.refresh(member)
 
         ts = TeamService(db_session)
-        shared = await ts.create_team(
-            name="Exclude Member Team", owner_user_id=test_user.id
-        )
+        shared = await ts.create_team(name="Exclude Member Team", owner_user_id=test_user.id)
         await ts.add_member(shared.id, member.id, "member")
         await db_session.commit()
 
@@ -436,9 +434,7 @@ class TestGatewayManagementApi:
         await db_session.refresh(member)
 
         ts = TeamService(db_session)
-        shared = await ts.create_team(
-            name="Cand Forbidden Team", owner_user_id=test_user.id
-        )
+        shared = await ts.create_team(name="Cand Forbidden Team", owner_user_id=test_user.id)
         await ts.add_member(shared.id, member.id, "member")
         await db_session.commit()
 
@@ -473,9 +469,7 @@ class TestGatewayManagementApi:
         await db_session.refresh(team_admin)
 
         ts = TeamService(db_session)
-        shared = await ts.create_team(
-            name="Scope Settings Team", owner_user_id=test_user.id
-        )
+        shared = await ts.create_team(name="Scope Settings Team", owner_user_id=test_user.id)
         await ts.add_member(shared.id, team_admin.id, "admin")
         await db_session.commit()
 
@@ -834,7 +828,9 @@ class TestGatewayManagementApi:
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
         headers = auth_headers
-        r_all = await dev_client.get(f"/api/v1/gateway/teams/{team.id}/models/presets", headers=headers)
+        r_all = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models/presets", headers=headers
+        )
         assert r_all.status_code == 200, r_all.text
         all_presets = r_all.json()
         if not all_presets:
@@ -879,7 +875,9 @@ class TestGatewayManagementApi:
         assert "api_key_masked" in cred_body
         assert "sk-int-test-key-for-gateway-123456" not in cred_body["api_key_masked"]
 
-        r_get = await dev_client.get(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+        r_get = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
         assert r_get.status_code == 200, r_get.text
         got = r_get.json()
         assert got["id"] == cid
@@ -1121,7 +1119,15 @@ class TestGatewayManagementApi:
         )
         assert r.status_code == 200, r.text
         body = r.json()
-        for key in ("items", "total", "page", "page_size", "has_next", "has_prev", "connectivity_summary"):
+        for key in (
+            "items",
+            "total",
+            "page",
+            "page_size",
+            "has_next",
+            "has_prev",
+            "connectivity_summary",
+        ):
             assert key in body
         assert body["page"] == 1
         assert body["page_size"] == 5
@@ -1304,7 +1310,15 @@ class TestGatewayManagementApi:
         )
         assert r.status_code == 200, r.text
         body = r.json()
-        for key in ("items", "total", "page", "page_size", "has_next", "has_prev", "connectivity_summary"):
+        for key in (
+            "items",
+            "total",
+            "page",
+            "page_size",
+            "has_next",
+            "has_prev",
+            "connectivity_summary",
+        ):
             assert key in body
         assert body["page"] == 1
         assert body["page_size"] == 5
@@ -1352,10 +1366,14 @@ class TestGatewayManagementApi:
         assert model_body["tenant_id"] == str(team.id)
         assert model_body["team_id"] == str(team.id)
 
-        r_del = await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+        r_del = await dev_client.delete(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
         assert r_del.status_code == 204, r_del.text
 
-        r_cred_after = await dev_client.get(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+        r_cred_after = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
         assert r_cred_after.status_code == 404
 
         r_models_after = await dev_client.get(
@@ -2315,9 +2333,7 @@ class TestGatewayManagementApi:
                 "label": "Owner-created plan",
                 "valid_from": valid_from,
                 "valid_until": valid_until,
-                "quotas": [
-                    {"label": "daily", "window_seconds": 86400, "limit_requests": 100}
-                ],
+                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 100}],
             },
         )
         assert r_create.status_code == 201, r_create.text
@@ -2397,9 +2413,7 @@ class TestGatewayManagementApi:
                 "label": "Owner Plan",
                 "valid_from": valid_from,
                 "valid_until": valid_until,
-                "quotas": [
-                    {"label": "daily", "window_seconds": 86400, "limit_requests": 100}
-                ],
+                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 100}],
             },
         )
         assert r_pp.status_code == 201, r_pp.text
@@ -2420,9 +2434,7 @@ class TestGatewayManagementApi:
                 "label": "Owner Entitlement",
                 "valid_from": valid_from,
                 "valid_until": valid_until,
-                "quotas": [
-                    {"label": "daily", "window_seconds": 86400, "limit_requests": 10}
-                ],
+                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 10}],
             },
         )
         assert r_ent.status_code == 201, r_ent.text
@@ -2476,9 +2488,7 @@ class TestGatewayManagementApi:
                 "label": "hijack",
                 "valid_from": valid_from,
                 "valid_until": valid_until,
-                "quotas": [
-                    {"label": "daily", "window_seconds": 86400, "limit_requests": 1}
-                ],
+                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 1}],
             },
         )
         assert r5.status_code == 404, r5.text
@@ -2602,12 +2612,16 @@ class TestGatewayManagementApi:
         assert r_member_key.status_code == 201, r_member_key.text
         member_key_id = r_member_key.json()["id"]
 
-        r_owner_list = await dev_client.get(f"/api/v1/gateway/teams/{shared.id}/keys", headers=owner_headers)
+        r_owner_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/keys", headers=owner_headers
+        )
         assert r_owner_list.status_code == 200, r_owner_list.text
         owner_ids = {item["id"] for item in r_owner_list.json()}
         assert owner_ids == {owner_key_id}
 
-        r_member_list = await dev_client.get(f"/api/v1/gateway/teams/{shared.id}/keys", headers=member_headers)
+        r_member_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/keys", headers=member_headers
+        )
         assert r_member_list.status_code == 200, r_member_list.text
         member_ids = {item["id"] for item in r_member_list.json()}
         assert member_ids == {member_key_id}
@@ -3176,7 +3190,9 @@ class TestGatewayManagementApi:
         assert "image" in body["model_types"]
 
         await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{mid}", headers=headers)
-        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+        await dev_client.delete(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
 
     @pytest.mark.asyncio
     async def test_resync_capabilities_rejects_config_managed_system_model(
@@ -3545,12 +3561,8 @@ class TestGatewayManagementApi:
         await db_session.commit()
         model_a = f"usage-a-{uuid.uuid4().hex[:6]}"
         model_b = f"usage-b-{uuid.uuid4().hex[:6]}"
-        await _create_team_model_via_api(
-            dev_client, team.id, auth_headers, model_name=model_a
-        )
-        await _create_team_model_via_api(
-            dev_client, team.id, auth_headers, model_name=model_b
-        )
+        await _create_team_model_via_api(dev_client, team.id, auth_headers, model_name=model_a)
+        await _create_team_model_via_api(dev_client, team.id, auth_headers, model_name=model_b)
         now = datetime.now(UTC)
         db_session.add(
             GatewayRequestLog(
@@ -3702,9 +3714,7 @@ class TestManagedTeamCredentialsAggregateApi:
         await self._create_team_credential(
             dev_client, personal.id, auth_headers, name=name_personal
         )
-        await self._create_team_credential(
-            dev_client, shared.id, auth_headers, name=name_shared
-        )
+        await self._create_team_credential(dev_client, shared.id, auth_headers, name=name_shared)
 
         r = await dev_client.get(
             "/api/v1/gateway/managed-team-credentials",
@@ -3798,9 +3808,7 @@ class TestManagedTeamCredentialsAggregateApi:
         await db_session.commit()
 
         target_name = f"search-hit-{uuid.uuid4().hex[:6]}"
-        await self._create_team_credential(
-            dev_client, shared.id, auth_headers, name=target_name
-        )
+        await self._create_team_credential(dev_client, shared.id, auth_headers, name=target_name)
 
         r = await dev_client.get(
             "/api/v1/gateway/managed-team-credentials",
@@ -3872,9 +3880,7 @@ class TestManagedTeamCredentialsAggregateApi:
         for i in range(page_size + 1):
             name = f"page-cred-{uuid.uuid4().hex[:6]}-{i}"
             created_names.append(name)
-            await self._create_team_credential(
-                dev_client, shared.id, auth_headers, name=name
-            )
+            await self._create_team_credential(dev_client, shared.id, auth_headers, name=name)
 
         r = await dev_client.get(
             "/api/v1/gateway/managed-team-credentials",
@@ -3958,9 +3964,7 @@ class TestManagedTeamModelsAggregateApi:
         await self._create_team_model(
             dev_client, personal.id, auth_headers, model_name=personal_model
         )
-        await self._create_team_model(
-            dev_client, shared.id, auth_headers, model_name=shared_model
-        )
+        await self._create_team_model(dev_client, shared.id, auth_headers, model_name=shared_model)
 
         r = await dev_client.get(
             "/api/v1/gateway/managed-team-models",
@@ -3997,9 +4001,7 @@ class TestManagedTeamModelsAggregateApi:
         await db_session.commit()
 
         model_name = f"managed-usage-{uuid.uuid4().hex[:6]}"
-        await self._create_team_model(
-            dev_client, shared.id, auth_headers, model_name=model_name
-        )
+        await self._create_team_model(dev_client, shared.id, auth_headers, model_name=model_name)
 
         now = datetime.now(UTC)
         db_session.add(

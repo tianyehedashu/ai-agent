@@ -29,7 +29,9 @@ def test_deployment_prefers_litellm_params_over_standard_logging() -> None:
     second = uuid.uuid4()
     kwargs = {
         "litellm_params": {"model_info": {"id": str(first)}},
-        "standard_logging_object": {"model_info": {"id": str(second), "gateway_model_name": "ignored"}},
+        "standard_logging_object": {
+            "model_info": {"id": str(second), "gateway_model_name": "ignored"}
+        },
     }
     did, name = _deployment_from_model_info_kwargs(kwargs)
     assert did == first
@@ -39,9 +41,7 @@ def test_deployment_prefers_litellm_params_over_standard_logging() -> None:
 def test_deployment_falls_back_to_standard_logging_object() -> None:
     gid = uuid.uuid4()
     kwargs = {
-        "standard_logging_object": {
-            "model_info": {"id": str(gid), "gateway_model_name": "x"}
-        }
+        "standard_logging_object": {"model_info": {"id": str(gid), "gateway_model_name": "x"}}
     }
     assert _deployment_from_model_info_kwargs(kwargs) == (gid, "x")
 

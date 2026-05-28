@@ -220,9 +220,7 @@ class GatewayUsageLogReadMixin:
             for row in rows:
                 key = self._group_key_to_str(row.group_key)
                 labels[key] = (
-                    row.label_snapshot
-                    or resolved.get(key)
-                    or ("未知人员" if key else "未关联人员")
+                    row.label_snapshot or resolved.get(key) or ("未知人员" if key else "未关联人员")
                 )
             return labels
 
@@ -280,10 +278,18 @@ class GatewayUsageLogReadMixin:
         for row in rows:
             key = self._group_key_to_str(row.group_key)
             parts = row.group_key_parts or [key, "", ""]
-            user_label = user_labels.get(key) or (row.label_parts[0] if row.label_parts else "") or ("未知人员" if key else "未关联人员")
+            user_label = (
+                user_labels.get(key)
+                or (row.label_parts[0] if row.label_parts else "")
+                or ("未知人员" if key else "未关联人员")
+            )
             model_label = parts[1] or "未关联模型"
             cred_key = parts[2] if len(parts) > 2 else ""
-            cred_label = cred_labels.get(cred_key) or (row.label_parts[2] if row.label_parts and len(row.label_parts) > 2 else "") or ("未关联凭据" if not cred_key else "已删除凭据")
+            cred_label = (
+                cred_labels.get(cred_key)
+                or (row.label_parts[2] if row.label_parts and len(row.label_parts) > 2 else "")
+                or ("未关联凭据" if not cred_key else "已删除凭据")
+            )
             label_parts = [user_label, model_label, cred_label]
             label = f"{user_label} / {model_label} / {cred_label}"
             items.append(

@@ -17,10 +17,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import { FILTER_ALL, USAGE_PERIOD_DAYS } from '@/features/gateway-models/constants'
-import {
-  GatewayModelCredentialFilterSelect,
-  type GatewayModelCredentialFilterOption,
-} from '@/features/gateway-models/gateway-model-credential-filter-select'
+import type { GatewayModelCredentialFilterOption } from '@/features/gateway-models/gateway-model-credential-filter-label'
+import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
 import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
 import { channelLabel } from '@/features/gateway-models/utils'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'

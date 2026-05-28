@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
+import pytest
 
 from tests.conftest import api_v1_url
 

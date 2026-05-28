@@ -16,7 +16,9 @@ from domains.identity.domain.repositories.user_repository import UserListFilters
 from domains.identity.infrastructure.models.user import User
 
 
-def _apply_user_list_filters(stmt: Select[tuple[User]], filters: UserListFilters) -> Select[tuple[User]]:
+def _apply_user_list_filters(
+    stmt: Select[tuple[User]], filters: UserListFilters
+) -> Select[tuple[User]]:
     if filters.exclude_anonymous:
         stmt = stmt.where(User.role != ANONYMOUS_ROLE)
     if filters.role is not None:
@@ -83,9 +85,7 @@ class SQLAlchemyUserRepository(UserRepository):
     async def get_by_email_insensitive(self, email: str) -> User | None:
         """通过邮箱获取用户（不区分大小写）"""
         normalized = email.strip().lower()
-        result = await self.db.execute(
-            select(User).where(func.lower(User.email) == normalized)
-        )
+        result = await self.db.execute(select(User).where(func.lower(User.email) == normalized))
         return result.scalar_one_or_none()
 
     async def update(
@@ -148,9 +148,7 @@ class SQLAlchemyUserRepository(UserRepository):
 
     async def count_by_role(self, role: str) -> int:
         """统计指定平台角色的用户数"""
-        result = await self.db.execute(
-            select(func.count(User.id)).where(User.role == role)
-        )
+        result = await self.db.execute(select(func.count(User.id)).where(User.role == role))
         return result.scalar() or 0
 
     async def list_by_roles(
@@ -162,7 +160,5 @@ class SQLAlchemyUserRepository(UserRepository):
         """按平台角色列表查询用户"""
         if not roles:
             return []
-        result = await self.db.execute(
-            select(User).where(User.role.in_(roles)).limit(limit)
-        )
+        result = await self.db.execute(select(User).where(User.role.in_(roles)).limit(limit))
         return list(result.scalars().all())

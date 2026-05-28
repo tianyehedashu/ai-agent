@@ -349,9 +349,7 @@ def upgrade() -> None:
         sa.Column("limit_usd", sa.Numeric(12, 4), nullable=True),
         sa.Column("limit_tokens", sa.Integer, nullable=True),
         sa.Column("limit_requests", sa.Integer, nullable=True),
-        sa.Column(
-            "current_usd", sa.Numeric(12, 4), nullable=False, server_default="0"
-        ),
+        sa.Column("current_usd", sa.Numeric(12, 4), nullable=False, server_default="0"),
         sa.Column("current_tokens", sa.Integer, nullable=False, server_default="0"),
         sa.Column("current_requests", sa.Integer, nullable=False, server_default="0"),
         sa.Column("reset_at", sa.DateTime(timezone=True), nullable=True),
@@ -367,15 +365,11 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.UniqueConstraint(
-            "scope", "scope_id", "period", name="uq_gateway_budgets_scope_period"
-        ),
+        sa.UniqueConstraint("scope", "scope_id", "period", name="uq_gateway_budgets_scope_period"),
     )
     op.create_index("ix_gateway_budgets_scope", "gateway_budgets", ["scope"])
     op.create_index("ix_gateway_budgets_scope_id", "gateway_budgets", ["scope_id"])
-    op.create_index(
-        "ix_gateway_budgets_lookup", "gateway_budgets", ["scope", "scope_id"]
-    )
+    op.create_index("ix_gateway_budgets_lookup", "gateway_budgets", ["scope", "scope_id"])
 
     # 数据迁移：从 user_quotas 复制
     # 检查 user_quotas 表是否存在
@@ -510,9 +504,7 @@ def upgrade() -> None:
     now = datetime.now(UTC)
     for delta in (-1, 0, 1, 2):  # 上月（保险）、本月、下月、再下月
         target = (now.replace(day=1) + timedelta(days=delta * 32)).replace(day=1)
-        _create_partition_for_month(
-            "gateway_request_logs", target.year, target.month
-        )
+        _create_partition_for_month("gateway_request_logs", target.year, target.month)
 
     # =========================================================================
     # 7. Metrics Hourly
@@ -533,12 +525,8 @@ def upgrade() -> None:
         sa.Column("input_tokens", sa.Integer, nullable=False, server_default="0"),
         sa.Column("output_tokens", sa.Integer, nullable=False, server_default="0"),
         sa.Column("cached_tokens", sa.Integer, nullable=False, server_default="0"),
-        sa.Column(
-            "cost_usd", sa.Numeric(14, 6), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "total_latency_ms", sa.Integer, nullable=False, server_default="0"
-        ),
+        sa.Column("cost_usd", sa.Numeric(14, 6), nullable=False, server_default="0"),
+        sa.Column("total_latency_ms", sa.Integer, nullable=False, server_default="0"),
         sa.Column("p95_latency_ms", sa.Integer, nullable=False, server_default="0"),
         sa.Column("cache_hit_count", sa.Integer, nullable=False, server_default="0"),
         sa.Column(
@@ -564,9 +552,7 @@ def upgrade() -> None:
             name="uq_gateway_metrics_hourly_dim",
         ),
     )
-    op.create_index(
-        "ix_gateway_metrics_hourly_bucket", "gateway_metrics_hourly", ["bucket_at"]
-    )
+    op.create_index("ix_gateway_metrics_hourly_bucket", "gateway_metrics_hourly", ["bucket_at"])
     op.create_index(
         "ix_gateway_metrics_hourly_team_bucket",
         "gateway_metrics_hourly",

@@ -104,7 +104,9 @@ def _has_openai_trailing_date_suffix(parts: list[str]) -> bool:
     if len(parts) < 4:
         return False
     y, m, d = parts[-3], parts[-2], parts[-1]
-    return len(y) == 4 and y.isdigit() and len(m) == 2 and m.isdigit() and len(d) == 2 and d.isdigit()
+    return (
+        len(y) == 4 and y.isdigit() and len(m) == 2 and m.isdigit() and len(d) == 2 and d.isdigit()
+    )
 
 
 __all__ = [

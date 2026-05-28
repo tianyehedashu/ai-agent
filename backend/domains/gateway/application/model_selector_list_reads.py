@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.gateway.application.config_catalog_sync import gateway_model_to_selector_item
-from domains.gateway.application.entitlement_model_status import annotate_items_entitlement_status
+from domains.gateway.application.entitlement_model_status import (
+    annotate_items_entitlement_status,
+    is_connectivity_requestable,
+)
 from domains.gateway.application.gateway_model_listing import (
     GatewayRegistryModelRow,
     list_merged_models_for_tenant,
@@ -95,6 +98,8 @@ async def list_available_models_page(
     ability_filter = model_type or resolved_registry_ability(query)
     system_items: list[dict[str, object]] = []
     for row in system_rows:
+        if not is_connectivity_requestable(row.last_test_status):
+            continue
         item = gateway_model_to_selector_item(row)
         if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
             continue
@@ -138,10 +143,13 @@ async def list_available_models_page(
             provider=query.provider,
         )
         for row in personal_rows:
+            if not is_connectivity_requestable(row.last_test_status):
+                continue
             item = gateway_model_to_selector_user_item(row)
             if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
                 continue
             item["enabled"] = row.enabled
+            item["last_test_status"] = row.last_test_status
             personal_items.append(item)
         personal_items = [
             i

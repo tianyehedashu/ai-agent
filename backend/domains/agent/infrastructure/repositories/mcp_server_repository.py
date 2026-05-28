@@ -41,9 +41,7 @@ class MCPServerRepository(TenantScopedRepositoryBase[MCPServer]):
         return system_servers, user_servers
 
     async def get_by_name(self, name: str) -> MCPServer | SystemMCPServer | None:
-        sys_row = await self.db.execute(
-            select(SystemMCPServer).where(SystemMCPServer.name == name)
-        )
+        sys_row = await self.db.execute(select(SystemMCPServer).where(SystemMCPServer.name == name))
         found = sys_row.scalar_one_or_none()
         if found is not None:
             return found
@@ -145,9 +143,7 @@ class MCPServerRepository(TenantScopedRepositoryBase[MCPServer]):
         return server
 
     async def count_by_scope(self) -> dict[str, int]:
-        system_result = await self.db.execute(
-            select(func.count()).select_from(SystemMCPServer)
-        )
+        system_result = await self.db.execute(select(func.count()).select_from(SystemMCPServer))
         user_count = await self.count_for_tenants()
         return {
             "system": int(system_result.scalar() or 0),

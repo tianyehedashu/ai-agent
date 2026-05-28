@@ -28,7 +28,9 @@ class _Cred:
     is_active: bool
 
 
-def _mk_model(provider: str, *, enabled: bool = True, managed: bool = True, name: str | None = None) -> _Model:
+def _mk_model(
+    provider: str, *, enabled: bool = True, managed: bool = True, name: str | None = None
+) -> _Model:
     return _Model(
         id=uuid.uuid4(),
         name=name or f"{provider}-m",

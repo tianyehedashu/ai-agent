@@ -38,9 +38,7 @@ class TestInlineVisionImageUrlsInMessages:
 
         store = LocalImageStore(storage_dir=storage_dir)
         config_svc = MagicMock()
-        config_svc.get_active_snapshot = AsyncMock(
-            return_value=_local_snapshot(str(storage_dir))
-        )
+        config_svc.get_active_snapshot = AsyncMock(return_value=_local_snapshot(str(storage_dir)))
         config_svc.build_image_store = AsyncMock(return_value=store)
         session = MagicMock()
         with patch(

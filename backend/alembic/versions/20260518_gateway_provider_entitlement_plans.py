@@ -46,12 +46,8 @@ def upgrade() -> None:
         sa.Column("label", sa.String(length=100), nullable=False),
         sa.Column("valid_from", sa.DateTime(timezone=True), nullable=False),
         sa.Column("valid_until", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
-        ),
-        sa.Column(
-            "auto_renew", sa.Boolean(), nullable=False, server_default=sa.text("false")
-        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("auto_renew", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("extra", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
@@ -67,9 +63,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
     )
-    op.create_index(
-        "ix_provider_plans_credential_id", "provider_plans", ["credential_id"]
-    )
+    op.create_index("ix_provider_plans_credential_id", "provider_plans", ["credential_id"])
     op.create_index(
         "ix_provider_plans_active",
         "provider_plans",
@@ -115,9 +109,7 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("plan_id", "label", name="uq_provider_plan_quota_label"),
     )
-    op.create_index(
-        "ix_provider_plan_quotas_plan_id", "provider_plan_quotas", ["plan_id"]
-    )
+    op.create_index("ix_provider_plan_quotas_plan_id", "provider_plan_quotas", ["plan_id"])
 
     # ------------------------------------------------------------------
     # entitlement_plans
@@ -147,12 +139,8 @@ def upgrade() -> None:
         ),
         sa.Column("valid_from", sa.DateTime(timezone=True), nullable=False),
         sa.Column("valid_until", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
-        ),
-        sa.Column(
-            "auto_renew", sa.Boolean(), nullable=False, server_default=sa.text("false")
-        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("auto_renew", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("extra", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
@@ -168,9 +156,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
     )
-    op.create_index(
-        "ix_entitlement_plans_scope_id", "entitlement_plans", ["scope_id"]
-    )
+    op.create_index("ix_entitlement_plans_scope_id", "entitlement_plans", ["scope_id"])
     op.create_index(
         "ix_entitlement_plans_active",
         "entitlement_plans",
@@ -216,9 +202,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
-        sa.UniqueConstraint(
-            "plan_id", "label", name="uq_entitlement_plan_quota_label"
-        ),
+        sa.UniqueConstraint("plan_id", "label", name="uq_entitlement_plan_quota_label"),
     )
     op.create_index(
         "ix_entitlement_plan_quotas_plan_id",
@@ -256,9 +240,7 @@ def upgrade() -> None:
         "gateway_metrics_hourly",
         sa.Column("provider_plan_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
-    op.drop_constraint(
-        "uq_gateway_metrics_hourly_dim", "gateway_metrics_hourly", type_="unique"
-    )
+    op.drop_constraint("uq_gateway_metrics_hourly_dim", "gateway_metrics_hourly", type_="unique")
     op.create_unique_constraint(
         "uq_gateway_metrics_hourly_dim",
         "gateway_metrics_hourly",
@@ -278,9 +260,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_gateway_metrics_hourly_dim", "gateway_metrics_hourly", type_="unique"
-    )
+    op.drop_constraint("uq_gateway_metrics_hourly_dim", "gateway_metrics_hourly", type_="unique")
     op.create_unique_constraint(
         "uq_gateway_metrics_hourly_dim",
         "gateway_metrics_hourly",
@@ -309,17 +289,13 @@ def downgrade() -> None:
     op.drop_column("gateway_request_logs", "provider_plan_id")
     op.drop_column("gateway_request_logs", "entitlement_plan_id")
 
-    op.drop_index(
-        "ix_entitlement_plan_quotas_plan_id", table_name="entitlement_plan_quotas"
-    )
+    op.drop_index("ix_entitlement_plan_quotas_plan_id", table_name="entitlement_plan_quotas")
     op.drop_table("entitlement_plan_quotas")
     op.drop_index("ix_entitlement_plans_active", table_name="entitlement_plans")
     op.drop_index("ix_entitlement_plans_scope_id", table_name="entitlement_plans")
     op.drop_table("entitlement_plans")
 
-    op.drop_index(
-        "ix_provider_plan_quotas_plan_id", table_name="provider_plan_quotas"
-    )
+    op.drop_index("ix_provider_plan_quotas_plan_id", table_name="provider_plan_quotas")
     op.drop_table("provider_plan_quotas")
     op.drop_index("ix_provider_plans_active", table_name="provider_plans")
     op.drop_index("ix_provider_plans_credential_id", table_name="provider_plans")

@@ -53,8 +53,16 @@ def _credential_update_api_fields(
         existing_api_bases=existing_api_bases,
         existing_profile_id=existing_profile_id,
     )
-    patch_base = stored_base if api_base is not None or profile_id is not None or api_bases is not None else None
-    patch_bases = stored_bases if api_base is not None or profile_id is not None or api_bases is not None else None
+    patch_base = (
+        stored_base
+        if api_base is not None or profile_id is not None or api_bases is not None
+        else None
+    )
+    patch_bases = (
+        stored_bases
+        if api_base is not None or profile_id is not None or api_bases is not None
+        else None
+    )
     patch_profile = stored_profile if profile_id is not None else None
     return (patch_base, patch_bases, patch_profile)
 
@@ -62,14 +70,54 @@ def _credential_update_api_fields(
 class CredentialWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
-    async def create_virtual_key(self, *, tenant_id: uuid.UUID, created_by_user_id: uuid.UUID | None, name: str, description: str | None, key_id_str: str, key_hash: str, encrypted_key: str, allowed_models: list[str], allowed_capabilities: list[str], rpm_limit: int | None, tpm_limit: int | None, store_full_messages: bool, guardrail_enabled: bool, expires_at: datetime | None) -> Any:
+    async def create_virtual_key(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        created_by_user_id: uuid.UUID | None,
+        name: str,
+        description: str | None,
+        key_id_str: str,
+        key_hash: str,
+        encrypted_key: str,
+        allowed_models: list[str],
+        allowed_capabilities: list[str],
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        store_full_messages: bool,
+        guardrail_enabled: bool,
+        expires_at: datetime | None,
+    ) -> Any:
         assert_vkey_guardrail_create_allowed(
             global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
             requested_guardrail_enabled=guardrail_enabled,
         )
-        return await self._vkeys.create(tenant_id=tenant_id, created_by_user_id=created_by_user_id, name=name, description=description, key_id_str=key_id_str, key_hash=key_hash, encrypted_key=encrypted_key, allowed_models=allowed_models, allowed_capabilities=allowed_capabilities, rpm_limit=rpm_limit, tpm_limit=tpm_limit, store_full_messages=store_full_messages, guardrail_enabled=guardrail_enabled, expires_at=expires_at)
+        return await self._vkeys.create(
+            tenant_id=tenant_id,
+            created_by_user_id=created_by_user_id,
+            name=name,
+            description=description,
+            key_id_str=key_id_str,
+            key_hash=key_hash,
+            encrypted_key=encrypted_key,
+            allowed_models=allowed_models,
+            allowed_capabilities=allowed_capabilities,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            store_full_messages=store_full_messages,
+            guardrail_enabled=guardrail_enabled,
+            expires_at=expires_at,
+        )
 
-    async def revoke_virtual_key(self, key_id: uuid.UUID, *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> None:
+    async def revoke_virtual_key(
+        self,
+        key_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> None:
         record = await self._vkeys.get(key_id)
         assert_virtual_key_accessible_by_actor(
             record,
@@ -80,7 +128,15 @@ class CredentialWritesMixin:
         )
         await self._vkeys.revoke(key_id)
 
-    async def revoke_virtual_keys_batch(self, key_ids: list[uuid.UUID], *, tenant_id: uuid.UUID, actor_user_id: uuid.UUID | None, team_role: str, is_platform_admin: bool) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
+    async def revoke_virtual_keys_batch(
+        self,
+        key_ids: list[uuid.UUID],
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]]]:
         revoked: list[uuid.UUID] = []
         failed: list[tuple[uuid.UUID, VirtualKeyBatchRevokeReason]] = []
         seen: set[uuid.UUID] = set()
@@ -89,13 +145,19 @@ class CredentialWritesMixin:
                 continue
             seen.add(key_id)
             try:
-                await self.revoke_virtual_key(key_id, tenant_id=tenant_id, actor_user_id=actor_user_id, team_role=team_role, is_platform_admin=is_platform_admin)
+                await self.revoke_virtual_key(
+                    key_id,
+                    tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
+                    is_platform_admin=is_platform_admin,
+                )
             except VirtualKeyNotFoundError:
-                failed.append((key_id, 'not_found'))
+                failed.append((key_id, "not_found"))
             except SystemVirtualKeyRevokeForbiddenError:
-                failed.append((key_id, 'system_key'))
+                failed.append((key_id, "system_key"))
             except TeamPermissionDeniedError:
-                failed.append((key_id, 'permission_denied'))
+                failed.append((key_id, "permission_denied"))
             else:
                 revoked.append(key_id)
         return (revoked, failed)
@@ -192,8 +254,12 @@ class CredentialWritesMixin:
 
             assert_system_credential_mutation_allowed(is_platform_admin=is_platform_admin)
             previous_is_active = system_existing.is_active
-            if name is not None and name != system_existing.name and is_config_managed_system_credential(
-                scope="system", name=system_existing.name, extra=system_existing.extra
+            if (
+                name is not None
+                and name != system_existing.name
+                and is_config_managed_system_credential(
+                    scope="system", name=system_existing.name, extra=system_existing.extra
+                )
             ):
                 raise ValidationError(
                     "配置同步托管的系统凭据不可重命名；请通过环境变量或 app.toml 管理密钥"
@@ -312,9 +378,16 @@ class CredentialWritesMixin:
         await self._creds.delete(credential_id)
         await self.reload_litellm_router()
 
-    async def import_user_credential_to_team(self, *, user_credential_id: uuid.UUID, tenant_id: uuid.UUID, actor_user_id: uuid.UUID, is_platform_admin: bool) -> CredentialReadModel:
+    async def import_user_credential_to_team(
+        self,
+        *,
+        user_credential_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> CredentialReadModel:
         src = await self._creds.get(user_credential_id)
-        if src is None or src.scope != 'user':
+        if src is None or src.scope != "user":
             raise CredentialNotFoundError(str(user_credential_id))
         if src.scope_id != actor_user_id and (not is_platform_admin):
             raise TeamPermissionDeniedError(str(tenant_id))
@@ -328,7 +401,9 @@ class CredentialWritesMixin:
         await self.reload_litellm_router()
         return ensure_credential_read_model(new_cred)
 
-    async def import_all_user_credentials_to_team(self, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID) -> int:
+    async def import_all_user_credentials_to_team(
+        self, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> int:
         user_creds = await self._creds.list_for_user(actor_user_id)
         created = 0
         for cred in user_creds:
@@ -365,7 +440,7 @@ class CredentialWritesMixin:
             api_bases=api_bases,
         )
         row = await self._creds.create(
-            scope='user',
+            scope="user",
             scope_id=actor_user_id,
             provider=provider,
             name=name,
@@ -392,11 +467,13 @@ class CredentialWritesMixin:
         name: str | None,
     ) -> CredentialReadModel:
         existing = await self._creds.get(credential_id)
-        if existing is None or existing.scope != 'user' or existing.scope_id != actor_user_id:
+        if existing is None or existing.scope != "user" or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
         previous_is_active = existing.is_active
         if name is not None and name != existing.name:
-            dup = await self._creds.find_user_by_provider_and_name(actor_user_id, existing.provider, name)
+            dup = await self._creds.find_user_by_provider_and_name(
+                actor_user_id, existing.provider, name
+            )
             if dup is not None:
                 raise CredentialNameConflictError(existing.provider, name)
         patch_base, patch_bases, patch_profile = _credential_update_api_fields(
@@ -428,9 +505,11 @@ class CredentialWritesMixin:
         await self.reload_litellm_router()
         return ensure_credential_read_model(updated)
 
-    async def delete_user_credential(self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, reload_router: bool=True) -> None:
+    async def delete_user_credential(
+        self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, reload_router: bool = True
+    ) -> None:
         existing = await self._creds.get(credential_id)
-        if existing is None or existing.scope != 'user' or existing.scope_id != actor_user_id:
+        if existing is None or existing.scope != "user" or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
         await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)

@@ -74,9 +74,7 @@ async def _resolved_record_and_credential(
     *,
     user_id: uuid.UUID | None = None,
 ) -> tuple[Any, Any] | None:
-    resolved = await resolve_model_or_route(
-        session, team_id, client_model, user_id=user_id
-    )
+    resolved = await resolve_model_or_route(session, team_id, client_model, user_id=user_id)
     if resolved is None:
         return None
     cred = await load_bindable_credential(session, resolved.record.credential_id)
@@ -100,9 +98,7 @@ async def resolve_deployment_litellm_params(
         _pricing_for_model,
     )
 
-    pair = await _resolved_record_and_credential(
-        session, team_id, client_model, user_id=user_id
-    )
+    pair = await _resolved_record_and_credential(session, team_id, client_model, user_id=user_id)
     if pair is None:
         return None
     record, cred = pair
@@ -137,9 +133,7 @@ async def resolve_volcengine_image_deployment(
         _pricing_for_model,
     )
 
-    pair = await _resolved_record_and_credential(
-        session, team_id, client_model, user_id=user_id
-    )
+    pair = await _resolved_record_and_credential(session, team_id, client_model, user_id=user_id)
     if pair is None:
         return None
     record, cred = pair

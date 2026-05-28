@@ -19,7 +19,7 @@ import uuid
 import httpx
 import pytest
 
-from tests.e2e.config import append_sse_data_line, e2e_api_v1_path
+from tests.e2e.config import e2e_api_v1_path
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, Any]]:

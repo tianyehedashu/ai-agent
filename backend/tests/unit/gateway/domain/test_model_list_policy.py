@@ -41,7 +41,9 @@ class _Row:
 def test_is_model_unavailable() -> None:
     assert is_model_unavailable(enabled=False, last_test_status="success") is True
     assert is_model_unavailable(enabled=True, last_test_status="failed") is True
-    assert is_model_unavailable(enabled=True, last_test_status="success", entitlement_status="exhausted")
+    assert is_model_unavailable(
+        enabled=True, last_test_status="success", entitlement_status="exhausted"
+    )
     assert not is_model_unavailable(enabled=True, last_test_status="success")
 
 
@@ -75,7 +77,11 @@ def test_sort_puts_unavailable_last() -> None:
 
 
 def test_sort_desc_keeps_unavailable_last() -> None:
-    rows = [_Row(name="alpha"), _Row(name="zeta"), _Row(name="failed-one", last_test_status="failed")]
+    rows = [
+        _Row(name="alpha"),
+        _Row(name="zeta"),
+        _Row(name="failed-one", last_test_status="failed"),
+    ]
     sorted_rows = sort_registry_rows(
         rows,
         sort_field=ModelListSortField.NAME,

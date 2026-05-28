@@ -60,6 +60,10 @@ LEGACY_LISTING_STUDIO_IMAGES_PREFIX = "/api/v1/listing-studio/images"
 
 def effective_listing_studio_serve_prefix(stored: str | None) -> str:
     """DB 未配置或仍为旧默认值时，使用当前 ROOT_PATH 下的前缀。"""
-    if stored is None or not stored.strip() or stored.strip() == LEGACY_LISTING_STUDIO_IMAGES_PREFIX:
+    if (
+        stored is None
+        or not stored.strip()
+        or stored.strip() == LEGACY_LISTING_STUDIO_IMAGES_PREFIX
+    ):
         return listing_studio_images_serve_prefix()
     return stored.strip()

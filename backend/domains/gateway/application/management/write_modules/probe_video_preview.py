@@ -12,8 +12,14 @@ def video_generation_probe_preview(video_response: Any) -> str:
         status: str | None
         video_id: str | None
         if isinstance(video_response, dict):
-            status = video_response.get("status") if isinstance(video_response.get("status"), str) else None
-            video_id = video_response.get("id") if isinstance(video_response.get("id"), str) else None
+            status = (
+                video_response.get("status")
+                if isinstance(video_response.get("status"), str)
+                else None
+            )
+            video_id = (
+                video_response.get("id") if isinstance(video_response.get("id"), str) else None
+            )
         else:
             raw_status = getattr(video_response, "status", None)
             raw_id = getattr(video_response, "id", None)

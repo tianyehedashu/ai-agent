@@ -8,8 +8,8 @@ Chat API 集成测试
 4. 多轮对话
 """
 
-import json
 from collections.abc import AsyncGenerator
+import json
 
 from fastapi import status
 from httpx import AsyncClient
@@ -21,7 +21,9 @@ from domains.agent.domain.types import AgentEvent
 # Fixtures 从 conftest.py 自动导入
 
 
-async def _noop_after_session_created(*_args: object, **_kwargs: object) -> AsyncGenerator[AgentEvent, None]:
+async def _noop_after_session_created(
+    *_args: object, **_kwargs: object
+) -> AsyncGenerator[AgentEvent, None]:
     if False:
         yield  # pragma: no cover - empty async generator
 

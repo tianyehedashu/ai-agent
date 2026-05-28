@@ -2,7 +2,7 @@
  * 配额中心：统一展示 platform / upstream / downstream 规则，支持批量设置。
  */
 
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -14,9 +14,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { LayoutGrid, List } from '@/lib/lucide-icons'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
+import { QuotaCardGrid } from './quota-card-grid'
 import { QuotaCenterTable } from './quota-center-table'
+import { QuotaOverviewCards } from './quota-overview-cards'
 import { LAYER_LABELS } from './quota-rule-utils'
 import { useQuotaCenter } from './use-quota-center'
 
@@ -27,6 +30,7 @@ const QuotaBatchDrawer = lazy(async () => {
 
 export function QuotaCenterWorkspace(): React.JSX.Element {
   const ws = useQuotaCenter()
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
 
   return (
     <div className="space-y-4">
@@ -54,7 +58,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[140px]">
           <Label className="text-xs text-muted-foreground">层级</Label>
           <Select
@@ -109,7 +113,34 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
             </SelectContent>
           </Select>
         </div>
+
+        <div className="ml-auto flex items-center gap-1 rounded-md border bg-background p-0.5">
+          <Button
+            size="sm"
+            variant={viewMode === 'table' ? 'default' : 'ghost'}
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => {
+              setViewMode('table')
+            }}
+          >
+            <List className="h-3.5 w-3.5" />
+            表格
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === 'card' ? 'default' : 'ghost'}
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => {
+              setViewMode('card')
+            }}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            卡片
+          </Button>
+        </div>
       </div>
+
+      <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} />
 
       {ws.formDisabled ? (
         <p className="text-sm text-muted-foreground">
@@ -117,15 +148,28 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
         </p>
       ) : null}
 
-      <QuotaCenterTable
-        items={ws.filteredItems}
-        isLoading={ws.isLoading}
-        selectedId={ws.selectedId}
-        formDisabled={ws.formDisabled}
-        labelContext={ws.labelContext}
-        onSelect={ws.selectRule}
-        onDelete={ws.confirmDelete}
-      />
+      {viewMode === 'table' ? (
+        <QuotaCenterTable
+          items={ws.filteredItems}
+          isLoading={ws.isLoading}
+          selectedId={ws.selectedId}
+          formDisabled={ws.formDisabled}
+          labelContext={ws.labelContext}
+          onSelect={ws.selectRule}
+          onDelete={ws.confirmDelete}
+          onBatchDelete={ws.confirmBatchDelete}
+        />
+      ) : (
+        <QuotaCardGrid
+          items={ws.filteredItems}
+          isLoading={ws.isLoading}
+          selectedId={ws.selectedId}
+          labelContext={ws.labelContext}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onSelect={ws.selectRule}
+        />
+      )}
 
       {ws.batchOpen ? (
         <Suspense fallback={null}>

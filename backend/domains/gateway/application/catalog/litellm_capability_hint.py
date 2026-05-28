@@ -49,7 +49,9 @@ def merge_litellm_capability_hints(
     if hints is None:
         return merged
 
-    hints_for_apply = hints_without_reasoning(hints) if _has_explicit_thinking_param(merged) else hints
+    hints_for_apply = (
+        hints_without_reasoning(hints) if _has_explicit_thinking_param(merged) else hints
+    )
     merged = apply_litellm_hints_to_tags(merged, hints_for_apply, mode=mode)
 
     if _has_explicit_thinking_param(tags):

@@ -323,7 +323,9 @@ class TestCredentialUpstreamProbeApi:
         gid = batch["created"][0]["gateway_model_id"]
 
         await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{gid}", headers=headers)
-        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers)
+        await dev_client.delete(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
 
     @pytest.mark.asyncio
     async def test_system_credential_batch_import_lists_as_system_registry(

@@ -9,15 +9,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { FILTER_ALL } from '@/features/gateway-models/constants'
-import { channelLabel } from '@/features/gateway-models/utils'
+import {
+  formatGatewayModelCredentialFilterLabel,
+  type GatewayModelCredentialFilterOption,
+} from '@/features/gateway-models/gateway-model-credential-filter-label'
 import { cn } from '@/lib/utils'
-
-export interface GatewayModelCredentialFilterOption {
-  id: string
-  name: string
-  provider?: string
-  teamLabel?: string
-}
 
 export interface GatewayModelCredentialFilterSelectProps {
   value: string
@@ -30,16 +26,6 @@ export interface GatewayModelCredentialFilterSelectProps {
   ariaLabel?: string
   /** options 未加载或未命中时，用列表行上的凭据名展示 trigger */
   selectedCredentialName?: string | null
-}
-
-export function formatGatewayModelCredentialFilterLabel(
-  option: GatewayModelCredentialFilterOption
-): string {
-  const base = option.provider ? `${option.name} · ${channelLabel(option.provider)}` : option.name
-  if (option.teamLabel) {
-    return `${option.teamLabel} · ${base}`
-  }
-  return base
 }
 
 export function GatewayModelCredentialFilterSelect({

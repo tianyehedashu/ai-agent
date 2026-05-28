@@ -11,7 +11,6 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -22,6 +21,7 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 
 
 async def _seed_team_creds(db_session, n: int = 2):
@@ -116,7 +116,9 @@ async def test_multi_credential_conflict_with_existing_route(db_session, test_us
     await db_session.flush()
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
-    cred = await create_tenant_test_credential(db_session, team.id, name=f"conflict-{uuid.uuid4().hex[:6]}")
+    cred = await create_tenant_test_credential(
+        db_session, team.id, name=f"conflict-{uuid.uuid4().hex[:6]}"
+    )
     await db_session.flush()
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ValidationError):

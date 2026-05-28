@@ -15,6 +15,7 @@ class TeamRole(str, Enum):
     ADMIN = "admin"
     MEMBER = "member"
 
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 TenantId = NewType("TenantId", uuid.UUID)

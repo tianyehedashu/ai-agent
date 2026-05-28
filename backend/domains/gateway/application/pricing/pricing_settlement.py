@@ -33,9 +33,7 @@ def pricing_rate_from_metadata(custom: dict[str, Any]) -> PricingRate | None:
                 if custom.get("cache_read_input_token_cost") is not None
                 else None
             ),
-            per_request_usd=(
-                Decimal(str(per_request)) if per_request is not None else None
-            ),
+            per_request_usd=(Decimal(str(per_request)) if per_request is not None else None),
         )
     if per_request is not None:
         return PricingRate(

@@ -8,10 +8,10 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError

@@ -59,9 +59,7 @@ async def _resolve_personal_team_model(
     personal = await TeamService(session).ensure_personal_team(user_id)
     if personal.id == current_team_id:
         return None
-    return await resolve_by_name_visible(
-        session, personal.id, name, user_id=user_id
-    )
+    return await resolve_by_name_visible(session, personal.id, name, user_id=user_id)
 
 
 async def _resolve_model_or_route_uncached(
@@ -86,18 +84,14 @@ async def _resolve_model_or_route_uncached(
                 via_route=None,
             )
 
-    record = await resolve_by_name_visible(
-        session, team_id, cleaned, user_id=user_id
-    )
+    record = await resolve_by_name_visible(session, team_id, cleaned, user_id=user_id)
     if record is not None:
         return ResolvedModelName(record=record, route=None, via_route=None)
     route = await GatewayRouteRepository(session).resolve_by_virtual_model(team_id, cleaned)
     if route is None:
         return None
     for primary in route.primary_models or ():
-        primary_record = await resolve_by_name_visible(
-            session, team_id, primary, user_id=user_id
-        )
+        primary_record = await resolve_by_name_visible(session, team_id, primary, user_id=user_id)
         if primary_record is not None:
             return ResolvedModelName(
                 record=primary_record,
@@ -139,9 +133,7 @@ async def resolve_model_or_route(
                 return None
             return await hydrate_resolve_cache_entry(session, cached)
 
-    resolved = await _resolve_model_or_route_uncached(
-        session, team_id, cleaned, user_id=user_id
-    )
+    resolved = await _resolve_model_or_route_uncached(session, team_id, cleaned, user_id=user_id)
     if settings.gateway_resolve_model_cache_enabled:
         put_resolve_cache_entry(team_id, cleaned, user_id=user_id, resolved=resolved)
     return resolved

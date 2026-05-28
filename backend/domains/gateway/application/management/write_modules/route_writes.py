@@ -28,8 +28,7 @@ class RouteWritesMixin:
         fallbacks_context_window: list[str],
     ) -> None:
         available = {
-            m.name
-            for m in await self._models.list_for_tenant(tenant_id, only_enabled=False)
+            m.name for m in await self._models.list_for_tenant(tenant_id, only_enabled=False)
         }
         unknown: list[str] = []
         for name in (
@@ -42,7 +41,7 @@ class RouteWritesMixin:
                 unknown.append(name)
         if unknown:
             unique = sorted(set(unknown))
-            raise ValidationError(f'未注册的模型别名: {", ".join(unique)}')
+            raise ValidationError(f"未注册的模型别名: {', '.join(unique)}")
 
     async def create_gateway_route(
         self,
@@ -82,17 +81,17 @@ class RouteWritesMixin:
         repo = self._routes
         existing = await repo.get(route_id)
         if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
-            raise ManagementEntityNotFoundError('route', str(route_id))
+            raise ManagementEntityNotFoundError("route", str(route_id))
         patch = dict(fields)
-        if patch.get('strategy') is not None:
-            patch['strategy'] = validate_routing_strategy(str(patch['strategy']))
-        primary_models = patch.get('primary_models', existing.primary_models) or []
-        fallbacks_general = patch.get('fallbacks_general', existing.fallbacks_general) or []
+        if patch.get("strategy") is not None:
+            patch["strategy"] = validate_routing_strategy(str(patch["strategy"]))
+        primary_models = patch.get("primary_models", existing.primary_models) or []
+        fallbacks_general = patch.get("fallbacks_general", existing.fallbacks_general) or []
         fallbacks_content_policy = (
-            patch.get('fallbacks_content_policy', existing.fallbacks_content_policy) or []
+            patch.get("fallbacks_content_policy", existing.fallbacks_content_policy) or []
         )
         fallbacks_context_window = (
-            patch.get('fallbacks_context_window', existing.fallbacks_context_window) or []
+            patch.get("fallbacks_context_window", existing.fallbacks_context_window) or []
         )
         await self._validate_route_model_names(
             tenant_id,
@@ -103,7 +102,7 @@ class RouteWritesMixin:
         )
         updated = await repo.update(route_id, **patch)
         if updated is None:
-            raise ManagementEntityNotFoundError('route', str(route_id))
+            raise ManagementEntityNotFoundError("route", str(route_id))
         await self.reload_litellm_router()
         return updated
 
@@ -111,6 +110,6 @@ class RouteWritesMixin:
         repo = self._routes
         existing = await repo.get(route_id)
         if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
-            raise ManagementEntityNotFoundError('route', str(route_id))
+            raise ManagementEntityNotFoundError("route", str(route_id))
         await repo.delete(route_id)
         await self.reload_litellm_router()

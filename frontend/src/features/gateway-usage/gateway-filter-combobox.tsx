@@ -36,6 +36,7 @@ export interface GatewayFilterComboboxProps {
   searchPlaceholder?: string
   loading?: boolean
   disabled?: boolean
+  active?: boolean
   className?: string
   id?: string
   onOpenChange?: (open: boolean) => void
@@ -50,6 +51,7 @@ export function GatewayFilterCombobox({
   searchPlaceholder = '搜索…',
   loading = false,
   disabled = false,
+  active = false,
   className,
   id,
   onOpenChange,
@@ -76,7 +78,7 @@ export function GatewayFilterCombobox({
         <Button
           id={id}
           type="button"
-          variant="outline"
+          variant={active ? 'default' : 'outline'}
           role="combobox"
           aria-expanded={open}
           disabled={disabled || loading}

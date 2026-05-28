@@ -13,9 +13,7 @@ def test_effective_team_role_returns_member_role_when_present() -> None:
 
 
 def test_effective_team_role_platform_admin_without_membership() -> None:
-    assert (
-        effective_team_role(member_role=None, is_platform_admin=True) == TeamRole.ADMIN.value
-    )
+    assert effective_team_role(member_role=None, is_platform_admin=True) == TeamRole.ADMIN.value
 
 
 def test_effective_team_role_non_admin_without_membership_raises() -> None:

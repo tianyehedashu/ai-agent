@@ -86,11 +86,17 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
         },
         "limits": {
             "limit_usd": str(limits.limit_usd) if limits.limit_usd is not None else None,
-            "soft_limit_usd": str(limits.soft_limit_usd) if limits.soft_limit_usd is not None else None,
+            "soft_limit_usd": str(limits.soft_limit_usd)
+            if limits.soft_limit_usd is not None
+            else None,
             "limit_tokens": limits.limit_tokens,
             "limit_requests": limits.limit_requests,
-            "unit_price_usd_per_token": str(limits.unit_price_usd_per_token) if limits.unit_price_usd_per_token is not None else None,
-            "unit_price_usd_per_request": str(limits.unit_price_usd_per_request) if limits.unit_price_usd_per_request is not None else None,
+            "unit_price_usd_per_token": str(limits.unit_price_usd_per_token)
+            if limits.unit_price_usd_per_token is not None
+            else None,
+            "unit_price_usd_per_request": str(limits.unit_price_usd_per_request)
+            if limits.unit_price_usd_per_request is not None
+            else None,
         },
         "plan_label": rule.plan_label,
         "is_active": rule.is_active,
@@ -128,7 +134,9 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
         team_id=uuid.UUID(key_data["team_id"]),
         layer=key_data["layer"],
         user_id=uuid.UUID(key_data["user_id"]) if key_data.get("user_id") else None,
-        credential_id=uuid.UUID(key_data["credential_id"]) if key_data.get("credential_id") else None,
+        credential_id=uuid.UUID(key_data["credential_id"])
+        if key_data.get("credential_id")
+        else None,
         model_name=key_data.get("model_name"),
         period=key_data.get("period"),
         window_seconds=key_data.get("window_seconds"),
@@ -150,23 +158,37 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
 
     limits_data = data["limits"]
     limits = QuotaRuleLimits(
-        limit_usd=Decimal(limits_data["limit_usd"]) if limits_data.get("limit_usd") is not None else None,
-        soft_limit_usd=Decimal(limits_data["soft_limit_usd"]) if limits_data.get("soft_limit_usd") is not None else None,
+        limit_usd=Decimal(limits_data["limit_usd"])
+        if limits_data.get("limit_usd") is not None
+        else None,
+        soft_limit_usd=Decimal(limits_data["soft_limit_usd"])
+        if limits_data.get("soft_limit_usd") is not None
+        else None,
         limit_tokens=limits_data.get("limit_tokens"),
         limit_requests=limits_data.get("limit_requests"),
-        unit_price_usd_per_token=Decimal(limits_data["unit_price_usd_per_token"]) if limits_data.get("unit_price_usd_per_token") is not None else None,
-        unit_price_usd_per_request=Decimal(limits_data["unit_price_usd_per_request"]) if limits_data.get("unit_price_usd_per_request") is not None else None,
+        unit_price_usd_per_token=Decimal(limits_data["unit_price_usd_per_token"])
+        if limits_data.get("unit_price_usd_per_token") is not None
+        else None,
+        unit_price_usd_per_request=Decimal(limits_data["unit_price_usd_per_request"])
+        if limits_data.get("unit_price_usd_per_request") is not None
+        else None,
     )
 
     usage = None
     usage_data = data.get("usage")
     if usage_data is not None:
         usage = QuotaRuleUsage(
-            current_usd=Decimal(usage_data["current_usd"]) if usage_data.get("current_usd") is not None else Decimal("0"),
+            current_usd=Decimal(usage_data["current_usd"])
+            if usage_data.get("current_usd") is not None
+            else Decimal("0"),
             current_tokens=usage_data.get("current_tokens") or 0,
             current_requests=usage_data.get("current_requests") or 0,
-            reset_at=datetime.fromisoformat(usage_data["reset_at"]) if usage_data.get("reset_at") else None,
-            budget_reset_at=datetime.fromisoformat(usage_data["budget_reset_at"]) if usage_data.get("budget_reset_at") else None,
+            reset_at=datetime.fromisoformat(usage_data["reset_at"])
+            if usage_data.get("reset_at")
+            else None,
+            budget_reset_at=datetime.fromisoformat(usage_data["budget_reset_at"])
+            if usage_data.get("budget_reset_at")
+            else None,
         )
 
     return QuotaRuleReadModel(
@@ -317,7 +339,9 @@ async def get_cached_quota_rules(
 ) -> list[QuotaRuleReadModel] | None:
     """尝试命中配额规则缓存；命中返回反序列化后的规则列表，未命中返回 None。"""
     version = await _get_version(team_id)
-    cache_key = _build_cache_key(team_id, actor_role_hash=actor_role_hash, filter_hash=_filter_hash(filters))
+    cache_key = _build_cache_key(
+        team_id, actor_role_hash=actor_role_hash, filter_hash=_filter_hash(filters)
+    )
 
     local_hit = _get_local(version, cache_key)
     if local_hit is not None:
@@ -340,7 +364,9 @@ async def put_cached_quota_rules(
 ) -> None:
     """将配额规则列表写入缓存（L1 + Redis）。"""
     version = await _get_version(team_id)
-    cache_key = _build_cache_key(team_id, actor_role_hash=actor_role_hash, filter_hash=_filter_hash(filters))
+    cache_key = _build_cache_key(
+        team_id, actor_role_hash=actor_role_hash, filter_hash=_filter_hash(filters)
+    )
     _put_local(version, cache_key, rules)
     await _put_redis(version, cache_key, rules)
 

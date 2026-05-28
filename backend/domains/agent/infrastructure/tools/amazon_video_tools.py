@@ -112,9 +112,7 @@ class AmazonVideoSubmitTool(BaseTool):
                     build_session_use_case,
                 )
 
-                use_case = VideoTaskUseCase(
-                    db, session_use_case=build_session_use_case(db)
-                )
+                use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
 
                 # 解析 session_id
                 session_uuid = None
@@ -193,9 +191,7 @@ class AmazonVideoPollTool(BaseTool):
                     build_session_use_case,
                 )
 
-                use_case = VideoTaskUseCase(
-                    db, session_use_case=build_session_use_case(db)
-                )
+                use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
 
                 # 轮询任务
                 task = await use_case.poll_task(

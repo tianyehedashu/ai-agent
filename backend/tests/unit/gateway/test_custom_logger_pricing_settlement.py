@@ -59,7 +59,10 @@ def test_extract_metadata_merges_litellm_params() -> None:
         "metadata": {"gateway_team_id": "00000000-0000-4000-8000-000000000001"},
         "litellm_params": {
             "metadata": {
-                "gateway_pricing_downstream": {"input_cost_per_token": 1e-6, "output_cost_per_token": 2e-6}
+                "gateway_pricing_downstream": {
+                    "input_cost_per_token": 1e-6,
+                    "output_cost_per_token": 2e-6,
+                }
             }
         },
     }

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useChat } from '@/hooks/use-chat'
+import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
 import type { SessionCreativeMode } from '@/types'
@@ -41,11 +42,16 @@ export default function ChatPage(): React.JSX.Element {
   const [referenceImageUrls, setReferenceImageUrls] = useState('')
   /** 网关调用详细日志：无会话时仅作用于下一条发送；有会话时切换会 PATCH 持久化到会话 */
   const [verboseGatewayLog, setVerboseGatewayLog] = useState(false)
+  const workspaceTeamId = useGatewayWorkspaceTeamId()
 
   const { data: availableTextModels } = useQuery({
-    queryKey: ['gateway-models-available', 'text'],
-    queryFn: () => gatewayApi.listAvailableModels('text'),
+    queryKey: ['gateway-models-available', 'text', '', '', workspaceTeamId ?? ''],
+    queryFn: () =>
+      gatewayApi.listAvailableModels('text', undefined, {
+        ...(workspaceTeamId ? { gatewayTeamId: workspaceTeamId } : {}),
+      }),
     staleTime: 30_000,
+    enabled: workspaceTeamId !== null,
   })
 
   const {
@@ -215,11 +221,15 @@ export default function ChatPage(): React.JSX.Element {
 
     if (creativeMode === 'image_gen') {
       const defaultImg = (
-        await gatewayApi.listAvailableModels('image_gen', undefined, { mode: 'image_gen' })
+        await gatewayApi.listAvailableModels('image_gen', undefined, {
+          mode: 'image_gen',
+          ...(workspaceTeamId ? { gatewayTeamId: workspaceTeamId } : {}),
+        })
       ).default_for_image_gen?.id
       const modelRef = selectedImageGenModelRef ?? defaultImg ?? undefined
       await sendMessage(message, {
         modelRef,
+        gatewayTeamId: workspaceTeamId ?? undefined,
         gatewayVerboseRequestLog: verboseGatewayLog ? true : undefined,
         creativeMode: 'image_gen',
         referenceImageUrls: refLines.length > 0 ? refLines : undefined,
@@ -239,6 +249,7 @@ export default function ChatPage(): React.JSX.Element {
     const modelRef = selectedModelRef ?? defaultId ?? undefined
     await sendMessage(message, {
       modelRef,
+      gatewayTeamId: workspaceTeamId ?? undefined,
       gatewayVerboseRequestLog: verboseGatewayLog ? true : undefined,
       creativeMode: 'chat',
       referenceImageUrls: refLines.length > 0 ? refLines : undefined,
@@ -359,6 +370,7 @@ export default function ChatPage(): React.JSX.Element {
                     <ModelSelector
                       modelType="image_gen"
                       listMode="image_gen"
+                      gatewayTeamId={workspaceTeamId}
                       value={selectedImageGenModelRef}
                       onChange={setSelectedImageGenModelRef}
                       disabled={isLoading}
@@ -369,6 +381,7 @@ export default function ChatPage(): React.JSX.Element {
                     <ModelSelector
                       modelType="text"
                       listMode="chat"
+                      gatewayTeamId={workspaceTeamId}
                       value={selectedModelRef}
                       onChange={setSelectedModelRef}
                       disabled={isLoading}

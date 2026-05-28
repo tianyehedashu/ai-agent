@@ -73,9 +73,9 @@ def build_dashscope_embedding_request(
     input_payload: Any,
 ) -> DashscopeEmbeddingRequest:
     """根据凭据与输入构建 OpenAI 兼容 Embedding 请求。"""
-    base = (resolve_effective_api_base("dashscope", api_base) or DEFAULT_DASHSCOPE_COMPAT_API_BASE).rstrip(
-        "/"
-    )
+    base = (
+        resolve_effective_api_base("dashscope", api_base) or DEFAULT_DASHSCOPE_COMPAT_API_BASE
+    ).rstrip("/")
     upstream_model = normalize_dashscope_embedding_model(model_id)
     return DashscopeEmbeddingRequest(
         url=f"{base}/embeddings",

@@ -6,11 +6,11 @@ import uuid
 
 from fastapi import APIRouter, status
 
+from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
-from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.schemas.common import (
     RouteCreate,
     RouteResponse,

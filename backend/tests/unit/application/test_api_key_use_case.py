@@ -17,8 +17,8 @@ from domains.identity.domain.api_key_types import (
     ApiKeyGatewayGrantRequest,
     ApiKeyScope,
 )
-from libs.exceptions import ValidationError
 from domains.identity.domain.services.api_key_service import ApiKeyGenerator
+from libs.exceptions import ValidationError
 
 
 @pytest.mark.unit

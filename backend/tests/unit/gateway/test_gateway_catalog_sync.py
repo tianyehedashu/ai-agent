@@ -86,7 +86,9 @@ async def test_sync_disables_config_models_when_provider_key_revoked(
 
     assert stats["disabled"] >= len(openai_rows_before)
     assert stats["credentials_deactivated"] >= len(openai_creds_before)
-    openai_rows_after = [r for r in await repo.list_system(only_enabled=False) if r.provider == "openai"]
+    openai_rows_after = [
+        r for r in await repo.list_system(only_enabled=False) if r.provider == "openai"
+    ]
     assert openai_rows_after and all(not r.enabled for r in openai_rows_after)
     openai_creds_after = [c for c in await cred_repo.list_all() if c.provider == "openai"]
     assert openai_creds_after and all(not c.is_active for c in openai_creds_after)
@@ -110,11 +112,7 @@ async def test_sync_does_not_duplicate_system_credential_after_rename(db_session
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()
 
-    system_openai = [
-        c
-        for c in await cred_repo.list_all()
-        if c.provider == "openai"
-    ]
+    system_openai = [c for c in await cred_repo.list_all() if c.provider == "openai"]
     assert len(system_openai) == 1
     assert system_openai[0].id == created.id
 
@@ -124,7 +122,9 @@ MANAGED_ZHIPU_BASE = "https://admin-managed.example.com/v1"
 
 
 @pytest.mark.asyncio
-async def test_sync_preserves_existing_api_base_over_env(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sync_preserves_existing_api_base_over_env(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """管理面已设置的 api_base 不应被 catalog sync 的 env 覆盖。"""
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = SystemProviderCredentialRepository(db_session)
@@ -149,7 +149,9 @@ async def test_sync_preserves_existing_api_base_over_env(db_session, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_sync_backfills_empty_api_base_from_env(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sync_backfills_empty_api_base_from_env(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = SystemProviderCredentialRepository(db_session)
 
@@ -185,7 +187,9 @@ def test_merge_config_managed_extra_preserves_force_env_sync() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_force_env_sync_overwrites_managed_base(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sync_force_env_sync_overwrites_managed_base(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """extra.force_env_sync=true 时 catalog sync 用 env 覆盖已有 api_base。"""
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_repo = SystemProviderCredentialRepository(db_session)

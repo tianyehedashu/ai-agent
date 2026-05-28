@@ -99,9 +99,7 @@ async def filter_visible_system_gateway_models(
     if not snapshots_need_grant_lookup(snapshots):
         return rows
 
-    granted_keys = await _grant_keys_for_visibility(
-        session, team_id=tenant_id, user_id=user_id
-    )
+    granted_keys = await _grant_keys_for_visibility(session, team_id=tenant_id, user_id=user_id)
     allowed_ids = visible_system_model_ids(snapshots, granted_keys)
     return [row for row in rows if row.id in allowed_ids]
 
@@ -120,9 +118,7 @@ def system_credential_visible_to_subject(
 def system_credentials_need_grant_lookup(
     rows: list[SystemProviderCredential],
 ) -> bool:
-    return any(
-        credential_visibility_for_api(row.visibility) == "restricted" for row in rows
-    )
+    return any(credential_visibility_for_api(row.visibility) == "restricted" for row in rows)
 
 
 async def filter_visible_system_provider_credentials(
@@ -138,13 +134,13 @@ async def filter_visible_system_provider_credentials(
         return list(rows)
     if not system_credentials_need_grant_lookup(rows):
         return list(rows)
-    granted_keys = await _grant_keys_for_visibility(
-        session, team_id=tenant_id, user_id=user_id
-    )
+    granted_keys = await _grant_keys_for_visibility(session, team_id=tenant_id, user_id=user_id)
     return [
         row
         for row in rows
-        if system_credential_visible_to_subject(row.id, row.visibility or Visibility.PUBLIC.value, granted_keys)
+        if system_credential_visible_to_subject(
+            row.id, row.visibility or Visibility.PUBLIC.value, granted_keys
+        )
     ]
 
 

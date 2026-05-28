@@ -52,8 +52,7 @@ async def list_managed_team_credentials_for_actor(
         search=search,
     )
     snapshots = [
-        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role)
-        for m in memberships
+        WritableTeamSnapshot(team_id=m.team_id, kind=m.kind, role=m.role) for m in memberships
     ]
     plan = build_managed_team_readable_resource_list_plan(
         snapshots,

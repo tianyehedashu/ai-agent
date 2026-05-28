@@ -105,8 +105,13 @@ def test_budget_target_allowed_key_requires_flag() -> None:
         member_user_ids=frozenset(),
         is_platform_admin=False,
     )
-    assert budget_target_allowed(BudgetScope.KEY.value, key_id, ctx, key_belongs_to_team=True) is True
-    assert budget_target_allowed(BudgetScope.KEY.value, key_id, ctx, key_belongs_to_team=False) is False
+    assert (
+        budget_target_allowed(BudgetScope.KEY.value, key_id, ctx, key_belongs_to_team=True) is True
+    )
+    assert (
+        budget_target_allowed(BudgetScope.KEY.value, key_id, ctx, key_belongs_to_team=False)
+        is False
+    )
     assert budget_target_allowed(BudgetScope.KEY.value, key_id, ctx) is False
 
 

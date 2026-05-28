@@ -37,7 +37,9 @@ async def list_managed_team_routes(
         page_params=page,
     )
     envelope = build_page(
-        items=[RouteResponse.model_validate(route_row_to_api_dict(row)) for row in result.page_items],
+        items=[
+            RouteResponse.model_validate(route_row_to_api_dict(row)) for row in result.page_items
+        ],
         total=result.total,
         page=result.page,
         page_size=result.page_size,

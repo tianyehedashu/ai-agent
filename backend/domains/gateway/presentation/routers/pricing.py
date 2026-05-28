@@ -235,9 +235,7 @@ async def list_downstream_pricing(
     sid = scope_id if scope_norm != "global" else None
     if scope_norm == "tenant" and sid is None:
         sid = team.team_id
-    rows = await _catalog_reads(db).list_downstream(
-        scope=scope_norm, scope_id=sid, currency=cur
-    )
+    rows = await _catalog_reads(db).list_downstream(scope=scope_norm, scope_id=sid, currency=cur)
     return [DownstreamPricingResponse.model_validate(r) for r in rows]
 
 

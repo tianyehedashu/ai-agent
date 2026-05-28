@@ -37,17 +37,13 @@ def test_classify_gateway_model_not_found() -> None:
 
 
 def test_classify_gateway_model_not_found_with_team_label() -> None:
-    biz = classify_proxy_use_case_business_error(
-        GatewayModelNotFoundError("m1", team_label="研发")
-    )
+    biz = classify_proxy_use_case_business_error(GatewayModelNotFoundError("m1", team_label="研发"))
     assert biz is not None
     assert "当前调用团队: 研发" in biz.message
 
 
 def test_classify_router_model_miss_maps_404() -> None:
-    exc = RuntimeError(
-        "litellm.BadRequestError: no healthy deployments for model=foo"
-    )
+    exc = RuntimeError("litellm.BadRequestError: no healthy deployments for model=foo")
     biz = classify_proxy_use_case_business_error(exc)
     assert biz is not None
     assert biz.http_status == status.HTTP_404_NOT_FOUND
@@ -56,9 +52,7 @@ def test_classify_router_model_miss_maps_404() -> None:
 
 
 def test_classify_rate_limit_maps_anthropic_rate_limit_error() -> None:
-    biz = classify_proxy_use_case_business_error(
-        RateLimitExceededError("vkey", retry_after=30)
-    )
+    biz = classify_proxy_use_case_business_error(RateLimitExceededError("vkey", retry_after=30))
     assert biz is not None
     assert biz.http_status == status.HTTP_429_TOO_MANY_REQUESTS
     assert biz.openai_error_type == "rate_limit_exceeded"
@@ -67,9 +61,7 @@ def test_classify_rate_limit_maps_anthropic_rate_limit_error() -> None:
 
 
 def test_classify_budget_maps_anthropic_api_error() -> None:
-    biz = classify_proxy_use_case_business_error(
-        BudgetExceededError("team", "daily", 10.0, 10.0)
-    )
+    biz = classify_proxy_use_case_business_error(BudgetExceededError("team", "daily", 10.0, 10.0))
     assert biz is not None
     assert biz.http_status == status.HTTP_402_PAYMENT_REQUIRED
     assert biz.openai_error_type == "budget_exceeded"
@@ -98,7 +90,9 @@ def test_classify_httpx_upstream_4xx_maps_400() -> None:
     response = httpx.Response(
         400,
         json={"error": {"message": "invalid model"}},
-        request=httpx.Request("POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"),
+        request=httpx.Request(
+            "POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+        ),
     )
     exc = httpx.HTTPStatusError("bad", request=response.request, response=response)
     biz = classify_proxy_use_case_business_error(exc)
@@ -111,7 +105,9 @@ def test_classify_httpx_upstream_4xx_maps_400() -> None:
 def test_classify_httpx_upstream_5xx_maps_502() -> None:
     response = httpx.Response(
         503,
-        request=httpx.Request("POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"),
+        request=httpx.Request(
+            "POST", "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+        ),
     )
     exc = httpx.HTTPStatusError("bad", request=response.request, response=response)
     biz = classify_proxy_use_case_business_error(exc)

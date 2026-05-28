@@ -47,13 +47,7 @@ async def test_chat_capability_success_persists(db_session, test_user) -> None:
     fake = type(
         "Resp",
         (),
-        {
-            "choices": [
-                type(
-                    "C", (), {"message": type("M", (), {"content": "Hello!"})()}
-                )()
-            ]
-        },
+        {"choices": [type("C", (), {"message": type("M", (), {"content": "Hello!"})()})()]},
     )()
     writes = GatewayManagementWriteService(db_session)
 
@@ -286,9 +280,7 @@ async def test_unknown_model_raises(db_session, test_user) -> None:
 
 
 @pytest.mark.asyncio
-async def test_volcengine_image_probe_uses_image_endpoint_from_extra(
-    db_session, test_user
-) -> None:
+async def test_volcengine_image_probe_uses_image_endpoint_from_extra(db_session, test_user) -> None:
     """火山生图模型探活：走自定义 HTTP，不再用 LiteLLM ``aimage_generation``。"""
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = await create_tenant_test_credential(
@@ -328,9 +320,7 @@ async def test_volcengine_image_probe_uses_image_endpoint_from_extra(
 
 
 @pytest.mark.asyncio
-async def test_volcengine_image_probe_fails_when_endpoint_missing(
-    db_session, test_user
-) -> None:
+async def test_volcengine_image_probe_fails_when_endpoint_missing(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = await create_tenant_test_credential(
         db_session,
@@ -355,9 +345,7 @@ async def test_volcengine_image_probe_fails_when_endpoint_missing(
 
 
 @pytest.mark.asyncio
-async def test_volcengine_video_probe_uses_direct_task_api(
-    db_session, test_user
-) -> None:
+async def test_volcengine_video_probe_uses_direct_task_api(db_session, test_user) -> None:
     """火山 Seedance 视频探活：走方舟 ``/contents/generations/tasks``，不用 LiteLLM。"""
     team_id, model_id = await _seed_team_credential_and_model(
         db_session,
@@ -408,13 +396,7 @@ async def test_system_model_from_merged_list_can_be_probed(db_session, test_user
     fake = type(
         "Resp",
         (),
-        {
-            "choices": [
-                type(
-                    "C", (), {"message": type("M", (), {"content": "pong"})()}
-                )()
-            ]
-        },
+        {"choices": [type("C", (), {"message": type("M", (), {"content": "pong"})()})()]},
     )()
     with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
         result = await writes.test_gateway_model(system_model.id, tenant_id=team.id)

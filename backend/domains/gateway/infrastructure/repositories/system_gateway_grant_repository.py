@@ -45,8 +45,7 @@ class SystemGatewayGrantRepository:
     ) -> list[SystemGatewayGrant]:
         """一次查询拉取 team / user 命中的 enabled grants。"""
         target_clauses = [
-            (SystemGatewayGrant.target_kind == "team")
-            & (SystemGatewayGrant.target_id == team_id)
+            (SystemGatewayGrant.target_kind == "team") & (SystemGatewayGrant.target_id == team_id)
         ]
         if user_id is not None:
             target_clauses.append(

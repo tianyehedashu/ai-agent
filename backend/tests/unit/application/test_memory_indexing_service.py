@@ -33,7 +33,9 @@ class TestMemoryIndexingService:
         index.delete_vectors = AsyncMock()
         return MemoryIndexingService(_FakeEmbedding(), index)
 
-    async def test_index_memory_calls_embed_and_upsert(self, service: MemoryIndexingService) -> None:
+    async def test_index_memory_calls_embed_and_upsert(
+        self, service: MemoryIndexingService
+    ) -> None:
         await service.index_memory(
             session_id="s1",
             memory_id="m1",

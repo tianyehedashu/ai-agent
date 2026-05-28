@@ -17,9 +17,7 @@ if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
     from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
 
-    CredentialReadSource = (
-        CredentialReadModel | ProviderCredential | SystemProviderCredential
-    )
+    CredentialReadSource = CredentialReadModel | ProviderCredential | SystemProviderCredential
 else:
     CredentialReadSource = CredentialReadModel
 
@@ -70,9 +68,7 @@ def credential_from_orm(
     encryption_key: str | None = None,
 ) -> CredentialReadModel:
     api_key_masked = (
-        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key)
-        if encryption_key
-        else None
+        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key) if encryption_key else None
     )
     stored_bases = _normalize_stored_api_bases(cred.api_bases)
     profile_label, effective_openai, effective_anthropic = _credential_profile_display(
@@ -110,9 +106,7 @@ def system_credential_from_orm(
     encryption_key: str | None = None,
 ) -> CredentialReadModel:
     api_key_masked = (
-        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key)
-        if encryption_key
-        else None
+        _mask_api_key_encrypted(cred.api_key_encrypted, encryption_key) if encryption_key else None
     )
     stored_bases = _normalize_stored_api_bases(cred.api_bases)
     profile_label, effective_openai, effective_anthropic = _credential_profile_display(

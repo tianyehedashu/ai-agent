@@ -171,7 +171,9 @@ def _upstream_cost_from_litellm_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
         hp = getattr(response, "_hidden_params", None)
         if hp is None:
             return None
-        raw = hp.get("response_cost") if isinstance(hp, dict) else getattr(hp, "response_cost", None)
+        raw = (
+            hp.get("response_cost") if isinstance(hp, dict) else getattr(hp, "response_cost", None)
+        )
         if raw is None:
             return None
         with suppress(Exception):

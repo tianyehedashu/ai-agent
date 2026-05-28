@@ -13,9 +13,7 @@ from domains.gateway.domain.types import (
 
 def test_tenant_row_scope_null_maps_to_team() -> None:
     tid = uuid.uuid4()
-    assert (
-        credential_api_scope(scope=None, tenant_id=tid) == CredentialScope.TEAM.value
-    )
+    assert credential_api_scope(scope=None, tenant_id=tid) == CredentialScope.TEAM.value
 
 
 def test_user_byok_scope() -> None:

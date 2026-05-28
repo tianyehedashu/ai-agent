@@ -21,10 +21,15 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text  # pylint: disable=wrong-import-position
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # pylint: disable=wrong-import-position
+from sqlalchemy.ext.asyncio import (  # pylint: disable=wrong-import-position
+    AsyncSession,
+    create_async_engine,
+)
 
 from bootstrap.config_loader import get_app_config  # pylint: disable=wrong-import-position
-from domains.identity.domain.orphan_tenant_tables import ORPHAN_TENANT_CLEANUP_TABLES  # pylint: disable=wrong-import-position
+from domains.identity.domain.orphan_tenant_tables import (
+    ORPHAN_TENANT_CLEANUP_TABLES,  # pylint: disable=wrong-import-position
+)
 
 
 async def get_engine():
