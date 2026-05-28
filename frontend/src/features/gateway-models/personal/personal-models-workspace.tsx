@@ -37,6 +37,7 @@ import {
   type HealthFilter,
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
+import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
 import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
 import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
 import {
@@ -103,15 +104,17 @@ export function PersonalModelsWorkspace({
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
   const isRegisterView = pageView === 'register'
   const credentialIdFromUrl = searchParams.get('credentialId') ?? ''
-  const lockCredentialFromUrl = credentialIdFromUrl !== ''
+  const credentialFilter = isRegisterView ? '' : credentialIdFromUrl
+  const lockCredentialFromUrl = isRegisterView && credentialIdFromUrl !== ''
   const [listChannel, setListChannel] = useState<string>(LIST_CHANNEL_ALL)
   const [abilityFilter, setAbilityFilter] = useState('')
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const personalListFilterKey = useMemo(
-    () => buildFilterKey([listChannel, abilityFilter, deferredSearch, healthFilter]),
-    [listChannel, abilityFilter, deferredSearch, healthFilter]
+    () =>
+      buildFilterKey([listChannel, abilityFilter, credentialFilter, deferredSearch, healthFilter]),
+    [listChannel, abilityFilter, credentialFilter, deferredSearch, healthFilter]
   )
   const [page, setPage] = usePaginationPageForFilters(personalListFilterKey)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
@@ -137,18 +140,46 @@ export function PersonalModelsWorkspace({
 
   const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
 
+  const credentialFilterOptions = useMemo(
+    () =>
+      credentials
+        .filter((c) => c.is_active || c.id === credentialFilter)
+        .map((c) => ({ id: c.id, name: c.name, provider: c.provider })),
+    [credentials, credentialFilter]
+  )
+
+  const setCredentialFilter = useCallback(
+    (credentialId: string): void => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          if (credentialId) {
+            n.set('credentialId', credentialId)
+          } else {
+            n.delete('credentialId')
+          }
+          return n
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
+
   const personalListQueryBase = useMemo(
     () => ({
       ...(listChannel !== LIST_CHANNEL_ALL ? { provider: listChannel } : {}),
       ...(abilityFilter ? { type: abilityFilter } : {}),
+      ...(credentialFilter ? { credential_id: credentialFilter } : {}),
       ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
     }),
-    [listChannel, abilityFilter, deferredSearch]
+    [listChannel, abilityFilter, credentialFilter, deferredSearch]
   )
 
   const hasActiveListFilters =
     listChannel !== LIST_CHANNEL_ALL ||
     abilityFilter !== '' ||
+    credentialFilter !== '' ||
     healthFilter !== 'all' ||
     deferredSearch.trim() !== ''
 
@@ -163,6 +194,7 @@ export function PersonalModelsWorkspace({
       'my-models',
       listChannel,
       abilityFilter,
+      credentialFilter,
       page,
       deferredSearch,
       healthFilter,
@@ -557,6 +589,17 @@ export function PersonalModelsWorkspace({
               onChange={(e) => {
                 setSearch(e.currentTarget.value)
               }}
+            />
+          </div>
+          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
+            <Label htmlFor="personal-model-credential">凭据</Label>
+            <GatewayModelCredentialFilterSelect
+              value={credentialFilter}
+              onChange={setCredentialFilter}
+              options={credentialFilterOptions}
+              loading={credentialsFetching}
+              triggerClassName="h-9 w-full"
+              ariaLabel="按凭据筛选"
             />
           </div>
           <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">

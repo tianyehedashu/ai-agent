@@ -6,8 +6,10 @@
  */
 
 import { apiClient } from '@/api/client'
+import { buildPageQuerySearch, fetchAllPaginatedPages } from '@/lib/pagination'
+import type { PaginatedList, PageQuery } from '@/types'
 
-import { teamGatewayPath } from './_base'
+import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 
 export interface GatewayRoute {
   id: string
@@ -28,6 +30,13 @@ export interface GatewayRoute {
   strategy: string
   retry_policy?: Record<string, unknown> | null
   enabled: boolean
+}
+
+export interface ManagedTeamRouteListResponse extends PaginatedList<GatewayRoute> {
+  queried_team_count: number
+  queried_personal_team_count: number
+  queried_shared_team_count: number
+  tenant_ids_with_routes: string[]
 }
 
 export interface GatewayRouteCreateBody {
@@ -53,6 +62,17 @@ export interface GatewayRouteUpdateBody {
 
 /** Routes 资源 API */
 export const routesApi = {
+  /** 列出 membership 内各团队可见的虚拟路由（跨团队聚合，分页） */
+  listManagedTeamRoutesPage: (params?: PageQuery) =>
+    apiClient.get<ManagedTeamRouteListResponse>(
+      `${GATEWAY_API_BASE}/managed-team-routes`,
+      buildPageQuerySearch(params)
+    ),
+  /** 拉取 membership 内全部可见虚拟路由（自动翻页） */
+  listManagedTeamRoutes: () =>
+    fetchAllPaginatedPages((page, page_size) =>
+      routesApi.listManagedTeamRoutesPage({ page, page_size })
+    ),
   /** 列出当前团队的虚拟路由 */
   listRoutes: (teamId: string) => apiClient.get<GatewayRoute[]>(teamGatewayPath(teamId, '/routes')),
   /** 创建路由 */

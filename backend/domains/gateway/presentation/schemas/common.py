@@ -787,6 +787,59 @@ class RouteResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ManagedTeamRouteListResponse(PaginatedListResponse[RouteResponse]):
+    """跨 membership 团队聚合的虚拟路由列表。"""
+
+    queried_team_count: int = Field(
+        ge=0,
+        description="参与聚合的 membership 团队数量",
+    )
+    queried_personal_team_count: int = Field(
+        ge=0,
+        description="参与聚合的 personal team 数量",
+    )
+    queried_shared_team_count: int = Field(
+        ge=0,
+        description="参与聚合的协作团队数量",
+    )
+    tenant_ids_with_routes: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="至少有一条 team 自定义路由的 tenant_id（去重）",
+    )
+
+
+class ManagedTeamVirtualKeyListResponse(PaginatedListResponse[VirtualKeyResponse]):
+    """跨 membership 团队聚合的虚拟 Key 列表（仅 actor 自建）。"""
+
+    queried_team_count: int = Field(
+        ge=0,
+        description="参与聚合的 membership 团队数量",
+    )
+    queried_personal_team_count: int = Field(
+        ge=0,
+        description="参与聚合的 personal team 数量",
+    )
+    queried_shared_team_count: int = Field(
+        ge=0,
+        description="参与聚合的协作团队数量",
+    )
+    tenant_ids_with_keys: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="至少有一条 actor 自建 vkey 的 tenant_id（去重）",
+    )
+
+
+class ManagedTeamVkeyEntitlementItem(BaseModel):
+    vkey_id: uuid.UUID
+    plans: list[EntitlementPlanResponse] = Field(default_factory=list)
+
+
+class ManagedTeamVkeyEntitlementsResponse(BaseModel):
+    """当前用户可见 vkey 的客户套餐（批量）。"""
+
+    items: list[ManagedTeamVkeyEntitlementItem] = Field(default_factory=list)
+
+
 # =============================================================================
 # Budget
 # =============================================================================
@@ -1315,6 +1368,10 @@ __all__ = [
     "GatewayModelUsageSummaryResponse",
     "ManagedTeamCredentialListResponse",
     "ManagedTeamModelListResponse",
+    "ManagedTeamRouteListResponse",
+    "ManagedTeamVirtualKeyListResponse",
+    "ManagedTeamVkeyEntitlementItem",
+    "ManagedTeamVkeyEntitlementsResponse",
     "MarginGroupItemResponse",
     "MarginSummaryResponse",
     "ModelConnectivitySummary",
@@ -1354,10 +1411,10 @@ __all__ = [
     "SystemVisibilityPatch",
     "SystemVisibilityTargetSnapshot",
     "TimeSeriesPointResponse",
-    "UsageStatisticsItemResponse",
-    "UsageStatisticsMetricResponse",
     "UsageStatisticsBreakdownResponse",
     "UsageStatisticsBreakdownSliceResponse",
+    "UsageStatisticsItemResponse",
+    "UsageStatisticsMetricResponse",
     "UsageStatisticsResponse",
     "UserCredentialCreate",
     "VirtualKeyCreate",

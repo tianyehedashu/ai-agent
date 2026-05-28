@@ -1008,6 +1008,103 @@ class TestGatewayManagementApi:
         assert r_member_reveal.json()["api_key"] == "sk-member-owned-test-key-123456"
 
     @pytest.mark.asyncio
+    async def test_member_private_credential_model_list_filter_respects_visibility(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """成员私有凭据：他人 credential_id 筛选 404；q 凭据名不得命中；创建者可筛到。"""
+        member = User(
+            email=f"priv_model_filter_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Private Model Filter Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"PrivModelFilter-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+        owner_headers = {
+            **auth_headers,
+            "X-Team-Id": str(shared.id),
+        }
+
+        cred_name = f"priv-filter-{uuid.uuid4().hex[:6]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=member_headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-priv-filter-test-key-123456",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+
+        model_name = f"priv-model-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=member_headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+
+        r_owner_by_cred = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=owner_headers,
+            params={"credential_id": cid, "page": 1, "page_size": 50},
+        )
+        assert r_owner_by_cred.status_code == 404, r_owner_by_cred.text
+
+        r_owner_by_q = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=owner_headers,
+            params={"q": cred_name, "page": 1, "page_size": 50},
+        )
+        assert r_owner_by_q.status_code == 200, r_owner_by_q.text
+        owner_names = {m["name"] for m in _model_list_items(r_owner_by_q.json())}
+        assert model_name not in owner_names
+
+        r_member_by_cred = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=member_headers,
+            params={"credential_id": cid, "page": 1, "page_size": 50},
+        )
+        assert r_member_by_cred.status_code == 200, r_member_by_cred.text
+        member_names = {m["name"] for m in _model_list_items(r_member_by_cred.json())}
+        assert model_name in member_names
+
+        r_managed_owner = await dev_client.get(
+            "/api/v1/gateway/managed-team-models",
+            headers=owner_headers,
+            params={"credential_id": cid, "page": 1, "page_size": 50},
+        )
+        assert r_managed_owner.status_code == 404, r_managed_owner.text
+
+    @pytest.mark.asyncio
     async def test_list_models_returns_paginated_envelope(
         self,
         dev_client: AsyncClient,
@@ -3647,3 +3744,123 @@ class TestManagedTeamModelsAggregateApi:
         assert owner_model_name in names
         assert payload["queried_team_count"] == 1
         assert payload["total"] >= 1
+
+
+class TestManagedTeamRoutesAggregateApi:
+    async def _create_team_route(
+        self,
+        dev_client: AsyncClient,
+        team_id: uuid.UUID,
+        headers: dict[str, str],
+        *,
+        virtual_model: str,
+    ) -> dict[str, object]:
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_id}/routes",
+            headers=headers,
+            json={
+                "virtual_model": virtual_model,
+                "primary_models": [],
+                "strategy": "simple-shuffle",
+            },
+        )
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_routes_includes_personal_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        personal = await ts.ensure_personal_team(test_user.id)
+        shared = await ts.create_team(
+            name=f"RoutesAgg-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        personal_virtual = f"personal-route-{uuid.uuid4().hex[:6]}"
+        shared_virtual = f"shared-route-{uuid.uuid4().hex[:6]}"
+        await self._create_team_route(
+            dev_client, personal.id, auth_headers, virtual_model=personal_virtual
+        )
+        await self._create_team_route(
+            dev_client, shared.id, auth_headers, virtual_model=shared_virtual
+        )
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-routes",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 200},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        virtual_models = {item["virtual_model"] for item in payload["items"]}
+        assert personal_virtual in virtual_models
+        assert shared_virtual in virtual_models
+        assert payload["total"] >= 2
+        assert payload["page"] == 1
+        assert payload["page_size"] == 200
+        assert payload["has_next"] is False
+        assert payload["has_prev"] is False
+        assert payload["queried_personal_team_count"] >= 1
+        assert payload["queried_shared_team_count"] >= 1
+        assert str(personal.id) in {str(t) for t in payload["tenant_ids_with_routes"]}
+        assert str(shared.id) in {str(t) for t in payload["tenant_ids_with_routes"]}
+
+
+class TestManagedTeamVirtualKeysAggregateApi:
+    @pytest.mark.asyncio
+    async def test_list_managed_team_keys_includes_personal_and_shared(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        personal = await ts.ensure_personal_team(test_user.id)
+        shared = await ts.create_team(
+            name=f"KeysAgg-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        personal_name = f"personal-key-{uuid.uuid4().hex[:6]}"
+        shared_name = f"shared-key-{uuid.uuid4().hex[:6]}"
+        r_personal = await dev_client.post(
+            f"/api/v1/gateway/teams/{personal.id}/keys",
+            headers=auth_headers,
+            json={"name": personal_name},
+        )
+        assert r_personal.status_code == 201, r_personal.text
+        r_shared = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/keys",
+            headers=auth_headers,
+            json={"name": shared_name},
+        )
+        assert r_shared.status_code == 201, r_shared.text
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-keys",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 200},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        names = {item["name"] for item in payload["items"]}
+        assert personal_name in names
+        assert shared_name in names
+        assert payload["total"] >= 2
+        assert payload["page"] == 1
+        assert payload["page_size"] == 200
+        assert payload["has_next"] is False
+        assert payload["has_prev"] is False
+        assert payload["queried_personal_team_count"] >= 1
+        assert payload["queried_shared_team_count"] >= 1
+        assert str(personal.id) in {str(t) for t in payload["tenant_ids_with_keys"]}
+        assert str(shared.id) in {str(t) for t in payload["tenant_ids_with_keys"]}

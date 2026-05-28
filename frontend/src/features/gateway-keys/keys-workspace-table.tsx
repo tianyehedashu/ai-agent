@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils'
 import type { VirtualKeyRevealTarget } from './virtual-key-reveal-dialog'
 
 export interface KeysWorkspaceTableProps {
-  teamDisplayName: string
   teamNameById: ReadonlyMap<string, string>
   modelsHref: string
   canManageKeys: boolean
@@ -33,12 +32,11 @@ export interface KeysWorkspaceTableProps {
   onToggleSelectAll: (checked: boolean) => void
   onToggleSelect: (id: string, checked: boolean) => void
   onReveal: (target: VirtualKeyRevealTarget) => void
-  onRevoke: (id: string, name: string) => void
+  onRevoke: (id: string, name: string, teamId: string) => void
   onCreateClick: () => void
 }
 
 export const KeysWorkspaceTable = memo(function KeysWorkspaceTable({
-  teamDisplayName,
   teamNameById,
   modelsHref,
   canManageKeys,
@@ -65,10 +63,7 @@ export const KeysWorkspaceTable = memo(function KeysWorkspaceTable({
       <CardContent className="p-0">
         {!isLoading && visibleKeys.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{teamDisplayName}</span> 下尚无你的虚拟
-              Key
-            </p>
+            <p className="text-sm text-muted-foreground">尚无虚拟 Key</p>
             {canManageKeys ? (
               <Button size="sm" onClick={onCreateClick}>
                 <Plus className="mr-1.5 h-4 w-4" />
@@ -105,7 +100,7 @@ export const KeysWorkspaceTable = memo(function KeysWorkspaceTable({
                   </th>
                 ) : null}
                 <th className="px-4 py-2 text-left font-medium">名称</th>
-                <th className="px-4 py-2 text-left font-medium">所属团队</th>
+                <th className="px-4 py-2 text-left font-medium">工作区</th>
                 <th className="px-4 py-2 text-left font-medium">Key</th>
                 <th className="px-4 py-2 text-left font-medium">允许模型</th>
                 <th className="px-4 py-2 text-left font-medium">RPM / TPM</th>
@@ -132,7 +127,6 @@ export const KeysWorkspaceTable = memo(function KeysWorkspaceTable({
                   key={k.id}
                   keyRow={k}
                   teamLabel={resolveTeamLabelFromMap(teamNameById, k.team_id)}
-                  teamDisplayName={teamDisplayName}
                   canManageKeys={canManageKeys}
                   isSelected={selectedIds.has(k.id)}
                   showEntitlementsColumn={showEntitlementsColumn}

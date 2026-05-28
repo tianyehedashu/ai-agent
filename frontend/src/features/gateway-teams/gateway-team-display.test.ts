@@ -7,6 +7,7 @@ import {
   gatewayTeamCommandItemValue,
   gatewayTeamDisplayLabel,
   gatewayTeamRoleSubtitle,
+  gatewayWorkspaceLabel,
 } from './gateway-team-display'
 
 function team(partial: Partial<GatewayTeam> & Pick<GatewayTeam, 'id'>): GatewayTeam {
@@ -47,6 +48,25 @@ describe('gatewayTeamDisplayLabel', () => {
         { viewerUserId: 'u1' }
       )
     ).toBe('个人 · alice@example.com')
+  })
+})
+
+describe('gatewayWorkspaceLabel', () => {
+  it('uses 个人 for viewer own personal team', () => {
+    expect(
+      gatewayWorkspaceLabel(
+        team({ id: 'p1', kind: 'personal', name: 'Personal', owner_user_id: 'u1' }),
+        { viewerUserId: 'u1' }
+      )
+    ).toBe('个人')
+  })
+
+  it('uses team name for shared team', () => {
+    expect(
+      gatewayWorkspaceLabel(team({ id: 's1', kind: 'shared', name: 'Alpha' }), {
+        viewerUserId: 'u1',
+      })
+    ).toBe('Alpha')
   })
 })
 

@@ -1,14 +1,19 @@
 /**
- * 虚拟 Key 列表页：并行预取各 Key 的 entitlement（避免每行独立 mount 造成请求瀑布）。
+ * 虚拟 Key 列表页：批量拉取客户套餐（GET /managed-team-vkey-entitlements）。
  */
 
 import { useMemo } from 'react'
 
-import { useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi, type EntitlementPlan } from '@/api/gateway'
 
 const ENTITLEMENTS_STALE_MS = 5 * 60_000
+
+export const MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY = [
+  'gateway',
+  'managed-team-vkey-entitlements',
+] as const
 
 export function filterActiveEntitlementPlans(plans: readonly EntitlementPlan[]): EntitlementPlan[] {
   const now = Date.now()
@@ -20,36 +25,28 @@ export function filterActiveEntitlementPlans(plans: readonly EntitlementPlan[]):
   )
 }
 
-export function useKeysEntitlementsMap(
-  teamId: string,
-  vkeyIds: readonly string[]
-): {
+export function useKeysEntitlementsMap(vkeyIds: readonly string[]): {
   activeByVkeyId: Map<string, EntitlementPlan[]>
   isLoadingByVkeyId: Map<string, boolean>
 } {
-  const queries = useQueries({
-    queries: vkeyIds.map((id) => ({
-      queryKey: ['gateway', 'keys', teamId, id, 'entitlements'] as const,
-      queryFn: () => gatewayApi.listVkeyEntitlements(teamId, id),
-      enabled: id.length > 0,
-      staleTime: ENTITLEMENTS_STALE_MS,
-    })),
+  const enabled = vkeyIds.length > 0
+  const { data, isLoading } = useQuery({
+    queryKey: MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY,
+    queryFn: () => gatewayApi.listManagedTeamVkeyEntitlements(),
+    enabled,
+    staleTime: ENTITLEMENTS_STALE_MS,
   })
-
-  const querySnapshot = queries
-    .map((row, index) => `${vkeyIds[index]}:${String(row.isLoading)}:${String(row.dataUpdatedAt)}`)
-    .join('|')
 
   return useMemo(() => {
     const activeByVkeyId = new Map<string, EntitlementPlan[]>()
     const isLoadingByVkeyId = new Map<string, boolean>()
-    for (let index = 0; index < vkeyIds.length; index += 1) {
-      const id = vkeyIds[index]
-      const row = queries[index]
-      isLoadingByVkeyId.set(id, row.isLoading)
-      activeByVkeyId.set(id, filterActiveEntitlementPlans(row.data ?? []))
+    const plansByVkeyId = new Map(
+      (data?.items ?? []).map((item) => [item.vkey_id, item.plans] as const)
+    )
+    for (const id of vkeyIds) {
+      isLoadingByVkeyId.set(id, isLoading)
+      activeByVkeyId.set(id, filterActiveEntitlementPlans(plansByVkeyId.get(id) ?? []))
     }
     return { activeByVkeyId, isLoadingByVkeyId }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- querySnapshot 反映 queries 代际
-  }, [vkeyIds, querySnapshot])
+  }, [data, isLoading, vkeyIds])
 }

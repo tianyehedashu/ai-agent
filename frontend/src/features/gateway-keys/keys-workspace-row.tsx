@@ -16,7 +16,6 @@ import type { VirtualKeyRevealTarget } from './virtual-key-reveal-dialog'
 export interface KeysWorkspaceRowProps {
   keyRow: VirtualKey
   teamLabel: string
-  teamDisplayName: string
   canManageKeys: boolean
   isSelected: boolean
   showEntitlementsColumn: boolean
@@ -26,13 +25,12 @@ export interface KeysWorkspaceRowProps {
   budgets: GatewayBudget[]
   onToggleSelect: (id: string, checked: boolean) => void
   onReveal: (target: VirtualKeyRevealTarget) => void
-  onRevoke: (id: string, name: string) => void
+  onRevoke: (id: string, name: string, teamId: string) => void
 }
 
 export const KeysWorkspaceRow = memo(function KeysWorkspaceRow({
   keyRow: k,
   teamLabel,
-  teamDisplayName,
   canManageKeys,
   isSelected,
   showEntitlementsColumn,
@@ -107,7 +105,7 @@ export const KeysWorkspaceRow = memo(function KeysWorkspaceRow({
                   </Link>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>使用本 Key 试调（团队：{teamDisplayName}）</TooltipContent>
+              <TooltipContent>使用本 Key 试调（{teamLabel}）</TooltipContent>
             </Tooltip>
           ) : null}
           {canManageKeys && k.is_active ? (
@@ -133,7 +131,7 @@ export const KeysWorkspaceRow = memo(function KeysWorkspaceRow({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => {
-                  onRevoke(k.id, k.name)
+                  onRevoke(k.id, k.name, k.team_id)
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />

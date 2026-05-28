@@ -46,6 +46,10 @@ from domains.gateway.application.management.usage_reads import (
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
+from domains.gateway.application.model_list_credential_assertions import (
+    assert_personal_model_list_credential_filter,
+    assert_team_model_list_credential_filter,
+)
 from domains.gateway.application.model_list_pipeline import (
     ModelListIdsResult,
     ModelListPageResult,
@@ -300,6 +304,27 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         rows = await self._creds.list_by_ids(list(credential_ids))
         return {row.id: row for row in rows}
 
+    async def map_team_credentials_visible_display_by_id(
+        self,
+        credential_ids: set[UUID],
+        *,
+        tenant_id: UUID,
+        actor_user_id: UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+    ) -> dict[UUID, ProviderCredential]:
+        """模型列表 enrich：仅返回 actor 可读的团队凭据展示字段。"""
+        if not credential_ids or actor_user_id is None:
+            return {}
+        rows = await self._creds.list_by_ids(list(credential_ids))
+        visible = filter_team_credentials_visible_to_actor(
+            [r for r in rows if r.tenant_id == tenant_id],
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+        )
+        return {row.id: row for row in visible}
+
     async def get_user_credential_for_owner(
         self, credential_id: UUID, user_id: UUID
     ) -> CredentialReadModel:
@@ -356,11 +381,15 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         user_id: UUID,
         query: ModelListQuery,
     ) -> ModelListPageResult:
+        await assert_personal_model_list_credential_filter(
+            self, query.credential_id, user_id=user_id
+        )
         personal_team = await self._teams.ensure_personal_team(user_id)
         return await list_personal_models_page(
             self._session,
             personal_team.id,
             query,
+            user_id=user_id,
         )
 
     async def get_personal_gateway_model(
@@ -379,7 +408,18 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
         only_enabled: bool = False,
         user_id: UUID | None = None,
+        team_role: str = "member",
+        is_platform_admin: bool = False,
     ) -> ModelListPageResult:
+        if user_id is not None:
+            await assert_team_model_list_credential_filter(
+                self,
+                query.credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
         return await list_gateway_models_page(
             self._session,
             tenant_id,
@@ -387,6 +427,8 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             registry_scope=registry_scope,
             only_enabled=only_enabled,
             user_id=user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
         )
 
     async def list_gateway_model_ids(
@@ -397,7 +439,18 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
         only_enabled: bool = False,
         user_id: UUID | None = None,
+        team_role: str = "member",
+        is_platform_admin: bool = False,
     ) -> ModelListIdsResult:
+        if user_id is not None:
+            await assert_team_model_list_credential_filter(
+                self,
+                query.credential_id,
+                tenant_id=tenant_id,
+                actor_user_id=user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
         return await list_gateway_model_ids(
             self._session,
             tenant_id,
@@ -405,6 +458,8 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             registry_scope=registry_scope,
             only_enabled=only_enabled,
             user_id=user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
         )
 
     async def get_gateway_registry_model(

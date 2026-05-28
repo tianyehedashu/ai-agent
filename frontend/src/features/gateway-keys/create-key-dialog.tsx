@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { Link } from 'react-router-dom'
 
+import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,8 +15,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
+import { gatewayWorkspaceLabel } from '@/features/gateway-teams/gateway-team-display'
 import { useToast } from '@/hooks/use-toast'
 import { Copy } from '@/lib/lucide-icons'
+import { useUserStore } from '@/stores/user'
 
 export interface CreateKeyValues {
   name: string
@@ -24,30 +28,63 @@ export interface CreateKeyValues {
   tpm_limit?: number | null
 }
 
+function resolveInitialTeamId(
+  writableTeams: readonly GatewayTeam[],
+  defaultTeamId: string | undefined
+): string {
+  if (defaultTeamId && writableTeams.some((team) => team.id === defaultTeamId)) {
+    return defaultTeamId
+  }
+  return writableTeams[0]?.id ?? ''
+}
+
 export interface CreateKeyDialogProps {
   open: boolean
-  teamId: string
-  teamDisplayName: string
+  routeTeamId: string
+  writableTeams: readonly GatewayTeam[]
   onOpenChange: (open: boolean) => void
-  onSubmit: (values: CreateKeyValues) => void
+  onSubmit: (targetTeamId: string, values: CreateKeyValues) => void
   plaintext: string | null
   createdKeyId: string | null
 }
 
 export function CreateKeyDialog({
   open,
-  teamId,
-  teamDisplayName,
+  routeTeamId,
+  writableTeams,
   onOpenChange,
   onSubmit,
   plaintext,
   createdKeyId,
 }: Readonly<CreateKeyDialogProps>): React.JSX.Element {
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const [targetTeamId, setTargetTeamId] = useState('')
   const [values, setValues] = useState<CreateKeyValues>({
     name: '',
     store_full_messages: false,
   })
   const { toast } = useToast()
+
+  const labelForTeam = useMemo(
+    () => (team: GatewayTeam) => gatewayWorkspaceLabel(team, { viewerUserId }),
+    [viewerUserId]
+  )
+
+  const selectedTeam = useMemo(
+    () => writableTeams.find((team) => team.id === targetTeamId) ?? null,
+    [writableTeams, targetTeamId]
+  )
+  const workspaceLabel = selectedTeam ? gatewayWorkspaceLabel(selectedTeam, { viewerUserId }) : '—'
+  const crossWorkspaceTarget =
+    targetTeamId.length > 0 && routeTeamId.length > 0 && targetTeamId !== routeTeamId
+
+  useEffect(() => {
+    if (!open || plaintext) return
+    setTargetTeamId(resolveInitialTeamId(writableTeams, routeTeamId))
+  }, [open, plaintext, routeTeamId, writableTeams])
+
+  const canSubmit =
+    values.name.trim().length > 0 && targetTeamId.length > 0 && writableTeams.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,12 +124,35 @@ export function CreateKeyDialog({
           </div>
         ) : (
           <div className="space-y-3 py-2">
-            <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">绑定团队：</span>
-              <span className="font-medium">{teamDisplayName}</span>
-              <span className="mt-1 block font-mono text-xs text-muted-foreground" title={teamId}>
-                {teamId}
-              </span>
+            <div className="space-y-2">
+              <Label htmlFor="key-target-workspace">绑定工作区</Label>
+              <GatewayTeamCombobox
+                id="key-target-workspace"
+                value={targetTeamId}
+                onChange={setTargetTeamId}
+                teams={writableTeams}
+                disabled={writableTeams.length === 0}
+                placeholder={writableTeams.length === 0 ? '无可绑定的工作区' : '选择工作区'}
+                labelForTeam={labelForTeam}
+              />
+              {writableTeams.length === 0 ? (
+                <p className="text-[11px] text-destructive">
+                  当前账号没有可创建虚拟 Key 的工作区。
+                </p>
+              ) : (
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    Key 将绑定到{' '}
+                    <span className="font-medium text-foreground">{workspaceLabel}</span>
+                    ，调用时无需再传团队头。
+                  </p>
+                  {crossWorkspaceTarget ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                      将创建到其他工作区，创建后可在本页列表中查看。
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
             <div>
               <Label htmlFor="key-name">名称</Label>
@@ -173,10 +233,10 @@ export function CreateKeyDialog({
               </Button>
               <Button
                 onClick={() => {
-                  if (!values.name) return
-                  onSubmit(values)
+                  if (!canSubmit) return
+                  onSubmit(targetTeamId, values)
                 }}
-                disabled={!values.name}
+                disabled={!canSubmit}
               >
                 创建
               </Button>

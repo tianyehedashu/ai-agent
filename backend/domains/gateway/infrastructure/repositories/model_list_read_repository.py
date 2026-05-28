@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
+import uuid
 
 from domains.gateway.domain.policies.model_list_policy import (
     ModelListConnectivityFilter,
@@ -89,6 +91,8 @@ class ModelListReadRepository:
         order: ModelListSortOrder,
         offset: int,
         limit: int,
+        readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
+        user_scope_owner_id: uuid.UUID | None = None,
     ) -> tuple[list[GatewayModel], int, dict[str, int]]:
         base = build_tenant_list_stmt(
             tenant_id=tenant_id,
@@ -102,6 +106,8 @@ class ModelListReadRepository:
             connectivity=connectivity,
             sort_field=sort_field,
             order=order,
+            readable_team_credential_ids=readable_team_credential_ids,
+            user_scope_owner_id=user_scope_owner_id,
         )
         total = await count_from_stmt(self._session, base)
         page_stmt = base.offset(offset).limit(limit)
@@ -117,6 +123,8 @@ class ModelListReadRepository:
             exclude_user_scope_credentials=exclude_user_scope_credentials,
             enabled=enabled,
             q=q,
+            readable_team_credential_ids=readable_team_credential_ids,
+            user_scope_owner_id=user_scope_owner_id,
         )
         return items, total, summary
 
@@ -136,6 +144,7 @@ class ModelListReadRepository:
         order: ModelListSortOrder,
         offset: int,
         limit: int,
+        readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
     ) -> tuple[list[GatewayModel], int, dict[str, int]]:
         base = build_tenants_list_stmt(
             tenant_ids=tenant_ids,
@@ -149,6 +158,7 @@ class ModelListReadRepository:
             connectivity=connectivity,
             sort_field=sort_field,
             order=order,
+            readable_team_credential_ids=readable_team_credential_ids,
         )
         total = await count_from_stmt(self._session, base)
         page_stmt = base.offset(offset).limit(limit)
@@ -164,6 +174,7 @@ class ModelListReadRepository:
             exclude_user_scope_credentials=exclude_user_scope_credentials,
             enabled=enabled,
             q=q,
+            readable_team_credential_ids=readable_team_credential_ids,
         )
         return items, total, summary
 
@@ -179,6 +190,7 @@ class ModelListReadRepository:
         enabled: bool | None = None,
         q: str | None = None,
         connectivity: ModelListConnectivityFilter = ModelListConnectivityFilter.ALL,
+        readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
     ) -> list[uuid.UUID]:
         return await list_tenant_ids_with_team_registry_for_tenants(
             self._session,
@@ -191,6 +203,7 @@ class ModelListReadRepository:
             enabled=enabled,
             q=q,
             connectivity=connectivity,
+            readable_team_credential_ids=readable_team_credential_ids,
         )
 
 

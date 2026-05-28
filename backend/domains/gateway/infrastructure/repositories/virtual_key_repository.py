@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, select, text, update
+from sqlalchemy import and_, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,6 +74,97 @@ class VirtualKeyRepository:
             .where(and_(*clauses))
             .order_by(GatewayVirtualKey.created_at.desc())
         )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    def _non_system_active_for_tenants_clauses(
+        self,
+        tenant_ids: Sequence[uuid.UUID],
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+    ) -> list[object]:
+        if not tenant_ids:
+            return []
+        clauses: list[object] = [
+            GatewayVirtualKey.tenant_id.in_(tuple(tenant_ids)),
+            GatewayVirtualKey.is_system.is_(False),
+            GatewayVirtualKey.is_active.is_(True),
+        ]
+        if created_by_user_id is not None:
+            clauses.append(GatewayVirtualKey.created_by_user_id == created_by_user_id)
+        return clauses
+
+    async def count_non_system_active_for_tenants(
+        self,
+        tenant_ids: Sequence[uuid.UUID],
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+    ) -> int:
+        clauses = self._non_system_active_for_tenants_clauses(
+            tenant_ids, created_by_user_id=created_by_user_id
+        )
+        if not clauses:
+            return 0
+        stmt = select(func.count()).select_from(GatewayVirtualKey).where(and_(*clauses))
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def list_distinct_tenant_ids_with_non_system_active_keys(
+        self,
+        tenant_ids: Sequence[uuid.UUID],
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+    ) -> list[uuid.UUID]:
+        clauses = self._non_system_active_for_tenants_clauses(
+            tenant_ids, created_by_user_id=created_by_user_id
+        )
+        if not clauses:
+            return []
+        stmt = (
+            select(GatewayVirtualKey.tenant_id)
+            .where(and_(*clauses))
+            .distinct()
+            .order_by(GatewayVirtualKey.tenant_id)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_non_system_active_ids_for_tenants(
+        self,
+        tenant_ids: Sequence[uuid.UUID],
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+    ) -> list[uuid.UUID]:
+        clauses = self._non_system_active_for_tenants_clauses(
+            tenant_ids, created_by_user_id=created_by_user_id
+        )
+        if not clauses:
+            return []
+        stmt = select(GatewayVirtualKey.id).where(and_(*clauses))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_non_system_active_for_tenants(
+        self,
+        tenant_ids: Sequence[uuid.UUID],
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[GatewayVirtualKey]:
+        """跨 tenant 批量列出非系统、激活中的 vkey（可选 SQL 层按创建者过滤 + 分页）。"""
+        clauses = self._non_system_active_for_tenants_clauses(
+            tenant_ids, created_by_user_id=created_by_user_id
+        )
+        if not clauses:
+            return []
+        stmt = (
+            select(GatewayVirtualKey)
+            .where(and_(*clauses))
+            .order_by(GatewayVirtualKey.created_at.desc())
+            .offset(max(0, offset))
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 

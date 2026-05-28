@@ -64,6 +64,49 @@ def test_registry_q_clause_includes_credential_name_exists() -> None:
     assert "name" in compiled
 
 
+def test_registry_q_clause_restricts_readable_team_credential_ids() -> None:
+    cred_a = uuid.uuid4()
+    cred_b = uuid.uuid4()
+    stmt = build_tenant_list_stmt(
+        tenant_id=uuid.uuid4(),
+        only_enabled=False,
+        capability=None,
+        provider=None,
+        credential_id=None,
+        exclude_user_scope_credentials=False,
+        enabled=None,
+        q="secret",
+        connectivity=ModelListConnectivityFilter.ALL,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+        readable_team_credential_ids=(cred_a, cred_b),
+    )
+    compiled = str(stmt.compile()).lower()
+    assert "provider_credentials" in compiled
+    assert " in " in compiled
+
+
+def test_registry_q_clause_skips_credential_exists_when_no_readable_ids() -> None:
+    """无可见凭据时 q 不得通过 EXISTS 匹配他人凭据名。"""
+    stmt = build_tenant_list_stmt(
+        tenant_id=uuid.uuid4(),
+        only_enabled=False,
+        capability=None,
+        provider=None,
+        credential_id=None,
+        exclude_user_scope_credentials=False,
+        enabled=None,
+        q="member-owned-secret",
+        connectivity=ModelListConnectivityFilter.ALL,
+        sort_field=ModelListSortField.NAME,
+        order=ModelListSortOrder.ASC,
+        readable_team_credential_ids=(),
+    )
+    compiled = str(stmt.compile()).lower()
+    assert "exists" not in compiled
+    assert "provider_credentials" not in compiled
+
+
 def test_system_registry_q_clause_includes_system_credential_name_exists() -> None:
     stmt = build_system_list_stmt(
         only_enabled=False,

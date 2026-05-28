@@ -25,6 +25,21 @@ export function gatewayTeamDisplayLabel(
   return team.name
 }
 
+/** 虚拟 Key 等工作区列/创建绑定：本人 personal 短称「个人」，侧栏仍用 gatewayTeamDisplayLabel。 */
+export function gatewayWorkspaceLabel(
+  team: GatewayTeam,
+  options?: GatewayTeamDisplayOptions
+): string {
+  if (team.kind === 'personal') {
+    const viewerId = options?.viewerUserId
+    if (viewerId && team.owner_user_id !== viewerId) {
+      return foreignPersonalTeamLabel(team)
+    }
+    return '个人'
+  }
+  return team.name
+}
+
 /** cmdk 搜索用：仅包含业务可读字段，不含 slug。 */
 export function gatewayTeamCommandItemValue(
   team: GatewayTeam,

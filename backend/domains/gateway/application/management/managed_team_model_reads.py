@@ -6,12 +6,18 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.application.model_list_credential_assertions import (
+    assert_managed_team_model_list_credential_filter,
+)
 from domains.gateway.application.model_list_pipeline import (
     ModelListPageResult,
     ModelListQuery,
     list_gateway_models_for_tenants_page,
     resolved_registry_ability,
     sql_capability_for_registry_ability,
+)
+from domains.gateway.application.model_list_readable_credentials import (
+    readable_team_credential_ids_for_tenants,
 )
 from domains.gateway.domain.policies.managed_team_credentials_policy import WritableTeamSnapshot
 from domains.gateway.domain.policies.managed_team_resource_policy import (
@@ -63,9 +69,26 @@ async def list_managed_team_models_for_actor(
         is_platform_admin=is_platform_admin,
     )
     tenant_ids = list(plan.tenant_ids)
+    role_by_tenant = {m.team_id: m.role for m in memberships if m.kind != "personal"}
+    await assert_managed_team_model_list_credential_filter(
+        session,
+        query.credential_id,
+        user_id=user_id,
+        allowed_tenant_ids=tenant_ids,
+        role_by_tenant=role_by_tenant,
+    )
     exclude_user_scope = exclude_user_scope_credentials_for_registry("team")
     ability = resolved_registry_ability(query)
     sql_cap = sql_capability_for_registry_ability(ability)
+    readable_team_ids: frozenset[uuid.UUID] | None = None
+    if query.q and query.q.strip():
+        readable_team_ids = await readable_team_credential_ids_for_tenants(
+            session,
+            tenant_ids,
+            actor_user_id=user_id,
+            role_by_tenant=role_by_tenant,
+            is_platform_admin=is_platform_admin,
+        )
     repo = ModelListReadRepository(session)
     tenant_ids_with_models = await repo.list_tenant_ids_with_team_registry(
         tenant_ids,
@@ -76,6 +99,7 @@ async def list_managed_team_models_for_actor(
         enabled=query.enabled,
         q=query.q,
         connectivity=query.connectivity,
+        readable_team_credential_ids=readable_team_ids,
     )
     page = await list_gateway_models_for_tenants_page(
         session,
@@ -83,6 +107,7 @@ async def list_managed_team_models_for_actor(
         query,
         only_enabled=False,
         exclude_user_scope_credentials=exclude_user_scope,
+        readable_team_credential_ids=readable_team_ids,
     )
     return ManagedTeamModelListPage(
         page=page,

@@ -35,6 +35,10 @@ import {
   USAGE_PERIOD_DAYS,
   type UsagePeriodDays,
 } from '../constants'
+import {
+  GatewayModelCredentialFilterSelect,
+  type GatewayModelCredentialFilterOption,
+} from '../gateway-model-credential-filter-select'
 import { RegistryAbilityFilterSelect } from '../registry-ability-filter-select'
 import { channelLabel } from '../utils'
 import { ModelInventoryRow } from './model-inventory-row'
@@ -54,6 +58,10 @@ interface ModelInventoryProps {
   onProviderFilterChange: (v: string) => void
   abilityFilter: string
   onAbilityFilterChange: (v: string) => void
+  credentialFilter?: string
+  onCredentialFilterChange?: (v: string) => void
+  credentialFilterOptions?: readonly GatewayModelCredentialFilterOption[]
+  credentialFilterLoading?: boolean
   providerChoices: string[]
   usageDays: UsagePeriodDays
   onUsageDaysChange: (d: UsagePeriodDays) => void
@@ -119,6 +127,10 @@ export const ModelInventory = memo(function ModelInventory({
   onProviderFilterChange,
   abilityFilter,
   onAbilityFilterChange,
+  credentialFilter = '',
+  onCredentialFilterChange,
+  credentialFilterOptions = [],
+  credentialFilterLoading = false,
   providerChoices,
   usageDays,
   onUsageDaysChange,
@@ -233,6 +245,14 @@ export const ModelInventory = memo(function ModelInventory({
               aria-label="搜索模型"
             />
           </div>
+          {onCredentialFilterChange ? (
+            <GatewayModelCredentialFilterSelect
+              value={credentialFilter}
+              onChange={onCredentialFilterChange}
+              options={credentialFilterOptions}
+              loading={credentialFilterLoading}
+            />
+          ) : null}
           <Select
             value={providerFilter || FILTER_ALL}
             onValueChange={(v) => {

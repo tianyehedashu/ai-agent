@@ -8,7 +8,10 @@ import { useQuery } from '@tanstack/react-query'
 
 import { teamsApi, type GatewayTeam } from '@/api/gateway/teams'
 import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
-import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
+import {
+  gatewayTeamDisplayLabel,
+  gatewayWorkspaceLabel,
+} from '@/features/gateway-teams/gateway-team-display'
 import { filterGatewayWritableTeams } from '@/features/gateway-teams/gateway-team-write-policy'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useUserStore } from '@/stores/user'
@@ -19,7 +22,7 @@ export const GATEWAY_TEAMS_QUERY_KEY = ['gateway', 'teams'] as const
 export const GATEWAY_MEMBER_TEAMS_QUERY_KEY = ['gateway', 'teams', 'membership'] as const
 export const GATEWAY_TEAMS_STALE_MS = 60_000
 
-export { gatewayTeamDisplayLabel }
+export { gatewayTeamDisplayLabel, gatewayWorkspaceLabel }
 
 export function useGatewayTeams(enabled = true): UseQueryResult<GatewayTeam[]> {
   return useQuery({
@@ -62,6 +65,20 @@ export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string>
     const map = new Map<string, string>()
     for (const team of teams) {
       map.set(team.id, gatewayTeamDisplayLabel(team, { viewerUserId }))
+    }
+    return map
+  }, [teams, viewerUserId])
+}
+
+/** 虚拟 Key 等工作区列：本人 personal 显示「个人」 */
+export function useGatewayMemberWorkspaceNameMap(enabled = true): Map<string, string> {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+
+  return useMemo(() => {
+    const map = new Map<string, string>()
+    for (const team of teams) {
+      map.set(team.id, gatewayWorkspaceLabel(team, { viewerUserId }))
     }
     return map
   }, [teams, viewerUserId])

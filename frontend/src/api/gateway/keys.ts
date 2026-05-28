@@ -7,8 +7,12 @@
  */
 
 import { apiClient } from '@/api/client'
+import { buildPageQuerySearch, fetchAllPaginatedPages } from '@/lib/pagination'
+import type { PaginatedList, PageQuery } from '@/types'
 
-import { teamGatewayPath } from './_base'
+import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
+
+import type { EntitlementPlan } from './entitlements'
 
 /** 虚拟 Key 列表元数据（不含明文） */
 export interface VirtualKey {
@@ -63,8 +67,40 @@ export interface VirtualKeyCreateBody {
   guardrail_enabled?: boolean
 }
 
+export interface ManagedTeamVirtualKeyListResponse extends PaginatedList<VirtualKey> {
+  queried_team_count: number
+  queried_personal_team_count: number
+  queried_shared_team_count: number
+  tenant_ids_with_keys: string[]
+}
+
+export interface ManagedTeamVkeyEntitlementItem {
+  vkey_id: string
+  plans: EntitlementPlan[]
+}
+
+export interface ManagedTeamVkeyEntitlementsResponse {
+  items: ManagedTeamVkeyEntitlementItem[]
+}
+
 /** Keys 资源 API */
 export const keysApi = {
+  /** 列出 membership 内各团队下自建的虚拟 Key（跨团队聚合，分页） */
+  listManagedTeamKeysPage: (params?: PageQuery) =>
+    apiClient.get<ManagedTeamVirtualKeyListResponse>(
+      `${GATEWAY_API_BASE}/managed-team-keys`,
+      buildPageQuerySearch(params)
+    ),
+  /** 拉取 membership 内全部可见虚拟 Key（自动翻页） */
+  listManagedTeamKeys: () =>
+    fetchAllPaginatedPages((page, page_size) =>
+      keysApi.listManagedTeamKeysPage({ page, page_size })
+    ),
+  /** 当前用户可见 vkey 的客户套餐（批量） */
+  listManagedTeamVkeyEntitlements: () =>
+    apiClient.get<ManagedTeamVkeyEntitlementsResponse>(
+      `${GATEWAY_API_BASE}/managed-team-vkey-entitlements`
+    ),
   listKeys: (teamId: string) => apiClient.get<VirtualKey[]>(teamGatewayPath(teamId, '/keys')),
   createKey: (teamId: string, body: VirtualKeyCreateBody) =>
     apiClient.post<VirtualKeyCreated>(teamGatewayPath(teamId, '/keys'), body),

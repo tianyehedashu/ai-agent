@@ -57,6 +57,10 @@ async def test_list_managed_team_models_excludes_personal_and_passes_filters() -
             "domains.gateway.application.management.managed_team_model_reads.ModelListReadRepository"
         ) as repo_cls,
         patch(
+            "domains.gateway.application.management.managed_team_model_reads.readable_team_credential_ids_for_tenants",
+            new=AsyncMock(return_value=frozenset()),
+        ),
+        patch(
             "domains.gateway.application.management.managed_team_model_reads.list_gateway_models_for_tenants_page",
             new=AsyncMock(return_value=page),
         ) as list_page,

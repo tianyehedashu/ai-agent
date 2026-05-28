@@ -23,6 +23,7 @@ import {
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import { FILTER_ALL, type HealthFilter } from '@/features/gateway-models/constants'
+import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
 import {
   canDeleteGatewayModel,
   canManageGatewayModel,
@@ -37,6 +38,7 @@ import {
 import { teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
 import { CollaborationTeamsModelsGroupedList } from '@/features/gateway-models/team/collaboration-teams-models-grouped-list'
+import { useManagedTeamCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
 import { useManagedTeamModelsList } from '@/features/gateway-models/use-managed-team-models-list'
 import { channelLabel, resolveGatewayModelTeamId } from '@/features/gateway-models/utils'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -68,6 +70,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [providerFilter, setProviderFilter] = useState('')
   const [abilityFilter, setAbilityFilter] = useState('')
+  const [credentialFilter, setCredentialFilter] = useState('')
   const [page, setPage] = useState(1)
   const [updatePendingModelId, setUpdatePendingModelId] = useState<string | null>(null)
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
@@ -79,14 +82,18 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const isModelSearchStale = deferredModelSearch.trim() !== modelSearchTrimmed
   const isListSearchStale = isDeferredTeamSearchStale || isModelSearchStale
 
+  const { options: credentialFilterOptions, isLoading: credentialOptionsLoading } =
+    useManagedTeamCredentialFilterOptions(hasCollaborationTeams)
+
   const listQueryBase = useMemo(
     () => ({
       ...(deferredTeamSearch.trim() ? { search: deferredTeamSearch.trim() } : {}),
       ...(deferredModelSearch.trim() ? { q: deferredModelSearch.trim() } : {}),
       ...(providerFilter ? { provider: providerFilter } : {}),
       ...(abilityFilter ? { type: abilityFilter } : {}),
+      ...(credentialFilter ? { credential_id: credentialFilter } : {}),
     }),
-    [deferredTeamSearch, deferredModelSearch, providerFilter, abilityFilter]
+    [deferredTeamSearch, deferredModelSearch, providerFilter, abilityFilter, credentialFilter]
   )
 
   const {
@@ -222,6 +229,11 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     setPage(1)
   }, [])
 
+  const handleCredentialFilterChange = useCallback((value: string) => {
+    setCredentialFilter(value)
+    setPage(1)
+  }, [])
+
   const handleHealthFilterChange = useCallback((filter: HealthFilter) => {
     setHealthFilter(filter)
     setPage(1)
@@ -326,6 +338,13 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
               placeholder="搜索别名、底模、通道、凭据…"
               className="h-8 w-[180px] text-sm"
               aria-label="按模型名称筛选"
+            />
+            <GatewayModelCredentialFilterSelect
+              value={credentialFilter}
+              onChange={handleCredentialFilterChange}
+              options={credentialFilterOptions}
+              loading={credentialOptionsLoading}
+              triggerClassName="w-[180px]"
             />
             <Select
               value={providerFilter || FILTER_ALL}

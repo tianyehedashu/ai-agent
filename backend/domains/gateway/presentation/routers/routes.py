@@ -6,18 +6,16 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
-from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,
 )
+from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.schemas.common import (
     RouteCreate,
     RouteResponse,
     RouteUpdate,
 )
-from domains.gateway.presentation.tenant_scoped_response import tenant_scoped_orm_dict
 
 from ._common import (
     MgmtReads,
@@ -27,24 +25,13 @@ from ._common import (
 router = APIRouter()
 
 
-def _route_to_response(record: GatewayRoute | SystemGatewayRoute) -> RouteResponse:
-    data = tenant_scoped_orm_dict(record)
-    if isinstance(record, SystemGatewayRoute):
-        data["team_id"] = None
-        data["tenant_id"] = None
-        data["source"] = "system"
-    else:
-        data["source"] = "team"
-    return RouteResponse.model_validate(data)
-
-
 @router.get("/routes", response_model=list[RouteResponse])
 async def list_routes(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[RouteResponse]:
     routes = await reads.list_gateway_routes(team.team_id, only_enabled=False)
-    return [_route_to_response(r) for r in routes]
+    return [RouteResponse.model_validate(route_row_to_api_dict(r)) for r in routes]
 
 
 @router.post("/routes", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -63,7 +50,7 @@ async def create_route(
         strategy=body.strategy.value,
         retry_policy=body.retry_policy,
     )
-    return _route_to_response(route)
+    return RouteResponse.model_validate(route_row_to_api_dict(route))
 
 
 @router.patch("/routes/{route_id}", response_model=RouteResponse)
@@ -78,7 +65,7 @@ async def update_route(
         tenant_id=team.team_id,
         fields=body.model_dump(exclude_unset=True, exclude_none=True),
     )
-    return _route_to_response(updated)
+    return RouteResponse.model_validate(route_row_to_api_dict(updated))
 
 
 @router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -82,7 +82,7 @@ export function VirtualKeyRevealDialog({
 
         {teamDisplayName ? (
           <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-            <span className="text-muted-foreground">绑定团队：</span>
+            <span className="text-muted-foreground">绑定工作区：</span>
             <span className="font-medium">{teamDisplayName}</span>
             {target?.team_id ? (
               <span

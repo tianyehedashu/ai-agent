@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from sqlalchemy import ColumnElement, and_, case, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute
@@ -21,8 +23,6 @@ from domains.gateway.infrastructure.models.system_gateway import (
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.sql.selectable import Select
 
@@ -62,19 +62,29 @@ def _credential_name_search_clause(
     *,
     q: str | None,
     system_credential: bool,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
+    user_scope_owner_id: uuid.UUID | None = None,
 ) -> ColumnElement[bool] | None:
     if not q or not q.strip():
         return None
+    if (
+        readable_team_credential_ids is not None
+        and len(readable_team_credential_ids) == 0
+        and user_scope_owner_id is None
+    ):
+        return None
     pattern = f"%{q.strip()}%"
     cred_cls = SystemProviderCredential if system_credential else ProviderCredential
-    return (
-        select(cred_cls.id)
-        .where(
-            cred_cls.id == credential_id_col,
-            cred_cls.name.ilike(pattern),
-        )
-        .exists()
-    )
+    cred_where: list[ColumnElement[bool]] = [
+        cred_cls.id == credential_id_col,
+        cred_cls.name.ilike(pattern),
+    ]
+    if readable_team_credential_ids is not None:
+        cred_where.append(cred_cls.id.in_(readable_team_credential_ids))
+    if user_scope_owner_id is not None:
+        cred_where.append(cred_cls.scope == CredentialScope.USER.value)
+        cred_where.append(cred_cls.scope_id == user_scope_owner_id)
+    return select(cred_cls.id).where(*cred_where).exists()
 
 
 def _registry_q_clause(
@@ -85,6 +95,8 @@ def _registry_q_clause(
     credential_id_col: InstrumentedAttribute[Any],
     q: str | None,
     system_credential: bool,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
+    user_scope_owner_id: uuid.UUID | None = None,
 ) -> ColumnElement[bool] | None:
     model_search = _search_clause(
         name_col=name_col,
@@ -96,6 +108,8 @@ def _registry_q_clause(
         credential_id_col,
         q=q,
         system_credential=system_credential,
+        readable_team_credential_ids=readable_team_credential_ids,
+        user_scope_owner_id=user_scope_owner_id,
     )
     if model_search is None and cred_search is None:
         return None
@@ -197,6 +211,8 @@ def build_tenant_list_stmt(
     connectivity: ModelListConnectivityFilter,
     sort_field: ModelListSortField,
     order: ModelListSortOrder,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
+    user_scope_owner_id: uuid.UUID | None = None,
 ) -> Select[tuple[GatewayModel]]:
     clauses: list[ColumnElement[bool]] = [GatewayModel.tenant_id == tenant_id]
     if only_enabled:
@@ -221,6 +237,8 @@ def build_tenant_list_stmt(
         credential_id_col=GatewayModel.credential_id,
         q=q,
         system_credential=False,
+        readable_team_credential_ids=readable_team_credential_ids,
+        user_scope_owner_id=user_scope_owner_id,
     )
     if search is not None:
         clauses.append(search)
@@ -248,6 +266,7 @@ def _tenant_registry_clauses(
     enabled: bool | None,
     q: str | None,
     connectivity: ModelListConnectivityFilter,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
 ) -> list[ColumnElement[bool]]:
     if not tenant_ids:
         return [GatewayModel.tenant_id.is_(None)]
@@ -274,6 +293,7 @@ def _tenant_registry_clauses(
         credential_id_col=GatewayModel.credential_id,
         q=q,
         system_credential=False,
+        readable_team_credential_ids=readable_team_credential_ids,
     )
     if search is not None:
         clauses.append(search)
@@ -296,6 +316,7 @@ def build_tenants_list_stmt(
     connectivity: ModelListConnectivityFilter,
     sort_field: ModelListSortField,
     order: ModelListSortOrder,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
 ) -> Select[tuple[GatewayModel]]:
     clauses = _tenant_registry_clauses(
         tenant_ids=tenant_ids,
@@ -307,6 +328,7 @@ def build_tenants_list_stmt(
         enabled=enabled,
         q=q,
         connectivity=connectivity,
+        readable_team_credential_ids=readable_team_credential_ids,
     )
     sort_col = _sort_column(GatewayModel, sort_field)
     ordering = [_availability_order(GatewayModel), sort_col.asc()]
@@ -327,6 +349,7 @@ async def list_tenant_ids_with_team_registry_for_tenants(
     enabled: bool | None = None,
     q: str | None = None,
     connectivity: ModelListConnectivityFilter = ModelListConnectivityFilter.ALL,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
 ) -> list[uuid.UUID]:
     if not tenant_ids:
         return []
@@ -342,6 +365,7 @@ async def list_tenant_ids_with_team_registry_for_tenants(
         connectivity=connectivity,
         sort_field=ModelListSortField.NAME,
         order=ModelListSortOrder.ASC,
+        readable_team_credential_ids=readable_team_credential_ids,
     )
     subq = base.order_by(None).subquery()
     stmt = select(subq.c.tenant_id).distinct()
@@ -433,6 +457,8 @@ async def summarize_tenant_list(
     exclude_user_scope_credentials: bool,
     enabled: bool | None,
     q: str | None,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
+    user_scope_owner_id: uuid.UUID | None = None,
 ) -> dict[str, int]:
     base = build_tenant_list_stmt(
         tenant_id=tenant_id,
@@ -446,6 +472,8 @@ async def summarize_tenant_list(
         connectivity=ModelListConnectivityFilter.ALL,
         sort_field=ModelListSortField.NAME,
         order=ModelListSortOrder.ASC,
+        readable_team_credential_ids=readable_team_credential_ids,
+        user_scope_owner_id=user_scope_owner_id,
     )
     subq = base.order_by(None).subquery()
     summary_stmt = _summary_select(
@@ -476,6 +504,7 @@ async def summarize_tenants_list(
     exclude_user_scope_credentials: bool,
     enabled: bool | None,
     q: str | None,
+    readable_team_credential_ids: Sequence[uuid.UUID] | None = None,
 ) -> dict[str, int]:
     base = build_tenants_list_stmt(
         tenant_ids=tenant_ids,
@@ -489,6 +518,7 @@ async def summarize_tenants_list(
         connectivity=ModelListConnectivityFilter.ALL,
         sort_field=ModelListSortField.NAME,
         order=ModelListSortOrder.ASC,
+        readable_team_credential_ids=readable_team_credential_ids,
     )
     subq = base.order_by(None).subquery()
     summary_stmt = _summary_select(

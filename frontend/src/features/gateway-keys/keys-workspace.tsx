@@ -4,10 +4,11 @@
 
 import { useCallback, useMemo, useState } from 'react'
 
-import { useMutation, useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
+import { useMutation, useQueries, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { gatewayApi, type VirtualKey } from '@/api/gateway'
+import { gatewayApi, type VirtualKey, type VirtualKeyBatchRevokeFailure } from '@/api/gateway'
+import type { GatewayBudget } from '@/api/gateway/budgets'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import {
   AlertDialog,
@@ -23,28 +24,47 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
-import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
+import { gatewayBudgetsQueryKey } from '@/features/gateway-budget/use-gateway-budgets'
 import { CreateKeyDialog, type CreateKeyValues } from '@/features/gateway-keys/create-key-dialog'
 import { KeysWorkspaceTable } from '@/features/gateway-keys/keys-workspace-table'
-import { useKeysEntitlementsMap } from '@/features/gateway-keys/use-keys-entitlements'
+import {
+  MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY,
+  useKeysEntitlementsMap,
+} from '@/features/gateway-keys/use-keys-entitlements'
+import {
+  MANAGED_TEAM_KEYS_QUERY_KEY,
+  useVisibleGatewayKeys,
+} from '@/features/gateway-keys/use-visible-gateway-keys'
 import {
   VirtualKeyRevealDialog,
   type VirtualKeyRevealTarget,
 } from '@/features/gateway-keys/virtual-key-reveal-dialog'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
-import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import {
-  useGatewayMemberTeamNameMap,
-  useGatewayMemberTeams,
+  useGatewayMemberWorkspaceNameMap,
+  useGatewayWritableMemberTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Trash2 } from '@/lib/lucide-icons'
-import { useUserStore } from '@/stores/user'
 
 export interface GatewayKeysWorkspaceProps {
   teamId: string
+}
+
+function groupRevokeIdsByTeam(
+  keys: readonly VirtualKey[],
+  selectedIds: ReadonlySet<string>
+): Map<string, string[]> {
+  const byTeam = new Map<string, string[]>()
+  for (const k of keys) {
+    if (!selectedIds.has(k.id)) continue
+    const list = byTeam.get(k.team_id) ?? []
+    list.push(k.id)
+    byTeam.set(k.team_id, list)
+  }
+  return byTeam
 }
 
 export function GatewayKeysWorkspace({
@@ -53,15 +73,9 @@ export function GatewayKeysWorkspace({
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { isMember, isPlatformViewer, isAdmin } = useGatewayPermission()
-  const canManageKeys = isMember && !isPlatformViewer
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
-  const keysQueryKey = useMemo(() => ['gateway', 'keys', teamId] as const, [teamId])
-  const { data: memberTeams = [] } = useGatewayMemberTeams()
-  const teamNameById = useGatewayMemberTeamNameMap()
-  const currentTeam = memberTeams.find((t) => t.id === teamId)
-  const teamDisplayName = currentTeam
-    ? gatewayTeamDisplayLabel(currentTeam, { viewerUserId })
-    : `${teamId.slice(0, 8)}…`
+  const writableTeams = useGatewayWritableMemberTeams()
+  const canManageKeys = isMember && !isPlatformViewer && writableTeams.length > 0
+  const workspaceNameById = useGatewayMemberWorkspaceNameMap()
 
   const [open, setOpen] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
@@ -69,44 +83,51 @@ export function GatewayKeysWorkspace({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchRevokeOpen, setBatchRevokeOpen] = useState(false)
   const [revokeOpen, setRevokeOpen] = useState(false)
-  const [pendingRevoke, setPendingRevoke] = useState<{ id: string; name: string } | null>(null)
+  const [pendingRevoke, setPendingRevoke] = useState<{
+    id: string
+    name: string
+    team_id: string
+  } | null>(null)
   const [revealTarget, setRevealTarget] = useState<VirtualKeyRevealTarget | null>(null)
 
   const modelsHref = `/gateway/teams/${encodeURIComponent(teamId)}/models`
 
-  const {
-    data: keys,
-    isLoading,
-    isFetching,
-    refetch: refetchKeys,
-  } = useQuery({
-    queryKey: keysQueryKey,
-    queryFn: () => gatewayApi.listKeys(teamId),
+  const { keys, isLoading, isFetching, refetch: refetchKeys } = useVisibleGatewayKeys()
+
+  const visibleKeys = useMemo(() => keys.filter((k) => !k.is_system && k.is_active), [keys])
+
+  const budgetTeamIds = useMemo(
+    () => [...new Set(visibleKeys.map((k) => k.team_id).filter((id) => id.length > 0))],
+    [visibleKeys]
+  )
+
+  const budgetQueries = useQueries({
+    queries: budgetTeamIds.map((id) => ({
+      queryKey: gatewayBudgetsQueryKey(id),
+      queryFn: () => gatewayApi.listBudgets(id),
+      enabled: id.length > 0,
+    })),
   })
-  const {
-    data: keyBudgets = [],
-    isFetching: budgetsFetching,
-    refetch: refetchBudgets,
-  } = useGatewayBudgets(teamId)
+
   const budgetsByKeyId = useMemo(() => {
-    const map = new Map<string, typeof keyBudgets>()
-    for (const b of keyBudgets) {
-      if (b.target_kind !== 'key' || b.target_id === null) continue
-      const list = map.get(b.target_id) ?? []
-      list.push(b)
-      map.set(b.target_id, list)
+    const map = new Map<string, GatewayBudget[]>()
+    for (const query of budgetQueries) {
+      for (const b of query.data ?? []) {
+        if (b.target_kind !== 'key' || b.target_id === null) continue
+        const list = map.get(b.target_id) ?? []
+        list.push(b)
+        map.set(b.target_id, list)
+      }
     }
     return map
-  }, [keyBudgets])
+  }, [budgetQueries])
 
-  const visibleKeys = useMemo(() => (keys ?? []).filter((k) => !k.is_system && k.is_active), [keys])
+  const budgetsFetching = budgetQueries.some((q) => q.isFetching)
+
   const visibleVkeyIds = useMemo(() => visibleKeys.map((k) => k.id), [visibleKeys])
   const entitlementsFetching =
-    useIsFetching({
-      queryKey: ['gateway', 'keys', teamId],
-      predicate: (query) => query.queryKey.length === 5 && query.queryKey[4] === 'entitlements',
-    }) > 0
-  const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(teamId, visibleVkeyIds)
+    useIsFetching({ queryKey: MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY }) > 0
+  const { activeByVkeyId, isLoadingByVkeyId } = useKeysEntitlementsMap(visibleVkeyIds)
 
   const showEntitlementsColumn = useMemo(
     () => visibleKeys.some((k) => (activeByVkeyId.get(k.id) ?? []).length > 0),
@@ -125,11 +146,19 @@ export function GatewayKeysWorkspace({
   const someSelectableSelected = visibleKeys.some((k) => selectedIds.has(k.id))
 
   const { mutate: createKey } = useMutation({
-    mutationFn: (body: CreateKeyValues) => gatewayApi.createKey(teamId, body),
-    onSuccess: (created) => {
+    mutationFn: ({ targetTeamId, body }: { targetTeamId: string; body: CreateKeyValues }) =>
+      gatewayApi.createKey(targetTeamId, body),
+    onSuccess: (created, { targetTeamId }) => {
       setCreatedKey(created.plain_key)
       setCreatedKeyId(created.id)
-      void queryClient.invalidateQueries({ queryKey: keysQueryKey })
+      void queryClient.invalidateQueries({ queryKey: MANAGED_TEAM_KEYS_QUERY_KEY })
+      if (targetTeamId !== teamId) {
+        const label = workspaceNameById.get(targetTeamId) ?? targetTeamId.slice(0, 8)
+        toast({
+          title: '虚拟 Key 已创建',
+          description: `已创建到「${label}」。`,
+        })
+      }
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '创建失败', description: e.message })
@@ -137,18 +166,16 @@ export function GatewayKeysWorkspace({
   })
 
   const revokeMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.revokeKey(teamId, id),
-    onSuccess: (_result, id) => {
-      queryClient.setQueryData<VirtualKey[]>(keysQueryKey, (prev) =>
-        (prev ?? []).filter((k) => k.id !== id)
-      )
+    mutationFn: ({ keyTeamId, id }: { keyTeamId: string; id: string }) =>
+      gatewayApi.revokeKey(keyTeamId, id),
+    onSuccess: (_result, { id }) => {
       setSelectedIds((prev) => {
         if (!prev.has(id)) return prev
         const next = new Set(prev)
         next.delete(id)
         return next
       })
-      void queryClient.invalidateQueries({ queryKey: keysQueryKey })
+      void queryClient.invalidateQueries({ queryKey: MANAGED_TEAM_KEYS_QUERY_KEY })
       toast({ title: '已撤销' })
     },
     onError: (e: Error) => {
@@ -157,14 +184,21 @@ export function GatewayKeysWorkspace({
   })
 
   const batchRevokeMutation = useMutation({
-    mutationFn: (ids: string[]) => gatewayApi.revokeKeysBatch(teamId, ids),
+    mutationFn: async (ids: readonly string[]) => {
+      const idSet = new Set(ids)
+      const byTeam = groupRevokeIdsByTeam(visibleKeys, idSet)
+      let revoked: string[] = []
+      let failed: VirtualKeyBatchRevokeFailure[] = []
+      for (const [keyTeamId, keyIds] of byTeam) {
+        const result = await gatewayApi.revokeKeysBatch(keyTeamId, keyIds)
+        revoked = [...revoked, ...result.revoked]
+        failed = [...failed, ...result.failed]
+      }
+      return { revoked, failed }
+    },
     onSuccess: (result) => {
-      const revokedSet = new Set(result.revoked)
-      queryClient.setQueryData<VirtualKey[]>(keysQueryKey, (prev) =>
-        (prev ?? []).filter((k) => !revokedSet.has(k.id))
-      )
       setSelectedIds(new Set(result.failed.map((item) => item.key_id)))
-      void queryClient.invalidateQueries({ queryKey: keysQueryKey })
+      void queryClient.invalidateQueries({ queryKey: MANAGED_TEAM_KEYS_QUERY_KEY })
       setBatchRevokeOpen(false)
       if (result.failed.length === 0) {
         toast({ title: `已撤销 ${String(result.revoked.length)} 个虚拟 Key` })
@@ -205,8 +239,8 @@ export function GatewayKeysWorkspace({
     setOpen(true)
   }, [])
 
-  const handleRevokeRequest = useCallback((id: string, name: string): void => {
-    setPendingRevoke({ id, name })
+  const handleRevokeRequest = useCallback((id: string, name: string, keyTeamId: string): void => {
+    setPendingRevoke({ id, name, team_id: keyTeamId })
     setRevokeOpen(true)
   }, [])
 
@@ -219,8 +253,8 @@ export function GatewayKeysWorkspace({
   }, [])
 
   const handleCreateSubmit = useCallback(
-    (values: CreateKeyValues): void => {
-      createKey(values)
+    (targetTeamId: string, values: CreateKeyValues): void => {
+      createKey({ targetTeamId, body: values })
     },
     [createKey]
   )
@@ -232,15 +266,20 @@ export function GatewayKeysWorkspace({
   const handleRefresh = useCallback((): void => {
     void Promise.all([
       refetchKeys(),
-      refetchBudgets(),
-      queryClient.invalidateQueries({
-        queryKey: ['gateway', 'keys', teamId],
-        predicate: (query) => query.queryKey.length === 5 && query.queryKey[4] === 'entitlements',
-      }),
+      ...budgetTeamIds.map((id) =>
+        queryClient.invalidateQueries({ queryKey: gatewayBudgetsQueryKey(id) })
+      ),
+      queryClient.invalidateQueries({ queryKey: MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY }),
     ])
-  }, [queryClient, refetchBudgets, refetchKeys, teamId])
+  }, [budgetTeamIds, queryClient, refetchKeys])
 
   const isRefreshing = combineFetching(isFetching, budgetsFetching, entitlementsFetching)
+
+  const revealTeamId = revealTarget?.team_id ?? teamId
+  const revealWorkspaceLabel =
+    revealTarget?.team_id !== undefined && revealTarget.team_id.length > 0
+      ? (workspaceNameById.get(revealTarget.team_id) ?? revealTarget.team_id.slice(0, 8))
+      : undefined
 
   const createButton = canManageKeys ? (
     <Button size="sm" onClick={handleCreateClick}>
@@ -257,7 +296,9 @@ export function GatewayKeysWorkspace({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent>需团队成员权限</TooltipContent>
+      <TooltipContent>
+        {writableTeams.length === 0 ? '无可绑定的工作区' : '需团队成员权限'}
+      </TooltipContent>
     </Tooltip>
   )
 
@@ -268,13 +309,11 @@ export function GatewayKeysWorkspace({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-semibold tracking-tight">虚拟 Key</h2>
-              <Badge
-                variant="secondary"
-                className="max-w-[12rem] truncate font-normal"
-                title={teamId}
-              >
-                {teamDisplayName}
-              </Badge>
+              {!isLoading ? (
+                <Badge variant="secondary" className="font-normal">
+                  共 {visibleKeys.length} 个
+                </Badge>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -309,8 +348,7 @@ export function GatewayKeysWorkspace({
         ) : null}
 
         <KeysWorkspaceTable
-          teamDisplayName={teamDisplayName}
-          teamNameById={teamNameById}
+          teamNameById={workspaceNameById}
           modelsHref={modelsHref}
           canManageKeys={canManageKeys}
           isLoading={isLoading}
@@ -334,8 +372,8 @@ export function GatewayKeysWorkspace({
 
         <CreateKeyDialog
           open={open}
-          teamId={teamId}
-          teamDisplayName={teamDisplayName}
+          routeTeamId={teamId}
+          writableTeams={writableTeams}
           onOpenChange={handleCreateDialogOpenChange}
           createdKeyId={createdKeyId}
           onSubmit={handleCreateSubmit}
@@ -343,8 +381,8 @@ export function GatewayKeysWorkspace({
         />
 
         <VirtualKeyRevealDialog
-          teamId={teamId}
-          teamDisplayName={teamDisplayName}
+          teamId={revealTeamId}
+          teamDisplayName={revealWorkspaceLabel}
           target={revealTarget}
           onClose={handleCloseReveal}
         />
@@ -365,10 +403,10 @@ export function GatewayKeysWorkspace({
           pending={revokeMutation.isPending}
           onConfirm={() => {
             if (!pendingRevoke) return
-            const id = pendingRevoke.id
+            const { id, team_id: keyTeamId } = pendingRevoke
             setRevokeOpen(false)
             setPendingRevoke(null)
-            revokeMutation.mutate(id)
+            revokeMutation.mutate({ id, keyTeamId })
           }}
         />
 

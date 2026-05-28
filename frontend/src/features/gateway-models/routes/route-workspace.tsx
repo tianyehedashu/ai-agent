@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { routingStrategyLabel } from '@/features/gateway-models/constants'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
+import { invalidateGatewayRouteCaches } from '@/features/gateway-models/routes/query-keys'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
 import {
   resolveGatewayRouteTeamId,
@@ -140,7 +141,7 @@ export function RouteWorkspace(): React.JSX.Element {
     mutationFn: (body: Parameters<typeof gatewayApi.createRoute>[1]) =>
       gatewayApi.createRoute(workspaceTeamId, body),
     onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+      invalidateGatewayRouteCaches(queryClient)
       setCreateMode(false)
       setSelectedId(created.id)
       setSearchParams(
@@ -169,7 +170,7 @@ export function RouteWorkspace(): React.JSX.Element {
       body: GatewayRouteUpdateBody
     }) => gatewayApi.updateRoute(teamId, id, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+      invalidateGatewayRouteCaches(queryClient)
       toast({ title: '路由已更新' })
     },
     onError: (e: Error) => {
@@ -181,7 +182,7 @@ export function RouteWorkspace(): React.JSX.Element {
     mutationFn: ({ teamId, id }: { teamId: string; id: string }) =>
       gatewayApi.deleteRoute(teamId, id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+      invalidateGatewayRouteCaches(queryClient)
       setSelectedId(null)
       setSearchParams(
         (prev) => {

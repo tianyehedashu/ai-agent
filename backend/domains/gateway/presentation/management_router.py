@@ -23,6 +23,8 @@ from fastapi import APIRouter
 from domains.gateway.presentation.routers import (
     managed_team_credentials,
     managed_team_models,
+    managed_team_routes,
+    managed_team_virtual_keys,
     my_credentials,
     my_models,
     playground,
@@ -38,6 +40,8 @@ router.include_router(my_credentials.router)
 router.include_router(playground.router)
 router.include_router(managed_team_credentials.router)
 router.include_router(managed_team_models.router)
+router.include_router(managed_team_routes.router)
+router.include_router(managed_team_virtual_keys.router)
 router.include_router(my_models.router)
 router.include_router(provider_profiles.router)
 router.include_router(system_visibility.router)

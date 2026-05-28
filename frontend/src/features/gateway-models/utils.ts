@@ -7,6 +7,7 @@ import type {
   GatewayModelTestResult,
 } from '@/api/gateway/models'
 import type { GatewayRoute } from '@/api/gateway/routes'
+import { invalidateGatewayRouteCaches } from '@/features/gateway-models/routes/query-keys'
 import { formatMoney } from '@/lib/money'
 import type { ModelTestStatus } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
@@ -623,7 +624,7 @@ export function invalidateGatewayModelCaches(
 
 /** 注册别名变更后，刷新虚拟路由与 vkey 白名单（后端会级联更新引用） */
 export function invalidateGatewayModelAliasDependents(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
+  invalidateGatewayRouteCaches(queryClient)
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'keys'] })
 }
 

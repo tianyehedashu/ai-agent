@@ -43,18 +43,50 @@ class GatewayRouteRepository:
         only_enabled: bool = True,
     ) -> list[GatewayRoute | SystemGatewayRoute]:
         """租户路由 + system 路由合并（tenant 同名 ``virtual_model`` 优先）。"""
-        clauses = [GatewayRoute.tenant_id == tenant_id]
-        if only_enabled:
-            clauses.append(GatewayRoute.enabled.is_(True))
-        stmt = select(GatewayRoute).where(*clauses).order_by(GatewayRoute.virtual_model)
-        result = await self._session.execute(stmt)
-        tenant_rows = list(result.scalars().all())
-        system_rows = await self.list_system(only_enabled=only_enabled)
-        return merge_virtual_model_rows_tenant_overrides_system(
-            tenant_rows,
-            system_rows,
+        return await self.list_merged_routes_for_tenants(
+            [tenant_id],
             only_enabled=only_enabled,
         )
+
+    async def list_merged_routes_for_tenants(
+        self,
+        tenant_ids: list[uuid.UUID],
+        *,
+        only_enabled: bool = True,
+    ) -> list[GatewayRoute | SystemGatewayRoute]:
+        """多租户路由聚合：各 tenant 与 system 合并后按 route id 去重。"""
+        if not tenant_ids:
+            return []
+
+        clauses: list[object] = [GatewayRoute.tenant_id.in_(tenant_ids)]
+        if only_enabled:
+            clauses.append(GatewayRoute.enabled.is_(True))
+        stmt = (
+            select(GatewayRoute)
+            .where(*clauses)
+            .order_by(GatewayRoute.virtual_model)
+        )
+        result = await self._session.execute(stmt)
+        all_tenant_rows = list(result.scalars().all())
+
+        by_tenant: dict[uuid.UUID, list[GatewayRoute]] = {}
+        for row in all_tenant_rows:
+            if row.tenant_id is not None:
+                by_tenant.setdefault(row.tenant_id, []).append(row)
+
+        system_rows = await self.list_system(only_enabled=only_enabled)
+        by_id: dict[uuid.UUID, GatewayRoute | SystemGatewayRoute] = {}
+        for tenant_id in tenant_ids:
+            tenant_rows = by_tenant.get(tenant_id, [])
+            merged = merge_virtual_model_rows_tenant_overrides_system(
+                tenant_rows,
+                system_rows,
+                only_enabled=only_enabled,
+            )
+            for route in merged:
+                by_id[route.id] = route
+
+        return sorted(by_id.values(), key=lambda row: row.virtual_model)
 
     async def list_all_active(self) -> list[GatewayRoute]:
         stmt = select(GatewayRoute).where(GatewayRoute.enabled.is_(True))

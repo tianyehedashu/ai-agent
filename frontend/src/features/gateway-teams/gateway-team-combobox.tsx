@@ -29,6 +29,8 @@ export interface GatewayTeamComboboxProps {
   className?: string
   popoverContentClassName?: string
   id?: string
+  /** 选项与触发器主文案；默认 gatewayTeamDisplayLabel */
+  labelForTeam?: (team: GatewayTeam) => string
 }
 
 export function GatewayTeamCombobox({
@@ -40,17 +42,21 @@ export function GatewayTeamCombobox({
   className,
   popoverContentClassName,
   id,
+  labelForTeam,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+
+  const resolveLabel = useMemo(() => {
+    if (labelForTeam) return labelForTeam
+    return (team: GatewayTeam) => gatewayTeamDisplayLabel(team, { viewerUserId })
+  }, [labelForTeam, viewerUserId])
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === value) ?? null,
     [teams, value]
   )
-  const triggerLabel = selectedTeam
-    ? gatewayTeamDisplayLabel(selectedTeam, { viewerUserId })
-    : placeholder
+  const triggerLabel = selectedTeam ? resolveLabel(selectedTeam) : placeholder
 
   return (
     <DropdownMenu>
@@ -79,9 +85,7 @@ export function GatewayTeamCombobox({
         >
           {teams.map((team) => (
             <DropdownMenuRadioItem key={team.id} value={team.id} className="gap-2">
-              <span className="min-w-0 flex-1 truncate">
-                {gatewayTeamDisplayLabel(team, { viewerUserId })}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{resolveLabel(team)}</span>
               <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
                 {gatewayTeamRoleSubtitle(team, isPlatformAdmin)}
               </span>

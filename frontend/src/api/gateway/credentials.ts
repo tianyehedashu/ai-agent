@@ -10,6 +10,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import { fetchAllPaginatedPages, MAX_PAGE_SIZE } from '@/lib/pagination'
 import type { PaginatedList } from '@/types'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
@@ -344,3 +345,13 @@ export const credentialsApi = {
   importFromUserConfig: (teamId: string) =>
     apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
 } as const
+
+/** 拉取当前 actor 可见的全部团队 scope 凭据（筛选下拉等需全量时使用） */
+export async function fetchAllManagedTeamCredentials(
+  params?: Omit<ListManagedTeamCredentialsParams, 'page' | 'page_size'>
+): Promise<ProviderCredential[]> {
+  return fetchAllPaginatedPages(
+    (page, page_size) => credentialsApi.listManagedTeamCredentials({ ...params, page, page_size }),
+    MAX_PAGE_SIZE
+  )
+}

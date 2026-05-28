@@ -297,6 +297,35 @@ export function TeamModelsWorkspace({
     [credentials, credentialFilter, listMode, viewerUserId, canWrite]
   )
 
+  const credentialFilterOptions = useMemo(
+    () =>
+      activeCredentials.map((c) => ({
+        id: c.id,
+        name: c.name,
+        provider: c.provider,
+      })),
+    [activeCredentials]
+  )
+
+  const setCredentialFilter = useCallback(
+    (credentialId: string): void => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          if (credentialId) {
+            n.set('credentialId', credentialId)
+          } else {
+            n.delete('credentialId')
+            n.delete('modelId')
+          }
+          return n
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
+
   const usageByRouteName = useMemo(() => {
     const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
     for (const row of usageSummary?.items ?? []) {
@@ -693,6 +722,10 @@ export function TeamModelsWorkspace({
               onProviderFilterChange={setProviderFilter}
               abilityFilter={abilityFilter}
               onAbilityFilterChange={setAbilityFilter}
+              credentialFilter={credentialFilter}
+              onCredentialFilterChange={setCredentialFilter}
+              credentialFilterOptions={credentialFilterOptions}
+              credentialFilterLoading={directoryFetching}
               providerChoices={providerChoices}
               usageDays={usageDays}
               onUsageDaysChange={setUsageDays}

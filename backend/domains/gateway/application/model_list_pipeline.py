@@ -11,6 +11,11 @@ from domains.gateway.application.gateway_model_listing import list_merged_models
 from domains.gateway.application.model_credential_enrichment import (
     build_credential_name_map_for_models,
 )
+from domains.gateway.application.model_list_readable_credentials import (
+    readable_team_credential_ids_for_tenant,
+    readable_team_credential_ids_for_tenants,
+    readable_user_credential_ids,
+)
 from domains.gateway.domain.policies.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
@@ -132,10 +137,15 @@ async def _credential_names_for_search(
     session: AsyncSession,
     rows: list[GatewayRegistryModelRow],
     q: str | None,
+    *,
+    readable_credential_ids: frozenset[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, str] | None:
     if not q or not q.strip():
         return None
-    return await build_credential_name_map_for_models(session, rows)
+    names = await build_credential_name_map_for_models(session, rows)
+    if readable_credential_ids is None:
+        return names
+    return {cid: label for cid, label in names.items() if cid in readable_credential_ids}
 
 
 async def _list_system_page(
@@ -209,7 +219,25 @@ async def _list_tenant_page(
     tenant_id: uuid.UUID,
     only_enabled: bool,
     exclude_user_scope_credentials: bool,
+    actor_user_id: uuid.UUID | None = None,
+    team_role: str = "member",
+    is_platform_admin: bool = False,
+    user_scope_owner_id: uuid.UUID | None = None,
 ) -> ModelListPageResult:
+    readable_team_ids: frozenset[uuid.UUID] | None = None
+    if query.q and query.q.strip():
+        if user_scope_owner_id is not None:
+            readable_team_ids = await readable_user_credential_ids(
+                repo._session, user_scope_owner_id
+            )
+        elif actor_user_id is not None:
+            readable_team_ids = await readable_team_credential_ids_for_tenant(
+                repo._session,
+                tenant_id,
+                actor_user_id=actor_user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
+            )
     ability = resolved_registry_ability(query)
     sql_cap = sql_capability_for_registry_ability(ability)
     if ability and not sql_cap:
@@ -225,10 +253,19 @@ async def _list_tenant_page(
             connectivity=query.connectivity,
             sort_field=query.sort,
             order=query.order,
+            readable_team_credential_ids=(
+                None if user_scope_owner_id is not None else readable_team_ids
+            ),
+            user_scope_owner_id=user_scope_owner_id,
         )
         result = await repo._session.execute(stmt)
         all_rows = list(result.scalars().all())
-        cred_names = await _credential_names_for_search(repo._session, all_rows, query.q)
+        cred_names = await _credential_names_for_search(
+            repo._session,
+            all_rows,
+            query.q,
+            readable_credential_ids=readable_team_ids,
+        )
         filtered = _filter_rows_in_memory(all_rows, query, credential_names=cred_names)
         summary = summarize_connectivity(filtered)
         sorted_rows = sort_registry_rows(
@@ -262,6 +299,10 @@ async def _list_tenant_page(
         order=query.order,
         offset=query.page_params.offset,
         limit=query.page_params.page_size,
+        readable_team_credential_ids=(
+            None if user_scope_owner_id is not None else readable_team_ids
+        ),
+        user_scope_owner_id=user_scope_owner_id,
     )
     return ModelListPageResult(
         items=items,
@@ -279,6 +320,10 @@ async def list_gateway_models_for_tenants_page(
     *,
     only_enabled: bool = False,
     exclude_user_scope_credentials: bool = True,
+    actor_user_id: uuid.UUID | None = None,
+    role_by_tenant: dict[uuid.UUID, str] | None = None,
+    is_platform_admin: bool = False,
+    readable_team_credential_ids: frozenset[uuid.UUID] | None = None,
 ) -> ModelListPageResult:
     """跨 tenant 聚合 team registry 模型分页（managed-team-models 读侧）。"""
     repo = ModelListReadRepository(session)
@@ -289,6 +334,21 @@ async def list_gateway_models_for_tenants_page(
             page=query.page_params.page,
             page_size=query.page_params.page_size,
             connectivity_summary=summarize_connectivity([]),
+        )
+    readable_team_ids = readable_team_credential_ids
+    if (
+        readable_team_ids is None
+        and query.q
+        and query.q.strip()
+        and actor_user_id is not None
+        and role_by_tenant is not None
+    ):
+        readable_team_ids = await readable_team_credential_ids_for_tenants(
+            session,
+            tenant_ids,
+            actor_user_id=actor_user_id,
+            role_by_tenant=role_by_tenant,
+            is_platform_admin=is_platform_admin,
         )
     ability = resolved_registry_ability(query)
     sql_cap = sql_capability_for_registry_ability(ability)
@@ -305,10 +365,16 @@ async def list_gateway_models_for_tenants_page(
             connectivity=query.connectivity,
             sort_field=query.sort,
             order=query.order,
+            readable_team_credential_ids=readable_team_ids,
         )
         result = await session.execute(stmt)
         all_rows = list(result.scalars().all())
-        cred_names = await _credential_names_for_search(session, all_rows, query.q)
+        cred_names = await _credential_names_for_search(
+            session,
+            all_rows,
+            query.q,
+            readable_credential_ids=readable_team_ids,
+        )
         filtered = _filter_rows_in_memory(all_rows, query, credential_names=cred_names)
         summary = summarize_connectivity(filtered)
         sorted_rows = sort_registry_rows(
@@ -342,6 +408,7 @@ async def list_gateway_models_for_tenants_page(
         order=query.order,
         offset=query.page_params.offset,
         limit=query.page_params.page_size,
+        readable_team_credential_ids=readable_team_ids,
     )
     return ModelListPageResult(
         items=items,
@@ -415,6 +482,8 @@ async def list_gateway_models_page(
     registry_scope: RegistryScope = "team",
     only_enabled: bool = False,
     user_id: uuid.UUID | None = None,
+    team_role: str = "member",
+    is_platform_admin: bool = False,
 ) -> ModelListPageResult:
     repo = ModelListReadRepository(session)
     if registry_scope == "team":
@@ -426,6 +495,9 @@ async def list_gateway_models_page(
             exclude_user_scope_credentials=exclude_user_scope_credentials_for_registry(
                 registry_scope
             ),
+            actor_user_id=user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
         )
     if registry_scope == "system":
         return await _list_system_page(repo, query, only_enabled=only_enabled)
@@ -443,6 +515,8 @@ async def list_personal_models_page(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     query: ModelListQuery,
+    *,
+    user_id: uuid.UUID | None = None,
 ) -> ModelListPageResult:
     repo = ModelListReadRepository(session)
     return await _list_tenant_page(
@@ -451,6 +525,7 @@ async def list_personal_models_page(
         tenant_id=tenant_id,
         only_enabled=False,
         exclude_user_scope_credentials=False,
+        user_scope_owner_id=user_id,
     )
 
 
@@ -462,6 +537,8 @@ async def list_gateway_model_ids(
     registry_scope: RegistryScope = "team",
     only_enabled: bool = False,
     user_id: uuid.UUID | None = None,
+    team_role: str = "member",
+    is_platform_admin: bool = False,
     max_ids: int = DEFAULT_MODEL_LIST_IDS_LIMIT,
 ) -> ModelListIdsResult:
     """同 filter 不分页，供批量探活/删除收集 id；超过 max_ids 时 truncated=True。"""
@@ -492,6 +569,8 @@ async def list_gateway_model_ids(
                 registry_scope=registry_scope,
                 only_enabled=only_enabled,
                 user_id=user_id,
+                team_role=team_role,
+                is_platform_admin=is_platform_admin,
             )
             total = page.total
             for row in page.items:
