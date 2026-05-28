@@ -85,6 +85,11 @@ export function ManagedCredentialRow({
           ) : (
             <span className="font-medium">{c.name}</span>
           )}
+          {c.management_access === 'metadata' ? (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              只读
+            </Badge>
+          ) : null}
           {configManaged ? (
             <Badge variant="secondary" className="text-[10px] font-normal">
               配置同步

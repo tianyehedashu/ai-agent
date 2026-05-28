@@ -13,6 +13,7 @@ import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   canDeleteGatewayModel,
   canManageGatewayModel,
@@ -81,117 +82,142 @@ export function CollaborationTeamsModelsGroupedList({
 
   return (
     <>
-      <ScrollArea className="max-h-[min(70vh,720px)] w-full overscroll-y-contain">
-        <div className="divide-y">
-          {teams.map((team) => {
-            const teamModels = modelsByTeamId.get(team.id) ?? []
-            const hasModelsOnServer = tenantIdsWithModels.has(team.id)
-            const showOffPageHint = hasModelsOnServer && teamModels.length === 0 && currentPage > 1
-            const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
+      <TooltipProvider delayDuration={300}>
+        <ScrollArea className="max-h-[min(70vh,720px)] w-full overscroll-y-contain">
+          {/* pr-3：为 Radix 垂直滚动条预留 gutter，避免挡住行尾开关/删除 */}
+          <div className="divide-y pr-3">
+            {teams.map((team) => {
+              const teamModels = modelsByTeamId.get(team.id) ?? []
+              const hasModelsOnServer = tenantIdsWithModels.has(team.id)
+              const showOffPageHint =
+                hasModelsOnServer && teamModels.length === 0 && currentPage > 1
+              const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
 
-            return (
-              <section key={team.id} aria-label={`团队 ${team.name} 模型`}>
-                <CollaborationTeamGroupHeader
-                  team={team}
-                  isPlatformAdmin={isPlatformAdmin}
-                  viewerUserId={viewerUserId}
-                  actions={
-                    teamCanWrite ? (
-                      <Button size="sm" className="h-7 text-xs" asChild>
-                        <Link to={teamModelsRegisterHref(team.id)}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          添加模型
-                        </Link>
-                      </Button>
-                    ) : null
-                  }
-                />
-                {teamModels.length > 0 ? (
-                  <ul className="divide-y">
-                    {teamModels.map((model) => {
-                      const canManage = canManageGatewayModel(
-                        model,
-                        viewerUserId,
-                        teamCanWrite,
-                        isPlatformAdmin
-                      )
-                      const canDelete = canDeleteGatewayModel(
-                        model,
-                        viewerUserId,
-                        teamCanWrite,
-                        isPlatformAdmin
-                      )
-                      const isUpdating = updatePendingModelId === model.id
-                      const isDeleting = deletingModelId === model.id
+              return (
+                <section key={team.id} aria-label={`团队 ${team.name} 模型`}>
+                  <CollaborationTeamGroupHeader
+                    team={team}
+                    isPlatformAdmin={isPlatformAdmin}
+                    viewerUserId={viewerUserId}
+                    actions={
+                      teamCanWrite ? (
+                        <Button size="sm" className="h-7 text-xs" asChild>
+                          <Link to={teamModelsRegisterHref(team.id)}>
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            添加模型
+                          </Link>
+                        </Button>
+                      ) : null
+                    }
+                  />
+                  {teamModels.length > 0 ? (
+                    <ul className="divide-y">
+                      {teamModels.map((model) => {
+                        const canManage = canManageGatewayModel(
+                          model,
+                          viewerUserId,
+                          teamCanWrite,
+                          isPlatformAdmin
+                        )
+                        const canDelete = canDeleteGatewayModel(
+                          model,
+                          viewerUserId,
+                          teamCanWrite,
+                          isPlatformAdmin
+                        )
+                        const isUpdating = updatePendingModelId === model.id
+                        const isDeleting = deletingModelId === model.id
 
-                      return (
-                        <ModelInventoryRow
-                          key={`${model.id}:${team.id}`}
-                          model={model}
-                          selected={false}
-                          highlighted={false}
-                          usageDays={7}
-                          usageRow={undefined}
-                          usageLoading={false}
-                          href={teamModelDetailHref(team.id, model.id)}
-                          trailingActions={
-                            canManage ? (
-                              <>
-                                <Switch
-                                  checked={model.enabled}
-                                  disabled={isUpdating || isDeleting}
-                                  aria-label={`${model.enabled ? '禁用' : '启用'} ${model.name}`}
-                                  onCheckedChange={(checked) => {
-                                    onToggleEnabled(model, team.id, checked)
-                                  }}
-                                />
-                                {canDelete ? (
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                    disabled={isDeleting || isUpdating}
-                                    aria-label={`删除 ${model.name}`}
-                                    onClick={() => {
-                                      setPendingDelete({ model, teamId: team.id })
-                                    }}
-                                  >
-                                    {isDeleting ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                ) : null}
-                              </>
-                            ) : null
-                          }
-                        />
-                      )
-                    })}
-                  </ul>
-                ) : showOffPageHint ? (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">
-                    该团队已有模型，请翻页查看。
-                  </p>
-                ) : hasModelsOnServer && teamModels.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">
-                    该团队已有模型（见其它页或未匹配当前筛选）。
-                  </p>
-                ) : (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">暂无模型</p>
-                )}
-              </section>
-            )
-          })}
-          {teams.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              没有匹配的团队
-            </div>
-          ) : null}
-        </div>
-      </ScrollArea>
+                        return (
+                          <ModelInventoryRow
+                            key={`${model.id}:${team.id}`}
+                            model={model}
+                            selected={false}
+                            highlighted={false}
+                            usageDays={7}
+                            usageRow={undefined}
+                            usageLoading={false}
+                            layout="compact"
+                            connectivityDisplay="attention-only"
+                            href={teamModelDetailHref(team.id, model.id)}
+                            trailingActions={
+                              canManage ? (
+                                <div className="flex items-center gap-2">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="hidden text-xs text-muted-foreground lg:inline">
+                                          {model.enabled ? '已启用' : '已禁用'}
+                                        </span>
+                                        <Switch
+                                          checked={model.enabled}
+                                          disabled={isUpdating || isDeleting}
+                                          aria-label={`${model.enabled ? '禁用' : '启用'} ${model.name}`}
+                                          onCheckedChange={(checked) => {
+                                            onToggleEnabled(model, team.id, checked)
+                                          }}
+                                        />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="text-xs lg:hidden">
+                                      {model.enabled ? '点击禁用模型' : '点击启用模型'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  {canDelete ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                          disabled={isDeleting || isUpdating}
+                                          aria-label={`删除 ${model.name}`}
+                                          onClick={() => {
+                                            setPendingDelete({ model, teamId: team.id })
+                                          }}
+                                        >
+                                          {isDeleting ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Trash2 className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="text-xs">
+                                        删除模型
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : null}
+                                </div>
+                              ) : null
+                            }
+                          />
+                        )
+                      })}
+                    </ul>
+                  ) : showOffPageHint ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">
+                      该团队已有模型，请翻页查看。
+                    </p>
+                  ) : hasModelsOnServer && teamModels.length === 0 ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">
+                      该团队已有模型（见其它页或未匹配当前筛选）。
+                    </p>
+                  ) : (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">暂无模型</p>
+                  )}
+                </section>
+              )
+            })}
+            {teams.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                没有匹配的团队
+              </div>
+            ) : null}
+          </div>
+        </ScrollArea>
+      </TooltipProvider>
 
       <ConfirmAlertDialog
         open={pendingDelete !== null}

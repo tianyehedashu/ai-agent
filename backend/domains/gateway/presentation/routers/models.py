@@ -164,12 +164,8 @@ async def list_models(
             for m in page.items
             if registry_kind_for_merged_row(m) == "team"
         }
-        team_credentials_by_id = await reads.map_team_credentials_visible_display_by_id(
+        team_credentials_by_id = await reads.map_team_credentials_display_by_id(
             team_cred_ids,
-            tenant_id=team.team_id,
-            actor_user_id=team.user_id,
-            team_role=team.team_role,
-            is_platform_admin=team.is_platform_admin,
         )
     return build_gateway_model_list_response(
         page,
@@ -260,12 +256,8 @@ async def get_model(
     if include_cred and registry_kind_for_merged_row(row) == "system":
         credentials_by_id = await reads.map_system_credentials_by_id({row.credential_id})
     if registry_kind_for_merged_row(row) == "team":
-        team_credentials_by_id = await reads.map_team_credentials_visible_display_by_id(
+        team_credentials_by_id = await reads.map_team_credentials_display_by_id(
             {row.credential_id},
-            tenant_id=team.team_id,
-            actor_user_id=team.user_id,
-            team_role=team.team_role,
-            is_platform_admin=team.is_platform_admin,
         )
     return build_gateway_model_response(
         row,
@@ -333,12 +325,8 @@ async def create_model(
         is_platform_admin=team.is_platform_admin,
         enabled=body.enabled,
     )
-    team_credentials_by_id = await reads.map_team_credentials_visible_display_by_id(
+    team_credentials_by_id = await reads.map_team_credentials_display_by_id(
         {model.credential_id},
-        tenant_id=team.team_id,
-        actor_user_id=team.user_id,
-        team_role=team.team_role,
-        is_platform_admin=team.is_platform_admin,
     )
     return build_gateway_model_response(
         model,

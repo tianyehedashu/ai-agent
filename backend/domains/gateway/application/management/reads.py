@@ -208,25 +208,31 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self,
         team_id: UUID,
         *,
-        actor_user_id: UUID | None,
-        team_role: str,
         include_system: bool,
         encryption_key: str | None = None,
     ) -> list[CredentialReadModel]:
+        """团队 workspace 列表：租户内全部 team-scope 行；分级在 presentation 组装。"""
         rows = await self._creds.list_for_tenant(team_id)
-        visible = filter_team_credentials_visible_to_actor(
-            rows,
-            actor_user_id=actor_user_id,
-            team_role=team_role,
-            is_platform_admin=include_system,
-        )
-        out = [credential_from_orm(c, encryption_key=encryption_key) for c in visible]
+        out = [credential_from_orm(c, encryption_key=encryption_key) for c in rows]
         if include_system:
             system_rows = await self._system_creds.list_all()
             out.extend(
                 system_credential_from_orm(c, encryption_key=encryption_key) for c in system_rows
             )
         return out
+
+    async def assert_credential_in_managed_tenants(
+        self,
+        credential_id: UUID | None,
+        *,
+        allowed_tenant_ids: list[UUID],
+    ) -> None:
+        if credential_id is None:
+            return
+        await self.access.assert_credential_in_managed_tenants(
+            credential_id,
+            allowed_tenant_ids=allowed_tenant_ids,
+        )
 
     async def list_credential_summaries_for_team(
         self,
@@ -236,15 +242,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_role: str = "member",
         is_platform_admin: bool = False,
     ) -> list[CredentialReadModel]:
-        """团队凭据 + 可见 system 凭据（仅摘要字段，无密钥）。"""
+        """团队内全部 team 凭据摘要 + ACL 过滤后的 system（无密钥；模型绑定下拉用）。"""
         rows = await self._creds.list_for_tenant(team_id)
-        visible = filter_team_credentials_visible_to_actor(
-            rows,
-            actor_user_id=user_id,
-            team_role=team_role,
-            is_platform_admin=is_platform_admin,
-        )
-        out = [credential_from_orm(c) for c in visible]
+        out = [credential_from_orm(c) for c in rows]
         system_rows = await self._system_creds.list_all()
         visible_system = await filter_visible_system_provider_credentials(
             self._session,
@@ -265,7 +265,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_role: str,
         is_platform_admin: bool,
     ) -> CredentialReadModel:
-        """与 ``list_credentials_for_team`` 可见集合一致：团队凭据 +（仅平台管理员）系统凭据。"""
+        """reveal/写路径：仅创建者或 legacy admin+ 可读（与 workspace 全量列表分离）。"""
         row = await self._creds.get_bindable_for_team_gateway_model(
             credential_id,
             tenant_id=tenant_id,
@@ -298,7 +298,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self,
         credential_ids: set[UUID],
     ) -> dict[UUID, ProviderCredential]:
-        """模型列表 enrich：批量加载凭据展示字段（不做读权限过滤）。"""
+        """模型列表/详情 enrich：凭据名、创建者等展示字段（不做 reveal 过滤；响应不含密钥）。"""
         if not credential_ids:
             return {}
         rows = await self._creds.list_by_ids(list(credential_ids))
@@ -313,7 +313,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_role: str,
         is_platform_admin: bool,
     ) -> dict[UUID, ProviderCredential]:
-        """模型列表 enrich：仅返回 actor 可读的团队凭据展示字段。"""
+        """绑定/摘要专用：仅 actor reveal 可读集合（workspace 列表用 ``map_team_credentials_display_by_id``）。"""
         if not credential_ids or actor_user_id is None:
             return {}
         rows = await self._creds.list_by_ids(list(credential_ids))

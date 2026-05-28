@@ -188,6 +188,10 @@ class CredentialResponse(BaseModel):
     api_key_masked: str = Field(
         description="解密后仅用于展示的掩码，不包含完整密钥",
     )
+    management_access: Literal["full", "metadata"] = Field(
+        default="full",
+        description="full=创建者/legacy admin 可管理；metadata=团队 member 仅可见非敏感字段",
+    )
 
     model_config = ConfigDict(from_attributes=False)
 
@@ -491,6 +495,22 @@ class ModelConnectivitySummary(BaseModel):
 
 class GatewayModelListResponse(PaginatedListResponse[GatewayModelResponse]):
     connectivity_summary: ModelConnectivitySummary
+
+
+class ManagedTeamModelCredentialFilterItem(BaseModel):
+    """跨团队模型列表「按凭据筛选」选项（来自注册模型绑定）。"""
+
+    id: uuid.UUID
+    name: str
+    provider: str
+    tenant_id: uuid.UUID
+
+
+class ManagedTeamModelCredentialFilterListResponse(BaseModel):
+    """注册模型已绑定凭据的去重列表（有界，非通用分页列表）。"""
+
+    items: list[ManagedTeamModelCredentialFilterItem] = Field(default_factory=list)
+    queried_team_count: int = Field(ge=0, default=0)
 
 
 class ManagedTeamModelListResponse(GatewayModelListResponse):
@@ -1367,6 +1387,8 @@ __all__ = [
     "GatewayModelUpdate",
     "GatewayModelUsageSummaryResponse",
     "ManagedTeamCredentialListResponse",
+    "ManagedTeamModelCredentialFilterItem",
+    "ManagedTeamModelCredentialFilterListResponse",
     "ManagedTeamModelListResponse",
     "ManagedTeamRouteListResponse",
     "ManagedTeamVirtualKeyListResponse",

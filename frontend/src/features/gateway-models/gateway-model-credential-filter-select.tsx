@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type React from 'react'
 
 import {
@@ -27,9 +28,13 @@ export interface GatewayModelCredentialFilterSelectProps {
   className?: string
   triggerClassName?: string
   ariaLabel?: string
+  /** options 未加载或未命中时，用列表行上的凭据名展示 trigger */
+  selectedCredentialName?: string | null
 }
 
-function optionLabel(option: GatewayModelCredentialFilterOption): string {
+export function formatGatewayModelCredentialFilterLabel(
+  option: GatewayModelCredentialFilterOption
+): string {
   const base = option.provider ? `${option.name} · ${channelLabel(option.provider)}` : option.name
   if (option.teamLabel) {
     return `${option.teamLabel} · ${base}`
@@ -46,8 +51,23 @@ export function GatewayModelCredentialFilterSelect({
   className,
   triggerClassName,
   ariaLabel = '按凭据筛选',
+  selectedCredentialName,
 }: Readonly<GatewayModelCredentialFilterSelectProps>): React.JSX.Element {
   const selectValue = value || FILTER_ALL
+
+  const selectedOption = useMemo(
+    () => (value ? options.find((option) => option.id === value) : undefined),
+    [options, value]
+  )
+
+  const triggerLabel = useMemo((): string | undefined => {
+    if (!value) return undefined
+    if (selectedOption) return formatGatewayModelCredentialFilterLabel(selectedOption)
+    const name = selectedCredentialName?.trim()
+    if (name) return name
+    if (loading) return '加载凭据…'
+    return undefined
+  }, [value, selectedOption, selectedCredentialName, loading])
 
   return (
     <Select
@@ -58,16 +78,20 @@ export function GatewayModelCredentialFilterSelect({
       disabled={disabled || loading}
     >
       <SelectTrigger
-        className={cn('h-8 w-[160px] shrink-0 text-xs', triggerClassName, className)}
+        className={cn(
+          'h-8 min-w-[160px] max-w-[280px] shrink-0 text-xs',
+          triggerClassName,
+          className
+        )}
         aria-label={ariaLabel}
       >
-        <SelectValue placeholder={loading ? '加载凭据…' : '全部凭据'} />
+        <SelectValue placeholder={loading ? '加载凭据…' : '全部凭据'}>{triggerLabel}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={FILTER_ALL}>全部凭据</SelectItem>
         {options.map((option) => (
           <SelectItem key={option.id} value={option.id}>
-            {optionLabel(option)}
+            {formatGatewayModelCredentialFilterLabel(option)}
           </SelectItem>
         ))}
       </SelectContent>

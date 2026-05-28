@@ -3462,7 +3462,7 @@ class TestManagedTeamCredentialsAggregateApi:
             name="Managed Cred Member",
         )
         db_session.add(member)
-        await db_session.commit()
+        await db_session.flush()
         await db_session.refresh(member)
 
         ts = TeamService(db_session)
@@ -3471,7 +3471,7 @@ class TestManagedTeamCredentialsAggregateApi:
             owner_user_id=test_user.id,
         )
         await ts.add_member(shared.id, member.id, "member")
-        await db_session.commit()
+        await db_session.flush()
 
         owner_cred_name = f"owner-only-{uuid.uuid4().hex[:6]}"
         await self._create_team_credential(
@@ -3491,10 +3491,12 @@ class TestManagedTeamCredentialsAggregateApi:
         )
         assert r.status_code == 200, r.text
         payload = r.json()
-        names = {item["name"] for item in payload["items"]}
-        assert owner_cred_name not in names
+        by_name = {item["name"]: item for item in payload["items"]}
+        assert owner_cred_name in by_name
+        assert by_name[owner_cred_name]["management_access"] == "metadata"
+        assert by_name[owner_cred_name]["api_key_masked"] == "—"
         assert payload["queried_team_count"] == 1
-        assert payload["total"] >= 0
+        assert payload["total"] >= 1
 
     @pytest.mark.asyncio
     async def test_list_managed_team_credentials_search_filters_by_team(
@@ -3744,6 +3746,133 @@ class TestManagedTeamModelsAggregateApi:
         assert owner_model_name in names
         assert payload["queried_team_count"] == 1
         assert payload["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_models_member_can_filter_by_owner_credential(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """成员无凭据 reveal 权，仍可按团队内模型绑定的 credential_id 筛选聚合列表。"""
+        member = User(
+            email=f"managed_model_filter_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Managed Model Filter Member",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"FilterCred-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        owner_model_name = f"owner-filter-{uuid.uuid4().hex[:6]}"
+        created = await self._create_team_model(
+            dev_client,
+            shared.id,
+            auth_headers,
+            model_name=owner_model_name,
+        )
+        credential_id = created["credential_id"]
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-models",
+            headers=member_headers,
+            params={
+                "page": 1,
+                "page_size": 50,
+                "credential_id": credential_id,
+            },
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["total"] >= 1
+        assert all(item["credential_id"] == credential_id for item in payload["items"])
+        assert owner_model_name in {item["name"] for item in payload["items"]}
+
+    @pytest.mark.asyncio
+    async def test_list_managed_team_model_credential_filters_for_member(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        member = User(
+            email=f"managed_cred_filter_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Managed Cred Filter Member",
+        )
+        db_session.add(member)
+        await db_session.flush()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"CredFilter-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.flush()
+
+        cred_name = f"owner-key-{uuid.uuid4().hex[:6]}"
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": cred_name,
+                "api_key": "sk-managed-filter-test-key-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=auth_headers,
+            json={
+                "name": f"model-{uuid.uuid4().hex[:6]}",
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {"Authorization": f"Bearer {member_token.access_token}"}
+
+        r = await dev_client.get(
+            "/api/v1/gateway/managed-team-model-credential-filters",
+            headers=member_headers,
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        by_id = {item["id"]: item for item in payload["items"]}
+        assert cid in by_id
+        assert by_id[cid]["name"] == cred_name
+        assert by_id[cid]["tenant_id"] == str(shared.id)
+
+        r_models = await dev_client.get(
+            "/api/v1/gateway/managed-team-models",
+            headers=member_headers,
+            params={"page": 1, "page_size": 50, "credential_id": cid},
+        )
+        assert r_models.status_code == 200, r_models.text
 
 
 class TestManagedTeamRoutesAggregateApi:

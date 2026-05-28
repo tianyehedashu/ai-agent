@@ -73,9 +73,7 @@ async def list_managed_team_models_for_actor(
     await assert_managed_team_model_list_credential_filter(
         session,
         query.credential_id,
-        user_id=user_id,
         allowed_tenant_ids=tenant_ids,
-        role_by_tenant=role_by_tenant,
     )
     exclude_user_scope = exclude_user_scope_credentials_for_registry("team")
     ability = resolved_registry_ability(query)

@@ -28,6 +28,7 @@ export interface CredentialSummary {
   is_active: boolean
   is_config_managed: boolean
   created_by_user_id?: string | null
+  management_access?: 'full' | 'metadata'
 }
 
 /** Playground 聚合凭据摘要：含解析模型/Key 所需的团队上下文 */
@@ -66,6 +67,8 @@ export interface ProviderCredential {
   api_key_masked: string
   /** 团队 scope 凭据创建者；NULL 表示 legacy 共享 */
   created_by_user_id?: string | null
+  /** full=可管理；metadata=团队内仅展示非敏感字段 */
+  management_access?: 'full' | 'metadata'
 }
 
 /** 团队/系统凭据创建体 */

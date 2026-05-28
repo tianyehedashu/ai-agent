@@ -82,6 +82,17 @@ describe('canEditGatewayCredential', () => {
     expect(canEditGatewayCredential(cred('system'), viewerId, true, true)).toBe(true)
     expect(canEditGatewayCredential(cred('system'), viewerId, true, false)).toBe(false)
   })
+
+  it('denies edit when management_access is metadata even for owner fields', () => {
+    expect(
+      canEditGatewayCredential(
+        { ...cred('team', ownerId), management_access: 'metadata' },
+        ownerId,
+        true,
+        false
+      )
+    ).toBe(false)
+  })
 })
 
 describe('canLinkToCredentialDetail', () => {
@@ -107,6 +118,17 @@ describe('canLinkToCredentialDetail', () => {
 
   it('allows platform admin on system credential', () => {
     expect(canLinkToCredentialDetail(systemSummary, viewerId, true, true)).toBe(true)
+  })
+
+  it('blocks detail link when management_access is metadata', () => {
+    expect(
+      canLinkToCredentialDetail(
+        { ...ownedTeamSummary, management_access: 'metadata' },
+        ownerId,
+        true,
+        false
+      )
+    ).toBe(false)
   })
 })
 

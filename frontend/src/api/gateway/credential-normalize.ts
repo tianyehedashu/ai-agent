@@ -25,6 +25,7 @@ export interface NormalizedProviderCredential {
   created_at: string
   api_key_masked: string
   created_by_user_id?: string | null
+  management_access?: 'full' | 'metadata'
 }
 export interface ProviderCredentialWire {
   id: string
@@ -46,6 +47,7 @@ export interface ProviderCredentialWire {
   created_at: string
   api_key_masked: string
   created_by_user_id?: string | null
+  management_access?: 'full' | 'metadata'
 }
 
 export function normalizeCredentialScope(
@@ -79,5 +81,6 @@ export function normalizeCredential(raw: ProviderCredentialWire): NormalizedProv
     created_at: raw.created_at,
     api_key_masked: raw.api_key_masked,
     created_by_user_id: raw.created_by_user_id ?? null,
+    management_access: raw.management_access,
   }
 }

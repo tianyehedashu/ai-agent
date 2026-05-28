@@ -38,6 +38,7 @@ export function canEditGatewayCredential(
   canWrite: boolean,
   isPlatformAdmin: boolean
 ): boolean {
+  if (c.management_access === 'metadata') return false
   if (c.scope === 'system') return isPlatformAdmin
   if (c.scope !== 'team') return false
   if (actorOwnsTeamCredential(c, viewerUserId)) return true
@@ -52,6 +53,9 @@ export function canLinkToCredentialDetail(
   isPlatformAdmin: boolean
 ): boolean {
   if (!summary) return false
+  if ('management_access' in summary && summary.management_access === 'metadata') {
+    return false
+  }
   if (summary.scope === 'user') return false
   if (summary.scope === 'system') return isPlatformAdmin
   if (summary.scope !== 'team') return false

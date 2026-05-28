@@ -9,6 +9,7 @@ from cryptography.fernet import InvalidToken
 
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
+from domains.gateway.domain.team_credential_access import team_credential_management_access
 from domains.gateway.domain.types import (
     credential_api_scope,
     is_config_managed_system_credential,
@@ -26,6 +27,8 @@ from libs.crypto import decrypt_value
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+METADATA_ONLY_API_KEY_MASKED = "—"
 
 
 def mask_plain_secret_for_display(plain: str) -> str:
@@ -137,7 +140,67 @@ def build_credential_response(
         created_by_user_id=cred.created_by_user_id,
         created_at=cred.created_at,
         api_key_masked=api_key_masked,
+        management_access="full",
     )
+
+
+def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialResponse:
+    """团队 member 可见：展示名/通道/状态等，不含密钥与 api_base/extra。"""
+    api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
+    profile_label = cred.profile_label or get_upstream_profile(
+        cred.profile_id, provider=cred.provider
+    ).label
+    return CredentialResponse(
+        id=cred.id,
+        tenant_id=cred.tenant_id,
+        scope=api_scope,
+        scope_id=cred.scope_id,
+        provider=cred.provider,
+        name=cred.name,
+        api_base=None,
+        api_bases=None,
+        profile_id=cred.profile_id,
+        profile_label=profile_label,
+        effective_api_base_openai=None,
+        effective_api_base_anthropic=None,
+        extra=None,
+        is_active=cred.is_active,
+        is_config_managed=is_config_managed_system_credential(
+            scope=cred.scope,
+            tenant_id=cred.tenant_id,
+            name=cred.name,
+            extra=cred.extra,
+        ),
+        visibility=credential_visibility_for_api(cred.visibility)
+        if api_scope == "system"
+        else None,
+        created_by_user_id=cred.created_by_user_id,
+        created_at=cred.created_at,
+        api_key_masked=METADATA_ONLY_API_KEY_MASKED,
+        management_access="metadata",
+    )
+
+
+def build_credential_response_for_team_workspace_list(
+    cred: CredentialReadModel,
+    *,
+    encryption_key: str,
+    actor_user_id: uuid.UUID | None,
+    team_role: str,
+    is_platform_admin: bool,
+) -> CredentialResponse:
+    """团队凭据 Tab / 跨团队聚合列表：成员可见团队内全部凭据，敏感字段按管理权限分级。"""
+    access = team_credential_management_access(
+        scope=cred.scope,
+        tenant_id=cred.tenant_id,
+        created_by_user_id=cred.created_by_user_id,
+        actor_user_id=actor_user_id,
+        team_role=team_role,
+        is_platform_admin=is_platform_admin,
+    )
+    if access == "full":
+        return build_credential_response(cred, encryption_key=encryption_key)
+    return build_credential_metadata_response(cred)
 
 
 def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSummaryResponse:
@@ -171,7 +234,10 @@ def build_playground_credential_summary_response(
 
 
 __all__ = [
+    "METADATA_ONLY_API_KEY_MASKED",
+    "build_credential_metadata_response",
     "build_credential_response",
+    "build_credential_response_for_team_workspace_list",
     "build_credential_summary_response",
     "build_playground_credential_summary_response",
     "credential_api_bases_from_body",

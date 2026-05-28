@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.management.managed_team_credential_reads import (
     list_managed_team_credentials_for_actor,
 )
-from domains.gateway.presentation.credential_response import build_credential_response
+from domains.gateway.presentation.credential_response import (
+    build_credential_response_for_team_workspace_list,
+)
 from domains.gateway.presentation.schemas.common import ManagedTeamCredentialListResponse
 from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, page_query_params
@@ -34,9 +36,10 @@ async def list_managed_team_credentials(
     """列出当前用户 membership 内协作团队的 team-scope 凭据（跨团队聚合，分页）。"""
     is_platform_admin = current_user.role == ADMIN_ROLE
     enc_key = encryption_key()
+    user_id = get_user_uuid(current_user)
     result = await list_managed_team_credentials_for_actor(
         db,
-        user_id=get_user_uuid(current_user),
+        user_id=user_id,
         is_platform_admin=is_platform_admin,
         page_params=page,
         search=search,
@@ -44,7 +47,15 @@ async def list_managed_team_credentials(
     )
     return ManagedTeamCredentialListResponse(
         items=[
-            build_credential_response(item, encryption_key=enc_key)
+            build_credential_response_for_team_workspace_list(
+                item,
+                encryption_key=enc_key,
+                actor_user_id=user_id,
+                team_role=result.role_by_tenant.get(item.tenant_id, "member")
+                if item.tenant_id
+                else "member",
+                is_platform_admin=is_platform_admin,
+            )
             for item in result.page.items
         ],
         total=result.page.total,

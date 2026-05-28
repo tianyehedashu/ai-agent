@@ -42,6 +42,20 @@ class GatewayManagementAccessAssertions:
         self._api_key_grants = api_key_grants
         self._entitlement_plans = entitlement_plans
 
+    async def assert_credential_in_managed_tenants(
+        self,
+        credential_id: UUID,
+        *,
+        allowed_tenant_ids: list[UUID],
+    ) -> ProviderCredential:
+        """跨团队模型列表 ``credential_id`` 筛选：凭据须归属协作团队（不要求 reveal）。"""
+        row = await self._creds.get(credential_id)
+        if row is None or row.tenant_id is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if row.tenant_id not in set(allowed_tenant_ids):
+            raise CredentialNotFoundError(str(credential_id))
+        return row
+
     async def assert_credential_in_team(
         self,
         credential_id: UUID,

@@ -148,6 +148,15 @@ export function PersonalModelsWorkspace({
     [credentials, credentialFilter]
   )
 
+  const selectedCredentialName = useMemo(() => {
+    if (!credentialFilter) return null
+    return (
+      credentialFilterOptions.find((option) => option.id === credentialFilter)?.name ??
+      credentials.find((credential) => credential.id === credentialFilter)?.name ??
+      null
+    )
+  }, [credentialFilter, credentialFilterOptions, credentials])
+
   const setCredentialFilter = useCallback(
     (credentialId: string): void => {
       setSearchParams(
@@ -598,6 +607,7 @@ export function PersonalModelsWorkspace({
               onChange={setCredentialFilter}
               options={credentialFilterOptions}
               loading={credentialsFetching}
+              selectedCredentialName={selectedCredentialName}
               triggerClassName="h-9 w-full"
               ariaLabel="按凭据筛选"
             />

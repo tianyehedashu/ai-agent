@@ -7,14 +7,25 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.management.managed_team_model_credential_filter_reads import (
+    list_managed_team_model_credential_filters_for_actor,
+)
 from domains.gateway.application.management.managed_team_model_reads import (
     list_managed_team_models_for_actor,
 )
+from domains.gateway.application.management.reads import GatewayManagementReadService
+from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.gateway_model_list_response import (
     build_gateway_model_list_response,
 )
+from domains.gateway.presentation.managed_team_model_credential_filter_response import (
+    build_managed_team_model_credential_filter_list_response,
+)
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
-from domains.gateway.presentation.schemas.common import ManagedTeamModelListResponse
+from domains.gateway.presentation.schemas.common import (
+    ManagedTeamModelCredentialFilterListResponse,
+    ManagedTeamModelListResponse,
+)
 from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
 from libs.db.database import get_db
 
@@ -39,7 +50,17 @@ async def list_managed_team_models(
         query=query,
         search=search,
     )
-    base = build_gateway_model_list_response(result.page)
+    reads = GatewayManagementReadService(db)
+    team_cred_ids = {
+        row.credential_id
+        for row in result.page.items
+        if registry_kind_for_merged_row(row) == "team"
+    }
+    team_credentials_by_id = await reads.map_team_credentials_display_by_id(team_cred_ids)
+    base = build_gateway_model_list_response(
+        result.page,
+        team_credentials_by_id=team_credentials_by_id,
+    )
     return ManagedTeamModelListResponse(
         **base.model_dump(),
         queried_team_count=result.queried_team_count,
@@ -47,3 +68,21 @@ async def list_managed_team_models(
         queried_shared_team_count=result.queried_shared_team_count,
         tenant_ids_with_models=list(result.tenant_ids_with_models),
     )
+
+
+@router.get(
+    "/managed-team-model-credential-filters",
+    response_model=ManagedTeamModelCredentialFilterListResponse,
+)
+async def list_managed_team_model_credential_filters(
+    current_user: RequiredAuthUser,
+    db: DbSession,
+) -> ManagedTeamModelCredentialFilterListResponse:
+    """跨协作团队注册模型绑定的凭据（筛选下拉；成员可见团队内模型所用凭据名）。"""
+    is_platform_admin = current_user.role == ADMIN_ROLE
+    result = await list_managed_team_model_credential_filters_for_actor(
+        db,
+        user_id=get_user_uuid(current_user),
+        is_platform_admin=is_platform_admin,
+    )
+    return build_managed_team_model_credential_filter_list_response(result)

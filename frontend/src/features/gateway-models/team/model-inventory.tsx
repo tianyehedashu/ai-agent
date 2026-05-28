@@ -62,6 +62,7 @@ interface ModelInventoryProps {
   onCredentialFilterChange?: (v: string) => void
   credentialFilterOptions?: readonly GatewayModelCredentialFilterOption[]
   credentialFilterLoading?: boolean
+  selectedCredentialName?: string | null
   providerChoices: string[]
   usageDays: UsagePeriodDays
   onUsageDaysChange: (d: UsagePeriodDays) => void
@@ -131,6 +132,7 @@ export const ModelInventory = memo(function ModelInventory({
   onCredentialFilterChange,
   credentialFilterOptions = [],
   credentialFilterLoading = false,
+  selectedCredentialName,
   providerChoices,
   usageDays,
   onUsageDaysChange,
@@ -231,9 +233,9 @@ export const ModelInventory = memo(function ModelInventory({
           </div>
         </div>
       ) : null}
-      <div className="space-y-2.5 border-b p-3">
-        <div className="flex gap-2">
-          <div className="relative min-w-0 flex-1">
+      <div className="space-y-3 border-b p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 basis-[min(100%,220px)]">
             <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
@@ -241,7 +243,7 @@ export const ModelInventory = memo(function ModelInventory({
                 onSearchChange(e.target.value)
               }}
               placeholder="搜索别名、底模、通道、凭据…"
-              className="h-8 pl-8 text-sm"
+              className="h-8 w-full pl-8 text-sm"
               aria-label="搜索模型"
             />
           </div>
@@ -251,6 +253,7 @@ export const ModelInventory = memo(function ModelInventory({
               onChange={onCredentialFilterChange}
               options={credentialFilterOptions}
               loading={credentialFilterLoading}
+              selectedCredentialName={selectedCredentialName}
             />
           ) : null}
           <Select
@@ -301,6 +304,18 @@ export const ModelInventory = memo(function ModelInventory({
               onRefresh={onRefreshList}
             />
           ) : null}
+          {canWrite && onRegister ? (
+            <Button
+              size="sm"
+              className="h-8 shrink-0"
+              onMouseEnter={onPreloadRegister}
+              onFocus={onPreloadRegister}
+              onClick={onRegister}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              添加模型
+            </Button>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -340,19 +355,6 @@ export const ModelInventory = memo(function ModelInventory({
                 </button>
               ))}
             </div>
-            {canWrite && onRegister ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs sm:hidden"
-                onMouseEnter={onPreloadRegister}
-                onFocus={onPreloadRegister}
-                onClick={onRegister}
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                注册
-              </Button>
-            ) : null}
           </div>
         </div>
       </div>

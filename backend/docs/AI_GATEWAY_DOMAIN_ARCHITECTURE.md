@@ -207,15 +207,17 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **SSOT**：`domain/team_credential_access.py`（凭据读/写/reveal/probe 过滤）、`domain/policies/team_model_access.py`（模型 create/update/delete）。Presentation 层 **`CurrentTeam`（member+）** 仅保证团队成员身份；细粒度授权在 Domain/Application。**平台 admin 无旁路**（对齐 `virtual_key_access.py`）。
 
-| 资源 | 创建 | 查看/改/删凭据 | 基于凭据添加/改模型 | 删模型 |
-|------|------|----------------|---------------------|--------|
-| 自己创建的 team 凭据 | member+ | 仅创建者 | 仅创建者 | 创建者 + team admin |
-| 他人 team 凭据 | — | 不可（404 防枚举） | 不可 | team admin 可删关联模型 |
+| 资源 | 创建 | 团队 Tab 列表 | 改/删/reveal 凭据 | 基于凭据添加/改模型 | 删模型 |
+|------|------|-------------|-------------------|---------------------|--------|
+| 自己创建的 team 凭据 | member+ | 全部字段（含掩码） | 仅创建者 | 仅创建者 | 创建者 + team admin |
+| 他人 team 凭据 | — | 非敏感字段（名/通道/状态/创建者） | 不可（详情 404） | 不可 | team admin 可删关联模型 |
 | system 凭据 | 平台 admin | 平台 admin + ACL | 平台 admin | 平台 admin |
 | legacy（`created_by_user_id IS NULL`） | — | **保留旧行为**：team admin+ | team admin+ | team admin+ |
 
 - **数据列**：`provider_credentials.created_by_user_id`（团队 scope 创建者；BYOK `scope=user` 不写入）。
-- **读侧**：`list_credentials_for_team` / summaries / `GET /managed-team-credentials` 经 `filter_team_credentials_visible_to_actor`；模型列表经 join 填充 **`credential_name`**、**`credential_created_by_user_id`**（不放宽凭据 reveal）。
+- **读侧（凭据管理列表）**：`list_credentials_for_team` / `GET /managed-team-credentials` 列出 membership 协作团队内**全部** team 凭据；`management_access=metadata` 时无 `api_base`/`extra`/真实掩码；`full` 仅创建者与 legacy admin+。
+- **读侧（凭据详情/reveal）**：`GET /credentials/{id}`、`reveal`、写操作仍经 `filter_team_credentials_visible_to_actor`（他人私有 404，防枚举）。
+- **读侧（模型上下文）**：团队/跨团队模型列表与详情、``GET /managed-team-model-credential-filters`` 可展示绑定凭据的 **`credential_name`**、**`credential_created_by_user_id`**、通道等**非敏感**字段；**不**含 `api_key` / `reveal` / 完整 `api_base`（仍仅创建者或 team admin+ legacy）。
 - **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 或 legacy admin 断言。
 - **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, or_, select
 
+from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
@@ -26,6 +27,16 @@ class EffectiveProviderSummary:
     credential_count: int
     has_managed: bool
     has_user: bool
+
+
+@dataclass(frozen=True)
+class TeamRegistryCredentialDisplay:
+    """团队注册模型引用的凭据（列表筛选下拉，不做 reveal 过滤）。"""
+
+    id: uuid.UUID
+    name: str
+    provider: str
+    tenant_id: uuid.UUID
 
 
 class ProviderCredentialRepository:
@@ -59,6 +70,40 @@ class ProviderCredentialRepository:
         stmt = select(ProviderCredential).where(ProviderCredential.id.in_(credential_ids))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_distinct_for_team_registry_in_tenants(
+        self,
+        tenant_ids: list[uuid.UUID],
+    ) -> list[TeamRegistryCredentialDisplay]:
+        """协作团队注册模型绑定的凭据（去重，供跨团队模型列表筛选下拉）。"""
+        if not tenant_ids:
+            return []
+        stmt = (
+            select(
+                ProviderCredential.id,
+                ProviderCredential.name,
+                ProviderCredential.provider,
+                ProviderCredential.tenant_id,
+            )
+            .join(GatewayModel, GatewayModel.credential_id == ProviderCredential.id)
+            .where(
+                GatewayModel.tenant_id.in_(tenant_ids),
+                ProviderCredential.tenant_id.in_(tenant_ids),
+            )
+            .distinct()
+            .order_by(ProviderCredential.tenant_id, ProviderCredential.name)
+        )
+        result = await self._session.execute(stmt)
+        return [
+            TeamRegistryCredentialDisplay(
+                id=row.id,
+                name=row.name,
+                provider=row.provider,
+                tenant_id=row.tenant_id,
+            )
+            for row in result.all()
+            if row.tenant_id is not None
+        ]
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[ProviderCredential]:
         stmt = (
@@ -331,4 +376,8 @@ class ProviderCredentialRepository:
         await self._session.flush()
         return new_cred
 
-__all__ = ["EffectiveProviderSummary", "ProviderCredentialRepository"]
+__all__ = [
+    "EffectiveProviderSummary",
+    "ProviderCredentialRepository",
+    "TeamRegistryCredentialDisplay",
+]

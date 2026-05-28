@@ -53,24 +53,17 @@ async def readable_team_credential_ids_for_tenants(
     if not tenant_ids:
         return frozenset()
     repo = ProviderCredentialRepository(session)
-    all_rows = await repo.list_team_scope_for_tenants_page(
-        tenant_ids,
-        offset=0,
-        limit=100_000,
-    )
     out: set[uuid.UUID] = set()
-    for row in all_rows:
-        if row.tenant_id is None:
-            continue
-        team_role = role_by_tenant.get(row.tenant_id, "member")
+    for tenant_id in tenant_ids:
+        rows = await repo.list_for_tenant(tenant_id)
+        team_role = role_by_tenant.get(tenant_id, "member")
         visible = filter_team_credentials_visible_to_actor(
-            [row],
+            rows,
             actor_user_id=actor_user_id,
             team_role=team_role,
             is_platform_admin=is_platform_admin,
         )
-        if visible:
-            out.add(row.id)
+        out.update(row.id for row in visible)
     return frozenset(out)
 
 

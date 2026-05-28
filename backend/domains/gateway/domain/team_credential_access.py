@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from domains.gateway.domain.errors import CredentialNotFoundError
 from domains.tenancy.domain.policies.team_role import TeamRole
+
+CredentialManagementAccess = Literal["full", "metadata"]
 
 
 class TeamCredentialAccessView(Protocol):
@@ -134,6 +136,31 @@ def assert_team_credential_writable_by_actor(
     return record
 
 
+def team_credential_management_access(
+    *,
+    scope: str | None,
+    tenant_id: UUID | None,
+    created_by_user_id: UUID | None,
+    actor_user_id: UUID | None,
+    team_role: str,
+    is_platform_admin: bool,
+) -> CredentialManagementAccess:
+    """团队凭据 Tab 列表：成员可见全部行，敏感字段按是否具备 reveal 权限分级。"""
+    api_scope = "team" if scope == "team" or tenant_id is not None else scope
+    if api_scope == "system":
+        return "full" if is_platform_admin else "metadata"
+    if api_scope != "team":
+        return "full" if actor_user_id is not None else "metadata"
+    if can_read_team_credential(
+        created_by_user_id=created_by_user_id,
+        actor_user_id=actor_user_id,
+        team_role=team_role,
+        is_platform_admin=is_platform_admin,
+    ):
+        return "full"
+    return "metadata"
+
+
 def filter_team_credentials_visible_to_actor(
     credentials: list[TeamCredentialAccessView],
     *,
@@ -156,6 +183,7 @@ def filter_team_credentials_visible_to_actor(
 
 
 __all__ = [
+    "CredentialManagementAccess",
     "TeamCredentialAccessView",
     "actor_owns_team_credential",
     "assert_team_credential_readable_by_actor",
@@ -166,4 +194,5 @@ __all__ = [
     "filter_team_credentials_visible_to_actor",
     "is_legacy_shared_team_credential",
     "is_team_admin_role",
+    "team_credential_management_access",
 ]

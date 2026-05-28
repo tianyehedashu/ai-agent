@@ -23,6 +23,10 @@ import {
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import { FILTER_ALL, type HealthFilter } from '@/features/gateway-models/constants'
+import {
+  credentialFilterOptionsFromModels,
+  mergeCredentialFilterOptions,
+} from '@/features/gateway-models/gateway-model-credential-filter-options'
 import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
 import {
   canDeleteGatewayModel,
@@ -38,7 +42,7 @@ import {
 import { teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
 import { CollaborationTeamsModelsGroupedList } from '@/features/gateway-models/team/collaboration-teams-models-grouped-list'
-import { useManagedTeamCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
+import { useGatewayModelCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
 import { useManagedTeamModelsList } from '@/features/gateway-models/use-managed-team-models-list'
 import { channelLabel, resolveGatewayModelTeamId } from '@/features/gateway-models/utils'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -49,6 +53,7 @@ import {
 } from '@/features/gateway-teams/use-collaboration-teams-overview-resolution'
 import {
   useGatewayMemberCollaborationTeams,
+  useGatewayMemberTeamNameMap,
   useGatewayWritableCollaborationTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -60,6 +65,7 @@ import { MODEL_PROVIDERS } from '@/types/user-model'
 export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
+  const teamNameById = useGatewayMemberTeamNameMap()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
 
@@ -82,8 +88,8 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const isModelSearchStale = deferredModelSearch.trim() !== modelSearchTrimmed
   const isListSearchStale = isDeferredTeamSearchStale || isModelSearchStale
 
-  const { options: credentialFilterOptions, isLoading: credentialOptionsLoading } =
-    useManagedTeamCredentialFilterOptions(hasCollaborationTeams)
+  const { options: summaryCredentialOptions, isLoading: credentialOptionsLoading } =
+    useGatewayModelCredentialFilterOptions('team-collaboration', true)
 
   const listQueryBase = useMemo(
     () => ({
@@ -120,6 +126,23 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
 
   const registryItems = useMemo(() => listData?.items ?? [], [listData?.items])
   const connectivitySummary = listData?.connectivity_summary
+
+  const credentialFilterOptions = useMemo(
+    () =>
+      mergeCredentialFilterOptions(
+        summaryCredentialOptions,
+        credentialFilterOptionsFromModels(registryItems, teamNameById)
+      ),
+    [summaryCredentialOptions, registryItems, teamNameById]
+  )
+
+  const selectedCredentialName = useMemo(() => {
+    if (!credentialFilter) return null
+    const fromOption = credentialFilterOptions.find((option) => option.id === credentialFilter)
+    if (fromOption) return fromOption.name
+    const fromModel = registryItems.find((model) => model.credential_id === credentialFilter)
+    return fromModel?.credential_name?.trim() ?? null
+  }, [credentialFilter, credentialFilterOptions, registryItems])
 
   const teamWritableById = useMemo(() => {
     const map = new Map<string, boolean>()
@@ -310,68 +333,14 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
         onRetestFailed={retestFailed}
         onScrollToFirstFailed={scrollToFirstFailed}
       />
-      <div className="space-y-2.5 border-b p-3">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className="space-y-3 border-b p-3">
+        <div className="flex flex-wrap items-center gap-2">
           {summaryLabel ? (
             <Badge variant="secondary" className="font-normal">
               {summaryLabel}
             </Badge>
           ) : null}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[180px] max-w-xs">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={teamSearch}
-                onChange={(e) => {
-                  handleTeamSearchChange(e.target.value)
-                }}
-                placeholder="按团队筛选"
-                className="h-8 pl-8 text-sm"
-                aria-label="按团队名称筛选"
-              />
-            </div>
-            <Input
-              value={modelSearch}
-              onChange={(e) => {
-                handleModelSearchChange(e.target.value)
-              }}
-              placeholder="搜索别名、底模、通道、凭据…"
-              className="h-8 w-[180px] text-sm"
-              aria-label="按模型名称筛选"
-            />
-            <GatewayModelCredentialFilterSelect
-              value={credentialFilter}
-              onChange={handleCredentialFilterChange}
-              options={credentialFilterOptions}
-              loading={credentialOptionsLoading}
-              triggerClassName="w-[180px]"
-            />
-            <Select
-              value={providerFilter || FILTER_ALL}
-              onValueChange={(v) => {
-                setProviderFilter(v === FILTER_ALL ? '' : v)
-                setPage(1)
-              }}
-            >
-              <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="按接入通道筛选">
-                <SelectValue placeholder="全部通道" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={FILTER_ALL}>全部通道</SelectItem>
-                {providerChoices.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {channelLabel(id)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <RegistryAbilityFilterSelect
-              value={abilityFilter}
-              onValueChange={(v) => {
-                setAbilityFilter(v)
-                setPage(1)
-              }}
-            />
+          <div className="ml-auto flex items-center gap-2">
             <GatewayRefreshButton
               isFetching={isFetching}
               ariaLabel="刷新团队模型"
@@ -386,6 +355,69 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
               </Button>
             ) : null}
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 basis-[min(100%,200px)] sm:max-w-[220px]">
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={teamSearch}
+              onChange={(e) => {
+                handleTeamSearchChange(e.target.value)
+              }}
+              placeholder="按团队筛选"
+              className="h-8 w-full pl-8 text-sm"
+              aria-label="按团队名称筛选"
+            />
+          </div>
+          <div className="relative min-w-0 flex-1 basis-[min(100%,220px)] sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={modelSearch}
+              onChange={(e) => {
+                handleModelSearchChange(e.target.value)
+              }}
+              placeholder="搜索别名、底模、通道、凭据…"
+              className="h-8 w-full pl-8 text-sm"
+              aria-label="按模型名称筛选"
+            />
+          </div>
+          <GatewayModelCredentialFilterSelect
+            value={credentialFilter}
+            onChange={handleCredentialFilterChange}
+            options={credentialFilterOptions}
+            loading={credentialOptionsLoading}
+            selectedCredentialName={selectedCredentialName}
+            triggerClassName="h-8 w-full min-w-[160px] sm:max-w-[280px]"
+          />
+          <Select
+            value={providerFilter || FILTER_ALL}
+            onValueChange={(v) => {
+              setProviderFilter(v === FILTER_ALL ? '' : v)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger
+              className="h-8 w-full min-w-[120px] text-xs sm:w-[130px]"
+              aria-label="按接入通道筛选"
+            >
+              <SelectValue placeholder="全部通道" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>全部通道</SelectItem>
+              {providerChoices.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {channelLabel(id)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <RegistryAbilityFilterSelect
+            value={abilityFilter}
+            onValueChange={(v) => {
+              setAbilityFilter(v)
+              setPage(1)
+            }}
+          />
         </div>
         <ConnectivityHealthStrip
           models={registryItems}

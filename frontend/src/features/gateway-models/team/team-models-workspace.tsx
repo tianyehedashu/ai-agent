@@ -22,6 +22,10 @@ import {
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
 import {
+  credentialFilterOptionsFromModels,
+  mergeCredentialFilterOptions,
+} from '@/features/gateway-models/gateway-model-credential-filter-options'
+import {
   canDeleteGatewayModel,
   canManageGatewayModel,
   canResyncGatewayModelCapabilities,
@@ -41,6 +45,7 @@ import {
   credentialsTeamListHref,
   teamModelDetailHref,
 } from '@/features/gateway-models/paths'
+import { useGatewayModelCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
 import {
   gatewayModelsListQueryKey,
   filterResyncableCapabilityModels,
@@ -50,6 +55,7 @@ import {
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
+import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
@@ -107,6 +113,12 @@ export function TeamModelsWorkspace({
     isFetching: directoryFetching,
     refetch: refetchDirectory,
   } = useGatewayCredentialDirectory()
+  const teamNameById = useGatewayMemberTeamNameMap()
+  const { options: summaryCredentialOptions, isLoading: credentialFilterOptionsLoading } =
+    useGatewayModelCredentialFilterOptions(
+      listMode === 'system' ? 'system' : 'team-collaboration',
+      true
+    )
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
@@ -218,6 +230,25 @@ export function TeamModelsWorkspace({
   const filteredModels = registryItems
   const connectivitySummary = listData?.connectivity_summary
 
+  const credentialFilterOptions = useMemo(
+    () =>
+      mergeCredentialFilterOptions(
+        summaryCredentialOptions,
+        credentialFilterOptionsFromModels(registryItems, teamNameById)
+      ),
+    [summaryCredentialOptions, registryItems, teamNameById]
+  )
+
+  const selectedCredentialName = useMemo(() => {
+    if (!credentialFilter) return null
+    const fromOption = credentialFilterOptions.find((option) => option.id === credentialFilter)
+    if (fromOption) return fromOption.name
+    const fromSummary = credentialSummariesById.get(credentialFilter)?.name
+    if (fromSummary) return fromSummary
+    const fromModel = registryItems.find((model) => model.credential_id === credentialFilter)
+    return fromModel?.credential_name?.trim() ?? null
+  }, [credentialFilter, credentialFilterOptions, credentialSummariesById, registryItems])
+
   useEffect(() => {
     if (!listData) return
     const maxPage = Math.max(1, Math.ceil(listData.total / listData.page_size))
@@ -295,16 +326,6 @@ export function TeamModelsWorkspace({
         return c.is_active || (credentialFilter !== '' && c.id === credentialFilter)
       }),
     [credentials, credentialFilter, listMode, viewerUserId, canWrite]
-  )
-
-  const credentialFilterOptions = useMemo(
-    () =>
-      activeCredentials.map((c) => ({
-        id: c.id,
-        name: c.name,
-        provider: c.provider,
-      })),
-    [activeCredentials]
   )
 
   const setCredentialFilter = useCallback(
@@ -725,7 +746,8 @@ export function TeamModelsWorkspace({
               credentialFilter={credentialFilter}
               onCredentialFilterChange={setCredentialFilter}
               credentialFilterOptions={credentialFilterOptions}
-              credentialFilterLoading={directoryFetching}
+              credentialFilterLoading={credentialFilterOptionsLoading || directoryFetching}
+              selectedCredentialName={selectedCredentialName}
               providerChoices={providerChoices}
               usageDays={usageDays}
               onUsageDaysChange={setUsageDays}

@@ -1,42 +1,83 @@
 /**
- * 跨团队模型筛选：当前 actor 可见的团队凭据选项（managed-team-credentials）。
+ * 模型列表「按凭据筛选」选项。
+ *
+ * 团队 Tab 使用 ``/managed-team-model-credential-filters``（注册模型绑定，成员可见凭据名）。
  */
 
 import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { fetchAllManagedTeamCredentials } from '@/api/gateway/credentials'
+import { modelsApi } from '@/api/gateway/models'
 import type { GatewayModelCredentialFilterOption } from '@/features/gateway-models/gateway-model-credential-filter-select'
-import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
+import { fetchPlaygroundCredentialSummaries } from '@/features/gateway-playground/playground-credential-summaries'
+import {
+  useGatewayMemberTeamNameMap,
+  useGatewayMemberTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 
-export function useManagedTeamCredentialFilterOptions(enabled: boolean): {
+export type GatewayModelCredentialFilterScope = 'team-collaboration' | 'system'
+
+const MODEL_CREDENTIAL_FILTER_QUERY_KEY = ['gateway', 'model-credential-filter'] as const
+
+export function useGatewayModelCredentialFilterOptions(
+  scope: GatewayModelCredentialFilterScope,
+  enabled: boolean
+): {
   options: GatewayModelCredentialFilterOption[]
   isLoading: boolean
 } {
   const teamNameById = useGatewayMemberTeamNameMap()
+  const { data: memberTeams = [], isLoading: teamsLoading } = useGatewayMemberTeams(enabled)
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ['gateway', 'managed-team-credentials', 'filter-options'],
-    queryFn: () => fetchAllManagedTeamCredentials(),
-    enabled,
+  const teamFiltersQuery = useQuery({
+    queryKey: [...MODEL_CREDENTIAL_FILTER_QUERY_KEY, 'managed-team-registry', scope],
+    queryFn: () => modelsApi.listManagedTeamModelCredentialFilters(),
+    enabled: enabled && scope === 'team-collaboration',
+    staleTime: 60_000,
+  })
+
+  const systemFiltersQuery = useQuery({
+    queryKey: [...MODEL_CREDENTIAL_FILTER_QUERY_KEY, 'playground-system', memberTeams.length],
+    queryFn: async (): Promise<GatewayModelCredentialFilterOption[]> => {
+      const summaries = await fetchPlaygroundCredentialSummaries(memberTeams)
+      return summaries
+        .filter((cred) => cred.scope === 'system')
+        .map((cred) => ({
+          id: cred.id,
+          name: cred.name,
+          provider: cred.provider,
+        }))
+    },
+    enabled: enabled && scope === 'system' && memberTeams.length > 0,
     staleTime: 60_000,
   })
 
   const options = useMemo((): GatewayModelCredentialFilterOption[] => {
-    return items
-      .map((cred) => ({
-        id: cred.id,
-        name: cred.name,
-        provider: cred.provider,
-        teamLabel: cred.tenant_id ? teamNameById.get(cred.tenant_id) : undefined,
-      }))
-      .sort((a, b) => optionLabelForSort(a).localeCompare(optionLabelForSort(b), 'zh-CN'))
-  }, [items, teamNameById])
+    if (scope === 'system') {
+      return [...(systemFiltersQuery.data ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name, 'zh-CN')
+      )
+    }
+    return (teamFiltersQuery.data?.items ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
+      teamLabel: teamNameById.get(row.tenant_id),
+    }))
+  }, [scope, systemFiltersQuery.data, teamFiltersQuery.data?.items, teamNameById])
+
+  const isLoading =
+    teamsLoading ||
+    (scope === 'team-collaboration' ? teamFiltersQuery.isLoading : systemFiltersQuery.isLoading)
 
   return { options, isLoading }
 }
 
-function optionLabelForSort(option: GatewayModelCredentialFilterOption): string {
-  return `${option.teamLabel ?? ''}\0${option.name}`
+/** @deprecated 使用 {@link useGatewayModelCredentialFilterOptions}('team-collaboration', …) */
+export function useManagedTeamCredentialFilterOptions(enabled: boolean): {
+  options: GatewayModelCredentialFilterOption[]
+  isLoading: boolean
+} {
+  return useGatewayModelCredentialFilterOptions('team-collaboration', enabled)
 }

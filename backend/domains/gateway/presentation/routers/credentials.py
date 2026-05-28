@@ -8,6 +8,7 @@ from fastapi import APIRouter, status
 
 from domains.gateway.presentation.credential_response import (
     build_credential_response,
+    build_credential_response_for_team_workspace_list,
     build_credential_summary_response,
     credential_api_bases_from_body,
     decrypt_credential_api_key_for_reveal,
@@ -48,14 +49,22 @@ async def list_credentials(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[CredentialResponse]:
+    enc_key = encryption_key()
     creds = await reads.list_credentials_for_team(
         team.team_id,
-        actor_user_id=team.user_id,
-        team_role=team.team_role,
         include_system=team.is_platform_admin,
-        encryption_key=encryption_key(),
+        encryption_key=enc_key,
     )
-    return [build_credential_response(c, encryption_key=encryption_key()) for c in creds]
+    return [
+        build_credential_response_for_team_workspace_list(
+            c,
+            encryption_key=enc_key,
+            actor_user_id=team.user_id,
+            team_role=team.team_role,
+            is_platform_admin=team.is_platform_admin,
+        )
+        for c in creds
+    ]
 
 
 @router.get("/credentials/summaries", response_model=list[CredentialSummaryResponse])
@@ -63,7 +72,7 @@ async def list_credential_summaries(
     team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[CredentialSummaryResponse]:
-    """团队 member 可读：仅 actor 可见的 team 凭据 + system 摘要（无密钥）。"""
+    """团队内全部 team 凭据摘要 + ACL 过滤后的 system（无密钥）。"""
     rows = await reads.list_credential_summaries_for_team(
         team.team_id,
         user_id=team.user_id,

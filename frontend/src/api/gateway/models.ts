@@ -223,6 +223,19 @@ export interface ManagedTeamModelListResponse extends GatewayModelListResponse {
   tenant_ids_with_models: string[]
 }
 
+/** GET /managed-team-model-credential-filters */
+export interface ManagedTeamModelCredentialFilterItem {
+  id: string
+  name: string
+  provider: string
+  tenant_id: string
+}
+
+export interface ManagedTeamModelCredentialFilterListResponse {
+  items: ManagedTeamModelCredentialFilterItem[]
+  queried_team_count: number
+}
+
 export interface ListManagedTeamModelsParams extends Omit<GatewayModelListQuery, 'registry_scope'> {
   search?: string
 }
@@ -434,6 +447,12 @@ export const modelsApi = {
       search
     )
   },
+
+  /** 团队 Tab 模型列表：按凭据筛选下拉（注册模型绑定，含成员可见名） */
+  listManagedTeamModelCredentialFilters: () =>
+    apiClient.get<ManagedTeamModelCredentialFilterListResponse>(
+      `${GATEWAY_API_BASE}/managed-team-model-credential-filters`
+    ),
 
   /** 单条团队/系统注册模型 */
   getModel: (teamId: string, id: string, params?: Pick<GatewayModelListQuery, 'registry_scope'>) =>
