@@ -414,11 +414,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
     ) -> ModelListPageResult:
         if user_id is not None:
             await assert_team_model_list_credential_filter(
+                self._session,
                 self,
                 query.credential_id,
                 tenant_id=tenant_id,
                 actor_user_id=user_id,
-                team_role=team_role,
                 is_platform_admin=is_platform_admin,
             )
         return await list_gateway_models_page(
@@ -445,11 +445,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
     ) -> ModelListIdsResult:
         if user_id is not None:
             await assert_team_model_list_credential_filter(
+                self._session,
                 self,
                 query.credential_id,
                 tenant_id=tenant_id,
                 actor_user_id=user_id,
-                team_role=team_role,
                 is_platform_admin=is_platform_admin,
             )
         return await list_gateway_model_ids(

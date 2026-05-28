@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
+import { MANAGED_TEAM_MODELS_QUERY_KEY } from '@/features/gateway-models/use-managed-team-models-list'
 import {
   GATEWAY_MODELS_STALE_MS,
   GATEWAY_MY_MODELS_ALL_QUERY_KEY,
@@ -24,6 +25,10 @@ import {
   type PlaygroundCredentialOption,
 } from './playground-credential-options'
 import { buildPlaygroundCandidateModels } from './playground-model-sources'
+import {
+  filterPlaygroundManagedTeamModels,
+  shouldQueryManagedTeamModelsForPlayground,
+} from './playground-team-models-query'
 
 import type { ModelCandidate } from './playground-mode-filter'
 
@@ -93,20 +98,40 @@ export function usePlaygroundFilteredModels(
   const isPersonalCredential = isPersonalPlaygroundCredential(credentialById, credentialId)
   const teamCredentialFilter = credentialId && !isPersonalCredential ? credentialId : ''
   const teamRegistryScope = resolvePlaygroundTeamRegistryScope(teamCredentialFilter)
-  const includeTeamModels = Boolean(contextTeamId) && (!credentialId || !isPersonalCredential)
+  const useManagedTeamModelsQuery = shouldQueryManagedTeamModelsForPlayground(
+    teamCredentialFilter,
+    isPersonalCredential
+  )
+  const includeTeamModels =
+    useManagedTeamModelsQuery ||
+    (Boolean(contextTeamId) && (!credentialId || !isPersonalCredential))
   const includeMyModels = !credentialId || isPersonalCredential
   const includeRoutes =
     fetchRoutes && Boolean(contextTeamId) && !(credentialId && isPersonalCredential)
 
   const teamModelsQuery = useInfiniteQuery({
-    queryKey: contextTeamId
-      ? [...playgroundTeamModelsQueryKey(contextTeamId, teamCredentialFilter), 'infinite']
-      : ['gateway', 'models', 'requestable', 'none'],
+    queryKey: useManagedTeamModelsQuery
+      ? [
+          ...MANAGED_TEAM_MODELS_QUERY_KEY,
+          'playground',
+          teamCredentialFilter,
+          contextTeamId ?? '',
+          'infinite',
+        ]
+      : contextTeamId
+        ? [...playgroundTeamModelsQueryKey(contextTeamId, teamCredentialFilter), 'infinite']
+        : ['gateway', 'models', 'requestable', 'none'],
     queryFn: ({ pageParam }) => {
+      if (useManagedTeamModelsQuery) {
+        return gatewayApi.listManagedTeamModels({
+          credential_id: teamCredentialFilter,
+          page: pageParam,
+          page_size: MAX_PAGE_SIZE,
+        })
+      }
       if (!contextTeamId) return Promise.reject(new Error('未选择团队'))
       return gatewayApi.listModels(contextTeamId, {
         registry_scope: teamRegistryScope,
-        ...(teamCredentialFilter ? { credential_id: teamCredentialFilter } : {}),
         page: pageParam,
         page_size: MAX_PAGE_SIZE,
       })
@@ -163,7 +188,11 @@ export function usePlaygroundFilteredModels(
     isSuccess: myModelsSuccess,
   } = myModelsQuery
 
-  const teamModels = useMemo(() => teamData?.pages.flatMap((page) => page.items) ?? [], [teamData])
+  const teamModels = useMemo(() => {
+    const items = teamData?.pages.flatMap((page) => page.items) ?? []
+    if (!useManagedTeamModelsQuery) return items
+    return filterPlaygroundManagedTeamModels(items, contextTeamId)
+  }, [teamData, useManagedTeamModelsQuery, contextTeamId])
   const myModels = useMemo(() => myData?.pages.flatMap((page) => page.items) ?? [], [myData])
 
   const shouldLoadMoreTeam = includeTeamModels && teamHasNextPage && !isFetchingNextTeamPage
@@ -261,6 +290,7 @@ export function usePlaygroundFilteredModels(
       refetchMyModels(),
       routesQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY] }),
+      queryClient.invalidateQueries({ queryKey: [...MANAGED_TEAM_MODELS_QUERY_KEY] }),
     ])
   }, [queryClient, refetchMyModels, refetchTeamModels, routesQuery])
 

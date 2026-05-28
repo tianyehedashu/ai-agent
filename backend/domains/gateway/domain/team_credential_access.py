@@ -46,6 +46,26 @@ def can_manage_legacy_team_credential(
     return is_team_admin_role(team_role)
 
 
+def can_filter_team_models_by_credential(
+    *,
+    created_by_user_id: UUID | None,
+    actor_user_id: UUID,
+    creator_team_role: str | None,
+    is_platform_admin: bool,
+) -> bool:
+    """模型列表 ``credential_id`` 筛选：弱于 reveal，成员可按 owner/admin 凭据筛模型。"""
+    if is_platform_admin:
+        return True
+    if actor_owns_team_credential(
+        created_by_user_id=created_by_user_id,
+        actor_user_id=actor_user_id,
+    ):
+        return True
+    if is_legacy_shared_team_credential(created_by_user_id):
+        return True
+    return is_team_admin_role(creator_team_role or TeamRole.MEMBER.value)
+
+
 def can_read_team_credential(
     *,
     created_by_user_id: UUID | None,
@@ -177,6 +197,7 @@ __all__ = [
     "actor_owns_team_credential",
     "assert_team_credential_readable_by_actor",
     "assert_team_credential_writable_by_actor",
+    "can_filter_team_models_by_credential",
     "can_manage_legacy_team_credential",
     "can_read_team_credential",
     "can_write_team_credential",

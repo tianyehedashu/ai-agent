@@ -9,6 +9,7 @@ from domains.gateway.domain.team_credential_access import (
     actor_owns_team_credential,
     assert_team_credential_readable_by_actor,
     assert_team_credential_writable_by_actor,
+    can_filter_team_models_by_credential,
     can_manage_legacy_team_credential,
     can_read_team_credential,
     filter_team_credentials_visible_to_actor,
@@ -116,3 +117,47 @@ def test_filter_visible_credentials() -> None:
     assert legacy in admin_visible
     assert own not in admin_visible
     assert other not in admin_visible
+
+
+def test_can_filter_team_models_by_credential() -> None:
+    owner = uuid4()
+    member = uuid4()
+    peer = uuid4()
+    admin = uuid4()
+
+    assert can_filter_team_models_by_credential(
+        created_by_user_id=member,
+        actor_user_id=member,
+        creator_team_role=TeamRole.MEMBER.value,
+        is_platform_admin=False,
+    )
+    assert can_filter_team_models_by_credential(
+        created_by_user_id=owner,
+        actor_user_id=member,
+        creator_team_role=TeamRole.OWNER.value,
+        is_platform_admin=False,
+    )
+    assert not can_filter_team_models_by_credential(
+        created_by_user_id=member,
+        actor_user_id=owner,
+        creator_team_role=TeamRole.MEMBER.value,
+        is_platform_admin=False,
+    )
+    assert not can_filter_team_models_by_credential(
+        created_by_user_id=member,
+        actor_user_id=peer,
+        creator_team_role=TeamRole.MEMBER.value,
+        is_platform_admin=False,
+    )
+    assert can_filter_team_models_by_credential(
+        created_by_user_id=None,
+        actor_user_id=member,
+        creator_team_role=None,
+        is_platform_admin=False,
+    )
+    assert can_filter_team_models_by_credential(
+        created_by_user_id=admin,
+        actor_user_id=member,
+        creator_team_role=TeamRole.ADMIN.value,
+        is_platform_admin=False,
+    )
