@@ -96,6 +96,8 @@ class UsageStatisticsItem(UsageStatisticsMetric):
 
     group_key: str
     label: str
+    group_key_parts: list[str] | None = None
+    label_parts: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -500,10 +502,10 @@ __all__ = [
     "MarginSummaryReadModel",
     "ProviderPlanCostReadModel",
     "UsageLogReadModel",
-    "UsageStatisticsItem",
-    "UsageStatisticsMetric",
     "UsageStatisticsBreakdownSlice",
     "UsageStatisticsBreakdownSummary",
+    "UsageStatisticsItem",
+    "UsageStatisticsMetric",
     "UsageStatisticsSummary",
     "UserQuotaReadModel",
 ]

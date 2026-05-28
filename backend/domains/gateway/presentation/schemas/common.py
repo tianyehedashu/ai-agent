@@ -1109,6 +1109,8 @@ class UsageStatisticsMetricResponse(BaseModel):
 class UsageStatisticsItemResponse(UsageStatisticsMetricResponse):
     group_key: str
     label: str
+    group_key_parts: list[str] | None = None
+    label_parts: list[str] | None = None
 
 
 class UsageStatisticsResponse(PaginatedListResponse[UsageStatisticsItemResponse]):

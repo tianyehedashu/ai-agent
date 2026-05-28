@@ -22,7 +22,6 @@ def infer_provider_name(model: str) -> str:
         ("doubao", "volcengine"),
         ("glm", "zhipuai"),
         ("kimi", "moonshot"),
-        ("moonshot", "moonshot"),
     )
     for pattern, provider in patterns:
         if pattern in model_lower:

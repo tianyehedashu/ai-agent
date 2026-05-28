@@ -141,6 +141,7 @@ class QuotaRuleWritesMixin:
         succeeded: list[QuotaRuleReadModel] = []
 
         failed: list[QuotaRuleBatchFailure] = []
+        any_changed = False
 
         for index, cmd in enumerate(commands):
             try:
@@ -149,6 +150,7 @@ class QuotaRuleWritesMixin:
                     tenant_id=tenant_id,
                     is_platform_admin=is_platform_admin,
                 )
+                any_changed = True
 
                 if cmd.layer == "platform":
                     succeeded.append(budget_to_quota_rule(result, team_id=tenant_id))
@@ -187,6 +189,13 @@ class QuotaRuleWritesMixin:
                 logger.warning("quota rule batch upsert failed index=%s: %s", index, exc)
 
                 failed.append(QuotaRuleBatchFailure(index=index, error=str(exc)))
+
+        if any_changed:
+            from domains.gateway.application.gateway_cache_invalidation import (
+                invalidate_gateway_quota_rule_cache_for_team,
+            )
+
+            await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
 
         return QuotaRuleBatchResult(succeeded=succeeded, failed=failed)
 
@@ -247,9 +256,11 @@ class QuotaRuleWritesMixin:
         )
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
+            invalidate_gateway_quota_rule_cache_for_team,
         )
 
         await invalidate_gateway_budget_config_cache()
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         self.invalidate_tenant_gateway_read_caches(tenant_id)
         return budget
 

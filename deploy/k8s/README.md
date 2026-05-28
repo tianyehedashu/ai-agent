@@ -1,7 +1,8 @@
 # 阿里云 ACK 生产部署（当前生产环境）
 
 > 运维入口：`ssh wuhan-ali` → `kubectl -n test …`  
-> 故障排查 Skill：[`.agents/skills/k8s-production-debug/SKILL.md`](../../.agents/skills/k8s-production-debug/SKILL.md)
+> 故障排查 Skill：[`.agents/skills/k8s-production-debug/SKILL.md`](../../.agents/skills/k8s-production-debug/SKILL.md)  
+> **Higress 入口**（如 `gateway.giimallai.com`）：[deploy/higress/README.md](../higress/README.md)
 
 ## 架构
 

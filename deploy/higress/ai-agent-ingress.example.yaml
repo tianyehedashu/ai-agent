@@ -1,0 +1,30 @@
+# AI Agent — Higress Ingress 示例（gateway.giimallai.com 等同域部署）
+#
+# 要点：
+# - 保留 /ai-agent 前缀，勿 rewrite 为 /
+# - Chat SSE 需加长超时（higress.io/timeout）
+# - 推荐整站转发 frontend Service，由 Pod 内 Nginx 反代 /ai-agent/api/
+#
+# 应用前请替换：namespace、host、service 名称与端口。
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-agent
+  namespace: test
+  annotations:
+    higress.io/timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: higress
+  rules:
+    - host: gateway.giimallai.com
+      http:
+        paths:
+          - path: /ai-agent
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

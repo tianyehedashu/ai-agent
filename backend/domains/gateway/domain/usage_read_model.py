@@ -50,6 +50,7 @@ class UsageStatisticsGroupBy(StrEnum):
     PROVIDER = "provider"
     CAPABILITY = "capability"
     STATUS = "status"
+    USER_MODEL_CREDENTIAL = "user_model_credential"
 
 
 class UsageStatisticsBreakdownBy(StrEnum):

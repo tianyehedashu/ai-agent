@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from domains.gateway.application.management.quota_rule_cache import (
+    build_actor_role_hash,
+    get_cached_quota_rules,
+    put_cached_quota_rules,
+)
 from domains.gateway.application.management.quota_rule_read_mappers import (
     budget_to_quota_rule,
     filter_quota_rules,
@@ -36,6 +41,19 @@ async def assemble_team_quota_rules(
     filters: QuotaRuleListFilters | None = None,
 ) -> list[QuotaRuleReadModel]:
     """聚合 platform budget + upstream provider + downstream entitlement 规则。"""
+    actor_role_hash = build_actor_role_hash(
+        is_team_admin=is_team_admin,
+        is_platform_admin=is_platform_admin,
+        team_role=team_role,
+    )
+    cached = await get_cached_quota_rules(
+        team_id,
+        actor_role_hash=actor_role_hash,
+        filters=filters,
+    )
+    if cached is not None:
+        return cached
+
     rules: list[QuotaRuleReadModel] = []
 
     if is_team_admin:
@@ -110,6 +128,13 @@ async def assemble_team_quota_rules(
             model_name=filters.model_name,
             period=filters.period,
         )
+
+    await put_cached_quota_rules(
+        team_id,
+        rules,
+        actor_role_hash=actor_role_hash,
+        filters=filters,
+    )
     return rules
 
 

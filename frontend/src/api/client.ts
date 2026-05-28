@@ -176,6 +176,62 @@ class ApiClient {
     return queryString ? `${path}?${queryString}` : path
   }
 
+  /** 将 fetch/SSE 底层错误转为可读文案（含 Higress/HTTPS 常见原因） */
+  private normalizeStreamNetworkError(error: unknown, url: string): Error {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return error
+    }
+    if (error instanceof ApiError) {
+      return error
+    }
+    const raw = error instanceof Error ? error.message : String(error)
+    const lower = raw.toLowerCase()
+    const isNetwork =
+      lower.includes('network') ||
+      lower.includes('failed to fetch') ||
+      lower.includes('load failed') ||
+      lower.includes('networkerror')
+    if (!isNetwork) {
+      return error instanceof Error ? error : new Error(raw)
+    }
+    let hint =
+      '请确认使用与页面相同的协议访问（本环境 HTTP 可用、HTTPS 可能未开通），并检查网关是否将 /ai-agent/api 正确转发且 SSE 超时足够长。'
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(url, window.location.origin)
+        if (parsed.protocol === 'https:' && window.location.protocol === 'http:') {
+          hint = '页面为 HTTP，但 API 指向 HTTPS，请清空 VITE_API_URL 或改为 HTTP。'
+        }
+      } catch {
+        // ignore invalid URL
+      }
+    }
+    return new Error(`网络连接失败（${raw}）。${hint}`)
+  }
+
+  private async errorFromResponse(response: Response): Promise<ApiError> {
+    const errorBody: unknown = await response.json().catch(() => ({ message: 'Unknown error' }))
+    const fallback =
+      typeof errorBody === 'object' &&
+      errorBody !== null &&
+      'detail' in errorBody &&
+      typeof (errorBody as { detail: unknown }).detail === 'string'
+        ? (errorBody as { detail: string }).detail
+        : typeof errorBody === 'object' &&
+            errorBody !== null &&
+            'message' in errorBody &&
+            typeof (errorBody as { message: unknown }).message === 'string'
+          ? (errorBody as { message: string }).message
+          : `HTTP ${String(response.status)}`
+    const parsed = parseApiErrorBody(errorBody, fallback)
+    return new ApiError(response.status, parsed.message, {
+      code: parsed.code,
+      title: parsed.title,
+      errors: parsed.errors,
+      extra: parsed.extra,
+    })
+  }
+
   private buildQueryString(params?: Record<string, ApiQueryParamValue>): string {
     if (!params) return ''
     const searchParams = new URLSearchParams()
@@ -401,7 +457,7 @@ class ApiClient {
             this.failGlobalSession(true)
           }
         }
-        throw new ApiError(response.status, `HTTP ${String(response.status)}`)
+        throw await this.errorFromResponse(response)
       }
 
       const reader = response.body?.getReader()
@@ -412,39 +468,47 @@ class ApiClient {
       const decoder = new TextDecoder()
       let buffer = ''
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      while (true) {
-        const { done, value } = await reader.read()
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        while (true) {
+          const { done, value } = await reader.read()
 
-        if (done) {
-          onComplete?.()
-          break
-        }
+          if (done) {
+            onComplete?.()
+            break
+          }
 
-        // When done is false, value is guaranteed to be defined
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        const lastLine = lines.pop()
-        buffer = lastLine ?? ''
+          // When done is false, value is guaranteed to be defined
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          const lastLine = lines.pop()
+          buffer = lastLine ?? ''
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const jsonStr = line.slice(6)
-            if (jsonStr === '[DONE]') {
-              onComplete?.()
-              return
-            }
-            try {
-              const event = JSON.parse(jsonStr) as { type: string; data: unknown }
-              onEvent(event)
-            } catch {
-              // Ignore JSON parse errors
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6)
+              if (jsonStr === '[DONE]') {
+                onComplete?.()
+                return
+              }
+              try {
+                const event = JSON.parse(jsonStr) as { type: string; data: unknown }
+                onEvent(event)
+              } catch {
+                // Ignore JSON parse errors
+              }
             }
           }
         }
+      } finally {
+        reader.releaseLock()
       }
     } catch (error) {
-      onError?.(error as Error)
+      const normalized = this.normalizeStreamNetworkError(error, url)
+      if (normalized instanceof DOMException && normalized.name === 'AbortError') {
+        return
+      }
+      onError?.(normalized)
     }
   }
 }

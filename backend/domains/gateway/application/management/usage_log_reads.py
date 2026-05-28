@@ -166,6 +166,8 @@ class GatewayUsageLogReadMixin:
         return UsageStatisticsItem(
             group_key=GatewayUsageLogReadMixin._group_key_to_str(row.group_key),
             label=label,
+            group_key_parts=row.group_key_parts,
+            label_parts=row.label_parts,
             requests=row.requests,
             success_count=row.success_count,
             failure_count=row.failure_count,
@@ -240,6 +242,69 @@ class GatewayUsageLogReadMixin:
                 labels[key] = key or "未知状态"
         return labels
 
+    async def _build_user_model_credential_items(
+        self,
+        rows: list[RequestLogUsageAggregateRow],
+    ) -> list[UsageStatisticsItem]:
+        """为 USER_MODEL_CREDENTIAL 组合维度组装分组行，解析用户与凭据权威标签。"""
+        from contextlib import suppress
+        from uuid import UUID as _UUID
+
+        user_ids: list[_UUID] = []
+        credential_ids: list[_UUID] = []
+        for row in rows:
+            if isinstance(row.group_key, _UUID):
+                user_ids.append(row.group_key)
+            if row.group_key_parts and len(row.group_key_parts) > 2:
+                with suppress(ValueError):
+                    credential_ids.append(_UUID(row.group_key_parts[2]))
+
+        user_labels: dict[str, str] = {}
+        if user_ids:
+            summaries = await self._user_summaries.list_summary_views_by_ids(user_ids)
+            for uid, summary in summaries.items():
+                display = user_display_label(summary)
+                if display:
+                    user_labels[str(uid)] = display
+
+        cred_labels: dict[str, str] = {}
+        if credential_ids:
+            regular = await self._creds.list_by_ids(credential_ids)
+            cred_labels.update({str(row.id): row.name for row in regular})
+            missing = [cid for cid in credential_ids if str(cid) not in cred_labels]
+            if missing:
+                system = await self._system_creds.list_by_ids(missing)
+                cred_labels.update({str(row.id): row.name for row in system})
+
+        items: list[UsageStatisticsItem] = []
+        for row in rows:
+            key = self._group_key_to_str(row.group_key)
+            parts = row.group_key_parts or [key, "", ""]
+            user_label = user_labels.get(key) or (row.label_parts[0] if row.label_parts else "") or ("未知人员" if key else "未关联人员")
+            model_label = parts[1] or "未关联模型"
+            cred_key = parts[2] if len(parts) > 2 else ""
+            cred_label = cred_labels.get(cred_key) or (row.label_parts[2] if row.label_parts and len(row.label_parts) > 2 else "") or ("未关联凭据" if not cred_key else "已删除凭据")
+            label_parts = [user_label, model_label, cred_label]
+            label = f"{user_label} / {model_label} / {cred_label}"
+            items.append(
+                UsageStatisticsItem(
+                    group_key=key,
+                    label=label,
+                    group_key_parts=parts,
+                    label_parts=label_parts,
+                    requests=row.requests,
+                    success_count=row.success_count,
+                    failure_count=row.failure_count,
+                    input_tokens=row.input_tokens,
+                    output_tokens=row.output_tokens,
+                    cached_tokens=row.cached_tokens,
+                    cost_usd=row.cost_usd,
+                    avg_latency_ms=row.avg_latency_ms,
+                    cache_hit_count=row.cache_hit_count,
+                )
+            )
+        return items
+
     async def aggregate_usage_statistics(
         self,
         ctx: ManagementTeamContext,
@@ -266,11 +331,14 @@ class GatewayUsageLogReadMixin:
             page=page,
             page_size=page_size,
         )
-        labels = await self._usage_statistics_labels(rows, group_by)
-        items = [
-            self._item_from_row(row, labels.get(self._group_key_to_str(row.group_key), "未知"))
-            for row in rows
-        ]
+        if group_by == UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL:
+            items = await self._build_user_model_credential_items(rows)
+        else:
+            labels = await self._usage_statistics_labels(rows, group_by)
+            items = [
+                self._item_from_row(row, labels.get(self._group_key_to_str(row.group_key), "未知"))
+                for row in rows
+            ]
         summary = UsageStatisticsSummary(
             start=start,
             end=end,

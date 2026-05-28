@@ -74,6 +74,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const streamSessionIdRef = useRef<string | undefined>(undefined)
   const currentToolCallsRef = useRef<ToolCall[]>([])
   const currentRunIdRef = useRef<string | null>(null)
+  const streamingContentRef = useRef('')
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // 同步 sessionId 变化（当前视图会话 = URL 的 sessionId）
@@ -187,6 +188,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         case 'text': {
           const textData = event.data as { content?: string }
           if (textData.content) {
+            streamingContentRef.current += textData.content
             setStreamingContent((prev) => prev + (textData.content ?? ''))
             if (currentRunIdRef.current) {
               appendProcessEvent(currentRunIdRef.current, {
@@ -270,7 +272,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             usage?: Record<string, unknown>
             model?: string
           }
-          const finalContent = doneData.final_message?.content ?? ''
+          const doneContent = doneData.final_message?.content?.trim() ?? ''
+          const finalContent =
+            doneContent.length > 0 ? doneContent : streamingContentRef.current.trim()
           const runId = currentRunIdRef.current
           const metadata: Record<string, unknown> = runId ? { runId } : {}
           if (doneData.usage) metadata.usage = doneData.usage
@@ -303,6 +307,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           }
 
           setStreamingContent('')
+          streamingContentRef.current = ''
           setPendingToolCalls([])
           currentToolCallsRef.current = []
           currentRunIdRef.current = null
@@ -350,6 +355,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       abortControllerRef.current = null
       setIsLoading(false)
       setStreamingContent('')
+      streamingContentRef.current = ''
       currentToolCallsRef.current = []
       currentRunIdRef.current = null
       setCurrentRunId(null)
@@ -390,6 +396,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       // 重置状态
       setIsLoading(true)
       setStreamingContent('')
+      streamingContentRef.current = ''
       setInterrupt(null)
       currentToolCallsRef.current = []
       const runId = generateId()
@@ -479,6 +486,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const clearMessages = useCallback(() => {
     setMessages([])
     setStreamingContent('')
+    streamingContentRef.current = ''
     setPendingToolCalls([])
     setInterrupt(null)
     currentToolCallsRef.current = []

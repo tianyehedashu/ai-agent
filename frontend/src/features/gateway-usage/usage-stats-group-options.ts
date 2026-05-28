@@ -12,6 +12,7 @@ export const USAGE_STATS_GROUP_OPTIONS: ReadonlyArray<{
   { value: 'provider', label: '提供商' },
   { value: 'capability', label: '能力' },
   { value: 'status', label: '状态' },
+  { value: 'user_model_credential', label: '用户+模型+凭据' },
 ]
 
 const GROUP_LABEL_BY_VALUE = Object.fromEntries(
@@ -33,7 +34,8 @@ export function getUsageStatsIdentityColumnHeaders(
 ): readonly [parentLabel: string, modelLabel: string, credentialLabel: string] {
   const cached = IDENTITY_COLUMN_HEADERS_CACHE.get(groupBy)
   if (cached) return cached
-  const headers: readonly [string, string, string] = [usageStatsGroupLabel(groupBy), '模型', '凭据']
+  const parentLabel = groupBy === 'user_model_credential' ? '用户' : usageStatsGroupLabel(groupBy)
+  const headers: readonly [string, string, string] = [parentLabel, '模型', '凭据']
   IDENTITY_COLUMN_HEADERS_CACHE.set(groupBy, headers)
   return headers
 }

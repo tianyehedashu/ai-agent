@@ -9,17 +9,8 @@ import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats
 import type { UsageStatsRowBreakdown } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { BarChart3 } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
+import { formatCompact, formatPercent } from '@/lib/number'
 import { cn } from '@/lib/utils'
-
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
-}
-
-function formatCompact(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`
-  return value.toLocaleString()
-}
 
 export interface UsageStatsRankingTableProps {
   items: readonly GatewayUsageStatsItem[]

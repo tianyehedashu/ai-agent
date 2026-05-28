@@ -24,7 +24,7 @@ interface DrillDownMapping {
   groupByAfter: GatewayUsageStatsGroupBy
 }
 
-const DRILL_DOWN_MAP: Record<GatewayUsageStatsGroupBy, DrillDownMapping> = {
+const DRILL_DOWN_MAP: Partial<Record<GatewayUsageStatsGroupBy, DrillDownMapping>> = {
   user: { filterKey: 'user_id', groupByAfter: 'model' },
   credential: { filterKey: 'credential_id', groupByAfter: 'model' },
   team: { filterKey: 'team_id', groupByAfter: 'credential' },
@@ -49,6 +49,7 @@ export function drillDownNextState(
   if (trimmedKey.length === 0) return null
 
   const mapping = DRILL_DOWN_MAP[groupBy]
+  if (!mapping) return null
   const displayLabel = label.trim() || trimmedKey
 
   return {
@@ -116,7 +117,7 @@ export function clearDrillSegmentsFromFilterState(
 }
 
 export function shouldShowBreakdownColumns(groupBy: GatewayUsageStatsGroupBy): boolean {
-  return groupBy !== 'credential' && groupBy !== 'model'
+  return groupBy !== 'credential' && groupBy !== 'model' && groupBy !== 'user_model_credential'
 }
 
 export {

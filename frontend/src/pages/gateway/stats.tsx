@@ -40,6 +40,7 @@ import {
 } from '@/features/gateway-usage/gateway-filter-combobox'
 import { isCrossTeamUsageStatsEnabled } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { UsageStatsCubeTable } from '@/features/gateway-usage/usage-stats-cube-table'
 import { UsageStatsDetailSheet } from '@/features/gateway-usage/usage-stats-detail-sheet'
 import {
   applyDrillSegmentToFilterState,
@@ -884,18 +885,22 @@ export default function GatewayStatsPage(): React.JSX.Element {
             <div className="px-6 py-10 text-center text-sm text-muted-foreground">暂无数据</div>
           ) : null}
           {!statsQuery.isLoading && !statsQuery.isError && items.length > 0 ? (
-            <UsageStatsRankingTable
-              items={items}
-              maxRequests={maxRequests}
-              showCost={isAdmin}
-              showBreakdownCols={showBreakdownCols}
-              identityColumnHeaders={identityColumnHeaders}
-              breakdownByRowKey={breakdownByRowKey}
-              loadingRowKeys={loadingRowKeys}
-              credentialTopN={tableCredentialTopN}
-              onDrill={handleRowDrill}
-              onShowDetail={handleShowDetail}
-            />
+            groupBy === 'user_model_credential' ? (
+              <UsageStatsCubeTable items={items} maxRequests={maxRequests} showCost={isAdmin} />
+            ) : (
+              <UsageStatsRankingTable
+                items={items}
+                maxRequests={maxRequests}
+                showCost={isAdmin}
+                showBreakdownCols={showBreakdownCols}
+                identityColumnHeaders={identityColumnHeaders}
+                breakdownByRowKey={breakdownByRowKey}
+                loadingRowKeys={loadingRowKeys}
+                credentialTopN={tableCredentialTopN}
+                onDrill={handleRowDrill}
+                onShowDetail={handleShowDetail}
+              />
+            )
           ) : null}
           {statsQuery.data && statsQuery.data.total > PAGE_SIZE ? (
             <div className="border-t px-4 py-3">

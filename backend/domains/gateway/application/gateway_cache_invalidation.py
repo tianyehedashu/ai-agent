@@ -14,6 +14,11 @@ from domains.tenancy.application.team_cache import invalidate_team
 
 def invalidate_gateway_read_caches_for_tenant(tenant_id: UUID) -> None:
     """模型/路由/预算/grants 变更后失效该租户相关读缓存。"""
+    from domains.gateway.application.management.quota_rule_cache import (
+        clear_local_quota_rule_cache_for_team,
+    )
+
+    clear_local_quota_rule_cache_for_team(tenant_id)
     invalidate_for_tenant(tenant_id)
     invalidate_route_snapshot_cache_for_tenant(tenant_id)
     invalidate_team(tenant_id)
@@ -27,6 +32,14 @@ async def invalidate_gateway_budget_config_cache() -> None:
 
 async def invalidate_gateway_grants_cache_for_team(team_id: UUID) -> None:
     await invalidate_grants_for_team(team_id)
+
+
+async def invalidate_gateway_quota_rule_cache_for_team(team_id: UUID) -> None:
+    from domains.gateway.application.management.quota_rule_cache import (
+        invalidate_quota_rule_cache_for_team,
+    )
+
+    await invalidate_quota_rule_cache_for_team(team_id)
 
 
 def clear_all_gateway_read_caches_for_tests() -> None:
@@ -49,5 +62,6 @@ __all__ = [
     "clear_all_gateway_read_caches_for_tests",
     "invalidate_gateway_budget_config_cache",
     "invalidate_gateway_grants_cache_for_team",
+    "invalidate_gateway_quota_rule_cache_for_team",
     "invalidate_gateway_read_caches_for_tenant",
 ]

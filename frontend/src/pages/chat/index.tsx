@@ -72,6 +72,7 @@ export default function ChatPage(): React.JSX.Element {
       })
     },
     onSessionCreated: (id) => {
+      skipHistoryLoadForSessionRef.current = id
       navigate(`/chat/${id}`)
     },
   })
@@ -103,6 +104,8 @@ export default function ChatPage(): React.JSX.Element {
 
   // 用于判断是「离开/切换会话」还是「新建会话后进入」
   const prevSessionIdRef = useRef<string | undefined>(undefined)
+  /** 流式创建会话后 navigate 到 /chat/:id 时跳过拉历史，避免覆盖进行中的 SSE 内容 */
+  const skipHistoryLoadForSessionRef = useRef<string | null>(null)
 
   // 无会话时（新建对话）切回对话模式，避免底部只显示 Tab 不显示输入
   useEffect(() => {
@@ -150,23 +153,25 @@ export default function ChatPage(): React.JSX.Element {
           }
         })
 
-      // 加载历史消息
-      sessionApi
-        .getMessages(sessionId)
-        .then((messages) => {
-          // 只有当这个 effect 没有被取消时才更新状态
-          if (!cancelled) {
-            loadMessages(messages)
-          }
-        })
-        .catch((error: unknown) => {
-          // 如果加载失败，检查是否是权限问题
-          // 只有当这个 effect 没有被取消时才处理错误
-          if (!cancelled) {
-            console.error('Failed to load messages:', error)
-            handleSessionAccessError(error)
-          }
-        })
+      // 加载历史消息（流式新建会话时跳过，防止竞态覆盖助手回复）
+      const skipHistory = skipHistoryLoadForSessionRef.current === sessionId
+      if (skipHistory) {
+        skipHistoryLoadForSessionRef.current = null
+      } else {
+        sessionApi
+          .getMessages(sessionId)
+          .then((messages) => {
+            if (!cancelled) {
+              loadMessages(messages)
+            }
+          })
+          .catch((error: unknown) => {
+            if (!cancelled) {
+              console.error('Failed to load messages:', error)
+              handleSessionAccessError(error)
+            }
+          })
+      }
     } else {
       setCurrentSession(null)
       setSelectedModelRef(null)

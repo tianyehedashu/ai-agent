@@ -60,9 +60,11 @@ class EntitlementWritesMixin:
         )
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
+            invalidate_gateway_quota_rule_cache_for_team,
         )
 
         await invalidate_gateway_budget_config_cache()
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         self.invalidate_tenant_gateway_read_caches(tenant_id)
         return budget
 
@@ -83,9 +85,11 @@ class EntitlementWritesMixin:
             raise ManagementEntityNotFoundError("budget", str(budget_id))
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
+            invalidate_gateway_quota_rule_cache_for_team,
         )
 
         await invalidate_gateway_budget_config_cache()
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         self.invalidate_tenant_gateway_read_caches(tenant_id)
 
     async def create_alert_rule(self, *, tenant_id: uuid.UUID, name: str, description: str | None, metric: str, threshold: Decimal, window_minutes: int, channels: dict[str, Any], enabled: bool) -> GatewayAlertRule:
@@ -108,6 +112,8 @@ class EntitlementWritesMixin:
         plan = await self._provider_plans.create(credential_id=credential_id, real_model=real_model, label=label, valid_from=valid_from, valid_until=valid_until, is_active=is_active, auto_renew=auto_renew, notes=notes, extra=extra)
         for q in quotas or []:
             await self._provider_plans.add_quota(plan_id=plan.id, **q)
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return plan
 
     async def update_provider_plan(self, plan_id: uuid.UUID, *, credential_id: uuid.UUID, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any], quotas: list[dict[str, Any]] | None=None) -> ProviderPlan:
@@ -119,6 +125,8 @@ class EntitlementWritesMixin:
         result = await self._provider_plans.get(plan_id)
         if result is None:
             raise ManagementEntityNotFoundError('provider_plan', str(plan_id))
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return result
 
     async def delete_provider_plan(self, plan_id: uuid.UUID, *, credential_id: uuid.UUID, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
@@ -127,6 +135,8 @@ class EntitlementWritesMixin:
         ok = await self._provider_plans.delete(plan_id)
         if not ok:
             raise ManagementEntityNotFoundError('provider_plan', str(plan_id))
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
 
     async def create_entitlement_plan(self, *, scope: str, scope_id: uuid.UUID, tenant_id: uuid.UUID, is_platform_admin: bool, label: str, valid_from: datetime, valid_until: datetime, included_models: list[str] | None=None, included_capabilities: list[str] | None=None, is_active: bool=True, auto_renew: bool=False, notes: str | None=None, extra: dict[str, Any] | None=None, quotas: list[dict[str, Any]] | None=None) -> EntitlementPlan:
         if scope == 'vkey':
@@ -138,6 +148,8 @@ class EntitlementWritesMixin:
         plan = await self._entitlement_plans.create(scope=scope, scope_id=scope_id, label=label, valid_from=valid_from, valid_until=valid_until, included_models=included_models, included_capabilities=included_capabilities, is_active=is_active, auto_renew=auto_renew, notes=notes, extra=extra)
         for q in quotas or []:
             await self._entitlement_plans.add_quota(plan_id=plan.id, **q)
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return plan
 
     async def update_entitlement_plan(self, plan_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool, fields: dict[str, Any], quotas: list[dict[str, Any]] | None=None) -> EntitlementPlan:
@@ -148,6 +160,8 @@ class EntitlementWritesMixin:
         result = await self._entitlement_plans.get(plan_id)
         if result is None:
             raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return result
 
     async def delete_entitlement_plan(self, plan_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool) -> None:
@@ -155,3 +169,5 @@ class EntitlementWritesMixin:
         ok = await self._entitlement_plans.delete(plan_id)
         if not ok:
             raise ManagementEntityNotFoundError('entitlement_plan', str(plan_id))
+        from domains.gateway.application.gateway_cache_invalidation import invalidate_gateway_quota_rule_cache_for_team
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)

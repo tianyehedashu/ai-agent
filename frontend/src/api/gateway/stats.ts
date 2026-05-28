@@ -21,6 +21,7 @@ export type GatewayUsageStatsGroupBy =
   | 'provider'
   | 'capability'
   | 'status'
+  | 'user_model_credential'
 
 export interface GatewayUsageStatsMetric {
   requests: number
@@ -40,6 +41,8 @@ export interface GatewayUsageStatsMetric {
 export interface GatewayUsageStatsItem extends GatewayUsageStatsMetric {
   group_key: string
   label: string
+  group_key_parts?: string[]
+  label_parts?: string[]
 }
 
 export interface GatewayUsageStatsResponse extends PaginatedList<GatewayUsageStatsItem> {

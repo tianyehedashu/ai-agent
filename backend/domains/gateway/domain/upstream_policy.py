@@ -12,6 +12,7 @@ _PROVIDER_MAX_OUTPUT: dict[str, int] = {
     "dashscope": 8192,
     "zhipuai": 8192,
     "volcengine": 8192,
+    "moonshot": 8192,
     "openai": 4096,
     "anthropic": 4096,
 }
