@@ -12,6 +12,7 @@ _DEFAULT_API_BASE_BY_PROVIDER: dict[str, str] = {
     "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "zhipuai": "https://open.bigmodel.cn/api/paas/v4",
     "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
+    "moonshot": "https://api.moonshot.ai/v1",
 }
 
 

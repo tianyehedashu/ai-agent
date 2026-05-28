@@ -30,6 +30,7 @@ _EXTRA_KEYS_BY_PROVIDER: Final[dict[str, tuple[str, ...]]] = {
     "deepseek": (),
     "volcengine": ("region", "endpoint_id"),
     "zhipuai": (),
+    "moonshot": (),
     "cohere": (),
     "mistral": (),
     "fireworks": (),

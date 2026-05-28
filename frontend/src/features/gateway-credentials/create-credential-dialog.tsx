@@ -7,7 +7,7 @@
  * Provider 候选与差异化 extra 字段由 [`provider-schemas.ts`](./provider-schemas.ts) 驱动。
  */
 
-import { useEffect, useCallback, useMemo, useState } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import type { CredentialApiBases } from '@/api/gateway/credentials'
@@ -33,6 +33,11 @@ import {
 import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
 import { Eye, EyeOff } from '@/lib/lucide-icons'
 
+import {
+  buildCreateCredentialFormState,
+  resolveInitialTeamId,
+  shouldInitializeCreateCredentialForm,
+} from './create-credential-form-state'
 import { CredentialApiBasesFields } from './credential-api-bases-fields'
 import {
   apiBaseRequiredForProtocols,
@@ -86,16 +91,6 @@ function buildScopeOptions(
   return allowedScopes.map((s) => ({ value: s, label: labels[s] }))
 }
 
-function resolveInitialTeamId(
-  writableTeams: readonly GatewayTeam[],
-  defaultTeamId: string | undefined
-): string {
-  if (defaultTeamId && writableTeams.some((team) => team.id === defaultTeamId)) {
-    return defaultTeamId
-  }
-  return writableTeams[0]?.id ?? ''
-}
-
 export function CreateCredentialDialog({
   open,
   onOpenChange,
@@ -141,6 +136,7 @@ export function CreateCredentialDialog({
   const [extra, setExtra] = useState<CredentialExtraValues>({})
   const [showKey, setShowKey] = useState(false)
   const [teamId, setTeamId] = useState('')
+  const wasOpenRef = useRef(false)
 
   const teamOptions = useMemo(() => writableTeams ?? [], [writableTeams])
 
@@ -167,28 +163,31 @@ export function CreateCredentialDialog({
     [activeProtocols, schema?.apiBaseRequired]
   )
 
-  // 打开时重置；按 scope 切换时若当前 provider 不在新 scope 候选中也重置
+  // 仅在 open false→true 时重置；writableTeams / provider-profiles 异步加载不得清空已填字段
   useEffect(() => {
-    if (!open) return
-    const initialScope = resolvedDefaultScope
-    const candidates = providersForScope(initialScope)
-    const initialProvider =
-      defaultProvider && candidates.some((p) => p.id === defaultProvider)
-        ? defaultProvider
-        : (candidates[0]?.id ?? '')
-    const initialProfile = defaultProfileIdForProvider(initialProvider) ?? ''
-    const initialProfileSpec = getUpstreamProfileSpec(initialProvider, initialProfile || undefined)
-    const initialSchema = getProviderSchema(initialProvider)
-    setScope(initialScope)
-    setProvider(initialProvider)
-    setName('')
-    setApiKey('')
-    setProfileId(initialProfile)
-    setApiBases(defaultApiBasesForProfile(initialProfileSpec, initialSchema?.defaultApiBase))
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    if (!shouldInitializeCreateCredentialForm(open, wasOpenRef.current)) return
+    wasOpenRef.current = true
+
+    const initial = buildCreateCredentialFormState({
+      resolvedDefaultScope,
+      defaultProvider,
+      defaultTeamId,
+      teamOptions,
+    })
+    setScope(initial.scope)
+    setProvider(initial.provider)
+    setName(initial.name)
+    setApiKey(initial.apiKey)
+    setProfileId(initial.profileId)
+    setApiBases(initial.apiBases)
     setApiBasesTouched(false)
-    setExtra({})
+    setExtra(initial.extra)
     setShowKey(false)
-    setTeamId(resolveInitialTeamId(teamOptions, defaultTeamId))
+    setTeamId(initial.teamId)
   }, [open, resolvedDefaultScope, defaultProvider, defaultTeamId, teamOptions])
 
   useEffect(() => {

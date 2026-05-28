@@ -220,6 +220,30 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
     availableScopes: SCOPES_ALL,
   },
   {
+    id: 'moonshot',
+    label: 'Kimi (Moonshot)',
+    apiBaseRequired: true,
+    defaultApiBase: 'https://api.moonshot.ai/v1',
+    profiles: [
+      {
+        id: 'moonshot.default',
+        label: '国际站',
+        defaultApiBaseOpenai: 'https://api.moonshot.ai/v1',
+      },
+      {
+        id: 'moonshot.cn',
+        label: '国内站',
+        defaultApiBaseOpenai: 'https://api.moonshot.cn/v1',
+      },
+      {
+        id: 'moonshot.coding_plan',
+        label: 'Kimi Code',
+        defaultApiBaseOpenai: 'https://api.kimi.com/coding/v1',
+      },
+    ],
+    availableScopes: SCOPES_ALL,
+  },
+  {
     id: 'volcengine',
     label: '火山引擎 (豆包/方舟)',
     apiBaseRequired: true,

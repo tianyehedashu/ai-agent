@@ -344,7 +344,7 @@ export const credentialsApi = {
       body
     ),
 
-  /** 从用户配置文件（app.toml / .env）导入 system 凭据；返回新建条数 */
+  /** 将当前用户的全部 user-scope 凭据复制到团队；返回新建条数 */
   importFromUserConfig: (teamId: string) =>
     apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
 } as const

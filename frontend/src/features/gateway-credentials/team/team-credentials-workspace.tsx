@@ -45,7 +45,6 @@ export function TeamCredentialsWorkspace({
   const [teamSearch, setTeamSearch] = useState('')
   const deferredTeamSearch = useDeferredValue(teamSearch)
   const [page, setPage] = useState(1)
-  const [importPendingTeamId, setImportPendingTeamId] = useState<string | null>(null)
 
   const hasCollaborationTeams = memberCollaborationTeams.length > 0
   const teamSearchTrimmed = teamSearch.trim()
@@ -98,21 +97,6 @@ export function TeamCredentialsWorkspace({
       onAdd(undefined, targetTeamId)
     },
     [onAdd]
-  )
-
-  const handleImportForTeam = useCallback(
-    (targetTeamId: string) => {
-      setImportPendingTeamId(targetTeamId)
-      mutations.importMutation.mutate(
-        { targetTeamId },
-        {
-          onSettled: () => {
-            setImportPendingTeamId(null)
-          },
-        }
-      )
-    },
-    [mutations.importMutation]
   )
 
   const handleRefresh = useCallback(() => {
@@ -194,9 +178,7 @@ export function TeamCredentialsWorkspace({
               isPlatformAdmin={isPlatformAdmin}
               viewerUserId={viewerUserId}
               routeTeamId={routeTeamId}
-              importPendingTeamId={importPendingTeamId}
               onAddForTeam={handleAddForTeam}
-              onImportForTeam={handleImportForTeam}
               onDelete={deleteFlow.handleDeleteCredential}
               updateMutation={mutations.updateMutation}
             />

@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, Query, status
 
-from domains.gateway.presentation.deps import RequiredTeamAdmin
+from domains.gateway.presentation.deps import CurrentTeam, RequiredTeamAdmin
 from domains.gateway.presentation.plan_response import (
     entitlement_plan_to_response,
     provider_plan_to_response,
@@ -39,12 +39,14 @@ router = APIRouter()
 )
 async def list_provider_plans(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     reads: MgmtReads,
 ) -> list[ProviderPlanResponse]:
-    await reads.access.assert_credential_in_team(
+    await reads.get_managed_credential_for_team(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
@@ -140,13 +142,15 @@ async def delete_provider_plan(
 )
 async def list_provider_plan_usage(
     credential_id: uuid.UUID,
-    team: RequiredTeamAdmin,
+    team: CurrentTeam,
     reads: MgmtReads,
     days: int = Query(30, ge=1, le=180),
 ) -> list[ProviderPlanCostResponse]:
-    await reads.access.assert_credential_in_team(
+    await reads.get_managed_credential_for_team(
         credential_id,
         tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
     rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)

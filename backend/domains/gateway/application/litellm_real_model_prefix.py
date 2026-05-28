@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 _STRICT_PREFIX_PROVIDERS: frozenset[str] = frozenset(
-    {"dashscope", "deepseek", "volcengine", "zhipuai"}
+    {"dashscope", "deepseek", "volcengine", "zhipuai", "moonshot"}
 )
 
 

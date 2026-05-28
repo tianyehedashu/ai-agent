@@ -24,9 +24,7 @@ export interface CollaborationTeamsCredentialsGroupedListProps {
   isPlatformAdmin: boolean
   viewerUserId?: string | null
   routeTeamId: string
-  importPendingTeamId?: string | null
   onAddForTeam: (teamId: string) => void
-  onImportForTeam: (teamId: string) => void
   onDelete: (c: ProviderCredential) => void
   updateMutation: {
     isPending: boolean
@@ -48,9 +46,7 @@ export function CollaborationTeamsCredentialsGroupedList({
   isPlatformAdmin,
   viewerUserId,
   routeTeamId,
-  importPendingTeamId,
   onAddForTeam,
-  onImportForTeam,
   onDelete,
   updateMutation,
 }: CollaborationTeamsCredentialsGroupedListProps): React.JSX.Element {
@@ -88,29 +84,16 @@ export function CollaborationTeamsCredentialsGroupedList({
                 isPlatformAdmin={isPlatformAdmin}
                 viewerUserId={viewerUserId}
                 actions={
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={importPendingTeamId === team.id}
-                      onClick={() => {
-                        onImportForTeam(team.id)
-                      }}
-                    >
-                      {importPendingTeamId === team.id ? '导入中…' : '从配置导入'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        onAddForTeam(team.id)
-                      }}
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      添加凭据
-                    </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      onAddForTeam(team.id)
+                    }}
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    添加凭据
+                  </Button>
                 }
               />
               {teamCredentials.length > 0 ? (

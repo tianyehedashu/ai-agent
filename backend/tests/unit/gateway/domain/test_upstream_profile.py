@@ -1,6 +1,19 @@
 """upstream_profile / upstream_endpoint 纯函数行为。"""
 
-from __future__ import annotationsfrom domains.gateway.domain.upstream_endpoint import (    effective_api_bases_for_credential,    infer_profile_id_from_env_api_base,    normalize_credential_api_bases_for_storage,    resolve_openai_compat_api_base_for_storage,    resolve_upstream_endpoint,)from domains.gateway.domain.upstream_profile import UpstreamProtocolfrom domains.gateway.domain.upstream_profile_registry import get_upstream_profiledef test_volcengine_coding_plan_appends_v3_when_user_omits_suffix() -> None:
+from __future__ import annotations
+
+from domains.gateway.domain.upstream_endpoint import (
+    effective_api_bases_for_credential,
+    infer_profile_id_from_env_api_base,
+    normalize_credential_api_bases_for_storage,
+    resolve_openai_compat_api_base_for_storage,
+    resolve_upstream_endpoint,
+)
+from domains.gateway.domain.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+
+
+def test_volcengine_coding_plan_appends_v3_when_user_omits_suffix() -> None:
     base = resolve_openai_compat_api_base_for_storage(
         provider="volcengine",
         profile_id="volcengine.coding_plan",
@@ -114,6 +127,27 @@ def test_infer_profile_id_from_env_api_base() -> None:
         == "zhipuai.coding_plan"
     )
     assert infer_profile_id_from_env_api_base("openai", api_base=None) is None
+    assert (
+        infer_profile_id_from_env_api_base(
+            "moonshot",
+            api_base="https://api.moonshot.ai/v1",
+        )
+        == "moonshot.default"
+    )
+    assert (
+        infer_profile_id_from_env_api_base(
+            "moonshot",
+            api_base="https://api.moonshot.cn/v1",
+        )
+        == "moonshot.cn"
+    )
+    assert (
+        infer_profile_id_from_env_api_base(
+            "moonshot",
+            api_base="https://api.kimi.com/coding/v1",
+        )
+        == "moonshot.coding_plan"
+    )
 
 
 def test_list_profiles_for_provider_includes_multi_plan_vendors() -> None:
@@ -131,3 +165,8 @@ def test_list_profiles_for_provider_includes_multi_plan_vendors() -> None:
     assert "dashscope.default" in dash
     assert "dashscope.intl" in dash
     assert "dashscope.us" in dash
+
+    moon = {p.id for p in list_profiles_for_provider("moonshot")}
+    assert "moonshot.default" in moon
+    assert "moonshot.cn" in moon
+    assert "moonshot.coding_plan" in moon

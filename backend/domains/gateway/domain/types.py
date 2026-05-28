@@ -337,7 +337,7 @@ def is_config_managed_system_gateway_model(*, tags: dict[str, Any] | None) -> bo
 
 # 用户 BYOK：``/my-credentials`` 所支持的提供商标识（与路由/LiteLLM 对齐，不含 custom）。
 USER_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
-    {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine"}
+    {"openai", "anthropic", "dashscope", "zhipuai", "deepseek", "volcengine", "moonshot"}
 )
 
 # 团队/系统凭据创建支持的 provider 标识 ——
@@ -354,6 +354,7 @@ MANAGED_GATEWAY_CREDENTIAL_PROVIDERS: frozenset[str] = frozenset(
         "deepseek",
         "volcengine",
         "zhipuai",
+        "moonshot",
         "cohere",
         "mistral",
         "fireworks",
@@ -373,6 +374,7 @@ PERSONAL_MODEL_PROVIDERS: frozenset[str] = frozenset(
         "anthropic",
         "zhipuai",
         "volcengine",
+        "moonshot",
         "custom",
     }
 )

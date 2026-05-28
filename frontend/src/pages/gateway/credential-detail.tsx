@@ -299,7 +299,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{cred.name}</h2>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{providerLabel(cred.provider)}</span>
             <span className="font-mono text-[11px]">({cred.provider})</span>
             <CredentialScopeBadge scope={cred.scope} />
@@ -315,7 +315,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
                 （配置同步托管，名称不可改）
               </span>
             ) : null}
-          </p>
+          </div>
           {cred.effective_api_base_openai || cred.effective_api_base_anthropic ? (
             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
               {cred.effective_api_base_openai ? (

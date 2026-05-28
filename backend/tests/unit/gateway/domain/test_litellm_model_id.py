@@ -14,6 +14,7 @@ from domains.gateway.domain.litellm_model_id import build_litellm_model_id
         ("zhipuai", "glm-4", "zai/glm-4"),
         ("dashscope", "qwen-max", "dashscope/qwen-max"),
         ("volcengine", "ep-123", "volcengine/ep-123"),
+        ("moonshot", "kimi-k2.6", "moonshot/kimi-k2.6"),
         ("openai", "deepseek/deepseek-chat", "deepseek/deepseek-chat"),
     ],
 )

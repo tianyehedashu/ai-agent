@@ -117,6 +117,7 @@ export const MODEL_PROVIDERS = [
   { id: 'dashscope', name: '阿里云 (DashScope)' },
   { id: 'zhipuai', name: '智谱 AI' },
   { id: 'volcengine', name: '火山引擎' },
+  { id: 'moonshot', name: 'Kimi (Moonshot)' },
   { id: 'custom', name: '自定义' },
 ] as const
 

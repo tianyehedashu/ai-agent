@@ -1660,6 +1660,38 @@ class TestGatewayManagementApi:
         assert coding["api_bases"]["anthropic_native"] == (
             "https://ark.cn-beijing.volces.com/api/coding"
         )
+        assert "moonshot.coding_plan" in ids
+        kimi_code = next(p for p in profiles if p["id"] == "moonshot.coding_plan")
+        assert kimi_code["api_bases"]["openai_compat"] == "https://api.kimi.com/coding/v1"
+
+    @pytest.mark.asyncio
+    async def test_create_managed_credential_moonshot_coding_plan(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """Moonshot Kimi Code：profile_id 与默认 api_base 正确落库。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        name = f"ms-cp-{uuid.uuid4().hex[:8]}"
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "moonshot",
+                "name": name,
+                "api_key": "sk-int-test-moonshot-key-1234567890",
+                "profile_id": "moonshot.coding_plan",
+                "scope": "team",
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["provider"] == "moonshot"
+        assert body["profile_id"] == "moonshot.coding_plan"
+        assert body["effective_api_base_openai"] == "https://api.kimi.com/coding/v1"
 
     @pytest.mark.asyncio
     async def test_create_managed_credential_rejects_unknown_provider(
@@ -2226,6 +2258,103 @@ class TestGatewayManagementApi:
             headers=headers,
         )
         assert r_margin.status_code == 403, r_margin.text
+
+    @pytest.mark.asyncio
+    async def test_provider_plan_list_readable_by_credential_owner_member(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """凭据创建者（非 admin 成员）可读 provider-plans，与 GET 凭据详情权限一致。"""
+        owner = test_user
+        member = User(
+            email=f"member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Member User",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Provider Plan Read Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+        await db_session.commit()
+
+        member_uc = UserUseCase(db_session)
+        member_token = await member_uc.create_token(member)
+        member_headers = {
+            "Authorization": f"Bearer {member_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+
+        now = datetime.now(UTC).replace(microsecond=0)
+        valid_from = (now - timedelta(minutes=1)).isoformat()
+        valid_until = (now + timedelta(days=30)).isoformat()
+
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials",
+            headers=member_headers,
+            json={
+                "provider": "openai",
+                "name": f"member-cred-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-member-plan-read-test",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        credential_id = r_cred.json()["id"]
+
+        r_create = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
+            headers=auth_headers,
+            json={
+                "real_model": "openai/gpt-4o-mini",
+                "label": "Owner-created plan",
+                "valid_from": valid_from,
+                "valid_until": valid_until,
+                "quotas": [
+                    {"label": "daily", "window_seconds": 86400, "limit_requests": 100}
+                ],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+
+        r_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
+            headers=member_headers,
+        )
+        assert r_list.status_code == 200, r_list.text
+        assert len(r_list.json()) == 1
+
+        r_usage = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plan-usage?days=7",
+            headers=member_headers,
+        )
+        assert r_usage.status_code == 200, r_usage.text
+
+        r_other_member = User(
+            email=f"other_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Other Member",
+        )
+        db_session.add(r_other_member)
+        await db_session.commit()
+        await db_session.refresh(r_other_member)
+        await ts.add_member(shared.id, r_other_member.id, "member")
+        await db_session.commit()
+        other_token = await member_uc.create_token(r_other_member)
+        other_headers = {
+            "Authorization": f"Bearer {other_token.access_token}",
+            "X-Team-Id": str(shared.id),
+        }
+        r_forbidden = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
+            headers=other_headers,
+        )
+        assert r_forbidden.status_code == 404, r_forbidden.text
 
     @pytest.mark.asyncio
     async def test_plan_apis_reject_cross_team_access(

@@ -33,6 +33,7 @@ _PROVIDER_CACHE_CONFIG: dict[str, dict[str, Any]] = {
     "dashscope": {"enabled": False},
     "volcengine": {"enabled": False},
     "zhipuai": {"enabled": False},
+    "moonshot": {"enabled": False},
 }
 
 

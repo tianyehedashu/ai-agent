@@ -10,7 +10,7 @@ def infer_provider_name(model: str) -> str:
         prefix = model_lower.split("/", 1)[0]
         if prefix == "zai":
             return "zhipuai"
-        if prefix in {"dashscope", "deepseek", "volcengine", "openai", "anthropic"}:
+        if prefix in {"dashscope", "deepseek", "volcengine", "moonshot", "openai", "anthropic"}:
             return prefix
     if model_lower.startswith("o1") or model_lower.startswith("o3"):
         return "openai"
@@ -21,6 +21,8 @@ def infer_provider_name(model: str) -> str:
         ("deepseek", "deepseek"),
         ("doubao", "volcengine"),
         ("glm", "zhipuai"),
+        ("kimi", "moonshot"),
+        ("moonshot", "moonshot"),
     )
     for pattern, provider in patterns:
         if pattern in model_lower:

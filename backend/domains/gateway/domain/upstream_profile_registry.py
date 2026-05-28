@@ -113,6 +113,24 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         normalize_rules=(_VOLCENGINE_OPENAI_NORMALIZE,),
     ),
     UpstreamProfile(
+        id="moonshot.default",
+        provider="moonshot",
+        label="Kimi 国际站",
+        api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.moonshot.ai/v1"},
+    ),
+    UpstreamProfile(
+        id="moonshot.cn",
+        provider="moonshot",
+        label="Kimi 国内站",
+        api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.moonshot.cn/v1"},
+    ),
+    UpstreamProfile(
+        id="moonshot.coding_plan",
+        provider="moonshot",
+        label="Kimi Code",
+        api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.kimi.com/coding/v1"},
+    ),
+    UpstreamProfile(
         id="custom.default",
         provider="custom",
         label="自定义代理",
