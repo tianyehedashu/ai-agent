@@ -43,6 +43,10 @@ def _redis_model_segment(budget_model_name: str | None) -> str | None:
     return _model_segment_hash(budget_model_name)
 
 
+def redis_model_segment_for_budget(budget_model_name: str | None) -> str | None:
+    return _redis_model_segment(budget_model_name)
+
+
 def _bucket_key(
     target_kind: str,
     target_id: str | None,
@@ -81,6 +85,16 @@ def _rate_key(target_kind: str, target_id: str | None, dimension: str) -> str:
     """Redis key for rpm/tpm windows (60 秒滚动桶)"""
     sid = target_id or "system"
     return f"gateway:rate:{target_kind}:{sid}:{dimension}"
+
+
+@dataclass(frozen=True)
+class BudgetUsageCoord:
+    """Redis 用量桶坐标。"""
+
+    target_kind: str
+    target_id: str | None
+    period: str
+    model_segment: str | None
 
 
 @dataclass
@@ -175,22 +189,79 @@ class BudgetService:
         period: str,
         model_segment: str | None,
     ) -> tuple[Decimal, int, int]:
-        client = await get_redis_client()
-        keys = [_bucket_key(target_kind, target_id, period, model_segment=model_segment)]
-        legacy = _legacy_team_bucket_key(
-            target_kind, target_id, period, model_segment=model_segment
+        batch = await self.read_budget_usage_batch(
+            [
+                BudgetUsageCoord(
+                    target_kind=target_kind,
+                    target_id=target_id,
+                    period=period,
+                    model_segment=model_segment,
+                )
+            ]
         )
-        if legacy is not None:
-            keys.append(legacy)
-        used_cost = Decimal("0")
-        used_tokens = 0
-        used_requests = 0
-        for key in keys:
-            values = await client.hmget(key, ["cost", "tokens", "requests"])
-            used_cost = max(used_cost, Decimal(values[0].decode() if values[0] else "0"))
-            used_tokens = max(used_tokens, int(values[1].decode() if values[1] else "0"))
-            used_requests = max(used_requests, int(values[2].decode() if values[2] else "0"))
-        return used_cost, used_tokens, used_requests
+        coord = BudgetUsageCoord(
+            target_kind=target_kind,
+            target_id=target_id,
+            period=period,
+            model_segment=model_segment,
+        )
+        return batch.get(coord, (Decimal("0"), 0, 0))
+
+    async def read_budget_usage_batch(
+        self,
+        coords: list[BudgetUsageCoord],
+    ) -> dict[BudgetUsageCoord, tuple[Decimal, int, int]]:
+        """Pipeline 批量读取预算 Redis 桶（含 tenant→team 迁移期 legacy key）。"""
+        if not coords:
+            return {}
+        unique_coords = list(dict.fromkeys(coords))
+        client = await get_redis_client()
+
+        key_entries: list[tuple[BudgetUsageCoord, str, bool]] = []
+        for coord in unique_coords:
+            primary = _bucket_key(
+                coord.target_kind,
+                coord.target_id,
+                coord.period,
+                model_segment=coord.model_segment,
+            )
+            key_entries.append((coord, primary, False))
+            legacy = _legacy_team_bucket_key(
+                coord.target_kind,
+                coord.target_id,
+                coord.period,
+                model_segment=coord.model_segment,
+            )
+            if legacy is not None:
+                key_entries.append((coord, legacy, True))
+
+        pipe = client.pipeline()
+        for _coord, key, _is_legacy in key_entries:
+            pipe.hmget(key, ["cost", "tokens", "requests"])
+        raw_results = await pipe.execute()
+
+        out: dict[BudgetUsageCoord, tuple[Decimal, int, int]] = {
+            c: (Decimal("0"), 0, 0) for c in unique_coords
+        }
+        for (coord, _key, _is_legacy), values in zip(key_entries, raw_results, strict=True):
+            used_cost, used_tokens, used_requests = out[coord]
+            cost_raw = values[0]
+            tokens_raw = values[1]
+            requests_raw = values[2]
+            used_cost = max(
+                used_cost,
+                Decimal(cost_raw.decode() if cost_raw else "0"),
+            )
+            used_tokens = max(
+                used_tokens,
+                int(tokens_raw.decode() if tokens_raw else "0"),
+            )
+            used_requests = max(
+                used_requests,
+                int(requests_raw.decode() if requests_raw else "0"),
+            )
+            out[coord] = (used_cost, used_tokens, used_requests)
+        return out
 
     async def check_budget(
         self,
@@ -202,18 +273,22 @@ class BudgetService:
         limit_tokens: int | None,
         limit_requests: int | None,
         budget_model_name: str | None = None,
+        prefetched_usage: tuple[Decimal, int, int] | None = None,
     ) -> BudgetCheckResult:
         """读取当前 budget 状态；超限返回 allowed=False
 
         当前 cost/tokens/requests 来自 Redis 桶，由 commit 异步累加。
         """
         seg = _redis_model_segment(budget_model_name)
-        used_cost, used_tokens, used_requests = await self._read_budget_usage(
-            target_kind=target_kind,
-            target_id=target_id,
-            period=period,
-            model_segment=seg,
-        )
+        if prefetched_usage is not None:
+            used_cost, used_tokens, used_requests = prefetched_usage
+        else:
+            used_cost, used_tokens, used_requests = await self._read_budget_usage(
+                target_kind=target_kind,
+                target_id=target_id,
+                period=period,
+                model_segment=seg,
+            )
 
         if limit_usd is not None and 0 < limit_usd <= used_cost:
             return BudgetCheckResult(
@@ -253,32 +328,88 @@ class BudgetService:
         target_id: str | None,
         period: str,
         limit_requests: int | None,
+        limit_tokens: int | None = None,
+        estimate_tokens: int = 0,
         budget_model_name: str | None = None,
-    ) -> None:
-        """预扣 1 个请求名额（用于防止并发请求穿透）
+    ) -> tuple[int, int]:
+        """预扣请求名额与/或 token 估算（防止并发穿透）。
 
-        若 limit_requests 已达，抛 BudgetExceededError。
+        返回 ``(reserved_requests, reserved_tokens)``。
         """
-        if limit_requests is None or limit_requests <= 0:
+        reserve_requests = limit_requests is not None and limit_requests > 0
+        reserve_tokens = (
+            limit_tokens is not None
+            and limit_tokens > 0
+            and estimate_tokens > 0
+        )
+        if not reserve_requests and not reserve_tokens:
+            return (0, 0)
+
+        client = await get_redis_client()
+        seg = _redis_model_segment(budget_model_name)
+        key = _bucket_key(target_kind, target_id, period, model_segment=seg)
+
+        reserved_requests = 0
+        reserved_tokens = 0
+
+        if reserve_requests:
+            assert limit_requests is not None
+            new_value = await client.hincrby(key, "requests", 1)
+            reserved_requests = 1
+            if period == PERIOD_DAILY:
+                await client.expire(key, 90000)
+            elif period == PERIOD_MONTHLY:
+                await client.expire(key, 86400 * 35)
+            if new_value > limit_requests:
+                await client.hincrby(key, "requests", -1)
+                raise BudgetExceededError(
+                    scope=target_kind,
+                    period=period,
+                    limit=float(limit_requests),
+                    used=float(new_value - 1),
+                )
+
+        if reserve_tokens:
+            assert limit_tokens is not None
+            new_tokens = await client.hincrby(key, "tokens", estimate_tokens)
+            reserved_tokens = estimate_tokens
+            if period == PERIOD_DAILY:
+                await client.expire(key, 90000)
+            elif period == PERIOD_MONTHLY:
+                await client.expire(key, 86400 * 35)
+            if new_tokens > limit_tokens:
+                if reserved_requests:
+                    await client.hincrby(key, "requests", -1)
+                await client.hincrby(key, "tokens", -estimate_tokens)
+                raise BudgetExceededError(
+                    scope=target_kind,
+                    period=period,
+                    limit=float(limit_tokens),
+                    used=float(new_tokens - estimate_tokens),
+                )
+
+        return (reserved_requests, reserved_tokens)
+
+    async def release(
+        self,
+        *,
+        target_kind: str,
+        target_id: str | None,
+        period: str,
+        budget_model_name: str | None = None,
+        reserved_requests: int = 1,
+        reserved_tokens: int = 0,
+    ) -> None:
+        """请求失败时回滚预扣的请求数 / token 估算。"""
+        if reserved_requests <= 0 and reserved_tokens <= 0:
             return
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
         key = _bucket_key(target_kind, target_id, period, model_segment=seg)
-        new_value = await client.hincrby(key, "requests", 1)
-        # 设置 TTL：daily 1 天，monthly 1 个月，total 不过期
-        if period == PERIOD_DAILY:
-            await client.expire(key, 90000)
-        elif period == PERIOD_MONTHLY:
-            await client.expire(key, 86400 * 35)
-        if new_value > limit_requests:
-            # 回滚
-            await client.hincrby(key, "requests", -1)
-            raise BudgetExceededError(
-                scope=target_kind,
-                period=period,
-                limit=float(limit_requests),
-                used=float(new_value - 1),
-            )
+        if reserved_requests > 0:
+            await client.hincrby(key, "requests", -reserved_requests)
+        if reserved_tokens > 0:
+            await client.hincrby(key, "tokens", -reserved_tokens)
 
     async def commit(
         self,
@@ -303,20 +434,6 @@ class BudgetService:
             pipe.expire(key, 86400 * 35)
         await pipe.execute()
 
-    async def release(
-        self,
-        *,
-        target_kind: str,
-        target_id: str | None,
-        period: str,
-        budget_model_name: str | None = None,
-    ) -> None:
-        """请求失败时回滚预扣的请求数"""
-        client = await get_redis_client()
-        seg = _redis_model_segment(budget_model_name)
-        key = _bucket_key(target_kind, target_id, period, model_segment=seg)
-        await client.hincrby(key, "requests", -1)
-
 
 __all__ = [
     "PERIOD_DAILY",
@@ -324,5 +441,7 @@ __all__ = [
     "PERIOD_TOTAL",
     "BudgetCheckResult",
     "BudgetService",
+    "BudgetUsageCoord",
     "ScopeIdentifier",
+    "redis_model_segment_for_budget",
 ]

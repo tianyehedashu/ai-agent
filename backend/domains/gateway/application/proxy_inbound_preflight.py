@@ -52,7 +52,7 @@ async def run_proxy_inbound_preflight(
         resolved = None
     guard.check_capability(ctx)
     await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
-    reservations = await guard.check_budget(ctx)
+    reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
     try:
         await guard.check_entitlement(
             ctx,

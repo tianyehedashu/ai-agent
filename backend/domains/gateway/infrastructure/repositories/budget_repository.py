@@ -56,7 +56,7 @@ class BudgetRepository:
     async def get_many_by_plan(
         self,
         plan: tuple[BudgetCheckQuery, ...] | list[BudgetCheckQuery],
-    ) -> dict[tuple[str, uuid.UUID, str, str | None], GatewayBudget]:
+    ) -> dict[tuple[str, uuid.UUID | None, str, str | None], GatewayBudget]:
         """一次查询拉取预算扫描 plan 中的全部配置行。"""
         if not plan:
             return {}
@@ -66,10 +66,14 @@ class BudgetRepository:
                 model_clause = GatewayBudget.model_name.is_(None)
             else:
                 model_clause = GatewayBudget.model_name == query.model_name
+            if query.target_id is None:
+                target_clause = GatewayBudget.target_id.is_(None)
+            else:
+                target_clause = GatewayBudget.target_id == query.target_id
             clauses.append(
                 and_(
                     GatewayBudget.target_kind == query.target_kind,
-                    GatewayBudget.target_id == query.target_id,
+                    target_clause,
                     GatewayBudget.period == query.period,
                     model_clause,
                 )
@@ -77,10 +81,8 @@ class BudgetRepository:
         stmt = select(GatewayBudget).where(or_(*clauses))
         result = await self._session.execute(stmt)
         rows = list(result.scalars().all())
-        out: dict[tuple[str, uuid.UUID, str, str | None], GatewayBudget] = {}
+        out: dict[tuple[str, uuid.UUID | None, str, str | None], GatewayBudget] = {}
         for row in rows:
-            if row.target_id is None:
-                continue
             key = (row.target_kind, row.target_id, row.period, row.model_name)
             out[key] = row
         return out

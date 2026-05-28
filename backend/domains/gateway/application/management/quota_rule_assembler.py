@@ -58,10 +58,13 @@ async def assemble_team_quota_rules(
         is_platform_admin=is_platform_admin,
     )
     visible_credential_ids = frozenset(c.id for c in creds)
-    for cred in creds:
-        plans = await reads.list_provider_plans_with_quotas_for_credential(cred.id)
-        for plan in plans:
-            rules.extend(flatten_provider_plan(plan, team_id=team_id))
+    if creds:
+        plans_by_cred = await reads.list_provider_plans_with_quotas_for_credentials(
+            [c.id for c in creds]
+        )
+        for cred in creds:
+            for plan in plans_by_cred.get(cred.id, ()):
+                rules.extend(flatten_provider_plan(plan, team_id=team_id))
 
     vkeys = await reads.list_virtual_keys_for_team(
         team_id,
@@ -70,10 +73,13 @@ async def assemble_team_quota_rules(
         is_platform_admin=is_platform_admin,
     )
     visible_vkey_ids = frozenset(v.id for v in vkeys)
-    for vkey in vkeys:
-        plans = await reads.list_entitlement_plans_with_quotas_for_scope("vkey", vkey.id)
-        for plan in plans:
-            rules.extend(flatten_entitlement_plan(plan, team_id=team_id))
+    if vkeys:
+        plans_by_vkey = await reads.list_entitlement_plans_with_quotas_for_vkeys(
+            [v.id for v in vkeys]
+        )
+        for vkey in vkeys:
+            for plan in plans_by_vkey.get(vkey.id, ()):
+                rules.extend(flatten_entitlement_plan(plan, team_id=team_id))
 
     if not is_team_admin:
         member_user_ids = await reads.list_team_member_user_ids(team_id)

@@ -59,21 +59,27 @@ export function QuotaBatchDrawer({
 }: QuotaBatchDrawerProps): React.JSX.Element {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
+      <SheetContent className="flex max-h-[100dvh] w-full flex-col sm:max-w-lg">
+        <SheetHeader className="shrink-0 pr-8 text-left">
           <SheetTitle>批量设置配额</SheetTitle>
           <SheetDescription>
-            选择层级与维度组合，统一应用限额。平台配额按团队/成员/Key；上游配额需指定凭据。
+            选择层级与维度组合，统一应用限额。平台配额按团队/成员/Key；上游需指定凭据；下游按虚拟
+            Key 写入权益套餐。
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 grid gap-4">
+        <div className="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto pr-1">
           <div>
             <Label>层级</Label>
             <Select
               value={values.layer}
               onValueChange={(layer) => {
-                onChange({ ...values, layer: layer as QuotaBatchFormValues['layer'] })
+                const nextLayer = layer as QuotaBatchFormValues['layer']
+                onChange({
+                  ...values,
+                  layer: nextLayer,
+                  subjectMode: nextLayer === 'downstream' ? 'keys' : values.subjectMode,
+                })
               }}
               disabled={disabled}
             >
@@ -231,6 +237,48 @@ export function QuotaBatchDrawer({
             </>
           ) : null}
 
+          {values.layer === 'downstream' ? (
+            <>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded border p-2">
+                {keyOptions.map((k) => (
+                  <label key={k.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={values.keyIds.includes(k.id)}
+                      disabled={disabled}
+                      onCheckedChange={(checked) => {
+                        const next = checked
+                          ? [...values.keyIds, k.id]
+                          : values.keyIds.filter((id) => id !== k.id)
+                        onChange({ ...values, keyIds: next })
+                      }}
+                    />
+                    {k.label}
+                  </label>
+                ))}
+              </div>
+              <div>
+                <Label>窗口（秒，0=套餐周期）</Label>
+                <Input
+                  value={values.windowSeconds}
+                  onChange={(e) => {
+                    onChange({ ...values, windowSeconds: e.target.value })
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div>
+                <Label>桶标签</Label>
+                <Input
+                  value={values.quotaLabel}
+                  onChange={(e) => {
+                    onChange({ ...values, quotaLabel: e.target.value })
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+            </>
+          ) : null}
+
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={values.allModels}
@@ -292,18 +340,6 @@ export function QuotaBatchDrawer({
                 disabled={disabled}
               />
             </div>
-            {values.layer === 'platform' ? (
-              <div>
-                <Label>软限额 USD</Label>
-                <Input
-                  value={values.soft_limit_usd}
-                  onChange={(e) => {
-                    onChange({ ...values, soft_limit_usd: e.target.value })
-                  }}
-                  disabled={disabled}
-                />
-              </div>
-            ) : null}
             <div>
               <Label>Token</Label>
               <Input
@@ -333,22 +369,22 @@ export function QuotaBatchDrawer({
           ) : null}
         </div>
 
-        <SheetFooter className="mt-6">
-          <p className="mr-auto text-sm text-muted-foreground">
-            预览：将写入 {String(previewCount)} 条
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              onOpenChange(false)
-            }}
-            disabled={pending}
-          >
-            取消
-          </Button>
-          <Button onClick={onSubmit} disabled={disabled || pending || previewCount === 0}>
-            {pending ? '保存中…' : '确认保存'}
-          </Button>
+        <SheetFooter className="mt-4 shrink-0 flex-row items-center justify-between gap-2 border-t pt-4 sm:justify-between">
+          <p className="text-sm text-muted-foreground">预览：将写入 {String(previewCount)} 条</p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                onOpenChange(false)
+              }}
+              disabled={pending}
+            >
+              取消
+            </Button>
+            <Button onClick={onSubmit} disabled={disabled || pending || previewCount === 0}>
+              {pending ? '保存中…' : '确认保存'}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

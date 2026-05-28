@@ -109,6 +109,38 @@ class ProviderPlanRepository:
             groups[q.plan_id].append(q)
         return [(p, groups[p.id]) for p in plans]
 
+    async def list_with_quotas_for_credentials(
+        self, credential_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[tuple[ProviderPlan, list[ProviderPlanQuota]]]]:
+        """批量拉取多个凭据的上游 plan + quotas（消除 N+1）。"""
+        if not credential_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(credential_ids))
+        stmt = (
+            select(ProviderPlan)
+            .where(ProviderPlan.credential_id.in_(unique_ids))
+            .order_by(ProviderPlan.valid_from.desc())
+        )
+        plans = list((await self._session.execute(stmt)).scalars().all())
+        if not plans:
+            return {cid: [] for cid in unique_ids}
+        plan_ids = [p.id for p in plans]
+        qstmt = (
+            select(ProviderPlanQuota)
+            .where(ProviderPlanQuota.plan_id.in_(plan_ids))
+            .order_by(ProviderPlanQuota.window_seconds.asc())
+        )
+        quota_rows = list((await self._session.execute(qstmt)).scalars().all())
+        quota_groups: dict[uuid.UUID, list[ProviderPlanQuota]] = {p.id: [] for p in plans}
+        for q in quota_rows:
+            quota_groups[q.plan_id].append(q)
+        out: dict[uuid.UUID, list[tuple[ProviderPlan, list[ProviderPlanQuota]]]] = {
+            cid: [] for cid in unique_ids
+        }
+        for plan in plans:
+            out[plan.credential_id].append((plan, quota_groups[plan.id]))
+        return out
+
     async def list_active_due(self, now: datetime | None = None) -> list[ProviderPlan]:
         """到期需要 lifecycle 处理的活跃套餐（``valid_until <= now``）。"""
         when = now or datetime.now(UTC)

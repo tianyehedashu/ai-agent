@@ -106,6 +106,41 @@ class EntitlementPlanRepository:
             groups[q.plan_id].append(q)
         return [(p, groups[p.id]) for p in plans]
 
+    async def list_with_quotas_for_vkeys(
+        self, vkey_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[tuple[EntitlementPlan, list[EntitlementPlanQuota]]]]:
+        """批量拉取多个 vkey 的下游 plan + quotas（消除 N+1）。"""
+        if not vkey_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(vkey_ids))
+        stmt = (
+            select(EntitlementPlan)
+            .where(
+                EntitlementPlan.target_kind == ENTITLEMENT_SCOPE_VKEY,
+                EntitlementPlan.target_id.in_(unique_ids),
+            )
+            .order_by(EntitlementPlan.valid_from.desc())
+        )
+        plans = list((await self._session.execute(stmt)).scalars().all())
+        if not plans:
+            return {vid: [] for vid in unique_ids}
+        plan_ids = [p.id for p in plans]
+        qstmt = (
+            select(EntitlementPlanQuota)
+            .where(EntitlementPlanQuota.plan_id.in_(plan_ids))
+            .order_by(EntitlementPlanQuota.window_seconds.asc())
+        )
+        quota_rows = list((await self._session.execute(qstmt)).scalars().all())
+        quota_groups: dict[uuid.UUID, list[EntitlementPlanQuota]] = {p.id: [] for p in plans}
+        for q in quota_rows:
+            quota_groups[q.plan_id].append(q)
+        out: dict[uuid.UUID, list[tuple[EntitlementPlan, list[EntitlementPlanQuota]]]] = {
+            vid: [] for vid in unique_ids
+        }
+        for plan in plans:
+            out[plan.target_id].append((plan, quota_groups[plan.id]))
+        return out
+
     async def list_active_due(self, now: datetime | None = None) -> list[EntitlementPlan]:
         when = now or datetime.now(UTC)
         stmt = select(EntitlementPlan).where(

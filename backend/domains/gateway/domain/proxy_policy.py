@@ -22,7 +22,18 @@ if TYPE_CHECKING:
 
 
 BudgetTarget = tuple[str, uuid.UUID | None]
-BudgetReservation = tuple[str, str | None, str, str | None]
+
+
+@dataclass(frozen=True)
+class BudgetReservation:
+    """预算预扣句柄（请求数 / token 估算）。"""
+
+    target_kind: str
+    target_id: str | None
+    period: str
+    budget_model_name: str | None
+    reserved_requests: int = 0
+    reserved_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -30,16 +41,15 @@ class BudgetCheckQuery:
     """单次预算扫描所需的查询坐标。
 
     Attributes:
-        target_kind: ``tenant`` / ``user`` / ``key`` 之一（与 ``BudgetScope`` 写入维度对齐，
-            排除了 ``system``，因为系统级预算不绑定具体调用上下文）。
-        target_id: 对应 target 的主键；保证非空，由 ``build_budget_check_plan`` 过滤。
+        target_kind: ``system`` / ``tenant`` / ``user`` / ``key``。
+        target_id: 对应 target 的主键；``system`` 为 ``None``。
         period: ``daily`` / ``monthly`` / ``total``。
         model_name: ``None`` = 全模型汇总行（``gateway_budgets.model_name IS NULL``），
             其它值表示模型级专属预算行。
     """
 
     target_kind: str
-    target_id: uuid.UUID
+    target_id: uuid.UUID | None
     period: str
     model_name: str | None
 
@@ -58,7 +68,7 @@ def build_budget_check_plan(
     """
     queries: list[BudgetCheckQuery] = []
     for target_kind, target_id in targets:
-        if target_id is None:
+        if target_id is None and target_kind != "system":
             continue
         for period in periods:
             for model_key in budget_model_keys(request_model):
@@ -115,13 +125,27 @@ def budget_targets(
     user_id: uuid.UUID | None,
     vkey_id: uuid.UUID | None,
 ) -> tuple[BudgetTarget, ...]:
-    """一次代理调用需要检查/结算的预算归属层级。"""
+    """一次代理调用需要检查/结算的预算归属层级（不含 system）。"""
     targets: list[BudgetTarget] = [("tenant", tenant_id)]
     if user_id is not None:
         targets.append(("user", user_id))
     if vkey_id is not None:
         targets.append(("key", vkey_id))
     return tuple(targets)
+
+
+def proxy_budget_targets(
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+    vkey_id: uuid.UUID | None,
+) -> tuple[BudgetTarget, ...]:
+    """代理热路径预算扫描：全局 system + tenant/user/key。"""
+    return (("system", None), *budget_targets(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        vkey_id=vkey_id,
+    ))
 
 
 def budget_model_keys(model_name: str | None) -> tuple[str | None, ...]:
@@ -244,6 +268,7 @@ __all__ = [
     "first_present_limit",
     "is_router_deployment_cooldown",
     "is_router_model_miss",
+    "proxy_budget_targets",
     "rate_limit_target",
     "router_cooldown_retry_after",
     "upstream_exception_http_status",

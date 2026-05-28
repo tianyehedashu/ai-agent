@@ -197,50 +197,52 @@ export function RouteOrderedModelPicker({
             注册并启用模型。
           </p>
         </div>
-      ) : selectedModels.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/10 px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">尚未配置主模型</p>
-          {!disabled ? (
-            <RouteModelAddCombobox
-              candidates={unselectedCandidates}
-              onPick={handleAdd}
-              triggerLabel="添加主模型"
-              priceByName={priceByName}
-              currency={currency}
-            />
-          ) : null}
-        </div>
       ) : (
-        <>
-          <TooltipProvider delayDuration={200}>
-            <ul className="space-y-1 rounded-md border p-2">
-              {selectedModels.map((model, index) => (
-                <RouteSelectedModelRow
-                  key={model.id}
-                  model={model}
-                  order={index}
-                  disabled={disabled}
-                  showOrderControls={showOrderControls}
-                  selectedCount={selectedModels.length}
-                  onMove={showOrderControls && !disabled ? handleMove : undefined}
-                  onRemove={handleRemove}
-                  priceRow={priceByName?.get(model.name)}
+        <TooltipProvider delayDuration={200}>
+          {selectedModels.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/10 px-4 py-8 text-center">
+              <p className="text-sm text-muted-foreground">尚未配置主模型</p>
+              {!disabled ? (
+                <RouteModelAddCombobox
+                  candidates={unselectedCandidates}
+                  onPick={handleAdd}
+                  triggerLabel="添加主模型"
+                  priceByName={priceByName}
                   currency={currency}
                 />
-              ))}
-            </ul>
-          </TooltipProvider>
-          {!disabled ? (
-            <RouteModelAddCombobox
-              candidates={unselectedCandidates}
-              onPick={handleAdd}
-              triggerLabel="添加主模型"
-              variant="ghost"
-              priceByName={priceByName}
-              currency={currency}
-            />
-          ) : null}
-        </>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <ul className="space-y-1 rounded-md border p-2">
+                {selectedModels.map((model, index) => (
+                  <RouteSelectedModelRow
+                    key={model.id}
+                    model={model}
+                    order={index}
+                    disabled={disabled}
+                    showOrderControls={showOrderControls}
+                    selectedCount={selectedModels.length}
+                    onMove={showOrderControls && !disabled ? handleMove : undefined}
+                    onRemove={handleRemove}
+                    priceRow={priceByName?.get(model.name)}
+                    currency={currency}
+                  />
+                ))}
+              </ul>
+              {!disabled ? (
+                <RouteModelAddCombobox
+                  candidates={unselectedCandidates}
+                  onPick={handleAdd}
+                  triggerLabel="添加主模型"
+                  variant="ghost"
+                  priceByName={priceByName}
+                  currency={currency}
+                />
+              ) : null}
+            </>
+          )}
+        </TooltipProvider>
       )}
     </section>
   )
@@ -311,47 +313,49 @@ export function RouteFallbackModelPicker({
       </div>
       {noPool ? (
         <p className="text-sm text-muted-foreground">暂无可选模型（请先配置主模型或注册模型）</p>
-      ) : selectedModels.length === 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm text-muted-foreground">尚未配置</p>
-          {!disabled ? (
-            <RouteModelAddCombobox
-              candidates={unselectedCandidates}
-              onPick={handleAdd}
-              triggerLabel="添加 Fallback"
-              priceByName={priceByName}
-              currency={currency}
-            />
-          ) : null}
-        </div>
       ) : (
-        <>
-          <TooltipProvider delayDuration={200}>
-            <ul className="space-y-1 rounded-md border p-2">
-              {selectedModels.map((model) => (
-                <RouteSelectedModelRow
-                  key={model.id}
-                  model={model}
-                  order={-1}
-                  disabled={disabled}
-                  onRemove={handleRemove}
-                  priceRow={priceByName?.get(model.name)}
+        <TooltipProvider delayDuration={200}>
+          {selectedModels.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">尚未配置</p>
+              {!disabled ? (
+                <RouteModelAddCombobox
+                  candidates={unselectedCandidates}
+                  onPick={handleAdd}
+                  triggerLabel="添加 Fallback"
+                  priceByName={priceByName}
                   currency={currency}
                 />
-              ))}
-            </ul>
-          </TooltipProvider>
-          {!disabled ? (
-            <RouteModelAddCombobox
-              candidates={unselectedCandidates}
-              onPick={handleAdd}
-              triggerLabel="添加 Fallback"
-              variant="ghost"
-              priceByName={priceByName}
-              currency={currency}
-            />
-          ) : null}
-        </>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <ul className="space-y-1 rounded-md border p-2">
+                {selectedModels.map((model) => (
+                  <RouteSelectedModelRow
+                    key={model.id}
+                    model={model}
+                    order={-1}
+                    disabled={disabled}
+                    onRemove={handleRemove}
+                    priceRow={priceByName?.get(model.name)}
+                    currency={currency}
+                  />
+                ))}
+              </ul>
+              {!disabled ? (
+                <RouteModelAddCombobox
+                  candidates={unselectedCandidates}
+                  onPick={handleAdd}
+                  triggerLabel="添加 Fallback"
+                  variant="ghost"
+                  priceByName={priceByName}
+                  currency={currency}
+                />
+              ) : null}
+            </>
+          )}
+        </TooltipProvider>
       )}
     </section>
   )

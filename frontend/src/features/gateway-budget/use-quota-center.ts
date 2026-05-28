@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
-import { buildBudgetModelOptions } from './budget-model-options'
+import { buildBudgetModelOptions, type BudgetModelOption } from './budget-model-options'
 import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
 import {
   GATEWAY_QUOTA_META_STALE_MS,
@@ -39,7 +39,6 @@ export interface QuotaBatchFormValues {
   windowSeconds: string
   quotaLabel: string
   limit_usd: string
-  soft_limit_usd: string
   limit_tokens: string
   limit_requests: string
 }
@@ -57,7 +56,6 @@ export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
   windowSeconds: '0',
   quotaLabel: 'default',
   limit_usd: '',
-  soft_limit_usd: '',
   limit_tokens: '',
   limit_requests: '',
 }
@@ -78,7 +76,6 @@ function expandBatchFormValues(
 
 function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | null {
   const lu = parseOptionalUsd(values.limit_usd)
-  const ls = parseOptionalUsd(values.soft_limit_usd)
   const lt = parseOptionalInt(values.limit_tokens)
   const lr = parseOptionalInt(values.limit_requests)
   if (lu === null && lt === null && lr === null) return null
@@ -112,7 +109,6 @@ function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | 
         if (sub.target_id) body.target_id = sub.target_id
         if (model) body.model_name = model
         if (lu !== null) body.limit_usd = lu
-        if (ls !== null) body.soft_limit_usd = ls
         if (lt !== null) body.limit_tokens = lt
         if (lr !== null) body.limit_requests = lr
         rules.push(body)
@@ -144,10 +140,61 @@ function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | 
     return rules
   }
 
-  return null
+  const ws = parseOptionalInt(values.windowSeconds) ?? 0
+  if (values.keyIds.length === 0) return null
+  for (const kid of values.keyIds) {
+    for (const model of models) {
+      const body: QuotaRuleUpsertBody = {
+        layer: 'downstream',
+        access_kind: 'vkey',
+        access_id: kid,
+        window_seconds: ws,
+        quota_label: values.quotaLabel.trim() || 'default',
+      }
+      if (model) body.model_name = model
+      if (lu !== null) body.limit_usd = lu
+      if (lt !== null) body.limit_tokens = lt
+      if (lr !== null) body.limit_requests = lr
+      rules.push(body)
+    }
+  }
+  return rules
 }
 
-export function useQuotaCenter() {
+export interface QuotaCenterState {
+  teamId: string
+  formDisabled: boolean
+  isLoading: boolean
+  isRefreshing: boolean
+  filteredItems: QuotaRule[]
+  selectedRule: QuotaRule | null
+  selectedId: string | null
+  selectRule: (rule: QuotaRule) => void
+  clearSelection: () => void
+  labelContext: QuotaRuleLabelContext
+  layerFilter: string
+  modelFilter: string
+  periodFilter: string
+  setFilter: (key: 'layer' | 'model' | 'period', value: string) => void
+  batchOpen: boolean
+  setBatchOpen: (open: boolean) => void
+  batchValues: QuotaBatchFormValues
+  setBatchValues: (values: QuotaBatchFormValues) => void
+  submitBatch: () => void
+  batchPending: boolean
+  confirmDelete: (rule: QuotaRule) => void
+  deletePending: boolean
+  refresh: () => void
+  memberOptions: { id: string; label: string }[]
+  keyOptions: { id: string; label: string }[]
+  credentialOptions: { id: string; label: string }[]
+  modelOptions: BudgetModelOption[]
+  modelsLoading: boolean
+  onModelPickerOpenChange?: (open: boolean) => void
+  batchPreviewCount: number
+}
+
+function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
   const { toast } = useToast()
   const { isPlatformViewer } = useGatewayPermission()
@@ -334,14 +381,6 @@ export function useQuotaCenter() {
   )
 
   const submitBatch = useCallback(() => {
-    if (batchValues.layer === 'downstream') {
-      toast({
-        title: '下游权益',
-        description: '请通过虚拟 Key 页配置下游套餐；统一批量写入即将支持。',
-        variant: 'destructive',
-      })
-      return
-    }
     const rules = buildBatchRules(resolvedBatchValues)
     if (!rules || rules.length === 0) {
       toast({
@@ -356,7 +395,7 @@ export function useQuotaCenter() {
       return
     }
     batchMutation.mutate(rules)
-  }, [batchValues.layer, resolvedBatchValues, batchMutation, toast])
+  }, [resolvedBatchValues, batchMutation, toast])
 
   const confirmDelete = useCallback(
     (rule: QuotaRule) => {
@@ -416,4 +455,6 @@ export function useQuotaCenter() {
   }
 }
 
-export type QuotaCenterState = ReturnType<typeof useQuotaCenter>
+export function useQuotaCenter(): QuotaCenterState {
+  return useQuotaCenterImpl()
+}

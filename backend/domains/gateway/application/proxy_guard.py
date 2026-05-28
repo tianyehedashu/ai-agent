@@ -24,11 +24,17 @@ from typing import TYPE_CHECKING
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.budget_config_cache import (
+    BudgetConfigRow,
+    get_cached_budget_by_plan,
+)
 from domains.gateway.application.budget_service import (
     PERIOD_DAILY,
     PERIOD_MONTHLY,
     PERIOD_TOTAL,
     BudgetService,
+    BudgetUsageCoord,
+    redis_model_segment_for_budget,
 )
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
@@ -40,14 +46,15 @@ from domains.gateway.application.model_or_route_resolution import (
 )
 from domains.gateway.domain.errors import BudgetExceededError, GatewayModelNotFoundError
 from domains.gateway.domain.proxy_policy import (
+    BudgetCheckQuery,
     BudgetReservation,
     allows_unregistered_gateway_model,
     assert_capability_allowed,
     assert_model_allowed,
     assert_registered_model_capability,
-    budget_targets,
     build_budget_check_plan,
     first_present_limit,
+    proxy_budget_targets,
     rate_limit_target,
 )
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
@@ -56,6 +63,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.application.proxy_context import ProxyContext
+    from domains.gateway.infrastructure.models.budget import GatewayBudget
 
 
 def _default_budget_repository_factory(session: AsyncSession) -> BudgetRepository:
@@ -221,15 +229,12 @@ class ProxyGuard:
     # 预算预扣 / 释放
     # ---------------------------------------------------------------------
 
-    async def check_budget(self, ctx: ProxyContext) -> list[BudgetReservation]:
-        """按 ``BudgetCheckPlan`` 顺序扫描 tenant/user/key 维度预算。
-
-        预算扫描坐标的纯逻辑（哪些 target_kind×period×model_key 该查）由
-        ``domains.gateway.domain.proxy_policy.build_budget_check_plan`` 决定，
-        本方法只负责按计划查仓储、调用 ``BudgetService``、抛错与累积请求级预扣。
-        """
+    async def check_budget(
+        self, ctx: ProxyContext, *, estimate_tokens: int = 0
+    ) -> list[BudgetReservation]:
+        """按 ``BudgetCheckPlan`` 顺序扫描 system/tenant/user/key 维度预算。"""
         repo = self._budget_repo_factory(self._session)
-        targets = budget_targets(
+        targets = proxy_budget_targets(
             tenant_id=ctx.team_id,
             user_id=ctx.user_id,
             vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
@@ -240,16 +245,44 @@ class ProxyGuard:
             request_model=ctx.budget_model,
         )
 
-        budget_by_coord = await repo.get_many_by_plan(plan)
+        async def load_budget_rows() -> dict[
+            tuple[str, uuid.UUID | None, str, str | None],
+            GatewayBudget,
+        ]:
+            return await repo.get_many_by_plan(plan)
 
-        reservations: list[BudgetReservation] = []
+        budget_by_coord = await get_cached_budget_by_plan(plan, load_budget_rows)
+
+        active: list[tuple[BudgetCheckQuery, BudgetConfigRow]] = []
+        usage_coords: list[BudgetUsageCoord] = []
         for query in plan:
             budget = budget_by_coord.get(
                 (query.target_kind, query.target_id, query.period, query.model_name)
             )
             if budget is None:
                 continue
-            target_id_str = str(query.target_id)
+            active.append((query, budget))
+            target_id_str = str(query.target_id) if query.target_id is not None else None
+            usage_coords.append(
+                BudgetUsageCoord(
+                    target_kind=query.target_kind,
+                    target_id=target_id_str,
+                    period=query.period,
+                    model_segment=redis_model_segment_for_budget(budget.model_name),
+                )
+            )
+        usage_by_coord = await self._budget.read_budget_usage_batch(usage_coords)
+
+        reservations: list[BudgetReservation] = []
+        for query, budget in active:
+            target_id_str = str(query.target_id) if query.target_id is not None else None
+            usage_coord = BudgetUsageCoord(
+                target_kind=query.target_kind,
+                target_id=target_id_str,
+                period=query.period,
+                model_segment=redis_model_segment_for_budget(budget.model_name),
+            )
+            prefetched = usage_by_coord.get(usage_coord)
             check = await self._budget.check_budget(
                 target_kind=query.target_kind,
                 target_id=target_id_str,
@@ -258,6 +291,7 @@ class ProxyGuard:
                 limit_tokens=budget.limit_tokens,
                 limit_requests=budget.limit_requests,
                 budget_model_name=budget.model_name,
+                prefetched_usage=prefetched,
             )
             if not check.allowed:
                 await self.release_budget_reservations(reservations)
@@ -281,33 +315,53 @@ class ProxyGuard:
                         else check.used_requests
                     ),
                 )
-            if budget.limit_requests:
+            needs_reserve = (
+                (budget.limit_requests is not None and budget.limit_requests > 0)
+                or (
+                    budget.limit_tokens is not None
+                    and budget.limit_tokens > 0
+                    and estimate_tokens > 0
+                )
+            )
+            if needs_reserve:
                 try:
-                    await self._budget.reserve(
+                    reserved_requests, reserved_tokens = await self._budget.reserve(
                         target_kind=query.target_kind,
                         target_id=target_id_str,
                         period=query.period,
                         limit_requests=budget.limit_requests,
+                        limit_tokens=budget.limit_tokens,
+                        estimate_tokens=estimate_tokens,
                         budget_model_name=budget.model_name,
                     )
                 except Exception:
                     await self.release_budget_reservations(reservations)
                     raise
-                reservations.append(
-                    (query.target_kind, target_id_str, query.period, budget.model_name)
-                )
+                if reserved_requests or reserved_tokens:
+                    reservations.append(
+                        BudgetReservation(
+                            target_kind=query.target_kind,
+                            target_id=target_id_str,
+                            period=query.period,
+                            budget_model_name=budget.model_name,
+                            reserved_requests=reserved_requests,
+                            reserved_tokens=reserved_tokens,
+                        )
+                    )
         return reservations
 
     async def release_budget_reservations(
         self, reservations: list[BudgetReservation]
     ) -> None:
-        for target_kind, target_id, period, budget_model_name in reservations:
+        for reservation in reservations:
             with suppress(Exception):
                 await self._budget.release(
-                    target_kind=target_kind,
-                    target_id=target_id,
-                    period=period,
-                    budget_model_name=budget_model_name,
+                    target_kind=reservation.target_kind,
+                    target_id=reservation.target_id,
+                    period=reservation.period,
+                    budget_model_name=reservation.budget_model_name,
+                    reserved_requests=reservation.reserved_requests,
+                    reserved_tokens=reservation.reserved_tokens,
                 )
 
     # ---------------------------------------------------------------------

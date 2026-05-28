@@ -50,7 +50,7 @@ class GatewayBudget(BaseModel):
     soft_limit_usd: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 4),
         nullable=True,
-        comment="软限额：达阈值告警但不阻断（对齐 LiteLLM soft_budget）",
+        comment="已废弃：代理热路径不读取；写入时忽略，请使用 limit_usd",
     )
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limit_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)

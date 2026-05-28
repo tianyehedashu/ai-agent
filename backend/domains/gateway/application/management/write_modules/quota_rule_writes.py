@@ -235,16 +235,23 @@ class QuotaRuleWritesMixin:
             is_platform_admin=is_platform_admin,
         )
 
-        return await self._budgets.upsert(
+        budget = await self._budgets.upsert(
             target_kind=target_kind,
             target_id=target_id,
             period=period,
             model_name=cmd.model_name,
             limit_usd=cmd.limit_usd,
-            soft_limit_usd=cmd.soft_limit_usd,
+            soft_limit_usd=None,
             limit_tokens=cmd.limit_tokens,
             limit_requests=cmd.limit_requests,
         )
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_budget_config_cache,
+        )
+
+        await invalidate_gateway_budget_config_cache()
+        self.invalidate_tenant_gateway_read_caches(tenant_id)
+        return budget
 
     async def _upsert_upstream_quota_rule(
         self,

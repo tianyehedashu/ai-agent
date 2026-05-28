@@ -33,6 +33,10 @@ from domains.gateway.application.management.plan_read_models import (
     EntitlementPlanReadModel,
     ProviderPlanReadModel,
 )
+from domains.gateway.application.management.quota_rule_read_model import (
+    QuotaRuleListFilters,
+    QuotaRuleReadModel,
+)
 from domains.gateway.application.management.usage_log_reads import GatewayUsageLogReadMixin
 from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
@@ -41,10 +45,7 @@ from domains.gateway.application.management.usage_reads import (
     ProviderPlanCostReadModel,
 )
 from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
-from domains.gateway.application.management.quota_rule_read_model import (
-    QuotaRuleListFilters,
-    QuotaRuleReadModel,
-)
+from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.application.model_list_pipeline import (
     ModelListIdsResult,
     ModelListPageResult,
@@ -124,6 +125,8 @@ if TYPE_CHECKING:
     from domains.gateway.application.management.playground_credential_reads import (
         PlaygroundCredentialSummaryItem,
     )
+
+
 class GatewayManagementReadService(GatewayUsageLogReadMixin):
     """管理 API 只读用例，经仓储访问数据"""
 
@@ -137,9 +140,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
     ) -> None:
         self._session = session
         self._membership = membership or TenancyMembershipAdapter()
-        self._api_key_grants: ApiKeyGatewayGrantQueryPort = (
-            api_key_grants or ApiKeyUseCase(session)
-        )
+        self._api_key_grants: ApiKeyGatewayGrantQueryPort = api_key_grants or ApiKeyUseCase(session)
         self._user_summaries: UserSummaryQueryPort = user_summaries or UserUseCase(session)
         self._teams = TeamService(session, membership=self._membership)
         self._vkeys = VirtualKeyRepository(session)
@@ -168,7 +169,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_role: str = "owner",
         is_platform_admin: bool = False,
     ) -> list[VirtualKeyReadModel]:
-        keys = await self._vkeys.list_for_tenant(team_id, include_system=False, include_inactive=False)
+        keys = await self._vkeys.list_for_tenant(
+            team_id, include_system=False, include_inactive=False
+        )
         filtered = filter_virtual_keys_visible_to_actor(
             keys,
             actor_user_id=actor_user_id,
@@ -213,14 +216,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             team_role=team_role,
             is_platform_admin=include_system,
         )
-        out = [
-            credential_from_orm(c, encryption_key=encryption_key) for c in visible
-        ]
+        out = [credential_from_orm(c, encryption_key=encryption_key) for c in visible]
         if include_system:
             system_rows = await self._system_creds.list_all()
             out.extend(
-                system_credential_from_orm(c, encryption_key=encryption_key)
-                for c in system_rows
+                system_credential_from_orm(c, encryption_key=encryption_key) for c in system_rows
             )
         return out
 
@@ -598,15 +598,31 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         rows = await self._provider_plans.list_with_quotas_for_credential(credential_id)
         return [provider_plan_from_orm(plan, quotas) for plan, quotas in rows]
 
+    async def list_provider_plans_with_quotas_for_credentials(
+        self, credential_ids: list[UUID]
+    ) -> dict[UUID, list[ProviderPlanReadModel]]:
+        rows_by_cred = await self._provider_plans.list_with_quotas_for_credentials(credential_ids)
+        return {
+            cred_id: [provider_plan_from_orm(plan, quotas) for plan, quotas in plan_rows]
+            for cred_id, plan_rows in rows_by_cred.items()
+        }
+
     async def list_entitlement_plans_with_quotas_for_scope(
         self, scope: str, scope_id: UUID
     ) -> list[EntitlementPlanReadModel]:
         rows = await self._entitlement_plans.list_with_quotas_for_scope(scope, scope_id)
         return [entitlement_plan_from_orm(plan, quotas) for plan, quotas in rows]
 
-    async def get_provider_plan_with_quotas(
-        self, plan_id: UUID
-    ) -> ProviderPlanReadModel | None:
+    async def list_entitlement_plans_with_quotas_for_vkeys(
+        self, vkey_ids: list[UUID]
+    ) -> dict[UUID, list[EntitlementPlanReadModel]]:
+        rows_by_vkey = await self._entitlement_plans.list_with_quotas_for_vkeys(vkey_ids)
+        return {
+            vkey_id: [entitlement_plan_from_orm(plan, quotas) for plan, quotas in plan_rows]
+            for vkey_id, plan_rows in rows_by_vkey.items()
+        }
+
+    async def get_provider_plan_with_quotas(self, plan_id: UUID) -> ProviderPlanReadModel | None:
         row = await self._provider_plans.get_with_quotas(plan_id)
         if row is None:
             return None
