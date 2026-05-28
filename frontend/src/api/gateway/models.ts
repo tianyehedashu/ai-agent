@@ -101,8 +101,19 @@ export interface GatewayModelRouteUsageItem {
   user: GatewayModelRouteUsageSlice
 }
 
+/** GET /managed-team-models/usage-summary 单条 route（含 team_id） */
+export interface ManagedTeamModelRouteUsageItem extends GatewayModelRouteUsageItem {
+  team_id: string
+}
+
 /** GET /models/usage-summary；按日志 route_name = 注册名统计 */
 export interface GatewayModelUsageSummary extends PaginatedList<GatewayModelRouteUsageItem> {
+  start: string
+  end: string
+}
+
+/** GET /managed-team-models/usage-summary；跨团队协作团队 workspace axis */
+export interface ManagedTeamModelUsageSummary extends PaginatedList<ManagedTeamModelRouteUsageItem> {
   start: string
   end: string
 }
@@ -237,6 +248,13 @@ export interface ManagedTeamModelCredentialFilterListResponse {
 }
 
 export interface ListManagedTeamModelsParams extends Omit<GatewayModelListQuery, 'registry_scope'> {
+  search?: string
+}
+
+export interface ManagedTeamModelUsageSummaryQuery extends PageQuery {
+  days?: number
+  provider?: string
+  route_names?: string[]
   search?: string
 }
 
@@ -415,6 +433,18 @@ function buildAdminCredentialStatsSearch(
   return search
 }
 
+function buildManagedTeamModelUsageSummarySearch(
+  params?: ManagedTeamModelUsageSummaryQuery
+): Record<string, string | string[]> {
+  const search: Record<string, string | string[]> = buildPageQuerySearch(params)
+  if (!params) return search
+  if (params.days !== undefined) search.days = String(params.days)
+  if (params.provider) search.provider = params.provider
+  if (params.route_names?.length) search.route_names = params.route_names
+  if (params.search) search.search = params.search
+  return search
+}
+
 export const modelsApi = {
   /**
    * 列出当前调用方可用的模型（系统模型 + 我的个人模型；按 type / provider / mode 过滤）。
@@ -447,6 +477,13 @@ export const modelsApi = {
       search
     )
   },
+
+  /** 跨协作团队模型用量汇总（按 route + team_id 维度） */
+  managedTeamModelsUsageSummary: (params?: ManagedTeamModelUsageSummaryQuery) =>
+    apiClient.get<ManagedTeamModelUsageSummary>(
+      `${GATEWAY_API_BASE}/managed-team-models/usage-summary`,
+      buildManagedTeamModelUsageSummarySearch(params)
+    ),
 
   /** 团队 Tab 模型列表：按凭据筛选下拉（注册模型绑定，含成员可见名） */
   listManagedTeamModelCredentialFilters: () =>

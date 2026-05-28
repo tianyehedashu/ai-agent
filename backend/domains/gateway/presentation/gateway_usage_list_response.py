@@ -8,6 +8,8 @@ from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
 from domains.gateway.presentation.schemas.common import (
     GatewayModelRouteUsageItem,
     GatewayModelUsageSummaryResponse,
+    ManagedTeamModelRouteUsageItem,
+    ManagedTeamModelUsageSummaryResponse,
     PlatformCredentialStatItem,
     PlatformCredentialStatListResponse,
     UsageStatisticsItemResponse,
@@ -65,6 +67,28 @@ def build_gateway_model_usage_summary_response(
     )
 
 
+def build_managed_team_model_usage_summary_response(
+    *,
+    items: list[ManagedTeamModelRouteUsageItem],
+    total: int,
+    page: int,
+    page_size: int,
+    start: datetime,
+    end: datetime,
+) -> ManagedTeamModelUsageSummaryResponse:
+    envelope = build_page(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+    return ManagedTeamModelUsageSummaryResponse(
+        **envelope.model_dump(),
+        start=start,
+        end=end,
+    )
+
+
 def build_platform_credential_stat_list_response(
     *,
     items: list[PlatformCredentialStatItem],
@@ -83,6 +107,7 @@ def build_platform_credential_stat_list_response(
 
 __all__ = [
     "build_gateway_model_usage_summary_response",
+    "build_managed_team_model_usage_summary_response",
     "build_platform_credential_stat_list_response",
     "build_usage_statistics_response",
 ]

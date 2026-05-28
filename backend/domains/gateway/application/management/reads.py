@@ -119,6 +119,7 @@ from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort, UserSummaryQueryPort
 from domains.identity.application.user_use_case import UserUseCase
 from domains.tenancy.application.team_service import TeamService
+from domains.tenancy.domain.management_context import ManagementTeamContext
 from domains.tenancy.infrastructure.membership_adapter import TenancyMembershipAdapter
 from libs.api.pagination import slice_page
 from libs.iam.tenancy import MembershipPort
@@ -810,6 +811,34 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             is_platform_admin=is_platform_admin,
             is_team_admin=is_team_admin,
             filters=filters,
+        )
+
+    async def aggregate_personal_model_route_usage(
+        self,
+        user_id: UUID,
+        *,
+        days: int,
+        provider: str | None = None,
+        route_names: list[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int, datetime, datetime]:
+        """个人模型用量：personal team + user/workspace 双轴（与团队列表语义一致）。"""
+        personal_team = await self._teams.ensure_personal_team(user_id)
+        ctx = ManagementTeamContext(
+            team_id=personal_team.id,
+            team_kind="personal",
+            team_role="owner",
+            user_id=user_id,
+            is_platform_admin=False,
+        )
+        return await self.aggregate_gateway_model_route_usage(
+            ctx,
+            days=days,
+            provider=provider,
+            route_names=route_names,
+            page=page,
+            page_size=page_size,
         )
 
 

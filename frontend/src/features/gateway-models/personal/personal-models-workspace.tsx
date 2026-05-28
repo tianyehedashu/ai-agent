@@ -1,49 +1,35 @@
-﻿import {
-  Suspense,
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+﻿import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import {
-  fetchAllPersonalGatewayModels,
-  gatewayApi,
-  type GatewayModelBatchDeleteFailureItem,
-  type PersonalGatewayModel,
-} from '@/api/gateway'
+import { fetchAllPersonalGatewayModels, gatewayApi, type PersonalGatewayModel } from '@/api/gateway'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
-import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import {
   FILTER_ALL,
   type HealthFilter,
   parseModelsPageView,
 } from '@/features/gateway-models/constants'
-import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
-import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
-import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
+import { useGatewayModelListBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
 import {
   invalidatePersonalModelCaches,
   usePersonalModelMutations,
 } from '@/features/gateway-models/hooks/use-personal-model-mutations'
+import {
+  effectiveCapabilities,
+  fromPersonalModel,
+  GatewayModelBatchBar,
+  GatewayModelFlatList,
+  GatewayModelListShell,
+  GatewayModelListToolbar,
+  PERSONAL_LIST_CAPABILITIES,
+} from '@/features/gateway-models/list'
 import {
   ModelBatchDeleteConfirmDialog,
   ModelBatchDeleteFailedDialog,
@@ -52,19 +38,12 @@ import {
   personalModelDetailHref,
   personalModelsRegisterHref,
 } from '@/features/gateway-models/paths'
-import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
 import {
-  createBatchConnectivityCachePatcher,
-  filterDeletableFailedModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
-  filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
-  formatDeleteFailedConfirmLabel,
-  type BatchDeleteChunkResult,
 } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
-import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
@@ -73,7 +52,6 @@ import { useAuthStore } from '@/stores/auth'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { PersonalModelForm, type PersonalModelFormValues } from './personal-model-form'
-import { PersonalModelListRow } from './personal-model-list-row'
 import { preloadPersonalModelDetailPane, preloadPersonalModelForm } from './personal-model-preload'
 
 const LIST_CHANNEL_ALL = FILTER_ALL
@@ -111,6 +89,7 @@ export function PersonalModelsWorkspace({
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
+  const [usageDays, setUsageDays] = useState<1 | 7 | 30>(7)
   const personalListFilterKey = useMemo(
     () =>
       buildFilterKey([listChannel, abilityFilter, credentialFilter, deferredSearch, healthFilter]),
@@ -120,13 +99,20 @@ export function PersonalModelsWorkspace({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
-  const [deleteFailedOpen, setDeleteFailedOpen] = useState(false)
   const [rowDeleteOpen, setRowDeleteOpen] = useState(false)
   const [pendingRowDeleteId, setPendingRowDeleteId] = useState<string | null>(null)
-  const [batchFailedOpen, setBatchFailedOpen] = useState(false)
-  const [batchFailedItems, setBatchFailedItems] = useState<GatewayModelBatchDeleteFailureItem[]>([])
+  const [updatePendingModelId, setUpdatePendingModelId] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const { toast } = useToast()
+
+  const capabilities = useMemo(
+    () =>
+      effectiveCapabilities(PERSONAL_LIST_CAPABILITIES, {
+        canWrite: hasAuthSession,
+        isPlatformAdmin: false,
+      }),
+    [hasAuthSession]
+  )
 
   const {
     data: credentials = [],
@@ -230,6 +216,35 @@ export function PersonalModelsWorkspace({
   const items = listData?.items ?? EMPTY_PERSONAL_ITEMS
   const connectivitySummary = listData?.connectivity_summary
 
+  const pageRouteNames = useMemo(() => items.map((m) => m.name), [items])
+  const pageRouteNamesKey = useMemo(() => buildFilterKey(pageRouteNames), [pageRouteNames])
+
+  const {
+    data: usageSummary,
+    isLoading: usageLoading,
+    isFetching: usageFetching,
+  } = useQuery({
+    queryKey: ['gateway', 'my-models', 'usage-summary', listChannel, usageDays, pageRouteNamesKey],
+    queryFn: () =>
+      gatewayApi.myModelsUsageSummary({
+        days: usageDays,
+        ...(listChannel !== LIST_CHANNEL_ALL ? { provider: listChannel } : {}),
+        ...(pageRouteNames.length > 0 ? { route_names: pageRouteNames } : {}),
+      }),
+    enabled: hasAuthSession && !isRegisterView && pageRouteNames.length > 0,
+    placeholderData: keepPreviousData,
+  })
+
+  const usageByRouteName = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
+    for (const row of usageSummary?.items ?? []) {
+      m.set(row.route_name, row)
+    }
+    return m
+  }, [usageSummary])
+
+  const listItems = useMemo(() => items.map(fromPersonalModel), [items])
+
   const goToList = useCallback((): void => {
     setSearchParams(
       (prev) => {
@@ -247,48 +262,9 @@ export function PersonalModelsWorkspace({
     void Promise.all([refetchList(), refetchCredentials()])
   }, [refetchCredentials, refetchList])
 
-  const isRefreshing = combineFetching(listFetching, credentialsFetching)
+  const isRefreshing = combineFetching(listFetching, credentialsFetching, usageFetching)
 
-  const onBatchItemComplete = useMemo(
-    () => createBatchConnectivityCachePatcher(queryClient, 'personal'),
-    [queryClient]
-  )
-
-  const {
-    state: batchTestState,
-    start: startBatchTest,
-    retestFailed,
-  } = useConnectivityBatchTest({
-    testById: (id) => gatewayApi.testMyModel(id),
-    onItemComplete: onBatchItemComplete,
-    invalidate: () => {
-      invalidatePersonalModelCaches(queryClient)
-    },
-    onComplete: (failed) => {
-      if (failed.length === 0) {
-        toast({ title: '批量测试完成' })
-      } else {
-        toast({
-          variant: 'destructive',
-          title: '批量测试完成',
-          description: `${String(failed.length)} 个模型探活失败`,
-        })
-      }
-    },
-  })
-
-  const batchFailedIdsRef = useRef(batchTestState.failedIds)
-  batchFailedIdsRef.current = batchTestState.failedIds
-
-  const scrollToFirstFailed = useCallback((): void => {
-    const first = batchFailedIdsRef.current[0]
-    if (!first) return
-    document
-      .querySelector(`[data-connectivity-model-id="${first}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [])
-
-  const { createMutation, deleteMutation } = usePersonalModelMutations({
+  const { createMutation, deleteMutation, updateMutation } = usePersonalModelMutations({
     onCreateSuccess: (created) => {
       if (created.length > 0) {
         navigate(personalModelDetailHref(teamId, created[0].id))
@@ -296,6 +272,52 @@ export function PersonalModelsWorkspace({
       }
       goToList()
     },
+  })
+
+  const handleBatchDeleteSucceeded = useCallback((succeeded: readonly string[]) => {
+    setBatchDeleteOpen(false)
+    setDeleteFilteredOpen(false)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of succeeded) {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
+  const {
+    batchTestState,
+    batchBusy,
+    batchTesting,
+    batchDeleting,
+    failedDeletableCount,
+    failedDeletableModels,
+    deleteFailedLabel,
+    handleTestAll,
+    handleTestUntested,
+    handleTestSelected,
+    handleDeleteFailed,
+    handleConfirmDeleteFailed,
+    runBatchDelete,
+    retestFailed,
+    scrollToFirstFailed,
+    deleteFailedOpen,
+    setDeleteFailedOpen,
+    batchFailedOpen,
+    setBatchFailedOpen,
+    batchFailedItems,
+    formatBatchDeleteLabel,
+  } = useGatewayModelListBatchOps({
+    scope: 'personal',
+    registryItems: items,
+    connectivitySummary,
+    listQueryBase: personalListQueryBase,
+    canShowBatchOps: hasAuthSession,
+    canDeleteModel: () => true,
+    canResyncModel: () => true,
+    canManageModel: () => true,
+    onBatchDeleteSucceeded: handleBatchDeleteSucceeded,
   })
 
   const handleImported = useCallback(
@@ -312,7 +334,7 @@ export function PersonalModelsWorkspace({
           .then((models) => {
             const testable = filterTestableConnectivityModels(models)
             if (testable.length > 0) {
-              startBatchTest(testable)
+              handleTestSelected(testable)
             }
           })
           .catch(() => {
@@ -323,7 +345,7 @@ export function PersonalModelsWorkspace({
           })
       }
     },
-    [goToList, queryClient, startBatchTest, toast]
+    [goToList, queryClient, handleTestSelected, toast]
   )
 
   const goToRegister = useCallback((): void => {
@@ -345,26 +367,16 @@ export function PersonalModelsWorkspace({
     [createMutation]
   )
 
-  const filteredItems = items
-
-  const filteredIdSet = useMemo(() => new Set(filteredItems.map((m) => m.id)), [filteredItems])
+  const filteredIdSet = useMemo(() => new Set(items.map((m) => m.id)), [items])
 
   const visibleSelectedIds = useMemo(
     () => filterSelectedIdsInView(selectedIds, filteredIdSet),
     [selectedIds, filteredIdSet]
   )
 
-  const testableItems = useMemo(() => filterTestableConnectivityModels(items), [items])
-  const hasTestableModels = testableItems.length > 0
-  const untestedTestableItems = useMemo(() => filterUntestedConnectivityModels(items), [items])
-  const selectedCount = visibleSelectedIds.size
-  const allFilteredSelected =
-    filteredItems.length > 0 && filteredItems.every((m) => visibleSelectedIds.has(m.id))
-  const someFilteredSelected = filteredItems.some((m) => visibleSelectedIds.has(m.id))
-
   const selectedModelsForBatch = useMemo(
-    () => filteredItems.filter((m) => visibleSelectedIds.has(m.id)),
-    [filteredItems, visibleSelectedIds]
+    () => items.filter((m) => visibleSelectedIds.has(m.id)),
+    [items, visibleSelectedIds]
   )
 
   const selectedTestable = useMemo(
@@ -373,75 +385,23 @@ export function PersonalModelsWorkspace({
   )
 
   const batchDeleteLabel = useMemo(
-    (): string => formatBatchDeleteConfirmLabel(selectedModelsForBatch.map((m) => m.display_name)),
-    [selectedModelsForBatch]
+    (): string => formatBatchDeleteLabel(selectedModelsForBatch),
+    [formatBatchDeleteLabel, selectedModelsForBatch]
   )
 
-  const filteredDeleteCount = listData?.total ?? filteredItems.length
+  const filteredDeleteCount = listData?.total ?? items.length
 
   const filteredDeleteLabel = useMemo((): string => {
-    if (filteredDeleteCount <= filteredItems.length) {
-      return formatBatchDeleteConfirmLabel(filteredItems.map((m) => m.display_name))
+    if (filteredDeleteCount <= items.length) {
+      return formatBatchDeleteConfirmLabel(items.map((m) => m.display_name))
     }
     return `将删除当前筛选下的全部 ${String(filteredDeleteCount)} 个个人模型，此操作不可撤销。`
-  }, [filteredDeleteCount, filteredItems])
-
-  const failedDeletableModels = useMemo(
-    () => filterDeletableFailedModels(items, () => true),
-    [items]
-  )
-
-  const failedDeletableCount = connectivitySummary?.failed ?? failedDeletableModels.length
-
-  const deleteFailedLabel = useMemo(
-    (): string =>
-      formatDeleteFailedConfirmLabel(
-        failedDeletableCount,
-        failedDeletableModels.map((m) => m.display_name)
-      ),
-    [failedDeletableCount, failedDeletableModels]
-  )
+  }, [filteredDeleteCount, items])
 
   const pendingRowDeleteModel = useMemo(
     () => (pendingRowDeleteId ? (items.find((m) => m.id === pendingRowDeleteId) ?? null) : null),
     [items, pendingRowDeleteId]
   )
-
-  const handleBatchDeleteComplete = useCallback(
-    (result: BatchDeleteChunkResult): void => {
-      invalidatePersonalModelCaches(queryClient)
-      setBatchDeleteOpen(false)
-      setDeleteFilteredOpen(false)
-      setDeleteFailedOpen(false)
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        for (const id of result.succeeded) {
-          next.delete(id)
-        }
-        return next
-      })
-      if (result.failed.length > 0) {
-        setBatchFailedItems(result.failed)
-        setBatchFailedOpen(true)
-      } else if (result.succeeded.length > 0) {
-        toast({
-          title: '批量删除完成',
-          description: `已删除 ${String(result.succeeded.length)} 个模型`,
-        })
-      }
-    },
-    [queryClient, toast]
-  )
-
-  const deletePersonalModelChunk = useCallback(
-    (chunk: string[]) => gatewayApi.batchDeleteMyModels(chunk),
-    []
-  )
-
-  const { batchDeleting, runBatchDelete: runPersonalBatchDelete } = useChunkedModelBatchDelete({
-    deleteChunk: deletePersonalModelChunk,
-    onComplete: handleBatchDeleteComplete,
-  })
 
   const handleToggleSelect = useCallback((id: string, selected: boolean): void => {
     setSelectedIds((prev) => {
@@ -459,7 +419,7 @@ export function PersonalModelsWorkspace({
     (selected: boolean): void => {
       setSelectedIds((prev) => {
         const next = new Set(prev)
-        for (const m of filteredItems) {
+        for (const m of items) {
           if (selected) {
             next.add(m.id)
           } else {
@@ -469,13 +429,13 @@ export function PersonalModelsWorkspace({
         return next
       })
     },
-    [filteredItems]
+    [items]
   )
 
   const handleConfirmBatchDelete = useCallback((): void => {
     if (visibleSelectedIds.size === 0) return
-    runPersonalBatchDelete([...visibleSelectedIds])
-  }, [visibleSelectedIds, runPersonalBatchDelete])
+    runBatchDelete([...visibleSelectedIds])
+  }, [visibleSelectedIds, runBatchDelete])
 
   const handleConfirmDeleteFiltered = useCallback((): void => {
     void (async () => {
@@ -484,25 +444,9 @@ export function PersonalModelsWorkspace({
         ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
       })
       if (all.length === 0) return
-      runPersonalBatchDelete(all.map((m) => m.id))
+      runBatchDelete(all.map((m) => m.id))
     })()
-  }, [personalListQueryBase, healthFilter, runPersonalBatchDelete])
-
-  const handleDeleteFailed = useCallback((): void => {
-    if (failedDeletableCount === 0) return
-    setDeleteFailedOpen(true)
-  }, [failedDeletableCount])
-
-  const handleConfirmDeleteFailed = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllPersonalGatewayModels({
-        ...personalListQueryBase,
-        connectivity: 'failed',
-      })
-      if (all.length === 0) return
-      runPersonalBatchDelete(all.map((m) => m.id))
-    })()
-  }, [personalListQueryBase, runPersonalBatchDelete])
+  }, [personalListQueryBase, healthFilter, runBatchDelete])
 
   const handleRowDelete = useCallback((id: string): void => {
     setPendingRowDeleteId(id)
@@ -517,28 +461,52 @@ export function PersonalModelsWorkspace({
     deleteMutation.mutate(id)
   }, [pendingRowDeleteId, deleteMutation])
 
-  const handleTestAll = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllPersonalGatewayModels(personalListQueryBase)
-      const testable = filterTestableConnectivityModels(all)
-      if (testable.length === 0) return
-      startBatchTest(testable)
-    })()
-  }, [personalListQueryBase, startBatchTest])
+  const handleToggleActive = useCallback(
+    (item: ReturnType<typeof fromPersonalModel>, enabled: boolean) => {
+      setUpdatePendingModelId(item.id)
+      updateMutation.mutate(
+        { id: item.id, body: { is_active: enabled } },
+        {
+          onSettled: () => {
+            setUpdatePendingModelId(null)
+          },
+        }
+      )
+    },
+    [updateMutation]
+  )
 
-  const handleTestUntested = useCallback((): void => {
-    void (async () => {
-      const all = await fetchAllPersonalGatewayModels(personalListQueryBase)
-      const untested = filterUntestedConnectivityModels(all)
-      if (untested.length === 0) return
-      startBatchTest(untested)
-    })()
-  }, [personalListQueryBase, startBatchTest])
+  const providerChoices = useMemo(() => {
+    const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
+    for (const m of items) {
+      s.add(m.provider)
+    }
+    return Array.from(s).sort()
+  }, [items])
 
-  const handleTestSelected = useCallback((): void => {
-    if (selectedTestable.length === 0) return
-    startBatchTest(selectedTestable)
-  }, [selectedTestable, startBatchTest])
+  const allFilteredSelected = items.length > 0 && items.every((m) => visibleSelectedIds.has(m.id))
+  const someFilteredSelected = items.some((m) => visibleSelectedIds.has(m.id))
+
+  const credentialBanner =
+    credentialFilter && capabilities.credentialBanner ? (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+        <span className="text-muted-foreground">
+          按凭据筛选：
+          <span className="ml-1 font-medium">{selectedCredentialName ?? credentialFilter}</span>
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7"
+          type="button"
+          onClick={() => {
+            setCredentialFilter('')
+          }}
+        >
+          清除筛选
+        </Button>
+      </div>
+    ) : null
 
   if (!hasAuthSession) {
     return <p className="py-8 text-center text-sm text-muted-foreground">请先登录以管理个人模型</p>
@@ -561,18 +529,10 @@ export function PersonalModelsWorkspace({
     )
   }
 
-  const batchTesting = batchTestState.running
-  const batchBusy = batchTesting || batchDeleting
-
   const showEmptyOnboarding = !isLoading && (listData?.total ?? 0) === 0 && !hasActiveListFilters
 
   return (
     <div className="space-y-4">
-      <ConnectivityBatchTestBanner
-        state={batchTestState}
-        onRetestFailed={retestFailed}
-        onScrollToFirstFailed={scrollToFirstFailed}
-      />
       {activeCredentials.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           尚无个人凭据，请先到{' '}
@@ -586,175 +546,7 @@ export function PersonalModelsWorkspace({
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
-            <Label htmlFor="personal-model-search">搜索</Label>
-            <Input
-              id="personal-model-search"
-              value={search}
-              placeholder="名称、模型 ID、通道…"
-              className="h-9 w-full"
-              onChange={(e) => {
-                setSearch(e.currentTarget.value)
-              }}
-            />
-          </div>
-          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
-            <Label htmlFor="personal-model-credential">凭据</Label>
-            <GatewayModelCredentialFilterSelect
-              value={credentialFilter}
-              onChange={setCredentialFilter}
-              options={credentialFilterOptions}
-              loading={credentialsFetching}
-              selectedCredentialName={selectedCredentialName}
-              triggerClassName="h-9 w-full"
-              ariaLabel="按凭据筛选"
-            />
-          </div>
-          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
-            <Label htmlFor="personal-model-channel">接入通道</Label>
-            <Select
-              value={listChannel}
-              onValueChange={(v) => {
-                setListChannel(v)
-              }}
-            >
-              <SelectTrigger
-                id="personal-model-channel"
-                className="h-9 w-full"
-                aria-label="按接入通道筛选"
-              >
-                <SelectValue placeholder="全部" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={LIST_CHANNEL_ALL}>全部</SelectItem>
-                {MODEL_PROVIDERS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex w-full flex-col gap-1.5 sm:w-[220px]">
-            <Label htmlFor="personal-model-ability">能力</Label>
-            <RegistryAbilityFilterSelect
-              id="personal-model-ability"
-              value={abilityFilter}
-              onValueChange={setAbilityFilter}
-              className="h-9 w-full"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {items.length > 0 || hasActiveListFilters ? (
-            <ConnectivityHealthStrip
-              models={items}
-              connectivitySummary={connectivitySummary}
-              healthFilter={healthFilter}
-              onHealthFilterChange={setHealthFilter}
-              canWrite={hasAuthSession}
-              onTestAll={
-                (connectivitySummary?.total ?? hasTestableModels) && !batchBusy
-                  ? handleTestAll
-                  : undefined
-              }
-              onTestUntested={
-                (connectivitySummary?.unknown ?? untestedTestableItems.length) > 0 && !batchBusy
-                  ? handleTestUntested
-                  : undefined
-              }
-              untestedTestableCount={connectivitySummary?.unknown ?? untestedTestableItems.length}
-              testingAll={batchTesting}
-              batchBusy={batchBusy}
-              onDeleteFailed={failedDeletableCount > 0 ? handleDeleteFailed : undefined}
-              deletingFailed={batchDeleting}
-            />
-          ) : null}
-          <GatewayRefreshButton
-            isFetching={isRefreshing}
-            ariaLabel="刷新个人模型"
-            onRefresh={handleRefresh}
-          />
-          <Button
-            size="sm"
-            className={items.length > 0 ? 'ml-auto' : undefined}
-            onClick={goToRegister}
-            disabled={activeCredentials.length === 0}
-            onMouseEnter={preloadPersonalModelForm}
-            onFocus={preloadPersonalModelForm}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            添加模型
-          </Button>
-        </div>
-      </div>
-
-      {filteredDeleteCount > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox
-              checked={allFilteredSelected ? true : someFilteredSelected ? 'indeterminate' : false}
-              onCheckedChange={(checked) => {
-                handleToggleSelectAll(checked === true)
-              }}
-              aria-label="全选当前筛选"
-            />
-            <span className="text-muted-foreground">全选当前筛选（{filteredDeleteCount}）</span>
-          </label>
-          {selectedCount > 0 ? (
-            <span className="text-sm text-muted-foreground">已选 {selectedCount} 项</span>
-          ) : null}
-          <div className="ml-auto flex flex-wrap gap-2">
-            {filteredDeleteCount > 0 && healthFilter !== 'failed' ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={batchBusy}
-                onClick={() => {
-                  setDeleteFilteredOpen(true)
-                }}
-              >
-                <Trash2 className="mr-1 h-3 w-3" />
-                删除当前筛选下全部（{filteredDeleteCount}）
-              </Button>
-            ) : null}
-            {selectedCount > 0 && selectedTestable.length > 0 && !batchBusy ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={batchBusy}
-                onClick={handleTestSelected}
-              >
-                批量测试
-              </Button>
-            ) : null}
-            {selectedCount > 0 ? (
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-8 text-xs"
-                disabled={batchBusy}
-                onClick={() => {
-                  setBatchDeleteOpen(true)
-                }}
-              >
-                <Trash2 className="mr-1 h-3 w-3" />
-                批量删除
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : showEmptyOnboarding ? (
+      {showEmptyOnboarding ? (
         <div className="rounded-lg border border-dashed bg-muted/10 p-8">
           <h3 className="text-lg font-semibold">配置个人模型供给链</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
@@ -792,83 +584,226 @@ export function PersonalModelsWorkspace({
             添加第一个模型
           </Button>
         </div>
-      ) : (listData?.total ?? 0) === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          当前筛选下没有匹配的模型，请调整搜索或健康状态筛选。
-        </p>
       ) : (
-        <ul className="divide-y rounded-lg border">
-          {filteredItems.map((m) => (
-            <PersonalModelListRow
-              key={m.id}
-              id={m.id}
-              displayName={m.display_name}
-              provider={m.provider}
-              virtualName={m.name}
-              modelId={m.model_id}
-              modelTypes={m.model_types}
-              lastTestStatus={m.last_test_status}
-              lastTestedAt={m.last_tested_at}
-              lastTestReason={m.last_test_reason}
-              detailHref={personalModelDetailHref(teamId, m.id)}
-              selected={visibleSelectedIds.has(m.id)}
-              onSelectChange={handleToggleSelect}
-              onDelete={handleRowDelete}
-              onPreloadNavigate={preloadPersonalModelDetailPane}
+        <GatewayModelListShell
+          capabilities={capabilities}
+          bannerSlot={credentialBanner}
+          connectivityBanner={
+            capabilities.connectivityBanner ? (
+              <ConnectivityBatchTestBanner
+                state={batchTestState}
+                onRetestFailed={retestFailed}
+                onScrollToFirstFailed={scrollToFirstFailed}
+              />
+            ) : undefined
+          }
+          toolbar={
+            <GatewayModelListToolbar
+              capabilities={capabilities}
+              search={search}
+              onSearchChange={setSearch}
+              providerFilter={listChannel === LIST_CHANNEL_ALL ? '' : listChannel}
+              onProviderFilterChange={(v) => {
+                setListChannel(v || LIST_CHANNEL_ALL)
+              }}
+              abilityFilter={abilityFilter}
+              onAbilityFilterChange={setAbilityFilter}
+              credentialFilter={credentialFilter}
+              onCredentialFilterChange={setCredentialFilter}
+              credentialFilterOptions={credentialFilterOptions}
+              credentialFilterLoading={credentialsFetching}
+              selectedCredentialName={selectedCredentialName}
+              providerChoices={providerChoices}
+              healthFilter={healthFilter}
+              onHealthFilterChange={setHealthFilter}
+              connectivitySummary={connectivitySummary}
+              allModels={items}
+              usageDays={usageDays}
+              onUsageDaysChange={setUsageDays}
+              canWrite={hasAuthSession}
+              onTestAll={!batchBusy ? handleTestAll : undefined}
+              onTestUntested={!batchBusy ? handleTestUntested : undefined}
+              testingAll={batchTesting}
+              batchBusy={batchBusy}
+              onDeleteFailed={failedDeletableCount > 0 ? handleDeleteFailed : undefined}
+              deletingFailed={batchDeleting}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+              onRegister={goToRegister}
+              onPreloadRegister={preloadPersonalModelForm}
+              deleteAllFilteredSlot={
+                filteredDeleteCount > 0 && healthFilter !== 'failed' ? (
+                  <DropdownMenuItem
+                    disabled={batchBusy}
+                    onClick={() => {
+                      setDeleteFilteredOpen(true)
+                    }}
+                  >
+                    删除当前筛选下全部（{filteredDeleteCount}）
+                  </DropdownMenuItem>
+                ) : undefined
+              }
             />
-          ))}
-        </ul>
+          }
+          batchBar={
+            capabilities.batchSelect ? (
+              <GatewayModelBatchBar
+                capabilities={capabilities}
+                selectedCount={visibleSelectedIds.size}
+                selectableCount={items.length}
+                allSelectableSelected={allFilteredSelected}
+                someSelectableSelected={someFilteredSelected}
+                onToggleSelectAll={handleToggleSelectAll}
+                onBatchTestSelected={
+                  selectedTestable.length > 0 && !batchBusy
+                    ? () => {
+                        handleTestSelected(selectedModelsForBatch)
+                      }
+                    : undefined
+                }
+                onBatchDelete={
+                  visibleSelectedIds.size > 0
+                    ? () => {
+                        setBatchDeleteOpen(true)
+                      }
+                    : undefined
+                }
+                batchBusy={batchBusy}
+                testingAll={batchTesting}
+              />
+            ) : undefined
+          }
+          isLoading={isLoading}
+          isEmpty={!isLoading && (listData?.total ?? 0) === 0 && hasActiveListFilters}
+          emptySlot={
+            <p className="px-3 py-12 text-center text-sm text-muted-foreground">
+              当前筛选下没有匹配的模型，请调整搜索或健康状态筛选。
+            </p>
+          }
+          paginationSlot={
+            listData && listData.total > 0 ? (
+              <div className="border-t px-3 py-2">
+                <PaginationControls
+                  page={listData.page}
+                  page_size={listData.page_size}
+                  total={listData.total}
+                  has_next={listData.has_next}
+                  has_prev={listData.has_prev}
+                  onPageChange={setPage}
+                />
+              </div>
+            ) : undefined
+          }
+          dialogsSlot={
+            <>
+              <ModelBatchDeleteConfirmDialog
+                open={batchDeleteOpen}
+                onOpenChange={setBatchDeleteOpen}
+                title="批量删除个人模型"
+                description={
+                  batchDeleteLabel ||
+                  `确定删除已选的 ${String(visibleSelectedIds.size)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+                }
+                confirmLabel="删除"
+                pending={batchDeleting}
+                onConfirm={handleConfirmBatchDelete}
+              />
+              <ModelBatchDeleteConfirmDialog
+                open={deleteFilteredOpen}
+                onOpenChange={setDeleteFilteredOpen}
+                title="删除当前筛选下的全部模型"
+                description={filteredDeleteLabel}
+                confirmLabel="全部删除"
+                pending={batchDeleting}
+                onConfirm={handleConfirmDeleteFiltered}
+              />
+              <ModelBatchDeleteConfirmDialog
+                open={deleteFailedOpen}
+                onOpenChange={setDeleteFailedOpen}
+                title="删除不可用模型"
+                description={
+                  deleteFailedLabel ||
+                  `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+                }
+                pending={batchDeleting}
+                onConfirm={handleConfirmDeleteFailed}
+              />
+              <ModelBatchDeleteFailedDialog
+                open={batchFailedOpen}
+                onOpenChange={setBatchFailedOpen}
+                failedItems={batchFailedItems}
+              />
+            </>
+          }
+        >
+          <GatewayModelFlatList
+            capabilities={capabilities}
+            items={listItems}
+            selectedIds={visibleSelectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={handleToggleSelectAll}
+            selectableCount={items.length}
+            allSelectableSelected={allFilteredSelected}
+            someSelectableSelected={someFilteredSelected}
+            usageDays={usageDays}
+            usageByRouteName={usageByRouteName}
+            usageLoading={usageLoading}
+            getItemHref={(item) => personalModelDetailHref(teamId, item.id)}
+            onPreloadNavigate={preloadPersonalModelDetailPane}
+            onDelete={handleRowDelete}
+            canBatchSelect={() => true}
+            canDelete={() => true}
+            renderTrailingActions={(item, { isDeleting }) => {
+              const isUpdating = updatePendingModelId === item.id
+              return (
+                <div className="flex items-center gap-2">
+                  {capabilities.rowToggleEnabled !== false ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5">
+                          <span className="hidden text-xs text-muted-foreground lg:inline">
+                            {item.enabled ? '已启用' : '已禁用'}
+                          </span>
+                          <Switch
+                            checked={item.enabled}
+                            disabled={isUpdating || isDeleting}
+                            aria-label={`${item.enabled ? '禁用' : '启用'} ${item.title}`}
+                            onCheckedChange={(checked) => {
+                              handleToggleActive(item, checked)
+                            }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs lg:hidden">
+                        {item.enabled ? '点击禁用模型' : '点击启用模型'}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  {capabilities.rowDelete !== false ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      disabled={isDeleting || isUpdating}
+                      aria-label={`删除 ${item.title}`}
+                      onClick={() => {
+                        handleRowDelete(item.id)
+                      }}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
+              )
+            }}
+          />
+        </GatewayModelListShell>
       )}
-
-      {listData && listData.total > 0 ? (
-        <PaginationControls
-          page={listData.page}
-          page_size={listData.page_size}
-          total={listData.total}
-          has_next={listData.has_next}
-          has_prev={listData.has_prev}
-          onPageChange={setPage}
-          className="pt-2"
-        />
-      ) : null}
-
-      <ModelBatchDeleteConfirmDialog
-        open={batchDeleteOpen}
-        onOpenChange={setBatchDeleteOpen}
-        title="批量删除个人模型"
-        description={
-          batchDeleteLabel ||
-          `确定删除已选的 ${String(selectedCount)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        }
-        confirmLabel="删除"
-        pending={batchDeleting}
-        onConfirm={handleConfirmBatchDelete}
-      />
-
-      <ModelBatchDeleteConfirmDialog
-        open={deleteFilteredOpen}
-        onOpenChange={setDeleteFilteredOpen}
-        title="删除当前筛选下的全部模型"
-        description={
-          filteredDeleteLabel ||
-          `确定删除当前筛选下的 ${String(filteredItems.length)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        }
-        confirmLabel="全部删除"
-        pending={batchDeleting}
-        onConfirm={handleConfirmDeleteFiltered}
-      />
-
-      <ModelBatchDeleteConfirmDialog
-        open={deleteFailedOpen}
-        onOpenChange={setDeleteFailedOpen}
-        title="删除不可用模型"
-        description={
-          deleteFailedLabel ||
-          `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        }
-        pending={batchDeleting}
-        onConfirm={handleConfirmDeleteFailed}
-      />
 
       <ConfirmAlertDialog
         open={rowDeleteOpen}
@@ -885,12 +820,6 @@ export function PersonalModelsWorkspace({
         confirmLabel="删除"
         pending={deleteMutation.isPending}
         onConfirm={handleConfirmRowDelete}
-      />
-
-      <ModelBatchDeleteFailedDialog
-        open={batchFailedOpen}
-        onOpenChange={setBatchFailedOpen}
-        failedItems={batchFailedItems}
       />
     </div>
   )

@@ -572,6 +572,10 @@ class GatewayModelRouteUsageItem(BaseModel):
     user: GatewayModelRouteUsageSlice
 
 
+class ManagedTeamModelRouteUsageItem(GatewayModelRouteUsageItem):
+    team_id: uuid.UUID
+
+
 class PlatformCredentialStatItem(BaseModel):
     """平台管理员：凭据维度全局调用统计（不含密钥）。"""
 
@@ -591,6 +595,11 @@ class PlatformCredentialStatItem(BaseModel):
 
 
 class GatewayModelUsageSummaryResponse(PaginatedListResponse[GatewayModelRouteUsageItem]):
+    start: datetime
+    end: datetime
+
+
+class ManagedTeamModelUsageSummaryResponse(PaginatedListResponse[ManagedTeamModelRouteUsageItem]):
     start: datetime
     end: datetime
 
@@ -1390,6 +1399,8 @@ __all__ = [
     "ManagedTeamModelCredentialFilterItem",
     "ManagedTeamModelCredentialFilterListResponse",
     "ManagedTeamModelListResponse",
+    "ManagedTeamModelRouteUsageItem",
+    "ManagedTeamModelUsageSummaryResponse",
     "ManagedTeamRouteListResponse",
     "ManagedTeamVirtualKeyListResponse",
     "ManagedTeamVkeyEntitlementItem",

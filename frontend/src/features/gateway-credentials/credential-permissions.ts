@@ -10,9 +10,10 @@ import type { GatewayTeam } from '@/api/gateway/teams'
 
 export type CredentialOwnerFields = Pick<ProviderCredential, 'scope' | 'created_by_user_id'>
 
-export type CredentialLinkScope =
-  | Pick<CredentialSummary, 'scope'>
-  | Pick<ProviderCredential, 'scope' | 'created_by_user_id'>
+export type CredentialLinkScope = Pick<
+  CredentialSummary,
+  'scope' | 'created_by_user_id' | 'management_access'
+>
 
 export function isLegacySharedTeamCredential(cred: CredentialOwnerFields): boolean {
   return (
@@ -60,7 +61,7 @@ export function canLinkToCredentialDetail(
   if (summary.scope === 'system') return isPlatformAdmin
   if (summary.scope !== 'team') return false
 
-  const createdBy = 'created_by_user_id' in summary ? (summary.created_by_user_id ?? null) : null
+  const createdBy = summary.created_by_user_id ?? null
   if (actorOwnsTeamCredential({ scope: 'team', created_by_user_id: createdBy }, viewerUserId)) {
     return true
   }

@@ -1783,6 +1783,159 @@ class TestGatewayManagementApi:
             assert mid not in remaining_ids
 
     @pytest.mark.asyncio
+    async def test_my_models_batch_resync_capabilities_partial_success(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """POST /my-models/batch-resync-capabilities：可 resync 行成功，未知 id 进 failed[]。"""
+        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+            LitellmCapabilityHintAdapter,
+        )
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"my-resync-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-my-resync-int-test-key-123456",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/my-models",
+            headers=auth_headers,
+            json={
+                "display_name": "Resync Test",
+                "provider": "openai",
+                "model_id": "gpt-4o-mini",
+                "credential_id": cred_id,
+                "model_types": ["text"],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        model_id = r_create.json()[0]["id"]
+        unknown_id = str(uuid.uuid4())
+
+        def _vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
+            _ = provider, real_model
+            return LitellmModelInfoHints(supports_vision=True)
+
+        monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _vision_hints)
+
+        r = await dev_client.post(
+            "/api/v1/gateway/my-models/batch-resync-capabilities",
+            headers=auth_headers,
+            json={"model_ids": [model_id, unknown_id]},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert model_id in body["succeeded"]
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["id"] == unknown_id
+
+    @pytest.mark.asyncio
+    async def test_my_models_usage_summary_pagination_and_route_names(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """GET /my-models/usage-summary：个人轴按 route_name 聚合。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"my-usage-cred-{uuid.uuid4().hex[:6]}",
+                "api_key": "sk-my-usage-int-test-key-123456",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cred_id = r_cred.json()["id"]
+
+        route_a = None
+        route_b = None
+        for display_name in ("Usage A", "Usage B"):
+            r_create = await dev_client.post(
+                "/api/v1/gateway/my-models",
+                headers=auth_headers,
+                json={
+                    "display_name": display_name,
+                    "provider": "openai",
+                    "model_id": f"gpt-4o-mini-{uuid.uuid4().hex[:4]}",
+                    "credential_id": cred_id,
+                    "model_types": ["text"],
+                },
+            )
+            assert r_create.status_code == 201, r_create.text
+            created = r_create.json()[0]
+            if display_name == "Usage A":
+                route_a = created["name"]
+            else:
+                route_b = created["name"]
+        assert route_a and route_b
+
+        now = datetime.now(UTC)
+        db_session.add(
+            GatewayRequestLog(
+                id=uuid.uuid4(),
+                created_at=now,
+                tenant_id=team.id,
+                user_id=test_user.id,
+                vkey_id=None,
+                capability="chat",
+                route_name=route_a,
+                real_model="gpt-4o-mini",
+                provider="openai",
+                status="success",
+                input_tokens=5,
+                output_tokens=3,
+                cached_tokens=0,
+                cost_usd=Decimal("0.002"),
+                latency_ms=50,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id="req-my-usage-a",
+            )
+        )
+        await db_session.commit()
+
+        r_page = await dev_client.get(
+            "/api/v1/gateway/my-models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "page": 1, "page_size": 1},
+        )
+        assert r_page.status_code == 200, r_page.text
+        page_payload = r_page.json()
+        _assert_paginated_envelope(page_payload, page=1, page_size=1)
+        assert page_payload["total"] >= 2
+        assert page_payload["has_next"] is True
+        assert "start" in page_payload
+        assert "end" in page_payload
+
+        r_scoped = await dev_client.get(
+            "/api/v1/gateway/my-models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "route_names": [route_a]},
+        )
+        assert r_scoped.status_code == 200, r_scoped.text
+        scoped_payload = r_scoped.json()
+        _assert_paginated_envelope(scoped_payload, page=1, page_size=20)
+        assert len(scoped_payload["items"]) == 1
+        assert scoped_payload["items"][0]["route_name"] == route_a
+        assert scoped_payload["items"][0]["workspace"]["requests"] >= 1
+
+    @pytest.mark.asyncio
     async def test_personal_my_model_listed_on_v1_models(
         self,
         dev_client: AsyncClient,
@@ -3697,6 +3850,77 @@ class TestManagedTeamModelsAggregateApi:
         summary = payload["connectivity_summary"]
         assert summary["total"] == summary["success"] + summary["failed"] + summary["unknown"]
         assert summary["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_managed_team_models_usage_summary_includes_team_id(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """GET /managed-team-models/usage-summary：跨团队聚合且 items 含 team_id。"""
+        ts = TeamService(db_session)
+        shared = await ts.create_team(
+            name=f"UsageAgg-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        model_name = f"managed-usage-{uuid.uuid4().hex[:6]}"
+        await self._create_team_model(
+            dev_client, shared.id, auth_headers, model_name=model_name
+        )
+
+        now = datetime.now(UTC)
+        db_session.add(
+            GatewayRequestLog(
+                id=uuid.uuid4(),
+                created_at=now,
+                tenant_id=shared.id,
+                user_id=test_user.id,
+                vkey_id=None,
+                capability="chat",
+                route_name=model_name,
+                real_model="gpt-4o-mini",
+                provider="openai",
+                status="success",
+                input_tokens=4,
+                output_tokens=2,
+                cached_tokens=0,
+                cost_usd=Decimal("0.001"),
+                latency_ms=40,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id="req-managed-usage",
+            )
+        )
+        await db_session.commit()
+
+        r_scoped = await dev_client.get(
+            "/api/v1/gateway/managed-team-models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "route_names": [model_name]},
+        )
+        assert r_scoped.status_code == 200, r_scoped.text
+        scoped_payload = r_scoped.json()
+        _assert_paginated_envelope(scoped_payload, page=1, page_size=20)
+        assert len(scoped_payload["items"]) == 1
+        item = scoped_payload["items"][0]
+        assert item["route_name"] == model_name
+        assert str(item["team_id"]) == str(shared.id)
+        assert item["workspace"]["requests"] >= 1
+
+        r_page = await dev_client.get(
+            "/api/v1/gateway/managed-team-models/usage-summary",
+            headers=auth_headers,
+            params={"days": 7, "page": 1, "page_size": 1},
+        )
+        assert r_page.status_code == 200, r_page.text
+        page_payload = r_page.json()
+        _assert_paginated_envelope(page_payload, page=1, page_size=1)
+        assert page_payload["total"] >= 1
+        assert page_payload["has_next"] is True
 
     @pytest.mark.asyncio
     async def test_list_managed_team_models_member_can_read(

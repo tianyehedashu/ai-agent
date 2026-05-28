@@ -250,6 +250,20 @@ class ModelWritesMixin:
             is_platform_admin=False,
         )
 
+    async def resync_personal_models_capabilities_batch(
+        self,
+        user_id: uuid.UUID,
+        model_ids: list[uuid.UUID],
+    ) -> GatewayModelBatchResyncCapabilitiesResult:
+        tenant_id = await self._ensure_personal_tenant_id(user_id)
+        return await self.resync_gateway_models_capabilities_batch(
+            model_ids,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            team_role="owner",
+            is_platform_admin=False,
+        )
+
     async def create_gateway_model(
         self,
         *,

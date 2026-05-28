@@ -5,47 +5,54 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react'
 import type React from 'react'
 
-import { Link } from 'react-router-dom'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { Link, useSearchParams } from 'react-router-dom'
 
+import { gatewayApi, fetchAllManagedTeamModelPages } from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
-import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
-import { FILTER_ALL, type HealthFilter } from '@/features/gateway-models/constants'
+import type { HealthFilter } from '@/features/gateway-models/constants'
 import {
   credentialFilterOptionsFromModels,
   mergeCredentialFilterOptions,
 } from '@/features/gateway-models/gateway-model-credential-filter-options'
-import { GatewayModelCredentialFilterSelect } from '@/features/gateway-models/gateway-model-credential-filter-select'
 import {
   canDeleteGatewayModel,
   canManageGatewayModel,
   canResyncGatewayModelCapabilities,
+  isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
-import { useGatewayModelConnectivityBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
+import { useGatewayModelListBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
+import {
+  effectiveCapabilities,
+  fromGatewayModel,
+  GatewayModelBatchBar,
+  GatewayModelGroupedList,
+  GatewayModelListShell,
+  GatewayModelListToolbar,
+  TEAM_GROUPED_CAPABILITIES,
+  buildManagedTeamRouteUsageKey,
+} from '@/features/gateway-models/list'
 import {
   ModelBatchDeleteConfirmDialog,
   ModelBatchDeleteFailedDialog,
 } from '@/features/gateway-models/model-batch-delete-dialogs'
-import { teamModelsRegisterHref } from '@/features/gateway-models/paths'
-import { RegistryAbilityFilterSelect } from '@/features/gateway-models/registry-ability-filter-select'
-import { CollaborationTeamsModelsGroupedList } from '@/features/gateway-models/team/collaboration-teams-models-grouped-list'
+import { teamModelDetailHref, teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { useGatewayModelCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
 import { useManagedTeamModelsList } from '@/features/gateway-models/use-managed-team-models-list'
-import { channelLabel, resolveGatewayModelTeamId } from '@/features/gateway-models/utils'
-import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import {
+  filterResyncableCapabilityModels,
+  filterSelectedIdsInView,
+  filterTestableConnectivityModels,
+  formatBatchDeleteConfirmLabel,
+  resolveGatewayModelTeamId,
+} from '@/features/gateway-models/utils'
 import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
 import {
   groupModelsByTenantId,
@@ -58,9 +65,11 @@ import {
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { Plus, Search } from '@/lib/lucide-icons'
-import { PROVIDER_CHANNEL_FILTER_HINT_GATEWAY } from '@/lib/provider-channel-hint'
+import { buildFilterKey } from '@/lib/pagination'
 import { useUserStore } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
+
+import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
 export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
@@ -68,6 +77,9 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const teamNameById = useGatewayMemberTeamNameMap()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const credentialFilter = searchParams.get('credentialId') ?? ''
+  const highlightModelId = searchParams.get('modelId') ?? ''
 
   const [teamSearch, setTeamSearch] = useState('')
   const deferredTeamSearch = useDeferredValue(teamSearch)
@@ -76,10 +88,18 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [providerFilter, setProviderFilter] = useState('')
   const [abilityFilter, setAbilityFilter] = useState('')
-  const [credentialFilter, setCredentialFilter] = useState('')
+  const [usageDays, setUsageDays] = useState<1 | 7 | 30>(7)
   const [page, setPage] = useState(1)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
   const [updatePendingModelId, setUpdatePendingModelId] = useState<string | null>(null)
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+
+  const capabilities = useMemo(
+    () => effectiveCapabilities(TEAM_GROUPED_CAPABILITIES, { canWrite, isPlatformAdmin }),
+    [canWrite, isPlatformAdmin]
+  )
 
   const hasCollaborationTeams = memberCollaborationTeams.length > 0
   const teamSearchTrimmed = teamSearch.trim()
@@ -126,6 +146,42 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
 
   const registryItems = useMemo(() => listData?.items ?? [], [listData?.items])
   const connectivitySummary = listData?.connectivity_summary
+
+  const pageRouteNames = useMemo(() => registryItems.map((m) => m.name), [registryItems])
+  const pageRouteNamesKey = useMemo(() => buildFilterKey(pageRouteNames), [pageRouteNames])
+
+  const {
+    data: usageSummary,
+    isLoading: usageLoading,
+    isFetching: usageFetching,
+  } = useQuery({
+    queryKey: [
+      'gateway',
+      'managed-team-models',
+      'usage-summary',
+      providerFilter,
+      usageDays,
+      pageRouteNamesKey,
+      deferredTeamSearch,
+    ],
+    queryFn: () =>
+      gatewayApi.managedTeamModelsUsageSummary({
+        days: usageDays,
+        ...(providerFilter ? { provider: providerFilter } : {}),
+        ...(pageRouteNames.length > 0 ? { route_names: pageRouteNames } : {}),
+        ...(deferredTeamSearch.trim() ? { search: deferredTeamSearch.trim() } : {}),
+      }),
+    enabled: hasCollaborationTeams && pageRouteNames.length > 0,
+    placeholderData: keepPreviousData,
+  })
+
+  const usageByRouteName = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
+    for (const row of usageSummary?.items ?? []) {
+      m.set(buildManagedTeamRouteUsageKey(row.team_id, row.route_name), row)
+    }
+    return m
+  }, [usageSummary])
 
   const credentialFilterOptions = useMemo(
     () =>
@@ -189,6 +245,18 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     [registryItems, canManageModel]
   )
 
+  const handleBatchDeleteSucceeded = useCallback((succeeded: readonly string[]) => {
+    setBatchDeleteOpen(false)
+    setDeleteFilteredOpen(false)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of succeeded) {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
   const {
     batchTestState,
     batchBusy,
@@ -202,9 +270,12 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     deleteFailedLabel,
     handleTestAll,
     handleTestUntested,
+    handleTestSelected,
     handleResyncAll,
+    handleResyncSelected,
     handleDeleteFailed,
     handleConfirmDeleteFailed,
+    runBatchDelete,
     retestFailed,
     scrollToFirstFailed,
     deleteFailedOpen,
@@ -214,7 +285,8 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     batchFailedItems,
     batchFailedDialogTitle,
     batchFailedDialogDescription,
-  } = useGatewayModelConnectivityBatchOps({
+    formatBatchDeleteLabel,
+  } = useGatewayModelListBatchOps({
     scope: 'managed-teams',
     registryItems,
     connectivitySummary,
@@ -223,9 +295,20 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     canDeleteModel,
     canResyncModel,
     canManageModel,
+    onBatchDeleteSucceeded: handleBatchDeleteSucceeded,
   })
 
-  const modelsByTeamId = useMemo(() => groupModelsByTenantId(registryItems), [registryItems])
+  const itemsByTeamId = useMemo(() => {
+    const grouped = groupModelsByTenantId(registryItems)
+    const result = new Map<string, ReturnType<typeof fromGatewayModel>[]>()
+    for (const [teamId, models] of grouped) {
+      result.set(
+        teamId,
+        models.map((m) => fromGatewayModel(m, 'team'))
+      )
+    }
+    return result
+  }, [registryItems])
 
   const tenantIdsWithModels = useMemo(
     () => new Set(listData?.tenant_ids_with_models ?? []),
@@ -242,6 +325,73 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     return Array.from(s).sort()
   }, [registryItems])
 
+  const filteredModelIdSet = useMemo(() => new Set(registryItems.map((m) => m.id)), [registryItems])
+
+  const visibleSelectedIds = useMemo(
+    () => filterSelectedIdsInView(selectedIds, filteredModelIdSet),
+    [selectedIds, filteredModelIdSet]
+  )
+
+  const checkModelBatchSelectable = useCallback(
+    (model: GatewayModel) =>
+      isModelBatchSelectable(model, viewerUserId, resolveTeamCanWrite(model), isPlatformAdmin),
+    [viewerUserId, isPlatformAdmin, resolveTeamCanWrite]
+  )
+
+  const selectableModels = useMemo(
+    () => registryItems.filter(checkModelBatchSelectable),
+    [registryItems, checkModelBatchSelectable]
+  )
+
+  const selectedModelsForBatch = useMemo(
+    () => registryItems.filter((m) => visibleSelectedIds.has(m.id)),
+    [registryItems, visibleSelectedIds]
+  )
+
+  const selectedTestable = useMemo(
+    () => filterTestableConnectivityModels(selectedModelsForBatch),
+    [selectedModelsForBatch]
+  )
+
+  const selectedResyncable = useMemo(
+    () => filterResyncableCapabilityModels(selectedModelsForBatch, canResyncModel),
+    [selectedModelsForBatch, canResyncModel]
+  )
+
+  const batchDeleteLabel = useMemo(
+    (): string => formatBatchDeleteLabel(selectedModelsForBatch),
+    [formatBatchDeleteLabel, selectedModelsForBatch]
+  )
+
+  const filteredDeleteCount = listData?.total ?? registryItems.length
+
+  const filteredDeleteLabel = useMemo((): string => {
+    if (filteredDeleteCount <= registryItems.length) {
+      return formatBatchDeleteConfirmLabel(registryItems.map((m) => m.name))
+    }
+    return `将删除当前筛选下的全部 ${String(filteredDeleteCount)} 个团队模型，此操作不可撤销。`
+  }, [filteredDeleteCount, registryItems])
+
+  const setCredentialFilter = useCallback(
+    (credentialId: string): void => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          if (credentialId) {
+            n.set('credentialId', credentialId)
+          } else {
+            n.delete('credentialId')
+            n.delete('modelId')
+          }
+          return n
+        },
+        { replace: true }
+      )
+      setPage(1)
+    },
+    [setSearchParams]
+  )
+
   const handleTeamSearchChange = useCallback((value: string) => {
     setTeamSearch(value)
     setPage(1)
@@ -252,21 +402,61 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
     setPage(1)
   }, [])
 
-  const handleCredentialFilterChange = useCallback((value: string) => {
-    setCredentialFilter(value)
-    setPage(1)
-  }, [])
-
   const handleHealthFilterChange = useCallback((filter: HealthFilter) => {
     setHealthFilter(filter)
     setPage(1)
   }, [])
 
+  const handleToggleSelect = useCallback((id: string, selected: boolean): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (selected) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
+  const handleToggleSelectAll = useCallback(
+    (selected: boolean): void => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        for (const m of selectableModels) {
+          if (selected) {
+            next.add(m.id)
+          } else {
+            next.delete(m.id)
+          }
+        }
+        return next
+      })
+    },
+    [selectableModels]
+  )
+
+  const handleConfirmBatchDelete = useCallback((): void => {
+    if (visibleSelectedIds.size === 0) return
+    runBatchDelete([...visibleSelectedIds])
+  }, [visibleSelectedIds, runBatchDelete])
+
+  const handleConfirmDeleteFiltered = useCallback((): void => {
+    void (async () => {
+      const all = await fetchAllManagedTeamModelPages({
+        ...listQueryBase,
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+      })
+      if (all.length === 0) return
+      runBatchDelete(all.map((m) => m.id))
+    })()
+  }, [listQueryBase, healthFilter, runBatchDelete])
+
   const handleToggleEnabled = useCallback(
-    (model: GatewayModel, teamId: string, enabled: boolean) => {
-      setUpdatePendingModelId(model.id)
+    (item: ReturnType<typeof fromGatewayModel>, teamId: string, enabled: boolean) => {
+      setUpdatePendingModelId(item.id)
       updateModelMutation.mutate(
-        { id: model.id, body: { enabled }, teamId },
+        { id: item.id, body: { enabled }, teamId },
         {
           onSettled: () => {
             setUpdatePendingModelId(null)
@@ -278,10 +468,10 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   )
 
   const handleDelete = useCallback(
-    (model: GatewayModel, teamId: string) => {
-      setDeletingModelId(model.id)
+    (item: ReturnType<typeof fromGatewayModel>, teamId: string) => {
+      setDeletingModelId(item.id)
       deleteModelMutation.mutate(
-        { id: model.id, teamId },
+        { id: item.id, teamId },
         {
           onSettled: () => {
             setDeletingModelId(null)
@@ -290,6 +480,31 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
       )
     },
     [deleteModelMutation]
+  )
+
+  const getModelHref = useCallback(
+    (teamId: string, modelId: string) =>
+      teamModelDetailHref(teamId, modelId, {
+        credentialId: credentialFilter !== '' ? credentialFilter : undefined,
+        tab: 'shared',
+      }),
+    [credentialFilter]
+  )
+
+  const canBatchSelectItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return checkModelBatchSelectable(model)
+    },
+    [checkModelBatchSelectable]
+  )
+
+  const canDeleteItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return canDeleteModel(model)
+    },
+    [canDeleteModel]
   )
 
   const handleRefresh = useCallback(() => {
@@ -304,161 +519,260 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
         : `${String(listData.queried_team_count)} 团队 · ${String(listData.total)} 模型`
       : null
 
-  const tableFooter =
-    listData && listData.total > listData.page_size ? (
-      <PaginationControls
-        page={listData.page}
-        page_size={listData.page_size}
-        total={listData.total}
-        has_next={listData.has_next}
-        has_prev={listData.has_prev}
-        onPageChange={setPage}
-      />
+  const credentialBanner =
+    credentialFilter && capabilities.credentialBanner ? (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+        <span className="text-muted-foreground">
+          按凭据筛选：
+          <span className="ml-1 font-medium">{selectedCredentialName ?? credentialFilter}</span>
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7"
+          type="button"
+          onClick={() => {
+            setCredentialFilter('')
+          }}
+        >
+          清除筛选
+        </Button>
+      </div>
     ) : null
 
   if (!hasCollaborationTeams) {
     return (
-      <Card>
-        <CardContent className="p-6 text-center text-sm text-muted-foreground">
-          尚无协作团队。加入协作团队后，可在此查看团队自注册模型；注册与变更需团队管理员权限。
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
+        尚无协作团队。加入协作团队后，可在此查看团队自注册模型；注册与变更需团队管理员权限。
+      </div>
     )
   }
 
+  const allSelectableSelected =
+    selectableModels.length > 0 && selectableModels.every((m) => visibleSelectedIds.has(m.id))
+  const someSelectableSelected = selectableModels.some((m) => visibleSelectedIds.has(m.id))
+
   return (
-    <Card>
-      <ConnectivityBatchTestBanner
-        state={batchTestState}
-        onRetestFailed={retestFailed}
-        onScrollToFirstFailed={scrollToFirstFailed}
-      />
-      <div className="space-y-3 border-b p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {summaryLabel ? (
-            <Badge variant="secondary" className="font-normal">
-              {summaryLabel}
-            </Badge>
-          ) : null}
-          <div className="ml-auto flex items-center gap-2">
-            <GatewayRefreshButton
-              isFetching={isFetching}
-              ariaLabel="刷新团队模型"
-              onRefresh={handleRefresh}
+    <div className="space-y-3">
+      <GatewayModelListShell
+        capabilities={capabilities}
+        bannerSlot={credentialBanner}
+        connectivityBanner={
+          capabilities.connectivityBanner ? (
+            <ConnectivityBatchTestBanner
+              state={batchTestState}
+              onRetestFailed={retestFailed}
+              onScrollToFirstFailed={scrollToFirstFailed}
             />
-            {canWrite ? (
-              <Button size="sm" asChild>
-                <Link to={teamModelsRegisterHref(defaultRegisterTeamId)}>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  添加模型
-                </Link>
-              </Button>
+          ) : undefined
+        }
+        headerSlot={
+          summaryLabel ? (
+            <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+              <Badge variant="secondary" className="font-normal">
+                {summaryLabel}
+              </Badge>
+              <div className="ml-auto flex items-center gap-2">
+                {canWrite && defaultRegisterTeamId ? (
+                  <Button size="sm" asChild>
+                    <Link to={teamModelsRegisterHref(defaultRegisterTeamId)}>
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      添加模型
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : undefined
+        }
+        toolbar={
+          <div className="space-y-3 border-b p-3">
+            {capabilities.teamSearch ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-0 flex-1 basis-[min(100%,200px)] sm:max-w-[220px]">
+                  <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={teamSearch}
+                    onChange={(e) => {
+                      handleTeamSearchChange(e.target.value)
+                    }}
+                    placeholder="按团队筛选"
+                    className="h-8 w-full pl-8 text-sm"
+                    aria-label="按团队名称筛选"
+                  />
+                </div>
+              </div>
             ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1 basis-[min(100%,200px)] sm:max-w-[220px]">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={teamSearch}
-              onChange={(e) => {
-                handleTeamSearchChange(e.target.value)
+            <GatewayModelListToolbar
+              capabilities={capabilities}
+              search={modelSearch}
+              onSearchChange={handleModelSearchChange}
+              providerFilter={providerFilter}
+              onProviderFilterChange={(v) => {
+                setProviderFilter(v)
+                setPage(1)
               }}
-              placeholder="按团队筛选"
-              className="h-8 w-full pl-8 text-sm"
-              aria-label="按团队名称筛选"
+              abilityFilter={abilityFilter}
+              onAbilityFilterChange={(v) => {
+                setAbilityFilter(v)
+                setPage(1)
+              }}
+              credentialFilter={credentialFilter}
+              onCredentialFilterChange={setCredentialFilter}
+              credentialFilterOptions={credentialFilterOptions}
+              credentialFilterLoading={credentialOptionsLoading}
+              selectedCredentialName={selectedCredentialName}
+              providerChoices={providerChoices}
+              healthFilter={healthFilter}
+              onHealthFilterChange={handleHealthFilterChange}
+              connectivitySummary={connectivitySummary}
+              allModels={registryItems}
+              usageDays={usageDays}
+              onUsageDaysChange={setUsageDays}
+              canWrite={hasManageableModels}
+              onTestAll={
+                hasManageableModels &&
+                (connectivitySummary?.total ?? batchTestableItems.length) > 0 &&
+                !batchBusy
+                  ? handleTestAll
+                  : undefined
+              }
+              onTestUntested={
+                hasManageableModels &&
+                (connectivitySummary?.unknown ?? batchUntestedTestableItems.length) > 0 &&
+                !batchBusy
+                  ? handleTestUntested
+                  : undefined
+              }
+              onResyncAll={
+                hasManageableModels && (listData?.total ?? 0) > 0 && !batchBusy
+                  ? handleResyncAll
+                  : undefined
+              }
+              resyncingAll={batchResyncing}
+              batchBusy={batchBusy}
+              untestedTestableCount={batchUntestedTestableItems.length}
+              testingAll={batchTesting}
+              onDeleteFailed={
+                hasManageableModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
+              }
+              deletingFailed={batchDeleting}
+              onRefresh={handleRefresh}
+              isRefreshing={isFetching || usageFetching}
+              deleteAllFilteredSlot={
+                hasManageableModels && filteredDeleteCount > 0 && healthFilter !== 'failed' ? (
+                  <DropdownMenuItem
+                    disabled={batchBusy}
+                    onClick={() => {
+                      setDeleteFilteredOpen(true)
+                    }}
+                  >
+                    删除当前筛选下全部（{filteredDeleteCount}）
+                  </DropdownMenuItem>
+                ) : undefined
+              }
             />
           </div>
-          <div className="relative min-w-0 flex-1 basis-[min(100%,220px)] sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={modelSearch}
-              onChange={(e) => {
-                handleModelSearchChange(e.target.value)
-              }}
-              placeholder="搜索别名、底模、通道、凭据…"
-              className="h-8 w-full pl-8 text-sm"
-              aria-label="按模型名称筛选"
+        }
+        batchBar={
+          capabilities.batchSelect ? (
+            <GatewayModelBatchBar
+              capabilities={capabilities}
+              selectedCount={visibleSelectedIds.size}
+              selectableCount={selectableModels.length}
+              allSelectableSelected={allSelectableSelected}
+              someSelectableSelected={someSelectableSelected}
+              onToggleSelectAll={handleToggleSelectAll}
+              onBatchTestSelected={
+                hasManageableModels && selectedTestable.length > 0 && !batchBusy
+                  ? () => {
+                      handleTestSelected(selectedModelsForBatch)
+                    }
+                  : undefined
+              }
+              onBatchResyncSelected={
+                hasManageableModels && selectedResyncable.length > 0 && !batchBusy
+                  ? () => {
+                      handleResyncSelected(selectedModelsForBatch)
+                    }
+                  : undefined
+              }
+              onBatchDelete={
+                visibleSelectedIds.size > 0
+                  ? () => {
+                      setBatchDeleteOpen(true)
+                    }
+                  : undefined
+              }
+              batchBusy={batchBusy}
+              testingAll={batchTesting}
+              resyncingAll={batchResyncing}
             />
-          </div>
-          <GatewayModelCredentialFilterSelect
-            value={credentialFilter}
-            onChange={handleCredentialFilterChange}
-            options={credentialFilterOptions}
-            loading={credentialOptionsLoading}
-            selectedCredentialName={selectedCredentialName}
-            triggerClassName="h-8 w-full min-w-[160px] sm:max-w-[280px]"
-          />
-          <Select
-            value={providerFilter || FILTER_ALL}
-            onValueChange={(v) => {
-              setProviderFilter(v === FILTER_ALL ? '' : v)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger
-              className="h-8 w-full min-w-[120px] text-xs sm:w-[130px]"
-              aria-label="按接入通道筛选"
-            >
-              <SelectValue placeholder="全部通道" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTER_ALL}>全部通道</SelectItem>
-              {providerChoices.map((id) => (
-                <SelectItem key={id} value={id}>
-                  {channelLabel(id)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <RegistryAbilityFilterSelect
-            value={abilityFilter}
-            onValueChange={(v) => {
-              setAbilityFilter(v)
-              setPage(1)
-            }}
-          />
-        </div>
-        <ConnectivityHealthStrip
-          models={registryItems}
-          connectivitySummary={connectivitySummary}
-          healthFilter={healthFilter}
-          onHealthFilterChange={handleHealthFilterChange}
-          canWrite={hasManageableModels}
-          onTestAll={
-            hasManageableModels &&
-            (connectivitySummary?.total ?? batchTestableItems.length) > 0 &&
-            !batchBusy
-              ? handleTestAll
-              : undefined
-          }
-          onTestUntested={
-            hasManageableModels &&
-            (connectivitySummary?.unknown ?? batchUntestedTestableItems.length) > 0 &&
-            !batchBusy
-              ? handleTestUntested
-              : undefined
-          }
-          onResyncAll={
-            hasManageableModels && (listData?.total ?? 0) > 0 && !batchBusy
-              ? handleResyncAll
-              : undefined
-          }
-          resyncingAll={batchResyncing}
-          batchBusy={batchBusy}
-          untestedTestableCount={batchUntestedTestableItems.length}
-          testingAll={batchTesting}
-          onDeleteFailed={
-            hasManageableModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
-          }
-          deletingFailed={batchDeleting}
-        />
-        <p className="sr-only">{PROVIDER_CHANNEL_FILTER_HINT_GATEWAY}</p>
-      </div>
-      <CardContent className="p-0">
-        <CollaborationTeamsModelsGroupedList
+          ) : undefined
+        }
+        isLoading={showLoading && registryItems.length === 0}
+        isEmpty={!showLoading && registryItems.length === 0}
+        paginationSlot={
+          listData && listData.total > listData.page_size ? (
+            <div className="border-t px-3 py-2">
+              <PaginationControls
+                page={listData.page}
+                page_size={listData.page_size}
+                total={listData.total}
+                has_next={listData.has_next}
+                has_prev={listData.has_prev}
+                onPageChange={setPage}
+              />
+            </div>
+          ) : undefined
+        }
+        dialogsSlot={
+          <>
+            <ModelBatchDeleteConfirmDialog
+              open={batchDeleteOpen}
+              onOpenChange={setBatchDeleteOpen}
+              title="批量删除团队模型"
+              description={
+                batchDeleteLabel ||
+                `确定删除已选的 ${String(visibleSelectedIds.size)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+              }
+              pending={batchDeleting}
+              onConfirm={handleConfirmBatchDelete}
+            />
+            <ModelBatchDeleteConfirmDialog
+              open={deleteFilteredOpen}
+              onOpenChange={setDeleteFilteredOpen}
+              title="删除当前筛选下的全部模型"
+              description={filteredDeleteLabel}
+              confirmLabel="全部删除"
+              pending={batchDeleting}
+              onConfirm={handleConfirmDeleteFiltered}
+            />
+            <ModelBatchDeleteConfirmDialog
+              open={deleteFailedOpen}
+              onOpenChange={setDeleteFailedOpen}
+              title="删除不可用模型"
+              description={
+                deleteFailedLabel ||
+                `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+              }
+              pending={batchDeleting}
+              onConfirm={handleConfirmDeleteFailed}
+            />
+            <ModelBatchDeleteFailedDialog
+              open={batchFailedOpen}
+              onOpenChange={setBatchFailedOpen}
+              failedItems={batchFailedItems}
+              title={batchFailedDialogTitle}
+              description={batchFailedDialogDescription}
+            />
+          </>
+        }
+      >
+        <GatewayModelGroupedList
+          capabilities={capabilities}
           teams={displayTeams}
-          modelsByTeamId={modelsByTeamId}
+          itemsByTeamId={itemsByTeamId}
           tenantIdsWithModels={tenantIdsWithModels}
           requiresSearch={requiresSearch}
           isLoading={showLoading}
@@ -467,31 +781,20 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
           viewerUserId={viewerUserId}
           updatePendingModelId={updatePendingModelId}
           deletingModelId={deletingModelId}
+          getModelHref={getModelHref}
+          onPreloadNavigate={preloadTeamModelDetailPane}
           onToggleEnabled={handleToggleEnabled}
           onDelete={handleDelete}
+          canBatchSelect={canBatchSelectItem}
+          canDelete={canDeleteItem}
+          selectedIds={visibleSelectedIds}
+          onBatchSelectChange={handleToggleSelect}
+          highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
+          usageDays={usageDays}
+          usageByRouteName={usageByRouteName}
+          usageLoading={usageLoading}
         />
-      </CardContent>
-      {tableFooter ? <div className="border-t px-3 py-2">{tableFooter}</div> : null}
-
-      <ModelBatchDeleteConfirmDialog
-        open={deleteFailedOpen}
-        onOpenChange={setDeleteFailedOpen}
-        title="删除不可用模型"
-        description={
-          deleteFailedLabel ||
-          `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        }
-        pending={batchDeleting}
-        onConfirm={handleConfirmDeleteFailed}
-      />
-
-      <ModelBatchDeleteFailedDialog
-        open={batchFailedOpen}
-        onOpenChange={setBatchFailedOpen}
-        failedItems={batchFailedItems}
-        title={batchFailedDialogTitle}
-        description={batchFailedDialogDescription}
-      />
-    </Card>
+      </GatewayModelListShell>
+    </div>
   )
 }

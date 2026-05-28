@@ -14,13 +14,20 @@ from domains.gateway.application.sql_model_catalog import get_model_catalog_adap
 from domains.gateway.presentation.gateway_model_list_response import (
     build_personal_model_list_response,
 )
+from domains.gateway.presentation.gateway_usage_list_response import (
+    build_gateway_model_usage_summary_response,
+)
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     AvailableModelsListResponse,
     GatewayModelBatchDeleteFailureItem,
     GatewayModelBatchDeleteRequest,
     GatewayModelBatchDeleteResponse,
+    GatewayModelBatchResyncCapabilitiesRequest,
+    GatewayModelBatchResyncCapabilitiesResponse,
+    GatewayModelRouteUsageItem,
     GatewayModelTestResponse,
+    GatewayModelUsageSummaryResponse,
     ModelConnectivitySummary,
     PaginatedSelectorModels,
     PersonalModelCreate,
@@ -33,6 +40,7 @@ from domains.identity.presentation.deps import (
     RequiredAuthUser,
     get_user_uuid,
 )
+from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import NotFoundError
 
@@ -46,6 +54,9 @@ from ._common import (
 
 router = APIRouter()
 
+PageDep = Annotated[PageParams, Depends(page_query_params)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/my-models", response_model=PersonalModelListResponse)
 async def list_my_models(
@@ -56,19 +67,6 @@ async def list_my_models(
     user_id = get_user_uuid(current_user)
     page = await reads.list_personal_gateway_models_page(user_id, query)
     return build_personal_model_list_response(page)
-
-
-@router.get("/my-models/{model_id}", response_model=PersonalModelResponse)
-async def get_my_model(
-    model_id: uuid.UUID,
-    current_user: RequiredAuthUser,
-    reads: MgmtReads,
-) -> PersonalModelResponse:
-    user_id = get_user_uuid(current_user)
-    row = await reads.get_personal_gateway_model(user_id, model_id)
-    if row is None:
-        raise NotFoundError("Model")
-    return PersonalModelResponse.from_gateway_model(row)
 
 
 @router.post(
@@ -95,6 +93,103 @@ async def create_my_models(
     return [PersonalModelResponse.from_gateway_model(r) for r in rows]
 
 
+@router.post("/my-models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
+async def batch_delete_my_models(
+    payload: GatewayModelBatchDeleteRequest,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+) -> GatewayModelBatchDeleteResponse:
+    user_id = get_user_uuid(current_user)
+    result = await writes.delete_personal_models_batch(user_id, payload.model_ids)
+    return GatewayModelBatchDeleteResponse(
+        succeeded=result.succeeded,
+        failed=[
+            GatewayModelBatchDeleteFailureItem(
+                id=item.id,
+                code=item.code,
+                message=item.message,
+            )
+            for item in result.failed
+        ],
+        grants_removed=result.grants_removed,
+        budgets_removed=result.budgets_removed,
+    )
+
+
+@router.post(
+    "/my-models/batch-resync-capabilities",
+    response_model=GatewayModelBatchResyncCapabilitiesResponse,
+)
+async def batch_resync_my_models_capabilities(
+    payload: GatewayModelBatchResyncCapabilitiesRequest,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+) -> GatewayModelBatchResyncCapabilitiesResponse:
+    user_id = get_user_uuid(current_user)
+    result = await writes.resync_personal_models_capabilities_batch(user_id, payload.model_ids)
+    return GatewayModelBatchResyncCapabilitiesResponse(
+        succeeded=result.succeeded,
+        failed=[
+            GatewayModelBatchDeleteFailureItem(
+                id=item.id,
+                code=item.code,
+                message=item.message,
+            )
+            for item in result.failed
+        ],
+    )
+
+
+@router.get("/my-models/usage-summary", response_model=GatewayModelUsageSummaryResponse)
+async def my_models_usage_summary(
+    current_user: RequiredAuthUser,
+    reads: MgmtReads,
+    page: PageDep,
+    days: int = Query(7, ge=1, le=90),
+    provider: str | None = Query(None, min_length=1, max_length=50),
+    route_names: list[str] | None = Query(
+        default=None,
+        description=(
+            "仅聚合指定 route（与注册模型 name 对齐）。"
+            "传入时忽略 page/page_size，仅返回匹配 route 的用量。"
+        ),
+    ),
+) -> GatewayModelUsageSummaryResponse:
+    if route_names is not None and len(route_names) > 200:
+        route_names = route_names[:200]
+    user_id = get_user_uuid(current_user)
+    items, total, start, end = await reads.aggregate_personal_model_route_usage(
+        user_id,
+        days=days,
+        provider=provider,
+        route_names=route_names,
+        page=page.page,
+        page_size=page.page_size,
+    )
+    validated_items = [GatewayModelRouteUsageItem.model_validate(i) for i in items]
+    return build_gateway_model_usage_summary_response(
+        items=validated_items,
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+        start=start,
+        end=end,
+    )
+
+
+@router.get("/my-models/{model_id}", response_model=PersonalModelResponse)
+async def get_my_model(
+    model_id: uuid.UUID,
+    current_user: RequiredAuthUser,
+    reads: MgmtReads,
+) -> PersonalModelResponse:
+    user_id = get_user_uuid(current_user)
+    row = await reads.get_personal_gateway_model(user_id, model_id)
+    if row is None:
+        raise NotFoundError("Model")
+    return PersonalModelResponse.from_gateway_model(row)
+
+
 @router.patch("/my-models/{model_id}", response_model=PersonalModelResponse)
 async def update_my_model(
     model_id: uuid.UUID,
@@ -119,29 +214,6 @@ async def delete_my_model(
 ) -> None:
     user_id = get_user_uuid(current_user)
     await writes.delete_personal_model(user_id, model_id)
-
-
-@router.post("/my-models/batch-delete", response_model=GatewayModelBatchDeleteResponse)
-async def batch_delete_my_models(
-    payload: GatewayModelBatchDeleteRequest,
-    current_user: RequiredAuthUser,
-    writes: MgmtWrites,
-) -> GatewayModelBatchDeleteResponse:
-    user_id = get_user_uuid(current_user)
-    result = await writes.delete_personal_models_batch(user_id, payload.model_ids)
-    return GatewayModelBatchDeleteResponse(
-        succeeded=result.succeeded,
-        failed=[
-            GatewayModelBatchDeleteFailureItem(
-                id=item.id,
-                code=item.code,
-                message=item.message,
-            )
-            for item in result.failed
-        ],
-        grants_removed=result.grants_removed,
-        budgets_removed=result.budgets_removed,
-    )
 
 
 @router.post("/my-models/{model_id}/test", response_model=GatewayModelTestResponse)

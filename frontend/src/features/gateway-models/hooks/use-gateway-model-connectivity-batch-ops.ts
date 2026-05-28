@@ -12,14 +12,18 @@ import {
   type ListManagedTeamModelsParams,
   type ModelConnectivitySummary,
 } from '@/api/gateway/models'
+import {
+  fetchAllPersonalGatewayModels,
+  type PersonalGatewayModel,
+  type PersonalModelListQuery,
+} from '@/api/gateway/my-models'
 import { useChunkedModelBatchDelete } from '@/features/gateway-models/hooks/use-chunked-model-batch-delete'
 import { useChunkedModelBatchResync } from '@/features/gateway-models/hooks/use-chunked-model-batch-resync'
 import { useConnectivityBatchTest } from '@/features/gateway-models/hooks/use-connectivity-batch-test'
+import { invalidatePersonalModelCaches } from '@/features/gateway-models/hooks/use-personal-model-mutations'
 import {
   createBatchConnectivityCachePatcher,
   filterDeletableFailedModels,
-  filterManageableTestableModels,
-  filterResyncableCapabilityModels,
   filterTestableConnectivityModels,
   filterUntestedConnectivityModels,
   formatBatchDeleteConfirmLabel,
@@ -59,9 +63,25 @@ interface ManagedTeamsConnectivityBatchOps extends ConnectivityBatchOpsBase {
   listQueryBase: Omit<ListManagedTeamModelsParams, 'page' | 'page_size' | 'connectivity'>
 }
 
+interface PersonalConnectivityBatchOps {
+  scope: 'personal'
+  registryItems: readonly PersonalGatewayModel[]
+  connectivitySummary?: ModelConnectivitySummary
+  listTotal?: number
+  listQueryBase: Omit<PersonalModelListQuery, 'page' | 'page_size' | 'connectivity'>
+  canShowBatchOps: boolean
+  canDeleteModel: (model: PersonalGatewayModel) => boolean
+  canResyncModel: (model: PersonalGatewayModel) => boolean
+  canManageModel: (model: PersonalGatewayModel) => boolean
+  onBatchDeleteSucceeded?: (succeededIds: readonly string[]) => void
+}
+
 export type UseGatewayModelConnectivityBatchOpsOptions =
   | SingleTeamConnectivityBatchOps
   | ManagedTeamsConnectivityBatchOps
+  | PersonalConnectivityBatchOps
+
+type BatchOpsRegistryItem = GatewayModel | PersonalGatewayModel
 
 export function useGatewayModelConnectivityBatchOps(
   options: UseGatewayModelConnectivityBatchOpsOptions
@@ -71,16 +91,16 @@ export function useGatewayModelConnectivityBatchOps(
   batchTesting: boolean
   batchDeleting: boolean
   batchResyncing: boolean
-  testableItems: GatewayModel[]
-  untestedTestableItems: GatewayModel[]
+  testableItems: BatchOpsRegistryItem[]
+  untestedTestableItems: BatchOpsRegistryItem[]
   failedDeletableCount: number
-  failedDeletableModels: GatewayModel[]
+  failedDeletableModels: BatchOpsRegistryItem[]
   deleteFailedLabel: string
   handleTestAll: () => void
   handleTestUntested: () => void
-  handleTestSelected: (items: readonly GatewayModel[]) => void
+  handleTestSelected: (items: readonly BatchOpsRegistryItem[]) => void
   handleResyncAll: () => void
-  handleResyncSelected: (items: readonly GatewayModel[]) => void
+  handleResyncSelected: (items: readonly BatchOpsRegistryItem[]) => void
   handleDeleteFailed: () => void
   handleConfirmDeleteFailed: () => void
   runBatchDelete: (ids: readonly string[]) => void
@@ -93,7 +113,7 @@ export function useGatewayModelConnectivityBatchOps(
   batchFailedItems: GatewayModelBatchDeleteFailureItem[]
   batchFailedDialogTitle: string
   batchFailedDialogDescription: string
-  formatBatchDeleteLabel: (models: readonly GatewayModel[]) => string
+  formatBatchDeleteLabel: (models: readonly BatchOpsRegistryItem[]) => string
 } {
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -107,17 +127,19 @@ export function useGatewayModelConnectivityBatchOps(
 
   const scope = options.scope
   const singleTeamId = options.scope === 'single-team' ? options.teamId : undefined
+  const isPersonalScope = options.scope === 'personal'
 
   const {
     registryItems,
     connectivitySummary,
-    credentialId,
     canShowBatchOps,
     canDeleteModel,
     canResyncModel,
     canManageModel,
     onBatchDeleteSucceeded,
   } = options
+
+  const credentialId = options.scope === 'personal' ? undefined : options.credentialId
 
   const listQueryBaseRef = useRef(options.listQueryBase)
   listQueryBaseRef.current = options.listQueryBase
@@ -140,55 +162,70 @@ export function useGatewayModelConnectivityBatchOps(
   const teamByModelIdRef = useRef<Map<string, string>>(new Map())
 
   const registryItemsById = useMemo(() => {
-    const map = new Map<string, GatewayModel>()
+    const map = new Map<string, BatchOpsRegistryItem>()
     for (const model of registryItems) {
       map.set(model.id, model)
     }
     return map
   }, [registryItems])
 
-  const populateTeamByModelId = useCallback((models: readonly GatewayModel[]): void => {
-    for (const model of models) {
-      const teamId = resolveGatewayModelTeamId(model)
-      if (teamId) {
-        teamByModelIdRef.current.set(model.id, teamId)
+  const populateTeamByModelId = useCallback(
+    (models: readonly BatchOpsRegistryItem[]): void => {
+      if (isPersonalScope) return
+      for (const model of models) {
+        const teamId = resolveGatewayModelTeamId(model as GatewayModel)
+        if (teamId) {
+          teamByModelIdRef.current.set(model.id, teamId)
+        }
       }
-    }
-  }, [])
+    },
+    [isPersonalScope]
+  )
 
   const resolveTeamIdForModel = useCallback(
     (id: string): string | null => {
       const cached = teamByModelIdRef.current.get(id)
       if (cached) return cached
       const fromPage = registryItemsById.get(id)
-      if (!fromPage) return null
-      return resolveGatewayModelTeamId(fromPage)
+      if (!fromPage || isPersonalScope) return null
+      return resolveGatewayModelTeamId(fromPage as GatewayModel)
     },
-    [registryItemsById]
+    [registryItemsById, isPersonalScope]
   )
 
-  const fetchAllFiltered = useCallback(async (): Promise<GatewayModel[]> => {
+  const fetchAllFiltered = useCallback(async (): Promise<BatchOpsRegistryItem[]> => {
     const listQueryBase = listQueryBaseRef.current
-    if (scope === 'single-team' && singleTeamId) {
-      return fetchAllGatewayModelPages(singleTeamId, listQueryBase)
+    if (isPersonalScope) {
+      return fetchAllPersonalGatewayModels(listQueryBase as PersonalModelListQuery)
     }
-    return fetchAllManagedTeamModelPages(listQueryBase)
-  }, [scope, singleTeamId])
+    if (scope === 'single-team' && singleTeamId) {
+      return fetchAllGatewayModelPages(singleTeamId, listQueryBase as GatewayModelListQuery)
+    }
+    return fetchAllManagedTeamModelPages(listQueryBase as ListManagedTeamModelsParams)
+  }, [scope, singleTeamId, isPersonalScope])
 
   const invalidateModelCaches = useCallback((): void => {
+    if (isPersonalScope) {
+      invalidatePersonalModelCaches(queryClient)
+      return
+    }
     invalidateGatewayModelCaches(queryClient, {
       credentialId,
       usageSummary: true,
     })
-  }, [queryClient, credentialId])
+  }, [queryClient, credentialId, isPersonalScope])
 
   const handleBatchDeleteComplete = useCallback(
     (result: BatchDeleteChunkResult): void => {
-      invalidateGatewayModelCaches(queryClient, {
-        credentialId,
-        usageSummary: true,
-      })
-      invalidateGatewayModelAliasDependents(queryClient)
+      if (isPersonalScope) {
+        invalidatePersonalModelCaches(queryClient)
+      } else {
+        invalidateGatewayModelCaches(queryClient, {
+          credentialId,
+          usageSummary: true,
+        })
+        invalidateGatewayModelAliasDependents(queryClient)
+      }
       setDeleteFailedOpen(false)
       onBatchDeleteSucceededRef.current?.(result.succeeded)
       if (result.failed.length > 0) {
@@ -210,11 +247,14 @@ export function useGatewayModelConnectivityBatchOps(
         })
       }
     },
-    [queryClient, credentialId, toast]
+    [queryClient, credentialId, toast, isPersonalScope]
   )
 
   const deleteChunk = useCallback(
     async (chunk: string[]): Promise<BatchDeleteChunkResult> => {
+      if (isPersonalScope) {
+        return gatewayApi.batchDeleteMyModels(chunk)
+      }
       if (scope === 'single-team' && singleTeamId) {
         return gatewayApi.batchDeleteModels(singleTeamId, chunk)
       }
@@ -223,7 +263,7 @@ export function useGatewayModelConnectivityBatchOps(
         gatewayApi.batchDeleteModels(teamId, teamChunk)
       )
     },
-    [scope, singleTeamId, resolveTeamIdForModel]
+    [scope, singleTeamId, resolveTeamIdForModel, isPersonalScope]
   )
 
   const { batchDeleting, runBatchDelete } = useChunkedModelBatchDelete({
@@ -246,6 +286,9 @@ export function useGatewayModelConnectivityBatchOps(
 
   const resyncChunk = useCallback(
     async (chunk: string[]): Promise<BatchResyncChunkResult> => {
+      if (isPersonalScope) {
+        return gatewayApi.batchResyncMyModels(chunk)
+      }
       if (scope === 'single-team' && singleTeamId) {
         return gatewayApi.batchResyncCapabilities(singleTeamId, chunk)
       }
@@ -254,7 +297,7 @@ export function useGatewayModelConnectivityBatchOps(
         gatewayApi.batchResyncCapabilities(teamId, teamChunk)
       )
     },
-    [scope, singleTeamId, resolveTeamIdForModel]
+    [scope, singleTeamId, resolveTeamIdForModel, isPersonalScope]
   )
 
   const { batchResyncing, runBatchResync } = useChunkedModelBatchResync({
@@ -263,12 +306,15 @@ export function useGatewayModelConnectivityBatchOps(
   })
 
   const onBatchItemComplete = useMemo(
-    () => createBatchConnectivityCachePatcher(queryClient, 'team'),
-    [queryClient]
+    () => createBatchConnectivityCachePatcher(queryClient, isPersonalScope ? 'personal' : 'team'),
+    [queryClient, isPersonalScope]
   )
 
   const testById = useCallback(
     async (id: string) => {
+      if (isPersonalScope) {
+        return gatewayApi.testMyModel(id)
+      }
       if (scope === 'single-team' && singleTeamId) {
         return gatewayApi.testModel(singleTeamId, id)
       }
@@ -278,7 +324,7 @@ export function useGatewayModelConnectivityBatchOps(
       }
       return gatewayApi.testModel(teamId, id)
     },
-    [scope, singleTeamId, resolveTeamIdForModel]
+    [scope, singleTeamId, resolveTeamIdForModel, isPersonalScope]
   )
 
   const handleBatchTestComplete = useCallback(
@@ -318,9 +364,15 @@ export function useGatewayModelConnectivityBatchOps(
       ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [])
 
-  const filterTestableForBatch = useCallback((models: readonly GatewayModel[]) => {
+  const filterTestableForBatch = useCallback((models: readonly BatchOpsRegistryItem[]) => {
     if (!canShowBatchOpsRef.current) return []
-    return filterManageableTestableModels(models, canManageModelRef.current)
+    const canManage = canManageModelRef.current as (model: BatchOpsRegistryItem) => boolean
+    return filterTestableConnectivityModels(models).filter(canManage)
+  }, [])
+
+  const filterResyncableForBatch = useCallback((models: readonly BatchOpsRegistryItem[]) => {
+    const canResync = canResyncModelRef.current as (model: BatchOpsRegistryItem) => boolean
+    return models.filter(canResync)
   }, [])
 
   const handleTestAll = useCallback((): void => {
@@ -345,7 +397,7 @@ export function useGatewayModelConnectivityBatchOps(
   }, [fetchAllFiltered, filterTestableForBatch, populateTeamByModelId, startBatchTest])
 
   const handleTestSelected = useCallback(
-    (items: readonly GatewayModel[]): void => {
+    (items: readonly BatchOpsRegistryItem[]): void => {
       populateTeamByModelId(items)
       const testable = filterTestableForBatch(items)
       if (testable.length === 0) return
@@ -357,38 +409,34 @@ export function useGatewayModelConnectivityBatchOps(
   const handleResyncAll = useCallback((): void => {
     void (async () => {
       const all = await fetchAllFiltered()
-      const resyncable = filterResyncableCapabilityModels(all, canResyncModelRef.current)
+      const resyncable = filterResyncableForBatch(all)
       if (resyncable.length === 0) return
       populateTeamByModelId(resyncable)
       runBatchResync(resyncable.map((m) => m.id))
     })()
-  }, [fetchAllFiltered, populateTeamByModelId, runBatchResync])
+  }, [fetchAllFiltered, populateTeamByModelId, runBatchResync, filterResyncableForBatch])
 
   const handleResyncSelected = useCallback(
-    (items: readonly GatewayModel[]): void => {
-      const resyncable = filterResyncableCapabilityModels(items, canResyncModelRef.current)
+    (items: readonly BatchOpsRegistryItem[]): void => {
+      const resyncable = filterResyncableForBatch(items)
       if (resyncable.length === 0) return
       populateTeamByModelId(resyncable)
       runBatchResync(resyncable.map((m) => m.id))
     },
-    [populateTeamByModelId, runBatchResync]
+    [populateTeamByModelId, runBatchResync, filterResyncableForBatch]
   )
 
-  const failedDeletableModels = useMemo(
-    () => filterDeletableFailedModels(registryItems, canDeleteModel),
-    [registryItems, canDeleteModel]
-  )
+  const failedDeletableModels = useMemo(() => {
+    const canDelete = canDeleteModel as (model: BatchOpsRegistryItem) => boolean
+    return filterDeletableFailedModels(registryItems as readonly BatchOpsRegistryItem[], canDelete)
+  }, [registryItems, canDeleteModel])
 
   const failedDeletableCount = connectivitySummary?.failed ?? failedDeletableModels.length
 
-  const deleteFailedLabel = useMemo(
-    (): string =>
-      formatDeleteFailedConfirmLabel(
-        failedDeletableCount,
-        failedDeletableModels.map((m) => m.name)
-      ),
-    [failedDeletableCount, failedDeletableModels]
-  )
+  const deleteFailedLabel = useMemo((): string => {
+    const labels = failedDeletableModels.map((m) => ('display_name' in m ? m.display_name : m.name))
+    return formatDeleteFailedConfirmLabel(failedDeletableCount, labels)
+  }, [failedDeletableCount, failedDeletableModels])
 
   const handleDeleteFailed = useCallback((): void => {
     if (failedDeletableCount === 0) return
@@ -398,41 +446,48 @@ export function useGatewayModelConnectivityBatchOps(
   const handleConfirmDeleteFailed = useCallback((): void => {
     void (async () => {
       const listQueryBase = listQueryBaseRef.current
-      const all =
-        scope === 'single-team' && singleTeamId
+      const all = isPersonalScope
+        ? await fetchAllPersonalGatewayModels({
+            ...(listQueryBase as PersonalModelListQuery),
+            connectivity: 'failed',
+          })
+        : scope === 'single-team' && singleTeamId
           ? await fetchAllGatewayModelPages(singleTeamId, {
-              ...listQueryBase,
+              ...(listQueryBase as GatewayModelListQuery),
               connectivity: 'failed',
             })
           : await fetchAllManagedTeamModelPages({
-              ...listQueryBase,
+              ...(listQueryBase as ListManagedTeamModelsParams),
               connectivity: 'failed',
             })
-      const deletable = filterDeletableFailedModels(all, canDeleteModelRef.current)
+      const canDelete = canDeleteModelRef.current as (model: BatchOpsRegistryItem) => boolean
+      const deletable = filterDeletableFailedModels(
+        all as readonly BatchOpsRegistryItem[],
+        canDelete
+      )
       if (deletable.length === 0) return
       populateTeamByModelId(deletable)
       runBatchDelete(deletable.map((m) => m.id))
     })()
-  }, [scope, singleTeamId, populateTeamByModelId, runBatchDelete])
+  }, [scope, singleTeamId, populateTeamByModelId, runBatchDelete, isPersonalScope])
 
   const testableItems = useMemo(
-    () => filterTestableConnectivityModels(registryItems),
+    () => filterTestableConnectivityModels(registryItems as readonly BatchOpsRegistryItem[]),
     [registryItems]
   )
 
   const untestedTestableItems = useMemo(
-    () => filterUntestedConnectivityModels(registryItems),
+    () => filterUntestedConnectivityModels(registryItems as readonly BatchOpsRegistryItem[]),
     [registryItems]
   )
 
   const batchTesting = batchTestState.running
   const batchBusy = batchTesting || batchResyncing || batchDeleting
 
-  const formatBatchDeleteLabel = useCallback(
-    (models: readonly GatewayModel[]): string =>
-      formatBatchDeleteConfirmLabel(models.map((m) => m.name)),
-    []
-  )
+  const formatBatchDeleteLabel = useCallback((models: readonly BatchOpsRegistryItem[]): string => {
+    const labels = models.map((m) => ('display_name' in m ? m.display_name : m.name))
+    return formatBatchDeleteConfirmLabel(labels)
+  }, [])
 
   return {
     batchTestState,
@@ -465,3 +520,6 @@ export function useGatewayModelConnectivityBatchOps(
     formatBatchDeleteLabel,
   }
 }
+
+/** @alias useGatewayModelConnectivityBatchOps */
+export const useGatewayModelListBatchOps = useGatewayModelConnectivityBatchOps

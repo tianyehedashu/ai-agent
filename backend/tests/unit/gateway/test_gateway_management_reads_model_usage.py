@@ -26,6 +26,33 @@ from domains.identity.application.ports import UserSummaryView
 
 
 @pytest.mark.asyncio
+async def test_aggregate_personal_model_route_usage_delegates_to_personal_team() -> None:
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    user_id = uuid.uuid4()
+    team_id = uuid.uuid4()
+    personal_team = SimpleNamespace(id=team_id)
+
+    svc._teams.ensure_personal_team = AsyncMock(return_value=personal_team)
+    svc.aggregate_gateway_model_route_usage = AsyncMock(
+        return_value=([{"route_name": "my-model"}], 1, MagicMock(), MagicMock())
+    )
+
+    items, total, _start, _end = await svc.aggregate_personal_model_route_usage(
+        user_id, days=7, provider=None
+    )
+
+    assert total == 1
+    assert items[0]["route_name"] == "my-model"
+    svc.aggregate_gateway_model_route_usage.assert_awaited_once()
+    ctx = svc.aggregate_gateway_model_route_usage.await_args.args[0]
+    assert ctx.team_id == team_id
+    assert ctx.team_kind == "personal"
+    assert ctx.team_role == "owner"
+    assert ctx.user_id == user_id
+
+
+@pytest.mark.asyncio
 async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -> None:
     session = MagicMock()
     svc = GatewayManagementReadService(session)

@@ -14,7 +14,10 @@ import { GATEWAY_API_BASE } from './_base'
 
 import type {
   GatewayModelBatchDeleteResponse,
+  GatewayModelBatchResyncCapabilitiesResponse,
   GatewayModelTestResult,
+  GatewayModelUsageSummary,
+  GatewayModelUsageSummaryQuery,
   ModelConnectivitySummary,
 } from './models'
 
@@ -131,7 +134,32 @@ export const myModelsApi = {
     apiClient.post<GatewayModelBatchDeleteResponse>(`${GATEWAY_API_BASE}/my-models/batch-delete`, {
       model_ids: modelIds,
     }),
+  /** 批量从 LiteLLM 同步能力 tags（部分成功） */
+  batchResyncMyModels: (modelIds: string[]) =>
+    apiClient.post<GatewayModelBatchResyncCapabilitiesResponse>(
+      `${GATEWAY_API_BASE}/my-models/batch-resync-capabilities`,
+      { model_ids: modelIds }
+    ),
+  /** 个人模型用量汇总（按 route 维度，user axis） */
+  myModelsUsageSummary: (params?: GatewayModelUsageSummaryQuery) =>
+    apiClient.get<GatewayModelUsageSummary>(
+      `${GATEWAY_API_BASE}/my-models/usage-summary`,
+      buildMyModelsUsageSummarySearch(params)
+    ),
   /** 对个人 Gateway 模型发起最小连通性测试 */
   testMyModel: (id: string) =>
     apiClient.post<GatewayModelTestResult>(`${GATEWAY_API_BASE}/my-models/${id}/test`, {}),
 } as const
+
+function buildMyModelsUsageSummarySearch(
+  params?: GatewayModelUsageSummaryQuery
+): Record<string, string | string[]> {
+  const search: Record<string, string | string[]> = {}
+  if (!params) return search
+  if (params.page !== undefined) search.page = String(params.page)
+  if (params.page_size !== undefined) search.page_size = String(params.page_size)
+  if (params.days !== undefined) search.days = String(params.days)
+  if (params.provider) search.provider = params.provider
+  if (params.route_names?.length) search.route_names = params.route_names
+  return search
+}

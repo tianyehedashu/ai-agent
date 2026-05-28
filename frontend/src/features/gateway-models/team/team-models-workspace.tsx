@@ -3,11 +3,14 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi } from '@/api/gateway'
+import { gatewayApi, fetchAllGatewayModelPages } from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway/models'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   canBindCredentialForTeamModel,
   canLinkToCredentialDetail,
@@ -32,8 +35,18 @@ import {
   isConfigManagedSystemModel,
   isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
-import { useGatewayModelConnectivityBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
+import { useGatewayModelListBatchOps } from '@/features/gateway-models/hooks/use-gateway-model-connectivity-batch-ops'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
+import {
+  effectiveCapabilities,
+  fromGatewayModel,
+  GatewayModelBatchBar,
+  GatewayModelFlatList,
+  GatewayModelListShell,
+  GatewayModelListToolbar,
+  SYSTEM_ADMIN_CAPABILITIES,
+  SHARED_FULL,
+} from '@/features/gateway-models/list'
 import {
   ModelBatchDeleteConfirmDialog,
   ModelBatchDeleteFailedDialog,
@@ -51,6 +64,7 @@ import {
   filterResyncableCapabilityModels,
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
+  formatBatchDeleteConfirmLabel,
   resolveTeamModelsRegistryScope,
   type TeamModelsListMode,
 } from '@/features/gateway-models/utils'
@@ -59,7 +73,7 @@ import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gatewa
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
-import { Loader2, Plus } from '@/lib/lucide-icons'
+import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { useUserStore } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
@@ -67,19 +81,8 @@ import { MODEL_PROVIDERS } from '@/types/user-model'
 import { preloadRegisterModelForm } from './register-model-preload'
 import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
-const ModelInventory = lazyWithReload(() =>
-  import('./model-inventory').then((m) => ({ default: m.ModelInventory }))
-)
-
 const RegisterModelForm = lazyWithReload(() =>
   import('./register-model-form').then((m) => ({ default: m.RegisterModelForm }))
-)
-
-const inventorySuspenseFallback = (
-  <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-    <Loader2 className="h-4 w-4 animate-spin" />
-    加载清单…
-  </div>
 )
 
 const registerFormSuspenseFallback = (
@@ -135,9 +138,31 @@ export function TeamModelsWorkspace({
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+  const [updatePendingModelId, setUpdatePendingModelId] = useState<string | null>(null)
   const [rowDeleteOpen, setRowDeleteOpen] = useState(false)
   const [pendingRowDeleteId, setPendingRowDeleteId] = useState<string | null>(null)
+
+  const capabilities = useMemo(() => {
+    const preset =
+      listMode === 'system'
+        ? SYSTEM_ADMIN_CAPABILITIES
+        : {
+            ...SHARED_FULL,
+            scope: 'team' as const,
+            deleteAllFilteredFetcher: 'single-team' as const,
+          }
+    const permContext =
+      listMode === 'system'
+        ? { canWrite: isPlatformAdmin, isPlatformAdmin }
+        : { canWrite, isPlatformAdmin }
+    const effective = effectiveCapabilities(preset, permContext)
+    return {
+      ...effective,
+      showSystemAdmin: listMode === 'system' && isPlatformAdmin,
+    }
+  }, [canWrite, isPlatformAdmin, listMode])
 
   const systemPermContext = useMemo(
     () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),
@@ -412,6 +437,7 @@ export function TeamModelsWorkspace({
 
   const handleBatchDeleteSucceeded = useCallback((succeeded: readonly string[]) => {
     setBatchDeleteOpen(false)
+    setDeleteFilteredOpen(false)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       for (const id of succeeded) {
@@ -450,7 +476,7 @@ export function TeamModelsWorkspace({
     batchFailedDialogTitle,
     batchFailedDialogDescription,
     formatBatchDeleteLabel,
-  } = useGatewayModelConnectivityBatchOps({
+  } = useGatewayModelListBatchOps({
     scope: 'single-team',
     teamId,
     listQueryBase: teamListQueryBase,
@@ -469,7 +495,7 @@ export function TeamModelsWorkspace({
     [systemPermContext]
   )
 
-  const { createMutation, deleteModelMutation } = useGatewayModelMutations({
+  const { createMutation, deleteModelMutation, updateModelMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
     onCreateSuccess: (created) => {
       navigate(
@@ -500,6 +526,89 @@ export function TeamModelsWorkspace({
     (): string => formatBatchDeleteLabel(selectedModelsForBatch),
     [formatBatchDeleteLabel, selectedModelsForBatch]
   )
+
+  const filteredDeleteCount = listData?.total ?? filteredModels.length
+
+  const filteredDeleteLabel = useMemo((): string => {
+    if (filteredDeleteCount <= filteredModels.length) {
+      return formatBatchDeleteConfirmLabel(filteredModels.map((m) => m.name))
+    }
+    return `将删除当前筛选下的全部 ${String(filteredDeleteCount)} 个模型，此操作不可撤销。`
+  }, [filteredDeleteCount, filteredModels])
+
+  const listItems = useMemo(
+    () => filteredModels.map((m) => fromGatewayModel(m, listMode === 'system' ? 'system' : 'team')),
+    [filteredModels, listMode]
+  )
+
+  const selectableModels = useMemo(
+    () => filteredModels.filter(checkModelBatchSelectable),
+    [filteredModels, checkModelBatchSelectable]
+  )
+
+  const allSelectableSelected =
+    selectableModels.length > 0 && selectableModels.every((m) => visibleSelectedIds.has(m.id))
+  const someSelectableSelected = selectableModels.some((m) => visibleSelectedIds.has(m.id))
+
+  const handleConfirmDeleteFiltered = useCallback((): void => {
+    void (async () => {
+      const all = await fetchAllGatewayModelPages(teamId, {
+        ...teamListQueryBase,
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+      })
+      if (all.length === 0) return
+      runBatchDelete(all.map((m) => m.id))
+    })()
+  }, [teamId, teamListQueryBase, healthFilter, runBatchDelete])
+
+  const handleToggleEnabled = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>, enabled: boolean) => {
+      setUpdatePendingModelId(item.id)
+      updateModelMutation.mutate(
+        { id: item.id, body: { enabled } },
+        {
+          onSettled: () => {
+            setUpdatePendingModelId(null)
+          },
+        }
+      )
+    },
+    [updateModelMutation]
+  )
+
+  const canBatchSelectItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return checkModelBatchSelectable(model)
+    },
+    [checkModelBatchSelectable]
+  )
+
+  const canDeleteItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return canDeleteModel(model)
+    },
+    [canDeleteModel]
+  )
+
+  const canManageItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return canManageModel(model)
+    },
+    [canManageModel]
+  )
+
+  const isConfigManagedItem = useCallback(
+    (item: ReturnType<typeof fromGatewayModel>) => {
+      const model = item.source as GatewayModel
+      return isConfigManagedModel(model)
+    },
+    [isConfigManagedModel]
+  )
+
+  const batchDeleteTitle = listMode === 'system' ? '批量删除系统模型' : '批量删除团队模型'
 
   const handleConfirmBatchDelete = useCallback((): void => {
     if (visibleSelectedIds.size === 0) return
@@ -679,13 +788,6 @@ export function TeamModelsWorkspace({
 
   return (
     <div className="space-y-4">
-      {credentialBanner}
-      <ConnectivityBatchTestBanner
-        state={batchTestState}
-        onRetestFailed={retestFailed}
-        onScrollToFirstFailed={scrollToFirstFailed}
-      />
-
       {showEmptyOnboarding ? (
         <div className="rounded-lg border border-dashed bg-muted/10 p-8">
           <h3 className="text-lg font-semibold">
@@ -729,14 +831,21 @@ export function TeamModelsWorkspace({
           ) : null}
         </div>
       ) : (
-        <>
-          <Suspense fallback={inventorySuspenseFallback}>
-            <ModelInventory
-              models={filteredModels}
-              allModels={registryItems}
-              selectedId={null}
-              getModelHref={getModelHref}
-              isLoading={isLoading}
+        <GatewayModelListShell
+          capabilities={capabilities}
+          bannerSlot={credentialBanner}
+          connectivityBanner={
+            capabilities.connectivityBanner ? (
+              <ConnectivityBatchTestBanner
+                state={batchTestState}
+                onRetestFailed={retestFailed}
+                onScrollToFirstFailed={scrollToFirstFailed}
+              />
+            ) : undefined
+          }
+          toolbar={
+            <GatewayModelListToolbar
+              capabilities={capabilities}
               search={search}
               onSearchChange={setSearch}
               providerFilter={providerFilter}
@@ -749,14 +858,12 @@ export function TeamModelsWorkspace({
               credentialFilterLoading={credentialFilterOptionsLoading || directoryFetching}
               selectedCredentialName={selectedCredentialName}
               providerChoices={providerChoices}
-              usageDays={usageDays}
-              onUsageDaysChange={setUsageDays}
-              usageByRouteName={usageByRouteName}
-              usageLoading={usageLoading}
-              highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
               healthFilter={healthFilter}
               onHealthFilterChange={setHealthFilter}
               connectivitySummary={connectivitySummary}
+              allModels={registryItems}
+              usageDays={usageDays}
+              onUsageDaysChange={setUsageDays}
               canWrite={hasManageableModels}
               onTestAll={
                 hasManageableModels &&
@@ -780,56 +887,194 @@ export function TeamModelsWorkspace({
               resyncingAll={batchResyncing}
               batchBusy={batchBusy}
               untestedTestableCount={batchUntestedTestableItems.length}
-              onBatchTestSelected={
-                hasManageableModels && selectedTestable.length > 0 && !batchBusy
-                  ? handleBatchTestSelected
-                  : undefined
-              }
-              onBatchResyncSelected={
-                hasManageableModels && selectedResyncable.length > 0 && !batchBusy
-                  ? handleBatchResyncSelectedClick
-                  : undefined
-              }
               testingAll={batchTesting}
-              onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
-              onPreloadRegister={preloadRegisterModelForm}
-              onPreloadRowNavigate={preloadTeamModelDetailPane}
-              showSystemAdmin={listMode === 'system' && isPlatformAdmin}
-              batchSelectEnabled={batchSelectEnabled}
-              selectedIds={visibleSelectedIds}
-              onToggleSelect={handleToggleSelect}
-              onToggleSelectAll={handleToggleSelectAll}
-              isModelBatchSelectable={checkModelBatchSelectable}
-              canDeleteModel={canDeleteModel}
-              isConfigManagedModel={isConfigManagedModel}
-              deletingModelId={deletingModelId}
-              onDeleteModel={handleDeleteModel}
-              batchDeleteOpen={batchDeleteOpen}
-              onBatchDeleteOpenChange={setBatchDeleteOpen}
-              onConfirmBatchDelete={handleConfirmBatchDelete}
-              batchDeletePending={batchDeleting}
-              batchDeleteLabel={batchDeleteLabel}
-              batchDeleteTitle={listMode === 'system' ? '批量删除系统模型' : '批量删除团队模型'}
               onDeleteFailed={
                 hasManageableModels && failedDeletableCount > 0 ? handleDeleteFailed : undefined
               }
               deletingFailed={batchDeleting}
-              onRefreshList={handleRefreshList}
-              isRefreshingList={isRefreshingList}
+              onRefresh={handleRefreshList}
+              isRefreshing={isRefreshingList}
+              onRegister={!hideRegisterAction && canManageModels ? goToRegister : undefined}
+              onPreloadRegister={preloadRegisterModelForm}
+              deleteAllFilteredSlot={
+                hasManageableModels && filteredDeleteCount > 0 && healthFilter !== 'failed' ? (
+                  <DropdownMenuItem
+                    disabled={batchBusy}
+                    onClick={() => {
+                      setDeleteFilteredOpen(true)
+                    }}
+                  >
+                    删除当前筛选下全部（{filteredDeleteCount}）
+                  </DropdownMenuItem>
+                ) : undefined
+              }
             />
-          </Suspense>
-          {listData && listData.total > 0 ? (
-            <PaginationControls
-              page={listData.page}
-              page_size={listData.page_size}
-              total={listData.total}
-              has_next={listData.has_next}
-              has_prev={listData.has_prev}
-              onPageChange={setPage}
-              className="pt-2"
-            />
-          ) : null}
-        </>
+          }
+          batchBar={
+            batchSelectEnabled && capabilities.batchSelect ? (
+              <GatewayModelBatchBar
+                capabilities={capabilities}
+                selectedCount={visibleSelectedIds.size}
+                selectableCount={selectableModels.length}
+                allSelectableSelected={allSelectableSelected}
+                someSelectableSelected={someSelectableSelected}
+                onToggleSelectAll={handleToggleSelectAll}
+                onBatchTestSelected={
+                  hasManageableModels && selectedTestable.length > 0 && !batchBusy
+                    ? handleBatchTestSelected
+                    : undefined
+                }
+                onBatchResyncSelected={
+                  hasManageableModels && selectedResyncable.length > 0 && !batchBusy
+                    ? handleBatchResyncSelectedClick
+                    : undefined
+                }
+                onBatchDelete={
+                  visibleSelectedIds.size > 0
+                    ? () => {
+                        setBatchDeleteOpen(true)
+                      }
+                    : undefined
+                }
+                batchBusy={batchBusy}
+                testingAll={batchTesting}
+                resyncingAll={batchResyncing}
+              />
+            ) : undefined
+          }
+          isLoading={isLoading}
+          isEmpty={!isLoading && filteredModels.length === 0}
+          paginationSlot={
+            listData && listData.total > 0 ? (
+              <div className="border-t px-3 py-2">
+                <PaginationControls
+                  page={listData.page}
+                  page_size={listData.page_size}
+                  total={listData.total}
+                  has_next={listData.has_next}
+                  has_prev={listData.has_prev}
+                  onPageChange={setPage}
+                />
+              </div>
+            ) : undefined
+          }
+          dialogsSlot={
+            <>
+              <ModelBatchDeleteConfirmDialog
+                open={batchDeleteOpen}
+                onOpenChange={setBatchDeleteOpen}
+                title={batchDeleteTitle}
+                description={
+                  batchDeleteLabel ||
+                  `确定删除已选的 ${String(visibleSelectedIds.size)} 个模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+                }
+                pending={batchDeleting}
+                onConfirm={handleConfirmBatchDelete}
+              />
+              <ModelBatchDeleteConfirmDialog
+                open={deleteFilteredOpen}
+                onOpenChange={setDeleteFilteredOpen}
+                title="删除当前筛选下的全部模型"
+                description={filteredDeleteLabel}
+                confirmLabel="全部删除"
+                pending={batchDeleting}
+                onConfirm={handleConfirmDeleteFiltered}
+              />
+              <ModelBatchDeleteConfirmDialog
+                open={deleteFailedOpen}
+                onOpenChange={setDeleteFailedOpen}
+                title="删除不可用模型"
+                description={
+                  deleteFailedLabel ||
+                  `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+                }
+                pending={batchDeleting}
+                onConfirm={handleConfirmDeleteFailed}
+              />
+              <ModelBatchDeleteFailedDialog
+                open={batchFailedOpen}
+                onOpenChange={setBatchFailedOpen}
+                failedItems={batchFailedItems}
+                title={batchFailedDialogTitle}
+                description={batchFailedDialogDescription}
+              />
+            </>
+          }
+        >
+          <GatewayModelFlatList
+            capabilities={capabilities}
+            items={listItems}
+            selectedIds={batchSelectEnabled ? visibleSelectedIds : undefined}
+            onToggleSelect={batchSelectEnabled ? handleToggleSelect : undefined}
+            onToggleSelectAll={batchSelectEnabled ? handleToggleSelectAll : undefined}
+            selectableCount={selectableModels.length}
+            allSelectableSelected={allSelectableSelected}
+            someSelectableSelected={someSelectableSelected}
+            highlightModelId={highlightModelId !== '' ? highlightModelId : undefined}
+            usageDays={usageDays}
+            usageByRouteName={usageByRouteName}
+            usageLoading={usageLoading}
+            getItemHref={(item) => getModelHref(item.id)}
+            onPreloadNavigate={preloadTeamModelDetailPane}
+            deletingModelId={deletingModelId}
+            onDelete={capabilities.rowDelete ? handleDeleteModel : undefined}
+            canBatchSelect={canBatchSelectItem}
+            canDelete={canDeleteItem}
+            isConfigManaged={isConfigManagedItem}
+            renderTrailingActions={(item, { isDeleting }) => {
+              if (capabilities.showSystemAdmin) return undefined
+              const canManage = canManageItem(item)
+              const canDelete = canDeleteItem(item)
+              const isUpdating = updatePendingModelId === item.id
+              if (!canManage && !canDelete) return undefined
+              return (
+                <div className="flex items-center gap-2">
+                  {canManage && capabilities.rowToggleEnabled !== false ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5">
+                          <span className="hidden text-xs text-muted-foreground lg:inline">
+                            {item.enabled ? '已启用' : '已禁用'}
+                          </span>
+                          <Switch
+                            checked={item.enabled}
+                            disabled={isUpdating || isDeleting}
+                            aria-label={`${item.enabled ? '禁用' : '启用'} ${item.title}`}
+                            onCheckedChange={(checked) => {
+                              handleToggleEnabled(item, checked)
+                            }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs lg:hidden">
+                        {item.enabled ? '点击禁用模型' : '点击启用模型'}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  {canDelete && capabilities.rowDelete !== false ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      disabled={isDeleting || isUpdating}
+                      aria-label={`删除 ${item.title}`}
+                      onClick={() => {
+                        handleDeleteModel(item.id)
+                      }}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
+              )
+            }}
+          />
+        </GatewayModelListShell>
       )}
 
       <ConfirmAlertDialog
@@ -849,26 +1094,6 @@ export function TeamModelsWorkspace({
         confirmLabel="确认删除"
         pending={deleteModelMutation.isPending}
         onConfirm={handleConfirmRowDelete}
-      />
-
-      <ModelBatchDeleteConfirmDialog
-        open={deleteFailedOpen}
-        onOpenChange={setDeleteFailedOpen}
-        title="删除不可用模型"
-        description={
-          deleteFailedLabel ||
-          `确定删除 ${String(failedDeletableModels.length)} 个探活失败的模型？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
-        }
-        pending={batchDeleting}
-        onConfirm={handleConfirmDeleteFailed}
-      />
-
-      <ModelBatchDeleteFailedDialog
-        open={batchFailedOpen}
-        onOpenChange={setBatchFailedOpen}
-        failedItems={batchFailedItems}
-        title={batchFailedDialogTitle}
-        description={batchFailedDialogDescription}
       />
     </div>
   )
