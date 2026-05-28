@@ -38,6 +38,7 @@ interface RouteTopologyEditorProps {
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
+  readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
   onDelete?: (id: string) => void
 }
@@ -315,6 +316,7 @@ export function RouteTopologyEditor({
   pickerModels,
   isSaving,
   isDeleting,
+  readOnly: readOnlyProp = false,
   onSave,
   onDelete,
 }: RouteTopologyEditorProps): React.JSX.Element {
@@ -329,7 +331,7 @@ export function RouteTopologyEditor({
     )
   }
 
-  const readOnly = route.source === 'system'
+  const readOnly = route.source === 'system' || readOnlyProp
 
   return (
     <RouteTopologyForm

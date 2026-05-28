@@ -12,6 +12,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
 import { Plus } from '@/lib/lucide-icons'
@@ -72,11 +73,8 @@ export const RouteModelAddCombobox = memo(function RouteModelAddCombobox({
           {triggerLabel}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-[min(24rem,var(--radix-popover-trigger-width))] p-0"
-        align="start"
-      >
-        {open ? (
+      <PopoverContent className="w-96 p-0" align="start" side="bottom" collisionPadding={8}>
+        <TooltipProvider delayDuration={200}>
           <Command>
             <CommandInput placeholder="搜索模型别名、通道…" />
             <CommandList>
@@ -86,36 +84,45 @@ export const RouteModelAddCombobox = memo(function RouteModelAddCombobox({
                   <CommandItem
                     key={model.id}
                     value={commandItemValue(model)}
-                    className="[contain-intrinsic-size:0_44px] [content-visibility:auto]"
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
                     onSelect={() => {
                       handlePick(model.name)
                     }}
                   >
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate font-mono text-sm">
-                        {model.name}
-                      </span>
-                      <PricingBadge
-                        row={priceByName?.get(model.name)}
-                        currency={currency}
-                        className="hidden shrink-0 sm:inline"
-                      />
-                      <ModelStatusBadge
-                        status={model.last_test_status}
-                        testedAt={model.last_tested_at}
-                        reason={model.last_test_reason}
-                        entitlementStatus={model.entitlement_status}
-                        entitlementResetAt={model.entitlement_reset_at}
-                        compact
-                        withProvider={false}
-                      />
+                    <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                          {model.name}
+                        </span>
+                        <ModelStatusBadge
+                          status={model.last_test_status}
+                          testedAt={model.last_tested_at}
+                          reason={model.last_test_reason}
+                          entitlementStatus={model.entitlement_status}
+                          entitlementResetAt={model.entitlement_reset_at}
+                          compact
+                          withProvider={false}
+                        />
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="min-w-0 flex-1 truncate">
+                          {[model.provider, model.real_model].filter(Boolean).join(' · ')}
+                        </span>
+                        <PricingBadge
+                          row={priceByName?.get(model.name)}
+                          currency={currency}
+                          className="shrink-0"
+                        />
+                      </div>
                     </div>
                   </CommandItem>
                 ))}
               </CommandGroup>
             </CommandList>
           </Command>
-        ) : null}
+        </TooltipProvider>
       </PopoverContent>
     </Popover>
   )

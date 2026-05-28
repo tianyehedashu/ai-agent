@@ -141,6 +141,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
             memberOptions={ws.memberOptions}
             keyOptions={ws.keyOptions}
             credentialOptions={ws.credentialOptions}
+            metaLoading={ws.metaLoading}
             modelOptions={ws.modelOptions}
             modelsLoading={ws.modelsLoading}
             onModelPickerOpenChange={ws.onModelPickerOpenChange}

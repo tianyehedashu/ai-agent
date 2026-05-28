@@ -60,6 +60,52 @@ export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
   limit_requests: '',
 }
 
+/** 切换层级时清理与当前层级无关的字段，避免预览条数异常 */
+export function patchQuotaBatchFormForLayer(
+  values: QuotaBatchFormValues,
+  layer: QuotaRuleLayer
+): QuotaBatchFormValues {
+  if (layer === 'platform') {
+    const subjectMode = values.subjectMode
+    return {
+      ...values,
+      layer,
+      subjectMode,
+      credentialIds: [],
+      userIds: subjectMode === 'users' ? values.userIds : [],
+      keyIds: subjectMode === 'keys' ? values.keyIds : [],
+    }
+  }
+  if (layer === 'upstream') {
+    return {
+      ...values,
+      layer,
+      subjectMode: 'tenant',
+      userIds: [],
+      keyIds: [],
+    }
+  }
+  return {
+    ...values,
+    layer,
+    subjectMode: 'keys',
+    userIds: [],
+    credentialIds: [],
+  }
+}
+
+export function patchQuotaBatchFormForSubjectMode(
+  values: QuotaBatchFormValues,
+  subjectMode: QuotaBatchFormValues['subjectMode']
+): QuotaBatchFormValues {
+  return {
+    ...values,
+    subjectMode,
+    userIds: subjectMode === 'users' ? values.userIds : [],
+    keyIds: subjectMode === 'keys' ? values.keyIds : [],
+  }
+}
+
 function expandBatchFormValues(
   values: QuotaBatchFormValues,
   credentialIds: readonly string[]
@@ -188,6 +234,7 @@ export interface QuotaCenterState {
   memberOptions: { id: string; label: string }[]
   keyOptions: { id: string; label: string }[]
   credentialOptions: { id: string; label: string }[]
+  metaLoading: boolean
   modelOptions: BudgetModelOption[]
   modelsLoading: boolean
   onModelPickerOpenChange?: (open: boolean) => void
@@ -448,6 +495,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
     memberOptions,
     keyOptions,
     credentialOptions,
+    metaLoading:
+      batchOpen && (membersQuery.isLoading || keysQuery.isLoading || credsQuery.isLoading),
     modelOptions,
     modelsLoading: modelPages.isLoading || routesQuery.isLoading,
     onModelPickerOpenChange: modelPages.onPickerOpenChange,

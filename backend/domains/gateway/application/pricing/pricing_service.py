@@ -50,8 +50,10 @@ class ResolvedPricing:
     downstream_row: DownstreamModelPricing | None
     upstream_row: UpstreamModelPricing | None
     hit_chain: list[str]
-    """与 ORM 行解耦的策略快照；缓存命中后 ``downstream_row`` 可能为 None。"""
+    """与 ORM 行解耦的策略快照；缓存命中后 ``downstream_row`` / ``upstream_row`` 为 None。"""
     downstream_strategy: str | None = None
+    upstream_extra: dict[str, Any] | None = None
+    """上游 ``extra`` JSONB 快照；避免缓存命中后访问 detach 的 ``upstream_row``。"""
 
 
 def resolved_inheritance_strategy(resolved: ResolvedPricing) -> str | None:
@@ -67,6 +69,13 @@ def resolved_inheritance_strategy(resolved: ResolvedPricing) -> str | None:
     if "upstream_passthrough" in resolved.hit_chain:
         return "upstream_passthrough"
     return None
+
+
+def _upstream_extra_snapshot(row: UpstreamModelPricing | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    extra = row.extra
+    return extra if extra else None
 
 
 def _row_to_rate(row: UpstreamModelPricing | DownstreamModelPricing) -> PricingRate:
@@ -236,6 +245,7 @@ class PricingService:
             at=at,
         )
         upstream_rate = _row_to_rate(upstream_row) if upstream_row else None
+        upstream_extra = _upstream_extra_snapshot(upstream_row)
 
         if row is None:
             if upstream_rate is None:
@@ -250,6 +260,7 @@ class PricingService:
                 upstream_row=upstream_row,
                 hit_chain=hit_chain,
                 downstream_strategy="upstream_passthrough",
+                upstream_extra=upstream_extra,
             )
 
         if row.inheritance_strategy == "mirror":
@@ -263,6 +274,7 @@ class PricingService:
                 upstream_row=upstream_row,
                 hit_chain=hit_chain,
                 downstream_strategy="mirror",
+                upstream_extra=upstream_extra,
             )
 
         downstream_rate = _row_to_rate(row)
@@ -274,6 +286,7 @@ class PricingService:
             upstream_row=upstream_row,
             hit_chain=hit_chain,
             downstream_strategy=row.inheritance_strategy,
+            upstream_extra=upstream_extra,
         )
 
     async def calculate(

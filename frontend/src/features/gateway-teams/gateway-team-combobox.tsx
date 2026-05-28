@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type React from 'react'
 
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandList,
-} from '@/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { GatewayTeamCommandItems } from '@/features/gateway-teams/gateway-team-command-items'
-import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  gatewayTeamDisplayLabel,
+  gatewayTeamRoleSubtitle,
+} from '@/features/gateway-teams/gateway-team-display'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { ChevronsUpDown } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -39,7 +41,6 @@ export function GatewayTeamCombobox({
   popoverContentClassName,
   id,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
-  const [open, setOpen] = useState(false)
   const { isPlatformAdmin } = useGatewayPermission()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
 
@@ -52,46 +53,42 @@ export function GatewayTeamCombobox({
     : placeholder
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
         <Button
           id={id}
           type="button"
           variant="outline"
           role="combobox"
-          aria-expanded={open}
           disabled={disabled || teams.length === 0}
           className={cn('w-full justify-between font-normal', className)}
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className={cn('w-[var(--radix-popover-trigger-width)] p-0', popoverContentClassName)}
-        align="start"
-        side="bottom"
-        collisionPadding={8}
-      >
-        <Command>
-          <CommandInput placeholder="搜索团队..." />
-          <CommandList>
-            <CommandEmpty>未找到匹配的团队</CommandEmpty>
-            <CommandGroup heading="团队">
-              <GatewayTeamCommandItems
-                teams={teams}
-                selectedTeamId={value}
-                isPlatformAdmin={isPlatformAdmin}
-                viewerUserId={viewerUserId}
-                onSelectTeam={(teamId) => {
-                  onChange(teamId)
-                  setOpen(false)
-                }}
-              />
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className={cn('min-w-[14rem]', popoverContentClassName)}>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          切换团队
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(nextTeamId) => {
+            if (nextTeamId.length > 0) onChange(nextTeamId)
+          }}
+        >
+          {teams.map((team) => (
+            <DropdownMenuRadioItem key={team.id} value={team.id} className="gap-2">
+              <span className="min-w-0 flex-1 truncate">
+                {gatewayTeamDisplayLabel(team, { viewerUserId })}
+              </span>
+              <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
+                {gatewayTeamRoleSubtitle(team, isPlatformAdmin)}
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

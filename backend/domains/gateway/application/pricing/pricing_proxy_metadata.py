@@ -140,14 +140,9 @@ async def attach_downstream_pricing_metadata(
 
     meta["gateway_pricing_downstream"] = downstream_rate_to_custom_cost(pricing.downstream)
     if pricing.upstream is not None:
-        upstream_extra = (
-            pricing.upstream_row.extra
-            if pricing.upstream_row is not None and pricing.upstream_row.extra
-            else None
-        )
         meta["gateway_pricing_upstream"] = downstream_rate_to_custom_cost(
             pricing.upstream,
-            extra=upstream_extra,
+            extra=pricing.upstream_extra,
         )
     meta["gateway_pricing_hit_chain"] = pricing.hit_chain
 

@@ -31,6 +31,9 @@ export function GatewayTeamCommandItems({
         <CommandItem
           key={team.id}
           value={gatewayTeamCommandItemValue(team, { viewerUserId })}
+          onMouseDown={(event) => {
+            event.preventDefault()
+          }}
           onSelect={() => {
             onSelectTeam(team.id)
           }}

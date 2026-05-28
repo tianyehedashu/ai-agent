@@ -79,12 +79,15 @@ def _rate_from_dict(raw: dict[str, str] | None) -> PricingRate | None:
 def _resolved_to_payload(resolved: ResolvedPricing) -> dict[str, Any]:
     from domains.gateway.application.pricing.pricing_service import resolved_inheritance_strategy
 
-    return {
+    payload: dict[str, Any] = {
         "hit_chain": resolved.hit_chain,
         "upstream": _rate_to_dict(resolved.upstream),
         "downstream": _rate_to_dict(resolved.downstream),
         "downstream_strategy": resolved_inheritance_strategy(resolved),
     }
+    if resolved.upstream_extra:
+        payload["upstream_extra"] = resolved.upstream_extra
+    return payload
 
 
 def _payload_to_resolved(payload: dict[str, Any]) -> ResolvedPricing:
@@ -95,6 +98,8 @@ def _payload_to_resolved(payload: dict[str, Any]) -> ResolvedPricing:
             output_cost_per_token=Decimal("0"),
         )
     strategy = payload.get("downstream_strategy")
+    raw_extra = payload.get("upstream_extra")
+    upstream_extra = raw_extra if isinstance(raw_extra, dict) else None
     return ResolvedPricing(
         upstream=_rate_from_dict(payload.get("upstream")),
         downstream=downstream,
@@ -102,7 +107,13 @@ def _payload_to_resolved(payload: dict[str, Any]) -> ResolvedPricing:
         upstream_row=None,
         hit_chain=list(payload.get("hit_chain") or []),
         downstream_strategy=strategy if isinstance(strategy, str) else None,
+        upstream_extra=upstream_extra,
     )
+
+
+def cache_safe_resolved(resolved: ResolvedPricing) -> ResolvedPricing:
+    """去掉 ORM 行引用，避免进程内缓存跨请求持有 detach 实例。"""
+    return _payload_to_resolved(_resolved_to_payload(resolved))
 
 
 def _local_get(key: str) -> ResolvedPricing | None:
@@ -120,8 +131,9 @@ def _local_get(key: str) -> ResolvedPricing | None:
 
 def _local_set(key: str, resolved: ResolvedPricing) -> None:
     expires = datetime.now(UTC) + _CACHE_TTL
+    safe = cache_safe_resolved(resolved)
     with _lock:
-        _local[key] = (resolved, expires)
+        _local[key] = (safe, expires)
 
 
 async def _redis_get(key: str) -> ResolvedPricing | None:
@@ -244,6 +256,7 @@ _cache_key = pricing_resolution_cache_key
 
 __all__ = [
     "CacheStats",
+    "cache_safe_resolved",
     "clear_pricing_resolution_cache_for_tests",
     "get_cached_resolution",
     "get_cached_resolution_async",

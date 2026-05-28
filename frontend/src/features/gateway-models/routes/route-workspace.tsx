@@ -1,9 +1,10 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi, type GatewayRouteUpdateBody } from '@/api/gateway'
+import { gatewayApi, type GatewayRoute, type GatewayRouteUpdateBody } from '@/api/gateway'
+import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,24 +12,48 @@ import { routingStrategyLabel } from '@/features/gateway-models/constants'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
-import { enabledGatewayModels, GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
+import {
+  resolveGatewayRouteTeamId,
+  useVisibleGatewayRoutes,
+} from '@/features/gateway-models/routes/use-visible-gateway-routes'
+import { enabledGatewayModels } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import {
+  useGatewayMemberTeamNameMap,
+  useGatewayMemberTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { TeamRole, type TeamRoleValue } from '@/types/permissions'
+
+function canManageTeamRoutes(
+  targetTeamId: string,
+  memberTeams: readonly GatewayTeam[],
+  isPlatformAdmin: boolean,
+  isPlatformViewer: boolean
+): boolean {
+  if (isPlatformViewer) return false
+  if (isPlatformAdmin) return true
+  const team = memberTeams.find((item) => item.id === targetTeamId)
+  const role = (team?.team_role as TeamRoleValue | null | undefined) ?? null
+  return role === TeamRole.OWNER || role === TeamRole.ADMIN
+}
 
 export function RouteWorkspace(): React.JSX.Element {
-  const teamId = useGatewayTeamId()
-  const { canWrite } = useGatewayPermission()
-  const currentTeam = useGatewayTeamRecord(teamId)
+  const workspaceTeamId = useGatewayTeamId()
+  const queryClient = useQueryClient()
+  const { canWrite, isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
+  const currentTeam = useGatewayTeamRecord(workspaceTeamId)
+  const { data: memberTeams = [] } = useGatewayMemberTeams()
+  const teamNameById = useGatewayMemberTeamNameMap()
   const isPersonalTeam = currentTeam?.kind === 'personal'
   const modelsHref = isPersonalTeam
-    ? `/gateway/teams/${teamId}/models?tab=personal`
-    : `/gateway/teams/${teamId}/models?tab=shared`
-  const queryClient = useQueryClient()
+    ? `/gateway/teams/${workspaceTeamId}/models?tab=personal`
+    : `/gateway/teams/${workspaceTeamId}/models?tab=shared`
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const routeIdFromUrl = searchParams.get('routeId') ?? ''
@@ -39,15 +64,24 @@ export function RouteWorkspace(): React.JSX.Element {
   const [createFormKey, setCreateFormKey] = useState(0)
 
   const {
-    data: routes,
+    routes,
     isLoading,
     isFetching: routesFetching,
+    isError: routesError,
+    error: routesQueryError,
     refetch: refetchRoutes,
-  } = useQuery({
-    queryKey: ['gateway', 'routes', teamId],
-    queryFn: () => gatewayApi.listRoutes(teamId),
-    staleTime: GATEWAY_MODELS_STALE_MS,
-  })
+  } = useVisibleGatewayRoutes()
+
+  const selectedRoute = useMemo(
+    () => routes.find((route) => route.id === selectedId) ?? null,
+    [routes, selectedId]
+  )
+
+  const activeTeamId = useMemo(() => {
+    if (createMode) return workspaceTeamId
+    const ownerTeamId = selectedRoute ? resolveGatewayRouteTeamId(selectedRoute) : null
+    return ownerTeamId ?? workspaceTeamId
+  }, [createMode, selectedRoute, workspaceTeamId])
 
   const needsRouteModels = createMode || selectedId !== null
 
@@ -57,49 +91,63 @@ export function RouteWorkspace(): React.JSX.Element {
     isFetching: modelsFetching,
     refetch: refetchModels,
   } = useInfiniteGatewayModelPages(
-    teamId,
+    activeTeamId,
     { registry_scope: 'callable' },
     { enabled: needsRouteModels, prefetchMode: 'idle' }
   )
 
   const pickerModels = useMemo(() => enabledGatewayModels(models), [models])
 
+  const selectedRouteEditable =
+    selectedRoute !== null &&
+    selectedRoute.source !== 'system' &&
+    (() => {
+      const ownerTeamId = resolveGatewayRouteTeamId(selectedRoute)
+      return ownerTeamId
+        ? canManageTeamRoutes(ownerTeamId, memberTeams, isPlatformAdmin, isPlatformViewer)
+        : false
+    })()
+
   useEffect(() => {
-    if (!routeIdFromUrl || !routes?.length) return
-    if (routes.some((r) => r.id === routeIdFromUrl)) {
+    if (!routeIdFromUrl || routes.length === 0) return
+    if (routes.some((route) => route.id === routeIdFromUrl)) {
       setSelectedId(routeIdFromUrl)
       setCreateMode(false)
     }
   }, [routeIdFromUrl, routes])
 
+  useEffect(() => {
+    if (selectedId && !routes.some((route) => route.id === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [routes, selectedId])
+
   const filteredRoutes = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return (routes ?? []).filter((r) => {
+    return routes.filter((route) => {
       if (!q) return true
+      const routeTeamId = resolveGatewayRouteTeamId(route)
+      const teamName = routeTeamId ? (teamNameById.get(routeTeamId) ?? '') : ''
       return (
-        r.virtual_model.toLowerCase().includes(q) ||
-        r.primary_models.some((m) => m.toLowerCase().includes(q))
+        route.virtual_model.toLowerCase().includes(q) ||
+        route.primary_models.some((name) => name.toLowerCase().includes(q)) ||
+        teamName.toLowerCase().includes(q)
       )
     })
-  }, [routes, search])
-
-  const selectedRoute = useMemo(
-    () => (routes ?? []).find((r) => r.id === selectedId) ?? null,
-    [routes, selectedId]
-  )
+  }, [routes, search, teamNameById])
 
   const createMutation = useMutation({
     mutationFn: (body: Parameters<typeof gatewayApi.createRoute>[1]) =>
-      gatewayApi.createRoute(teamId, body),
+      gatewayApi.createRoute(workspaceTeamId, body),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
       setCreateMode(false)
       setSelectedId(created.id)
       setSearchParams(
         (prev) => {
-          const n = new URLSearchParams(prev)
-          n.set('routeId', created.id)
-          return n
+          const next = new URLSearchParams(prev)
+          next.set('routeId', created.id)
+          return next
         },
         { replace: true }
       )
@@ -111,8 +159,15 @@ export function RouteWorkspace(): React.JSX.Element {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: GatewayRouteUpdateBody }) =>
-      gatewayApi.updateRoute(teamId, id, body),
+    mutationFn: ({
+      teamId,
+      id,
+      body,
+    }: {
+      teamId: string
+      id: string
+      body: GatewayRouteUpdateBody
+    }) => gatewayApi.updateRoute(teamId, id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
       toast({ title: '路由已更新' })
@@ -122,46 +177,17 @@ export function RouteWorkspace(): React.JSX.Element {
     },
   })
 
-  function selectRoute(id: string): void {
-    setCreateMode(false)
-    setSelectedId(id)
-    setSearchParams(
-      (prev) => {
-        const n = new URLSearchParams(prev)
-        n.set('routeId', id)
-        return n
-      },
-      { replace: true }
-    )
-  }
-
-  function startCreate(): void {
-    setCreateMode(true)
-    setCreateFormKey((k) => k + 1)
-    setSearchParams(
-      (prev) => {
-        const n = new URLSearchParams(prev)
-        n.delete('routeId')
-        return n
-      },
-      { replace: true }
-    )
-  }
-
-  function cancelCreate(): void {
-    setCreateMode(false)
-  }
-
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => gatewayApi.deleteRoute(teamId, id),
+    mutationFn: ({ teamId, id }: { teamId: string; id: string }) =>
+      gatewayApi.deleteRoute(teamId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['gateway', 'routes'] })
       setSelectedId(null)
       setSearchParams(
         (prev) => {
-          const n = new URLSearchParams(prev)
-          n.delete('routeId')
-          return n
+          const next = new URLSearchParams(prev)
+          next.delete('routeId')
+          return next
         },
         { replace: true }
       )
@@ -172,26 +198,52 @@ export function RouteWorkspace(): React.JSX.Element {
     },
   })
 
-  const teamCustomRoutes = useMemo(
-    () => (routes ?? []).filter((r) => r.source !== 'system'),
-    [routes]
-  )
+  function selectRoute(id: string): void {
+    setCreateMode(false)
+    setSelectedId(id)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('routeId', id)
+        return next
+      },
+      { replace: true }
+    )
+  }
+
+  function startCreate(): void {
+    setCreateMode(true)
+    setCreateFormKey((k) => k + 1)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('routeId')
+        return next
+      },
+      { replace: true }
+    )
+  }
+
+  function cancelCreate(): void {
+    setCreateMode(false)
+  }
+
+  function handleSave(route: GatewayRoute, body: GatewayRouteUpdateBody): void {
+    const ownerTeamId = resolveGatewayRouteTeamId(route)
+    if (!ownerTeamId) return
+    updateMutation.mutate({ teamId: ownerTeamId, id: route.id, body })
+  }
+
+  function handleDelete(route: GatewayRoute): void {
+    const ownerTeamId = resolveGatewayRouteTeamId(route)
+    if (!ownerTeamId) return
+    deleteMutation.mutate({ teamId: ownerTeamId, id: route.id })
+  }
+
+  const searchActive = search.trim().length > 0
 
   return (
     <div className="space-y-4">
-      {currentTeam ? (
-        <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-          {isPersonalTeam ? (
-            <>个人工作区 · 模型池来自个人注册别名</>
-          ) : (
-            <>
-              当前团队：<span className="font-medium text-foreground">{currentTeam.name}</span> ·
-              模型池来自团队注册别名
-            </>
-          )}
-        </div>
-      ) : null}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted-foreground">
           虚拟路由定义客户端请求的 <span className="font-mono">model</span> 名与主模型池、Fallback
@@ -226,7 +278,7 @@ export function RouteWorkspace(): React.JSX.Element {
                   onChange={(e) => {
                     setSearch(e.target.value)
                   }}
-                  placeholder="搜索虚拟名…"
+                  placeholder="搜索虚拟名、主模型、团队…"
                   className="h-8 pl-8 text-sm"
                 />
               </div>
@@ -249,41 +301,56 @@ export function RouteWorkspace(): React.JSX.Element {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
+            ) : routesError ? (
+              <p className="px-3 py-12 text-center text-sm text-destructive">
+                加载失败：
+                {routesQueryError instanceof Error ? routesQueryError.message : '请稍后重试'}
+              </p>
             ) : filteredRoutes.length === 0 ? (
               <p className="px-3 py-12 text-center text-sm text-muted-foreground">
-                {teamCustomRoutes.length === 0
-                  ? '暂无团队自定义路由；系统路由见下方（只读）'
-                  : '暂无匹配的路由'}
+                {searchActive ? `暂无匹配「${search.trim()}」的路由` : '暂无虚拟路由'}
               </p>
             ) : (
               <ul className="divide-y">
-                {filteredRoutes.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      className={cn(
-                        'w-full px-3 py-2.5 text-left hover:bg-muted/40',
-                        !createMode && r.id === selectedId && 'bg-primary/10'
-                      )}
-                      onClick={() => {
-                        selectRoute(r.id)
-                      }}
-                    >
-                      <p className="flex items-center gap-2 font-mono text-sm font-medium">
-                        {r.virtual_model}
-                        {r.source === 'system' ? (
-                          <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
-                            系统
-                          </span>
+                {filteredRoutes.map((route) => {
+                  const ownerTeamId = resolveGatewayRouteTeamId(route)
+                  const teamLabel =
+                    route.source === 'system'
+                      ? '系统'
+                      : ownerTeamId
+                        ? (teamNameById.get(ownerTeamId) ?? '团队')
+                        : null
+                  return (
+                    <li key={route.id}>
+                      <button
+                        type="button"
+                        className={cn(
+                          'w-full px-3 py-2.5 text-left hover:bg-muted/40',
+                          !createMode && route.id === selectedId && 'bg-primary/10'
+                        )}
+                        onClick={() => {
+                          selectRoute(route.id)
+                        }}
+                      >
+                        <p className="flex items-center gap-2 font-mono text-sm font-medium">
+                          {route.virtual_model}
+                          {teamLabel ? (
+                            <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+                              {teamLabel}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {routingStrategyLabel(route.strategy)} ·{' '}
+                          {route.primary_models.join(', ') || '—'}
+                        </p>
+                        {!route.enabled ? (
+                          <p className="mt-1 text-xs text-amber-600">已禁用</p>
                         ) : null}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {routingStrategyLabel(r.strategy)} · {r.primary_models.join(', ') || '—'}
-                      </p>
-                      {!r.enabled ? <p className="mt-1 text-xs text-amber-600">已禁用</p> : null}
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </ScrollArea>
@@ -307,11 +374,14 @@ export function RouteWorkspace(): React.JSX.Element {
             pickerModels={pickerModels}
             isSaving={updateMutation.isPending}
             isDeleting={deleteMutation.isPending}
-            onSave={(id, body) => {
-              updateMutation.mutate({ id, body })
+            readOnly={selectedRoute !== null && !selectedRouteEditable}
+            onSave={(_id, body) => {
+              if (!selectedRoute) return
+              handleSave(selectedRoute, body)
             }}
-            onDelete={(id) => {
-              deleteMutation.mutate(id)
+            onDelete={() => {
+              if (!selectedRoute) return
+              handleDelete(selectedRoute)
             }}
           />
         )}
