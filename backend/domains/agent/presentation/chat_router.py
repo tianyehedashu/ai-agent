@@ -21,19 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.application import ChatUseCase
-from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application.permission_context_composer import PermissionContextComposer
 from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import merge_optional_gateway_team
-from libs.api.deps import (
-    build_session_use_case,
-    get_checkpoint_service,
-    get_sandbox_service,
-    get_session_service,
-)
+from libs.api.deps import get_checkpoint_service, get_session_service
 from libs.db.database import get_db, get_session_context
 from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
@@ -69,26 +62,13 @@ async def _assert_checkpoint_session_accessible(
     )
 
 
-def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
+async def _build_stream_chat_service(db: AsyncSession, request: Request) -> ChatUseCase:
     """为 SSE 生成器创建独立 ChatUseCase，避免复用 FastAPI 依赖 session。"""
-    from domains.agent.infrastructure.memory.vector_store_factory import (
-        build_memory_indexing_service,
-    )
+    from libs.api.deps import build_chat_use_case, build_session_use_case, get_sandbox_service
 
     sandbox_service = get_sandbox_service(request)
     session_service = build_session_use_case(db, sandbox_service=sandbox_service)
-    checkpointer = getattr(request.app.state, "checkpointer", None)
-    catalog = get_model_catalog_adapter(db)
-    model_resolution = ChatModelResolutionUseCase(db, catalog=catalog)
-    return ChatUseCase(
-        db,
-        session_use_case=session_service,
-        session_use_case_factory=build_session_use_case,
-        memory_indexing=build_memory_indexing_service(),
-        checkpointer=checkpointer,
-        model_catalog=catalog,
-        model_resolution_use_case=model_resolution,
-    )
+    return await build_chat_use_case(db, request, session_service=session_service)
 
 
 # =============================================================================
@@ -239,7 +219,7 @@ async def chat(
                     _optional_permission_scope(permission_context)
                 )
                 db = await stack.enter_async_context(get_session_context())
-                chat_service = _build_stream_chat_service(db, http_request)
+                chat_service = await _build_stream_chat_service(db, http_request)
                 mcp_config_dict = (
                     {"enabled_servers": request.mcp_config.enabled_servers}
                     if request.mcp_config
@@ -313,7 +293,7 @@ async def resume_execution(
                     _optional_permission_scope(permission_context)
                 )
                 db = await stack.enter_async_context(get_session_context())
-                chat_service = _build_stream_chat_service(db, http_request)
+                chat_service = await _build_stream_chat_service(db, http_request)
                 async for event in chat_service.resume(
                     session_id=request.session_id,
                     checkpoint_id=request.checkpoint_id,

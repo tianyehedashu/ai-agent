@@ -50,7 +50,7 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
         yield stream_db
         events.append("exit-session")
 
-    def fake_builder(seen_db: object, seen_request: object) -> _FakeChatService:
+    async def fake_builder(seen_db: object, seen_request: object) -> _FakeChatService:
         events.append("build-service")
         assert seen_db is stream_db
         assert seen_request is http_request

@@ -56,6 +56,20 @@ kubectl -n test create secret generic ai-agent-backend-env \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+**Agent 记忆 / Embedding**（SSE 对话依赖；参考 [`deploy/backend.env.production`](../backend.env.production)）：
+
+```bash
+# 检查 Secret 是否含 EMBEDDING_MODEL（缺省会导致流式对话报错）
+ssh wuhan-ali "kubectl -n test exec deploy/backend -- env | grep EMBEDDING"
+# 若无输出，用 patch 补全后 rollout restart backend
+```
+
+```json
+{"data":{"EMBEDDING_MODEL":"ZGFzaHNjb3BlL3RleHQtZW1iZWRkaW5nLXYz","EMBEDDING_DIMENSION":"MTAyNA=="}}
+```
+
+（`echo -n 'dashscope/text-embedding-v3' | base64` → `ZGFzaHNjb3BlL3RleHQtZW1iZWRkaW5nLXYz`，`echo -n '1024' | base64` → `MTAyNA==`）
+
 **ROOT_PATH 必须无尾随空格**（曾导致全 API 404）：
 
 ```bash

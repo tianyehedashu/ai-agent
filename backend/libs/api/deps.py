@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DbSession",
+    "build_chat_use_case",
     "build_session_use_case",
     "get_agent_service",
     "get_anonymous_reassignment_service",
@@ -152,16 +153,21 @@ async def get_title_service(db: DbSession) -> TitleUseCase:
     return TitleUseCase(db=db, model_catalog=catalog)
 
 
-async def get_chat_service(
-    db: DbSession,
+async def build_chat_use_case(
+    db: AsyncSession,
     request: Request,
-    session_service: SessionUseCase = Depends(get_session_service),
+    *,
+    session_service: SessionUseCase | None = None,
 ) -> ChatUseCase:
-    """获取对话服务"""
+    """组装 ChatUseCase（Gateway 目录解析 embedding，与 SSE 流式路径共用）。"""
     from domains.agent.infrastructure.memory.vector_store_factory import (
         build_memory_indexing_service,
         create_text_embedding_port_async,
     )
+
+    if session_service is None:
+        sandbox_service = get_sandbox_service(request)
+        session_service = build_session_use_case(db, sandbox_service=sandbox_service)
 
     checkpointer = getattr(request.app.state, "checkpointer", None)
     catalog = get_model_catalog_adapter(db)
@@ -176,6 +182,15 @@ async def get_chat_service(
         model_catalog=catalog,
         model_resolution_use_case=model_resolution,
     )
+
+
+async def get_chat_service(
+    db: DbSession,
+    request: Request,
+    session_service: SessionUseCase = Depends(get_session_service),
+) -> ChatUseCase:
+    """获取对话服务"""
+    return await build_chat_use_case(db, request, session_service=session_service)
 
 
 async def get_checkpoint_service(db: DbSession) -> CheckpointService:
