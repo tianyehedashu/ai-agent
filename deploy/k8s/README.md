@@ -139,6 +139,38 @@ kubectl -n test logs deployment/frontend --tail=50 -f
 kubectl -n test exec deploy/frontend -- cat /etc/nginx/conf.d/default.conf
 ```
 
+## 沙箱（Agent 代码执行）
+
+后端默认 `execution.toml` 中 `SANDBOX_MODE` 缺省为 `docker`；K8s Pod **未安装** `docker` CLI，也未挂载 Docker socket。若 Secret 未覆盖，SSE chat 会报错：`[Errno 2] No such file or directory: 'docker'`。
+
+**生产 Secret 必须设置**（见 [`deploy/backend.env.production`](../backend.env.production)）：
+
+```bash
+SANDBOX_MODE=local
+```
+
+应用后滚动重启：
+
+```bash
+kubectl -n test patch secret ai-agent-backend-env --type=merge \
+  -p '{"stringData":{"SANDBOX_MODE":"local"}}'
+kubectl -n test rollout restart deployment/backend
+```
+
+验证：
+
+```bash
+kubectl -n test exec deploy/backend -- env | grep SANDBOX_MODE
+kubectl -n test exec deploy/backend -- which docker   # 应无输出
+```
+
+| 环境 | 推荐 `SANDBOX_MODE` | 说明 |
+|------|---------------------|------|
+| K8s 生产 | `local` | 在 Pod 内执行 `run_shell`/`run_python`，工作目录 `/app/workspace`（PVC） |
+| 本机 / Compose | `docker`（默认） | 宿主机有 Docker 时可用容器隔离 |
+
+`SANDBOX_ENABLED`（bootstrap settings）与 `execution.toml` 的 `sandbox.docker.sandbox_enabled` 无关；勿指望只改 `SANDBOX_ENABLED` 即可修复 chat。
+
 ## 与 Docker Compose 的差异
 
 | 项 | K8s（生产） | Docker Compose（备选） |
@@ -146,5 +178,6 @@ kubectl -n test exec deploy/frontend -- cat /etc/nginx/conf.d/default.conf
 | 入口 | frontend LoadBalancer | 单机 Nginx / `:3000` |
 | 后端暴露 | 仅 ClusterIP | 可映射 `:8000` |
 | 环境变量 | Secret `ai-agent-backend-env` | `backend/.env` + `.env.production` |
+| Agent 沙箱 | `SANDBOX_MODE=local`（必填） | 默认 `docker`（宿主机 Docker） |
 | 发版 | 镜像 tag + rollout | `make deploy` / `deploy.sh` |
 | 文档 | 本文 | [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) §Compose |

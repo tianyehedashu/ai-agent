@@ -80,6 +80,20 @@ def decrypt_credential_api_key_for_reveal(
         raise CredentialApiKeyDecryptError from exc
 
 
+def _resolved_effective_api_bases(
+    cred: CredentialReadModel,
+) -> tuple[str | None, str | None]:
+    if cred.effective_api_base_openai or cred.effective_api_base_anthropic:
+        return cred.effective_api_base_openai, cred.effective_api_base_anthropic
+    effective = effective_api_bases_for_credential(
+        provider=cred.provider,
+        profile_id=cred.profile_id,
+        api_base=cred.api_base,
+        api_bases=cred.api_bases,
+    )
+    return effective.get("openai_compat"), effective.get("anthropic_native")
+
+
 def build_credential_response(
     cred: CredentialReadModel,
     *,
@@ -103,18 +117,7 @@ def build_credential_response(
     profile_label = (
         cred.profile_label or get_upstream_profile(cred.profile_id, provider=cred.provider).label
     )
-    if cred.effective_api_base_openai or cred.effective_api_base_anthropic:
-        effective_openai = cred.effective_api_base_openai
-        effective_anthropic = cred.effective_api_base_anthropic
-    else:
-        effective = effective_api_bases_for_credential(
-            provider=cred.provider,
-            profile_id=cred.profile_id,
-            api_base=cred.api_base,
-            api_bases=cred.api_bases,
-        )
-        effective_openai = effective.get("openai_compat")
-        effective_anthropic = effective.get("anthropic_native")
+    effective_openai, effective_anthropic = _resolved_effective_api_bases(cred)
     return CredentialResponse(
         id=cred.id,
         tenant_id=cred.tenant_id,
@@ -145,11 +148,12 @@ def build_credential_response(
 
 
 def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialResponse:
-    """团队 member 可见：展示名/通道/状态等，不含密钥与 api_base/extra。"""
+    """团队 member 可见：展示名/通道/endpoint 等，不含密钥与 extra。"""
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     profile_label = (
         cred.profile_label or get_upstream_profile(cred.profile_id, provider=cred.provider).label
     )
+    effective_openai, effective_anthropic = _resolved_effective_api_bases(cred)
     return CredentialResponse(
         id=cred.id,
         tenant_id=cred.tenant_id,
@@ -157,12 +161,12 @@ def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialR
         scope_id=cred.scope_id,
         provider=cred.provider,
         name=cred.name,
-        api_base=None,
-        api_bases=None,
+        api_base=cred.api_base,
+        api_bases=credential_api_bases_response(cred.api_bases),
         profile_id=cred.profile_id,
         profile_label=profile_label,
-        effective_api_base_openai=None,
-        effective_api_base_anthropic=None,
+        effective_api_base_openai=effective_openai,
+        effective_api_base_anthropic=effective_anthropic,
         extra=None,
         is_active=cred.is_active,
         is_config_managed=is_config_managed_system_credential(

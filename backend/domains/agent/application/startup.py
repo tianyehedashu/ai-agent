@@ -10,8 +10,10 @@ from fastapi import FastAPI  # noqa: TC002
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+from domains.agent.domain.sandbox_runtime_policy import wants_persistent_docker_sandbox
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
 from domains.agent.infrastructure.sandbox import SandboxManager, SandboxPolicy
+from domains.agent.infrastructure.sandbox.docker_availability import docker_cli_available
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_factory
 from utils.logging import get_logger
@@ -33,24 +35,32 @@ async def run_agent_startup(app: FastAPI) -> None:
         app.state.checkpointer = global_checkpointer
         logger.warning("Using MemorySaver as fallback for checkpointer")
 
-    try:
-        from domains.agent.infrastructure.sandbox.executor import PersistentDockerExecutor
+    if docker_cli_available():
+        try:
+            from domains.agent.infrastructure.sandbox.executor import PersistentDockerExecutor
 
-        orphans = await PersistentDockerExecutor.cleanup_orphaned_containers(
-            max_age_seconds=300,
-        )
-        if orphans:
-            logger.info(
-                "Cleaned up %d orphaned containers on startup: %s",
-                len(orphans),
-                orphans,
+            orphans = await PersistentDockerExecutor.cleanup_orphaned_containers(
+                max_age_seconds=300,
             )
-    except Exception as e:
-        logger.warning("Failed to cleanup orphaned containers: %s", e)
+            if orphans:
+                logger.info(
+                    "Cleaned up %d orphaned containers on startup: %s",
+                    len(orphans),
+                    orphans,
+                )
+        except Exception as e:
+            logger.warning("Failed to cleanup orphaned containers: %s", e)
 
     try:
         config_service = get_execution_config_service()
         execution_config = config_service.load_for_agent("default")
+        if wants_persistent_docker_sandbox(execution_config) and not docker_cli_available():
+            logger.error(
+                "Sandbox mode is docker but docker CLI not found in PATH. "
+                "Set SANDBOX_MODE=local for K8s (see deploy/k8s/README.md) or "
+                "provide Docker socket/CLI. Chat will skip sandbox pre-create; "
+                "run_shell/run_python may fail until fixed.",
+            )
         sandbox_policy = SandboxPolicy.from_config(
             execution_config.sandbox.docker.sandbox_policy,
         )

@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 import uuid
 
 from bootstrap.config import settings
+from domains.agent.domain.sandbox_runtime_policy import (
+    should_pre_create_persistent_sandbox,
+    wants_persistent_docker_sandbox,
+)
 from domains.agent.domain.types import (
     AgentConfig,
     AgentEvent,
@@ -22,6 +26,7 @@ from domains.agent.domain.types import (
     MessageRole,
 )
 from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxManager
+from domains.agent.infrastructure.sandbox.docker_availability import docker_cli_available
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
 from domains.gateway.application.ports import InvocationOverrides
@@ -61,9 +66,9 @@ class ChatAgentRunMixin:
         execution_config = self.config_service.load_for_agent(agent_id=agent_id or "default")
 
         session_recreated_event = None
-        if (
-            execution_config.sandbox.mode.value == "docker"
-            and execution_config.sandbox.docker.sandbox_enabled
+        if should_pre_create_persistent_sandbox(
+            execution_config,
+            docker_cli_present=docker_cli_available(),
         ):
             sandbox_manager = SandboxManager.get_instance()
             creation_result = await sandbox_manager.get_or_create_with_info(
@@ -72,6 +77,11 @@ class ChatAgentRunMixin:
             )
             if creation_result.is_recreated and creation_result.previous_state:
                 session_recreated_event = self._create_sandbox_recreated_event(creation_result)
+        elif wants_persistent_docker_sandbox(execution_config):
+            logger.warning(
+                "Skipping persistent sandbox pre-create: docker CLI not found. "
+                "Set SANDBOX_MODE=local on K8s or install Docker.",
+            )
 
         configured_tool_registry = ConfiguredToolRegistry(config=execution_config)
 

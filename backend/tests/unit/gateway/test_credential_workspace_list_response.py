@@ -57,7 +57,7 @@ def test_member_sees_metadata_only_for_others_credential(encryption_key: str) ->
 
     assert resp.management_access == "metadata"
     assert resp.api_key_masked == METADATA_ONLY_API_KEY_MASKED
-    assert resp.api_base is None
+    assert resp.api_base == "https://api.example.com"
     assert resp.extra is None
 
 
