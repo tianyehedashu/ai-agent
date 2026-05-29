@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
+import { displayApiBaseForCredential } from '@/features/gateway-credentials/credential-api-bases-utils'
 import {
   canEditGatewayCredential,
   canLinkToCredentialDetail,
@@ -183,10 +184,7 @@ export function ManagedCredentialRow({
 function CredentialApiBaseCell({
   credential,
 }: Readonly<{ credential: ProviderCredential }>): React.JSX.Element {
-  const base =
-    [credential.api_base, credential.effective_api_base_openai, credential.api_bases?.openai_compat]
-      .map((value) => value?.trim())
-      .find((value) => value) ?? ''
+  const base = displayApiBaseForCredential(credential)
   if (!base) return <span className="text-muted-foreground">—</span>
   const defaultBase = defaultApiBaseForProvider(credential.provider)
   const isDefault = Boolean(defaultBase) && base === defaultBase

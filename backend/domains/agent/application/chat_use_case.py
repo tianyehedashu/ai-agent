@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
-import uuid
 
 from bootstrap.config import settings
 from domains.agent.application.agent_use_case import AgentUseCase
@@ -16,6 +15,13 @@ from domains.agent.application.chat_agent_run import ChatAgentRunMixin
 from domains.agent.application.chat_engine import LangGraphAgentEngine
 from domains.agent.application.chat_image_gen import ChatImageGenMixin
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
+from domains.agent.domain.chat_model_ref_policy import (
+    explicit_request_rejection_message,
+    normalize_model_ref,
+    parse_personal_model_uuid,
+    session_stored_model_ref,
+    should_ignore_stale_session_ref,
+)
 from domains.agent.domain.types import AgentEvent, MessageRole
 from domains.agent.infrastructure.engine.langgraph_checkpointer import LangGraphCheckpointer
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
@@ -28,12 +34,15 @@ from domains.gateway.application.gateway_internal_log_context import (
     set_internal_store_full_override,
 )
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.tenancy.application.team_service import TeamService
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
 from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    import uuid
+
     from collections.abc import AsyncGenerator, Callable
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -375,13 +384,26 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 exc_info=True,
             )
 
+    async def _billing_team_id_for_catalog(self) -> uuid.UUID | None:
+        """与 GatewayBridge 对齐：PermissionContext 无 team 时回退 personal team。"""
+        team_id = resolve_internal_gateway_team_id()
+        if team_id is not None:
+            return team_id
+        user_id = self._model_resolution._resolve_user_id()
+        if user_id is None:
+            return None
+        personal = await TeamService(self.db).ensure_personal_team(user_id)
+        return personal.id
+
     async def _visible_text_system_ids(self) -> frozenset[str]:
         if self._model_catalog is None:
             return frozenset()
-        team_id = resolve_internal_gateway_team_id()
+        team_id = await self._billing_team_id_for_catalog()
+        user_id = self._model_resolution._resolve_user_id()
         rows = await self._model_catalog.list_visible_models(
             billing_team_id=team_id,
             model_type="text",
+            user_id=user_id,
         )
         return frozenset(str(r["id"]) for r in rows if r.get("id") is not None)
 
@@ -392,29 +414,46 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         agent_id: str | None,
     ) -> str | None:
         """解析用户可见的 model_ref：请求 > 会话存储 > Agent（须合法）> 默认（None）。"""
-        if request_model_ref and str(request_model_ref).strip():
-            return str(request_model_ref).strip()
-        cfg = session.config if isinstance(getattr(session, "config", None), dict) else {}
-        stored = cfg.get("chat_model_ref")
-        if isinstance(stored, str) and stored.strip():
-            ref = stored.strip()
-            try:
-                sid = uuid.UUID(ref)
-            except ValueError:
-                return ref
-            if await self._model_resolution.is_valid_text_personal_model_ref(sid):
-                return ref
         allowed = await self._visible_text_system_ids()
+
+        async def _accept_ref(ref: str) -> str | None:
+            cleaned = normalize_model_ref(ref)
+            if cleaned is None:
+                return None
+            personal_id = parse_personal_model_uuid(cleaned)
+            if personal_id is None:
+                return cleaned if cleaned in allowed else None
+            if await self._model_resolution.is_valid_text_personal_model_ref(personal_id):
+                return cleaned
+            return None
+
+        explicit = normalize_model_ref(request_model_ref)
+        if explicit is not None:
+            accepted = await _accept_ref(explicit)
+            if accepted is not None:
+                return accepted
+            raise ValidationError(explicit_request_rejection_message(explicit))
+
+        stored = session_stored_model_ref(session)
+        if stored is not None:
+            accepted = await _accept_ref(stored)
+            if accepted is not None:
+                return accepted
+            if should_ignore_stale_session_ref(stored, accepted):
+                logger.info(
+                    "Ignoring stale session chat_model_ref %r",
+                    stored.strip(),
+                )
+
         base = await self._get_agent_config(agent_id)
         agent_litellm = base.model
         if agent_litellm in allowed:
             return agent_litellm
-        try:
-            uid = uuid.UUID(str(agent_litellm))
-        except (ValueError, AttributeError, TypeError):
-            return None
-        if await self._model_resolution.is_valid_text_personal_model_ref(uid):
-            return str(uid)
+        agent_uuid = parse_personal_model_uuid(str(agent_litellm))
+        if agent_uuid is not None and await self._model_resolution.is_valid_text_personal_model_ref(
+            agent_uuid
+        ):
+            return str(agent_uuid)
         return None
 
     async def _persist_picked_chat_model_ref(self, session_id: str, picked: object) -> None:

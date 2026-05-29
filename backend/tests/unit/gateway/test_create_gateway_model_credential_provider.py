@@ -19,6 +19,7 @@ from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -51,6 +52,7 @@ async def test_create_gateway_model_rejects_cred_provider_mismatch(
             tpm_limit=None,
             tags=None,
             is_platform_admin=False,
+            **team_owner_actor_kw(test_user),
         )
 
 
@@ -83,6 +85,7 @@ async def test_create_gateway_model_rejects_system_credential(
             tpm_limit=None,
             tags=None,
             is_platform_admin=True,
+            **team_owner_actor_kw(test_user),
         )
 
 

@@ -20,6 +20,9 @@ from domains.gateway.domain.types import GatewayCapability
 
 @dataclass(frozen=True)
 class FakeBudget:
+    target_kind: str = "tenant"
+    target_id: uuid.UUID | None = None
+    period: str = "monthly"
     limit_usd: Decimal | None = Decimal("100")
     limit_tokens: int | None = 100_000
     limit_requests: int | None = 100
@@ -38,6 +41,9 @@ class RecordingBudgetService(BudgetService):
     async def check_budget(self, **_kwargs: object) -> BudgetCheckResult:
         return BudgetCheckResult(allowed=True)
 
+    async def read_budget_usage_batch(self, _coords: object) -> dict[object, object]:
+        return {}
+
     async def reserve(
         self,
         *,
@@ -45,10 +51,13 @@ class RecordingBudgetService(BudgetService):
         target_id: str | None,
         period: str,
         limit_requests: int | None,
+        limit_tokens: int | None = None,
+        estimate_tokens: int = 0,
         budget_model_name: str | None = None,
-    ) -> None:
-        _ = limit_requests
+    ) -> tuple[int, int]:
+        _ = limit_tokens, estimate_tokens
         self.reserved.append((target_kind, target_id, period, budget_model_name))
+        return (1 if limit_requests else 0, 0)
 
     async def release(
         self,
@@ -57,7 +66,10 @@ class RecordingBudgetService(BudgetService):
         target_id: str | None,
         period: str,
         budget_model_name: str | None = None,
+        reserved_requests: int = 1,
+        reserved_tokens: int = 0,
     ) -> None:
+        _ = reserved_requests, reserved_tokens
         self.released.append((target_kind, target_id, period, budget_model_name))
 
     async def commit(self, **_kwargs: object) -> None:
@@ -136,9 +148,19 @@ class FakeBudgetRepository:
             }
         ):
             if model_name is None:
-                return FakeBudget(model_name=None)
+                return FakeBudget(
+                    target_kind=target_kind,
+                    target_id=target_id,
+                    period=period,
+                    model_name=None,
+                )
             if model_name == "gpt-4o-mini":
-                return FakeBudget(model_name="gpt-4o-mini")
+                return FakeBudget(
+                    target_kind=target_kind,
+                    target_id=target_id,
+                    period=period,
+                    model_name="gpt-4o-mini",
+                )
         return None
 
 

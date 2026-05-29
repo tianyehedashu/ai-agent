@@ -16,6 +16,7 @@ from domains.gateway.infrastructure.repositories.system_credential_repository im
 )
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
+from tests.unit.gateway.credential_test_helpers import team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -47,6 +48,7 @@ async def test_update_system_gateway_model_requires_platform_admin(db_session, t
             tenant_id=team.id,
             is_platform_admin=False,
             fields={"enabled": False},
+            **team_owner_actor_kw(test_user),
         )
 
     updated = await writes.update_gateway_model(
@@ -54,6 +56,7 @@ async def test_update_system_gateway_model_requires_platform_admin(db_session, t
         tenant_id=team.id,
         is_platform_admin=True,
         fields={"enabled": False},
+        **team_owner_actor_kw(test_user),
     )
     assert updated.enabled is False
     reloaded = await GatewayModelRepository(db_session).get_system(model.id)

@@ -6,6 +6,10 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.system_grants_cache import (
+    clear_grants_cache_for_tests,
+    invalidate_grants_for_team,
+)
 from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.system_visibility_filter import (
@@ -231,6 +235,8 @@ async def test_restricted_model_requires_grant_even_if_credential_public(
         )
     )
     await db_session.flush()
+    clear_grants_cache_for_tests()
+    await invalidate_grants_for_team(team.id)
     visible2 = await list_merged_models_for_tenant(db_session, team.id, user_id=test_user.id)
     assert model.name in {r.name for r in visible2}
 

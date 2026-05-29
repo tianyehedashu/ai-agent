@@ -1381,8 +1381,8 @@ class TestGatewayManagementApi:
             headers=headers,
             params={"credential_id": cid},
         )
-        assert r_models_after.status_code == 200, r_models_after.text
-        assert not any(m["id"] == mid for m in _model_list_items(r_models_after.json()))
+        assert r_models_after.status_code == 404, r_models_after.text
+        assert r_models_after.json()["code"] == "CREDENTIAL_NOT_FOUND"
 
     @pytest.mark.asyncio
     async def test_patch_credential_is_active_false_cascades_model_enabled(
@@ -2860,7 +2860,7 @@ class TestGatewayManagementApi:
         assert str(sys_cred.id) in by_id
         assert by_id[str(sys_cred.id)]["name"] == sys_name
         assert by_id[str(sys_cred.id)]["scope"] == "system"
-        assert str(team_cred_id) not in by_id
+        assert str(team_cred_id) in by_id
         for item in summaries:
             assert "api_key_masked" not in item
             assert "api_base" not in item
@@ -2872,9 +2872,10 @@ class TestGatewayManagementApi:
             headers=member_headers,
         )
         assert r_list.status_code == 200, r_list.text
-        list_ids = {item["id"] for item in r_list.json()}
-        assert str(team_cred_id) not in list_ids
-        assert str(sys_cred.id) not in list_ids
+        list_by_id = {item["id"]: item for item in r_list.json()}
+        assert str(team_cred_id) in list_by_id
+        assert list_by_id[str(team_cred_id)]["management_access"] == "metadata"
+        assert str(sys_cred.id) not in list_by_id
 
         r_sys_detail = await dev_client.get(
             f"/api/v1/gateway/teams/{shared.id}/credentials/{sys_cred.id}",
@@ -2977,7 +2978,9 @@ class TestGatewayManagementApi:
         assert r_pg.status_code == 200, r_pg.text
         rows = r_pg.json()
         by_id = {item["id"]: item for item in rows}
-        assert active_id not in by_id
+        assert active_id in by_id
+        assert by_id[active_id]["context_team_id"] == str(shared.id)
+        assert by_id[active_id]["scope"] == "team"
         assert inactive_id not in by_id
         assert member_team_id in by_id
         assert by_id[member_team_id]["context_team_id"] == str(shared.id)
@@ -3787,6 +3790,8 @@ class TestManagedTeamCredentialsAggregateApi:
         assert owner_cred_name in by_name
         assert by_name[owner_cred_name]["management_access"] == "metadata"
         assert by_name[owner_cred_name]["api_key_masked"] == "—"
+        assert by_name[owner_cred_name]["extra"] is None
+        assert by_name[owner_cred_name]["effective_api_base_openai"] == "https://api.openai.com/v1"
         assert payload["queried_team_count"] == 1
         assert payload["total"] >= 1
 

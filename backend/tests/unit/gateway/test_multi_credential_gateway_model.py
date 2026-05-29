@@ -21,7 +21,7 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
 
 
 async def _seed_team_creds(db_session, n: int = 2):
@@ -71,6 +71,7 @@ async def test_multi_credential_creates_models_and_route(db_session, test_user) 
         provider="openai",
         credential_ids=[cred_a.id, cred_b.id],
         is_platform_admin=False,
+        **team_owner_actor_kw(test_user),
     )
     await db_session.flush()
 
@@ -103,6 +104,7 @@ async def test_multi_credential_rejects_duplicate_credentials(db_session, test_u
             provider="openai",
             credential_ids=[creds[0].id, creds[0].id],
             is_platform_admin=False,
+            **team_owner_actor_kw(test_user),
         )
 
 
@@ -130,4 +132,5 @@ async def test_multi_credential_conflict_with_existing_route(db_session, test_us
             provider="openai",
             credential_ids=[cred.id],
             is_platform_admin=False,
+            **team_owner_actor_kw(test_user),
         )

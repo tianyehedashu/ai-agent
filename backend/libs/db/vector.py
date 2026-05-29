@@ -16,6 +16,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    NearestQuery,
     PointIdsList,
     PointStruct,
     VectorParams,
@@ -129,9 +130,9 @@ class QdrantVectorIndex(VectorIndexAdapter):
                 FieldCondition(key=k, match=MatchValue(value=v)) for k, v in query_filter.items()
             ]
             qdrant_filter = Filter(must=conditions)
-        results = await client.search(
+        results = await client.query_points(
             collection_name=collection,
-            query_vector=vector,
+            query=NearestQuery(nearest=vector),
             limit=limit,
             query_filter=qdrant_filter,
         )
@@ -139,10 +140,10 @@ class QdrantVectorIndex(VectorIndexAdapter):
             VectorHitRecord(
                 id=str(r.id),
                 score=float(r.score or 0.0),
-                text=str(r.payload.get("text", "")),
+                text=str((r.payload or {}).get("text", "")),
                 payload=dict(r.payload or {}),
             )
-            for r in results
+            for r in results.points
         ]
 
     async def delete_vectors(self, collection: str, *, point_ids: list[str]) -> None:

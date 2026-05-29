@@ -34,7 +34,7 @@ class TestMyCredentialsAPI:
         cid = body["id"]
         assert body["provider"] == "deepseek"
         assert body["name"] == "integration-test-acct"
-        assert body["api_base"] == "https://api.deepseek.com"
+        assert body["api_base"] == "https://api.deepseek.com/v1"
         assert "api_key_masked" in body
         assert body["api_key_masked"] == "••••" or "…" in body["api_key_masked"]
         assert "sk-test-placeholder" not in body["api_key_masked"]

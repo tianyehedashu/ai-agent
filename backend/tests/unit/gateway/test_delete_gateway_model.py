@@ -27,6 +27,7 @@ from domains.gateway.infrastructure.repositories.system_gateway_grant_repository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -53,9 +54,13 @@ async def test_delete_system_gateway_model_requires_platform_admin(db_session, t
 
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(SystemCredentialAdminRequiredError):
-        await writes.delete_gateway_model(model.id, tenant_id=team.id, is_platform_admin=False)
+        await writes.delete_gateway_model(
+            model.id, tenant_id=team.id, is_platform_admin=False, **team_owner_actor_kw(test_user)
+        )
 
-    await writes.delete_gateway_model(model.id, tenant_id=team.id, is_platform_admin=True)
+    await writes.delete_gateway_model(
+        model.id, tenant_id=team.id, is_platform_admin=True, **team_owner_actor_kw(test_user)
+    )
     await db_session.flush()
     assert await GatewayModelRepository(db_session).get_system(model.id) is None
 
@@ -102,7 +107,9 @@ async def test_delete_system_model_prunes_grants_and_budgets(db_session, test_us
     await db_session.flush()
 
     writes = GatewayManagementWriteService(db_session)
-    await writes.delete_gateway_model(model.id, tenant_id=team.id, is_platform_admin=True)
+    await writes.delete_gateway_model(
+        model.id, tenant_id=team.id, is_platform_admin=True, **team_owner_actor_kw(test_user)
+    )
     await db_session.flush()
 
     assert await GatewayModelRepository(db_session).get_system(model.id) is None
@@ -136,4 +143,6 @@ async def test_delete_config_managed_system_model_rejected(db_session, test_user
 
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ValidationError):
-        await writes.delete_gateway_model(model.id, tenant_id=team.id, is_platform_admin=True)
+        await writes.delete_gateway_model(
+            model.id, tenant_id=team.id, is_platform_admin=True, **team_owner_actor_kw(test_user)
+        )

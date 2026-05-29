@@ -15,7 +15,7 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.tenancy.application.team_service import TeamService
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,9 @@ async def test_delete_gateway_model_prunes_vkey_allowed_list(db_session, test_us
     await db_session.flush()
 
     writes = GatewayManagementWriteService(db_session)
-    await writes.delete_gateway_model(model.id, tenant_id=team.id)
+    await writes.delete_gateway_model(
+        model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+    )
     await db_session.flush()
 
     keys = await vkey_repo.list_for_tenant(team.id, include_inactive=True)

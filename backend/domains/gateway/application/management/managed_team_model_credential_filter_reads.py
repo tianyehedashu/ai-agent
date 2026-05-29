@@ -10,9 +10,11 @@ from domains.gateway.domain.policies.managed_team_credentials_policy import Writ
 from domains.gateway.domain.policies.managed_team_resource_policy import (
     build_managed_team_readable_resource_list_plan,
 )
+from domains.gateway.domain.team_registry_credential_display import (
+    TeamRegistryCredentialDisplay,
+)
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
-    TeamRegistryCredentialDisplay,
 )
 from domains.tenancy.application.ports import GatewayTeamListingPort
 from domains.tenancy.application.team_service import TeamService

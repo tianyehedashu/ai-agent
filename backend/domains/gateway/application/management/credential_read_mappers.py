@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any
 from cryptography.fernet import InvalidToken
 
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.domain.credential_display import mask_plain_secret_for_display
 from domains.gateway.domain.upstream_endpoint import effective_api_bases_for_credential
 from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
-from domains.gateway.presentation.credential_response import mask_plain_secret_for_display
 from libs.crypto import decrypt_value
 
 if TYPE_CHECKING:

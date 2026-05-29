@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, or_, select
 
+from domains.gateway.domain.team_registry_credential_display import (
+    TeamRegistryCredentialDisplay,
+)
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
@@ -27,16 +30,6 @@ class EffectiveProviderSummary:
     credential_count: int
     has_managed: bool
     has_user: bool
-
-
-@dataclass(frozen=True)
-class TeamRegistryCredentialDisplay:
-    """团队注册模型引用的凭据（列表筛选下拉，不做 reveal 过滤）。"""
-
-    id: uuid.UUID
-    name: str
-    provider: str
-    tenant_id: uuid.UUID
 
 
 class ProviderCredentialRepository:

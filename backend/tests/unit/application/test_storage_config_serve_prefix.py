@@ -11,13 +11,14 @@ from domains.agent.application.storage_config_service import StorageConfigServic
 from libs.api.paths import LEGACY_LISTING_STUDIO_IMAGES_PREFIX
 
 
+def _settings(root_path: str = "", api_prefix: str = "/api/v1") -> SimpleNamespace:
+    return SimpleNamespace(root_path=root_path, api_prefix=api_prefix)
+
+
 @pytest.mark.unit
 class TestStorageConfigServePrefix:
     def test_row_to_snapshot_overrides_legacy_default(self) -> None:
-        with (
-            patch("libs.api.paths.settings.root_path", "/ai-agent"),
-            patch("libs.api.paths.settings.api_prefix", "/api/v1"),
-        ):
+        with patch("libs.api.paths.get_settings", return_value=_settings("/ai-agent")):
             row = SimpleNamespace(
                 storage_type="local",
                 local_storage_path="./data",
@@ -37,10 +38,7 @@ class TestStorageConfigServePrefix:
             assert snapshot.local_serve_prefix == "/ai-agent/api/v1/listing-studio/images"
 
     def test_row_to_snapshot_keeps_custom_prefix(self) -> None:
-        with (
-            patch("libs.api.paths.settings.root_path", "/ai-agent"),
-            patch("libs.api.paths.settings.api_prefix", "/api/v1"),
-        ):
+        with patch("libs.api.paths.get_settings", return_value=_settings("/ai-agent")):
             row = SimpleNamespace(
                 storage_type="local",
                 local_storage_path="./data",

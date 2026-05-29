@@ -49,6 +49,9 @@ class _NoopBudget:
     async def commit(self, **_kwargs: object) -> None:
         return None
 
+    async def read_budget_usage_batch(self, _coords: object) -> dict[object, object]:
+        return {}
+
 
 @pytest.mark.asyncio
 async def test_embedding_dashscope_uses_compatible_api(

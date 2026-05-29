@@ -46,6 +46,7 @@ class TestChatModelValidation:
             "anthropic",
             "zhipuai",
             "volcengine",
+            "moonshot",
             "custom",
         }
         assert expected == PERSONAL_MODEL_PROVIDERS

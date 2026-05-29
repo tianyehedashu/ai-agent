@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 import uuid
@@ -10,6 +11,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_response_adapter import adapt_binary_response
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
@@ -48,6 +50,35 @@ class _NoopBudget:
 
     async def commit(self, **_kwargs: object) -> None:
         return None
+
+    async def read_budget_usage_batch(self, _coords: object) -> dict[object, object]:
+        return {}
+
+
+def _patch_preflight_model_resolution(
+    use_case: ProxyUseCase,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    record: object | None = None,
+) -> None:
+    async def _resolve(
+        ctx: ProxyContext,
+        model: str,
+        *,
+        match_registered_capability: bool = True,
+    ) -> ResolvedModelName:
+        rec = record or SimpleNamespace(
+            id=uuid.uuid4(),
+            credential_id=uuid.uuid4(),
+            capability=ctx.capability.value,
+            provider="openai",
+            real_model=model,
+            tags={},
+            enabled=True,
+        )
+        return ResolvedModelName(record=rec, route=None, via_route=None)
+
+    monkeypatch.setattr(use_case.guard, "resolve_and_validate_request_model", _resolve)
 
 
 @pytest.mark.asyncio
@@ -130,6 +161,7 @@ async def test_audio_speech_proxy_uses_adapt_binary(
         ),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    _patch_preflight_model_resolution(use_case, monkeypatch)
 
     adapt_mock = MagicMock(side_effect=lambda data, *_a, **_k: data)
     monkeypatch.setattr(

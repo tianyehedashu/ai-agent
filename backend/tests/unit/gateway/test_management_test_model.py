@@ -11,7 +11,7 @@ from domains.gateway.application.management.writes import GatewayManagementWrite
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
 
 
 async def _seed_team_credential_and_model(
@@ -53,7 +53,9 @@ async def test_chat_capability_success_persists(db_session, test_user) -> None:
 
     # acompletion 在 test_gateway_model 内部延迟导入，patch litellm 模块入口即可。
     with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -77,7 +79,9 @@ async def test_chat_capability_failure_persists(db_session, test_user) -> None:
         "litellm.acompletion",
         new=AsyncMock(side_effect=RuntimeError("401 Unauthorized")),
     ):
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -115,7 +119,9 @@ async def test_dashscope_embedding_probe_uses_compatible_client(db_session, test
         ) as perform_mock,
         patch("litellm.aembedding", new=AsyncMock()) as litellm_embed,
     ):
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     perform_mock.assert_awaited_once()
@@ -134,7 +140,9 @@ async def test_embedding_capability_uses_aembedding(db_session, test_user) -> No
     writes = GatewayManagementWriteService(db_session)
 
     with patch("litellm.aembedding", new=AsyncMock(return_value={"data": []})) as mock_embed:
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -167,7 +175,9 @@ async def test_image_capability_uses_aimage_generation(db_session, test_user) ->
     )()
 
     with patch("litellm.aimage_generation", new=AsyncMock(return_value=fake_img)) as mock_img:
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -200,7 +210,9 @@ async def test_image_capability_failure_persists(db_session, test_user) -> None:
         "litellm.aimage_generation",
         new=AsyncMock(side_effect=RuntimeError("502 Bad Gateway")),
     ):
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -230,7 +242,9 @@ async def test_video_generation_capability_uses_avideo_generation(db_session, te
     )()
 
     with patch("litellm.avideo_generation", new=AsyncMock(return_value=fake_video)) as mock_video:
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert result["status"] == "success"
@@ -259,7 +273,9 @@ async def test_unsupported_capability_returns_failed(db_session, test_user) -> N
     )
     writes = GatewayManagementWriteService(db_session)
 
-    result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+    result = await writes.test_gateway_model(
+        model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+    )
 
     assert result["success"] is False
     assert result["status"] == "failed"
@@ -276,7 +292,9 @@ async def test_unknown_model_raises(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     writes = GatewayManagementWriteService(db_session)
     with pytest.raises(ManagementEntityNotFoundError):
-        await writes.test_gateway_model(uuid.uuid4(), tenant_id=team.id)
+        await writes.test_gateway_model(
+            uuid.uuid4(), tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
 
 
 @pytest.mark.asyncio
@@ -312,7 +330,9 @@ async def test_volcengine_image_probe_uses_image_endpoint_from_extra(db_session,
         "domains.gateway.application.management.write_modules.probe.perform_volcengine_image_generation",
         new=fake_perform,
     ):
-        result = await writes.test_gateway_model(model.id, tenant_id=team.id)
+        result = await writes.test_gateway_model(
+            model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert captured["model"] == "ep-image-test"
@@ -339,7 +359,9 @@ async def test_volcengine_image_probe_fails_when_endpoint_missing(db_session, te
     await db_session.flush()
     writes = GatewayManagementWriteService(db_session)
 
-    result = await writes.test_gateway_model(model.id, tenant_id=team.id)
+    result = await writes.test_gateway_model(
+        model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+    )
     assert result["success"] is False
     assert "image_endpoint_id" in result["reason"]
 
@@ -369,7 +391,9 @@ async def test_volcengine_video_probe_uses_direct_task_api(db_session, test_user
         ),
         patch("litellm.avideo_generation", new=AsyncMock()) as mock_video,
     ):
-        result = await writes.test_gateway_model(model_id, tenant_id=team_id)
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     assert result.get("response_preview") == "queued: cgt-test"
@@ -399,7 +423,9 @@ async def test_system_model_from_merged_list_can_be_probed(db_session, test_user
         {"choices": [type("C", (), {"message": type("M", (), {"content": "pong"})()})()]},
     )()
     with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
-        result = await writes.test_gateway_model(system_model.id, tenant_id=team.id)
+        result = await writes.test_gateway_model(
+            system_model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
 
     assert result["success"] is True
     refreshed = await repo.get_system(system_model.id)

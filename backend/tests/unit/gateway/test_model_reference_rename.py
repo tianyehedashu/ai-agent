@@ -19,7 +19,7 @@ from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -171,6 +171,7 @@ async def test_update_gateway_model_renames_with_cascade(db_session, test_user) 
         tenant_id=team.id,
         is_platform_admin=False,
         fields={"name": new_name},
+        **team_owner_actor_kw(test_user),
     )
     assert updated.name == new_name
 
@@ -210,6 +211,7 @@ async def test_update_gateway_model_name_conflict(db_session, test_user) -> None
             tenant_id=team.id,
             is_platform_admin=False,
             fields={"name": taken_name},
+            **team_owner_actor_kw(test_user),
         )
 
 

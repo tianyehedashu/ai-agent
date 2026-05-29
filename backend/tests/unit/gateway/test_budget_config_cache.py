@@ -15,18 +15,8 @@ from domains.gateway.application.budget_config_cache import (
     clear_budget_config_cache_for_tests,
     get_cached_budget_by_plan,
     invalidate_budget_config_cache,
-    plan_cache_fingerprint,
 )
 from domains.gateway.domain.proxy_policy import BudgetCheckQuery
-
-
-def test_plan_cache_fingerprint_stable() -> None:
-    tid = uuid.uuid4()
-    plan = (
-        BudgetCheckQuery("tenant", tid, "daily", None),
-        BudgetCheckQuery("tenant", tid, "monthly", "gpt-4"),
-    )
-    assert plan_cache_fingerprint(plan) == plan_cache_fingerprint(tuple(reversed(plan)))
 
 
 def test_budget_config_coord_key() -> None:
@@ -73,7 +63,7 @@ async def test_get_cached_budget_by_plan_hits_local_cache(monkeypatch) -> None:
         AsyncMock(return_value="7"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis",
+        "domains.gateway.application.budget_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -116,7 +106,7 @@ async def test_invalidate_budget_config_cache_clears_local(monkeypatch) -> None:
         fake_version,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis",
+        "domains.gateway.application.budget_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
     redis_client = AsyncMock()

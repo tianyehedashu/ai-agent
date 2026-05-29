@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bootstrap.config import settings
+from bootstrap.config import get_settings
 
 
 def _normalize_segments(*parts: str) -> list[str]:
@@ -18,7 +18,7 @@ def _normalize_segments(*parts: str) -> list[str]:
 
 def service_path(*segments: str) -> str:
     """``ROOT_PATH`` + segments（如 ``/ai-agent/health``）。"""
-    root_parts = _normalize_segments(settings.root_path)
+    root_parts = _normalize_segments(get_settings().root_path)
     rest = _normalize_segments(*segments)
     combined = root_parts + rest
     if not combined:
@@ -28,6 +28,7 @@ def service_path(*segments: str) -> str:
 
 def api_v1_path(*segments: str) -> str:
     """``{ROOT_PATH}{API_PREFIX}/{segments}``（如 ``/ai-agent/api/v1/gateway``）。"""
+    settings = get_settings()
     base_parts = _normalize_segments(settings.root_path, settings.api_prefix)
     rest = _normalize_segments(*segments)
     combined = base_parts + rest

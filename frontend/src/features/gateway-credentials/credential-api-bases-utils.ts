@@ -99,3 +99,16 @@ export function apiBaseRequiredForProtocols(
 export function primaryApiBaseFromForm(form: CredentialApiBasesFormState): string {
   return form.openai_compat.trim() || form.anthropic_native.trim()
 }
+
+/** 列表/摘要展示用 endpoint：优先显式 api_base，否则 effective / api_bases。 */
+export function displayApiBaseForCredential(cred: {
+  api_base?: string | null
+  api_bases?: CredentialApiBases | null
+  effective_api_base_openai?: string | null
+}): string {
+  const apiBase = cred.api_base?.trim()
+  if (apiBase) return apiBase
+  const effective = cred.effective_api_base_openai?.trim()
+  if (effective) return effective
+  return cred.api_bases?.openai_compat?.trim() ?? ''
+}

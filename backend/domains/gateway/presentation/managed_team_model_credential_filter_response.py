@@ -5,7 +5,7 @@ from __future__ import annotations
 from domains.gateway.application.management.managed_team_model_credential_filter_reads import (
     ManagedTeamModelCredentialFilterList,
 )
-from domains.gateway.infrastructure.repositories.credential_repository import (
+from domains.gateway.domain.team_registry_credential_display import (
     TeamRegistryCredentialDisplay,
 )
 from domains.gateway.presentation.schemas.common import (

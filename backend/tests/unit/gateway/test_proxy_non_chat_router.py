@@ -54,6 +54,9 @@ class _NoopBudget:
     async def commit(self, **_kwargs: object) -> None:
         return None
 
+    async def read_budget_usage_batch(self, _coords: object) -> dict[object, object]:
+        return {}
+
 
 def _ctx(team_id: uuid.UUID | None = None) -> ProxyContext:
     tid = team_id or uuid.uuid4()

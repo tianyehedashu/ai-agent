@@ -76,3 +76,51 @@ def test_owner_gets_full_management_access(encryption_key: str) -> None:
 
     assert resp.management_access == "full"
     assert resp.api_key_masked != METADATA_ONLY_API_KEY_MASKED
+
+
+@pytest.mark.parametrize("encryption_key", ["test-encryption-key-32bytes!!"])
+def test_metadata_response_includes_api_base_not_secret(encryption_key: str) -> None:
+    owner_id = uuid.uuid4()
+    row = _cred(created_by=owner_id)
+
+    from domains.gateway.presentation.credential_response import build_credential_metadata_response
+
+    resp = build_credential_metadata_response(row)
+
+    assert resp.management_access == "metadata"
+    assert resp.api_base == "https://api.example.com"
+    assert resp.api_key_masked == METADATA_ONLY_API_KEY_MASKED
+    assert resp.extra is None
+
+
+def test_metadata_response_api_base_falls_back_to_provider_default() -> None:
+    owner_id = uuid.uuid4()
+    row = CredentialReadModel(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        scope="team",
+        scope_id=None,
+        provider="deepseek",
+        name="team-key",
+        api_base=None,
+        api_bases=None,
+        profile_id=None,
+        profile_label=None,
+        effective_api_base_openai="https://api.deepseek.com/v1",
+        effective_api_base_anthropic=None,
+        api_key_encrypted=b"enc",
+        api_key_masked=None,
+        extra=None,
+        is_active=True,
+        visibility=None,
+        created_by_user_id=owner_id,
+        created_at=datetime.now(UTC),
+    )
+
+    from domains.gateway.presentation.credential_response import build_credential_metadata_response
+
+    resp = build_credential_metadata_response(row)
+
+    assert resp.management_access == "metadata"
+    assert resp.api_base == "https://api.deepseek.com/v1"
+    assert resp.api_key_masked == METADATA_ONLY_API_KEY_MASKED

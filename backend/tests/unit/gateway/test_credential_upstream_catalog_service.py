@@ -22,7 +22,7 @@ from domains.gateway.infrastructure.repositories.system_credential_repository im
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
+from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -153,6 +153,7 @@ async def test_probe_managed_openai_uses_port(db_session, test_user: User) -> No
         tenant_id=team.id,
         is_platform_admin=False,
         credential_id=row.id,
+        **team_owner_actor_kw(test_user),
     )
     assert result.support == "full"
     assert result.items[0].id == "gpt-4o-mini"
@@ -183,6 +184,7 @@ async def test_batch_import_team_duplicate_fails(db_session, test_user: User) ->
         is_platform_admin=False,
         enabled=True,
         reload_router=False,
+        **team_owner_actor_kw(test_user),
     )
     await db_session.commit()
 
@@ -199,6 +201,7 @@ async def test_batch_import_team_duplicate_fails(db_session, test_user: User) ->
         tags=None,
         enabled=True,
         items=[("gpt-4o-mini", None)],
+        **team_owner_actor_kw(test_user),
     )
     assert created == []
     assert len(failed) == 1
@@ -227,6 +230,7 @@ async def test_batch_import_team_success(db_session, test_user: User) -> None:
         tags=None,
         enabled=True,
         items=[("gpt-new-model", "my-alias")],
+        **team_owner_actor_kw(test_user),
     )
     assert failed == []
     assert len(created) == 1
@@ -294,6 +298,7 @@ async def test_probe_system_credential_marks_system_model_already_registered(
         tenant_id=team.id,
         is_platform_admin=True,
         credential_id=cred.id,
+        **team_owner_actor_kw(test_user),
     )
     assert result.support == "full"
     by_id = {item.id: item for item in result.items}
@@ -330,6 +335,7 @@ async def test_batch_import_system_success_writes_system_gateway_models(
         tags=None,
         enabled=True,
         items=[("gpt-system-new", "sys-alias")],
+        **team_owner_actor_kw(test_user),
     )
     assert failed == []
     assert len(created) == 1
@@ -379,6 +385,7 @@ async def test_batch_import_system_duplicate_fails_when_in_system_gateway_models
         tags=None,
         enabled=True,
         items=[("gpt-4o-mini", None)],
+        **team_owner_actor_kw(test_user),
     )
     assert created == []
     assert len(failed) == 1
@@ -415,6 +422,7 @@ async def test_batch_import_cross_credential_same_upstream_id_succeeds(
         is_platform_admin=False,
         enabled=True,
         reload_router=False,
+        **team_owner_actor_kw(test_user),
     )
     await db_session.commit()
 
@@ -431,6 +439,7 @@ async def test_batch_import_cross_credential_same_upstream_id_succeeds(
         tags=None,
         enabled=True,
         items=[("gpt-4o-mini", None)],
+        **team_owner_actor_kw(test_user),
     )
     assert failed == []
     assert len(created) == 1

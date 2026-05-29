@@ -61,6 +61,9 @@ class _NoopBudget:
     async def commit(self, **_kwargs: object) -> None:
         return None
 
+    async def read_budget_usage_batch(self, _coords: object) -> dict[object, object]:
+        return {}
+
 
 def _patch_anthropic_preflight(
     use_case: ProxyUseCase,
@@ -96,7 +99,8 @@ def _patch_anthropic_preflight(
         _ = estimate_tokens
         return None
 
-    async def _budget(_ctx: ProxyContext) -> list[object]:
+    async def _budget(_ctx: ProxyContext, *, estimate_tokens: int = 0) -> list[object]:
+        _ = estimate_tokens
         return []
 
     monkeypatch.setattr(use_case.guard, "resolve_and_validate_request_model", _resolve)
@@ -184,15 +188,23 @@ async def test_anthropic_messages_passes_body_fields_to_router(
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     _patch_anthropic_preflight(use_case, monkeypatch)
 
-    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def no_direct(
+        _ctx: ProxyContext, _model: str, *, resolved: object | None = None
+    ) -> bool:
+        _ = resolved
         return False
 
     monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+        _ctx: ProxyContext,
+        *,
+        user_kwargs: dict[str, Any] | None = None,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> dict[str, Any]:
+        _ = resolved, timings
         meta: dict[str, Any] = {"gateway_request_id": "req-1"}
         if user_kwargs:
             user_meta = user_kwargs.get("metadata")
@@ -266,15 +278,23 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     _patch_anthropic_preflight(use_case, monkeypatch)
 
-    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def no_direct(
+        _ctx: ProxyContext, _model: str, *, resolved: object | None = None
+    ) -> bool:
+        _ = resolved
         return False
 
     monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+        _ctx: ProxyContext,
+        *,
+        user_kwargs: dict[str, Any] | None = None,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> dict[str, Any]:
+        _ = resolved, timings
         _ = user_kwargs
         return {}
 
@@ -342,15 +362,23 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
         tags={"thinking_param": THINKING_PARAM_NONE, "supports_reasoning": False},
     )
 
-    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def no_direct(
+        _ctx: ProxyContext, _model: str, *, resolved: object | None = None
+    ) -> bool:
+        _ = resolved
         return False
 
     monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+        _ctx: ProxyContext,
+        *,
+        user_kwargs: dict[str, Any] | None = None,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> dict[str, Any]:
+        _ = resolved, timings
         _ = user_kwargs
         return {"gateway_request_id": "req-strip", "gateway_provider": "volcengine"}
 
@@ -427,15 +455,23 @@ async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
         real_model="claude-opus-4-7",
     )
 
-    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def no_direct(
+        _ctx: ProxyContext, _model: str, *, resolved: object | None = None
+    ) -> bool:
+        _ = resolved
         return False
 
     monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+        _ctx: ProxyContext,
+        *,
+        user_kwargs: dict[str, Any] | None = None,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> dict[str, Any]:
+        _ = resolved, timings
         _ = user_kwargs
         return {"gateway_request_id": "req-keep", "gateway_provider": "anthropic"}
 
@@ -503,15 +539,23 @@ async def test_anthropic_messages_translates_thinking_for_deepseek_v4(
         },
     )
 
-    async def no_direct(_ctx: ProxyContext, _model: str) -> bool:
+    async def no_direct(
+        _ctx: ProxyContext, _model: str, *, resolved: object | None = None
+    ) -> bool:
+        _ = resolved
         return False
 
     monkeypatch.setattr(use_case.litellm, "should_use_internal_direct_litellm", no_direct)
     monkeypatch.setattr(use_case.litellm, "router_anthropic_messages", fake_router_anthropic)
 
     async def fake_metadata(
-        _ctx: ProxyContext, *, user_kwargs: dict[str, Any] | None = None
+        _ctx: ProxyContext,
+        *,
+        user_kwargs: dict[str, Any] | None = None,
+        resolved: object | None = None,
+        timings: object | None = None,
     ) -> dict[str, Any]:
+        _ = resolved, timings
         _ = user_kwargs
         return {"gateway_request_id": "req-v4", "gateway_provider": "volcengine"}
 

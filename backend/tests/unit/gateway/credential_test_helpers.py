@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 
 
+def team_owner_actor_kw(test_user) -> dict[str, object]:
+    """团队 owner 写操作 IAM 上下文（单测通用）。"""
+    return {"actor_user_id": test_user.id, "team_role": "owner"}
+
+
 async def create_tenant_test_credential(
     db_session: AsyncSession,
     tenant_id: uuid.UUID,

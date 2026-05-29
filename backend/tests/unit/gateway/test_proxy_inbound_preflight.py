@@ -62,6 +62,9 @@ async def test_optional_model_skips_model_whitelist(
         async def get_for(self, *_args: object, **_kwargs: object) -> None:
             return None
 
+        async def get_many_by_plan(self, _plan: object) -> dict[object, object]:
+            return {}
+
     monkeypatch.setattr(
         proxy_guard_module,
         "_default_budget_repository_factory",

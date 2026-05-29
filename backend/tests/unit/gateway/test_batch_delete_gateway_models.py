@@ -25,6 +25,7 @@ from domains.gateway.infrastructure.repositories.system_gateway_grant_repository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
+from tests.unit.gateway.credential_test_helpers import team_owner_actor_kw
 
 
 @pytest.mark.asyncio
@@ -63,6 +64,7 @@ async def test_batch_delete_system_models_partial_success(db_session, test_user)
         [deletable.id, managed.id],
         tenant_id=team.id,
         is_platform_admin=True,
+        **team_owner_actor_kw(test_user),
     )
     await db_session.flush()
 
@@ -99,6 +101,7 @@ async def test_batch_delete_requires_platform_admin_for_system_rows(db_session, 
         [model.id],
         tenant_id=team.id,
         is_platform_admin=False,
+        **team_owner_actor_kw(test_user),
     )
     assert result.succeeded == []
     assert len(result.failed) == 1
@@ -151,6 +154,7 @@ async def test_batch_delete_prunes_grants_and_budgets(db_session, test_user) -> 
         [model.id],
         tenant_id=team.id,
         is_platform_admin=True,
+        **team_owner_actor_kw(test_user),
     )
     await db_session.flush()
 
@@ -171,4 +175,5 @@ async def test_batch_delete_rejects_over_limit(db_session, test_user) -> None:
             too_many,
             tenant_id=team.id,
             is_platform_admin=True,
+            **team_owner_actor_kw(test_user),
         )

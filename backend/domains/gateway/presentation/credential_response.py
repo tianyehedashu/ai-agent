@@ -8,6 +8,10 @@ import uuid
 from cryptography.fernet import InvalidToken
 
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.domain.credential_display import (
+    display_api_base_for_credential,
+    mask_plain_secret_for_display,
+)
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
 from domains.gateway.domain.team_credential_access import team_credential_management_access
 from domains.gateway.domain.types import (
@@ -29,16 +33,6 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 METADATA_ONLY_API_KEY_MASKED = "—"
-
-
-def mask_plain_secret_for_display(plain: str) -> str:
-    """对 API Key 类字符串做展示用掩码（不回传明文）。"""
-    s = plain.strip()
-    if len(s) <= 8:
-        return "••••"
-    prefix = s[:4]
-    suffix = s[-4:]
-    return f"{prefix}…{suffix}"
 
 
 def credential_api_bases_response(
@@ -94,6 +88,14 @@ def _resolved_effective_api_bases(
     return effective.get("openai_compat"), effective.get("anthropic_native")
 
 
+def _response_api_base(cred: CredentialReadModel, effective_openai: str | None) -> str | None:
+    return display_api_base_for_credential(
+        provider=cred.provider,
+        api_base=cred.api_base,
+        effective_openai=effective_openai,
+    )
+
+
 def build_credential_response(
     cred: CredentialReadModel,
     *,
@@ -125,7 +127,7 @@ def build_credential_response(
         scope_id=cred.scope_id,
         provider=cred.provider,
         name=cred.name,
-        api_base=cred.api_base,
+        api_base=_response_api_base(cred, effective_openai),
         api_bases=credential_api_bases_response(cred.api_bases),
         profile_id=cred.profile_id,
         profile_label=profile_label,
@@ -161,7 +163,7 @@ def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialR
         scope_id=cred.scope_id,
         provider=cred.provider,
         name=cred.name,
-        api_base=cred.api_base,
+        api_base=_response_api_base(cred, effective_openai),
         api_bases=credential_api_bases_response(cred.api_bases),
         profile_id=cred.profile_id,
         profile_label=profile_label,

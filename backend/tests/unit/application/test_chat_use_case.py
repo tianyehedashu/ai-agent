@@ -251,6 +251,14 @@ class TestChatUseCase:
             clear_permission_context()
 
     @pytest.mark.asyncio
+    async def test_pick_chat_model_ref_ignores_stale_non_uuid_session_ref(self, service) -> None:
+        session = type("SessionStub", (), {"config": {"chat_model_ref": "deepseek-v3-2-stale"}})()
+
+        picked = await service._pick_chat_model_ref(None, session, agent_id=None)
+
+        assert picked == "deepseek/deepseek-chat"
+
+    @pytest.mark.asyncio
     async def test_get_agent_config_default(self, service):
         config = await service._get_agent_config(None)
 

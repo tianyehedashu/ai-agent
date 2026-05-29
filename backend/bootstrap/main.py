@@ -286,7 +286,12 @@ async def authentication_error_handler(
     exc: AuthenticationError,
 ) -> JSONResponse:
     logger.warning("Authentication failed: %s", exc.message)
-    return problem_response_from_agent_error(request, exc, status.HTTP_401_UNAUTHORIZED)
+    return problem_response_from_agent_error(
+        request,
+        exc,
+        status.HTTP_401_UNAUTHORIZED,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 @app.exception_handler(TokenError)
@@ -295,7 +300,12 @@ async def token_error_handler(
     exc: TokenError,
 ) -> JSONResponse:
     logger.warning("Token error: %s", exc.message)
-    return problem_response_from_agent_error(request, exc, status.HTTP_401_UNAUTHORIZED)
+    return problem_response_from_agent_error(
+        request,
+        exc,
+        status.HTTP_401_UNAUTHORIZED,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 @app.exception_handler(ConflictError)
