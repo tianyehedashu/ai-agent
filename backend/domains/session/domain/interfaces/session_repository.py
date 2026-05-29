@@ -32,7 +32,7 @@ class SessionRepository(ABC):
     @abstractmethod
     async def create(
         self,
-        user_id: uuid.UUID | None = None,
+        user_id: uuid.UUID,
         agent_id: uuid.UUID | None = None,
         title: str | None = None,
     ) -> SessionEntity:
@@ -63,7 +63,7 @@ class SessionRepository(ABC):
     @abstractmethod
     async def find_by_user(
         self,
-        user_id: uuid.UUID | None = None,
+        user_id: uuid.UUID,
         agent_id: uuid.UUID | None = None,
         skip: int = 0,
         limit: int = 20,

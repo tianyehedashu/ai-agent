@@ -36,7 +36,7 @@ describe('provider-schemas', () => {
   it('limits user scope to BYOK-friendly providers', () => {
     const userProviders = providersForScope('user').map((s) => s.id)
     expect(new Set(userProviders)).toEqual(
-      new Set(['openai', 'anthropic', 'dashscope', 'zhipuai', 'deepseek', 'volcengine'])
+      new Set(['openai', 'anthropic', 'dashscope', 'zhipuai', 'deepseek', 'moonshot', 'volcengine'])
     )
   })
 

@@ -22,7 +22,12 @@ def usage_axis_base_clauses(axis: UsageAxis) -> list[ColumnElement[bool]]:
     保持同步。
 
     user 轴：跨团队按登录用户；含 ``user_id`` 列或本人非系统 vkey 归因（与 workspace member 语义对齐）。
+
+    platform 轴：无基础约束，覆盖全平台所有请求日志（仅平台管理员；门控在应用层）。
     """
+    if axis.kind == "platform":
+        return []
+
     if axis.kind == "workspace":
         if axis.team_id is None:
             raise ValueError("UsageAxis.workspace requires team_id")

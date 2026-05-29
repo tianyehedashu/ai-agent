@@ -7,6 +7,7 @@ import type {
   GatewayModelRouteUsageItem,
   GatewayModelUpdateBody,
   GatewayRoute,
+  GatewayUsageAggregation,
   ProviderCredential,
 } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
@@ -121,7 +122,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const myPrice = priceByName.get(model.name)
-  const [usageScope, setUsageScope] = useState<'workspace' | 'user'>('workspace')
+  const [usageScope, setUsageScope] = useState<GatewayUsageAggregation>('workspace')
   const [modelName, setModelName] = useState(model.name)
   const [realModel, setRealModel] = useState(model.real_model)
   const [credentialId, setCredentialId] = useState(model.credential_id)

@@ -818,6 +818,124 @@ class TestGatewayManagementApi:
         assert {item["id"] for item in own_body["items"]} == {str(log_member_vkey)}
 
     @pytest.mark.asyncio
+    async def test_platform_usage_aggregation_admin_only_and_cross_tenant(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """usage_aggregation=platform：仅平台管理员；全平台轴可聚合多 tenant 日志。"""
+        owner = test_user
+        member = User(
+            email=f"member_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Member User",
+        )
+        platform_admin = User(
+            email=f"padmin_{uuid.uuid4()}@example.com",
+            hashed_password="hashed_password",
+            name="Platform Admin",
+            role="admin",
+        )
+        db_session.add_all([member, platform_admin])
+        await db_session.commit()
+        await db_session.refresh(member)
+        await db_session.refresh(platform_admin)
+
+        ts = TeamService(db_session)
+        shared = await ts.create_team(name="Platform Agg Team", owner_user_id=owner.id)
+        await ts.add_member(shared.id, member.id, "member")
+        member_personal = await ts.ensure_personal_team(member.id)
+
+        now = datetime.now(UTC)
+        log_shared = uuid.uuid4()
+        log_personal = uuid.uuid4()
+        db_session.add_all(
+            [
+                GatewayRequestLog(
+                    id=log_shared,
+                    created_at=now,
+                    tenant_id=shared.id,
+                    user_id=owner.id,
+                    vkey_id=None,
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=10,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id=f"plat-agg-shared-{uuid.uuid4().hex[:8]}",
+                ),
+                GatewayRequestLog(
+                    id=log_personal,
+                    created_at=now,
+                    tenant_id=member_personal.id,
+                    user_id=member.id,
+                    vkey_id=None,
+                    capability="chat",
+                    route_name=None,
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=2,
+                    output_tokens=2,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.002"),
+                    latency_ms=10,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id=f"plat-agg-personal-{uuid.uuid4().hex[:8]}",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        owner_headers = auth_headers
+        uc = UserUseCase(db_session)
+        admin_token = await uc.create_token(platform_admin)
+        admin_headers = {"Authorization": f"Bearer {admin_token.access_token}"}
+
+        r_owner_platform = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/summary",
+            params={"usage_aggregation": "platform", "days": 1},
+            headers=owner_headers,
+        )
+        assert r_owner_platform.status_code == 403, r_owner_platform.text
+
+        r_admin_logs = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/logs",
+            params={"usage_aggregation": "platform", "page": 1, "page_size": 200},
+            headers=admin_headers,
+        )
+        assert r_admin_logs.status_code == 200, r_admin_logs.text
+        admin_log_ids = {item["id"] for item in r_admin_logs.json()["items"]}
+        assert str(log_shared) in admin_log_ids
+        assert str(log_personal) in admin_log_ids
+
+        r_admin_summary = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/summary",
+            params={"usage_aggregation": "platform", "days": 1},
+            headers=admin_headers,
+        )
+        assert r_admin_summary.status_code == 200, r_admin_summary.text
+        assert int(r_admin_summary.json()["total_requests"]) >= 2
+
+        r_owner_workspace = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/summary",
+            params={"usage_aggregation": "workspace", "days": 1},
+            headers=owner_headers,
+        )
+        assert r_owner_workspace.status_code == 200, r_owner_workspace.text
+        assert r_owner_workspace.json()["total_requests"] == 1
+
+    @pytest.mark.asyncio
     async def test_list_model_presets_filter_by_provider(
         self,
         dev_client: AsyncClient,
@@ -1276,6 +1394,40 @@ class TestGatewayManagementApi:
         assert summary["success"] + summary["failed"] + summary["unknown"] == summary["total"]
 
     @pytest.mark.asyncio
+    async def test_list_system_requestable_models_paginated_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """成员系统浏览：system_requestable 分页 envelope，且仅 system registry_kind。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=auth_headers,
+            params={"registry_scope": "system_requestable", "page": 1, "page_size": 5},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for key in (
+            "items",
+            "total",
+            "page",
+            "page_size",
+            "has_next",
+            "has_prev",
+            "connectivity_summary",
+        ):
+            assert key in body
+        assert body["page"] == 1
+        assert body["page_size"] == 5
+        assert all(item.get("registry_kind") == "system" for item in body["items"])
+        summary = body["connectivity_summary"]
+        assert summary["total"] == body["total"]
+
+    @pytest.mark.asyncio
     async def test_list_model_ids_returns_ids_envelope(
         self,
         dev_client: AsyncClient,
@@ -1362,7 +1514,7 @@ class TestGatewayManagementApi:
         )
         assert r_model.status_code == 201, r_model.text
         model_body = r_model.json()
-        mid = model_body["id"]
+        model_body["id"]
         assert model_body["tenant_id"] == str(team.id)
         assert model_body["team_id"] == str(team.id)
 

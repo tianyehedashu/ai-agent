@@ -25,7 +25,7 @@
 | 概念 | 实现 |
 |------|------|
 | 个人用户 | `TeamService.ensure_personal_team` / `PersonalTeamProvisioner` |
-| 匿名用户 | Cookie → 内存 `Principal`；`tenant_id` = `resolve_anonymous_tenant_id`（orphan tenant，无 team 行） |
+| 认证身份 | `auth_mode=local`（JWT）或 `sso`（HiGress 注入 `X-Giikin-*`，JIT 映射本地用户）；**已移除匿名访问**，无身份一律 401 |
 | 系统级配置 | 独立 `system_*` 表（无 `tenant_id`）；查询用 `list_system()` + `list_for_tenant()` 在应用层合并 |
 | 策略挂载（vkey 等） | `target_kind` + `target_id`（如 `EntitlementPlan`），与 tenant 正交 |
 | Repository 过滤 | `TenantScopedRepositoryBase` + `DataScopeEnforcer`（`PermissionContext.team_ids`） |

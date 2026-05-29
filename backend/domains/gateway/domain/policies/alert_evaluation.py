@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING
 
-from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
-from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
+    from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
 
 
 @dataclass(frozen=True, slots=True)

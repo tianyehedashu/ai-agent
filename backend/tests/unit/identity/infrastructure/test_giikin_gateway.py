@@ -6,8 +6,8 @@ import base64
 import json
 from types import SimpleNamespace
 
-import pytest
 from pydantic import SecretStr
+import pytest
 
 from bootstrap.config import Settings
 from domains.identity.infrastructure.auth.giikin_gateway import (
@@ -93,12 +93,20 @@ class TestParseGatewayIdentity:
         with pytest.raises(AuthenticationError, match="Gateway identity missing user_id"):
             parse_gateway_identity(_request(headers), _settings())
 
-    def test_user_id_header_only_without_internal_key_configured(self) -> None:
-        headers = {"X-Giikin-User-Id": "2002"}
-        claims = parse_gateway_identity(_request(headers), _settings(internal_key=None))
+    def test_user_id_header_only_with_valid_internal_key(self) -> None:
+        headers = {
+            "X-Giikin-User-Id": "2002",
+            "X-Giikin-Internal-Key": "test-internal-key",
+        }
+        claims = parse_gateway_identity(_request(headers), _settings())
         assert claims == GiikinGatewayClaims(
             user_id="2002",
             name="Giikin 2002",
             org_code="",
             shop_id="",
         )
+
+    def test_sso_mode_without_internal_key_is_rejected_at_config(self) -> None:
+        """fail-closed：sso 模式缺 internal_key 时配置层直接拒绝，杜绝绕过网关伪造身份。"""
+        with pytest.raises(ValueError, match="giikin_internal_key"):
+            _settings(internal_key=None)

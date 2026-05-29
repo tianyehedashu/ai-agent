@@ -76,7 +76,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
   const teamNameById = useGatewayMemberTeamNameMap()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
-  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
   const highlightModelId = searchParams.get('modelId') ?? ''
@@ -97,8 +97,13 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
 
   const capabilities = useMemo(
-    () => effectiveCapabilities(TEAM_GROUPED_CAPABILITIES, { canWrite, isPlatformAdmin }),
-    [canWrite, isPlatformAdmin]
+    () =>
+      effectiveCapabilities(TEAM_GROUPED_CAPABILITIES, {
+        canWrite,
+        canContribute,
+        isPlatformAdmin,
+      }),
+    [canWrite, canContribute, isPlatformAdmin]
   )
 
   const hasCollaborationTeams = memberCollaborationTeams.length > 0
@@ -543,7 +548,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   if (!hasCollaborationTeams) {
     return (
       <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-        尚无协作团队。加入协作团队后，可在此查看团队自注册模型；注册与变更需团队管理员权限。
+        尚无协作团队。加入协作团队后，可在此查看团队自注册模型，并在自己创建的凭据下注册模型。
       </div>
     )
   }
@@ -573,7 +578,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
                 {summaryLabel}
               </Badge>
               <div className="ml-auto flex items-center gap-2">
-                {canWrite && defaultRegisterTeamId ? (
+                {(canWrite || canContribute) && defaultRegisterTeamId ? (
                   <Button size="sm" asChild>
                     <Link to={teamModelsRegisterHref(defaultRegisterTeamId)}>
                       <Plus className="mr-1.5 h-4 w-4" />
@@ -713,7 +718,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
         isLoading={showLoading && registryItems.length === 0}
         isEmpty={!showLoading && registryItems.length === 0}
         paginationSlot={
-          listData && listData.total > listData.page_size ? (
+          listData && listData.total > 0 ? (
             <div className="border-t px-3 py-2">
               <PaginationControls
                 page={listData.page}
@@ -778,6 +783,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
           isLoading={showLoading}
           currentPage={page}
           isPlatformAdmin={isPlatformAdmin}
+          canContribute={canContribute}
           viewerUserId={viewerUserId}
           updatePendingModelId={updatePendingModelId}
           deletingModelId={deletingModelId}

@@ -248,3 +248,39 @@ def test_resolve_usage_axis_member_keeps_filter_when_vkey_filter_set() -> None:
     )
     axis4 = GatewayManagementReadService._resolve_usage_axis(ctx_admin, UsageAggregation.WORKSPACE)
     assert axis4.is_workspace() and axis4.member_user_id is None
+
+
+def test_resolve_usage_axis_platform_requires_platform_admin() -> None:
+    """platform 聚合：平台管理员得全平台轴；非平台管理员被拒绝。"""
+    team_id = uuid.uuid4()
+    uid = uuid.uuid4()
+
+    ctx_admin = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="member",
+        user_id=uid,
+        is_platform_admin=True,
+    )
+    axis = GatewayManagementReadService._resolve_usage_axis(ctx_admin, UsageAggregation.PLATFORM)
+    assert axis.is_platform()
+    assert axis.team_id is None and axis.user_id is None
+
+    ctx_owner = ManagementTeamContext(
+        team_id=team_id,
+        team_kind="shared",
+        team_role="owner",
+        user_id=uid,
+        is_platform_admin=False,
+    )
+    with pytest.raises(TeamPermissionDeniedError):
+        GatewayManagementReadService._resolve_usage_axis(ctx_owner, UsageAggregation.PLATFORM)
+
+
+def test_platform_axis_base_clauses_empty() -> None:
+    """全平台轴不产生基础 WHERE 子句（覆盖所有请求日志）。"""
+    from domains.gateway.infrastructure.repositories.usage_axis_sql import (
+        usage_axis_base_clauses,
+    )
+
+    assert usage_axis_base_clauses(UsageAxis.platform()) == []

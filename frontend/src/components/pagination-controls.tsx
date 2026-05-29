@@ -29,6 +29,8 @@ export function PaginationControls({
   if (total <= 0) return null
 
   const pages = totalPages(total, page_size)
+  const start = (page - 1) * page_size + 1
+  const end = Math.min(page * page_size, total)
 
   return (
     <div
@@ -38,7 +40,7 @@ export function PaginationControls({
       )}
     >
       <span className="tabular-nums">
-        共 {total} 条 · 第 {page}/{pages} 页
+        第 {start}–{end} 条，共 {total} 条 · 第 {page}/{pages} 页
       </span>
       <div className="flex items-center gap-1">
         <Button

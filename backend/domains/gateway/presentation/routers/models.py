@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 import uuid
 
 from fastapi import APIRouter, Depends, Query, status
@@ -19,6 +19,7 @@ from domains.gateway.application.gateway_catalog_maintenance import (
     log_gateway_catalog_maintenance_report,
     run_gateway_catalog_maintenance,
 )
+from domains.gateway.domain.policies.model_registry_scope import RegistryScope
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
     CurrentTeam,
@@ -122,11 +123,12 @@ async def list_models(
     team: CurrentTeam,
     reads: MgmtReads,
     query: ModelListQueryDep,
-    registry_scope: Literal["team", "system", "callable", "requestable"] = Query(
+    registry_scope: RegistryScope = Query(
         "team",
         description=(
             "team=当前团队注册行（不含 scope=user BYOK）；system=平台注册行（仅平台管理员）；"
-            "callable=租户+平台合并；requestable=enabled 且连通性未 failed（试调/请求用）"
+            "callable=租户+平台合并；requestable=enabled 且连通性未 failed（试调/请求用）；"
+            "system_requestable=成员可见且可请求的系统模型（enabled、未 failed、应用可见性）"
         ),
     ),
 ) -> GatewayModelListResponse:
@@ -172,7 +174,7 @@ async def list_model_ids(
     team: CurrentTeam,
     reads: MgmtReads,
     query: ModelListQueryDep,
-    registry_scope: Literal["team", "system", "callable", "requestable"] = Query("team"),
+    registry_scope: RegistryScope = Query("team"),
 ) -> GatewayModelIdsResponse:
     if registry_scope == "system" and not team.is_platform_admin:
         raise PermissionDeniedError(
@@ -233,7 +235,7 @@ async def get_model(
     model_id: uuid.UUID,
     team: CurrentTeam,
     reads: MgmtReads,
-    registry_scope: Literal["team", "system", "callable", "requestable"] = Query("team"),
+    registry_scope: RegistryScope = Query("team"),
 ) -> GatewayModelResponse:
     row = await reads.get_gateway_registry_model(
         model_id,

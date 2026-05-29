@@ -98,6 +98,37 @@ async def test_list_gateway_models_registry_scope_system(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_gateway_models_registry_scope_system_requestable_only_system_kind(
+    db_session, test_user
+) -> None:
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    reads = GatewayManagementReadService(db_session)
+    _, byok_name, team_name = await _seed_byok_and_team_models(db_session, test_user)
+
+    system_requestable = await reads.list_gateway_models(
+        team.id,
+        registry_scope="system_requestable",
+        only_enabled=True,
+        user_id=test_user.id,
+    )
+    requestable = await reads.list_gateway_models(
+        team.id,
+        registry_scope="requestable",
+        only_enabled=True,
+        user_id=test_user.id,
+    )
+    if not system_requestable:
+        pytest.skip("catalog sync produced no visible system models")
+
+    assert all(registry_kind_for_merged_row(r) == "system" for r in system_requestable)
+    assert byok_name not in {r.name for r in system_requestable}
+    assert team_name not in {r.name for r in system_requestable}
+    assert {r.name for r in system_requestable}.issubset({r.name for r in requestable})
+
+
+@pytest.mark.asyncio
 async def test_list_gateway_models_registry_scope_requestable_excludes_failed(
     db_session, test_user
 ) -> None:

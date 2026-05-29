@@ -197,7 +197,12 @@ export interface GatewayModelUpdateBody {
   upstream_call_shape?: string | null
 }
 
-export type GatewayModelRegistryScope = 'team' | 'system' | 'callable' | 'requestable'
+export type GatewayModelRegistryScope =
+  | 'team'
+  | 'system'
+  | 'callable'
+  | 'requestable'
+  | 'system_requestable'
 
 export interface ModelConnectivitySummary {
   total: number

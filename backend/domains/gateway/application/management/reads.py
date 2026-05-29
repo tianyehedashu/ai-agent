@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
@@ -73,7 +73,10 @@ from domains.gateway.domain.policies.budget_scope_policy import (
     plan_admin_budget_fetch,
 )
 from domains.gateway.domain.policies.model_registry_scope import (
+    RegistryScope,
     exclude_user_scope_credentials_for_registry,
+    filter_system_registry_rows,
+    is_requestable_registry_scope,
 )
 from domains.gateway.domain.team_credential_access import (
     assert_team_credential_readable_by_actor,
@@ -406,7 +409,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         tenant_id: UUID,
         query: ModelListQuery,
         *,
-        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
+        registry_scope: RegistryScope = "team",
         only_enabled: bool = False,
         user_id: UUID | None = None,
         team_role: str = "member",
@@ -437,7 +440,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         tenant_id: UUID,
         query: ModelListQuery,
         *,
-        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
+        registry_scope: RegistryScope = "team",
         only_enabled: bool = False,
         user_id: UUID | None = None,
         team_role: str = "member",
@@ -481,13 +484,13 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self,
         tenant_id: UUID,
         *,
-        registry_scope: Literal["team", "system", "callable", "requestable"] = "team",
+        registry_scope: RegistryScope = "team",
         only_enabled: bool,
         provider: str | None = None,
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
     ) -> list[GatewayRegistryModelRow]:
-        """``team`` / ``system``：注册表行；``callable``：合并列表；``requestable``：可发起代理请求（enabled 且未 failed）。"""
+        """``team`` / ``system``：注册表行；``callable``：合并列表；``requestable`` / ``system_requestable``：可发起代理请求（enabled 且未 failed，后者仅 system 行）。"""
         if registry_scope == "team":
             return await self._models.list_tenant_owned(
                 tenant_id,
@@ -507,13 +510,15 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         merged = await list_merged_models_for_tenant(
             self._session,
             tenant_id,
-            only_enabled=True if registry_scope == "requestable" else only_enabled,
+            only_enabled=True if is_requestable_registry_scope(registry_scope) else only_enabled,
             provider=provider,
             credential_id=credential_id,
             user_id=user_id,
             apply_visibility_filter=True,
         )
-        if registry_scope == "requestable":
+        if registry_scope == "system_requestable":
+            merged = filter_system_registry_rows(merged)
+        if is_requestable_registry_scope(registry_scope):
             return [row for row in merged if is_connectivity_requestable(row.last_test_status)]
         return merged
 

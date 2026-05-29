@@ -45,15 +45,22 @@
 
 ## 权限 gate
 
-| 维度                      | 预期                                                      |
-| ------------------------- | --------------------------------------------------------- |
-| 未登录                    | Personal 拒入                                             |
-| 非 PlatformAdmin          | System Admin → 降级 `SYSTEM_BROWSE_CAPABILITIES`          |
-| `canWrite=false`          | 隐藏 BatchBar、行 Switch、行删除、添加模型                |
-| 行级 `canManage=false`    | 禁用 Switch；不显示删除；批量 Checkbox disabled + Tooltip |
-| 行级 `configManaged=true` | 不可批量选；不可单删；Tooltip 说明                        |
-| System Browse             | preset `readonly`；所有写操作不渲染                       |
-| Embedded                  | 无 Toolbar/BatchBar/分组；行可点进详情                    |
+| 维度                              | 预期                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------- |
+| 未登录                            | Personal 拒入                                                                                |
+| 非 PlatformAdmin                  | System Admin → 降级 `SYSTEM_BROWSE_CAPABILITIES`                                             |
+| `canContribute=true`（member+）   | 保留 BatchBar / 行 Switch / 行删除 / 添加模型；行级归属由 `canManage`/`canDelete` 裁剪到自有 |
+| `canWrite=false`（仅 member）     | **关闭** 跨筛选「删除当前筛选下全部」（会触及他人模型，仅 admin+）                           |
+| `canContribute=false`（只读访客） | 隐藏 BatchBar、行 Switch、行删除、添加模型                                                   |
+| 行级 `canManage=false`            | 禁用 Switch；不显示删除；批量 Checkbox disabled + Tooltip                                    |
+| 行级 `configManaged=true`         | 不可批量选；不可单删；Tooltip 说明                                                           |
+| System Browse                     | preset `readonly`；所有写操作不渲染                                                          |
+| Embedded                          | 无 Toolbar/BatchBar/分组；行可点进详情                                                       |
+
+> **创建者私有（member-friendly）**：团队成员（member+）可在「自己创建的凭据」下注册/启停/删除模型，
+> 故 `effectiveCapabilities` 行级与勾选能力由 `canContribute` 而非 `canWrite` 控制；
+> `deleteAllFiltered`（跨当前筛选全量删除）仍仅 admin+（`canWrite`）。
+> 详见 `useGatewayPermission().canContribute` 与 `gateway-model-permissions.ts`。
 
 ## Blocker 回归项
 
@@ -74,8 +81,10 @@
 ## 手测脚本（摘要）
 
 1. 五个入口各打开列表，确认 preset 能力开关与上表一致。
-2. 分别以 Owner / Member(read) / PlatformAdmin / 匿名 四类角色验证权限 gate。
-3. 批量：勾选 → 测试/同步/删除；Toolbar 菜单 → 删除筛选下全部。
+2. 分别以 Owner / Member(创建者) / Member(他人凭据只读) / PlatformAdmin / 匿名 五类角色验证权限 gate。
+   - Member(创建者)：能看到「添加模型」、对自有模型行内启停/删除、批量勾选删除自有；看不到「删除筛选下全部」。
+   - Member(他人凭据)：他人模型只读，无行内操作。
+3. 批量：勾选 → 测试/同步/删除；Toolbar 菜单 → 删除筛选下全部（仅 admin+）。
 4. 探活：全量/未测/失败删除；Banner scrollToFirst。
 5. 深链：`?credentialId=`、`?modelId=` 高亮与筛选。
 

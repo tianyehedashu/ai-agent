@@ -1,10 +1,12 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
+import { gatewayApi, type GatewayModel } from '@/api/gateway'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import type { HealthFilter } from '@/features/gateway-models/constants'
-import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import {
   fromGatewayModel,
   GatewayModelFlatList,
@@ -12,10 +14,15 @@ import {
   GatewayModelListToolbar,
   SYSTEM_BROWSE_CAPABILITIES,
 } from '@/features/gateway-models/list'
+import { gatewayModelsListQueryKey } from '@/features/gateway-models/utils'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2 } from '@/lib/lucide-icons'
+import { buildFilterKey, DEFAULT_PAGE_SIZE, usePaginationPageForFilters } from '@/lib/pagination'
 import { MODEL_PROVIDERS } from '@/types/user-model'
+
+const SYSTEM_BROWSE_PAGE_SIZE = DEFAULT_PAGE_SIZE
+const EMPTY_SYSTEM_ITEMS: GatewayModel[] = []
 
 function BrowseFallback(): React.JSX.Element {
   return (
@@ -32,63 +39,74 @@ export function SystemModelsBrowseWorkspace(): React.JSX.Element {
   const deferredSearch = useDeferredValue(search)
   const [providerFilter, setProviderFilter] = useState('')
   const [abilityFilter, setAbilityFilter] = useState('')
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>('all')
+
+  const filterKey = buildFilterKey([deferredSearch, providerFilter, abilityFilter, healthFilter])
+  const [page, setPage] = usePaginationPageForFilters(filterKey)
 
   const {
-    items: requestableItems,
+    data: listData,
     isLoading,
     isFetching,
     refetch,
-  } = useInfiniteGatewayModelPages(
-    teamId,
-    { registry_scope: 'requestable' },
-    { prefetchMode: 'idle' }
-  )
+  } = useQuery({
+    queryKey: gatewayModelsListQueryKey(
+      teamId,
+      'system_requestable',
+      providerFilter,
+      '',
+      page,
+      SYSTEM_BROWSE_PAGE_SIZE,
+      deferredSearch,
+      healthFilter,
+      abilityFilter
+    ),
+    queryFn: () =>
+      gatewayApi.listModels(teamId, {
+        registry_scope: 'system_requestable',
+        page,
+        page_size: SYSTEM_BROWSE_PAGE_SIZE,
+        ...(providerFilter ? { provider: providerFilter } : {}),
+        ...(abilityFilter ? { type: abilityFilter } : {}),
+        ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
+        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+      }),
+    placeholderData: keepPreviousData,
+  })
 
-  const systemModels = useMemo(
-    () => requestableItems.filter((m) => m.registry_kind === 'system'),
-    [requestableItems]
-  )
+  const registryItems = listData?.items ?? EMPTY_SYSTEM_ITEMS
+  const total = listData?.total ?? 0
+
+  useEffect(() => {
+    if (!listData) return
+    const maxPage = Math.max(1, Math.ceil(listData.total / listData.page_size))
+    if (page > maxPage) {
+      setPage(maxPage)
+    }
+  }, [listData, page, setPage])
 
   const providerChoices = useMemo(() => {
     const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
-    for (const m of systemModels) {
-      s.add(m.provider)
+    if (providerFilter === '' && registryItems.length > 0) {
+      for (const m of registryItems) {
+        s.add(m.provider)
+      }
     }
     return Array.from(s).sort()
-  }, [systemModels])
-
-  const filteredItems = useMemo(() => {
-    const q = deferredSearch.trim().toLowerCase()
-    return systemModels.filter((m) => {
-      if (providerFilter && m.provider !== providerFilter) return false
-      if (
-        abilityFilter &&
-        m.capability !== abilityFilter &&
-        !m.model_types?.includes(abilityFilter)
-      ) {
-        return false
-      }
-      if (!q) return true
-      const haystack = [m.name, m.real_model, m.provider, m.credential_name ?? '']
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [systemModels, deferredSearch, providerFilter, abilityFilter])
+  }, [registryItems, providerFilter])
 
   const listItems = useMemo(
-    () => filteredItems.map((m) => fromGatewayModel(m, 'system')),
-    [filteredItems]
+    () => registryItems.map((m) => fromGatewayModel(m, 'system')),
+    [registryItems]
   )
 
   const capabilities = SYSTEM_BROWSE_CAPABILITIES
-  const healthFilter: HealthFilter = 'all'
 
   if (isLoading) {
     return <BrowseFallback />
   }
 
-  if (systemModels.length === 0) {
+  if (total === 0 && filterKey === buildFilterKey(['', '', '', 'all'])) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/10 p-8 text-center text-sm text-muted-foreground">
         当前工作区暂无可请求的系统模型。请联系平台管理员配置系统供给，或查看{' '}
@@ -108,7 +126,7 @@ export function SystemModelsBrowseWorkspace(): React.JSX.Element {
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">系统模型</h3>
             <Badge variant="secondary" className="text-xs font-normal">
-              只读 · {systemModels.length} 个可请求
+              只读 · {total} 个可请求
             </Badge>
             <div className="ml-auto">
               <GatewayRefreshButton
@@ -142,15 +160,30 @@ export function SystemModelsBrowseWorkspace(): React.JSX.Element {
           onAbilityFilterChange={setAbilityFilter}
           providerChoices={providerChoices}
           healthFilter={healthFilter}
-          onHealthFilterChange={() => {}}
-          allModels={systemModels}
+          onHealthFilterChange={setHealthFilter}
+          connectivitySummary={listData?.connectivity_summary}
+          allModels={registryItems}
           usageDays={7}
           onUsageDaysChange={() => {}}
           canWrite={false}
         />
       }
-      isEmpty={listItems.length === 0}
+      isEmpty={registryItems.length === 0}
       emptySlot={<p className="px-3 py-12 text-center text-sm text-muted-foreground">无匹配模型</p>}
+      paginationSlot={
+        total > 0 && listData ? (
+          <div className="border-t px-3 py-2">
+            <PaginationControls
+              page={listData.page}
+              page_size={listData.page_size}
+              total={listData.total}
+              has_next={listData.has_next}
+              has_prev={listData.has_prev}
+              onPageChange={setPage}
+            />
+          </div>
+        ) : undefined
+      }
     >
       <GatewayModelFlatList capabilities={capabilities} items={listItems} />
     </GatewayModelListShell>

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from domains.identity.application.giikin_identity_service import GiikinIdentityService
 from domains.identity.infrastructure.auth.giikin_gateway import GiikinGatewayClaims
@@ -19,6 +20,21 @@ class _FakeUser:
     name: str
     role: str
     giikin_user_id: str | None = None
+
+
+class _FakeSavepoint:
+    """显式 SAVEPOINT 上下文：``__aexit__`` 返回 False，不吞异常（与真实 begin_nested 一致）。"""
+
+    async def __aenter__(self) -> _FakeSavepoint:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+
+class _FakeDb:
+    def begin_nested(self) -> _FakeSavepoint:
+        return _FakeSavepoint()
 
 
 @pytest.mark.unit
@@ -97,3 +113,35 @@ class TestGiikinIdentityService:
             display_name="New User",
             log=mock_provision.await_args.kwargs["log"],
         )
+
+    async def test_concurrent_first_request_falls_back_to_existing(self) -> None:
+        """并发首请求：create 撞唯一索引抛 IntegrityError 时，回退到重查既有用户而非 500。"""
+        winner = _FakeUser(
+            id=uuid.uuid4(),
+            email="giikin-3003@giikin.sso",
+            name="Winner",
+            role="user",
+            giikin_user_id="3003",
+        )
+        user_repo = MagicMock()
+        # 首查为空（本协程以为是首请求），重查命中对端已提交的用户
+        user_repo.get_by_giikin_user_id = AsyncMock(side_effect=[None, winner])
+        user_repo.create = AsyncMock(
+            side_effect=IntegrityError("dup", params=None, orig=Exception("unique"))
+        )
+
+        service = GiikinIdentityService(
+            _FakeDb(),
+            user_repo=user_repo,
+            tenant_provisioner=MagicMock(),
+        )
+        claims = GiikinGatewayClaims(user_id="3003", name="Winner", org_code="", shop_id="")
+
+        with patch(
+            "domains.identity.application.giikin_identity_service.provision_default_tenant_for_new_user",
+            new_callable=AsyncMock,
+        ):
+            user = await service.resolve_or_provision(claims)
+
+        assert user is winner
+        assert user_repo.get_by_giikin_user_id.await_count == 2

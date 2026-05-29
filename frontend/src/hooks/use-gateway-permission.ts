@@ -36,6 +36,12 @@ export interface GatewayPermissionFlags {
   isMember: boolean
   /** 是否可写（key/credential/model/route）：团队 admin+ 且非平台 viewer */
   canWrite: boolean
+  /**
+   * 是否可贡献「创建者私有」资源：team member+ 且非平台 viewer。
+   * 用于「成员可给所在团队创建凭据、在自己凭据下注册/管理模型」——细粒度归属
+   * 仍由各资源的 owner 策略（credential-permissions / gateway-model-permissions）裁剪。
+   */
+  canContribute: boolean
   /** 是否可看跨团队仪表盘：仅平台 admin */
   canViewCrossTeam: boolean
   /** 套餐毛利大盘：**仅平台管理员**可见（涉及平台经营数据，不暴露给任何团队角色） */
@@ -68,6 +74,7 @@ export function useGatewayPermission(): GatewayPermissionFlags {
       isAdmin,
       isMember,
       canWrite: isAdmin && !isPlatformViewer,
+      canContribute: isMember && !isPlatformViewer,
       canViewCrossTeam: isPlatformAdmin,
       canViewMargin,
     }

@@ -73,8 +73,8 @@ Reference these guidelines when:
 Read individual rule files for detailed explanations and code examples:
 
 ```
-rules/architecture-avoid-boolean-props.md
-rules/state-context-interface.md
+rules1/architecture-avoid-boolean-props.md
+rules1/state-context-interface.md
 ```
 
 Each rule file contains:
@@ -86,4 +86,4 @@ Each rule file contains:
 
 ## Full Compiled Document
 
-For the complete guide with all rules expanded: `AGENTS.md`
+

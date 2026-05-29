@@ -8,11 +8,13 @@ import type { GatewayModel } from '@/api/gateway'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { filterCollaborationGatewayTeams } from '@/features/gateway-teams/gateway-team-collaboration'
 import {
+  COLLABORATION_TEAMS_REQUIRE_SEARCH_THRESHOLD,
   groupResourcesByTenantId,
   resolveCollaborationTeamsCandidates,
 } from '@/features/gateway-teams/resolve-collaboration-teams-candidates'
 import {
   useGatewayMemberCollaborationTeams,
+  useGatewayTeams,
   useGatewayTeamsBySearch,
 } from '@/features/gateway-teams/use-gateway-teams'
 
@@ -47,13 +49,30 @@ export function useCollaborationTeamsOverviewResolution({
     enabled && isPlatformAdmin && deferredTeamSearch.trim().length > 0
   )
 
+  // 平台 admin 无搜索且团队数未超阈值时，后端按「全部协作团队」聚合 total/模型，
+  // 故候选池也须取全部活跃团队（而非仅 membership），否则未加入团队的模型会被分组渲染丢弃。
+  const adminBrowsesAllTeams =
+    enabled &&
+    isPlatformAdmin &&
+    deferredTeamSearch.trim().length === 0 &&
+    queriedTeamCount !== undefined &&
+    queriedTeamCount <= COLLABORATION_TEAMS_REQUIRE_SEARCH_THRESHOLD
+  const { data: allActiveTeams = [] } = useGatewayTeams(adminBrowsesAllTeams)
+
   const candidateTeams = useMemo(() => {
     if (!enabled) return []
-    if (isPlatformAdmin && deferredTeamSearch.trim().length > 0) {
-      return filterCollaborationGatewayTeams(platformAdminSearchTeams)
+    if (isPlatformAdmin) {
+      if (deferredTeamSearch.trim().length > 0) {
+        return filterCollaborationGatewayTeams(platformAdminSearchTeams)
+      }
+      if (adminBrowsesAllTeams) {
+        return filterCollaborationGatewayTeams(allActiveTeams)
+      }
     }
     return memberCollaborationTeams
   }, [
+    adminBrowsesAllTeams,
+    allActiveTeams,
     deferredTeamSearch,
     enabled,
     isPlatformAdmin,

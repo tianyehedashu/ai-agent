@@ -1,7 +1,7 @@
 /**
  * AI Gateway · 概览
  *
- * 用量 KPI（与 GET /dashboard/summary 对齐；usage_aggregation=user|workspace）。
+ * 用量 KPI（与 GET /dashboard/summary 对齐；usage_aggregation=workspace|user|platform）。
  * 切片产品文案：workspace=团队（按当前选中团队），user=我（跨团队按当前账号）。
  *
  * 注：套餐毛利（margin）属于平台经营数据,**仅平台管理员**可见;
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GatewayQueryErrorBanner } from '@/features/gateway-shared/gateway-query-error-banner'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { gatewayUsageAggregationOptions } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -40,7 +41,11 @@ function coalesceNumber(value: unknown): number {
 
 export default function GatewayOverviewPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { isAdmin } = useGatewayPermission()
+  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const aggregationOptions = useMemo(
+    () => gatewayUsageAggregationOptions(isPlatformAdmin),
+    [isPlatformAdmin]
+  )
   const [range, setRange] = useState<'1d' | '7d' | '30d'>('7d')
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
@@ -60,7 +65,11 @@ export default function GatewayOverviewPage(): React.JSX.Element {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">概览</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <UsageAggregationToggle value={usageAggregation} onChange={setUsageAggregation} />
+          <UsageAggregationToggle
+            value={usageAggregation}
+            onChange={setUsageAggregation}
+            options={aggregationOptions}
+          />
           <div className="flex items-center gap-1 rounded-md border bg-background p-0.5">
             {RANGE_DAYS.map((r) => (
               <Button

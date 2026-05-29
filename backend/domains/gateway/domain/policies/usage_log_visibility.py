@@ -30,6 +30,11 @@ def snapshot_is_team_member_only(snapshot: UsageLogAccessSnapshot) -> bool:
     )
 
 
+def platform_aggregation_allowed(snapshot: UsageLogAccessSnapshot) -> bool:
+    """``usage_aggregation=platform``（全平台切片）是否允许当前主体使用。"""
+    return snapshot.is_platform_admin
+
+
 def workspace_axis_member_user_id(
     snapshot: UsageLogAccessSnapshot,
     *,
@@ -82,6 +87,7 @@ __all__ = [
     "UsageLogAccessSnapshot",
     "member_can_view_request_log_record",
     "member_requires_request_log_detail_filter",
+    "platform_aggregation_allowed",
     "snapshot_is_team_member_only",
     "usage_log_access_from_management_ctx",
     "workspace_axis_member_user_id",

@@ -40,7 +40,12 @@ import {
   credentialDisplayTitle,
 } from '@/features/gateway-usage/credential-display'
 import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakdown'
+import {
+  gatewayUsageAggregationOptions,
+  usageAggregationScopeLabel,
+} from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import {
   AlertCircle,
@@ -97,6 +102,11 @@ interface LogsLocationState {
 
 export default function GatewayLogsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const { isPlatformAdmin } = useGatewayPermission()
+  const aggregationOptions = useMemo(
+    () => gatewayUsageAggregationOptions(isPlatformAdmin),
+    [isPlatformAdmin]
+  )
   const location = useLocation()
   const navigate = useNavigate()
   const parentRef = useRef<HTMLDivElement>(null)
@@ -213,8 +223,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
         <div className="min-w-0">
           <h2 className="text-2xl font-semibold tracking-tight">调用日志</h2>
           <p className="text-sm text-muted-foreground">
-            {usageAggregation === 'user' ? '我的跨团队调用' : '当前团队调用'} · 已载入{' '}
-            {items.length.toLocaleString()} / {totalCount.toLocaleString()} 条
+            {usageAggregationScopeLabel(usageAggregation)} · 已载入 {items.length.toLocaleString()}{' '}
+            / {totalCount.toLocaleString()} 条
           </p>
         </div>
         <UsageAggregationToggle
@@ -223,6 +233,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
             setUsageAggregation(next)
             resetListPosition()
           }}
+          options={aggregationOptions}
         />
       </div>
 

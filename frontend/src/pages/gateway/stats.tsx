@@ -33,7 +33,10 @@ import {
   GatewayFilterCombobox,
   type GatewayFilterOption,
 } from '@/features/gateway-usage/gateway-filter-combobox'
-import { isCrossTeamUsageStatsEnabled } from '@/features/gateway-usage/usage-aggregation'
+import {
+  gatewayUsageAggregationOptions,
+  isCrossTeamUsageStatsEnabled,
+} from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { UsageStatsCubeTable } from '@/features/gateway-usage/usage-stats-cube-table'
 import { UsageStatsDetailSheet } from '@/features/gateway-usage/usage-stats-detail-sheet'
@@ -196,7 +199,11 @@ function buildLogsNavigationState(
 
 export default function GatewayStatsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { isAdmin } = useGatewayPermission()
+  const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const aggregationOptions = useMemo(
+    () => gatewayUsageAggregationOptions(isPlatformAdmin),
+    [isPlatformAdmin]
+  )
   const tableAnchorRef = useRef<HTMLDivElement>(null)
 
   const [days, setDays] = useState<1 | 7 | 30 | 90>(7)
@@ -560,7 +567,11 @@ export default function GatewayStatsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <UsageAggregationToggle value={usageAggregation} onChange={setUsageAggregation} />
+          <UsageAggregationToggle
+            value={usageAggregation}
+            onChange={setUsageAggregation}
+            options={aggregationOptions}
+          />
           <div className="flex flex-wrap gap-1 rounded-md border bg-background p-0.5">
             {RANGE_DAYS.map((range) => (
               <Button

@@ -210,6 +210,35 @@ describe('gatewayApi.listModels', () => {
     expect(url).toContain('q=gpt')
     expect(url).toContain('connectivity=failed')
   })
+  it('请求 system_requestable 分页 envelope', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+        has_next: false,
+        has_prev: false,
+        connectivity_summary: {
+          total: 0,
+          available: 0,
+          unavailable: 0,
+          success: 0,
+          failed: 0,
+          unknown: 0,
+        },
+      })
+    )
+    await gatewayApi.listModels(TEAM_ID, {
+      registry_scope: 'system_requestable',
+      page: 1,
+      page_size: 20,
+    })
+    const url = getLastFetchUrl()
+    expect(url).toContain('registry_scope=system_requestable')
+    expect(url).toContain('page=1')
+    expect(url).toContain('page_size=20')
+  })
 })
 
 describe('gatewayApi.listModelIds', () => {

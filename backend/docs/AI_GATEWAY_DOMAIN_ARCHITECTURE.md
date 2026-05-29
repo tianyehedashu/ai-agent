@@ -220,6 +220,11 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 - **读侧（模型上下文）**：团队/跨团队模型列表与详情、``GET /managed-team-model-credential-filters`` 可展示绑定凭据的 **`credential_name`**、**`credential_created_by_user_id`**、通道等**非敏感**字段；**不**含 `api_key` / `reveal` / 完整 `api_base`（仍仅创建者或 team admin+ legacy）。
 - **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 或 legacy admin 断言。
 - **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
+- **前端 UI 对齐（创建者私有 member-friendly）**：成员能力由 `useGatewayPermission().canContribute`（= team member+ 且非平台 viewer）驱动，与团队 admin 的 `canWrite` 区分：
+  - 凭据 Tab：`canContribute` 时「新增凭据」可选 `team` scope，目标团队取 `useGatewayContributorCollaborationTeams`（membership 协作团队）；改/删/reveal 仍仅创建者（`canEditGatewayCredential`）。
+  - 模型 Tab：`effectiveCapabilities` 的行级启停/删除/批量勾选由 `canContribute` 控制，归属由 `canManageGatewayModel`/`canDeleteGatewayModel` 裁剪到自有；分组「添加模型」对 member+ 开放，注册表单仅列出本人可绑定凭据（`canBindCredentialForTeamModel`）。
+  - 仅 admin+（`canWrite`）：跨「当前筛选」的 `deleteAllFiltered`（会触及他人模型）、legacy 共享凭据/模型管理。
+  - 平台 viewer：`canContribute=false`，全站管理面只读。
 
 **入口凭据 vs 存储 `tenant_id`**：业务表 `tenant_id` 是行级归属键；代理面 `sk-gw-*` 对调用方是「一个 token 即完整上下文」，解析后仍展开为 `team_id` + `vkey_id` 等正交字段，并非重复标识。
 
@@ -236,8 +241,9 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 | 取值 | 产品文案 | 含义 |
 |------|---------|------|
-| `workspace` | **团队** | 按 **`X-Team-Id` → CurrentTeam.team_id`** 过滤/聚合；该 ID 可为 **personal** 或 **shared** 团队。 |
+| `workspace` | **团队** | 按 **`X-Team-Id` → CurrentTeam.team_id`** 过滤/聚合；该 ID 可为 **personal** 或 **shared** 团队。owner/admin 看全团队，普通 member 仅本人相关行（见 `usage_log_visibility` 策略）。 |
 | `user` | **我** | 按当前登录 **`user_id`** 跨团队聚合/过滤（与日志行 `user_id` 对齐）；**不**表示「无团队用户」。 |
+| `platform` | **全平台** | **仅平台管理员**：覆盖全平台所有用户的请求日志（无 tenant/user 基础约束）。门控在 `GatewayUsageLogReadMixin._resolve_usage_axis`（非平台 admin 抛 `TeamPermissionDeniedError`）；对应 `UsageAxis.platform()`，SQL 基础子句为空。 |
 
 **前端 ScopeTab 与 Team.kind 对齐**：前端 URL `?tab=` 使用 `personal | shared` 字面量与后端 `Team.kind` 完全对齐；旧 `?tab=team` 由 `parseScopeTab` 自动兼容映射至 `shared`。注意 `pages/gateway/budgets.tsx` 中 `<SelectItem value="team">` 是 `BudgetScope.team`（预算归属层级），与 ScopeTab 无关。
 
@@ -490,7 +496,7 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 
 ### 6.3 前后端契约
 
-- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider` / **`gateway_team_id`**，默认 `useGatewayWorkspaceTeamId()` personal 工作区）；发送对话时 `POST /chat` 携带相同 **`gateway_team_id`**。个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
+- `frontend/src/api/gateway.ts`：日志/大盘使用查询参数 **`usage_aggregation`**（`workspace` | `user` | `platform`），与后端 `UsageAggregation` 对齐；与 `schemas/common.py` 响应体对齐。**`platform`（全平台）仅平台管理员**：前端经 `gatewayUsageAggregationOptions(isPlatformAdmin)` 在调用统计页（`pages/gateway/stats.tsx`）按权限注入选项，后端 `_resolve_usage_axis` 二次门控。聊天/产品信息选模型：`listAvailableModels` → `GET /models/available`（`type` / `mode` / `provider` / **`gateway_team_id`**，默认 `useGatewayWorkspaceTeamId()` personal 工作区）；发送对话时 `POST /chat` 携带相同 **`gateway_team_id`**。个人模型管理：`/my-models`（不依赖 `X-Team-Id`）。
 - `frontend/src/stores/gateway-team.ts` → 请求头 **`X-Team-Id`**。
 - `frontend/src/pages/settings/index.tsx`：支持查询参数 **`?tab=api`**（及 `mcp`、`account` 等）深链到对应设置子页；**模型与凭据**均在 **AI Gateway**（`/gateway/models?tab=personal|team`、`/gateway/credentials?tab=personal|team`）。旧 `?tab=credentials`、`?tab=models`、`?view=gateway` 会重定向到 Gateway 个人 Tab。**已移除**设置内嵌的 `credentials-tab` / `model-tab` / `provider-config-tab` 等组件；个人凭据 UI 复用 `features/gateway-credentials/personal-credentials-panel.tsx`（仅由 Gateway 凭据页等挂载）。
 - `frontend/src/types/api-key.ts`：`ApiKeyScope` 与后端 **`gateway:proxy` / `gateway:admin` / `gateway:read`** 对齐；设置页创建/编辑 Key 时可配置 **Gateway 团队授权**（模型/能力/RPM/TPM/guardrail）。`gateway:admin` / `gateway:read` 与 Agent/Session 等 scope 在 UI 标注「预留」— 当前 HTTP 鉴权以 JWT 或 MCP/`gateway:proxy` 为准。
@@ -525,7 +531,7 @@ uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_
 | 主题 | 约定 |
 |------|------|
 | **告警 job** | `gateway_alert_job.run_gateway_alert_cycle`：只读 session 评估指标；每条触发独立 write session + `commit` 后再发 webhook，避免长事务占用 DB 连接。 |
-| **UsageAxis** | 纯值对象在 `domain/usage_axis.py`；SQL WHERE 在 `infrastructure/repositories/usage_axis_sql.py`。 |
+| **UsageAxis** | 纯值对象在 `domain/usage_axis.py`（`workspace` / `user` / `platform` 三轴）；SQL WHERE 在 `infrastructure/repositories/usage_axis_sql.py`（`platform` 轴返回空基础子句，覆盖全平台，仅平台管理员可解析）。 |
 | **默认租户** | `TenancyDefaultTenantProvisioner`（tenancy 域）；`libs.iam.deps.get_default_tenant_provisioner` 绑定该实现。 |
 
 ---

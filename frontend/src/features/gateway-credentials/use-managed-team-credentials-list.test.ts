@@ -15,22 +15,28 @@ import type {
 
 import { useManagedTeamCredentialsList } from './use-managed-team-credentials-list'
 
-const emptyManagedTeamCredentialListResponse = (): ManagedTeamCredentialListResponse => ({
-  items: [],
-  total: 0,
-  page: 1,
-  page_size: 20,
-  has_next: false,
-  has_prev: false,
-  queried_team_count: 0,
-  queried_personal_team_count: 0,
-  queried_shared_team_count: 0,
-  tenant_ids_with_credentials: [],
-})
+const { listManagedTeamCredentialsMock, emptyManagedTeamCredentialListResponse } = vi.hoisted(
+  () => {
+    const emptyManagedTeamCredentialListResponse = (): ManagedTeamCredentialListResponse => ({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+      has_next: false,
+      has_prev: false,
+      queried_team_count: 0,
+      queried_personal_team_count: 0,
+      queried_shared_team_count: 0,
+      tenant_ids_with_credentials: [],
+    })
 
-const listManagedTeamCredentialsMock = vi.fn(
-  (_params?: ListManagedTeamCredentialsParams): Promise<ManagedTeamCredentialListResponse> =>
-    Promise.resolve(emptyManagedTeamCredentialListResponse())
+    const listManagedTeamCredentialsMock = vi.fn(
+      (_params?: ListManagedTeamCredentialsParams): Promise<ManagedTeamCredentialListResponse> =>
+        Promise.resolve(emptyManagedTeamCredentialListResponse())
+    )
+
+    return { listManagedTeamCredentialsMock, emptyManagedTeamCredentialListResponse }
+  }
 )
 
 vi.mock('@/api/gateway/credentials', () => ({

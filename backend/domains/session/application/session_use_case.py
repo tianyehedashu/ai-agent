@@ -125,8 +125,11 @@ class SessionUseCase:
         limit: int = 20,
     ) -> list[Session]:
         """获取用户的会话列表"""
+        user_uuid = _safe_uuid(user_id)
+        if user_uuid is None:
+            raise ValueError("user_id is required")
         return await self.session_repo.find_by_user(
-            user_id=_safe_uuid(user_id),
+            user_id=user_uuid,
             agent_id=_safe_uuid(agent_id),
             skip=skip,
             limit=limit,

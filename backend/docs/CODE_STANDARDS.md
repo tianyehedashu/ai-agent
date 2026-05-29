@@ -221,7 +221,7 @@ backend/
 
 ```python
 # ✅ 从 identity 域导入身份类型
-from domains.identity.domain.types import Principal, ANONYMOUS_ID_PREFIX
+from domains.identity.domain.types import Principal
 
 # ✅ 从 identity 域导入认证依赖
 from domains.identity.presentation.deps import AuthUser, RequiredAuthUser, check_tenant_access
@@ -274,7 +274,7 @@ if TYPE_CHECKING:
 - **多租户业务表**：`BaseModel` + `TenantScopedMixin`（物理列 `tenant_id UUID NOT NULL`）；系统级配置写入 `system_*` 表。
 - **系统级配置**：`system_*` 表（无 `tenant_id`），如 `system_gateway_models`；查询时在应用层 `list_system()` + `list_for_tenant()` 合并（tenant 同名覆盖 system）。
 - **个人用户**：归属 `personal` team（`TeamService.ensure_personal_team`）。
-- **匿名用户（仅开发环境）**：Cookie → 内存 `Principal`；业务 `tenant_id` = `resolve_anonymous_tenant_id(cookie_id)`（UUID v5，**不写** `users` / `gateway_teams`）。见 `domains/identity/domain/anonymous_tenant.py`。
+- **认证模式**：`auth_mode=local`（邮箱密码 + JWT）或 `auth_mode=sso`（HiGress(giikin-auth-bridge) 注入 `X-Giikin-*` 身份，校验 `X-Giikin-Internal-Key` 后按 `giikin_user_id` JIT 建本地用户）。**已移除匿名访问**：无有效身份一律 401。见 `domains/identity/application/principal_service.py`、`infrastructure/auth/giikin_gateway.py`。
 - **授权链**：`User → team_members → tenant_id`；`PermissionContext.team_ids` + `DataScopeEnforcer`（libs 机制，不含 domain 字面量）。
 - **策略挂载**：`PolicyTargetMixin`（`target_kind` / `target_id`），与 tenant 正交；字面量仅出现在各 domain（如 gateway `vkey`）。
 

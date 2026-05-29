@@ -41,9 +41,8 @@ from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
-    import uuid
-
     from collections.abc import AsyncGenerator, Callable
+    import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
 

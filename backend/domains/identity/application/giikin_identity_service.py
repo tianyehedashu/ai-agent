@@ -9,6 +9,8 @@ from __future__ import annotations
 import secrets
 from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import IntegrityError
+
 from domains.identity.domain.services.password_service import PasswordService
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
@@ -58,21 +60,30 @@ class GiikinIdentityService:
         # 不可用随机密码：SSO 用户不走本地密码登录
         unusable_password = self._password_service.hash(secrets.token_urlsafe(32))
 
-        user = await self.user_repo.create(
-            email=email,
-            hashed_password=unusable_password,
-            name=claims.name,
-            role="user",
-            giikin_user_id=claims.user_id,
-        )
-
-        await provision_default_tenant_for_new_user(
-            session=self.db,
-            provisioner=self._tenant_provisioner_or_default(),
-            user_id=user.id,
-            display_name=claims.name,
-            log=logger,
-        )
+        # SAVEPOINT 隔离首次建号：并发首请求时落败者撞唯一索引 (ix_users_giikin_user_id)，
+        # 回退到「读已存在」而非抛 500。Postgres 唯一冲突意味着对端事务已提交，重查必命中。
+        try:
+            async with self.db.begin_nested():
+                user = await self.user_repo.create(
+                    email=email,
+                    hashed_password=unusable_password,
+                    name=claims.name,
+                    role="user",
+                    giikin_user_id=claims.user_id,
+                )
+                await provision_default_tenant_for_new_user(
+                    session=self.db,
+                    provisioner=self._tenant_provisioner_or_default(),
+                    user_id=user.id,
+                    display_name=claims.name,
+                    log=logger,
+                )
+        except IntegrityError:
+            existing = await self.user_repo.get_by_giikin_user_id(claims.user_id)
+            if existing is None:
+                raise
+            logger.info("JIT race resolved for giikin user %s -> %s", claims.user_id, existing.id)
+            return existing
 
         logger.info("JIT provisioned giikin user %s -> local %s", claims.user_id, user.id)
         return user

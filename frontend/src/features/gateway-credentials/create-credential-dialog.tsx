@@ -303,7 +303,7 @@ export function CreateCredentialDialog({
                 {scope === 'user'
                   ? '个人凭据仅当前账号可见，存储于 /my-credentials'
                   : scope === 'team'
-                    ? '团队凭据由团队所有成员可见、管理员可写'
+                    ? '团队凭据由创建者管理（仅创建者可改/删/查看密钥）；团队成员可见但密钥脱敏。'
                     : '创建后默认对所有团队公开；可在详情中改为「受限」并指定授权团队。'}
               </p>
             </div>
@@ -317,14 +317,16 @@ export function CreateCredentialDialog({
                 onChange={setTeamId}
                 teams={teamOptions}
                 disabled={teamOptions.length === 0}
-                placeholder={teamOptions.length === 0 ? '无可管理的团队' : '选择团队'}
+                placeholder={teamOptions.length === 0 ? '无可创建凭据的团队' : '选择团队'}
               />
               {teamOptions.length === 0 ? (
-                <p className="text-[11px] text-destructive">当前账号没有可写入团队凭据的团队。</p>
+                <p className="text-[11px] text-destructive">
+                  当前账号尚未加入可创建凭据的协作团队。
+                </p>
               ) : (
                 <>
                   <p className="text-[11px] text-muted-foreground">
-                    凭据将写入所选团队，团队成员可见、管理员可写。
+                    凭据将写入所选团队，由你管理（仅创建者可改/删）；团队成员可见但密钥脱敏。
                   </p>
                   {crossTeamTarget ? (
                     <p className="text-[11px] text-amber-700 dark:text-amber-400">

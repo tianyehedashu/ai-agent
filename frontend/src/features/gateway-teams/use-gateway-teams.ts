@@ -12,7 +12,10 @@ import {
   gatewayTeamDisplayLabel,
   gatewayWorkspaceLabel,
 } from '@/features/gateway-teams/gateway-team-display'
-import { filterGatewayWritableTeams } from '@/features/gateway-teams/gateway-team-write-policy'
+import {
+  filterGatewayContributorTeams,
+  filterGatewayWritableTeams,
+} from '@/features/gateway-teams/gateway-team-write-policy'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useUserStore } from '@/stores/user'
 
@@ -115,6 +118,22 @@ export function useGatewayWritableCollaborationTeams(enabled = true): GatewayTea
 export function useGatewayMemberCollaborationTeams(enabled = true): GatewayTeam[] {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
   return useMemo(() => filterCollaborationGatewayTeams(teams), [teams])
+}
+
+/**
+ * 可创建团队凭据的协作团队：membership 协作团队 + 贡献者过滤（member+，排除平台 viewer）。
+ * 对齐后端 `POST /teams/{id}/credentials`（member+）；凭据创建后归创建者私有。
+ */
+export function useGatewayContributorCollaborationTeams(enabled = true): GatewayTeam[] {
+  const { data: teams = [] } = useGatewayMemberTeams(enabled)
+  const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
+  return useMemo(
+    () =>
+      filterCollaborationGatewayTeams(
+        filterGatewayContributorTeams(teams, isPlatformAdmin, isPlatformViewer)
+      ),
+    [teams, isPlatformAdmin, isPlatformViewer]
+  )
 }
 
 /** 平台 admin 跨团队搜索：按团队名称拉取全站活跃团队（需非空 search） */

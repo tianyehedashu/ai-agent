@@ -86,7 +86,13 @@ export interface GatewayModelListItem {
 
 /** Shell 权限裁剪输入 */
 export interface GatewayModelListPermissionContext {
+  /** 团队 admin+（含 legacy 共享凭据/跨筛选批量等管理面写权限） */
   canWrite: boolean
+  /**
+   * 团队 member+（创建者私有）：可对自有模型行级启停/删除、批量勾选删除自有模型。
+   * 缺省回退到 `canWrite` 以兼容仅管理员场景；具体行级归属仍由 Row callback 裁剪。
+   */
+  canContribute?: boolean
   isPlatformAdmin: boolean
 }
 
@@ -206,6 +212,8 @@ export interface GatewayModelGroupedListProps extends GatewayModelListRowPermiss
   isLoading: boolean
   currentPage: number
   isPlatformAdmin: boolean
+  /** member+ 贡献者：分组内「添加模型」入口对自有凭据开放（行级管理仍由 canManage 裁剪） */
+  canContribute?: boolean
   viewerUserId?: string | null
   updatePendingModelId?: string | null
   deletingModelId?: string | null

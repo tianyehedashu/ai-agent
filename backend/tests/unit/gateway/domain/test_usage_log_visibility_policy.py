@@ -10,10 +10,30 @@ from domains.gateway.domain.policies.usage_log_visibility import (
     UsageLogAccessSnapshot,
     member_can_view_request_log_record,
     member_requires_request_log_detail_filter,
+    platform_aggregation_allowed,
     snapshot_is_team_member_only,
     workspace_axis_member_user_id,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
+
+
+@pytest.mark.unit
+def test_platform_aggregation_allowed() -> None:
+    admin_snap = UsageLogAccessSnapshot(
+        is_platform_admin=True,
+        team_role="member",
+        user_id=uuid.uuid4(),
+        team_id=uuid.uuid4(),
+    )
+    assert platform_aggregation_allowed(admin_snap) is True
+
+    owner_snap = UsageLogAccessSnapshot(
+        is_platform_admin=False,
+        team_role="owner",
+        user_id=uuid.uuid4(),
+        team_id=uuid.uuid4(),
+    )
+    assert platform_aggregation_allowed(owner_snap) is False
 
 
 @pytest.mark.unit

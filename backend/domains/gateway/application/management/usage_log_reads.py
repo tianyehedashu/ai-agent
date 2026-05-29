@@ -18,6 +18,7 @@ from domains.gateway.application.management.usage_reads import (
 from domains.gateway.domain.errors import TeamPermissionDeniedError
 from domains.gateway.domain.policies.usage_log_visibility import (
     member_can_view_request_log_record,
+    platform_aggregation_allowed,
     usage_log_access_from_management_ctx,
     workspace_axis_member_user_id,
 )
@@ -60,6 +61,11 @@ class GatewayUsageLogReadMixin:
         *,
         vkey_id: UUID | None = None,
     ) -> UsageAxis:
+        if aggregation == UsageAggregation.PLATFORM:
+            snapshot = usage_log_access_from_management_ctx(ctx)
+            if not platform_aggregation_allowed(snapshot):
+                raise TeamPermissionDeniedError(str(ctx.team_id))
+            return UsageAxis.platform()
         if aggregation == UsageAggregation.USER:
             return UsageAxis.user(ctx.user_id)
         snapshot = usage_log_access_from_management_ctx(ctx)
@@ -100,6 +106,10 @@ class GatewayUsageLogReadMixin:
         *,
         usage_aggregation: UsageAggregation,
     ) -> Any | None:
+        if usage_aggregation == UsageAggregation.PLATFORM:
+            # 平台管理员（门控在 _resolve_usage_axis）可查看任意单条日志
+            platform_axis = self._resolve_usage_axis(ctx, UsageAggregation.PLATFORM)
+            return await self._logs.get_by_axis(platform_axis, log_id)
         axis = (
             self._resolve_usage_axis(ctx, UsageAggregation.USER)
             if usage_aggregation == UsageAggregation.USER

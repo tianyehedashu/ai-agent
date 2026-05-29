@@ -26,7 +26,7 @@ import {
   systemModelsBrowseIndexHref,
 } from '@/features/gateway-models/paths'
 import {
-  useGatewayWritableCollaborationTeams,
+  useGatewayContributorCollaborationTeams,
   useGatewayWritableTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -60,8 +60,9 @@ function CredentialsPanelFallback(): React.JSX.Element {
 export default function GatewayCredentialsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const writableTeams = useGatewayWritableTeams()
-  const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
-  const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
+  // 团队 Tab：成员（含非管理员）即可为所在协作团队创建创建者私有凭据。
+  const contributorCollaborationTeams = useGatewayContributorCollaborationTeams()
+  const { canContribute, isPlatformAdmin, isAdmin } = useGatewayPermission()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [pendingProvider, setPendingProvider] = useState<string | undefined>(undefined)
@@ -96,9 +97,10 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
     if (activeTab === 'system' && isPlatformAdmin) return ['system']
     if (activeTab === 'personal') return ['user']
     const scopes: CredentialFormScope[] = ['user']
-    if (canWrite) scopes.push('team')
+    // 成员可在所在协作团队下创建团队凭据（创建者私有）。
+    if (canContribute && contributorCollaborationTeams.length > 0) scopes.push('team')
     return scopes
-  }, [activeTab, canWrite, isPlatformAdmin])
+  }, [activeTab, canContribute, contributorCollaborationTeams.length, isPlatformAdmin])
 
   const defaultScope: CredentialFormScope =
     activeTab === 'personal' ? 'user' : activeTab === 'system' ? 'system' : 'team'
@@ -177,22 +179,22 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
   const defaultCreateTeamId = useMemo(() => {
     if (pendingCreateTeamId) return pendingCreateTeamId
     if (activeTab === 'shared') {
-      return writableCollaborationTeams[0]?.id ?? undefined
+      return contributorCollaborationTeams[0]?.id ?? undefined
     }
     return teamId
-  }, [activeTab, pendingCreateTeamId, teamId, writableCollaborationTeams])
+  }, [activeTab, pendingCreateTeamId, teamId, contributorCollaborationTeams])
 
-  const createWritableTeams = activeTab === 'shared' ? writableCollaborationTeams : writableTeams
+  const createWritableTeams = activeTab === 'shared' ? contributorCollaborationTeams : writableTeams
 
   const sharedTabDescription = useMemo(() => {
     if (isAdmin) {
       return '展示您可管理的全部协作团队及其共享凭据；可为任一团队添加上游 API Key。'
     }
-    if (writableCollaborationTeams.length > 0) {
-      return '展示您已加入的协作团队及其共享凭据；密钥已脱敏，详情与变更需团队管理员。'
+    if (contributorCollaborationTeams.length > 0) {
+      return '展示您已加入的协作团队凭据；您可为团队添加自己的凭据并管理（仅创建者可改/删），他人凭据密钥已脱敏。'
     }
-    return '展示您已加入的协作团队共享凭据（只读）；密钥已脱敏，增删改需团队管理员。'
-  }, [isAdmin, writableCollaborationTeams.length])
+    return '展示您已加入的协作团队共享凭据（只读）；密钥已脱敏。'
+  }, [isAdmin, contributorCollaborationTeams.length])
 
   return (
     <div className="space-y-4">

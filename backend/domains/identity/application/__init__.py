@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 from domains.identity.application.ports import IdentityApplicationPort
 
 if TYPE_CHECKING:
+    from domains.identity.application.principal_service import (
+        get_principal,
+        get_principal_optional,
+    )
     from domains.identity.application.user_use_case import UserUseCase
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {

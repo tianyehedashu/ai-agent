@@ -13,8 +13,8 @@ import type { PaginatedList } from '@/types'
 
 import { teamGatewayPath } from './_base'
 
-/** 日志/大盘聚合维度 */
-export type GatewayUsageAggregation = 'workspace' | 'user'
+/** 日志/大盘聚合维度（platform 仅平台管理员可用） */
+export type GatewayUsageAggregation = 'workspace' | 'user' | 'platform'
 
 /** 日志列表项（脱敏后） */
 export interface GatewayLogItem {

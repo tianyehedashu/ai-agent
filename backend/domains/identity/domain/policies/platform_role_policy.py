@@ -11,6 +11,11 @@ ASSIGNABLE_PLATFORM_ROLES: frozenset[str] = frozenset(
     {Role.ADMIN.value, Role.USER.value, Role.VIEWER.value}
 )
 
+# DEPRECATED：匿名访问能力已移除（见 feat(auth) SSO 重构），不再签发 role='anonymous' 用户，
+# 迁移 20260606_anon_tenant 已删除历史 shadow 行。此常量与下方 ANONYMOUS_ROLE 分支仅为防御性
+# 兜底，避免遗留库残行被误提权/误邀请。
+# 到期条件：确认所有目标库 `SELECT count(*) FROM users WHERE role='anonymous'` 为 0 后，可连同
+# user_invite_candidate / sqlalchemy_user_repository / platform_user_admin_policy 的引用一并删除。
 ANONYMOUS_ROLE = "anonymous"
 
 

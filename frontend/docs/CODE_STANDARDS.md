@@ -59,6 +59,7 @@ function process(data: unknown): User {
 - 个人/团队凭据与模型、虚拟 Key、路由、预算等页面在 **`/gateway/*`** 与 `src/features/gateway-*`；设置页仅保留账户与平台 API Key。
 - **产品说明不进 Banner**：虚拟 Key vs 平台 Key、`X-Team-Id`、模型注册与团队绑定等规则写在 [DEVELOPMENT.md](./DEVELOPMENT.md)（AI Gateway 控制台一节）与后端 Gateway 文档，页面只保留标题、团队徽章、表单字段（如创建时的「绑定团队」）与必要操作提示。
 - 团队上下文 SSOT：URL `/gateway/teams/:teamId/*`；`stores/gateway-team.ts` 仅缓存 membership 列表；扁平路由回退 personal team（`useGatewayWorkspaceTeamId`）。
+- 管理面权限两档（`useGatewayPermission`）：`canWrite`（team admin+，管 legacy 共享资源与跨筛选批量）vs `canContribute`（team member+ 且非平台 viewer，创建者私有：给所在团队建凭据、在自己凭据下注册/启停/删模型）。行级归属由 `gateway-credentials/credential-permissions.ts`、`gateway-models/gateway-model-permissions.ts` 裁剪到「自有」；勿用 `canWrite` 直接 gate 成员的自有资源操作。可创建凭据的团队取 `useGatewayContributorCollaborationTeams`。
 
 ## 列表 API 与分页
 

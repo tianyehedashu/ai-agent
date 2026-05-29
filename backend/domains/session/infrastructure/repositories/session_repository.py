@@ -35,18 +35,12 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
 
     async def create(
         self,
-        user_id: uuid.UUID | None = None,
+        user_id: uuid.UUID,
         agent_id: uuid.UUID | None = None,
         title: str | None = None,
-        tenant_id: uuid.UUID | None = None,
     ) -> Session:
-        if tenant_id is None:
-            if user_id is None:
-                raise ValueError("user_id is required to resolve tenant_id")
-            tenant_id = await self._resolve_tenant_id(user_id=user_id)
-        resolved_tenant = tenant_id
         session = Session(
-            tenant_id=resolved_tenant,
+            tenant_id=await self._resolve_tenant_id(user_id=user_id),
             agent_id=agent_id,
             title=title,
         )
@@ -60,21 +54,18 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
 
     async def find_by_user(
         self,
-        user_id: uuid.UUID | None = None,
+        user_id: uuid.UUID,
         agent_id: uuid.UUID | None = None,
         skip: int = 0,
         limit: int = 20,
     ) -> list[Session]:
         ctx = get_permission_context()
-        if ctx and not ctx.is_admin and user_id is not None and ctx.user_id != user_id:
+        if ctx and not ctx.is_admin and ctx.user_id != user_id:
             raise ValueError(
                 f"user_id parameter ({user_id}) does not match PermissionContext ({ctx.user_id}). "
                 "This may indicate an authorization bug."
             )
 
-        if user_id is None:
-            msg = "user_id is required"
-            raise ValueError(msg)
         tenant_id = await self._personal_tenant_id(user_id)
 
         query = select(self.model_class).where(self.model_class.tenant_id == tenant_id)

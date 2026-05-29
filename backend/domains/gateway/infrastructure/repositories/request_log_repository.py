@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, case, func, literal, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select, true
 from sqlalchemy.orm import defer
 
 from domains.gateway.domain.usage_read_model import (
@@ -21,6 +21,16 @@ from domains.gateway.domain.usage_read_model import (
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.usage_axis_sql import usage_axis_base_clauses
+
+if TYPE_CHECKING:
+    from sqlalchemy.sql import ColumnElement
+
+
+def _sql_and(*clauses: ColumnElement[bool]) -> ColumnElement[bool]:
+    """``UsageAxis.platform`` 等场景可能仅有时间窗子句；避免 ``and_()`` 空参数。"""
+    if not clauses:
+        return true()
+    return and_(*clauses)
 
 
 def _request_log_list_defer_options() -> tuple:
@@ -193,14 +203,14 @@ class RequestLogRepository:
         if credential_id:
             clauses.append(GatewayRequestLog.credential_id == credential_id)
 
-        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(and_(*clauses))
+        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*clauses))
         total = (await self._session.execute(count_stmt)).scalar_one()
 
         offset = max(0, (page - 1) * page_size)
         stmt = (
             select(GatewayRequestLog)
             .options(*_request_log_list_defer_options())
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .order_by(GatewayRequestLog.created_at.desc())
             .offset(offset)
             .limit(page_size)
@@ -223,7 +233,7 @@ class RequestLogRepository:
         """
         # 分区表主键为 (id, created_at)，不可用 session.get 单单传入 id
         clauses = [*usage_axis_base_clauses(axis), GatewayRequestLog.id == log_id]
-        stmt = select(GatewayRequestLog).where(and_(*clauses)).limit(1)
+        stmt = select(GatewayRequestLog).where(_sql_and(*clauses)).limit(1)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -246,7 +256,7 @@ class RequestLogRepository:
             func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
             func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency"),
-        ).where(and_(*clauses))
+        ).where(_sql_and(*clauses))
         row = (await self._session.execute(stmt)).one()
         return {
             "total": int(row.total or 0),
@@ -276,7 +286,7 @@ class RequestLogRepository:
                 func.count(GatewayRequestLog.id).label("requests"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(client_type_expr)
             .order_by(func.count(GatewayRequestLog.id).desc())
         )
@@ -305,7 +315,7 @@ class RequestLogRepository:
             func.count(GatewayRequestLog.id).label("requests"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.sum(GatewayRequestLog.revenue_usd).label("revenue_usd"),
-        ).where(and_(*clauses))
+        ).where(_sql_and(*clauses))
         row = (await self._session.execute(stmt)).one()
         cost = Decimal(row.cost_usd or 0)
         revenue = Decimal(row.revenue_usd or 0)
@@ -336,7 +346,7 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.sum(GatewayRequestLog.revenue_usd).label("revenue_usd"),
             )
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(GatewayRequestLog.route_name)
             .order_by(func.sum(GatewayRequestLog.revenue_usd).desc())
             .limit(limit)
@@ -383,7 +393,7 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(GatewayRequestLog.route_name)
         )
         rows = (await self._session.execute(stmt)).all()
@@ -433,7 +443,7 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(GatewayRequestLog.deployment_gateway_model_id)
         )
         rows = (await self._session.execute(stmt)).all()
@@ -486,7 +496,7 @@ class RequestLogRepository:
                     "failure"
                 ),
             )
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(GatewayRequestLog.credential_id)
         )
         rows = (await self._session.execute(stmt)).all()
@@ -641,7 +651,7 @@ class RequestLogRepository:
         ]
         if parent_scope is not None:
             clauses.append(self._usage_statistics_parent_clause(parent_scope))
-        stmt = select(func.count(GatewayRequestLog.id)).where(and_(*clauses))
+        stmt = select(func.count(GatewayRequestLog.id)).where(_sql_and(*clauses))
         return int((await self._session.execute(stmt)).scalar_one())
 
     @staticmethod
@@ -677,7 +687,7 @@ class RequestLogRepository:
 
         group_subq = (
             select(*[expr.label(f"gk_{i}") for i, expr in enumerate(group_exprs)])
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(*group_exprs)
             .subquery()
         )
@@ -709,7 +719,7 @@ class RequestLogRepository:
         )
         rows_stmt = (
             select(*selected)
-            .where(and_(*clauses))
+            .where(_sql_and(*clauses))
             .group_by(*group_exprs)
             .order_by(func.count(GatewayRequestLog.id).desc())
             .offset(offset)
@@ -756,7 +766,7 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
             func.sum(cache_hit_case).label("cache_hit_count"),
-        ).where(and_(*clauses))
+        ).where(_sql_and(*clauses))
         total_row = (await self._session.execute(totals_stmt)).one()
         totals = RequestLogUsageTotals(
             requests=int(total_row.requests or 0),

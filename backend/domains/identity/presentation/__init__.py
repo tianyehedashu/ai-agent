@@ -3,7 +3,6 @@
 提供身份认证相关的 API 组件：
 - deps: 认证依赖注入（AuthUser, RequiredAuthUser, AdminUser, OptionalUser, check_*）
 - schemas: 请求/响应模型（CurrentUser, UserCreate, UserLogin 等）
-- middleware: 中间件（AuthMiddleware, anonymous_user_cookie_middleware）
 - router: API 路由
 """
 
@@ -20,7 +19,6 @@ from domains.identity.presentation.deps import (
     require_auth,
     require_role,
 )
-from domains.identity.presentation.middleware import AuthMiddleware
 from domains.identity.presentation.schemas import (
     CurrentUser,
     PasswordChange,
@@ -37,8 +35,6 @@ __all__ = [
     "ADMIN_ROLE",
     # Dependencies
     "AdminUser",
-    # Middleware
-    "AuthMiddleware",
     "AuthUser",
     # Schemas
     "CurrentUser",

@@ -110,7 +110,7 @@ export function TeamModelsWorkspace({
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
-  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
   const {
     byId: credentialSummariesById,
     isFetching: directoryFetching,
@@ -155,14 +155,14 @@ export function TeamModelsWorkspace({
           }
     const permContext =
       listMode === 'system'
-        ? { canWrite: isPlatformAdmin, isPlatformAdmin }
-        : { canWrite, isPlatformAdmin }
+        ? { canWrite: isPlatformAdmin, canContribute: isPlatformAdmin, isPlatformAdmin }
+        : { canWrite, canContribute, isPlatformAdmin }
     const effective = effectiveCapabilities(preset, permContext)
     return {
       ...effective,
       showSystemAdmin: listMode === 'system' && isPlatformAdmin,
     }
-  }, [canWrite, isPlatformAdmin, listMode])
+  }, [canWrite, canContribute, isPlatformAdmin, listMode])
 
   const systemPermContext = useMemo(
     () => (listMode === 'system' ? ({ preferSystem: true } as const) : undefined),

@@ -10,7 +10,6 @@ import { Link } from 'react-router-dom'
 import type { GatewayModel } from '@/api/gateway/models'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -40,6 +39,7 @@ export function GatewayModelGroupedList({
   isLoading,
   currentPage,
   isPlatformAdmin,
+  canContribute = false,
   viewerUserId,
   updatePendingModelId,
   deletingModelId,
@@ -149,96 +149,96 @@ export function GatewayModelGroupedList({
   return (
     <>
       <TooltipProvider delayDuration={300}>
-        <ScrollArea className="max-h-[min(70vh,720px)] w-full overscroll-y-contain">
-          <div className="divide-y pr-3">
-            {teams.map((team) => {
-              const teamItems = itemsByTeamId.get(team.id) ?? []
-              const hasModelsOnServer = tenantIdsWithModels.has(team.id)
-              const showOffPageHint = hasModelsOnServer && teamItems.length === 0 && currentPage > 1
-              const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
+        <div className="divide-y">
+          {teams.map((team) => {
+            const teamItems = itemsByTeamId.get(team.id) ?? []
+            const hasModelsOnServer = tenantIdsWithModels.has(team.id)
+            const showOffPageHint = hasModelsOnServer && teamItems.length === 0 && currentPage > 1
+            const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
+            // 成员可在自己的凭据下注册模型；注册表单仍只列出本人可绑定的凭据。
+            const teamCanRegister = teamCanWrite || canContribute
 
-              return (
-                <section key={team.id} aria-label={`团队 ${team.name} 模型`}>
-                  <CollaborationTeamGroupHeader
-                    team={team}
-                    isPlatformAdmin={isPlatformAdmin}
-                    viewerUserId={viewerUserId}
-                    actions={
-                      teamCanWrite ? (
-                        <Button size="sm" className="h-7 text-xs" asChild>
-                          <Link to={teamModelsRegisterHref(team.id)}>
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            添加模型
-                          </Link>
-                        </Button>
-                      ) : null
-                    }
-                  />
-                  {teamItems.length > 0 ? (
-                    <ul className="divide-y">
-                      {teamItems.map((item) => {
-                        const model = asGatewayModel(item)
-                        const resolvedCanManage =
-                          canManage?.(item) ??
-                          canManageGatewayModel(model, viewerUserId, teamCanWrite, isPlatformAdmin)
-                        const resolvedCanDelete =
-                          canDelete?.(item) ??
-                          canDeleteGatewayModel(model, viewerUserId, teamCanWrite, isPlatformAdmin)
-                        const resolvedCanBatchSelect = canBatchSelect?.(item) ?? resolvedCanDelete
-                        const isUpdating = updatePendingModelId === item.id
-                        const isDeleting = deletingModelId === item.id
+            return (
+              <section key={team.id} aria-label={`团队 ${team.name} 模型`}>
+                <CollaborationTeamGroupHeader
+                  team={team}
+                  isPlatformAdmin={isPlatformAdmin}
+                  viewerUserId={viewerUserId}
+                  actions={
+                    teamCanRegister ? (
+                      <Button size="sm" className="h-7 text-xs" asChild>
+                        <Link to={teamModelsRegisterHref(team.id)}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          添加模型
+                        </Link>
+                      </Button>
+                    ) : null
+                  }
+                />
+                {teamItems.length > 0 ? (
+                  <ul className="divide-y">
+                    {teamItems.map((item) => {
+                      const model = asGatewayModel(item)
+                      const resolvedCanManage =
+                        canManage?.(item) ??
+                        canManageGatewayModel(model, viewerUserId, teamCanWrite, isPlatformAdmin)
+                      const resolvedCanDelete =
+                        canDelete?.(item) ??
+                        canDeleteGatewayModel(model, viewerUserId, teamCanWrite, isPlatformAdmin)
+                      const resolvedCanBatchSelect = canBatchSelect?.(item) ?? resolvedCanDelete
+                      const isUpdating = updatePendingModelId === item.id
+                      const isDeleting = deletingModelId === item.id
 
-                        return (
-                          <GatewayModelListRow
-                            key={`${item.id}:${team.id}`}
-                            item={item}
-                            capabilities={capabilities}
-                            href={getModelHref(team.id, item.id)}
-                            onPreloadNavigate={onPreloadNavigate}
-                            highlighted={
-                              highlightModelId !== undefined && item.id === highlightModelId
-                            }
-                            usageDays={usageDays}
-                            usageRow={usageByRouteName?.get(
-                              buildManagedTeamRouteUsageKey(team.id, item.title)
-                            )}
-                            usageLoading={usageLoading}
-                            batchSelected={selectedIds?.has(item.id) ?? false}
-                            onBatchSelectChange={onBatchSelectChange}
-                            canBatchSelect={(i) => canBatchSelect?.(i) ?? resolvedCanBatchSelect}
-                            canDelete={(i) => canDelete?.(i) ?? resolvedCanDelete}
-                            isConfigManaged={isConfigManaged}
-                            trailingActions={resolveTrailing(item, team.id, {
-                              canManage: resolvedCanManage,
-                              canDelete: resolvedCanDelete,
-                              isUpdating,
-                              isDeleting,
-                            })}
-                          />
-                        )
-                      })}
-                    </ul>
-                  ) : showOffPageHint ? (
-                    <p className="px-4 py-3 text-sm text-muted-foreground">
-                      该团队已有模型，请翻页查看。
-                    </p>
-                  ) : hasModelsOnServer && teamItems.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-muted-foreground">
-                      该团队已有模型（见其它页或未匹配当前筛选）。
-                    </p>
-                  ) : (
-                    <p className="px-4 py-3 text-sm text-muted-foreground">暂无模型</p>
-                  )}
-                </section>
-              )
-            })}
-            {teams.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                没有匹配的团队
-              </div>
-            ) : null}
-          </div>
-        </ScrollArea>
+                      return (
+                        <GatewayModelListRow
+                          key={`${item.id}:${team.id}`}
+                          item={item}
+                          capabilities={capabilities}
+                          href={getModelHref(team.id, item.id)}
+                          onPreloadNavigate={onPreloadNavigate}
+                          highlighted={
+                            highlightModelId !== undefined && item.id === highlightModelId
+                          }
+                          usageDays={usageDays}
+                          usageRow={usageByRouteName?.get(
+                            buildManagedTeamRouteUsageKey(team.id, item.title)
+                          )}
+                          usageLoading={usageLoading}
+                          batchSelected={selectedIds?.has(item.id) ?? false}
+                          onBatchSelectChange={onBatchSelectChange}
+                          canBatchSelect={(i) => canBatchSelect?.(i) ?? resolvedCanBatchSelect}
+                          canDelete={(i) => canDelete?.(i) ?? resolvedCanDelete}
+                          isConfigManaged={isConfigManaged}
+                          trailingActions={resolveTrailing(item, team.id, {
+                            canManage: resolvedCanManage,
+                            canDelete: resolvedCanDelete,
+                            isUpdating,
+                            isDeleting,
+                          })}
+                        />
+                      )
+                    })}
+                  </ul>
+                ) : showOffPageHint ? (
+                  <p className="px-4 py-3 text-sm text-muted-foreground">
+                    该团队已有模型，请翻页查看。
+                  </p>
+                ) : hasModelsOnServer && teamItems.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-muted-foreground">
+                    该团队已有模型（见其它页或未匹配当前筛选）。
+                  </p>
+                ) : (
+                  <p className="px-4 py-3 text-sm text-muted-foreground">暂无模型</p>
+                )}
+              </section>
+            )
+          })}
+          {teams.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              没有匹配的团队
+            </div>
+          ) : null}
+        </div>
       </TooltipProvider>
 
       <ConfirmAlertDialog

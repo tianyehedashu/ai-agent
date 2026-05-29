@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, TypeVar
 
-RegistryScope = Literal["team", "system", "callable", "requestable"]
+from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+RegistryScope = Literal["team", "system", "callable", "requestable", "system_requestable"]
+
+_T = TypeVar("_T")
 
 
 def exclude_user_scope_credentials_for_registry(registry_scope: RegistryScope) -> bool:
@@ -17,4 +24,25 @@ def exclude_user_scope_credentials_for_registry(registry_scope: RegistryScope) -
     return registry_scope == "team"
 
 
-__all__ = ["RegistryScope", "exclude_user_scope_credentials_for_registry"]
+def is_requestable_registry_scope(registry_scope: RegistryScope) -> bool:
+    """``requestable`` / ``system_requestable``：仅 enabled 且连通性未 failed。"""
+    return registry_scope in ("requestable", "system_requestable")
+
+
+def uses_merged_registry_list(registry_scope: RegistryScope) -> bool:
+    """经租户可见性合并后的列表（非纯 tenant/system 注册表 SQL 路径）。"""
+    return registry_scope in ("callable", "requestable", "system_requestable")
+
+
+def filter_system_registry_rows(rows: Sequence[_T]) -> list[_T]:
+    """合并列表中仅保留 ``registry_kind=system`` 的平台注册行。"""
+    return [row for row in rows if registry_kind_for_merged_row(row) == "system"]
+
+
+__all__ = [
+    "RegistryScope",
+    "exclude_user_scope_credentials_for_registry",
+    "filter_system_registry_rows",
+    "is_requestable_registry_scope",
+    "uses_merged_registry_list",
+]

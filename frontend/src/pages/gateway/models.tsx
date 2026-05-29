@@ -67,7 +67,7 @@ function ModelsPanelFallback(): React.JSX.Element {
 
 export default function GatewayModelsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const { canWrite, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
   const mutateParamsOnTabChange = useCallback(
     (next: GatewayScopeTab, params: URLSearchParams) => {
       params.delete('view')
@@ -88,7 +88,9 @@ export default function GatewayModelsPage(): React.JSX.Element {
   })
   const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''
-  const isTeamRegister = scopeTab === 'shared' && pageView === 'register' && canWrite
+  // 成员可在自己的凭据下注册团队模型；注册表单仅列出本人可绑定的凭据。
+  const canRegisterTeamModel = canWrite || canContribute
+  const isTeamRegister = scopeTab === 'shared' && pageView === 'register' && canRegisterTeamModel
   const isSystemRegister = scopeTab === 'system' && pageView === 'register' && isPlatformAdmin
   const isPersonalRegister = scopeTab === 'personal' && pageView === 'register'
 
@@ -114,7 +116,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
       needsUpdate = true
     }
 
-    if (pageView === 'register' && scopeTab === 'shared' && !canWrite) {
+    if (pageView === 'register' && scopeTab === 'shared' && !canRegisterTeamModel) {
       next.delete('view')
       needsUpdate = true
     }
@@ -127,7 +129,7 @@ export default function GatewayModelsPage(): React.JSX.Element {
     if (needsUpdate) {
       setSearchParams(next, { replace: true })
     }
-  }, [searchParams, setSearchParams, pageView, scopeTab, canWrite, isPlatformAdmin])
+  }, [searchParams, setSearchParams, pageView, scopeTab, canRegisterTeamModel, isPlatformAdmin])
 
   const teamListBackHref =
     scopeTab === 'system'

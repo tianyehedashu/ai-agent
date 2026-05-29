@@ -31,7 +31,7 @@ describe('PaginationControls', () => {
       />
     )
 
-    expect(screen.getByText('共 45 条 · 第 2/3 页')).toBeInTheDocument()
+    expect(screen.getByText('第 21–40 条，共 45 条 · 第 2/3 页')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '上一页' }))
     expect(onPageChange).toHaveBeenCalledWith(1)

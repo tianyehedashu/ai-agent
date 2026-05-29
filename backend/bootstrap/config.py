@@ -212,7 +212,8 @@ class Settings(BaseSettings):
     #   local - 本地/开发：走 ai-agent 自身的邮箱密码 + JWT 登录
     # ========================================================================
     auth_mode: Literal["sso", "local"] = "local"
-    # 与 HiGress giikin-auth-bridge 的 internal_key 对齐；为空时不强制校验（仅本地/调试）
+    # 与 HiGress giikin-auth-bridge 的 internal_key 对齐。
+    # sso 模式下必填（fail-closed）：缺失则任何绕过网关的直连都能伪造 X-Giikin-* 身份。
     giikin_internal_key: SecretStr | None = None
     # HiGress 注入的身份 Header 名（与 giikin-auth-bridge InjectHeaders 一致）
     giikin_user_json_header: str = "X-Giikin-User-JSON"
@@ -233,6 +234,17 @@ class Settings(BaseSettings):
             and self.jwt_secret.get_secret_value() != "jwt-secret-change-in-production"
         ):
             self.jwt_secret_key = self.jwt_secret.get_secret_value()
+
+        # fail-closed：SSO 模式必须配置 internal_key，否则可被绕过网关伪造身份
+        if self.auth_mode == "sso" and (
+            self.giikin_internal_key is None
+            or not self.giikin_internal_key.get_secret_value().strip()
+        ):
+            msg = (
+                "auth_mode='sso' requires giikin_internal_key to be set "
+                "(防止绕过 HiGress 直连伪造 X-Giikin-* 身份)"
+            )
+            raise ValueError(msg)
 
     # ========================================================================
     # 存储配置（已废弃：业务真源为 system_storage_config 表 + /admin/storage）

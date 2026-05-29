@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 import uuid
 
 from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
@@ -26,7 +26,11 @@ from domains.gateway.domain.policies.model_list_policy import (
     summarize_connectivity,
 )
 from domains.gateway.domain.policies.model_registry_scope import (
+    RegistryScope,
     exclude_user_scope_credentials_for_registry,
+    filter_system_registry_rows,
+    is_requestable_registry_scope,
+    uses_merged_registry_list,
 )
 from domains.gateway.domain.registry_model_types import (
     ability_filters_via_sql_capability_column,
@@ -48,8 +52,6 @@ GatewayRegistryModelRow = GatewayModel | SystemGatewayModel
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-RegistryScope = Literal["team", "system", "callable", "requestable"]
 
 DEFAULT_MODEL_LIST_IDS_LIMIT = 5000
 
@@ -431,13 +433,15 @@ async def _list_merged_page(
     merged = await list_merged_models_for_tenant(
         session,
         tenant_id,
-        only_enabled=True if registry_scope == "requestable" else only_enabled,
+        only_enabled=True if is_requestable_registry_scope(registry_scope) else only_enabled,
         provider=query.provider,
         credential_id=query.credential_id,
         user_id=user_id,
         apply_visibility_filter=True,
     )
-    if registry_scope == "requestable":
+    if registry_scope == "system_requestable":
+        merged = filter_system_registry_rows(merged)
+    if is_requestable_registry_scope(registry_scope):
         merged = [row for row in merged if is_connectivity_requestable(row.last_test_status)]
     summary_query = ModelListQuery(
         page_params=query.page_params,
@@ -501,14 +505,16 @@ async def list_gateway_models_page(
         )
     if registry_scope == "system":
         return await _list_system_page(repo, query, only_enabled=only_enabled)
-    return await _list_merged_page(
-        session,
-        tenant_id,
-        query,
-        registry_scope=registry_scope,
-        only_enabled=only_enabled,
-        user_id=user_id,
-    )
+    if uses_merged_registry_list(registry_scope):
+        return await _list_merged_page(
+            session,
+            tenant_id,
+            query,
+            registry_scope=registry_scope,
+            only_enabled=only_enabled,
+            user_id=user_id,
+        )
+    raise ValueError(f"unsupported registry_scope: {registry_scope}")
 
 
 async def list_personal_models_page(
@@ -587,13 +593,15 @@ async def list_gateway_model_ids(
     merged = await list_merged_models_for_tenant(
         session,
         tenant_id,
-        only_enabled=True if registry_scope == "requestable" else only_enabled,
+        only_enabled=True if is_requestable_registry_scope(registry_scope) else only_enabled,
         provider=query.provider,
         credential_id=query.credential_id,
         user_id=user_id,
         apply_visibility_filter=True,
     )
-    if registry_scope == "requestable":
+    if registry_scope == "system_requestable":
+        merged = filter_system_registry_rows(merged)
+    if is_requestable_registry_scope(registry_scope):
         merged = [row for row in merged if is_connectivity_requestable(row.last_test_status)]
     cred_names = await _credential_names_for_search(session, merged, query.q)
     filtered = _filter_rows_in_memory(merged, query, credential_names=cred_names)
