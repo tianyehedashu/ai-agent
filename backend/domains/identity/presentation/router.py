@@ -4,14 +4,10 @@ Identity API - 用户认证接口
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Request, Response, status
+from fastapi import APIRouter, Body, Depends, status
 from pydantic import BaseModel, Field
 
 from domains.identity.application import UserUseCase
-from domains.identity.application.principal_service import ANONYMOUS_USER_COOKIE
-from domains.identity.application.session_migration_service import (
-    AnonymousDataReassignmentService,
-)
 from domains.identity.infrastructure.authentication import (
     auth_backend,
     current_active_user,
@@ -27,7 +23,7 @@ from domains.identity.presentation.schemas import (
     UserRead,
     UserUpdate,
 )
-from libs.identity_bridge_deps import get_login_services, get_user_use_case
+from libs.identity_bridge_deps import get_user_use_case
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,19 +45,10 @@ router.include_router(
 
 @router.get("/me")
 async def get_me(
-    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """
-    获取当前用户信息（支持匿名用户）
-
-    在开发模式下支持匿名用户，生产模式下需要真实认证
-    """
-    logger.info(
-        "GET /api/v1/auth/me - user_id=%s, is_anonymous=%s",
-        current_user.id,
-        current_user.is_anonymous,
-    )
+    """获取当前用户信息（需认证）。"""
+    logger.info("GET /api/v1/auth/me - user_id=%s", current_user.id)
     return current_user
 
 
@@ -103,16 +90,9 @@ async def change_password(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response) -> None:
-    """
-    退出登录
-    清除匿名用户cookie，允许用户重新登录或创建新的匿名会话
-    """
-    response.delete_cookie(
-        key=ANONYMOUS_USER_COOKIE,
-        path="/",
-        samesite="lax",
-    )
+async def logout() -> None:
+    """退出登录（本地 JWT 由前端清除；SSO 登出走 giikin-iam）。"""
+    return None
 
 
 # =============================================================================
@@ -122,36 +102,15 @@ async def logout(response: Response) -> None:
 
 @router.post("/token", response_model=TokenResponse)
 async def login_for_token_pair(
-    request: Request,
     login_data: Annotated[UserLogin, Body()],
-    services: Annotated[
-        tuple[UserUseCase, AnonymousDataReassignmentService],
-        Depends(get_login_services),
-    ],
+    user_use_case: Annotated[UserUseCase, Depends(get_user_use_case)],
 ) -> TokenResponse:
-    """登录并获取 Token 对（access_token + refresh_token）
+    """登录并获取 Token 对（access_token + refresh_token）。
 
-    替代 /jwt/login，返回完整的 token pair 供前端自动续期。
-    同时触发匿名数据迁移（将当前浏览器的匿名会话/任务关联到登录账号）。
+    替代 /jwt/login，返回完整的 token pair 供前端自动续期（local 认证模式）。
     """
-    user_use_case, reassignment_service = services
-
     user = await user_use_case.authenticate(login_data.email, login_data.password)
-
-    # 创建 token pair
     token_pair = await user_use_case.create_token(user)
-
-    # 迁移匿名数据（与 on_after_login 逻辑一致）
-    anonymous_user_id = request.cookies.get(ANONYMOUS_USER_COOKIE)
-    if anonymous_user_id:
-        result = await reassignment_service.migrate(user.id, anonymous_user_id)
-        if result.total > 0:
-            logger.info(
-                "Post-login migration for user %s: %d sessions, %d video_tasks",
-                user.id,
-                result.sessions,
-                result.video_tasks,
-            )
 
     return TokenResponse(
         access_token=token_pair.access_token,

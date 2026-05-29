@@ -10,7 +10,6 @@ function personalModel(
 ): PersonalGatewayModel {
   return {
     user_id: 'user-1',
-    anonymous_user_id: null,
     display_name: 'My Model',
     provider: 'openai',
     model_id: 'gpt-4o',

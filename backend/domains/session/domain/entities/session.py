@@ -17,54 +17,18 @@ class SessionLike(Protocol):
 
 @dataclass(frozen=True)
 class SessionOwner:
-    """会话所有者值对象
+    """会话所有者值对象（已认证注册用户）。"""
 
-    封装会话所有者的身份信息，支持注册用户和匿名用户。
-    使用值对象确保不可变性和类型安全。
-    """
-
-    user_id: uuid.UUID | None = None
-    anonymous_user_id: str | None = None
-
-    def __post_init__(self) -> None:
-        """验证业务规则：必须有且仅有一个用户标识"""
-        if not self.user_id and not self.anonymous_user_id:
-            raise ValueError("Either user_id or anonymous_user_id must be provided")
-        if self.user_id and self.anonymous_user_id:
-            raise ValueError("Cannot provide both user_id and anonymous_user_id")
-
-    @property
-    def is_anonymous(self) -> bool:
-        """是否为匿名用户"""
-        return self.anonymous_user_id is not None
+    user_id: uuid.UUID
 
     @classmethod
     def from_user_id(cls, user_id: str) -> "SessionOwner":
-        """从用户 ID 创建（注册用户）"""
+        """从用户 ID 创建。"""
         return cls(user_id=uuid.UUID(user_id))
 
     @classmethod
-    def from_anonymous_id(cls, anonymous_id: str) -> "SessionOwner":
-        """从匿名 ID 创建（匿名用户）"""
-        return cls(anonymous_user_id=anonymous_id)
-
-    @classmethod
-    def from_principal_id(cls, principal_id: str, is_anonymous: bool) -> "SessionOwner":
-        """从 Principal ID 创建
-
-        Args:
-            principal_id: Principal 的 ID（可能包含 'anonymous-' 前缀）
-            is_anonymous: 是否为匿名用户
-
-        Returns:
-            SessionOwner 实例
-        """
-        if is_anonymous:
-            # 提取匿名用户的真实 ID（去除 'anonymous-' 前缀）
-            # pylint: disable=import-outside-toplevel
-            from domains.identity.domain.types import Principal
-
-            return cls(anonymous_user_id=Principal.extract_anonymous_id(principal_id))
+    def from_principal_id(cls, principal_id: str) -> "SessionOwner":
+        """从 Principal ID 创建。"""
         return cls(user_id=uuid.UUID(principal_id))
 
 
@@ -80,22 +44,6 @@ class SessionDomainService:
         return session.tenant_id == expected_tenant_id
 
     @staticmethod
-    def validate_session_creation(
-        user_id: uuid.UUID | None,
-        anonymous_user_id: str | None,
-    ) -> SessionOwner:
-        """验证会话创建参数
-
-        业务规则：必须有且仅有一个用户标识。
-
-        Args:
-            user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
-
-        Returns:
-            SessionOwner 值对象
-
-        Raises:
-            ValueError: 如果参数不符合业务规则时
-        """
-        return SessionOwner(user_id=user_id, anonymous_user_id=anonymous_user_id)
+    def validate_session_creation(user_id: uuid.UUID) -> SessionOwner:
+        """验证会话创建参数并返回所有者值对象。"""
+        return SessionOwner(user_id=user_id)

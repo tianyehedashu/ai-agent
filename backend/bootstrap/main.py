@@ -97,7 +97,6 @@ from libs.exceptions import (
     ValidationError,
 )
 from libs.exceptions.codes import INTERNAL_ERROR
-from libs.middleware.anonymous_cookie_asgi import AnonymousCookieASGIMiddleware
 from libs.middleware.permission import PermissionContextASGIMiddleware
 from utils.logging import get_logger, setup_logging
 
@@ -205,7 +204,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=[
-        "X-Anonymous-User-Id",
         "Retry-After",
         "x-ratelimit-limit-requests",
         "x-ratelimit-remaining-requests",
@@ -227,7 +225,6 @@ app.add_middleware(
 # 纯 ASGI 中间件（与 SSE/StreamingResponse 兼容；勿改用 @app.middleware + BaseHTTPMiddleware）
 app.add_middleware(PermissionContextASGIMiddleware)
 app.add_middleware(PlatformApiKeyUsageASGIMiddleware)
-app.add_middleware(AnonymousCookieASGIMiddleware)
 
 
 # =============================================================================

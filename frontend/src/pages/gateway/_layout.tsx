@@ -8,6 +8,7 @@ import type React from 'react'
 
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
+import { useSyncGatewayTeamRoute } from '@/features/gateway-teams/use-sync-gateway-team-route'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import {
@@ -107,6 +108,8 @@ export default function GatewayLayout(): React.JSX.Element {
   const location = useLocation()
   const navigate = useNavigate()
   const isGuidePage = /\/gateway\/guide(?:\/|$)/.test(location.pathname)
+
+  useSyncGatewayTeamRoute()
 
   useEffect(() => {
     const target = corruptedFlatGatewayPath(location.pathname)

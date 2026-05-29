@@ -14,8 +14,6 @@ class SessionEntity(Protocol):
     """会话实体协议（用于类型检查）"""
 
     id: uuid.UUID
-    user_id: uuid.UUID | None
-    anonymous_user_id: str | None
     agent_id: uuid.UUID | None
     title: str | None
     status: str
@@ -35,7 +33,6 @@ class SessionRepository(ABC):
     async def create(
         self,
         user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
         agent_id: uuid.UUID | None = None,
         title: str | None = None,
     ) -> SessionEntity:
@@ -43,7 +40,6 @@ class SessionRepository(ABC):
 
         Args:
             user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
             agent_id: 关联的 Agent ID
             title: 会话标题
 
@@ -68,7 +64,6 @@ class SessionRepository(ABC):
     async def find_by_user(
         self,
         user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
         agent_id: uuid.UUID | None = None,
         skip: int = 0,
         limit: int = 20,
@@ -77,7 +72,6 @@ class SessionRepository(ABC):
 
         Args:
             user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
             agent_id: 筛选指定 Agent
             skip: 跳过记录数
             limit: 返回记录数
@@ -171,14 +165,4 @@ class SessionRepository(ABC):
     @abstractmethod
     async def list_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
         """列出指定用户的会话 ID"""
-        ...
-
-    @abstractmethod
-    async def reassign_anonymous_to_user(
-        self,
-        *,
-        user_id: uuid.UUID,
-        anonymous_user_id: str,
-    ) -> int:
-        """把匿名会话归并到正式用户"""
         ...

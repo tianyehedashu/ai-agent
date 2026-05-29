@@ -2,7 +2,7 @@
 User Manager - 用户管理器
 
 提供 FastAPI Users 的用户管理器实现。
-包含登录/注册后的回调钩子，用于匿名数据迁移。
+包含登录/注册后的回调钩子，用于幂等开通 personal team。
 """
 
 import uuid
@@ -12,9 +12,6 @@ from fastapi_users import BaseUserManager, UUIDIDMixin
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from bootstrap.config import settings
-from domains.identity.application.session_migration_service import (
-    AnonymousDataReassignmentService,
-)
 from domains.identity.infrastructure.default_tenant_lifecycle import (
     provision_default_tenant_for_new_user,
 )
@@ -24,9 +21,6 @@ from libs.iam.tenancy import DefaultTenantProvisionerPort
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# 匿名用户 Cookie 名称（与 principal_service 保持一致）
-_ANONYMOUS_USER_COOKIE = "anonymous_user_id"
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -40,50 +34,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_db: SQLAlchemyUserDatabase[User, uuid.UUID],
         *,
         tenant_provisioner: DefaultTenantProvisionerPort | None = None,
-        anonymous_reassignment_service: AnonymousDataReassignmentService | None = None,
     ) -> None:
         super().__init__(user_db)
         self._tenant_provisioner = tenant_provisioner
-        self._anonymous_reassignment_service = anonymous_reassignment_service
 
     def _tenant_provisioner_or_default(self) -> DefaultTenantProvisionerPort:
         return self._tenant_provisioner or get_default_tenant_provisioner()
-
-    async def _migrate_anonymous_data(
-        self,
-        user: User,
-        request: Request | None,
-    ) -> None:
-        """迁移当前浏览器的匿名数据到正式账号
-
-        从请求 Cookie 中获取 anonymous_user_id，如果存在则触发数据迁移。
-        """
-        if request is None:
-            return
-
-        anonymous_user_id = request.cookies.get(_ANONYMOUS_USER_COOKIE)
-        if not anonymous_user_id:
-            return
-
-        if self._anonymous_reassignment_service is None:
-            logger.warning("Anonymous data reassignment service is not configured")
-            return
-
-        result = await self._anonymous_reassignment_service.migrate(user.id, anonymous_user_id)
-        if result.total > 0:
-            logger.info(
-                "Post-auth migration for user %s: %d sessions, %d video_tasks",
-                user.id,
-                result.sessions,
-                result.video_tasks,
-            )
 
     async def on_after_register(
         self,
         user: User,
         request: Request | None = None,
     ) -> None:
-        """用户注册后回调：创建 personal team + 迁移匿名数据"""
+        """用户注册后回调：创建 personal team"""
         logger.info("User %s has registered.", user.id)
 
         await provision_default_tenant_for_new_user(
@@ -94,16 +57,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             log=logger,
         )
 
-        await self._migrate_anonymous_data(user, request)
-
     async def on_after_login(
         self,
         user: User,
         request: Request | None = None,
         response: Response | None = None,
     ) -> None:
-        """用户登录后回调：迁移匿名数据；幂等补齐 personal team（存量修复）。"""
-        await self._migrate_anonymous_data(user, request)
+        """用户登录后回调：幂等补齐 personal team（存量修复）。"""
         await provision_default_tenant_for_new_user(
             session=self.user_db.session,
             provisioner=self._tenant_provisioner_or_default(),

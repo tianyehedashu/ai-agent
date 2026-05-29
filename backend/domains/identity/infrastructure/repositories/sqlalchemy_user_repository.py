@@ -51,6 +51,7 @@ class SQLAlchemyUserRepository(UserRepository):
         name: str,
         role: str = "user",
         is_active: bool = True,
+        giikin_user_id: str | None = None,
     ) -> User:
         """创建用户"""
         user = User(
@@ -59,6 +60,7 @@ class SQLAlchemyUserRepository(UserRepository):
             name=name,
             role=role,
             is_active=is_active,
+            giikin_user_id=giikin_user_id,
         )
         self.db.add(user)
         await self.db.flush()
@@ -68,6 +70,13 @@ class SQLAlchemyUserRepository(UserRepository):
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
         """通过 ID 获取用户"""
         result = await self.db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def get_by_giikin_user_id(self, giikin_user_id: str) -> User | None:
+        """通过 giikin SSO 用户 ID 获取本地用户。"""
+        result = await self.db.execute(
+            select(User).where(User.giikin_user_id == giikin_user_id)
+        )
         return result.scalar_one_or_none()
 
     async def list_by_ids(self, user_ids: Sequence[uuid.UUID]) -> list[User]:

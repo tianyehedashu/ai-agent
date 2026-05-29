@@ -31,16 +31,11 @@ class PermissionContextComposer:
 
     async def compose_from_principal(self, principal: Principal) -> PermissionContext:
         user_id: uuid.UUID | None = None
-        anonymous_id: str | None = None
-        if principal.is_anonymous:
-            anonymous_id = principal.get_anonymous_user_id()
-        else:
-            with suppress(ValueError, AttributeError):
-                user_id = uuid.UUID(principal.id)
+        with suppress(ValueError, AttributeError):
+            user_id = uuid.UUID(principal.id)
         return await build_permission_context_with_team_ids(
             self._db,
             user_id=user_id,
-            anonymous_user_id=anonymous_id,
             role=principal.role,
         )
 
@@ -53,21 +48,6 @@ class PermissionContextComposer:
         return await build_permission_context_with_team_ids(
             self._db,
             user_id=user_id,
-            anonymous_user_id=None,
-            role=role,
-        )
-
-    async def compose_for_owner(
-        self,
-        *,
-        user_id: uuid.UUID | None,
-        anonymous_user_id: str | None,
-        role: str = "user",
-    ) -> PermissionContext:
-        return await build_permission_context_with_team_ids(
-            self._db,
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
             role=role,
         )
 
@@ -81,7 +61,6 @@ class PermissionContextComposer:
         ctx = await build_permission_context_with_team_ids(
             self._db,
             user_id=created_by_user_id,
-            anonymous_user_id=None,
             role="user",
             team_id=tenant_id,
             team_role=team_role,

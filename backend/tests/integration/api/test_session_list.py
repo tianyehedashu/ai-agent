@@ -152,35 +152,13 @@ class TestSessionList:
                 assert field in session, f"Missing field: {field}"
 
     @pytest.mark.asyncio
-    async def test_list_anonymous_user_sessions(self, dev_client: AsyncClient):
-        """测试: 匿名用户获取会话列表"""
-        # Arrange - 创建匿名用户会话
-        create_response = await dev_client.post(
-            "/api/v1/sessions/",
-            json={"title": "Anonymous Session"},
-        )
-        anon_session_id = create_response.json()["id"]
-
-        # Act
-        list_response = await dev_client.get("/api/v1/sessions/")
-        sessions = list_response.json()
-
-        # Assert
-        assert list_response.status_code == status.HTTP_200_OK
-        assert isinstance(sessions, list)
-        # 应该包含刚创建的会话
-        session_ids = [s["id"] for s in sessions]
-        assert anon_session_id in session_ids
-        # 验证所有会话都属于匿名用户
-        for session in sessions:
-            assert session["tenant_id"]
-
-    @pytest.mark.asyncio
     async def test_list_sessions_only_returns_own_sessions(
-        self, dev_client: AsyncClient, auth_headers: dict
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        admin_headers: dict[str, str],
     ):
         """测试: 用户只能看到自己的会话"""
-        # Arrange - 注册用户创建会话
         registered_response = await dev_client.post(
             "/api/v1/sessions/",
             json={"title": "Registered Session"},
@@ -188,27 +166,23 @@ class TestSessionList:
         )
         registered_session_id = registered_response.json()["id"]
 
-        # Arrange - 匿名用户创建会话
-        anonymous_response = await dev_client.post(
+        admin_response = await dev_client.post(
             "/api/v1/sessions/",
-            json={"title": "Anonymous Session"},
+            json={"title": "Admin Session"},
+            headers=admin_headers,
         )
-        anonymous_session_id = anonymous_response.json()["id"]
+        admin_session_id = admin_response.json()["id"]
 
-        # Act - 注册用户获取会话列表
         registered_list = await dev_client.get("/api/v1/sessions/", headers=auth_headers)
         registered_sessions = registered_list.json()
 
-        # Act - 匿名用户获取会话列表
-        anonymous_list = await dev_client.get("/api/v1/sessions/")
-        anonymous_sessions = anonymous_list.json()
+        admin_list = await dev_client.get("/api/v1/sessions/", headers=admin_headers)
+        admin_sessions = admin_list.json()
 
-        # Assert - 注册用户只能看到自己的会话
         registered_ids = [s["id"] for s in registered_sessions]
         assert registered_session_id in registered_ids
-        assert anonymous_session_id not in registered_ids
+        assert admin_session_id not in registered_ids
 
-        # Assert - 匿名用户只能看到自己的会话
-        anonymous_ids = [s["id"] for s in anonymous_sessions]
-        assert anonymous_session_id in anonymous_ids
-        assert registered_session_id not in anonymous_ids
+        admin_ids = [s["id"] for s in admin_sessions]
+        assert admin_session_id in admin_ids
+        assert registered_session_id not in admin_ids

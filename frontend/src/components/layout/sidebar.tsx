@@ -101,16 +101,16 @@ export default function Sidebar(): React.JSX.Element {
   const { isCollapsed, toggle } = useSidebarStore()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const { currentUser } = useUserStore()
-  const isAnonymous = currentUser?.is_anonymous ?? true
+  const isAuthenticated = currentUser !== null
   const isAdmin = currentUser?.role === 'admin'
   const visibleNavigation = useMemo(
     () =>
       navigation.filter((item) => {
         if (item.requiresAdmin && !isAdmin) return false
-        if (item.requiresAuth && isAnonymous) return false
+        if (item.requiresAuth && !isAuthenticated) return false
         return true
       }),
-    [isAnonymous, isAdmin]
+    [isAuthenticated, isAdmin]
   )
 
   // Fetch sessions

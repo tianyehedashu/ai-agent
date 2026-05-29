@@ -14,7 +14,6 @@ from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.gateway.application.scenario_defaults import require_scenario_default
-from domains.identity.domain.types import Principal
 from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
@@ -70,8 +69,7 @@ class TitleUseCase:
 
     def _create_owner_from_user_id(self, user_id: str) -> SessionOwner:
         """从用户 ID 创建 SessionOwner"""
-        is_anonymous = Principal.is_anonymous_id(user_id)
-        return SessionOwner.from_principal_id(user_id, is_anonymous)
+        return SessionOwner.from_principal_id(user_id)
 
     async def _session_belongs_to_owner(self, session: Session, owner: SessionOwner) -> bool:
         expected = await self.session_use_case._tenant_id_for_owner(owner)

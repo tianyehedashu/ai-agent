@@ -44,6 +44,7 @@ class MemoryIndexingService:
         importance: float = 5.0,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        await self.ensure_session_collection()
         collection = memory_collection_name(purpose="session")
         payload = vector_payload_for_memory(
             session_id=session_id,
@@ -67,6 +68,7 @@ class MemoryIndexingService:
         query: str,
         limit: int = 10,
     ) -> list[VectorHit]:
+        await self.ensure_session_collection()
         collection = memory_collection_name(purpose="session")
         query_vector = await self._embedding.embed(query)
         filt = vector_filter_for_session(session_id) if session_id else None

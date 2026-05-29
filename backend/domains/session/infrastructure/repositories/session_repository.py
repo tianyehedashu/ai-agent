@@ -7,10 +7,9 @@ Session Repository - 会话仓储实现
 from datetime import UTC, datetime
 import uuid
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.session.domain.interfaces.session_repository import (
     SessionRepository as SessionRepositoryInterface,
 )
@@ -31,32 +30,21 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
     def model_class(self) -> type[Session]:
         return Session
 
-    async def _resolve_tenant_id(
-        self,
-        *,
-        user_id: uuid.UUID | None,
-        anonymous_user_id: str | None,
-    ) -> uuid.UUID:
-        teams = PersonalTeamProvisioner(self.db)
-        if user_id is not None:
-            return await teams.ensure_personal_team(user_id)
-        if anonymous_user_id:
-            return resolve_anonymous_tenant_id(anonymous_user_id)
-        msg = "Either user_id or anonymous_user_id is required to resolve tenant_id"
-        raise ValueError(msg)
+    async def _resolve_tenant_id(self, *, user_id: uuid.UUID) -> uuid.UUID:
+        return await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
 
     async def create(
         self,
         user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
         agent_id: uuid.UUID | None = None,
         title: str | None = None,
         tenant_id: uuid.UUID | None = None,
     ) -> Session:
-        resolved_tenant = tenant_id or await self._resolve_tenant_id(
-            user_id=user_id,
-            anonymous_user_id=anonymous_user_id,
-        )
+        if tenant_id is None:
+            if user_id is None:
+                raise ValueError("user_id is required to resolve tenant_id")
+            tenant_id = await self._resolve_tenant_id(user_id=user_id)
+        resolved_tenant = tenant_id
         session = Session(
             tenant_id=resolved_tenant,
             agent_id=agent_id,
@@ -73,32 +61,21 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
     async def find_by_user(
         self,
         user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
         agent_id: uuid.UUID | None = None,
         skip: int = 0,
         limit: int = 20,
     ) -> list[Session]:
         ctx = get_permission_context()
-        if ctx and not ctx.is_admin:
-            if user_id is not None and ctx.user_id != user_id:
-                raise ValueError(
-                    f"user_id parameter ({user_id}) does not match PermissionContext ({ctx.user_id}). "
-                    "This may indicate an authorization bug."
-                )
-            if anonymous_user_id is not None and ctx.anonymous_user_id != anonymous_user_id:
-                raise ValueError(
-                    f"anonymous_user_id parameter ({anonymous_user_id}) does not match "
-                    f"PermissionContext ({ctx.anonymous_user_id}). "
-                    "This may indicate an authorization bug."
-                )
+        if ctx and not ctx.is_admin and user_id is not None and ctx.user_id != user_id:
+            raise ValueError(
+                f"user_id parameter ({user_id}) does not match PermissionContext ({ctx.user_id}). "
+                "This may indicate an authorization bug."
+            )
 
-        if user_id is not None:
-            tenant_id = await self._personal_tenant_id(user_id)
-        elif anonymous_user_id:
-            tenant_id = resolve_anonymous_tenant_id(anonymous_user_id)
-        else:
-            msg = "Either user_id or anonymous_user_id is required"
+        if user_id is None:
+            msg = "user_id is required"
             raise ValueError(msg)
+        tenant_id = await self._personal_tenant_id(user_id)
 
         query = select(self.model_class).where(self.model_class.tenant_id == tenant_id)
         if agent_id is not None:
@@ -206,19 +183,3 @@ class SessionRepository(TenantScopedRepositoryBase[Session], SessionRepositoryIn
         tenant_id = await self._personal_tenant_id(user_id)
         result = await self.db.execute(select(Session.id).where(Session.tenant_id == tenant_id))
         return list(result.scalars().all())
-
-    async def reassign_anonymous_to_user(
-        self,
-        *,
-        user_id: uuid.UUID,
-        anonymous_user_id: str,
-    ) -> int:
-        """把匿名 orphan tenant 下的会话迁到正式用户的 personal team。"""
-        anon_tenant = resolve_anonymous_tenant_id(anonymous_user_id)
-        user_tenant = await self._personal_tenant_id(user_id)
-        if anon_tenant == user_tenant:
-            return 0
-        result = await self.db.execute(
-            update(Session).where(Session.tenant_id == anon_tenant).values(tenant_id=user_tenant)
-        )
-        return result.rowcount or 0

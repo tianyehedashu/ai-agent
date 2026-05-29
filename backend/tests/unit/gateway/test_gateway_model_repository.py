@@ -185,6 +185,35 @@ async def test_list_for_tenant_none_returns_system_models(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_sql_catalog_excludes_undeployable_credential(db_session, test_user) -> None:
+    """凭据 inactive 的模型不进入可见目录，与 Router / 代理解析语义一致。"""
+    from domains.gateway.infrastructure.repositories.system_credential_repository import (
+        SystemProviderCredentialRepository,
+    )
+
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+    models = GatewayModelRepository(db_session)
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    adapter = SqlModelCatalogAdapter(db_session)
+    before = await adapter.list_visible_models(billing_team_id=team.id, model_type=None)
+    if not before:
+        pytest.skip("catalog sync produced no global models (no provider API keys)")
+    item_id = before[0]["id"]
+    sys_row = await models.get_system_by_name(item_id)
+    assert sys_row is not None
+    await SystemProviderCredentialRepository(db_session).update(
+        sys_row.credential_id,
+        is_active=False,
+    )
+    await db_session.flush()
+
+    after = await adapter.list_visible_models(billing_team_id=team.id, model_type=None)
+    ids = {i["id"] for i in after}
+    assert item_id not in ids
+
+
+@pytest.mark.asyncio
 async def test_list_for_tenant_filters_by_provider(db_session, test_user) -> None:
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()

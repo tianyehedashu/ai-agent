@@ -12,7 +12,40 @@ export interface UsageStatsBreakdownCredentialsProps {
   className?: string
 }
 
-/** 凭据列：展示父行下全部已返回的凭据 slice（无 Top 分档序号）。 */
+const BAR_COLORS = [
+  'bg-blue-500',
+  'bg-emerald-500',
+  'bg-amber-500',
+  'bg-rose-500',
+  'bg-violet-500',
+  'bg-cyan-500',
+  'bg-orange-500',
+  'bg-pink-500',
+]
+
+function BarSegment({
+  color,
+  width,
+  label,
+  share,
+  requests,
+}: Readonly<{
+  color: string
+  width: string
+  label: string
+  share: number
+  requests: number
+}>): React.JSX.Element {
+  return (
+    <div
+      className={cn('h-full', color)}
+      style={{ width }}
+      title={`${label}: ${(share * 100).toFixed(0)}% · ${requests.toLocaleString()} 次`}
+    />
+  )
+}
+
+/** 凭据列：横向堆叠条 + Top1 标签，替代原先的行中列表。 */
 export function UsageStatsBreakdownCredentials({
   data,
   loading = false,
@@ -28,36 +61,43 @@ export function UsageStatsBreakdownCredentials({
   }
 
   const footerHints = credentialBreakdownFooterHints(data, requestedTopN)
+  const top1 = data.items[0]
 
   return (
     <div className={cn('min-w-0', className)}>
-      <ul className="max-h-28 space-y-1 overflow-y-auto text-xs">
-        {data.items.map((slice) => (
-          <li key={slice.group_key} className="min-w-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate font-medium" title={slice.label}>
-                {slice.label}
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {(slice.share * 100).toFixed(0)}%
-              </span>
-            </div>
-            <div className="text-[10px] tabular-nums text-muted-foreground">
-              {slice.requests.toLocaleString()} 次
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+        {data.items.map((slice, i) => {
+          const width = `${Math.max(1, slice.share * 100).toFixed(1)}%`
+          return (
+            <BarSegment
+              key={slice.group_key}
+              color={BAR_COLORS[i % BAR_COLORS.length]}
+              width={width}
+              label={slice.label}
+              share={slice.share}
+              requests={slice.requests}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs">
+        <span className="truncate font-medium" title={top1.label}>
+          {top1.label}
+        </span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {(top1.share * 100).toFixed(0)}%
+        </span>
+        {data.items.length > 1 ? (
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            +{data.items.length - 1}
+          </span>
+        ) : null}
+      </div>
       {footerHints.map((hint) => (
-        <p key={hint} className="mt-1 text-[10px] text-muted-foreground">
+        <p key={hint} className="mt-0.5 text-[10px] text-muted-foreground">
           {hint}
         </p>
       ))}
-      {data.items.length > 1 && footerHints.length === 0 ? (
-        <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
-          共 {data.items.length} 个凭据
-        </p>
-      ) : null}
     </div>
   )
 }

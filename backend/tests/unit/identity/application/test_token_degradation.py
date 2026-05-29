@@ -4,15 +4,13 @@ Token 过期处理单元测试
 测试 get_principal 在 JWT token 无效/过期时的行为：
 1. 无效 token 返回 401（不再静默降级）
 2. 有效 token 正常返回 Principal
-3. 无 token 在开发模式下走匿名流程
+3. 无 token 返回 401
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
 import pytest
-
-from domains.identity.domain.types import ANONYMOUS_ID_PREFIX
 
 
 @pytest.mark.unit
@@ -59,10 +57,11 @@ class TestTokenExpiry:
             patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
+            mock_settings.is_sso_auth = False
             mock_settings.is_development = True
 
             with pytest.raises(TokenError) as exc_info:
-                await get_principal(request, credentials, mock_db, None)
+                await get_principal(request, credentials, mock_db)
 
             assert exc_info.value.code == "TOKEN_ERROR"
 
@@ -88,10 +87,11 @@ class TestTokenExpiry:
             patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
+            mock_settings.is_sso_auth = False
             mock_settings.is_development = False
 
             with pytest.raises(TokenError) as exc_info:
-                await get_principal(request, credentials, mock_db, None)
+                await get_principal(request, credentials, mock_db)
 
             assert exc_info.value.code == "TOKEN_ERROR"
 
@@ -117,14 +117,13 @@ class TestTokenExpiry:
             patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
+            mock_settings.is_sso_auth = False
             mock_settings.is_development = True
 
             with pytest.raises(TokenError):
-                await get_principal(request, credentials, mock_db, None)
+                await get_principal(request, credentials, mock_db)
 
-        # 不应设置 token_degraded 或 anonymous_user_id
         assert not hasattr(request.state, "token_degraded") or not request.state.token_degraded
-        assert not hasattr(request.state, "anonymous_user_id")
 
     @pytest.mark.asyncio
     async def test_valid_token_returns_principal(self):
@@ -146,6 +145,7 @@ class TestTokenExpiry:
         mock_strategy.read_token = AsyncMock(return_value=mock_user)
 
         with (
+            patch("domains.identity.application.principal_service.settings") as mock_settings,
             patch(
                 "domains.identity.infrastructure.authentication.get_jwt_strategy",
                 return_value=mock_strategy,
@@ -153,28 +153,30 @@ class TestTokenExpiry:
             patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
-            principal = await get_principal(request, credentials, mock_db, None)
+            mock_settings.is_sso_auth = False
+            principal = await get_principal(request, credentials, mock_db)
 
         assert principal is not None
-        assert principal.is_anonymous is False
         assert principal.email == "leo@example.com"
+        assert principal.id == str(mock_user.id)
 
     @pytest.mark.asyncio
-    async def test_no_token_anonymous_in_dev_mode(self):
-        """测试: 开发模式下无 token 走正常匿名流程"""
+    async def test_no_token_returns_401_in_dev_mode(self):
+        """测试: 开发模式下无 token 返回 401"""
         from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import AuthenticationError
 
         request = self._create_mock_request()
         mock_db = AsyncMock()
-        anonymous_id = str(uuid.uuid4())
 
         with patch("domains.identity.application.principal_service.settings") as mock_settings:
+            mock_settings.is_sso_auth = False
             mock_settings.is_development = True
-            principal = await get_principal(request, None, mock_db, anonymous_id)
 
-        assert principal is not None
-        assert principal.is_anonymous is True
-        assert principal.id.startswith(ANONYMOUS_ID_PREFIX)
+            with pytest.raises(AuthenticationError) as exc_info:
+                await get_principal(request, None, mock_db)
+
+            assert exc_info.value.code == "AUTHENTICATION_ERROR"
 
     @pytest.mark.asyncio
     async def test_no_token_returns_401_in_production(self):
@@ -186,9 +188,10 @@ class TestTokenExpiry:
         mock_db = AsyncMock()
 
         with patch("domains.identity.application.principal_service.settings") as mock_settings:
+            mock_settings.is_sso_auth = False
             mock_settings.is_development = False
 
             with pytest.raises(AuthenticationError) as exc_info:
-                await get_principal(request, None, mock_db, None)
+                await get_principal(request, None, mock_db)
 
             assert exc_info.value.code == "AUTHENTICATION_ERROR"

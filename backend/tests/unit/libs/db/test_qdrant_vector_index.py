@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -40,3 +41,29 @@ async def test_search_vectors_uses_query_points() -> None:
     assert len(hits) == 1
     assert hits[0].id == "pt-1"
     assert hits[0].text == "hello memory"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ensure_collection_recreates_on_dimension_mismatch() -> None:
+    index = QdrantVectorIndex(url="http://localhost:6333")
+    existing = SimpleNamespace(
+        config=SimpleNamespace(params=SimpleNamespace(vectors=SimpleNamespace(size=512)))
+    )
+    coll = SimpleNamespace(name="session_memories")
+    client = AsyncMock()
+    client.get_collections = AsyncMock(
+        return_value=MagicMock(collections=[coll])
+    )
+    client.get_collection = AsyncMock(return_value=existing)
+    client.delete_collection = AsyncMock()
+    client.create_collection = AsyncMock()
+    index._client = client
+
+    await index.ensure_collection("session_memories", dimension=1024)
+
+    client.delete_collection.assert_awaited_once_with(collection_name="session_memories")
+    client.create_collection.assert_awaited_once()
+    kwargs = client.create_collection.await_args.kwargs
+    assert kwargs["collection_name"] == "session_memories"
+    assert kwargs["vectors_config"].size == 1024

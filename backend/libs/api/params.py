@@ -8,7 +8,21 @@ import uuid
 
 from libs.exceptions import ValidationError
 
-__all__ = ["parse_optional_uuid"]
+__all__ = ["coerce_optional_uuid", "parse_optional_uuid"]
+
+
+def coerce_optional_uuid(value: object) -> uuid.UUID | None:
+    """Pydantic ``mode='before'``：JSON 字符串 UUID → ``uuid.UUID``（兼容 strict 模型）。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    if isinstance(value, str):
+        try:
+            return uuid.UUID(value.strip())
+        except ValueError as exc:
+            raise ValueError("must be a valid UUID") from exc
+    raise ValueError("must be a UUID string")
 
 
 def parse_optional_uuid(

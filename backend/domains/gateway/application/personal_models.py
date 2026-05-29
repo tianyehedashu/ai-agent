@@ -61,7 +61,6 @@ def gateway_model_to_personal_list_item(row: GatewayModel) -> dict[str, Any]:
     return {
         "id": str(row.id),
         "user_id": None,
-        "anonymous_user_id": None,
         "display_name": display_name,
         "provider": row.provider,
         "model_id": row.real_model,

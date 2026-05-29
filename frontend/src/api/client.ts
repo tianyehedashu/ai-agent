@@ -1,13 +1,13 @@
 /**
  * API Client
  *
- * 认证策略（优先级从高到低）：
- * 1. JWT Token (Authorization: Bearer) - 已登录用户
- * 2. Cookie (anonymous_user_id) - 匿名用户（浏览器自动发送）
- * 3. Header (X-Anonymous-User-Id) - 匿名用户备用方案（Cookie 丢失时）
+ * 认证策略：
+ * - local 模式：JWT Token (Authorization: Bearer)，token 由 authStore 管理。
+ * - sso 模式：身份由 HiGress(giikin-auth-bridge) 经 guard_token Cookie 注入，
+ *   前端无本地 token，请求统一携带 Cookie（credentials: 'include'）。
  *
  * 状态管理：
- * - Token 和 anonymousUserId 由 authStore (Zustand) 统一管理
+ * - Token 由 authStore (Zustand) 统一管理
  * - apiClient 通过 authStore.getState() 获取认证信息
  * - 避免直接操作 localStorage，保持状态一致性
  *
@@ -36,10 +36,8 @@ import { shouldInvalidateGlobalSession } from '@/lib/session-invalidation'
 import {
   getAuthToken,
   getRefreshToken,
-  getAnonymousUserId,
   setAuthToken,
   setRefreshToken,
-  setAnonymousUserId,
   clearAuth,
 } from '@/stores/auth'
 // 开发环境为空（使用 vite proxy），生产环境按需配置
@@ -135,21 +133,6 @@ class ApiClient {
    */
   setToken(token: string | null): void {
     setAuthToken(token)
-  }
-
-  /**
-   * 设置匿名用户 ID（委托给 authStore）
-   * 用于 Cookie 丢失时的备用认证
-   */
-  setAnonymousUserId(id: string | null): void {
-    setAnonymousUserId(id)
-  }
-
-  /**
-   * 获取当前匿名用户 ID
-   */
-  getAnonymousUserId(): string | null {
-    return getAnonymousUserId()
   }
 
   /**
@@ -265,15 +248,10 @@ class ApiClient {
       ? { ...defaultHeaders, ...customHeaders }
       : defaultHeaders
 
-    // 从 authStore 获取认证信息
+    // local 模式携带 JWT；sso 模式靠 Cookie（credentials: 'include'）
     const token = getAuthToken()
-    const anonymousUserId = getAnonymousUserId()
-
-    // 认证策略：优先使用 Token，其次使用匿名用户 ID
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (anonymousUserId) {
-      headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
     const response = await fetch(url, {
@@ -281,12 +259,6 @@ class ApiClient {
       headers,
       credentials: 'include',
     })
-
-    // 从响应头中提取并保存 anonymous_user_id
-    const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
-    if (responseAnonymousId && !token) {
-      setAnonymousUserId(responseAnonymousId)
-    }
 
     if (!response.ok) {
       const errorBody: unknown = await response.json().catch(() => ({ message: 'Unknown error' }))
@@ -374,9 +346,7 @@ class ApiClient {
     const url = this.buildUrl(path)
     const headers: Record<string, string> = {}
     const token = getAuthToken()
-    const anonymousUserId = getAnonymousUserId()
     if (token) headers['Authorization'] = `Bearer ${token}`
-    else if (anonymousUserId) headers['X-Anonymous-User-Id'] = anonymousUserId
 
     const response = await fetch(url, {
       method: 'POST',
@@ -384,11 +354,6 @@ class ApiClient {
       body: formData,
       credentials: 'include',
     })
-
-    const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
-    if (responseAnonymousId && !token) {
-      setAnonymousUserId(responseAnonymousId)
-    }
 
     if (!response.ok) {
       const errorBody: unknown = await response
@@ -417,15 +382,10 @@ class ApiClient {
       Accept: 'text/event-stream',
     }
 
-    // 从 authStore 获取认证信息
+    // local 模式携带 JWT；sso 模式靠 Cookie
     const token = getAuthToken()
-    const anonymousUserId = getAnonymousUserId()
-
-    // 认证策略：优先使用 Token，其次使用匿名用户 ID
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    } else if (anonymousUserId) {
-      headers['X-Anonymous-User-Id'] = anonymousUserId
     }
 
     try {
@@ -436,12 +396,6 @@ class ApiClient {
         signal,
         credentials: 'include',
       })
-
-      // 从响应头中提取并保存 anonymous_user_id
-      const responseAnonymousId = response.headers.get('X-Anonymous-User-Id')
-      if (responseAnonymousId && !token) {
-        setAnonymousUserId(responseAnonymousId)
-      }
 
       if (!response.ok) {
         if (response.status === 401) {

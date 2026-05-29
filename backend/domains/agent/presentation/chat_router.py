@@ -58,7 +58,6 @@ async def _assert_checkpoint_session_accessible(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
 
@@ -213,7 +212,7 @@ async def chat(
     使用 Server-Sent Events (SSE) 返回事件流
     """
 
-    if not current_user.is_anonymous and request.gateway_team_id is not None:
+    if request.gateway_team_id is not None:
         await merge_optional_gateway_team(
             db,
             user_id=uuid.UUID(current_user.id),
@@ -285,7 +284,7 @@ async def resume_execution(
     用于 Human-in-the-Loop 场景
     """
 
-    if not current_user.is_anonymous and request.gateway_team_id is not None:
+    if request.gateway_team_id is not None:
         await merge_optional_gateway_team(
             db,
             user_id=uuid.UUID(current_user.id),

@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.agent.infrastructure.models.agent import Agent
 from domains.agent.infrastructure.repositories import AgentRepository
-from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.identity.infrastructure.models.user import User
 from domains.session.infrastructure.models import Session
 from domains.session.infrastructure.repositories import SessionRepository
@@ -30,24 +29,6 @@ async def _add_session_for_user(
     title: str,
 ) -> tuple[Session, uuid.UUID]:
     tenant_id = await PersonalTeamProvisioner(db_session).ensure_personal_team(user.id)
-    session = Session(
-        tenant_id=tenant_id,
-        title=title,
-        status="active",
-        message_count=0,
-        token_count=0,
-    )
-    db_session.add(session)
-    return session, tenant_id
-
-
-async def _add_session_for_anonymous(
-    db_session: AsyncSession,
-    anonymous_cookie_id: str,
-    *,
-    title: str,
-) -> tuple[Session, uuid.UUID]:
-    tenant_id = resolve_anonymous_tenant_id(anonymous_cookie_id)
     session = Session(
         tenant_id=tenant_id,
         title=title,
@@ -155,34 +136,6 @@ class TestSessionRepositoryPermissions:
             assert await repository.get_by_id(session1.id) is not None
             listed = await repository.find_by_user(user_id=admin_user.id)
             assert session1.id not in {s.id for s in listed}
-        finally:
-            clear_permission_context()
-
-    @pytest.mark.asyncio
-    async def test_anonymous_user_filters_by_tenant(self, db_session: AsyncSession):
-        anonymous_id1 = "anon-1"
-        anonymous_id2 = "anon-2"
-
-        session1, tenant1 = await _add_session_for_anonymous(
-            db_session, anonymous_id1, title="Anon 1 Session"
-        )
-        await _add_session_for_anonymous(db_session, anonymous_id2, title="Anon 2 Session")
-        await db_session.commit()
-
-        ctx = PermissionContext(
-            anonymous_user_id=anonymous_id1,
-            role="user",
-            team_ids=frozenset({tenant1}),
-        )
-        set_permission_context(ctx)
-
-        try:
-            repository = SessionRepository(db_session)
-            sessions = await repository.find_by_user(anonymous_user_id=anonymous_id1)
-
-            assert len(sessions) == 1
-            assert sessions[0].id == session1.id
-            assert sessions[0].tenant_id == tenant1
         finally:
             clear_permission_context()
 

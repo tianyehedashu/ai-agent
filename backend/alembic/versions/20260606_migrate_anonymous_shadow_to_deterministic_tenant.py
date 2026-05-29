@@ -13,8 +13,6 @@ import uuid
 import sqlalchemy as sa
 
 from alembic import op
-from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
-from domains.identity.domain.orphan_tenant_tables import TENANT_SCOPED_TABLES_FOR_MIGRATION
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -23,6 +21,36 @@ revision: str = "20260606_anon_tenant"
 down_revision: str | None = "20260605_sys_cred_models"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+# 历史迁移自包含：匿名能力已移除，此处内联当时的常量/算法以保持本迁移可重放。
+_ANONYMOUS_TENANT_NAMESPACE = uuid.UUID("01932f8a-7b3c-7000-8000-000000000001")
+_ANONYMOUS_ID_PREFIX = "anonymous-"
+TENANT_SCOPED_TABLES_FOR_MIGRATION: tuple[str, ...] = (
+    "sessions",
+    "agents",
+    "video_gen_tasks",
+    "product_image_gen_tasks",
+    "product_info_jobs",
+    "product_info_prompt_templates",
+    "memories",
+    "mcp_servers",
+    "api_keys",
+    "api_key_gateway_grants",
+    "gateway_models",
+    "gateway_routes",
+    "gateway_virtual_keys",
+    "gateway_alert_rules",
+    "provider_credentials",
+    "gateway_alert_events",
+)
+
+
+def resolve_anonymous_tenant_id(cookie_id: str) -> uuid.UUID:
+    """由匿名 cookie ID 确定性解析 orphan tenant_id（历史迁移内联，UUID v5）。"""
+    normalized = cookie_id.strip()
+    if normalized.startswith(_ANONYMOUS_ID_PREFIX):
+        normalized = normalized[len(_ANONYMOUS_ID_PREFIX) :]
+    return uuid.uuid5(_ANONYMOUS_TENANT_NAMESPACE, normalized)
 
 
 def _existing_tenant_tables(conn: sa.Connection) -> tuple[str, ...]:

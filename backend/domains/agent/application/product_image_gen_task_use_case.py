@@ -54,8 +54,7 @@ async def _generate_images_background(
     task_id: uuid.UUID,
     prompts: list[dict[str, Any]],
     image_generator: ImageGenerator,
-    user_id: uuid.UUID | None,
-    anonymous_user_id: str | None,
+    user_id: uuid.UUID,
     api_key_override: str | None = None,
     api_base_override: str | None = None,
 ) -> None:
@@ -63,12 +62,7 @@ async def _generate_images_background(
     session_factory = get_session_factory()
     async with session_factory() as db:
         composer = PermissionContextComposer(db)
-        composer.install(
-            await composer.compose_for_owner(
-                user_id=user_id,
-                anonymous_user_id=anonymous_user_id,
-            )
-        )
+        composer.install(await composer.compose_for_user_id(user_id))
         from domains.agent.application.listing_studio_image_factory import (  # pylint: disable=import-outside-toplevel
             create_listing_studio_image_service,
         )
@@ -218,8 +212,7 @@ class ProductImageGenTaskUseCase:
 
     async def create(
         self,
-        user_id: uuid.UUID | None,
-        anonymous_user_id: str | None,
+        user_id: uuid.UUID,
         job_id: uuid.UUID | None = None,
         prompts: list | None = None,
         api_key_override: str | None = None,
@@ -246,7 +239,6 @@ class ProductImageGenTaskUseCase:
                     prompts=prompts,
                     image_generator=self.image_generator,
                     user_id=user_id,
-                    anonymous_user_id=anonymous_user_id,
                     api_key_override=api_key_override,
                     api_base_override=api_base_override,
                 )

@@ -42,6 +42,7 @@ class UserRepository(ABC):
         name: str,
         role: str = "user",
         is_active: bool = True,
+        giikin_user_id: str | None = None,
     ) -> UserEntity:
         """创建用户"""
         ...
@@ -49,6 +50,11 @@ class UserRepository(ABC):
     @abstractmethod
     async def get_by_id(self, user_id: uuid.UUID) -> UserEntity | None:
         """通过 ID 获取用户"""
+        ...
+
+    @abstractmethod
+    async def get_by_giikin_user_id(self, giikin_user_id: str) -> UserEntity | None:
+        """通过 giikin SSO 用户 ID 获取本地用户。"""
         ...
 
     @abstractmethod

@@ -456,7 +456,7 @@ describe('ApiClient', () => {
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           ok: true,
-          json: () => Promise.resolve({ id: '123', is_anonymous: false }),
+          json: () => Promise.resolve({ id: '123' }),
         })
       )
 

@@ -93,7 +93,6 @@ class VideoTaskResponse(BaseModel):
     id: str
     tenant_id: str | None = None
     user_id: str | None = None
-    anonymous_user_id: str | None = None
     session_id: str | None = None
     workflow_id: str | None
     run_id: str | None

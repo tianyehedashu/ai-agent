@@ -6,8 +6,6 @@ import uuid
 from sqlalchemy import update
 
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
-from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
-from domains.tenancy.application.personal_team_provisioner import PersonalTeamProvisioner
 from libs.db.base_repository import TenantScopedRepositoryBase
 from libs.db.tenant_resolve import resolve_tenant_id_for_write
 
@@ -59,19 +57,3 @@ class VideoGenTaskRepository(TenantScopedRepositoryBase[VideoGenTask]):
     async def update_by_id(self, task_id: uuid.UUID, values: dict[str, Any]) -> None:
         q = update(VideoGenTask).where(VideoGenTask.id == task_id).values(**values)
         await self.db.execute(q)
-
-    async def reassign_anonymous_to_user(
-        self,
-        *,
-        user_id: uuid.UUID,
-        anonymous_user_id: str,
-    ) -> int:
-        anon_tenant = resolve_anonymous_tenant_id(anonymous_user_id)
-        user_tenant = await PersonalTeamProvisioner(self.db).ensure_personal_team(user_id)
-        stmt = (
-            update(VideoGenTask)
-            .where(VideoGenTask.tenant_id == anon_tenant)
-            .values(tenant_id=user_tenant)
-        )
-        result = await self.db.execute(stmt)
-        return int(result.rowcount or 0)

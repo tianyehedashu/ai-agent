@@ -102,18 +102,13 @@ class TokenResponse(BaseModel):
 
 
 class CurrentUser(BaseModel):
-    """当前登录用户
-
-    用于依赖注入，表示已认证的用户信息
-    支持注册用户和匿名用户
-    """
+    """当前登录用户（依赖注入用，表示已认证用户）。"""
 
     model_config = ConfigDict(frozen=True)
 
     id: str
     email: str
     name: str
-    is_anonymous: bool = False
     role: str = "user"  # 用户角色：admin, user, viewer
     vendor_creator_id: int | None = None  # 厂商系统操作用户 ID
 

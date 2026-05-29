@@ -3,7 +3,11 @@ import { describe, expect, test } from 'vitest'
 import { ApiError } from '@/api/errors'
 
 import { messageFromApiErrorBody, parseFastApiDetail } from './fastapi-error-detail'
-import { formatGatewayManagementError } from './gateway-api-error'
+import {
+  formatGatewayManagementError,
+  formatGatewayQueryError,
+  isGatewayTeamAccessError,
+} from './gateway-api-error'
 
 describe('fastapi-error-detail', () => {
   test('parseFastApiDetail handles nested OpenAI error object', () => {
@@ -25,5 +29,15 @@ describe('gateway-api-error', () => {
   test('formatGatewayManagementError maps generic 404 Not Found', () => {
     const err = new ApiError(404, 'Not Found')
     expect(formatGatewayManagementError(err)).toContain('接口不存在')
+  })
+
+  test('formatGatewayQueryError maps TEAM_NOT_FOUND', () => {
+    const err = new ApiError(404, '团队不存在: abc', { code: 'TEAM_NOT_FOUND' })
+    expect(formatGatewayQueryError(err)).toBe('团队不存在: abc')
+  })
+
+  test('isGatewayTeamAccessError detects team not found message', () => {
+    const err = new ApiError(404, '团队不存在: xyz')
+    expect(isGatewayTeamAccessError(err)).toBe(true)
   })
 })

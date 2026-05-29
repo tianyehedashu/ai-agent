@@ -250,7 +250,7 @@ async def list_available_models_for_chat(
         effective_type = resolved_registry_ability(query)
     catalog = get_model_catalog_adapter(db)
     user_id: uuid.UUID | None = None
-    if current_user is not None and not current_user.is_anonymous:
+    if current_user is not None:
         user_id = uuid.UUID(current_user.id)
         await merge_optional_gateway_team(
             db,

@@ -61,8 +61,8 @@ const apiKeyListSkeleton = (
 
 export function ApiKeyTab(): React.ReactElement {
   const queryClient = useQueryClient()
-  const isAnonymous = useUserStore((state) => state.currentUser?.is_anonymous ?? true)
-  const teamNameById = useGatewayTeamNameMap(!isAnonymous)
+  const isAuthenticated = useUserStore((state) => state.currentUser !== null)
+  const teamNameById = useGatewayTeamNameMap(isAuthenticated)
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editKeyId, setEditKeyId] = useState<string | null>(null)
@@ -75,7 +75,7 @@ export function ApiKeyTab(): React.ReactElement {
   const { data: apiKeys = [], isLoading } = useQuery({
     queryKey: ['api-keys', page],
     queryFn: () => apiKeyApi.list({ skip: page * PAGE_SIZE, limit: PAGE_SIZE }),
-    enabled: !isAnonymous,
+    enabled: isAuthenticated,
   })
 
   const editKey = useMemo(
@@ -169,7 +169,7 @@ export function ApiKeyTab(): React.ReactElement {
     [revealMutation]
   )
 
-  if (isAnonymous) {
+  if (!isAuthenticated) {
     return (
       <Card>
         <CardHeader>

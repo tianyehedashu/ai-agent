@@ -26,22 +26,8 @@ class TestPermissionContext:
         ctx = PermissionContext(user_id=user_id, role="user")
 
         assert ctx.user_id == user_id
-        assert ctx.anonymous_user_id is None
         assert ctx.role == "user"
         assert ctx.is_admin is False
-        assert ctx.is_anonymous is False
-        assert ctx.has_identity is True
-
-    def test_create_anonymous_user_context(self):
-        """测试: 创建匿名用户权限上下文"""
-        anonymous_id = "test-anonymous-id"
-        ctx = PermissionContext(anonymous_user_id=anonymous_id, role="user")
-
-        assert ctx.user_id is None
-        assert ctx.anonymous_user_id == anonymous_id
-        assert ctx.role == "user"
-        assert ctx.is_admin is False
-        assert ctx.is_anonymous is True
         assert ctx.has_identity is True
 
     def test_create_admin_context(self):
@@ -52,17 +38,14 @@ class TestPermissionContext:
         assert ctx.user_id == user_id
         assert ctx.role == "admin"
         assert ctx.is_admin is True
-        assert ctx.is_anonymous is False
 
     def test_empty_context(self):
         """测试: 空权限上下文"""
         ctx = PermissionContext()
 
         assert ctx.user_id is None
-        assert ctx.anonymous_user_id is None
         assert ctx.role == "user"
         assert ctx.is_admin is False
-        assert ctx.is_anonymous is False
         assert ctx.has_identity is False
 
     def test_context_is_frozen(self):

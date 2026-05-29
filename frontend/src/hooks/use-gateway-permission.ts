@@ -60,7 +60,7 @@ export function useGatewayPermission(): GatewayPermissionFlags {
     const isMember = isAdmin || teamRole === TeamRole.MEMBER
     const canViewMargin = isPlatformAdmin
     return {
-      isAuthenticated: !(currentUser?.is_anonymous ?? true),
+      isAuthenticated: currentUser !== null,
       isPlatformAdmin,
       isPlatformViewer,
       teamRole,

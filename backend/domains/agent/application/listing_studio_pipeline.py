@@ -43,8 +43,7 @@ async def _finalize_listing_studio_pipeline_job(job_id: UUID) -> None:
 
 async def run_pipeline_async(
     job_id: UUID,
-    user_id: UUID | None,
-    anonymous_user_id: str | None,
+    user_id: UUID,
     inputs: dict[str, Any],
     steps: list[str] | None = None,
     model_overrides: dict[str, str] | None = None,
@@ -54,12 +53,7 @@ async def run_pipeline_async(
     try:
         async with get_session_context() as db:
             composer = PermissionContextComposer(db)
-            composer.install(
-                await composer.compose_for_owner(
-                    user_id=user_id,
-                    anonymous_user_id=anonymous_user_id,
-                )
-            )
+            composer.install(await composer.compose_for_user_id(user_id))
         order_to_run = CAPABILITY_ORDER
         if steps:
             order_to_run = [(o, c) for o, c in order_to_run if c in steps]

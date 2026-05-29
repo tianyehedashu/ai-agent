@@ -18,7 +18,6 @@ async def test_compose_from_principal_sets_team_ids(db_session) -> None:
         id=str(user_id),
         email="u@example.com",
         name="U",
-        is_anonymous=False,
         role="user",
     )
     ctx = await composer.compose_from_principal(principal)

@@ -226,14 +226,13 @@ async def create_template(
     prompt_service: ListingStudioPromptTemplateUseCase = Depends(get_listing_studio_prompt_service),
 ) -> dict[str, Any]:
     """保存为用户模板"""
-    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
+    owner = SessionOwner.from_principal_id(current_user.id)
     return await prompt_service.create_template(
         capability_id=capability_id,
         name=body.name,
         content=body.content,
         prompts=body.prompts,
         user_id=owner.user_id,
-        anonymous_user_id=owner.anonymous_user_id,
     )
 
 
@@ -288,7 +287,7 @@ async def run_pipeline(
     """一键异步执行：创建 Job，后台按依赖分层执行，立即返回 job_id。"""
     if body is None:
         body = RunPipelineBody(model_overrides=None)
-    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
+    owner = SessionOwner.from_principal_id(current_user.id)
     session_uuid = parse_optional_uuid(body.session_id, "session_id")
 
     job = await service.create_job(
@@ -303,7 +302,6 @@ async def run_pipeline(
         run_pipeline_async(
             job_id=uuid.UUID(job_id),
             user_id=owner.user_id,
-            anonymous_user_id=owner.anonymous_user_id,
             inputs=body.inputs or {},
             steps=body.steps,
             model_overrides=body.model_overrides,
@@ -364,7 +362,7 @@ async def create_image_gen_task(
         allowed_image_gen_system_ids=await model_resolution_service.visible_image_gen_system_model_ids(),
     )
 
-    owner = SessionOwner.from_principal_id(current_user.id, current_user.is_anonymous)
+    owner = SessionOwner.from_principal_id(current_user.id)
     job_uuid = parse_optional_uuid(body.job_id, "job_id")
 
     provider = body.provider or resolved.provider
@@ -380,7 +378,6 @@ async def create_image_gen_task(
 
     return await image_gen_service.create(
         user_id=owner.user_id,
-        anonymous_user_id=owner.anonymous_user_id,
         job_id=job_uuid,
         prompts=prompts,
         api_key_override=resolved.api_key,

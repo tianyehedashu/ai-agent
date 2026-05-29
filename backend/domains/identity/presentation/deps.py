@@ -10,17 +10,15 @@ Identity Presentation Dependencies - 身份认证依赖注入
 from typing import Annotated
 import uuid
 
-from fastapi import Cookie, Depends, Request
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application import (
-    ANONYMOUS_USER_COOKIE,
     get_principal,
     get_principal_optional,
 )
 from domains.identity.application.permission_context_composer import PermissionContextComposer
-from domains.identity.domain.types import Principal
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
 from libs.exceptions import AuthenticationError, PermissionDeniedError
@@ -29,7 +27,6 @@ from libs.iam.permission_context import get_permission_context
 
 __all__ = [
     "ADMIN_ROLE",
-    "ANONYMOUS_USER_COOKIE",
     "AdminUser",
     "AuthUser",
     "OptionalAuthUser",
@@ -47,6 +44,16 @@ __all__ = [
 security = HTTPBearer(auto_error=False)
 
 
+def _to_current_user(principal: object) -> CurrentUser:
+    return CurrentUser(
+        id=principal.id,
+        email=principal.email,
+        name=principal.name,
+        role=principal.role,
+        vendor_creator_id=principal.vendor_creator_id,
+    )
+
+
 # =============================================================================
 # 认证依赖
 # =============================================================================
@@ -56,18 +63,10 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-    anonymous_user_id: str | None = Cookie(default=None, alias=ANONYMOUS_USER_COOKIE),
 ) -> CurrentUser:
     """获取当前用户并设置权限上下文"""
-    principal = await get_principal(request, credentials, db, anonymous_user_id)
-    current_user = CurrentUser(
-        id=principal.id,
-        email=principal.email,
-        name=principal.name,
-        is_anonymous=principal.is_anonymous,
-        role=principal.role,
-        vendor_creator_id=principal.vendor_creator_id,
-    )
+    principal = await get_principal(request, credentials, db)
+    current_user = _to_current_user(principal)
 
     composer = PermissionContextComposer(db)
     composer.install(await composer.compose_from_principal(principal))
@@ -78,59 +77,25 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: AsyncSession = Depends(get_db),
-) -> CurrentUser | None:
-    """获取当前用户（可选）"""
-    principal = await get_principal_optional(credentials, db)
-    if not principal:
-        return None
-    return CurrentUser(
-        id=principal.id,
-        email=principal.email,
-        name=principal.name,
-        is_anonymous=principal.is_anonymous,
-        role=principal.role,
-        vendor_creator_id=principal.vendor_creator_id,
-    )
-
-
-async def get_current_user_optional_with_anonymous(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-    anonymous_user_id: str | None = Cookie(default=None, alias=ANONYMOUS_USER_COOKIE),
 ) -> CurrentUser | None:
-    """获取当前用户（可选，开发环境支持匿名，生产环境无凭证时返回 None 不抛 401）
-
-    用于需要公开访问的接口（如可用模型列表），无认证时返回 None 而非 401。
-    """
-    try:
-        principal = await get_principal(request, credentials, db, anonymous_user_id)
-    except AuthenticationError:
+    """获取当前用户（可选，无身份返回 None 不抛 401）。"""
+    principal = await get_principal_optional(request, credentials, db)
+    if not principal:
         return None
 
-    current_user = CurrentUser(
-        id=principal.id,
-        email=principal.email,
-        name=principal.name,
-        is_anonymous=principal.is_anonymous,
-        role=principal.role,
-        vendor_creator_id=principal.vendor_creator_id,
-    )
-
+    current_user = _to_current_user(principal)
     composer = PermissionContextComposer(db)
     composer.install(await composer.compose_from_principal(principal))
-
     return current_user
 
 
 async def require_auth(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """要求必须认证（非匿名）"""
-    if current_user.is_anonymous:
-        raise AuthenticationError("Authentication required")
+    """要求必须认证。"""
     return current_user
 
 
@@ -176,14 +141,12 @@ def require_role(*roles: str):
 AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 RequiredAuthUser = Annotated[CurrentUser, Depends(require_auth)]
 OptionalUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
-OptionalAuthUser = Annotated[CurrentUser | None, Depends(get_current_user_optional_with_anonymous)]
+OptionalAuthUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
 
 
 def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
     """从当前用户获取 UUID（用于需要注册用户 ID 的 API）"""
-    if current_user.is_anonymous or Principal.is_anonymous_id(current_user.id):
-        raise AuthenticationError("Authentication required")
     try:
         return uuid.UUID(current_user.id)
     except ValueError as exc:

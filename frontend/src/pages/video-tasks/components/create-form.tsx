@@ -27,7 +27,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { VIDEO_TASK_MARKETPLACES, VIDEO_MODELS, getVideoDurations } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import { getAnonymousUserId } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { useVideoSettingsStore } from '@/stores/video-settings'
 import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
@@ -72,7 +71,7 @@ export default function VideoTaskCreateForm({
   const { toast } = useToast()
 
   const currentUser = useUserStore((s) => s.currentUser)
-  const userKey = currentUser?.id ?? getAnonymousUserId() ?? 'default'
+  const userKey = currentUser?.id ?? 'default'
   const { setSystemPrompt, clearSystemPrompt } = useVideoSettingsStore()
   const systemPrompt = useVideoSettingsStore((s) => s.userPrompts[userKey] ?? '')
   const handleSystemPromptChange = useCallback(

@@ -78,11 +78,6 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                     username=getattr(user, "username", None),
                 )
 
-        # 匿名用户
-        anonymous_id = getattr(request.state, "anonymous_user_id", None)
-        if anonymous_id:
-            set_user_context(user_id=f"anonymous:{anonymous_id}")
-
     def _add_request_breadcrumb(self, request: Request) -> None:
         """添加请求面包屑到 Sentry"""
         if not is_sentry_initialized():

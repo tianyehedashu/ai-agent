@@ -205,6 +205,25 @@ class Settings(BaseSettings):
     oidc_audience: str | None = None
     oauth2_introspection_url: str | None = None
 
+    # ========================================================================
+    # 认证模式
+    #   sso   - 生产：信任 HiGress(giikin-auth-bridge) 注入的 X-Giikin-* 身份 Header，
+    #           校验 X-Giikin-Internal-Key，并按 giikin user_id JIT 建本地用户
+    #   local - 本地/开发：走 ai-agent 自身的邮箱密码 + JWT 登录
+    # ========================================================================
+    auth_mode: Literal["sso", "local"] = "local"
+    # 与 HiGress giikin-auth-bridge 的 internal_key 对齐；为空时不强制校验（仅本地/调试）
+    giikin_internal_key: SecretStr | None = None
+    # HiGress 注入的身份 Header 名（与 giikin-auth-bridge InjectHeaders 一致）
+    giikin_user_json_header: str = "X-Giikin-User-JSON"
+    giikin_user_id_header: str = "X-Giikin-User-Id"
+    giikin_internal_key_header: str = "X-Giikin-Internal-Key"
+
+    @property
+    def is_sso_auth(self) -> bool:
+        """是否启用 giikin 网关 SSO 认证模式。"""
+        return self.auth_mode == "sso"
+
     def model_post_init(self, __context: object) -> None:  # pylint: disable=arguments-differ
         """初始化后处理：如果 jwt_secret_key 是默认值，则使用 jwt_secret 的值"""
         super().model_post_init(__context)

@@ -204,7 +204,6 @@ async def list_sessions(
     """获取用户的会话列表"""
     sessions = await session_service.list_sessions_for_principal(
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         skip=skip,
         limit=limit,
         agent_id=agent_id,
@@ -222,7 +221,6 @@ async def create_session(
     try:
         session = await session_service.create_session_for_principal(
             principal_id=current_user.id,
-            is_anonymous=current_user.is_anonymous,
             agent_id=data.agent_id,
             title=data.title,
         )
@@ -244,7 +242,6 @@ async def get_session(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
     return _session_to_response(session)
@@ -262,7 +259,6 @@ async def update_session(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
 
@@ -303,7 +299,6 @@ async def generate_session_title(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
 
@@ -341,7 +336,6 @@ async def delete_session(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
     await session_service.delete_session(session_id)
@@ -362,7 +356,6 @@ async def get_session_mcp_config(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
     config = session_service.get_session_mcp_config(session)
@@ -385,7 +378,6 @@ async def update_session_mcp_config(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
     await session_service.update_session_mcp_config(session_id, data.enabled_servers)
@@ -405,7 +397,6 @@ async def get_session_messages(
     await session_service.assert_session_accessible(
         session,
         principal_id=current_user.id,
-        is_anonymous=current_user.is_anonymous,
         role=current_user.role,
     )
 

@@ -47,7 +47,7 @@ async def test_background_chain_uses_slot1_for_slot2() -> None:
 
     mock_composer = MagicMock()
     mock_composer.install = MagicMock()
-    mock_composer.compose_for_owner = AsyncMock(return_value=MagicMock())
+    mock_composer.compose_for_user_id = AsyncMock(return_value=MagicMock())
 
     prompts = [
         {
@@ -86,8 +86,7 @@ async def test_background_chain_uses_slot1_for_slot2() -> None:
             task_id=task_id,
             prompts=prompts,
             image_generator=image_generator,
-            user_id=None,
-            anonymous_user_id="anon-1",
+            user_id=uuid.uuid4(),
         )
 
     assert captured_refs[0] == "https://source.jpg"
@@ -118,7 +117,7 @@ async def test_background_single_slot_keeps_explicit_reference() -> None:
     mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
     mock_composer = MagicMock()
     mock_composer.install = MagicMock()
-    mock_composer.compose_for_owner = AsyncMock(return_value=MagicMock())
+    mock_composer.compose_for_user_id = AsyncMock(return_value=MagicMock())
 
     prompts = [
         {
@@ -151,8 +150,7 @@ async def test_background_single_slot_keeps_explicit_reference() -> None:
             task_id=task_id,
             prompts=prompts,
             image_generator=image_generator,
-            user_id=None,
-            anonymous_user_id="anon-1",
+            user_id=uuid.uuid4(),
         )
 
     assert captured_refs == ["https://current-slot3.jpg"]

@@ -17,8 +17,7 @@ class PermissionContext:
     封装当前请求的用户身份和权限信息，用于 Repository 层的数据过滤。
 
     Attributes:
-        user_id: 注册用户 ID（如果是注册用户）
-        anonymous_user_id: 匿名用户 ID（如果是匿名用户）
+        user_id: 注册用户 ID
         role: 用户角色（admin, user, viewer）
         team_id: 当前 **活动团队租户**（URL `/teams/{team_id}` 或 legacy `X-Team-Id` 解析结果）
         team_role: 当前团队角色（owner/admin/member），仅 team_id 非空时有意义
@@ -26,7 +25,6 @@ class PermissionContext:
     """
 
     user_id: uuid.UUID | None = None
-    anonymous_user_id: str | None = None
     role: str = "user"
     team_id: uuid.UUID | None = None
     team_role: str | None = None
@@ -38,14 +36,9 @@ class PermissionContext:
         return self.role == "admin"
 
     @property
-    def is_anonymous(self) -> bool:
-        """是否为匿名用户"""
-        return self.anonymous_user_id is not None
-
-    @property
     def has_identity(self) -> bool:
         """是否有有效身份"""
-        return self.user_id is not None or self.anonymous_user_id is not None
+        return self.user_id is not None
 
     @property
     def has_team(self) -> bool:
@@ -70,7 +63,6 @@ class PermissionContext:
         """返回附加了团队上下文的新实例（不可变）"""
         return PermissionContext(
             user_id=self.user_id,
-            anonymous_user_id=self.anonymous_user_id,
             role=self.role,
             team_id=team_id,
             team_role=team_role,
@@ -81,7 +73,6 @@ class PermissionContext:
         """返回附加了可访问租户集合的新实例。"""
         return PermissionContext(
             user_id=self.user_id,
-            anonymous_user_id=self.anonymous_user_id,
             role=self.role,
             team_id=self.team_id,
             team_role=self.team_role,

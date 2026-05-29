@@ -153,4 +153,3 @@ class TestRefreshEndpoint:
         assert me_resp.status_code == 200
         me_data = me_resp.json()
         assert me_data["email"] == user.email
-        assert me_data["is_anonymous"] is False

@@ -4,7 +4,7 @@
  * 管理用户信息的 Zustand Store
  *
  * 职责分离：
- * - authStore: 管理认证状态（token、anonymousUserId）
+ * - authStore: 管理认证状态（token）
  * - userStore: 管理用户信息（currentUser、登录/注册/登出操作）
  *
  * 登出时会同时清除 authStore 中的 token

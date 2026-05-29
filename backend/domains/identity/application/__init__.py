@@ -12,14 +12,6 @@ if TYPE_CHECKING:
     from domains.identity.application.user_use_case import UserUseCase
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
-    "ANONYMOUS_COOKIE_MAX_AGE": (
-        "domains.identity.application.principal_service",
-        "ANONYMOUS_COOKIE_MAX_AGE",
-    ),
-    "ANONYMOUS_USER_COOKIE": (
-        "domains.identity.application.principal_service",
-        "ANONYMOUS_USER_COOKIE",
-    ),
     "UserUseCase": ("domains.identity.application.user_use_case", "UserUseCase"),
     "get_principal": ("domains.identity.application.principal_service", "get_principal"),
     "get_principal_optional": (
@@ -29,8 +21,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
 }
 
 __all__ = [
-    "ANONYMOUS_COOKIE_MAX_AGE",
-    "ANONYMOUS_USER_COOKIE",
     "IdentityApplicationPort",
     "UserUseCase",
     "get_principal",

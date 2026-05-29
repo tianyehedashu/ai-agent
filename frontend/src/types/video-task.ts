@@ -30,7 +30,6 @@ export interface VideoCatalogModelOption {
 export interface VideoGenTask {
   id: string
   userId?: string
-  anonymousUserId?: string
   sessionId?: string
   workflowId?: string
   runId?: string

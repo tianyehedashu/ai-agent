@@ -74,7 +74,6 @@ class ListingStudioJobStepResponse(BaseModel):
 class ListingStudioJobResponse(BaseModel):
     id: str
     user_id: str | None = None
-    anonymous_user_id: str | None = None
     session_id: str | None = None
     title: str | None = None
     status: str

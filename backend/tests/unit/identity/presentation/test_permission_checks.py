@@ -26,7 +26,6 @@ def _user(*, role: str = "user") -> CurrentUser:
         id=str(uid),
         email="test@example.com",
         name="Test User",
-        is_anonymous=False,
         role=role,
     )
 

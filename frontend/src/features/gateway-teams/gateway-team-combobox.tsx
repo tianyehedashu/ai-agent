@@ -29,6 +29,7 @@ export interface GatewayTeamComboboxProps {
   className?: string
   popoverContentClassName?: string
   id?: string
+  active?: boolean
   /** 选项与触发器主文案；默认 gatewayTeamDisplayLabel */
   labelForTeam?: (team: GatewayTeam) => string
 }
@@ -42,6 +43,7 @@ export function GatewayTeamCombobox({
   className,
   popoverContentClassName,
   id,
+  active = false,
   labelForTeam,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
@@ -64,7 +66,7 @@ export function GatewayTeamCombobox({
         <Button
           id={id}
           type="button"
-          variant="outline"
+          variant={active ? 'default' : 'outline'}
           role="combobox"
           disabled={disabled || teams.length === 0}
           className={cn('w-full justify-between font-normal', className)}

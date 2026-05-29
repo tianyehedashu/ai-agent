@@ -10,9 +10,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.agent.domain.types import MessageRole
-from domains.identity.domain.anonymous_tenant import resolve_anonymous_tenant_id
 from domains.identity.domain.rbac import Role
-from domains.identity.domain.types import Principal
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from domains.session.domain.policies.session_access import can_access_personal_session
 from domains.session.infrastructure.repositories import SessionRepository
@@ -78,11 +76,7 @@ class SessionUseCase:
         self.sandbox_service = sandbox_service
 
     async def _tenant_id_for_owner(self, owner: SessionOwner) -> uuid.UUID:
-        if owner.user_id is not None:
-            return await PersonalTeamProvisioner(self.db).ensure_personal_team(owner.user_id)
-        if owner.anonymous_user_id:
-            return resolve_anonymous_tenant_id(owner.anonymous_user_id)
-        raise ValueError("SessionOwner must have user_id or anonymous_user_id")
+        return await PersonalTeamProvisioner(self.db).ensure_personal_team(owner.user_id)
 
     # =========================================================================
     # Session CRUD
@@ -90,36 +84,18 @@ class SessionUseCase:
 
     async def create_session(
         self,
-        user_id: str | None = None,
-        anonymous_user_id: str | None = None,
+        user_id: str,
         agent_id: str | None = None,
         title: str | None = None,
     ) -> Session:
-        """创建会话
-
-        Args:
-            user_id: 注册用户 ID
-            anonymous_user_id: 匿名用户 ID
-            agent_id: 关联Agent ID
-            title: 会话标题
-
-        Returns:
-            创建的会话对象
-
-        Raises:
-            ValueError: 如果参数不符合业务规则时
-        """
-        # 使用领域服务验证参数
+        """创建会话。"""
         user_uuid = _safe_uuid(user_id)
-        owner = self.domain_service.validate_session_creation(
-            user_id=user_uuid,
-            anonymous_user_id=anonymous_user_id,
-        )
+        if user_uuid is None:
+            raise ValueError("user_id is required")
+        owner = self.domain_service.validate_session_creation(user_id=user_uuid)
 
-        # 通过仓储创建会话
         session = await self.session_repo.create(
             user_id=owner.user_id,
-            anonymous_user_id=owner.anonymous_user_id,
             agent_id=_safe_uuid(agent_id),
             title=title,
         )
@@ -143,8 +119,7 @@ class SessionUseCase:
 
     async def list_sessions(
         self,
-        user_id: str | None = None,
-        anonymous_user_id: str | None = None,
+        user_id: str,
         agent_id: str | None = None,
         skip: int = 0,
         limit: int = 20,
@@ -152,7 +127,6 @@ class SessionUseCase:
         """获取用户的会话列表"""
         return await self.session_repo.find_by_user(
             user_id=_safe_uuid(user_id),
-            anonymous_user_id=anonymous_user_id,
             agent_id=_safe_uuid(agent_id),
             skip=skip,
             limit=limit,
@@ -162,16 +136,14 @@ class SessionUseCase:
         self,
         *,
         principal_id: str,
-        is_anonymous: bool,
         agent_id: str | None = None,
         skip: int = 0,
         limit: int = 20,
     ) -> list[Session]:
         """按认证主体列出 personal 工作区会话。"""
-        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        owner = SessionOwner.from_principal_id(principal_id)
         return await self.list_sessions(
-            user_id=str(owner.user_id) if owner.user_id else None,
-            anonymous_user_id=owner.anonymous_user_id,
+            user_id=str(owner.user_id),
             agent_id=agent_id,
             skip=skip,
             limit=limit,
@@ -181,15 +153,13 @@ class SessionUseCase:
         self,
         *,
         principal_id: str,
-        is_anonymous: bool,
         agent_id: str | None = None,
         title: str | None = None,
     ) -> Session:
         """按认证主体创建会话。"""
-        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        owner = SessionOwner.from_principal_id(principal_id)
         return await self.create_session(
-            user_id=str(owner.user_id) if owner.user_id else None,
-            anonymous_user_id=owner.anonymous_user_id,
+            user_id=str(owner.user_id),
             agent_id=agent_id,
             title=title,
         )
@@ -304,11 +274,10 @@ class SessionUseCase:
         session: Session,
         *,
         principal_id: str,
-        is_anonymous: bool,
         role: str = "user",
     ) -> None:
         """断言当前主体可访问该会话（personal tenant 等值；平台 admin 放行）。"""
-        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        owner = SessionOwner.from_principal_id(principal_id)
         expected_tenant = await self._tenant_id_for_owner(owner)
         if not can_access_personal_session(
             session,
@@ -362,7 +331,7 @@ class SessionUseCase:
         供 Chat、视频任务等用例复用，统一「无 session_id 则创建、有则校验所有权」的逻辑。
 
         Args:
-            principal_id: 当前用户 Principal ID（与 Chat 一致，含 anonymous- 前缀时表示匿名）
+            principal_id: 当前用户 Principal ID
             session_id: 会话 ID；若为 None 则创建新会话
             title: 新建会话时的标题（可选）
             agent_id: 新建会话时关联的 Agent ID（可选）
@@ -374,13 +343,11 @@ class SessionUseCase:
             NotFoundError: session_id 对应会话不存在
             PermissionDeniedError: session_id 对应会话不属于当前用户
         """
-        is_anonymous = Principal.is_anonymous_id(principal_id)
-        owner = SessionOwner.from_principal_id(principal_id, is_anonymous)
+        owner = SessionOwner.from_principal_id(principal_id)
 
         if not session_id:
             session = await self.create_session(
-                user_id=str(owner.user_id) if owner.user_id else None,
-                anonymous_user_id=owner.anonymous_user_id,
+                user_id=str(owner.user_id),
                 agent_id=agent_id,
                 title=title,
             )
@@ -471,19 +438,6 @@ class SessionUseCase:
     async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
         """列出指定用户的会话 ID"""
         return await self.session_repo.list_ids_by_user(uuid.UUID(user_id))
-
-    async def reassign_anonymous_to_user(
-        self,
-        *,
-        user_id: uuid.UUID | str,
-        anonymous_user_id: str,
-    ) -> int:
-        """把匿名会话归并到正式用户"""
-        uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
-        return await self.session_repo.reassign_anonymous_to_user(
-            user_id=uid,
-            anonymous_user_id=anonymous_user_id,
-        )
 
     async def increment_video_task_count(self, session_id: str, count: int = 1) -> None:
         """增加会话的视频任务计数

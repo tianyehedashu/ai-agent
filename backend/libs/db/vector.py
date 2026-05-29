@@ -27,6 +27,23 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _qdrant_collection_vector_size(collection_info: object) -> int | None:
+    """从 Qdrant CollectionInfo 解析单向量集合的维度。"""
+    try:
+        config = collection_info.config  # type: ignore[attr-defined]
+        params = config.params  # type: ignore[attr-defined]
+        vectors = params.vectors  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+    if hasattr(vectors, "size"):
+        return int(vectors.size)
+    if isinstance(vectors, dict):
+        for cfg in vectors.values():
+            if hasattr(cfg, "size"):
+                return int(cfg.size)
+    return None
+
+
 @dataclass(frozen=True)
 class VectorHitRecord:
     """向量检索命中（libs 层 DTO，由 factory 桥接为应用层 VectorHit）。"""
@@ -90,12 +107,22 @@ class QdrantVectorIndex(VectorIndexAdapter):
         client = await self._get_client()
         collections = await client.get_collections()
         if name in [c.name for c in collections.collections]:
-            return
+            info = await client.get_collection(collection_name=name)
+            existing_dim = _qdrant_collection_vector_size(info)
+            if existing_dim is None or existing_dim == dimension:
+                return
+            logger.warning(
+                "Qdrant collection %s dimension mismatch (collection=%s, expected=%s); recreating",
+                name,
+                existing_dim,
+                dimension,
+            )
+            await client.delete_collection(collection_name=name)
         await client.create_collection(
             collection_name=name,
             vectors_config=VectorParams(size=dimension, distance=Distance.COSINE),
         )
-        logger.info("Created collection: %s", name)
+        logger.info("Created collection: %s (dim=%s)", name, dimension)
 
     async def delete_collection(self, name: str) -> None:
         client = await self._get_client()

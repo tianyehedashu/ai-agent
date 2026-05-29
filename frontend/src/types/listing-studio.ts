@@ -32,7 +32,6 @@ export interface ListingStudioJobStep {
 export interface ListingStudioJob {
   id: string
   user_id: string | null
-  anonymous_user_id: string | null
   session_id: string | null
   title: string | null
   status: ListingStudioJobStatus
@@ -68,7 +67,6 @@ export interface ListingStudioCapabilitiesResponse {
 export interface ListingStudioPromptTemplate {
   id: string
   user_id: string | null
-  anonymous_user_id: string | null
   capability_id: string
   name: string
   content: string | null

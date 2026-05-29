@@ -23,7 +23,6 @@ export type ModelTestStatus = 'success' | 'failed' | null
 export interface UserModel {
   id: string
   user_id: string | null
-  anonymous_user_id: string | null
   display_name: string
   provider: string
   model_id: string

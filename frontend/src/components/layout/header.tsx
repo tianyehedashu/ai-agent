@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Moon, Sun, User } from 'lucide-react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { useTheme } from '@/components/theme-provider'
@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { cn } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 const pageTitles: Partial<Record<string, string>> = {
@@ -31,7 +30,6 @@ const pageTitles: Partial<Record<string, string>> = {
 
 export default function Header(): React.JSX.Element {
   const location = useLocation()
-  const navigate = useNavigate()
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { theme, setTheme } = useTheme()
   // 用户信息已由 AuthProvider 在应用启动时获取
@@ -55,7 +53,6 @@ export default function Header(): React.JSX.Element {
   // 显示用户信息
   const displayName = currentUser?.name ?? '用户'
   const displayEmail = currentUser?.email ?? 'user@example.com'
-  const isAnonymous = currentUser?.is_anonymous ?? false
 
   return (
     <header className="sticky top-0 z-[60] flex h-14 items-center justify-between border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -75,19 +72,11 @@ export default function Header(): React.JSX.Element {
           {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
 
-        {/* User Menu：未登录时在顶栏直接显示「未登录」标签，便于区分 */}
+        {/* User Menu */}
         <div className="flex items-center gap-2">
-          {isAnonymous && <span className="text-xs text-muted-foreground">未登录</span>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className={cn(
-                  'relative h-8 w-8 rounded-full',
-                  isAnonymous &&
-                    'ring-1 ring-muted-foreground/40 ring-offset-2 ring-offset-background'
-                )}
-              >
+              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="" alt="用户头像" />
                   <AvatarFallback>
@@ -107,22 +96,9 @@ export default function Header(): React.JSX.Element {
                     </Badge>
                   )}
                   {isPlatformViewer && <p className="text-xs text-muted-foreground">只读账号</p>}
-                  {isAnonymous && <p className="text-xs italic text-muted-foreground">匿名用户</p>}
                 </div>
               </div>
               <DropdownMenuSeparator />
-              {isAnonymous && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      navigate('/login')
-                    }}
-                  >
-                    <span className="font-semibold text-primary">登录账号</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
               <DropdownMenuItem>个人资料</DropdownMenuItem>
               <DropdownMenuItem>API 密钥</DropdownMenuItem>
               <DropdownMenuSeparator />

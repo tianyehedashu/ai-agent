@@ -19,11 +19,11 @@ function toStoreTeam(team: ApiGatewayTeam): GatewayTeam {
   }
 }
 
-/** 挂载于 Layout：匿名用户跳过；已登录用户注水 teams 缓存 */
+/** 挂载于 Layout：未登录跳过；已登录用户注水 teams 缓存 */
 export function useHydrateGatewayTeamStore(): void {
-  const isAnonymous = useUserStore((s) => s.currentUser?.is_anonymous ?? true)
+  const isAuthenticated = useUserStore((s) => s.currentUser !== null)
   const setTeams = useGatewayTeamStore((s) => s.setTeams)
-  const { data: teams } = useGatewayMemberTeams(!isAnonymous)
+  const { data: teams } = useGatewayMemberTeams(isAuthenticated)
 
   useEffect(() => {
     if (!teams) return

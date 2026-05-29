@@ -1,25 +1,14 @@
 /**
  * Auth Store
  *
- * 专门管理认证状态（token、anonymousUserId）的 Zustand Store
+ * 管理本地认证状态（JWT token）的 Zustand Store。
  *
  * 设计原则：
  * 1. 单一职责 - 只管理认证相关的状态
  * 2. 持久化 - 使用 zustand/middleware 的 persist 持久化到 localStorage
  * 3. 与 apiClient 解耦 - apiClient 通过 getState() 获取 token，而非直接操作 localStorage
  *
- * 使用方式：
- * - 组件中：useAuthStore((s) => s.token) 选择性订阅
- * - apiClient：useAuthStore.getState().token 直接获取
- *
- * @example
- * ```tsx
- * // 组件中使用
- * const { token, setToken, clearAuth } = useAuthStore()
- *
- * // apiClient 中使用
- * const token = useAuthStore.getState().token
- * ```
+ * 说明：SSO 模式下身份由 HiGress 经 guard_token Cookie 注入，无需本地 token。
  */
 
 import { create } from 'zustand'
@@ -32,12 +21,10 @@ interface AuthState {
   // Token 状态
   token: string | null
   refreshToken: string | null
-  anonymousUserId: string | null
 
   // Token 操作
   setToken: (token: string | null) => void
   setRefreshToken: (token: string | null) => void
-  setAnonymousUserId: (id: string | null) => void
 
   // 清除所有认证信息
   clearAuth: () => void
@@ -52,7 +39,6 @@ export const useAuthStore = create<AuthState>()(
       // 初始状态
       token: null,
       refreshToken: null,
-      anonymousUserId: null,
 
       // 设置 JWT Token
       setToken: (token) => {
@@ -64,14 +50,9 @@ export const useAuthStore = create<AuthState>()(
         set({ refreshToken: token })
       },
 
-      // 设置匿名用户 ID
-      setAnonymousUserId: (id) => {
-        set({ anonymousUserId: id })
-      },
-
       // 清除所有认证信息（用于登出）
       clearAuth: () => {
-        set({ token: null, refreshToken: null, anonymousUserId: null })
+        set({ token: null, refreshToken: null })
       },
 
       // 处理 401 错误
@@ -90,7 +71,6 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         token: state.token,
         refreshToken: state.refreshToken,
-        anonymousUserId: state.anonymousUserId,
       }),
     }
   )
@@ -99,15 +79,11 @@ export const useAuthStore = create<AuthState>()(
 // 导出便捷方法，供非 React 环境使用（如 apiClient）
 export const getAuthToken = (): string | null => useAuthStore.getState().token
 export const getRefreshToken = (): string | null => useAuthStore.getState().refreshToken
-export const getAnonymousUserId = (): string | null => useAuthStore.getState().anonymousUserId
 export const setAuthToken = (token: string | null): void => {
   useAuthStore.getState().setToken(token)
 }
 export const setRefreshToken = (token: string | null): void => {
   useAuthStore.getState().setRefreshToken(token)
-}
-export const setAnonymousUserId = (id: string | null): void => {
-  useAuthStore.getState().setAnonymousUserId(id)
 }
 export const clearAuth = (): void => {
   useAuthStore.getState().clearAuth()

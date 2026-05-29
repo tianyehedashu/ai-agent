@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query'
 import { gatewayApi, type GatewayUsageAggregation } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GatewayQueryErrorBanner } from '@/features/gateway-shared/gateway-query-error-banner'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -44,7 +45,7 @@ export default function GatewayOverviewPage(): React.JSX.Element {
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const days = useMemo(() => RANGE_DAYS.find((r) => r.value === range)?.days ?? 7, [range])
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['gateway', 'dashboard', teamId, usageAggregation, days],
     queryFn: () => gatewayApi.dashboard(teamId, { days, usage_aggregation: usageAggregation }),
   })
@@ -83,24 +84,37 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         </div>
       </div>
 
+      {isError ? (
+        <GatewayQueryErrorBanner
+          error={error}
+          title="概览数据加载失败"
+          fallback="无法加载用量概览"
+        />
+      ) : null}
+
       <div
         className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
       >
-        <Kpi title="请求总数" value={data?.total_requests ?? 0} loading={isLoading} />
-        <Kpi title="Token 总数" value={totalTokens} loading={isLoading} format="kmb" />
+        <Kpi title="请求总数" value={data?.total_requests ?? 0} loading={isLoading && !isError} />
+        <Kpi title="Token 总数" value={totalTokens} loading={isLoading && !isError} format="kmb" />
         {isAdmin ? (
           <Kpi
             title="累计成本（USD）"
             value={data?.total_cost_usd}
-            loading={isLoading}
+            loading={isLoading && !isError}
             format="money"
           />
         ) : null}
-        <Kpi title="成功率" value={data?.success_rate ?? 0} loading={isLoading} format="percent" />
+        <Kpi
+          title="成功率"
+          value={data?.success_rate ?? 0}
+          loading={isLoading && !isError}
+          format="percent"
+        />
         <Kpi
           title="平均延迟（ms）"
           value={data?.avg_latency_ms ?? 0}
-          loading={isLoading}
+          loading={isLoading && !isError}
           format="int"
         />
       </div>

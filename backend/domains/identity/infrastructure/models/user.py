@@ -61,6 +61,13 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         nullable=True,
         comment="厂商系统操作用户 ID（如 GIIKIN creator_id）",
     )
+    giikin_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="giikin 单点登录用户 ID（SSO 模式下经 HiGress 注入，JIT 映射键）",
+    )
 
     memories: Mapped[list["Memory"]] = relationship(
         "Memory",

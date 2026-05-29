@@ -25,7 +25,6 @@ import { apiClient } from './client'
 interface BackendVideoTask {
   id: string
   user_id: string | null
-  anonymous_user_id: string | null
   session_id: string | null
   workflow_id: string | null
   run_id: string | null
@@ -61,7 +60,6 @@ function toFrontendVideoTask(backend: BackendVideoTask): VideoGenTask {
   return {
     id: backend.id,
     userId: backend.user_id ?? undefined,
-    anonymousUserId: backend.anonymous_user_id ?? undefined,
     sessionId: backend.session_id ?? undefined,
     workflowId: backend.workflow_id ?? undefined,
     runId: backend.run_id ?? undefined,

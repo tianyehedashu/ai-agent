@@ -4,7 +4,7 @@ Token 过期处理集成测试
 测试 JWT token 过期/无效时的行为：
 1. 过期 token 返回 401（不再静默降级）
 2. 有效 token 正常访问
-3. 无 token 走匿名流程（开发模式）
+3. 无 token 返回 401
 """
 
 from httpx import AsyncClient
@@ -50,11 +50,11 @@ class TestTokenExpiry:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_no_token_anonymous_access(self, dev_client: AsyncClient):
-        """测试: 无 token 走匿名流程（开发模式），正常返回 200"""
+    async def test_no_token_returns_401(self, dev_client: AsyncClient):
+        """测试: 无 token 返回 401"""
         response = await dev_client.get("/api/v1/sessions/")
 
-        assert response.status_code == 200
+        assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_expired_user_data_stays_accessible_after_relogin(

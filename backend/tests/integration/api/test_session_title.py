@@ -217,68 +217,13 @@ class TestSessionTitle:
         )
         session_id = registered_response.json()["id"]
 
-        # Act - 匿名用户尝试生成标题
+        # Act - 未认证用户尝试生成标题
         generate_response = await dev_client.post(
             f"/api/v1/sessions/{session_id}/generate-title?strategy=summary",
         )
 
         # Assert
-        assert generate_response.status_code in [
-            status.HTTP_403_FORBIDDEN,
-            status.HTTP_404_NOT_FOUND,
-        ]
-
-    @pytest.mark.asyncio
-    async def test_anonymous_user_can_update_own_title(self, dev_client: AsyncClient):
-        """测试: 匿名用户可以更新自己的会话标题"""
-        # Arrange - 创建匿名用户会话
-        create_response = await dev_client.post(
-            "/api/v1/sessions/",
-            json={"title": "Original"},
-        )
-        session_id = create_response.json()["id"]
-
-        # Act - 更新标题
-        update_response = await dev_client.patch(
-            f"/api/v1/sessions/{session_id}",
-            json={"title": "Updated by Anonymous"},
-        )
-
-        # Assert
-        assert update_response.status_code == status.HTTP_200_OK
-        data = update_response.json()
-        assert data["title"] == "Updated by Anonymous"
-        assert data["tenant_id"]
-
-    @pytest.mark.asyncio
-    async def test_generate_title_for_anonymous_user(self, dev_client: AsyncClient):
-        """测试: 匿名用户生成标题"""
-        # Arrange - 创建匿名用户会话
-        create_response = await dev_client.post(
-            "/api/v1/sessions/",
-            json={},
-        )
-        session_id = create_response.json()["id"]
-
-        # Mock LLM 响应
-        mock_title = "匿名用户标题"
-
-        with patch(
-            "domains.agent.application.title_generation_service.LlmTitleGenerationAdapter.chat",
-            new_callable=AsyncMock,
-            return_value=TitleLlmChatResult(content=mock_title),
-        ):
-            # Act - 生成标题
-            generate_response = await dev_client.post(
-                f"/api/v1/sessions/{session_id}/generate-title?strategy=summary",
-            )
-
-            # Assert
-            # 如果没有消息，生成可能失败（这是预期的）
-            assert generate_response.status_code in [
-                status.HTTP_200_OK,
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-            ]
+        assert generate_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_update_title_and_status_together(

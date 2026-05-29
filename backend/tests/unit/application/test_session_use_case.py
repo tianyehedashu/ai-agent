@@ -62,19 +62,6 @@ class TestSessionUseCase:
         assert session.title == "Test Session"
 
     @pytest.mark.asyncio
-    async def test_create_anonymous_session(self, db_session):
-        """Test: Create anonymous session."""
-        # Arrange
-        anonymous_id = f"anon_{uuid.uuid4()}"
-        use_case = SessionUseCase(db_session, message_service=MessageUseCase(db_session))
-        session = await use_case.create_session(
-            anonymous_user_id=anonymous_id,
-            title="Anonymous Session",
-        )
-        assert session.id is not None
-        assert session.tenant_id is not None
-
-    @pytest.mark.asyncio
     async def test_get_session(self, db_session):
         """Test: Get session by ID."""
         # Arrange

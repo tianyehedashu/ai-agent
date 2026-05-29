@@ -1,0 +1,15 @@
+-- =============================================================================
+-- 生产运维手工执行 | Alembic 运行时不会加载本文件
+-- 本地/开发请用: uv run alembic upgrade head  （走 alembic/versions/*.py）
+-- versions/20260605_migrate_system_cred_models.py
+-- revision: 20260605_sys_cred_models
+-- down_revision: 20260604_revoked
+-- 方向: DOWNGRADE (down.sql)
+--   up.sql   = 升级（从 down_revision 升到 revision）
+--   down.sql = 回滚（从 revision 退回到 down_revision）
+-- 执行后请手工维护 alembic_version.version_num
+-- =============================================================================
+
+-- 数据迁移（含运行时 DB 读取）：无法离线渲染为静态 SQL。
+-- 生产请用 `uv run alembic upgrade <rev>` 执行，或在此手工维护等价的集合式 SQL
+-- （参考同目录已手工维护的数据迁移 .sql，如 20260515_migrate_user_models_data.up.sql）。

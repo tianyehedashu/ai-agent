@@ -29,7 +29,6 @@ vi.mock('@/stores/user', () => ({
         id: '1',
         email: 'admin@test.com',
         name: 'Admin',
-        is_anonymous: false,
         role: 'admin',
       },
     }),

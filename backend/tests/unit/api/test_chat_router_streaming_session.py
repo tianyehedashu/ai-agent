@@ -69,7 +69,6 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
                 id=str(user_id),
                 email="user@example.com",
                 name="User",
-                is_anonymous=False,
             ),
         )
 

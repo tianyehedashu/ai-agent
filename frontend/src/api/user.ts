@@ -11,7 +11,6 @@ export interface CurrentUser {
   id: string
   email: string
   name: string
-  is_anonymous: boolean
   /** 用户角色：admin, user, viewer；仅管理员可管理动态工具 */
   role?: string
   /** 厂商系统操作用户 ID（如 GIIKIN creator_id） */
@@ -96,22 +95,17 @@ export const userApi = {
 
   /**
    * 退出登录
-   * 清除所有认证信息（token、localStorage、cookie）
+   * 清除所有本地认证信息（token、localStorage）
    */
   async logout(): Promise<void> {
     try {
-      // 调用后端退出登录接口，清除 cookie
+      // 调用后端退出登录接口
       await apiClient.post(apiV1Path('/auth/logout'))
     } catch (error) {
       // 即使后端调用失败，也清除本地认证信息
       console.warn('Logout API call failed:', error)
     } finally {
-      // 清除所有本地存储的认证信息（token 和 anonymousUserId）
       apiClient.clearAuth()
-
-      // 尝试清除 anonymous_user_id cookie（作为备用方案）
-      // 注意：如果 cookie 是 httpOnly，前端无法直接删除，主要依赖后端清除
-      document.cookie = 'anonymous_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
     }
   },
 }

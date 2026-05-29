@@ -9,7 +9,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppLayoutRoutes } from '@/routes/app-layout-routes'
-import { LoginPage, RegisterPage } from '@/routes/lazy-pages'
+import { LoginPage, RegisterPage, SsoCallbackPage } from '@/routes/lazy-pages'
 
 function App(): React.JSX.Element {
   return (
@@ -20,6 +20,7 @@ function App(): React.JSX.Element {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/sso-callback" element={<SsoCallbackPage />} />
               <Route
                 path="/*"
                 element={

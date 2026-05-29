@@ -321,11 +321,9 @@ class TestAdminUsersApi:
         admin_headers: dict[str, str],
         db_session,
     ) -> None:
-        from domains.identity.domain.types import Principal
-
         anon_id = uuid.uuid4().hex
         anon_user = User(
-            email=Principal.make_anonymous_email(anon_id),
+            email=f"anon-{anon_id}@giikin.sso",
             hashed_password="anonymous-no-login",
             name="Anonymous",
             role="anonymous",
@@ -346,10 +344,8 @@ class TestAdminUsersApi:
         admin_headers: dict[str, str],
         db_session,
     ) -> None:
-        from domains.identity.domain.types import Principal
-
         anon_id = uuid.uuid4().hex
-        email = Principal.make_anonymous_email(anon_id)
+        email = f"anon-{anon_id}@giikin.sso"
         anon_user = User(
             email=email,
             hashed_password="anonymous-no-login",
@@ -373,11 +369,9 @@ class TestAdminUsersApi:
         admin_headers: dict[str, str],
         db_session,
     ) -> None:
-        from domains.identity.domain.types import Principal
-
         anon_id = uuid.uuid4().hex
         anon_user = User(
-            email=Principal.make_anonymous_email(anon_id),
+            email=f"anon-{anon_id}@giikin.sso",
             hashed_password="anonymous-no-login",
             name="Anonymous",
             role="anonymous",

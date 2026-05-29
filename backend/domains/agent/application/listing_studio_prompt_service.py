@@ -103,7 +103,6 @@ class ListingStudioPromptTemplateUseCase:
         content: str | None = None,
         prompts: list[str] | None = None,
         user_id: uuid.UUID | None = None,
-        anonymous_user_id: str | None = None,
     ) -> dict[str, Any]:
         """保存为用户模板。"""
         t = await self.repo.create(

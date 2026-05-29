@@ -195,21 +195,6 @@ class TestSessionCreate:
             assert session_id in session_ids_in_list
 
     @pytest.mark.asyncio
-    async def test_create_anonymous_session_with_title(self, dev_client: AsyncClient):
-        """测试: 匿名用户创建带标题的会话"""
-        # Act
-        create_response = await dev_client.post(
-            "/api/v1/sessions/",
-            json={"title": "Anonymous Session Title"},
-        )
-
-        # Assert
-        assert create_response.status_code == status.HTTP_201_CREATED
-        data = create_response.json()
-        assert data["title"] == "Anonymous Session Title"
-        assert data["tenant_id"]
-
-    @pytest.mark.asyncio
     async def test_create_session_empty_title(self, dev_client: AsyncClient, auth_headers: dict):
         """测试: 创建会话title 为空字符串"""
         # Act

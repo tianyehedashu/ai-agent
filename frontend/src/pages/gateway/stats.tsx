@@ -23,13 +23,6 @@ import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
@@ -65,7 +58,7 @@ import {
 } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { ChevronRight, LineChart, Settings2, X } from '@/lib/lucide-icons'
+import { ChevronRight, LineChart, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 const PAGE_SIZE = DEFAULT_PAGE_SIZE
@@ -211,7 +204,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<GatewayUsageStatsGroupBy>('credential')
   const [filterState, setFilterState] = useState<UsageStatsFilterState>(INITIAL_FILTER_STATE)
   const [drillSegments, setDrillSegments] = useState<UsageStatsDrillSegment[]>([])
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const [detailItem, setDetailItem] = useState<GatewayUsageStatsItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
@@ -489,11 +481,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
     setFilterState(clearDrillSegmentsFromFilterState(INITIAL_FILTER_STATE, drillSegments))
   }, [drillSegments])
 
-  const clearAllFilters = useCallback((): void => {
-    setDrillSegments([])
-    setFilterState(INITIAL_FILTER_STATE)
-  }, [])
-
   const resetDrillToRoot = useCallback((): void => {
     setDrillSegments([])
     setFilterState(clearDrillSegmentsFromFilterState(filterState, drillSegments))
@@ -615,122 +602,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
         </div>
       </div>
 
-      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <SheetContent className="flex max-h-[100vh] w-full flex-col p-0 sm:max-w-xl">
-          <SheetHeader className="shrink-0 border-b px-5 pb-4 pt-5 text-left">
-            <SheetTitle className="flex items-center gap-2 pr-8 text-base">
-              <Settings2 className="h-4 w-4" />
-              更多筛选
-            </SheetTitle>
-            <SheetDescription>
-              {usageAggregation === 'user' ? '我的跨团队调用' : '当前团队调用'} ·{' '}
-              {RANGE_DAYS.find((range) => range.value === days)?.label}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-            {crossTeamStatsEnabled ? (
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground">团队</h3>
-                <GatewayTeamCombobox
-                  value={
-                    filterState.teamFilterId === GATEWAY_FILTER_ALL ? '' : filterState.teamFilterId
-                  }
-                  onChange={(teamFilterId) => {
-                    setFilterField(
-                      'teamFilterId',
-                      teamFilterId.length > 0 ? teamFilterId : GATEWAY_FILTER_ALL
-                    )
-                  }}
-                  teams={teamOptions}
-                  placeholder="全部团队"
-                  className="h-9"
-                />
-              </section>
-            ) : null}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground">对象</h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterField label="虚拟 Key">
-                  <GatewayFilterCombobox
-                    value={filterState.vkeyId}
-                    onChange={(v) => {
-                      setFilterField('vkeyId', v)
-                    }}
-                    options={keyOptions}
-                    placeholder="全部 Key"
-                    searchPlaceholder="搜索 Key…"
-                    loading={keysQuery.isLoading}
-                  />
-                </FilterField>
-                <FilterField label="提供商">
-                  <GatewayFilterCombobox
-                    value={filterState.provider}
-                    onChange={(v) => {
-                      setFilterField('provider', v)
-                    }}
-                    options={providerOptions}
-                    placeholder="全部提供商"
-                    searchPlaceholder="搜索提供商…"
-                    onOpenChange={(open) => {
-                      if (open) onModelPickerOpenChange(true)
-                    }}
-                  />
-                </FilterField>
-              </div>
-            </section>
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground">调用</h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterField label="能力">
-                  <GatewayFilterCombobox
-                    value={filterState.capability}
-                    onChange={(v) => {
-                      setFilterField('capability', v)
-                    }}
-                    options={CAPABILITY_OPTIONS}
-                    placeholder="全部能力"
-                    searchPlaceholder="搜索能力…"
-                  />
-                </FilterField>
-                <FilterField label="状态">
-                  <GatewayFilterCombobox
-                    value={filterState.status}
-                    onChange={(v) => {
-                      setFilterField('status', v)
-                    }}
-                    options={STATUS_OPTIONS}
-                    placeholder="全部状态"
-                    searchPlaceholder="搜索状态…"
-                  />
-                </FilterField>
-              </div>
-            </section>
-          </div>
-          <div className="flex shrink-0 items-center justify-between gap-2 border-t px-5 py-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              disabled={activeFilterCount === 0 && drillSegments.length === 0}
-              onClick={clearAllFilters}
-            >
-              <X className="h-4 w-4" />
-              清空
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                setFiltersOpen(false)
-              }}
-            >
-              完成
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
       <div
         className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
       >
@@ -769,7 +640,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 searchPlaceholder="搜索凭据…"
                 loading={credentialsQuery.isLoading}
                 active={filterState.credentialId !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,10rem)]"
+                className="w-[min(100%,9rem)]"
               />
               <GatewayFilterCombobox
                 value={filterState.userId}
@@ -781,7 +652,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 searchPlaceholder="搜索人员…"
                 loading={membersQuery.isLoading}
                 active={filterState.userId !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,10rem)]"
+                className="w-[min(100%,9rem)]"
               />
               <GatewayFilterCombobox
                 value={filterState.model}
@@ -795,25 +666,73 @@ export default function GatewayStatsPage(): React.JSX.Element {
                   if (open) onModelPickerOpenChange(true)
                 }}
                 active={filterState.model !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,10rem)]"
+                className="w-[min(100%,9rem)]"
               />
-              <Button
-                type="button"
-                size="sm"
-                variant={activeFilterCount > 0 ? 'default' : 'outline'}
-                className="h-9 gap-1.5 text-xs"
-                onClick={() => {
-                  setFiltersOpen(true)
+              <GatewayFilterCombobox
+                value={filterState.provider}
+                onChange={(v) => {
+                  setFilterField('provider', v)
                 }}
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-                筛选
-                {activeFilterCount > 0 ? (
-                  <Badge variant="secondary" className="ml-0.5 px-1.5 text-[10px]">
-                    {activeFilterCount}
-                  </Badge>
-                ) : null}
-              </Button>
+                options={providerOptions}
+                placeholder="提供商"
+                searchPlaceholder="搜索提供商…"
+                onOpenChange={(open) => {
+                  if (open) onModelPickerOpenChange(true)
+                }}
+                active={filterState.provider !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,9rem)]"
+              />
+              <GatewayFilterCombobox
+                value={filterState.status}
+                onChange={(v) => {
+                  setFilterField('status', v)
+                }}
+                options={STATUS_OPTIONS}
+                placeholder="状态"
+                searchPlaceholder="搜索状态…"
+                active={filterState.status !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,9rem)]"
+              />
+              <GatewayFilterCombobox
+                value={filterState.capability}
+                onChange={(v) => {
+                  setFilterField('capability', v)
+                }}
+                options={CAPABILITY_OPTIONS}
+                placeholder="能力"
+                searchPlaceholder="搜索能力…"
+                active={filterState.capability !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,9rem)]"
+              />
+              <GatewayFilterCombobox
+                value={filterState.vkeyId}
+                onChange={(v) => {
+                  setFilterField('vkeyId', v)
+                }}
+                options={keyOptions}
+                placeholder="虚拟 Key"
+                searchPlaceholder="搜索 Key…"
+                loading={keysQuery.isLoading}
+                active={filterState.vkeyId !== GATEWAY_FILTER_ALL}
+                className="w-[min(100%,9rem)]"
+              />
+              {crossTeamStatsEnabled ? (
+                <GatewayTeamCombobox
+                  value={
+                    filterState.teamFilterId === GATEWAY_FILTER_ALL ? '' : filterState.teamFilterId
+                  }
+                  onChange={(teamFilterId) => {
+                    setFilterField(
+                      'teamFilterId',
+                      teamFilterId.length > 0 ? teamFilterId : GATEWAY_FILTER_ALL
+                    )
+                  }}
+                  teams={teamOptions}
+                  placeholder="全部团队"
+                  className="h-9 w-[min(100%,9rem)]"
+                  active={filterState.teamFilterId !== GATEWAY_FILTER_ALL}
+                />
+              ) : null}
             </div>
           </div>
           {(drillSegments.length > 0 || activeFilterCount > 0) && (
@@ -942,21 +861,6 @@ export default function GatewayStatsPage(): React.JSX.Element {
         logsNavigationState={logsNavigationState}
       />
     </div>
-  )
-}
-
-function FilterField({
-  label,
-  children,
-}: Readonly<{
-  label: string
-  children: React.ReactNode
-}>): React.JSX.Element {
-  return (
-    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-      <span>{label}</span>
-      {children}
-    </label>
   )
 }
 

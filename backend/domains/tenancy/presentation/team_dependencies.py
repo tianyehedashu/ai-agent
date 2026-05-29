@@ -22,7 +22,7 @@ from domains.tenancy.domain.policies.team_role import (
     assert_team_role,
 )
 from libs.db.database import get_db
-from libs.exceptions import AIAgentError, AuthenticationError, PermissionDeniedError
+from libs.exceptions import AIAgentError, PermissionDeniedError
 from libs.exceptions.codes import INTERNAL_ERROR
 
 ResolvedTeam = ManagementTeamContext
@@ -69,10 +69,7 @@ async def resolve_current_team(
     db: Annotated[AsyncSession, Depends(get_db)],
     x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
 ) -> ManagementTeamContext:
-    """解析当前团队：路径 team_id > X-Team-Id > personal team。匿名 401。"""
-    if current_user.is_anonymous:
-        raise AuthenticationError("Anonymous users cannot access AI Gateway")
-
+    """解析当前团队：路径 team_id > X-Team-Id > personal team。"""
     _assert_gateway_not_viewer_write(request, current_user.role)
 
     user_id = uuid.UUID(current_user.id)

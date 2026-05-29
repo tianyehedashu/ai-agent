@@ -38,7 +38,7 @@ tests/
 - ✅ 设置 None 上下文
 
 **关键测试点**：
-- `PermissionContext` 的属性（`is_admin`、`is_anonymous`、`has_identity`）
+- `PermissionContext` 的属性（`is_admin`、`has_identity`）
 - ContextVar 的线程安全设置和获取
 - 上下文清理机制
 

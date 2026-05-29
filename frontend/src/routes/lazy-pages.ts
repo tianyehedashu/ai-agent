@@ -3,6 +3,7 @@ import { lazyWithReload } from '@/lib/lazy-with-reload'
 /** 路由级 code splitting：按页 lazy import，避免打进主 chunk */
 export const LoginPage = lazyWithReload(() => import('@/pages/auth/login'))
 export const RegisterPage = lazyWithReload(() => import('@/pages/auth/register'))
+export const SsoCallbackPage = lazyWithReload(() => import('@/pages/auth/sso-callback'))
 
 export const ChatPage = lazyWithReload(() => import('@/pages/chat'))
 export const AgentsPage = lazyWithReload(() => import('@/pages/agents'))

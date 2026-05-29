@@ -70,14 +70,11 @@ class TestSessionDelete:
         )
         registered_session_id = registered_response.json()["id"]
 
-        # Act - 匿名用户尝试删除注册用户的会话
+        # Act - 未认证用户尝试删除注册用户的会话
         delete_response = await dev_client.delete(f"/api/v1/sessions/{registered_session_id}")
 
         # Assert
-        assert delete_response.status_code in [
-            status.HTTP_403_FORBIDDEN,
-            status.HTTP_404_NOT_FOUND,
-        ]
+        assert delete_response.status_code == status.HTTP_401_UNAUTHORIZED
 
         # Assert - 会话仍然存在
         get_response = await dev_client.get(
@@ -85,26 +82,6 @@ class TestSessionDelete:
             headers=auth_headers,
         )
         assert get_response.status_code == status.HTTP_200_OK
-
-    @pytest.mark.asyncio
-    async def test_delete_anonymous_user_session(self, dev_client: AsyncClient):
-        """测试: 匿名用户删除自己的会话"""
-        # Arrange - 创建匿名用户会话
-        create_response = await dev_client.post(
-            "/api/v1/sessions/",
-            json={"title": "Anonymous Session"},
-        )
-        session_id = create_response.json()["id"]
-
-        # Act - 删除会话
-        delete_response = await dev_client.delete(f"/api/v1/sessions/{session_id}")
-
-        # Assert
-        assert delete_response.status_code == status.HTTP_204_NO_CONTENT
-
-        # Assert - 验证会话已被删除
-        get_response = await dev_client.get(f"/api/v1/sessions/{session_id}")
-        assert get_response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
     async def test_delete_session_removes_from_list(

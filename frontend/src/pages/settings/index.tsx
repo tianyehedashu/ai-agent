@@ -107,7 +107,7 @@ export default function SettingsPage(): React.JSX.Element {
   }, [currentUser])
 
   const handleSaveAccount = async (): Promise<void> => {
-    if (!currentUser || currentUser.is_anonymous) {
+    if (!currentUser) {
       toast({
         title: '无法保存',
         description: '请先登录',
@@ -250,7 +250,7 @@ export default function SettingsPage(): React.JSX.Element {
                     setUserName(e.target.value)
                   }}
                   placeholder="请输入用户名"
-                  disabled={currentUser?.is_anonymous}
+                  disabled={!currentUser}
                 />
               </div>
 
@@ -263,24 +263,20 @@ export default function SettingsPage(): React.JSX.Element {
                     setVendorCreatorId(e.target.value)
                   }}
                   placeholder="用于视频生成等第三方服务追踪"
-                  disabled={currentUser?.is_anonymous}
+                  disabled={!currentUser}
                 />
                 <p className="text-xs text-muted-foreground">
                   此 ID 用于 GIIKIN 等视频生成服务的操作追踪，请向服务商获取您的用户 ID
                 </p>
               </div>
 
-              <Button onClick={handleSaveAccount} disabled={isSaving || currentUser?.is_anonymous}>
+              <Button onClick={handleSaveAccount} disabled={isSaving || !currentUser}>
                 {isSaving ? '保存中...' : '保存更改'}
               </Button>
 
-              {currentUser?.is_anonymous && (
-                <p className="text-sm text-muted-foreground">请先登录以修改账户设置</p>
-              )}
-
               <div className="border-t pt-6">
                 <h4 className="mb-2 text-sm font-medium text-destructive">危险区域</h4>
-                <Button variant="destructive" size="sm" disabled={currentUser?.is_anonymous}>
+                <Button variant="destructive" size="sm" disabled={!currentUser}>
                   删除账户
                 </Button>
               </div>

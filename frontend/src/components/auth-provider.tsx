@@ -1,15 +1,14 @@
 /**
  * Auth Provider
  *
- * 确保在应用初始化时先完成身份验证调用，
- * 等待匿名用户 Cookie 设置完成后再渲染子组件。
+ * 应用初始化时先完成身份校验（GET /auth/me），再渲染子组件。
  *
  * 设计要点：
  * 1. 使用 TanStack Query 与项目其他数据获取保持一致
- * 2. 阻塞渲染直到 Cookie 建立完成
+ * 2. 阻塞渲染直到身份校验完成
  * 3. 同步用户信息到 Zustand store 供全局访问
  * 4. 监听 token 过期事件，自动 toast 提示并重定向到登录页
- * 5. 未认证用户自动重定向到 /login（公开路由除外）
+ * 5. 未认证用户：local 模式重定向到 /login；sso 模式整页跳转到 giikin 单点登录入口
  */
 
 import { type ReactNode, useEffect } from 'react'
@@ -20,10 +19,11 @@ import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/client'
 import { userApi } from '@/api/user'
+import { buildSsoLoginUrl, isSsoMode } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
-const PUBLIC_PATHS = ['/login', '/register']
+const PUBLIC_PATHS = ['/login', '/register', '/sso-callback']
 
 interface AuthProviderProps {
   children: ReactNode
@@ -115,8 +115,18 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     )
   }
 
-  // 未认证 + 不在公开页面 → 重定向到登录页（保留原始路径以便登录后跳回）
+  // 未认证 + 不在公开页面
   if (!sessionUser && isFetched && !isOnPublicPath) {
+    // SSO 模式：跳转到 giikin 单点登录入口（整页跳转，登录后经 Cookie 回到本站）
+    if (isSsoMode) {
+      window.location.href = buildSsoLoginUrl(location.pathname)
+      return (
+        <div className="flex h-screen items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )
+    }
+    // local 模式：重定向到本地登录页（保留原始路径以便登录后跳回）
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 

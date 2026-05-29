@@ -25,7 +25,6 @@ def _registered_user(role: str = "user") -> CurrentUser:
         id=str(uid),
         email="u@example.com",
         name="User",
-        is_anonymous=False,
         role=role,
     )
 

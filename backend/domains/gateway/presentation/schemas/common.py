@@ -638,7 +638,6 @@ class PersonalModelResponse(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID | None = None
-    anonymous_user_id: str | None = None
     display_name: str
     provider: str
     model_id: str
@@ -678,7 +677,6 @@ class PersonalModelResponse(BaseModel):
         return cls(
             id=uuid.UUID(str(raw["id"])),
             user_id=_uuid("user_id"),
-            anonymous_user_id=raw.get("anonymous_user_id"),
             display_name=str(raw["display_name"]),
             provider=str(raw["provider"]),
             model_id=str(raw["model_id"]),

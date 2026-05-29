@@ -30,7 +30,7 @@ from domains.tenancy.presentation.team_dependencies import (
 from domains.tenancy.presentation.team_invite_mappers import to_invite_candidate_list_response
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
-from libs.exceptions import AuthenticationError, NotFoundError, ValidationError
+from libs.exceptions import NotFoundError, ValidationError
 from libs.identity_bridge_deps import create_user_use_case, get_user_use_case
 
 router = APIRouter(tags=["Tenancy / Teams"])
@@ -126,8 +126,6 @@ async def create_team(
     current_user: RequiredAuthUser,
     svc: TeamSvc,
 ) -> TeamResponse:
-    if current_user.is_anonymous:
-        raise AuthenticationError("Anonymous cannot create team")
     team = await svc.create_team(
         name=body.name,
         owner_user_id=uuid.UUID(current_user.id),

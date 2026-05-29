@@ -47,8 +47,7 @@ class SessionApplicationPort(Protocol):
 
     async def create_session(
         self,
-        user_id: str | None = None,
-        anonymous_user_id: str | None = None,
+        user_id: str,
         agent_id: str | None = None,
         title: str | None = None,
     ) -> Any:
@@ -126,15 +125,6 @@ class SessionApplicationPort(Protocol):
 
     async def list_session_ids_by_user(self, user_id: str) -> list[uuid.UUID]:
         """列出指定用户的会话 ID"""
-        ...
-
-    async def reassign_anonymous_to_user(
-        self,
-        *,
-        user_id: uuid.UUID | str,
-        anonymous_user_id: str,
-    ) -> int:
-        """把匿名会话归并到正式用户"""
         ...
 
     async def update_session_mcp_config(self, session_id: str, enabled_servers: list[str]) -> dict:

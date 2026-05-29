@@ -34,9 +34,6 @@ from domains.agent.infrastructure.repositories.message_repository import Message
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application import UserUseCase
-from domains.identity.application.session_migration_service import (
-    AnonymousDataReassignmentService,
-)
 from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db
 from libs.iam.deps import get_default_tenant_provisioner
@@ -52,7 +49,6 @@ __all__ = [
     "build_chat_use_case",
     "build_session_use_case",
     "get_agent_service",
-    "get_anonymous_reassignment_service",
     "get_chat_model_resolution_service",
     "get_chat_service",
     "get_checkpoint_service",
@@ -60,7 +56,6 @@ __all__ = [
     "get_listing_studio_image_service",
     "get_listing_studio_prompt_service",
     "get_listing_studio_service",
-    "get_login_services",
     "get_mcp_dynamic_prompt_service",
     "get_mcp_dynamic_tool_service",
     "get_mcp_service",
@@ -242,27 +237,11 @@ async def get_video_task_service(
     return VideoTaskUseCase(db, session_use_case=session_service)
 
 
-async def get_anonymous_reassignment_service(db: DbSession) -> AnonymousDataReassignmentService:
-    """匿名数据归并服务（登录/注册后统一入口）。"""
-    from libs.identity_bridge_deps import build_anonymous_reassignment_service
-
-    return build_anonymous_reassignment_service(db)
-
-
 def get_user_use_case(db: DbSession) -> UserUseCase:
     """Identity 写侧 UserUseCase（无 tenant_provisioner；FastAPI 依赖见 ``libs.identity_bridge_deps``）。"""
     from libs.identity_bridge_deps import create_user_use_case
 
     return create_user_use_case(db)
-
-
-async def get_login_services(
-    db: DbSession,
-) -> tuple[UserUseCase, AnonymousDataReassignmentService]:
-    """登录编排（UserUseCase + 匿名归并）；FastAPI 依赖见 ``libs.identity_bridge_deps.get_login_services``。"""
-    from libs.identity_bridge_deps import build_login_services
-
-    return build_login_services(db)
 
 
 async def get_listing_studio_service(db: DbSession) -> ListingStudioUseCase:

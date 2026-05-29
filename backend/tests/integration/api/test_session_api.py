@@ -63,39 +63,6 @@ class TestSessionAPI:
         assert data["token_count"] == 0
 
     @pytest.mark.asyncio
-    async def test_create_session_as_anonymous_user_in_dev_mode(self, client: AsyncClient):
-        """测试: 匿名用户创建会话（开发模式）
-
-        注意：此测试在开发模式下验证匿名用户（无认证头）可以创建会话。
-        在生产模式下，此测试可能会失败（需要认证）。
-        """
-        # Act - 匿名用户（无认证头）创建会话
-        # 在开发模式下，系统会自动创建匿名用户
-        response = await client.post(
-            "/api/v1/sessions/",
-            json={"title": "Anonymous Session"},
-            follow_redirects=False,
-        )
-
-        # Assert
-        # 在开发模式下应该成功（201），在生产模式下会返回401
-        # 这里我们检查两种情况
-        if response.status_code == status.HTTP_201_CREATED:
-            # 开发模式：匿名用户成功创建会话
-            data = response.json()
-            assert "id" in data
-            assert "tenant_id" in data
-            assert data["title"] == "Anonymous Session"
-            assert data["status"] == "active"
-        elif response.status_code == status.HTTP_401_UNAUTHORIZED:
-            # 生产模式：需要认证
-            # 这是预期的行为，测试通过
-            pass
-        else:
-            # 其他状态码表示意外情况
-            pytest.fail(f"Unexpected status code: {response.status_code}")
-
-    @pytest.mark.asyncio
     async def test_create_session_with_title(self, client: AsyncClient, auth_headers: dict):
         """测试: 创建会话（带title）"""
         # Arrange

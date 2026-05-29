@@ -13,7 +13,10 @@ from domains.gateway.application.config_catalog_sync import (
     model_types_for_gateway_registration,
 )
 from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
-from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
+from domains.gateway.application.gateway_model_listing import (
+    _registry_row_deployable,
+    list_merged_models_for_tenant,
+)
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_catalog_port import (
     ModelCapabilitySnapshot,
@@ -62,6 +65,9 @@ class SqlModelCatalogAdapter:
                 by_name[row.name] = row
         items: list[dict[str, Any]] = []
         for row in sorted(by_name.values(), key=lambda r: r.name):
+            # 与 resolve_by_name_visible / Router 注册一致：凭据须可部署
+            if not await _registry_row_deployable(self._session, row):
+                continue
             # 与模型选择器一致：已知连通性测试失败的模型不进入「可用」目录，
             # 避免管理页标「不可用」但对话/产品信息仍可点选。
             if not is_connectivity_requestable(row.last_test_status):

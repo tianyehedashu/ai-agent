@@ -5,7 +5,7 @@
  *
  * 用户隔离策略：
  * - 通过 `userPrompts` Record 按用户标识存储，同一浏览器多账号互不干扰
- * - 用户标识来自 authStore（token 对应的用户或 anonymousUserId）
+ * - 用户标识来自当前登录用户（currentUser.id）
  */
 
 import { create } from 'zustand'

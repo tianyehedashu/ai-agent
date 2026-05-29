@@ -13,7 +13,6 @@ from pydantic import Field
 
 from domains.agent.domain.types import ToolCategory, ToolResult
 from domains.agent.infrastructure.tools.base import BaseTool, ToolParameters, register_tool
-from domains.identity.domain.types import ANONYMOUS_ID_PREFIX
 from libs.db.database import get_session_factory
 from libs.iam.permission_context import get_permission_context
 from utils.logging import get_logger
@@ -99,9 +98,14 @@ class AmazonVideoSubmitTool(BaseTool):
                     error="无法获取用户权限上下文",
                 )
 
-            principal_id = (
-                str(ctx.user_id) if ctx.user_id else f"{ANONYMOUS_ID_PREFIX}{ctx.anonymous_user_id}"
-            )
+            if ctx.user_id is None:
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error="无法获取用户权限上下文",
+                )
+            principal_id = str(ctx.user_id)
             session_factory = get_session_factory()
             async with session_factory() as db:
                 # 延迟导入避免循环依赖：engine -> tools -> amazon_video_tools -> application -> chat_use_case -> engine

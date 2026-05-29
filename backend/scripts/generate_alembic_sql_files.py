@@ -56,6 +56,43 @@ def _parse_meta(py_path: Path) -> tuple[str, str | None]:
     return revision, down_revision
 
 
+# 合并修订：down_revision 为元组（多父）。例：down_revision = (\n  "a",\n  "b",\n)
+_MERGE_DOWN_RE = re.compile(r"^down_revision[^=]*=\s*\(", re.MULTILINE)
+# 数据迁移：运行时取连接读行（offline --sql 无连接，无法渲染为静态 SQL）。
+_DATA_MIGRATION_MARKERS = (
+    "op.get_bind()",
+    ".fetchall(",
+    ".fetchone(",
+    ".scalar(",
+    ".mappings(",
+)
+
+
+def _classify(text: str) -> str:
+    """归类修订：merge（合并）/ data（数据迁移）/ normal（结构 DDL）。"""
+    if _MERGE_DOWN_RE.search(text):
+        return "merge"
+    if any(marker in text for marker in _DATA_MIGRATION_MARKERS):
+        return "data"
+    return "normal"
+
+
+def _merge_parents(text: str) -> list[str]:
+    """从 merge 修订的元组 down_revision 中提取父修订号（仅用于头注释）。"""
+    m = re.search(r"down_revision[^=]*=\s*\(([^)]*)\)", text, re.DOTALL)
+    if not m:
+        return []
+    return re.findall(r"[\"']([^\"']+)[\"']", m.group(1))
+
+
+_MERGE_SQL = "-- 合并修订（merge revision）：无 DDL / 数据变更（no-op）\n"
+_DATA_MIGRATION_SQL = (
+    "-- 数据迁移（含运行时 DB 读取）：无法离线渲染为静态 SQL。\n"
+    "-- 生产请用 `uv run alembic upgrade <rev>` 执行，或在此手工维护等价的集合式 SQL\n"
+    "-- （参考同目录已手工维护的数据迁移 .sql，如 20260515_migrate_user_models_data.up.sql）。\n"
+)
+
+
 def _clean_alembic_sql_output(raw: str) -> str:
     statements: list[str] = []
     for line in raw.splitlines():
@@ -176,44 +213,66 @@ def main() -> int:
         stem = py_path.stem
         up_path = _SQL / f"{stem}.up.sql"
         down_path = _SQL / f"{stem}.down.sql"
+        # 幂等：已生成且非 --force 时跳过（避免对历史修订重复跑 alembic 子进程）
+        if not args.force and up_path.exists() and down_path.exists():
+            print(f"= {stem}: unchanged")
+            continue
         try:
+            text = py_path.read_text(encoding="utf-8")
             revision, down_revision = _parse_meta(py_path)
-            up_sql = _upgrade_range(down_revision, revision)
+            kind = _classify(text)
+
+            # merge / data 修订无法离线渲染为静态 SQL：写明确占位，不走 alembic 子进程
+            write_force = args.force
+            if kind == "merge":
+                parents = _merge_parents(text)
+                down_label = ", ".join(parents) if parents else (down_revision or "base")
+                up_sql = down_sql = _MERGE_SQL
+            elif kind == "data":
+                down_label = down_revision
+                up_sql = down_sql = _DATA_MIGRATION_SQL
+                # 数据迁移多为手工维护的等价 SQL，占位不得覆盖已存在文件
+                write_force = False
+            else:
+                down_label = down_revision
+                up_sql = _upgrade_range(down_revision, revision)
+                try:
+                    down_sql = _downgrade_range(revision, down_revision)
+                except RuntimeError as exc:
+                    if "NotImplementedError" in str(exc):
+                        down_sql = "-- 不可回滚：Python downgrade 为 NotImplementedError\n"
+                    else:
+                        raise
+
             wrote_up = _write(
                 up_path,
                 up_sql,
                 stem=stem,
                 revision=revision,
-                down_revision=down_revision,
+                down_revision=down_label,
                 direction="UPGRADE (up.sql)",
-                force=args.force,
+                force=write_force,
             )
-            try:
-                down_sql = _downgrade_range(revision, down_revision)
-            except RuntimeError as exc:
-                if "NotImplementedError" in str(exc):
-                    down_sql = "-- 不可回滚：Python downgrade 为 NotImplementedError\n"
-                else:
-                    raise
             wrote_down = _write(
                 down_path,
                 down_sql,
                 stem=stem,
                 revision=revision,
-                down_revision=down_revision,
+                down_revision=down_label,
                 direction="DOWNGRADE (down.sql)",
-                force=args.force,
+                force=write_force,
             )
+            note = f" [{kind}]" if kind != "normal" else ""
             status = []
             if wrote_up:
                 status.append("up")
             if wrote_down:
                 status.append("down")
             if status:
-                print(f"+ {stem}: {', '.join(status)}")
+                print(f"+ {stem}{note}: {', '.join(status)}")
                 ok += 1
             else:
-                print(f"= {stem}: unchanged")
+                print(f"= {stem}{note}: unchanged")
         except (ValueError, RuntimeError) as exc:
             print(f"! {stem}: {exc}", file=sys.stderr)
             failed.append(stem)

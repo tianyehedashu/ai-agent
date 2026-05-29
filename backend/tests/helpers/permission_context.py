@@ -16,13 +16,11 @@ async def permission_context_for_user(
     db: AsyncSession,
     *,
     user_id: uuid.UUID | None = None,
-    anonymous_user_id: str | None = None,
     role: str = "user",
 ) -> PermissionContext:
     """与生产 ``build_permission_context_with_team_ids`` 一致。"""
     return await build_permission_context_with_team_ids(
         db,
         user_id=user_id,
-        anonymous_user_id=anonymous_user_id,
         role=role,
     )
