@@ -27,6 +27,7 @@ from domains.identity.presentation.deps import AuthUser
 from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import merge_optional_gateway_team
 from libs.api.deps import get_checkpoint_service, get_session_service
+from libs.api.params import coerce_optional_uuid
 from libs.db.database import get_db, get_session_context
 from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
@@ -140,6 +141,11 @@ class ChatRequest(BaseModel):
             raise ValueError("session_id cannot be empty string")
         return v
 
+    @field_validator("gateway_team_id", mode="before")
+    @classmethod
+    def parse_gateway_team_id(cls, v: object) -> uuid.UUID | None:
+        return coerce_optional_uuid(v)
+
 
 class ResumeRequest(BaseModel):
     """恢复执行请求"""
@@ -154,6 +160,11 @@ class ResumeRequest(BaseModel):
         default=None,
         description="可选：Gateway 计费团队（与 POST /chat 一致）",
     )
+
+    @field_validator("gateway_team_id", mode="before")
+    @classmethod
+    def parse_gateway_team_id(cls, v: object) -> uuid.UUID | None:
+        return coerce_optional_uuid(v)
 
 
 class DiffRequest(BaseModel):

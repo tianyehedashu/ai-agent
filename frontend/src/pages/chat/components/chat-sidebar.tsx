@@ -10,7 +10,7 @@ import {
   PanelLeftOpen,
   MessageSquarePlus,
 } from 'lucide-react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
@@ -32,6 +32,7 @@ import type { Session } from '@/types'
 export default function ChatSidebar(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const { data: sessionsData, isLoading } = useQuery({
@@ -45,6 +46,9 @@ export default function ChatSidebar(): React.JSX.Element {
 
   // 新建对话：仅导航到无 sessionId 的聊天页，会话在用户发送第一条消息时由后端创建（避免空会话入库）
   const handleCreateSession = (): void => {
+    if (location.pathname === '/chat' || location.pathname === '/chat/') {
+      useChatStore.getState().bumpNewChatEpoch()
+    }
     navigate('/chat')
   }
 

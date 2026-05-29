@@ -30,6 +30,10 @@ interface ChatState {
   pendingMCPConfig: string[]
   setPendingMCPConfig: (servers: string[]) => void
   clearPendingMCPConfig: () => void
+
+  /** 侧栏「新建对话」在同一 /chat 路由下重置 UI 时递增 */
+  newChatEpoch: number
+  bumpNewChatEpoch: () => void
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -81,5 +85,10 @@ export const useChatStore = create<ChatState>((set) => ({
   },
   clearPendingMCPConfig: () => {
     set({ pendingMCPConfig: [] })
+  },
+
+  newChatEpoch: 0,
+  bumpNewChatEpoch: () => {
+    set((state) => ({ newChatEpoch: state.newChatEpoch + 1 }))
   },
 }))

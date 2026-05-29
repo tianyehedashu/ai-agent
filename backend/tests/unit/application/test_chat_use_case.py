@@ -17,6 +17,16 @@ from libs.iam.permission_context import clear_permission_context, set_permission
 
 @pytest.mark.unit
 class TestChatUseCase:
+    @pytest.fixture(autouse=True)
+    def _proxy_callable_chat_model(self):
+        """单测 mock 目录与真实 Gateway 注册解耦；引擎准备仍校验代理可调用性。"""
+        with patch(
+            "domains.agent.application.chat_agent_run.resolve_model_or_route",
+            new_callable=AsyncMock,
+            return_value=object(),
+        ):
+            yield
+
     @pytest.fixture
     def service(self, db_session):
         from unittest.mock import AsyncMock

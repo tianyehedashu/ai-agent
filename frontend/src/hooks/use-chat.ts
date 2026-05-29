@@ -4,7 +4,14 @@
  * 封装聊天相关的状态和逻辑
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import {
+  startTransition,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  type MutableRefObject,
+} from 'react'
 
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -19,6 +26,10 @@ interface UseChatOptions {
   onError?: (error: Error) => void
   /** 首次发消息后服务端创建会话时回调，用于更新 URL 等（如 navigate(`/chat/${id}`)） */
   onSessionCreated?: (sessionId: string) => void
+  /** 流式进行中绑定的 sessionId；由父组件传入以便跳过历史拉取竞态 */
+  streamingSessionRef?: MutableRefObject<string | null>
+  /** SSE 流结束（done / error / cancel）时回调 */
+  onStreamEnd?: (sessionId: string | undefined) => void
 }
 
 interface UseChatReturn {
@@ -58,8 +69,22 @@ interface InterruptState {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { sessionId: initialSessionId, agentId, onError, onSessionCreated } = options
+  const {
+    sessionId: initialSessionId,
+    agentId,
+    onError,
+    onSessionCreated,
+    streamingSessionRef,
+    onStreamEnd,
+  } = options
   const queryClient = useQueryClient()
+
+  const onErrorRef = useRef(onError)
+  const onSessionCreatedRef = useRef(onSessionCreated)
+  const onStreamEndRef = useRef(onStreamEnd)
+  onErrorRef.current = onError
+  onSessionCreatedRef.current = onSessionCreated
+  onStreamEndRef.current = onStreamEnd
 
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -80,6 +105,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
   // 同步 sessionId 变化（当前视图会话 = URL 的 sessionId）
   useEffect(() => {
+    const streamId = streamSessionIdRef.current
+    // session_created 已写入 stream/view，但 navigate 尚未更新 URL 时，
+    // 勿用仍为 undefined 的 initialSessionId 覆盖 viewSessionIdRef（否则 SSE 事件被丢弃）
+    if (streamId !== undefined && !initialSessionId && viewSessionIdRef.current === streamId) {
+      sessionIdRef.current = streamId
+      return
+    }
     sessionIdRef.current = initialSessionId
     viewSessionIdRef.current = initialSessionId
   }, [initialSessionId])
@@ -90,6 +122,25 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       [runId]: [...(prev[runId] ?? []), event],
     }))
   }, [])
+
+  const markStreamActive = useCallback(
+    (activeSessionId: string | undefined) => {
+      if (streamingSessionRef) {
+        streamingSessionRef.current = activeSessionId ?? null
+      }
+    },
+    [streamingSessionRef]
+  )
+
+  const finishStream = useCallback(
+    (endedSessionId: string | undefined) => {
+      if (streamingSessionRef) {
+        streamingSessionRef.current = null
+      }
+      onStreamEndRef.current?.(endedSessionId)
+    },
+    [streamingSessionRef]
+  )
 
   const handleEvent = useCallback(
     (event: ChatEvent) => {
@@ -106,9 +157,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             sessionIdRef.current = sessionData.session_id
             viewSessionIdRef.current = sessionData.session_id
             streamSessionIdRef.current = sessionData.session_id
-            // 刷新会话列表，以便显示新创建的会话
-            void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-            onSessionCreated?.(sessionData.session_id)
+            markStreamActive(sessionData.session_id)
+            startTransition(() => {
+              void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+            })
+            onSessionCreatedRef.current?.(sessionData.session_id)
             // 首条消息携带的待用 MCP 配置已持久化到 session，清除本地待用配置
             useChatStore.getState().clearPendingMCPConfig()
           }
@@ -314,13 +367,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           currentRunIdRef.current = null
           setCurrentRunId(null)
           setIsLoading(false)
+          finishStream(sessionIdRef.current)
 
           // 对话完成后刷新会话列表，以便显示可能已生成的标题
           // 标题生成是异步的，可能在对话完成后才完成
           if (sessionIdRef.current) {
             // 延迟一点刷新，给标题生成留出时间
             setTimeout(() => {
-              void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+              startTransition(() => {
+                void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+              })
             }, 1000)
           }
           break
@@ -328,8 +384,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         case 'error': {
           const errorData = event.data as { error: string }
-          onError?.(new Error(errorData.error))
+          onErrorRef.current?.(new Error(errorData.error))
           setIsLoading(false)
+          finishStream(sessionIdRef.current)
           if (currentRunIdRef.current) {
             appendProcessEvent(currentRunIdRef.current, {
               id: generateId(),
@@ -343,11 +400,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         case 'terminated': {
           setIsLoading(false)
+          finishStream(sessionIdRef.current)
           break
         }
       }
     },
-    [appendProcessEvent, onError, onSessionCreated, queryClient]
+    [appendProcessEvent, finishStream, markStreamActive, queryClient]
   )
 
   const cancelRequest = useCallback(() => {
@@ -360,8 +418,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       currentToolCallsRef.current = []
       currentRunIdRef.current = null
       setCurrentRunId(null)
+      finishStream(sessionIdRef.current)
     }
-  }, [])
+  }, [finishStream])
 
   const sendMessage = useCallback(
     async (
@@ -406,6 +465,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       setCurrentRunId(runId)
       setProcessRuns((prev) => ({ ...prev, [runId]: [] }))
       streamSessionIdRef.current = sessionIdRef.current
+      markStreamActive(sessionIdRef.current)
 
       try {
         const { pendingMCPConfig } = useChatStore.getState()
@@ -432,26 +492,29 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           (error) => {
             // 忽略取消导致的错误
             if (error.name !== 'AbortError') {
-              onError?.(error)
+              onErrorRef.current?.(error)
             }
             setIsLoading(false)
+            finishStream(sessionIdRef.current)
           },
           () => {
             setIsLoading(false)
             abortControllerRef.current = null
+            finishStream(sessionIdRef.current)
           },
           abortController.signal
         )
       } catch (error) {
         // 忽略取消导致的错误
         if ((error as Error).name !== 'AbortError') {
-          onError?.(error as Error)
+          onErrorRef.current?.(error as Error)
         }
         setIsLoading(false)
         abortControllerRef.current = null
+        finishStream(sessionIdRef.current)
       }
     },
-    [isLoading, agentId, handleEvent, onError]
+    [isLoading, agentId, handleEvent, finishStream, markStreamActive]
   )
 
   const resumeExecution = useCallback(
@@ -471,7 +534,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           },
           handleEvent,
           (error) => {
-            onError?.(error)
+            onErrorRef.current?.(error)
             setIsLoading(false)
           },
           () => {
@@ -479,11 +542,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           }
         )
       } catch (error) {
-        onError?.(error as Error)
+        onErrorRef.current?.(error as Error)
         setIsLoading(false)
       }
     },
-    [interrupt, handleEvent, onError]
+    [interrupt, handleEvent]
   )
 
   const clearMessages = useCallback(() => {

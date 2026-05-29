@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 import uuid
 
 from bootstrap.config import settings
+from domains.agent.application.chat_model_resolution_use_case import (
+    _NO_VISIBLE_TEXT_MODELS_MSG,
+)
 from domains.agent.domain.sandbox_runtime_policy import (
     should_pre_create_persistent_sandbox,
     wants_persistent_docker_sandbox,
@@ -29,8 +32,10 @@ from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxM
 from domains.agent.infrastructure.sandbox.docker_availability import docker_cli_available
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
+from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
 from domains.gateway.application.ports import InvocationOverrides
 from libs.db.database import get_session_context
+from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -60,6 +65,31 @@ class ChatAgentRunMixin:
             picked,
             allowed_text_system_ids=allowed,
         )
+        team_id = await self._billing_team_id_for_catalog()
+        catalog_user_id = self._model_resolution._resolve_user_id()
+        if team_id is not None and await resolve_model_or_route(
+            self.db,
+            team_id,
+            resolved.model,
+            user_id=catalog_user_id,
+        ) is None:
+            logger.warning(
+                "Chat model %r not proxy-callable for team %s; falling back to default",
+                resolved.model,
+                team_id,
+            )
+            resolved = await self._model_resolution.resolve_text_chat_model(
+                None,
+                allowed_text_system_ids=allowed,
+            )
+            if await resolve_model_or_route(
+                self.db,
+                team_id,
+                resolved.model,
+                user_id=catalog_user_id,
+            ) is None:
+                raise ValidationError(_NO_VISIBLE_TEXT_MODELS_MSG)
+
         agent_config = await self._get_agent_config(agent_id)
         agent_config = agent_config.model_copy(update={"model": resolved.model})
 
@@ -106,7 +136,7 @@ class ChatAgentRunMixin:
             invocation_overrides=invocation_overrides,
         )
 
-        return engine, session_recreated_event, picked
+        return engine, session_recreated_event, resolved.model
 
     async def _execute_agent_with_event_queue(
         self: ChatUseCase,

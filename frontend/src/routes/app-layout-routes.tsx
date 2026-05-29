@@ -44,7 +44,7 @@ function LegacyProductInfoRedirect(): React.JSX.Element {
 }
 
 const appLayoutRouteConfig: RouteObject[] = [
-  { path: '/', element: <ChatPage /> },
+  { path: '/', element: <Navigate to="/chat" replace /> },
   { path: '/chat/:sessionId?', element: <ChatPage /> },
   {
     path: '/agents',

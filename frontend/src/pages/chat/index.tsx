@@ -35,7 +35,7 @@ export default function ChatPage(): React.JSX.Element {
   const { toast } = useToast()
   const [showDebugger, setShowDebugger] = useState(false)
   const [creativeMode, setCreativeMode] = useState<CreativeInputMode>('chat')
-  const { setCurrentSession, input, setInput } = useChatStore()
+  const { setCurrentSession, input, setInput, newChatEpoch } = useChatStore()
   const [toolConfigOpen, setToolConfigOpen] = useState(false)
   const [selectedModelRef, setSelectedModelRef] = useState<string | null>(null)
   const [selectedImageGenModelRef, setSelectedImageGenModelRef] = useState<string | null>(null)
@@ -44,15 +44,36 @@ export default function ChatPage(): React.JSX.Element {
   const [verboseGatewayLog, setVerboseGatewayLog] = useState(false)
   const workspaceTeamId = useGatewayWorkspaceTeamId()
 
-  const { data: availableTextModels } = useQuery({
-    queryKey: ['gateway-models-available', 'text', '', '', workspaceTeamId ?? ''],
-    queryFn: () =>
-      gatewayApi.listAvailableModels('text', undefined, {
-        ...(workspaceTeamId ? { gatewayTeamId: workspaceTeamId } : {}),
-      }),
-    staleTime: 30_000,
-    enabled: workspaceTeamId !== null,
-  })
+  const prevSessionIdRef = useRef<string | undefined>(undefined)
+  /** 流式创建会话后 navigate 到 /chat/:id 时跳过拉历史，避免覆盖进行中的 SSE 内容 */
+  const skipHistoryLoadForSessionRef = useRef<string | null>(null)
+  /** 当前 SSE 流绑定的 sessionId（与 useChat 同步，避免 effect 依赖 isLoading） */
+  const streamingSessionRef = useRef<string | null>(null)
+
+  const handleChatError = useCallback(
+    (error: Error) => {
+      toast({
+        title: '错误',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+    [toast]
+  )
+
+  const handleSessionCreated = useCallback(
+    (id: string) => {
+      skipHistoryLoadForSessionRef.current = id
+      navigate(`/chat/${id}`, { replace: true })
+    },
+    [navigate]
+  )
+
+  const handleStreamEnd = useCallback((endedSessionId: string | undefined) => {
+    if (endedSessionId && skipHistoryLoadForSessionRef.current === endedSessionId) {
+      skipHistoryLoadForSessionRef.current = null
+    }
+  }, [])
 
   const {
     messages,
@@ -67,20 +88,14 @@ export default function ChatPage(): React.JSX.Element {
     resumeExecution,
     clearMessages,
     loadMessages,
+    cancelRequest,
     dismissSessionRecreation,
   } = useChat({
     sessionId,
-    onError: (error) => {
-      toast({
-        title: '错误',
-        description: error.message,
-        variant: 'destructive',
-      })
-    },
-    onSessionCreated: (id) => {
-      skipHistoryLoadForSessionRef.current = id
-      navigate(`/chat/${id}`)
-    },
+    streamingSessionRef,
+    onStreamEnd: handleStreamEnd,
+    onError: handleChatError,
+    onSessionCreated: handleSessionCreated,
   })
 
   // 处理会话访问错误（如 403 无权限），重定向到首页
@@ -108,10 +123,22 @@ export default function ChatPage(): React.JSX.Element {
     [toast, navigate]
   )
 
-  // 用于判断是「离开/切换会话」还是「新建会话后进入」
-  const prevSessionIdRef = useRef<string | undefined>(undefined)
-  /** 流式创建会话后 navigate 到 /chat/:id 时跳过拉历史，避免覆盖进行中的 SSE 内容 */
-  const skipHistoryLoadForSessionRef = useRef<string | null>(null)
+  const { data: availableTextModels } = useQuery({
+    queryKey: ['gateway-models-available', 'text', '', '', workspaceTeamId ?? ''],
+    queryFn: () =>
+      gatewayApi.listAvailableModels('text', undefined, {
+        ...(workspaceTeamId ? { gatewayTeamId: workspaceTeamId } : {}),
+      }),
+    staleTime: 30_000,
+    enabled: workspaceTeamId !== null,
+  })
+
+  // 侧栏「新建对话」已在 /chat 时 sessionId 不变，需单独重置消息与进行中的流
+  useEffect(() => {
+    if (newChatEpoch === 0) return
+    cancelRequest()
+    clearMessages()
+  }, [newChatEpoch, cancelRequest, clearMessages])
 
   // 无会话时（新建对话）切回对话模式，避免底部只显示 Tab 不显示输入
   useEffect(() => {
@@ -134,46 +161,45 @@ export default function ChatPage(): React.JSX.Element {
     let cancelled = false
 
     if (sessionId) {
-      // 加载会话信息
-      sessionApi
-        .get(sessionId)
-        .then((session) => {
-          // 只有当这个 effect 没有被取消时才更新状态
-          if (!cancelled) {
-            setCurrentSession(session)
-            setSelectedModelRef(session.chatModelRef ?? null)
-            setVerboseGatewayLog(session.gatewayVerboseRequestLog ?? false)
-            const cm = session.creativeMode
-            if (cm === 'image_gen' || cm === 'video') {
-              setCreativeMode(cm)
-            } else {
-              setCreativeMode('chat')
-            }
-            setSelectedImageGenModelRef(session.imageGenModelRef ?? null)
-          }
-        })
-        .catch((error: unknown) => {
-          if (!cancelled) {
-            console.error('Failed to load session:', error)
-            handleSessionAccessError(error)
-          }
-        })
+      const skipHistory =
+        skipHistoryLoadForSessionRef.current === sessionId ||
+        streamingSessionRef.current === sessionId
 
-      // 加载历史消息（流式新建会话时跳过，防止竞态覆盖助手回复）
-      const skipHistory = skipHistoryLoadForSessionRef.current === sessionId
+      const applySession = (session: Awaited<ReturnType<typeof sessionApi.get>>): void => {
+        if (cancelled) return
+        setCurrentSession(session)
+        setSelectedModelRef(session.chatModelRef ?? null)
+        setVerboseGatewayLog(session.gatewayVerboseRequestLog ?? false)
+        const cm = session.creativeMode
+        if (cm === 'image_gen' || cm === 'video') {
+          setCreativeMode(cm)
+        } else {
+          setCreativeMode('chat')
+        }
+        setSelectedImageGenModelRef(session.imageGenModelRef ?? null)
+      }
+
       if (skipHistory) {
-        skipHistoryLoadForSessionRef.current = null
-      } else {
         sessionApi
-          .getMessages(sessionId)
-          .then((messages) => {
+          .get(sessionId)
+          .then(applySession)
+          .catch((error: unknown) => {
+            if (!cancelled) {
+              console.error('Failed to load session:', error)
+              handleSessionAccessError(error)
+            }
+          })
+      } else {
+        Promise.all([sessionApi.get(sessionId), sessionApi.getMessages(sessionId)])
+          .then(([session, messages]) => {
+            applySession(session)
             if (!cancelled) {
               loadMessages(messages)
             }
           })
           .catch((error: unknown) => {
             if (!cancelled) {
-              console.error('Failed to load messages:', error)
+              console.error('Failed to load session:', error)
               handleSessionAccessError(error)
             }
           })

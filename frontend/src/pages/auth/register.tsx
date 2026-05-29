@@ -67,7 +67,7 @@ export default function RegisterPage(): React.JSX.Element {
         title: '注册成功',
         description: '账号已创建并自动登录',
       })
-      navigate('/')
+      navigate('/chat')
     } catch (error) {
       toast({
         title: '注册失败',

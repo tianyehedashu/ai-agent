@@ -10,7 +10,7 @@ export default function NotFoundPage(): React.JSX.Element {
       <h2 className="mt-4 text-2xl font-semibold">页面未找到</h2>
       <p className="mt-2 text-muted-foreground">抱歉，您访问的页面不存在</p>
       <Button asChild className="mt-6">
-        <Link to="/">
+        <Link to="/chat">
           <Home className="mr-2 h-4 w-4" />
           返回首页
         </Link>

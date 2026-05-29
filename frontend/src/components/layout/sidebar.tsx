@@ -123,10 +123,7 @@ export default function Sidebar(): React.JSX.Element {
   const groupedSessions = useMemo(() => groupSessionsByDate(sessions), [sessions])
 
   // 判断当前是否在聊天页面（会话区域高亮用）
-  const isChatActive =
-    location.pathname === '/' ||
-    location.pathname === '/chat' ||
-    location.pathname.startsWith('/chat/')
+  const isChatActive = location.pathname === '/chat' || location.pathname.startsWith('/chat/')
 
   // 当前会话（用于侧栏显示当前会话标题，仅聊天页面）
   const { data: currentSession } = useQuery({
@@ -136,6 +133,9 @@ export default function Sidebar(): React.JSX.Element {
   })
 
   const handleCreateChat = (): void => {
+    if (location.pathname === '/chat' || location.pathname === '/chat/') {
+      useChatStore.getState().bumpNewChatEpoch()
+    }
     navigate('/chat')
   }
 
@@ -153,7 +153,7 @@ export default function Sidebar(): React.JSX.Element {
         {/* Logo */}
         <div className="flex h-14 items-center border-b border-border/40 px-4">
           {!isCollapsed && (
-            <Link to="/" className="group flex items-center gap-2">
+            <Link to="/chat" className="group flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm transition-colors group-hover:bg-primary/20">
                 <Bot className="h-5 w-5 text-primary" />
               </div>
