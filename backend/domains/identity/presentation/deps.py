@@ -22,11 +22,13 @@ from domains.identity.application.permission_context_composer import PermissionC
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
 from libs.exceptions import AuthenticationError, PermissionDeniedError
-from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
-from libs.iam.permission_context import get_permission_context
+from domains.identity.domain.rbac import Role
+from libs.iam.tenant_access_assertions import (
+    assert_tenant_access,
+    assert_tenant_access_or_public,
+)
 
 __all__ = [
-    "ADMIN_ROLE",
     "AdminUser",
     "AuthUser",
     "OptionalAuthUser",
@@ -103,11 +105,6 @@ async def require_auth(
 # 角色依赖
 # =============================================================================
 
-# 角色常量
-ADMIN_ROLE = "admin"
-USER_ROLE = "user"
-VIEWER_ROLE = "viewer"
-
 
 def require_role(*roles: str):
     """要求特定角色的依赖工厂
@@ -142,7 +139,7 @@ AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 RequiredAuthUser = Annotated[CurrentUser, Depends(require_auth)]
 OptionalUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
 OptionalAuthUser = Annotated[CurrentUser | None, Depends(get_current_user_optional)]
-AdminUser = Annotated[CurrentUser, Depends(require_role(ADMIN_ROLE))]
+AdminUser = Annotated[CurrentUser, Depends(require_role(Role.ADMIN.value))]
 
 
 def get_user_uuid(current_user: CurrentUser) -> uuid.UUID:
@@ -163,27 +160,8 @@ def check_tenant_access(
     current_user: CurrentUser,
     resource_name: str = "Resource",
 ) -> None:
-    """HTTP 薄适配：委托 ``enforce_data_scope`` 判定 tenant 可见性。"""
-    if current_user.role == ADMIN_ROLE:
-        return
-
-    ctx = get_permission_context()
-    if ctx is None:
-        raise PermissionDeniedError(
-            message=f"You don't have permission to access this {resource_name.lower()}",
-            resource=resource_name,
-        )
-
-    allowed = enforce_data_scope(
-        ctx,
-        DataResource(kind=resource_name, tenant_id=resource_tenant_id),
-        DataAction.READ,
-    )
-    if not allowed:
-        raise PermissionDeniedError(
-            message=f"You don't have permission to access this {resource_name.lower()}",
-            resource=resource_name,
-        )
+    """HTTP 薄适配：委托 ``assert_tenant_access`` 判定 tenant 可见性。"""
+    assert_tenant_access(resource_tenant_id, current_user.role, resource_name)
 
 
 def check_tenant_access_or_public(
@@ -193,6 +171,6 @@ def check_tenant_access_or_public(
     resource_name: str = "Resource",
 ) -> None:
     """租户作用域访问，或资源标记为公开。"""
-    if is_public:
-        return
-    check_tenant_access(resource_tenant_id, current_user, resource_name)
+    assert_tenant_access_or_public(
+        resource_tenant_id, current_user.role, is_public, resource_name
+    )

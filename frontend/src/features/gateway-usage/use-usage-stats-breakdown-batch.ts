@@ -31,7 +31,7 @@ function breakdownBaseQueryKey(teamId: string, baseQuery: UsageStatsBreakdownBas
     baseQuery.usage_aggregation ?? 'workspace',
     baseQuery.credential_id ?? '',
     baseQuery.user_id ?? '',
-    baseQuery.team_id ?? '',
+    baseQuery.filter_team_id ?? '',
     baseQuery.model ?? '',
     baseQuery.provider ?? '',
     baseQuery.capability ?? '',

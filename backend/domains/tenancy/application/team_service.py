@@ -7,7 +7,9 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.application.ports import UserPlatformRoleLookupPort
+from domains.identity.application.ports import UserPlatformRoleLookupPort, user_display_label
+from domains.identity.application.user_use_case import UserUseCase
+from domains.tenancy.domain.team_display_label import format_team_display_label
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot, TeamSnapshot
 from domains.tenancy.domain.policies.gateway_team_list_visibility import (
     is_visible_in_platform_admin_gateway_list,
@@ -245,8 +247,39 @@ class TeamService:
             raise ValueError("Cannot delete personal team")
         await self._teams.delete(team_id)
 
-    async def get_display_names_by_ids(self, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
-        return await self._teams.get_display_names_by_ids(team_ids)
+    async def get_display_names_by_ids(
+        self,
+        team_ids: list[uuid.UUID],
+        *,
+        viewer_user_id: uuid.UUID | None = None,
+    ) -> dict[uuid.UUID, str]:
+        """与前端 ``gatewayTeamDisplayLabel`` 对齐的展示名（personal / 他人个人 / shared）。"""
+        teams = await self._teams.get_by_ids(team_ids)
+        if not teams:
+            return {}
+        owner_hints: dict[uuid.UUID, str | None] = {}
+        if viewer_user_id is not None:
+            foreign_owner_ids = [
+                team.owner_user_id
+                for team in teams
+                if team.kind == "personal" and team.owner_user_id != viewer_user_id
+            ]
+            if foreign_owner_ids:
+                summaries = await UserUseCase(self._session).list_summary_views_by_ids(
+                    foreign_owner_ids
+                )
+                for owner_id, summary in summaries.items():
+                    owner_hints[owner_id] = user_display_label(summary)
+        return {
+            team.id: format_team_display_label(
+                kind=team.kind,
+                name=team.name,
+                owner_user_id=team.owner_user_id,
+                viewer_user_id=viewer_user_id,
+                owner_hint=owner_hints.get(team.owner_user_id),
+            )
+            for team in teams
+        }
 
     @staticmethod
     def _to_snapshot(team: Team) -> TeamSnapshot:

@@ -5,13 +5,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import { credentialsApi } from '@/api/gateway/credentials'
-import { keysApi } from '@/api/gateway/keys'
+import { ApiError } from '@/api/errors'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
-import type { GatewayModel } from '@/api/gateway/models'
 import {
   statsApi,
   type GatewayUsageStatsGroupBy,
@@ -28,6 +26,7 @@ import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/us
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
+import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
 import {
   GATEWAY_FILTER_ALL,
   GatewayFilterCombobox,
@@ -36,6 +35,7 @@ import {
 import {
   gatewayUsageAggregationOptions,
   isCrossTeamUsageStatsEnabled,
+  usageAggregationScopeLabel,
 } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { UsageStatsCubeTable } from '@/features/gateway-usage/usage-stats-cube-table'
@@ -54,17 +54,25 @@ import {
   USAGE_STATS_GROUP_OPTIONS,
 } from '@/features/gateway-usage/usage-stats-group-options'
 import { UsageStatsRankingTable } from '@/features/gateway-usage/usage-stats-ranking-table'
+import { usePlatformUserStatsFilterSearch } from '@/features/gateway-usage/use-platform-user-stats-filter-search'
 import {
   TABLE_CREDENTIAL_TOP_N,
   useUsageStatsBreakdownBatch,
   type UsageStatsBreakdownBaseQuery,
 } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
+import { useUsageStatsFilterCatalog } from '@/features/gateway-usage/use-usage-stats-filter-catalog'
+import { useUsageStatsProviderFilterOptions } from '@/features/gateway-usage/use-usage-stats-provider-filter-options'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronRight, LineChart, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
+import { useUserStore } from '@/stores/user'
 const PAGE_SIZE = DEFAULT_PAGE_SIZE
+
+/** 统计页筛选触发器：略宽于旧版 9rem，下拉面板独立加宽（见 GatewayFilterCombobox） */
+const STATS_FILTER_TRIGGER = 'h-9 min-w-[5.5rem] max-w-[11rem] shrink-0'
+const STATS_FILTER_TRIGGER_WIDE = 'h-9 min-w-[6.5rem] max-w-[14rem] shrink-0'
 
 const EMPTY_STATS_ITEMS: GatewayUsageStatsItem[] = []
 
@@ -123,28 +131,19 @@ function formatPercent(value: unknown): string {
   return `${(asNumber(value) * 100).toFixed(1)}%`
 }
 
-function errorMessage(error: unknown): string {
+function usageStatsErrorMessage(error: unknown, aggregation: GatewayUsageAggregation): string {
+  if (error instanceof ApiError) {
+    if (aggregation === 'platform' && (error.status === 403 || error.status === 422)) {
+      return '全平台统计需要已部署支持 usage_aggregation=platform 的后端，且当前账号须为平台管理员（role=admin）。请重启或部署 backend 后重试。'
+    }
+    return error.message
+  }
   if (error instanceof Error) return error.message
   return '加载失败'
 }
 
 function resettable(value: string): string | undefined {
   return value === GATEWAY_FILTER_ALL ? undefined : value
-}
-
-function uniqueSorted(values: string[]): GatewayFilterOption[] {
-  return Array.from(new Set(values.filter((v) => v.trim().length > 0)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((value) => ({ value, label: value }))
-}
-
-function modelOptionValues(models: GatewayModel[]): string[] {
-  const values: string[] = []
-  for (const model of models) {
-    values.push(model.name)
-    values.push(model.real_model)
-  }
-  return values
 }
 
 function selectedOptionLabel(options: GatewayFilterOption[], value: string): string {
@@ -159,7 +158,7 @@ function filterStateToQueryParams(
   GatewayUsageStatsQuery,
   | 'credential_id'
   | 'user_id'
-  | 'team_id'
+  | 'filter_team_id'
   | 'model'
   | 'provider'
   | 'capability'
@@ -169,7 +168,7 @@ function filterStateToQueryParams(
   return {
     credential_id: resettable(state.credentialId),
     user_id: resettable(state.userId),
-    team_id: crossTeamStatsEnabled ? resettable(state.teamFilterId) : undefined,
+    filter_team_id: crossTeamStatsEnabled ? resettable(state.teamFilterId) : undefined,
     model: resettable(state.model),
     provider: resettable(state.provider),
     capability: resettable(state.capability),
@@ -193,13 +192,43 @@ function buildLogsNavigationState(
     model: q.model,
     provider: q.provider,
     vkeyId: q.vkey_id,
-    teamId: q.team_id,
+    teamId: q.filter_team_id,
   }
+}
+
+function buildUsageStatsQueryKey(
+  teamId: string,
+  days: number,
+  usageAggregation: GatewayUsageAggregation,
+  groupBy: GatewayUsageStatsGroupBy,
+  page: number,
+  filterState: UsageStatsFilterState,
+  drillSegments: UsageStatsDrillSegment[]
+): (string | number)[] {
+  return [
+    'gateway',
+    'usage-stats',
+    teamId,
+    days,
+    usageAggregation,
+    groupBy,
+    page,
+    filterState.credentialId,
+    filterState.userId,
+    filterState.teamFilterId,
+    filterState.model,
+    filterState.provider,
+    filterState.capability,
+    filterState.status,
+    filterState.vkeyId,
+    drillSegments.map((s) => `${s.filterKey}:${s.filterValue}`).join('|'),
+  ]
 }
 
 export default function GatewayStatsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
   const aggregationOptions = useMemo(
     () => gatewayUsageAggregationOptions(isPlatformAdmin),
     [isPlatformAdmin]
@@ -208,36 +237,39 @@ export default function GatewayStatsPage(): React.JSX.Element {
 
   const [days, setDays] = useState<1 | 7 | 30 | 90>(7)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('workspace')
+  const platformAggBootstrapped = useRef(false)
   const [groupBy, setGroupBy] = useState<GatewayUsageStatsGroupBy>('credential')
   const [filterState, setFilterState] = useState<UsageStatsFilterState>(INITIAL_FILTER_STATE)
   const [drillSegments, setDrillSegments] = useState<UsageStatsDrillSegment[]>([])
   const [detailItem, setDetailItem] = useState<GatewayUsageStatsItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
-  const {
-    items: modelItems,
-    onPickerOpenChange: onModelPickerOpenChange,
-    ensureModelName,
-  } = useInfiniteGatewayModelPages(
-    teamId,
-    { registry_scope: 'callable' },
-    { enabled: true, prefetchMode: 'open' }
-  )
-
-  useEffect(() => {
-    if (filterState.model !== GATEWAY_FILTER_ALL) {
-      ensureModelName(filterState.model)
-    }
-  }, [filterState.model, ensureModelName])
-
   const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
 
-  const setFilterField = useCallback(
-    <K extends keyof UsageStatsFilterState>(key: K, value: UsageStatsFilterState[K]): void => {
-      setFilterState((prev) => ({ ...prev, [key]: value }))
-    },
-    []
-  )
+  const filterCatalog = useUsageStatsFilterCatalog({
+    teamId,
+    usageAggregation,
+    isPlatformAdmin,
+    crossTeamStatsEnabled,
+  })
+
+  const { onPickerOpenChange: onModelPickerOpenChange, ensureModelName } =
+    useInfiniteGatewayModelPages(
+      teamId,
+      { registry_scope: 'callable' },
+      { enabled: !crossTeamStatsEnabled, prefetchMode: 'open' }
+    )
+
+  useEffect(() => {
+    if (crossTeamStatsEnabled || filterState.model === GATEWAY_FILTER_ALL) return
+    ensureModelName(filterState.model)
+  }, [crossTeamStatsEnabled, filterState.model, ensureModelName])
+
+  useEffect(() => {
+    if (!isPlatformAdmin || platformAggBootstrapped.current) return
+    platformAggBootstrapped.current = true
+    setUsageAggregation('platform')
+  }, [isPlatformAdmin])
 
   const statsFilterKey = useMemo(
     () =>
@@ -259,6 +291,14 @@ export default function GatewayStatsPage(): React.JSX.Element {
   )
   const [page, setPage] = usePaginationPageForFilters(statsFilterKey)
 
+  const setFilterField = useCallback(
+    <K extends keyof UsageStatsFilterState>(key: K, value: UsageStatsFilterState[K]): void => {
+      setFilterState((prev) => ({ ...prev, [key]: value }))
+      setPage(1)
+    },
+    [setPage]
+  )
+
   useEffect(() => {
     if (crossTeamStatsEnabled) return
     setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
@@ -273,65 +313,57 @@ export default function GatewayStatsPage(): React.JSX.Element {
     [crossTeamStatsEnabled]
   )
 
-  const credentialsQuery = useQuery({
-    queryKey: ['gateway', 'credential-summaries', teamId],
-    queryFn: () => credentialsApi.listCredentialSummaries(teamId),
-  })
-  const membersQuery = useQuery({
-    queryKey: ['gateway', 'members', teamId],
-    queryFn: () => teamsApi.listMembers(teamId),
-  })
   const teamsQuery = useQuery({
     queryKey: ['gateway', 'teams'],
     queryFn: () => teamsApi.listTeams(),
     enabled: crossTeamStatsEnabled,
   })
-  const keysQuery = useQuery({
-    queryKey: ['gateway', 'keys', teamId],
-    queryFn: () => keysApi.listKeys(teamId),
+
+  const {
+    showMemberFilter,
+    usePlatformUserDirectory,
+    credentialOptions,
+    memberOptions: teamMemberOptions,
+    modelOptions,
+    registryProviderOptions,
+    keyOptions,
+    credentialsLoading,
+    membersLoading: teamMembersLoading,
+    modelsLoading,
+    keysLoading,
+  } = filterCatalog
+
+  const platformMemberFilter = usePlatformUserStatsFilterSearch({
+    selectedUserId: filterState.userId,
+    enabled: showMemberFilter && usePlatformUserDirectory,
   })
 
-  const credentialOptions = useMemo<GatewayFilterOption[]>(
-    () =>
-      (credentialsQuery.data ?? []).map((credential) => ({
-        value: credential.id,
-        label: credential.name,
-        meta: credential.provider,
-      })),
-    [credentialsQuery.data]
-  )
-  const memberOptions = useMemo<GatewayFilterOption[]>(
-    () =>
-      (membersQuery.data ?? []).map((member) => ({
-        value: member.user_id,
-        label: member.user_name ?? member.user_email ?? member.user_id,
-        meta: member.role,
-      })),
-    [membersQuery.data]
-  )
+  const memberOptions = usePlatformUserDirectory ? platformMemberFilter.options : teamMemberOptions
+  const membersLoading = usePlatformUserDirectory
+    ? platformMemberFilter.resolvingSelection
+    : teamMembersLoading
+
   const teamOptions = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
-  const keyOptions = useMemo<GatewayFilterOption[]>(
-    () =>
-      (keysQuery.data ?? []).map((key) => ({
-        value: key.id,
-        label: key.name,
-        meta: key.masked_key,
-      })),
-    [keysQuery.data]
-  )
-  const modelOptions = useMemo(() => uniqueSorted(modelOptionValues(modelItems)), [modelItems])
-  const providerOptions = useMemo(() => {
-    const values = [
-      ...(credentialsQuery.data ?? []).map((credential) => credential.provider),
-      ...modelItems.map((gatewayModel) => gatewayModel.provider),
-    ]
-    return uniqueSorted(values)
-  }, [credentialsQuery.data, modelItems])
 
   const filterQueryFields = useMemo(
     () => filterStateToQueryParams(filterState, crossTeamStatsEnabled),
     [filterState, crossTeamStatsEnabled]
   )
+
+  const providerDiscoveryFilters = useMemo(() => {
+    const { provider: _provider, ...rest } = filterQueryFields
+    return rest
+  }, [filterQueryFields])
+
+  const { options: providerOptions, loading: providerOptionsLoading } =
+    useUsageStatsProviderFilterOptions({
+      teamId,
+      days,
+      usageAggregation,
+      baseFilters: providerDiscoveryFilters,
+      registryProviders: registryProviderOptions,
+      enabled: !!teamId,
+    })
 
   const queryParams = useMemo((): GatewayUsageStatsQuery => {
     return {
@@ -353,9 +385,17 @@ export default function GatewayStatsPage(): React.JSX.Element {
   }, [days, usageAggregation, filterQueryFields])
 
   const statsQuery = useQuery({
-    queryKey: ['gateway', 'usage-stats', teamId, queryParams],
+    queryKey: buildUsageStatsQueryKey(
+      teamId,
+      days,
+      usageAggregation,
+      groupBy,
+      page,
+      filterState,
+      drillSegments
+    ),
     queryFn: () => statsApi.usageStats(teamId, queryParams),
-    placeholderData: keepPreviousData,
+    enabled: !!teamId,
   })
 
   const showBreakdownCols = shouldShowBreakdownColumns(groupBy)
@@ -367,9 +407,9 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const items = useMemo(() => statsQuery.data?.items ?? EMPTY_STATS_ITEMS, [statsQuery.data?.items])
 
   const tableCredentialTopN = useMemo(() => {
-    const teamCredentialCount = credentialsQuery.data?.length ?? TABLE_CREDENTIAL_TOP_N
-    return Math.min(Math.max(1, teamCredentialCount), TABLE_CREDENTIAL_TOP_N)
-  }, [credentialsQuery.data?.length])
+    const credentialCount = credentialOptions.length || TABLE_CREDENTIAL_TOP_N
+    return Math.min(Math.max(1, credentialCount), TABLE_CREDENTIAL_TOP_N)
+  }, [credentialOptions.length])
 
   const breakdownEnabled = showBreakdownCols && items.length > 0 && statsQuery.data !== undefined
 
@@ -394,22 +434,31 @@ export default function GatewayStatsPage(): React.JSX.Element {
             setFilterField('credentialId', GATEWAY_FILTER_ALL)
           },
         },
-        {
-          key: 'user' as const,
-          filterKey: 'user_id' as StatsFilterKey,
-          label: '人员',
-          value: selectedOptionLabel(memberOptions, filterState.userId),
-          clear: () => {
-            setFilterField('userId', GATEWAY_FILTER_ALL)
-          },
-        },
+        ...(showMemberFilter
+          ? [
+              {
+                key: 'user' as const,
+                filterKey: 'user_id' as StatsFilterKey,
+                label: '人员',
+                value: selectedOptionLabel(memberOptions, filterState.userId),
+                clear: () => {
+                  setFilterField('userId', GATEWAY_FILTER_ALL)
+                },
+              },
+            ]
+          : []),
         ...(crossTeamStatsEnabled
           ? [
               {
                 key: 'team' as const,
-                filterKey: 'team_id' as StatsFilterKey,
+                filterKey: 'filter_team_id' as StatsFilterKey,
                 label: '团队',
-                value: teamOptions.find((t) => t.id === filterState.teamFilterId)?.name ?? '',
+                value: (() => {
+                  const team = teamOptions.find((t) => t.id === filterState.teamFilterId)
+                  return team
+                    ? gatewayTeamDisplayLabel(team, { viewerUserId })
+                    : filterState.teamFilterId
+                })(),
                 clear: () => {
                   setFilterField('teamFilterId', GATEWAY_FILTER_ALL)
                 },
@@ -473,8 +522,10 @@ export default function GatewayStatsPage(): React.JSX.Element {
       filterState.capability,
       filterState.status,
       memberOptions,
+      showMemberFilter,
       crossTeamStatsEnabled,
       teamOptions,
+      viewerUserId,
       modelOptions,
       keyOptions,
       providerOptions,
@@ -562,8 +613,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
           </h2>
           <p className="text-sm text-muted-foreground">
             {statsQuery.data
-              ? `${new Date(statsQuery.data.start).toLocaleDateString()} - ${new Date(statsQuery.data.end).toLocaleDateString()}`
-              : '按当前时间窗口聚合调用日志'}
+              ? `${new Date(statsQuery.data.start).toLocaleDateString()} - ${new Date(statsQuery.data.end).toLocaleDateString()} · ${usageAggregationScopeLabel(usageAggregation)}`
+              : `${usageAggregationScopeLabel(usageAggregation)} · 按当前时间窗口聚合调用日志`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -640,7 +691,11 @@ export default function GatewayStatsPage(): React.JSX.Element {
             <CardTitle className="pt-1 text-base">
               {groupOptions.find((option) => option.value === groupBy)?.label ?? '维度'}排名
             </CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex flex-wrap items-center gap-2.5"
+              role="group"
+              aria-label="调用统计筛选"
+            >
               <GatewayFilterCombobox
                 value={filterState.credentialId}
                 onChange={(v) => {
@@ -649,22 +704,41 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 options={credentialOptions}
                 placeholder="凭据"
                 searchPlaceholder="搜索凭据…"
-                loading={credentialsQuery.isLoading}
+                menuWidth="wide"
+                loading={credentialsLoading}
                 active={filterState.credentialId !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER_WIDE}
               />
-              <GatewayFilterCombobox
-                value={filterState.userId}
-                onChange={(v) => {
-                  setFilterField('userId', v)
-                }}
-                options={memberOptions}
-                placeholder="人员"
-                searchPlaceholder="搜索人员…"
-                loading={membersQuery.isLoading}
-                active={filterState.userId !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
-              />
+              {showMemberFilter ? (
+                <GatewayFilterCombobox
+                  value={filterState.userId}
+                  onChange={(v) => {
+                    setFilterField('userId', v)
+                  }}
+                  options={memberOptions}
+                  placeholder="人员"
+                  searchPlaceholder={usePlatformUserDirectory ? '姓名或邮箱…' : '搜索人员…'}
+                  searchMode={usePlatformUserDirectory ? 'server' : 'client'}
+                  onSearchQueryChange={
+                    usePlatformUserDirectory ? platformMemberFilter.onSearchQueryChange : undefined
+                  }
+                  onOpenChange={
+                    usePlatformUserDirectory ? platformMemberFilter.onPickerOpenChange : undefined
+                  }
+                  remoteSearching={
+                    usePlatformUserDirectory ? platformMemberFilter.remoteSearching : false
+                  }
+                  emptyHint={
+                    usePlatformUserDirectory
+                      ? '输入姓名或邮箱搜索；无关键词时仅显示前 40 名活跃用户'
+                      : undefined
+                  }
+                  loading={membersLoading}
+                  active={filterState.userId !== GATEWAY_FILTER_ALL}
+                  menuWidth="wide"
+                  className={STATS_FILTER_TRIGGER_WIDE}
+                />
+              ) : null}
               <GatewayFilterCombobox
                 value={filterState.model}
                 onChange={(v) => {
@@ -673,11 +747,14 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 options={modelOptions}
                 placeholder="模型"
                 searchPlaceholder="搜索模型…"
+                menuWidth="wide"
+                optionLayout="multiline"
+                loading={modelsLoading}
                 onOpenChange={(open) => {
-                  if (open) onModelPickerOpenChange(true)
+                  if (open && !crossTeamStatsEnabled) onModelPickerOpenChange(true)
                 }}
                 active={filterState.model !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER_WIDE}
               />
               <GatewayFilterCombobox
                 value={filterState.provider}
@@ -687,11 +764,9 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 options={providerOptions}
                 placeholder="提供商"
                 searchPlaceholder="搜索提供商…"
-                onOpenChange={(open) => {
-                  if (open) onModelPickerOpenChange(true)
-                }}
+                loading={providerOptionsLoading}
                 active={filterState.provider !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER}
               />
               <GatewayFilterCombobox
                 value={filterState.status}
@@ -702,7 +777,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 placeholder="状态"
                 searchPlaceholder="搜索状态…"
                 active={filterState.status !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER}
               />
               <GatewayFilterCombobox
                 value={filterState.capability}
@@ -713,7 +788,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 placeholder="能力"
                 searchPlaceholder="搜索能力…"
                 active={filterState.capability !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER}
               />
               <GatewayFilterCombobox
                 value={filterState.vkeyId}
@@ -723,24 +798,23 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 options={keyOptions}
                 placeholder="虚拟 Key"
                 searchPlaceholder="搜索 Key…"
-                loading={keysQuery.isLoading}
+                menuWidth="wide"
+                loading={keysLoading}
                 active={filterState.vkeyId !== GATEWAY_FILTER_ALL}
-                className="w-[min(100%,9rem)]"
+                className={STATS_FILTER_TRIGGER_WIDE}
               />
               {crossTeamStatsEnabled ? (
                 <GatewayTeamCombobox
-                  value={
-                    filterState.teamFilterId === GATEWAY_FILTER_ALL ? '' : filterState.teamFilterId
-                  }
+                  allowAll
+                  allLabel="全部团队"
+                  value={filterState.teamFilterId}
                   onChange={(teamFilterId) => {
-                    setFilterField(
-                      'teamFilterId',
-                      teamFilterId.length > 0 ? teamFilterId : GATEWAY_FILTER_ALL
-                    )
+                    setFilterField('teamFilterId', teamFilterId)
                   }}
                   teams={teamOptions}
                   placeholder="全部团队"
-                  className="h-9 w-[min(100%,9rem)]"
+                  className={STATS_FILTER_TRIGGER_WIDE}
+                  popoverContentClassName="min-w-[min(18rem,calc(100vw-1.5rem))] max-w-[min(28rem,calc(100vw-1.5rem))]"
                   active={filterState.teamFilterId !== GATEWAY_FILTER_ALL}
                 />
               ) : null}
@@ -821,7 +895,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
           ) : null}
           {statsQuery.isError ? (
             <div className="px-6 py-10 text-center text-sm text-destructive">
-              {errorMessage(statsQuery.error)}
+              {usageStatsErrorMessage(statsQuery.error, usageAggregation)}
             </div>
           ) : null}
           {!statsQuery.isLoading && !statsQuery.isError && items.length === 0 ? (

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from starlette.requests import Request
 
-from domains.tenancy.presentation.team_dependencies import _assert_gateway_not_viewer_write
+from domains.identity.domain.policies.gateway_access_policy import assert_gateway_write_allowed
 from libs.exceptions import PermissionDeniedError
 
 
@@ -21,15 +21,15 @@ def _request(method: str) -> Request:
 
 @pytest.mark.unit
 def test_viewer_allows_get() -> None:
-    _assert_gateway_not_viewer_write(_request("GET"), "viewer")
+    assert_gateway_write_allowed("viewer", "GET")
 
 
 @pytest.mark.unit
 def test_viewer_blocks_post() -> None:
     with pytest.raises(PermissionDeniedError):
-        _assert_gateway_not_viewer_write(_request("POST"), "viewer")
+        assert_gateway_write_allowed("viewer", "POST")
 
 
 @pytest.mark.unit
 def test_user_allows_post() -> None:
-    _assert_gateway_not_viewer_write(_request("POST"), "user")
+    assert_gateway_write_allowed("user", "POST")

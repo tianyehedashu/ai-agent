@@ -18,12 +18,16 @@ def is_platform_admin(team: ManagementTeamContext) -> bool:
     return team.is_platform_admin
 
 
+def is_admin_or_owner_team_role(team_role: str | None) -> bool:
+    """给定团队角色字符串是否为 owner 或 admin（纯值判断，不含平台 admin 旁路）。"""
+    if team_role is None:
+        return False
+    return team_role in (TeamRole.OWNER.value, TeamRole.ADMIN.value)
+
+
 def is_team_admin_or_platform(team: ManagementTeamContext) -> bool:
     """平台 admin 或团队 owner/admin。"""
-    return team.is_platform_admin or team.team_role in (
-        TeamRole.OWNER.value,
-        TeamRole.ADMIN.value,
-    )
+    return team.is_platform_admin or is_admin_or_owner_team_role(team.team_role)
 
 
 def is_plain_team_member_role(*, is_platform_admin: bool, team_role: str) -> bool:

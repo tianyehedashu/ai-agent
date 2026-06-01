@@ -8,7 +8,8 @@ from domains.gateway.presentation.credential_response import (
     build_playground_credential_summary_response,
 )
 from domains.gateway.presentation.schemas.common import PlaygroundCredentialSummaryResponse
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 
 from ._common import MgmtReads
 
@@ -25,7 +26,7 @@ async def list_playground_credential_summaries(
 ) -> list[PlaygroundCredentialSummaryResponse]:
     """跨 membership 聚合个人 + 团队 + 系统凭据摘要（无密钥）。"""
     user_id = get_user_uuid(current_user)
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     rows = await reads.list_playground_credential_summaries_for_actor(
         user_id,
         is_platform_admin=is_platform_admin,

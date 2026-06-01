@@ -24,15 +24,9 @@ from domains.identity.infrastructure.auth.jwt import (
     verify_token,
 )
 from domains.identity.infrastructure.auth.password import hash_password, verify_password
-from domains.identity.infrastructure.auth.rbac_adapter import (
-    RBACMiddleware,
-    require_permission,
-)
-
 __all__ = [
     "JWTManager",
     "Permission",
-    "RBACMiddleware",
     "Role",
     "TokenPayload",
     "check_resource_ownership",
@@ -42,7 +36,6 @@ __all__ = [
     "has_permission",
     "hash_password",
     "init_jwt_manager",
-    "require_permission",
     "verify_password",
     "verify_token",
 ]

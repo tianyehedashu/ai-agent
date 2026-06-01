@@ -83,6 +83,8 @@ def _usage_statistics_item_response(
     return UsageStatisticsItemResponse(
         group_key=item.group_key,
         label=item.label,
+        group_key_parts=item.group_key_parts,
+        label_parts=item.label_parts,
         requests=metric.requests,
         success_count=metric.success_count,
         failure_count=metric.failure_count,
@@ -151,7 +153,10 @@ async def dashboard_statistics(
     group_by: UsageStatisticsGroupBy = Query(UsageStatisticsGroupBy.CREDENTIAL),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
-    team_id: uuid.UUID | None = None,
+    filter_team_id: uuid.UUID | None = Query(
+        default=None,
+        description="按租户团队筛选（与路径 {team_id} 工作区上下文无关）",
+    ),
     model: str | None = Query(default=None, min_length=1, max_length=200),
     provider: str | None = Query(default=None, min_length=1, max_length=50),
     capability: str | None = Query(default=None, min_length=1, max_length=40),
@@ -169,7 +174,7 @@ async def dashboard_statistics(
         filters=UsageStatisticsFilters(
             credential_id=credential_id,
             user_id=user_id,
-            team_id=team_id,
+            team_id=filter_team_id,
             model=model.strip() if model else None,
             provider=provider.strip() if provider else None,
             capability=capability.strip() if capability else None,
@@ -232,7 +237,10 @@ async def dashboard_statistics_breakdown(
     top_n: int = Query(3, ge=1, le=32),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
-    team_id: uuid.UUID | None = None,
+    filter_team_id: uuid.UUID | None = Query(
+        default=None,
+        description="按租户团队筛选（与路径 {team_id} 工作区上下文无关）",
+    ),
     model: str | None = Query(default=None, min_length=1, max_length=200),
     provider: str | None = Query(default=None, min_length=1, max_length=50),
     capability: str | None = Query(default=None, min_length=1, max_length=40),
@@ -249,7 +257,7 @@ async def dashboard_statistics_breakdown(
         filters=UsageStatisticsFilters(
             credential_id=credential_id,
             user_id=user_id,
-            team_id=team_id,
+            team_id=filter_team_id,
             model=model.strip() if model else None,
             provider=provider.strip() if provider else None,
             capability=capability.strip() if capability else None,

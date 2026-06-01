@@ -66,6 +66,33 @@ class TestGiikinIdentityService:
         user_repo.get_by_giikin_user_id.assert_awaited_once_with("1001")
         user_repo.create.assert_not_called()
 
+    async def test_resolve_existing_admin_user_preserves_role(self) -> None:
+        """已提权为 admin 的 giikin 用户重登时不得降级为 user。"""
+        existing = _FakeUser(
+            id=uuid.uuid4(),
+            email="giikin-9009@giikin.sso",
+            name="SSO Admin",
+            role="admin",
+            giikin_user_id="9009",
+        )
+        user_repo = MagicMock()
+        user_repo.get_by_giikin_user_id = AsyncMock(return_value=existing)
+        user_repo.create = AsyncMock()
+
+        service = GiikinIdentityService(MagicMock(), user_repo=user_repo)
+        claims = GiikinGatewayClaims(
+            user_id="9009",
+            name="SSO Admin",
+            org_code="",
+            shop_id="",
+        )
+
+        user = await service.resolve_or_provision(claims)
+
+        assert user is existing
+        assert user.role == "admin"
+        user_repo.create.assert_not_called()
+
     async def test_provision_new_user_and_default_team(self) -> None:
         created = _FakeUser(
             id=uuid.uuid4(),

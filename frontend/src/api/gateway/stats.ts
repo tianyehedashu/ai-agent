@@ -58,7 +58,7 @@ export type GatewayUsageStatsQuery = PageQuery & {
   group_by?: GatewayUsageStatsGroupBy
   credential_id?: string
   user_id?: string
-  team_id?: string
+  filter_team_id?: string
   model?: string
   provider?: string
   capability?: string
@@ -74,7 +74,7 @@ function buildUsageStatsSearch(params?: GatewayUsageStatsQuery): Record<string, 
   if (params.group_by) search.group_by = params.group_by
   if (params.credential_id) search.credential_id = params.credential_id
   if (params.user_id) search.user_id = params.user_id
-  if (params.team_id) search.team_id = params.team_id
+  if (params.filter_team_id) search.filter_team_id = params.filter_team_id
   if (params.model) search.model = params.model
   if (params.provider) search.provider = params.provider
   if (params.capability) search.capability = params.capability

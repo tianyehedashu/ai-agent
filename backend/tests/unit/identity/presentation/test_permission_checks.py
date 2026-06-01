@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
+from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import (
-    ADMIN_ROLE,
     check_tenant_access,
     check_tenant_access_or_public,
 )
@@ -58,7 +58,7 @@ class TestCheckTenantAccess:
             clear_permission_context()
 
     def test_admin_bypasses_tenant_check(self) -> None:
-        admin = _user(role=ADMIN_ROLE)
+        admin = _user(role=Role.ADMIN.value)
         check_tenant_access(uuid.uuid4(), admin, "Agent")
 
     def test_missing_context_denies(self) -> None:

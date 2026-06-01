@@ -9,6 +9,7 @@ import uuid
 
 class EncryptedCredentialSnapshot(Protocol):
     id: uuid.UUID
+    name: str
     api_key_encrypted: str
     api_base: str | None
     extra: dict[str, Any] | None

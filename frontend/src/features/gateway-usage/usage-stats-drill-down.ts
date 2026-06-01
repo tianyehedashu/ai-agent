@@ -5,7 +5,7 @@ import { GATEWAY_FILTER_ALL } from './gateway-filter-combobox'
 export type StatsFilterKey =
   | 'credential_id'
   | 'user_id'
-  | 'team_id'
+  | 'filter_team_id'
   | 'model'
   | 'provider'
   | 'capability'
@@ -27,7 +27,7 @@ interface DrillDownMapping {
 const DRILL_DOWN_MAP: Partial<Record<GatewayUsageStatsGroupBy, DrillDownMapping>> = {
   user: { filterKey: 'user_id', groupByAfter: 'model' },
   credential: { filterKey: 'credential_id', groupByAfter: 'model' },
-  team: { filterKey: 'team_id', groupByAfter: 'credential' },
+  team: { filterKey: 'filter_team_id', groupByAfter: 'credential' },
   model: { filterKey: 'model', groupByAfter: 'credential' },
   vkey: { filterKey: 'vkey_id', groupByAfter: 'model' },
   provider: { filterKey: 'provider', groupByAfter: 'model' },
@@ -69,7 +69,7 @@ export function filterKeyToStateSetter(key: StatsFilterKey): keyof UsageStatsFil
       return 'credentialId'
     case 'user_id':
       return 'userId'
-    case 'team_id':
+    case 'filter_team_id':
       return 'teamFilterId'
     case 'model':
       return 'model'

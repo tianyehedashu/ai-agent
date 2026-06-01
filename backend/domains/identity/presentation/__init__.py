@@ -7,7 +7,6 @@
 """
 
 from domains.identity.presentation.deps import (
-    ADMIN_ROLE,
     AdminUser,
     AuthUser,
     OptionalUser,
@@ -31,8 +30,6 @@ from domains.identity.presentation.schemas import (
 )
 
 __all__ = [
-    # Role constants
-    "ADMIN_ROLE",
     # Dependencies
     "AdminUser",
     "AuthUser",

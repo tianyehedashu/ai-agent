@@ -14,7 +14,8 @@ from domains.gateway.presentation.credential_response import (
     build_credential_response_for_team_workspace_list,
 )
 from domains.gateway.presentation.schemas.common import ManagedTeamCredentialListResponse
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 
@@ -34,7 +35,7 @@ async def list_managed_team_credentials(
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> ManagedTeamCredentialListResponse:
     """列出当前用户 membership 内协作团队的 team-scope 凭据（跨团队聚合，分页）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     enc_key = encryption_key()
     user_id = get_user_uuid(current_user)
     result = await list_managed_team_credentials_for_actor(

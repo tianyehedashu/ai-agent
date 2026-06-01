@@ -50,11 +50,6 @@ class PermissionContext:
         """是否为团队管理员或所有者（不含平台 admin）"""
         return self.team_role in {"owner", "admin"}
 
-    @property
-    def is_team_owner(self) -> bool:
-        """是否为团队所有者"""
-        return self.team_role == "owner"
-
     def with_team(
         self,
         team_id: uuid.UUID,

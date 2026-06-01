@@ -19,10 +19,14 @@ from domains.gateway.application.management.write_modules.probe_recording import
     record_gateway_model_test_failure,
     record_gateway_model_test_success,
 )
+from domains.gateway.application.management.write_modules.probe_litellm_attribution import (
+    merge_probe_litellm_kwargs,
+)
 from domains.gateway.application.management.write_modules.probe_target import (
     EncryptedCredentialSnapshot,
     ProbeTarget,
 )
+from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
 from domains.gateway.application.management.write_modules.probe_video_preview import (
     video_generation_probe_preview,
 )
@@ -64,7 +68,11 @@ class ProbeWritesMixin:
 
     async def test_personal_model(self, user_id: uuid.UUID, model_id: uuid.UUID) -> dict[str, Any]:
         tenant_id = await self._ensure_personal_tenant_id(user_id)
-        return await self.test_gateway_model(model_id, tenant_id=tenant_id)
+        return await self.test_gateway_model(
+            model_id,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+        )
 
     async def _resolve_probe_target(
         self,
@@ -104,6 +112,38 @@ class ProbeWritesMixin:
             return await self._system_creds.get(target.credential_id)
         return await self._creds.get(target.credential_id)
 
+    async def _resolve_probe_actor_user_id(
+        self,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+    ) -> uuid.UUID | None:
+        if actor_user_id is not None:
+            return actor_user_id
+        # 延迟导入避免 application 层循环依赖（tenancy ↔ gateway）
+        from domains.tenancy.application.team_service import TeamService
+
+        team = await TeamService(self._session).get_team(tenant_id)
+        if team is not None and team.kind == "personal":
+            return team.owner_user_id
+        return None
+
+    def _probe_litellm_kwargs(
+        self,
+        base: dict[str, Any],
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+        target: ProbeTarget,
+        credential_name: str,
+    ) -> dict[str, Any]:
+        return merge_probe_litellm_kwargs(
+            base,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            target=target,
+            credential_name=credential_name,
+        )
+
     async def test_gateway_model(
         self,
         model_id: uuid.UUID,
@@ -115,6 +155,8 @@ class ProbeWritesMixin:
     ) -> dict[str, Any]:
         target = await self._resolve_probe_target(model_id, tenant_id=tenant_id)
         if not target.is_system:
+            # 探活会消耗上游 API 额度并产生真实请求，视为对凭据的「写副作用」；
+            # 因此复用 update 权限策略，确保只有凭据 owner / team_admin / platform_admin 可执行。
             await self._assert_team_model_mutation_allowed(
                 credential_id=target.credential_id,
                 tenant_id=tenant_id,
@@ -148,17 +190,32 @@ class ProbeWritesMixin:
                 self._models, model_id, tested_at, msg, litellm_model, **record_kw
             )
         api_base = credential.api_base
+        probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
+        ensure_gateway_callbacks()
         from litellm import acompletion, aembedding, aimage_generation, avideo_generation
+
+        def _litellm_kw(base: dict[str, Any]) -> dict[str, Any]:
+            return self._probe_litellm_kwargs(
+                base,
+                tenant_id=tenant_id,
+                actor_user_id=probe_actor_id,
+                target=target,
+                credential_name=credential.name,
+            )
 
         try:
             if capability == "chat":
                 response = await acompletion(
-                    model=litellm_model,
-                    messages=[{"role": "user", "content": "Hi"}],
-                    max_tokens=10,
-                    temperature=0,
-                    api_key=api_key,
-                    api_base=api_base,
+                    **_litellm_kw(
+                        {
+                            "model": litellm_model,
+                            "messages": [{"role": "user", "content": "Hi"}],
+                            "max_tokens": 10,
+                            "temperature": 0,
+                            "api_key": api_key,
+                            "api_base": api_base,
+                        }
+                    )
                 )
                 preview = ""
                 with suppress(Exception):
@@ -200,13 +257,17 @@ class ProbeWritesMixin:
                     preview = image_generation_probe_preview(img_data)
                 else:
                     img_response = await aimage_generation(
-                        model=litellm_model,
-                        prompt="ping",
-                        n=1,
-                        size=img_size,
-                        api_key=api_key,
-                        api_base=api_base,
-                        timeout=60,
+                        **_litellm_kw(
+                            {
+                                "model": litellm_model,
+                                "prompt": "ping",
+                                "n": 1,
+                                "size": img_size,
+                                "api_key": api_key,
+                                "api_base": api_base,
+                                "timeout": 60,
+                            }
+                        )
                     )
                     preview = image_generation_probe_preview(img_response)
                 return await record_gateway_model_test_success(
@@ -228,10 +289,14 @@ class ProbeWritesMixin:
                     await perform_dashscope_embedding(embed_req)
                 else:
                     await aembedding(
-                        model=litellm_model,
-                        input=["ping"],
-                        api_key=api_key,
-                        api_base=api_base,
+                        **_litellm_kw(
+                            {
+                                "model": litellm_model,
+                                "input": ["ping"],
+                                "api_key": api_key,
+                                "api_base": api_base,
+                            }
+                        )
                     )
                 return await record_gateway_model_test_success(
                     self._models, model_id, tested_at, litellm_model, **record_kw
@@ -255,12 +320,16 @@ class ProbeWritesMixin:
                     )
                 else:
                     video_response = await avideo_generation(
-                        model=litellm_model,
-                        prompt="ping",
-                        seconds="5",
-                        api_key=api_key,
-                        api_base=api_base,
-                        timeout=VIDEO_PROBE_TIMEOUT,
+                        **_litellm_kw(
+                            {
+                                "model": litellm_model,
+                                "prompt": "ping",
+                                "seconds": "5",
+                                "api_key": api_key,
+                                "api_base": api_base,
+                                "timeout": VIDEO_PROBE_TIMEOUT,
+                            }
+                        )
                     )
                 preview = video_generation_probe_preview(video_response)
                 return await record_gateway_model_test_success(

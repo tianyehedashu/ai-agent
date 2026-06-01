@@ -55,13 +55,21 @@ class GatewayUsageLogReadMixin:
         return UsageAxis.workspace(ctx.team_id)
 
     @staticmethod
+    def _aggregation_is_platform(aggregation: UsageAggregation) -> bool:
+        """兼容 StrEnum 成员与历史进程/查询中的字符串 ``\"platform\"``。"""
+        if aggregation == UsageAggregation.PLATFORM:
+            return True
+        raw = aggregation.value if isinstance(aggregation, UsageAggregation) else str(aggregation)
+        return raw == UsageAggregation.PLATFORM.value
+
+    @staticmethod
     def _resolve_usage_axis(
         ctx: ManagementTeamContext,
         aggregation: UsageAggregation,
         *,
         vkey_id: UUID | None = None,
     ) -> UsageAxis:
-        if aggregation == UsageAggregation.PLATFORM:
+        if GatewayUsageLogReadMixin._aggregation_is_platform(aggregation):
             snapshot = usage_log_access_from_management_ctx(ctx)
             if not platform_aggregation_allowed(snapshot):
                 raise TeamPermissionDeniedError(str(ctx.team_id))
@@ -106,7 +114,7 @@ class GatewayUsageLogReadMixin:
         *,
         usage_aggregation: UsageAggregation,
     ) -> Any | None:
-        if usage_aggregation == UsageAggregation.PLATFORM:
+        if self._aggregation_is_platform(usage_aggregation):
             # 平台管理员（门控在 _resolve_usage_axis）可查看任意单条日志
             platform_axis = self._resolve_usage_axis(ctx, UsageAggregation.PLATFORM)
             return await self._logs.get_by_axis(platform_axis, log_id)
@@ -193,6 +201,8 @@ class GatewayUsageLogReadMixin:
         self,
         rows: list[RequestLogUsageAggregateRow],
         group_by: UsageStatisticsGroupBy,
+        *,
+        viewer_user_id: UUID | None = None,
     ) -> dict[str, str]:
         labels: dict[str, str] = {}
         if group_by == UsageStatisticsGroupBy.CREDENTIAL:
@@ -211,7 +221,9 @@ class GatewayUsageLogReadMixin:
 
         if group_by == UsageStatisticsGroupBy.TEAM:
             team_ids = [row.group_key for row in rows if isinstance(row.group_key, UUID)]
-            names = await self._teams.get_display_names_by_ids(team_ids)
+            names = await self._teams.get_display_names_by_ids(
+                team_ids, viewer_user_id=viewer_user_id
+            )
             labels.update({str(key): value for key, value in names.items()})
             for row in rows:
                 key = self._group_key_to_str(row.group_key)
@@ -350,7 +362,9 @@ class GatewayUsageLogReadMixin:
         if group_by == UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL:
             items = await self._build_user_model_credential_items(rows)
         else:
-            labels = await self._usage_statistics_labels(rows, group_by)
+            labels = await self._usage_statistics_labels(
+                rows, group_by, viewer_user_id=ctx.user_id
+            )
             items = [
                 self._item_from_row(row, labels.get(self._group_key_to_str(row.group_key), "未知"))
                 for row in rows
@@ -408,7 +422,9 @@ class GatewayUsageLogReadMixin:
             page_size=top_n,
             parent_scope=parent_scope,
         )
-        labels = await self._usage_statistics_labels(rows, breakdown_group_by)
+        labels = await self._usage_statistics_labels(
+            rows, breakdown_group_by, viewer_user_id=ctx.user_id
+        )
         items: list[UsageStatisticsBreakdownSlice] = []
         for row in rows:
             key = self._group_key_to_str(row.group_key)

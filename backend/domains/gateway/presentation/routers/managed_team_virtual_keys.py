@@ -18,7 +18,8 @@ from domains.gateway.presentation.schemas.common import (
     ManagedTeamVkeyEntitlementItem,
     ManagedTeamVkeyEntitlementsResponse,
 )
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, build_page, page_query_params
 from libs.db.database import get_db
 
@@ -35,7 +36,7 @@ async def list_managed_team_virtual_keys(
     page: PageDep,
 ) -> ManagedTeamVirtualKeyListResponse:
     """列出当前用户 membership 内各团队下自建的虚拟 Key（跨团队聚合，分页）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     result = await list_managed_team_virtual_keys_for_actor(
         db,
         user_id=get_user_uuid(current_user),
@@ -66,7 +67,7 @@ async def list_managed_team_vkey_entitlements(
     db: DbSession,
 ) -> ManagedTeamVkeyEntitlementsResponse:
     """当前用户可见 vkey 的客户套餐（单次批量，供虚拟 Key 列表页使用）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     result = await list_managed_team_vkey_entitlements_for_actor(
         db,
         user_id=get_user_uuid(current_user),

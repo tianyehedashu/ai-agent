@@ -209,6 +209,7 @@ $RECYCLE.BIN/
 *.backup
 *.old
 *.orig
+**/.review_diff.txt
 tmp/
 temp/
 cache/

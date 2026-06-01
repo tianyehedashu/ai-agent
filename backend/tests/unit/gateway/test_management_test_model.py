@@ -51,13 +51,24 @@ async def test_chat_capability_success_persists(db_session, test_user) -> None:
     )()
     writes = GatewayManagementWriteService(db_session)
 
+    mock_completion = AsyncMock(return_value=fake)
     # acompletion 在 test_gateway_model 内部延迟导入，patch litellm 模块入口即可。
-    with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
+    with patch("litellm.acompletion", new=mock_completion):
         result = await writes.test_gateway_model(
             model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
         )
 
     assert result["success"] is True
+    mock_completion.assert_awaited_once()
+    call_kwargs = mock_completion.await_args.kwargs
+    meta = call_kwargs["metadata"]
+    seeded = await GatewayModelRepository(db_session).get(model_id)
+    assert seeded is not None
+    assert meta["gateway_team_id"] == str(team_id)
+    assert meta["gateway_user_id"] == str(test_user.id)
+    assert meta["gateway_credential_id"] == str(seeded.credential_id)
+    assert meta["gateway_client_type"] == "model_connectivity_probe"
+    assert call_kwargs["litellm_params"]["model_info"]["id"] == str(model_id)
     assert result["status"] == "success"
     assert "tested_at" in result
 

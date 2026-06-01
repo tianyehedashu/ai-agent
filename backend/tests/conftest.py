@@ -502,6 +502,73 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 
+@pytest_asyncio.fixture(scope="function")
+async def sso_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """SSO 模式 HTTP 客户端（auth_mode=sso + giikin internal key，走 X-Giikin-* Header 认证）。"""
+    # pylint: disable=import-outside-toplevel
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from pydantic import SecretStr
+
+    from tests.helpers.giikin_sso import GIIKIN_SSO_TEST_INTERNAL_KEY
+
+    mock_factory = MagicMock()
+    mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
+    mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch("libs.db.database.init_db"),
+        patch("libs.db.redis.init_redis"),
+        patch("libs.db.database.get_session_factory", return_value=mock_factory),
+        patch("libs.db.database.get_async_session", new=mock_factory),
+        patch("bootstrap.config.settings.app_env", "development"),
+        patch("bootstrap.config.settings.auth_mode", "sso"),
+        patch(
+            "bootstrap.config.settings.giikin_internal_key",
+            SecretStr(GIIKIN_SSO_TEST_INTERNAL_KEY),
+        ),
+    ):
+        from bootstrap.main import app  # pylint: disable=import-outside-toplevel
+        from domains.agent.infrastructure.engine.langgraph_checkpointer import (
+            LangGraphCheckpointer,  # pylint: disable=import-outside-toplevel
+        )
+
+        _apply_db_overrides(app, db_session)
+
+        from domains.gateway.application.config_catalog_sync import (
+            sync_gateway_catalog_from_seed,
+        )
+        from domains.gateway.infrastructure.router_singleton import reload_router
+
+        await sync_gateway_catalog_from_seed(db_session)
+        await db_session.flush()
+        with contextlib.suppress(Exception):
+            await reload_router(db_session)
+
+        if not hasattr(app.state, "checkpointer"):
+            test_checkpointer = LangGraphCheckpointer(storage_type="memory")
+            await test_checkpointer.setup()
+            app.state.checkpointer = test_checkpointer
+
+        async with AsyncClient(
+            transport=ASGITransport(app=_asgi_app_with_streaming_spec(app)),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+
+        from domains.gateway.application.proxy_deferred_tasks import (
+            shutdown_proxy_deferred_tasks,
+        )
+
+        await shutdown_proxy_deferred_tasks()
+
+        await asyncio.sleep(_CLIENT_TEARDOWN_SLEEP)
+        from libs.background_tasks import shutdown_app_background_tasks
+
+        await shutdown_app_background_tasks(app)
+        app.dependency_overrides.clear()  # type: ignore[attr-defined]
+
+
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
     """测试用户 fixture"""

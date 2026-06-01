@@ -12,7 +12,8 @@ from domains.gateway.application.management.managed_team_route_reads import (
 )
 from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.schemas.common import ManagedTeamRouteListResponse, RouteResponse
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, build_page, page_query_params
 from libs.db.database import get_db
 
@@ -29,7 +30,7 @@ async def list_managed_team_routes(
     page: PageDep,
 ) -> ManagedTeamRouteListResponse:
     """列出当前用户 membership 内各团队可见的虚拟路由（跨团队聚合，分页）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     result = await list_managed_team_routes_for_actor(
         db,
         user_id=get_user_uuid(current_user),

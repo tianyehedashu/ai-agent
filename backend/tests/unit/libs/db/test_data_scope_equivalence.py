@@ -6,7 +6,8 @@ import uuid
 
 import pytest
 
-from domains.identity.presentation.deps import ADMIN_ROLE, check_tenant_access
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import check_tenant_access
 from domains.identity.presentation.schemas import CurrentUser
 from libs.exceptions import PermissionDeniedError
 from libs.iam.data_scope_policy import DataAction, DataResource, enforce_data_scope
@@ -53,9 +54,9 @@ def _enforce_matches_check(
 
 class TestDataScopeEquivalence:
     def test_admin_always_allowed(self) -> None:
-        user = _registered_user(role=ADMIN_ROLE)
+        user = _registered_user(role=Role.ADMIN.value)
         tenant_id = uuid.uuid4()
-        ctx = PermissionContext(user_id=uuid.uuid4(), role=ADMIN_ROLE, team_ids=frozenset())
+        ctx = PermissionContext(user_id=uuid.uuid4(), role=Role.ADMIN.value, team_ids=frozenset())
         _enforce_matches_check(ctx, tenant_id, user, expect_allowed=True)
 
     def test_empty_team_ids_denied(self) -> None:

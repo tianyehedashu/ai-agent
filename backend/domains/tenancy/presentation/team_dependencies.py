@@ -13,7 +13,10 @@ import uuid
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.identity.presentation.deps import VIEWER_ROLE, RequiredAuthUser
+from domains.identity.domain.policies.gateway_access_policy import (
+    assert_gateway_write_allowed,
+)
+from domains.identity.presentation.deps import RequiredAuthUser
 from domains.tenancy.application.management_team_installer import install_management_team_context
 from domains.tenancy.domain.management_context import ManagementTeamContext
 from domains.tenancy.domain.policies.team_role import (
@@ -26,20 +29,6 @@ from libs.exceptions import AIAgentError, PermissionDeniedError
 from libs.exceptions.codes import INTERNAL_ERROR
 
 ResolvedTeam = ManagementTeamContext
-
-_GATEWAY_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-
-
-def _assert_gateway_not_viewer_write(request: Request, platform_role: str) -> None:
-    if platform_role != VIEWER_ROLE:
-        return
-    if request.method in _GATEWAY_READ_ONLY_METHODS:
-        return
-    raise PermissionDeniedError(
-        message="Viewer accounts are read-only on AI Gateway",
-        resource="AI Gateway",
-    )
-
 
 async def merge_optional_gateway_team(
     db: AsyncSession,
@@ -70,7 +59,7 @@ async def resolve_current_team(
     x_team_id: Annotated[str | None, Header(alias="X-Team-Id")] = None,
 ) -> ManagementTeamContext:
     """解析当前团队：路径 team_id > X-Team-Id > personal team。"""
-    _assert_gateway_not_viewer_write(request, current_user.role)
+    assert_gateway_write_allowed(current_user.role, request.method)
 
     user_id = uuid.UUID(current_user.id)
     path_raw = request.path_params.get("team_id")

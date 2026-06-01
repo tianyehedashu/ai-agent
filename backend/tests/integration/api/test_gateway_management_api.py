@@ -935,6 +935,24 @@ class TestGatewayManagementApi:
         assert r_owner_workspace.status_code == 200, r_owner_workspace.text
         assert r_owner_workspace.json()["total_requests"] == 1
 
+        # 路径 {team_id} 不得隐式写入 ?filter_team_id= 筛选（否则 platform 会被收窄为单团队）
+        r_admin_stats = await dev_client.get(
+            f"/api/v1/gateway/teams/{shared.id}/dashboard/statistics",
+            params={
+                "usage_aggregation": "platform",
+                "group_by": "user",
+                "days": 1,
+                "page": 1,
+                "page_size": 50,
+            },
+            headers=admin_headers,
+        )
+        assert r_admin_stats.status_code == 200, r_admin_stats.text
+        stats_body = r_admin_stats.json()
+        assert int(stats_body["totals"]["requests"]) >= 2
+        user_keys = {item["group_key"] for item in stats_body["items"]}
+        assert str(member.id) in user_keys
+
     @pytest.mark.asyncio
     async def test_list_model_presets_filter_by_provider(
         self,
@@ -3537,6 +3555,80 @@ class TestGatewayManagementApi:
         assert len(payload["items"]) == page_size
         assert payload["totals"]["requests"] == 3
         assert payload["group_by"] == "credential"
+
+    @pytest.mark.asyncio
+    async def test_dashboard_statistics_provider_filter_query_param(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """``provider`` 查询参数须进入 UsageStatisticsFilters，不得被路径 team_id 覆盖。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        now = datetime.now(UTC)
+        db_session.add_all(
+            [
+                GatewayRequestLog(
+                    id=uuid.uuid4(),
+                    created_at=now,
+                    tenant_id=team.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    credential_id=uuid.uuid4(),
+                    capability="chat",
+                    real_model="gpt-4",
+                    provider="openai",
+                    status="success",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.001"),
+                    latency_ms=10,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id=f"req-openai-{uuid.uuid4().hex[:8]}",
+                ),
+                GatewayRequestLog(
+                    id=uuid.uuid4(),
+                    created_at=now,
+                    tenant_id=team.id,
+                    user_id=test_user.id,
+                    vkey_id=None,
+                    credential_id=uuid.uuid4(),
+                    capability="chat",
+                    real_model="doubao-test",
+                    provider="volcengine",
+                    status="success",
+                    input_tokens=2,
+                    output_tokens=2,
+                    cached_tokens=0,
+                    cost_usd=Decimal("0.002"),
+                    latency_ms=12,
+                    cache_hit=False,
+                    fallback_chain=[],
+                    request_id=f"req-volc-{uuid.uuid4().hex[:8]}",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics",
+            headers=auth_headers,
+            params={
+                "group_by": "model",
+                "days": 7,
+                "provider": "volcengine",
+                "page": 1,
+                "page_size": 20,
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["totals"]["requests"] == 1
+        assert len(body["items"]) == 1
+        assert body["items"][0]["group_key"] == "doubao-test"
 
     @pytest.mark.asyncio
     async def test_dashboard_statistics_breakdown_under_user_parent(

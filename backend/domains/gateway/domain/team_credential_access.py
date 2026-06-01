@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from domains.gateway.domain.errors import CredentialNotFoundError
-from domains.tenancy.domain.policies.team_role import TeamRole
+from domains.tenancy.domain.policies.team_role import TeamRole, is_admin_or_owner_team_role
 
 CredentialManagementAccess = Literal["full", "metadata"]
 
@@ -32,7 +32,7 @@ def actor_owns_team_credential(
 
 
 def is_team_admin_role(team_role: str) -> bool:
-    return team_role in (TeamRole.OWNER.value, TeamRole.ADMIN.value)
+    return is_admin_or_owner_team_role(team_role)
 
 
 def can_manage_legacy_team_credential(
@@ -102,6 +102,29 @@ def can_write_team_credential(
     )
 
 
+def _assert_team_credential_accessible(
+    record: TeamCredentialAccessView | None,
+    *,
+    credential_id: UUID,
+    tenant_id: UUID,
+    actor_user_id: UUID | None,
+    team_role: str,
+    is_platform_admin: bool,
+    can_access_fn,
+) -> TeamCredentialAccessView:
+    """可复用的凭据访问断言体（readable/writable 共用）。"""
+    if record is None or record.tenant_id is None or record.tenant_id != tenant_id:
+        raise CredentialNotFoundError(str(credential_id))
+    if not can_access_fn(
+        created_by_user_id=record.created_by_user_id,
+        actor_user_id=actor_user_id,
+        team_role=team_role,
+        is_platform_admin=is_platform_admin,
+    ):
+        raise CredentialNotFoundError(str(credential_id))
+    return record
+
+
 def assert_team_credential_readable_by_actor(
     record: TeamCredentialAccessView | None,
     *,
@@ -112,16 +135,15 @@ def assert_team_credential_readable_by_actor(
     is_platform_admin: bool,
 ) -> TeamCredentialAccessView:
     """校验 actor 是否可读团队凭据；失败抛 CredentialNotFoundError（防枚举）。"""
-    if record is None or record.tenant_id is None or record.tenant_id != tenant_id:
-        raise CredentialNotFoundError(str(credential_id))
-    if not can_read_team_credential(
-        created_by_user_id=record.created_by_user_id,
+    return _assert_team_credential_accessible(
+        record,
+        credential_id=credential_id,
+        tenant_id=tenant_id,
         actor_user_id=actor_user_id,
         team_role=team_role,
         is_platform_admin=is_platform_admin,
-    ):
-        raise CredentialNotFoundError(str(credential_id))
-    return record
+        can_access_fn=can_read_team_credential,
+    )
 
 
 def assert_team_credential_writable_by_actor(
@@ -133,16 +155,19 @@ def assert_team_credential_writable_by_actor(
     team_role: str,
     is_platform_admin: bool,
 ) -> TeamCredentialAccessView:
-    if record is None or record.tenant_id is None or record.tenant_id != tenant_id:
-        raise CredentialNotFoundError(str(credential_id))
-    if not can_write_team_credential(
-        created_by_user_id=record.created_by_user_id,
+    """当前 can_write 与 can_read 等价，直接委托可读断言。
+
+    若未来读写权限分离，请改用独立的 can_write 调用。
+    """
+    return _assert_team_credential_accessible(
+        record,
+        credential_id=credential_id,
+        tenant_id=tenant_id,
         actor_user_id=actor_user_id,
         team_role=team_role,
         is_platform_admin=is_platform_admin,
-    ):
-        raise CredentialNotFoundError(str(credential_id))
-    return record
+        can_access_fn=can_write_team_credential,
+    )
 
 
 def team_credential_management_access(

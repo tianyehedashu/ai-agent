@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application.user_use_case import UserUseCase
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser
 from domains.tenancy.application.team_invite_candidate_reads import TeamInviteCandidateReads
 from domains.tenancy.application.team_member_reads import EnrichedTeamMember, enrich_team_members
 from domains.tenancy.application.team_service import TeamService
@@ -78,7 +79,7 @@ async def list_my_teams(
     ] = False,
 ) -> list[TeamResponse]:
     user_uuid = uuid.UUID(current_user.id)
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     items_data = await svc.list_teams_for_gateway(
         user_uuid,
         is_platform_admin=is_platform_admin and not membership_only,

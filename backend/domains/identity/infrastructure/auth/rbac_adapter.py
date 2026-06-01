@@ -1,72 +1,10 @@
 """
 RBAC Infrastructure Adapter - RBAC 基础设施适配器
 
-提供 FastAPI 框架适配：
-- FastAPI 装饰器
-- 中间件实现
+保留模块占位；当前项目路由统一使用 ``domains.identity.presentation.deps``
+中的依赖注入（``require_role`` / ``AdminUser`` 等），本模块暂不额外提供
+FastAPI 专用装饰器或中间件。
 """
 
-from collections.abc import Callable
-from functools import wraps
-from typing import Any
-
-from domains.identity.domain.rbac import (
-    Permission,
-    has_permission,
-)
-from libs.exceptions import AuthenticationError, PermissionDeniedError
-
-
-def require_permission(permission: Permission):
-    """
-    权限要求装饰器（FastAPI 适配）
-
-    用于 FastAPI 路由
-
-    Args:
-        permission: 所需权限
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        async def wrapper(*args, current_user: dict | None = None, **kwargs):
-            if current_user is None:
-                raise AuthenticationError("Authentication required")
-
-            user_role = current_user.get("role", "user")
-
-            if not has_permission(user_role, permission):
-                raise PermissionDeniedError(
-                    message=f"Permission denied: {permission.value}",
-                    action=permission.value,
-                )
-
-            return await func(*args, current_user=current_user, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-class RBACMiddleware:
-    """
-    RBAC 中间件（FastAPI 适配）
-
-    可选：用于更细粒度的权限控制
-    """
-
-    def __init__(self, required_permissions: list[Permission] | None = None):
-        self.required_permissions = required_permissions or []
-
-    async def __call__(
-        self,
-        current_user: dict[str, Any],
-    ) -> bool:
-        """检查权限"""
-        user_role = current_user.get("role", "user")
-
-        for permission in self.required_permissions:
-            if not has_permission(user_role, permission):
-                return False
-
-        return True
+# 项目中实际使用 ``deps.require_role`` 与团队角色依赖进行权限控制，
+# 若后续需要更细粒度的基于 Permission 枚举的装饰器，可在此补充。

@@ -21,6 +21,12 @@ class TeamRepository:
     async def get(self, team_id: uuid.UUID) -> Team | None:
         return await self._session.get(Team, team_id)
 
+    async def get_by_ids(self, team_ids: list[uuid.UUID]) -> list[Team]:
+        if not team_ids:
+            return []
+        stmt = select(Team).where(Team.id.in_(team_ids))
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def get_display_names_by_ids(self, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         """批量解析团队展示名（供跨域读模型标签等）。"""
         if not team_ids:

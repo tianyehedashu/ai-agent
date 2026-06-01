@@ -34,7 +34,8 @@ from domains.gateway.presentation.schemas.common import (
     ManagedTeamModelRouteUsageItem,
     ManagedTeamModelUsageSummaryResponse,
 )
-from domains.identity.presentation.deps import ADMIN_ROLE, RequiredAuthUser, get_user_uuid
+from domains.identity.domain.rbac import Role
+from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 
@@ -52,7 +53,7 @@ async def list_managed_team_models(
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> ManagedTeamModelListResponse:
     """列出当前用户可管理团队的 team registry 模型（跨团队聚合，分页）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     result = await list_managed_team_models_for_actor(
         db,
         user_id=get_user_uuid(current_user),
@@ -89,7 +90,7 @@ async def list_managed_team_model_credential_filters(
     db: DbSession,
 ) -> ManagedTeamModelCredentialFilterListResponse:
     """跨协作团队注册模型绑定的凭据（筛选下拉；成员可见团队内模型所用凭据名）。"""
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     result = await list_managed_team_model_credential_filters_for_actor(
         db,
         user_id=get_user_uuid(current_user),
@@ -116,7 +117,7 @@ async def managed_team_models_usage_summary(
 ) -> ManagedTeamModelUsageSummaryResponse:
     if route_names is not None and len(route_names) > 200:
         route_names = route_names[:200]
-    is_platform_admin = current_user.role == ADMIN_ROLE
+    is_platform_admin = current_user.role == Role.ADMIN.value
     items, total, start, end = await aggregate_managed_team_models_route_usage(
         db,
         user_id=get_user_uuid(current_user),

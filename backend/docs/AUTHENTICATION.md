@@ -48,6 +48,42 @@
 
 `users.giikin_user_id`（`String(64)`，唯一索引，可空）为 SSO 用户与本地用户的映射键（迁移 `20260609_add_user_giikin_user_id`）。
 
+### 2.3 平台角色 vs 团队角色（勿混淆）
+
+| 维度 | 存储 | SSO 首登默认 | 提权方式 |
+|------|------|--------------|----------|
+| **平台角色** | `users.role` | `user` | Admin API / CLI |
+| **团队角色** | `gateway_team_members.role` | personal team → `owner` | 团队成员管理 |
+
+- Giikin SSO Header **不含** `role` / `is_admin`；Giikin IAM 侧管理员**不会**自动映射为本站 `admin`。
+- 平台 `admin` 仅在本系统显式授予；SSO 重登**不会**把已提权的 `admin` 改回 `user`（`resolve_or_provision` 命中已有用户后直接返回）。
+- 个人团队首登一般为团队 `owner`，与平台 `user` 并存，属正常设计（见 `docs/项目权限规则.md`）。
+
+### 2.4 SSO 用户标识与首个平台 admin
+
+**合成邮箱**：JIT 用户的占位邮箱为 `giikin-{user_id}@giikin.sso`（不可用于本地密码登录）。运维提权或排查时请用此邮箱或用户 UUID：
+
+```bash
+# 列出用户（含 giikin 合成邮箱）
+uv run python scripts/set_admin.py --list
+
+# 首个平台 admin（仅当尚无 admin 时；SSO 生产无法用本地密码登录）
+uv run python scripts/set_admin.py --email giikin-1001@giikin.sso
+```
+
+**首个 admin（鸡生蛋）**：生产 `AUTH_MODE=sso` 时，用户经 giikin 登录、无本地 JWT 密码路径。第一个平台管理员须通过：
+
+1. **CLI**（上例 `scripts/set_admin.py`，在目标用户至少 SSO 登录一次以 JIT 建号后执行），或
+2. **已有 admin** 在 `/admin/users` 将目标用户平台角色改为 `admin`。
+
+**历史本地账号**：若用户曾在 `local` 模式注册且未绑定 `giikin_user_id`，SSO 首登会 **新建** 一条 JIT 用户。对旧账号提权不会影响 SSO 身份；迁移期需手动绑定：
+
+```sql
+UPDATE users SET giikin_user_id = '<giikin_user_id>' WHERE email = '<real_email>';
+```
+
+自动化回归见 `tests/integration/api/test_sso_role_persistence.py`。
+
 ---
 
 ## 3. 本地开发链路（`local`）
