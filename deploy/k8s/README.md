@@ -41,8 +41,8 @@ backend Service (ClusterIP :8000，不对公网暴露)
 docker build -f backend/Dockerfile -t giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:v1.0.0 backend/
 docker push giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:v1.0.0
 
-# 前端（构建参数与 ROOT_PATH 一致）
-docker build -f frontend/Dockerfile --build-arg VITE_APP_ROOT=/ai-agent \
+# 前端（Dockerfile 已默认 VITE_APP_ROOT=/ai-agent、VITE_AUTH_MODE=sso、VITE_SSO_LOGIN_URL；Jenkins 无需传 build-arg）
+docker build -f frontend/Dockerfile \
   -t giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-frontend:v1.0.0 frontend/
 docker push giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-frontend:v1.0.0
 ```

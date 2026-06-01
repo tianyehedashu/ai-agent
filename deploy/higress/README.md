@@ -18,6 +18,7 @@
 3. **SSE 超时**：`higress.io/timeout: "3600"`；云 SLB 空闲超时同步调大。
 4. **勿**对 Chat 开启 `proxy-next-upstream` 重试。
 5. **前端**：生产构建勿设置 `VITE_API_URL`（同域相对路径 `/ai-agent/api/v1/...`）。
+6. **SSO**：K8s Secret 设 `AUTH_MODE=sso` + `GIIKIN_INTERNAL_KEY`（与 giikin-auth-bridge 一致）；前端 `frontend/Dockerfile` 已默认 `VITE_AUTH_MODE=sso` 与 IAM binding URL，Jenkins 构建无需额外 build-arg。同域已登录用户可经 `guard_token` Cookie + Redis 识别（无需 auth-bridge 亦可工作）。
 
 ## 验证
 

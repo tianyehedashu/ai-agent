@@ -99,4 +99,21 @@ def parse_gateway_identity(
     )
 
 
-__all__ = ["GiikinGatewayClaims", "parse_gateway_identity"]
+async def resolve_giikin_identity(
+    request: Request,
+    settings: Settings,
+) -> GiikinGatewayClaims | None:
+    """解析 giikin 身份：优先 HiGress Header，其次 guard_token Cookie + Redis。"""
+    claims = parse_gateway_identity(request, settings)
+    if claims is not None:
+        return claims
+
+    from domains.identity.infrastructure.auth.giikin_session_cookie import (
+        resolve_claims_from_session_cookie,
+    )
+
+    cookie_name = settings.giikin_session_cookie_name
+    return await resolve_claims_from_session_cookie(request, cookie_name=cookie_name)
+
+
+__all__ = ["GiikinGatewayClaims", "parse_gateway_identity", "resolve_giikin_identity"]

@@ -219,6 +219,8 @@ class Settings(BaseSettings):
     giikin_user_json_header: str = "X-Giikin-User-JSON"
     giikin_user_id_header: str = "X-Giikin-User-Id"
     giikin_internal_key_header: str = "X-Giikin-Internal-Key"
+    # 与 giikin-iam UserActionListener 下发的 Cookie 名一致
+    giikin_session_cookie_name: str = "guard_token"
 
     @property
     def is_sso_auth(self) -> bool:

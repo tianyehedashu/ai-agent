@@ -28,9 +28,9 @@ if TYPE_CHECKING:
 async def _principal_from_gateway(request: Request, db: AsyncSession) -> Principal:
     """SSO 模式：解析网关注入身份并 JIT 映射本地用户。"""
     from domains.identity.application.giikin_identity_service import GiikinIdentityService
-    from domains.identity.infrastructure.auth.giikin_gateway import parse_gateway_identity
+    from domains.identity.infrastructure.auth.giikin_gateway import resolve_giikin_identity
 
-    claims = parse_gateway_identity(request, settings)
+    claims = await resolve_giikin_identity(request, settings)
     if claims is None:
         raise AuthenticationError("Authentication required")
 

@@ -34,6 +34,13 @@ FROM dependencies AS build
 ARG VITE_APP_ROOT=/ai-agent
 ENV VITE_APP_ROOT=${VITE_APP_ROOT}
 
+# 生产默认 SSO（gateway.giimallai.com）；本地开发可 --build-arg VITE_AUTH_MODE=local 覆盖
+ARG VITE_AUTH_MODE=sso
+ENV VITE_AUTH_MODE=${VITE_AUTH_MODE}
+
+ARG VITE_SSO_LOGIN_URL=http://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin
+ENV VITE_SSO_LOGIN_URL=${VITE_SSO_LOGIN_URL}
+
 COPY . .
 RUN npm run build
 

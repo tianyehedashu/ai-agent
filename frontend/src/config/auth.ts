@@ -20,15 +20,18 @@ const RAW_SSO_LOGIN_URL = import.meta.env.VITE_SSO_LOGIN_URL ?? ''
 
 /**
  * 构造 SSO 登录跳转地址，附带当前来源以便登录后回跳。
- * 未配置 VITE_SSO_LOGIN_URL 时回退到本地登录路由（避免死循环）。
+ * callbackOrigin 含 VITE_APP_ROOT，使 IAM 回调落到 /ai-agent/sso-callback。
  */
 export function buildSsoLoginUrl(returnPath: string): string {
   if (!RAW_SSO_LOGIN_URL) {
     return '/login'
   }
+  const appRoot = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
+  const normalizedRoot = appRoot.endsWith('/') ? appRoot.slice(0, -1) : appRoot
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const callbackOrigin = encodeURIComponent(origin)
-  const redirect = encodeURIComponent(origin + returnPath)
+  const callbackOrigin = encodeURIComponent(`${origin}${normalizedRoot}`)
+  const normalizedReturn = returnPath.startsWith('/') ? returnPath : `/${returnPath}`
+  const redirect = encodeURIComponent(`${origin}${normalizedReturn}`)
   const sep = RAW_SSO_LOGIN_URL.includes('?') ? '&' : '?'
   return `${RAW_SSO_LOGIN_URL}${sep}callbackOrigin=${callbackOrigin}&redirect=${redirect}`
 }
