@@ -15,6 +15,11 @@ class ListingStudioImageService:
     def __init__(self, config_service: StorageConfigService) -> None:
         self._config_service = config_service
 
+    async def get_upload_max_bytes(self) -> int:
+        """返回当前配置允许的单张图片最大字节数。"""
+        snapshot = await self._config_service.require_active_snapshot()
+        return snapshot.image_upload_max_bytes
+
     async def upload_image(
         self,
         content: bytes,
