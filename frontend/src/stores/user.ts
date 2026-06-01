@@ -13,7 +13,16 @@
 import { create } from 'zustand'
 
 import { userApi, type CurrentUser, type LoginParams, type RegisterParams } from '@/api/user'
+import { isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
 import { clearAuth, setAuthToken } from '@/stores/auth'
+
+function appRootPath(): string {
+  const root = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
+  if (!root || root === '/') {
+    return '/'
+  }
+  return root.endsWith('/') ? root.slice(0, -1) : root
+}
 
 interface UserState {
   // Current user
@@ -82,20 +91,28 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   // Logout
-  // 登出时同时清除 authStore 中的认证信息
+  // local：清 JWT；sso：须调 IAM /api/auth/logout 清除 guard_token，否则刷新后仍登录
   logout: async () => {
     try {
-      await userApi.logout()
+      if (isSsoMode) {
+        await fetch(resolveSsoLogoutUrl(), {
+          method: 'POST',
+          credentials: 'include',
+        })
+      } else {
+        await userApi.logout()
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '退出登录失败'
       set({ error: errorMessage })
     } finally {
-      // 无论成功失败，都清除本地状态
       set({ currentUser: null, error: null })
-      // 清除 authStore 中的 token
       clearAuth()
-      // 刷新页面以清除所有状态
-      window.location.reload()
+      if (isSsoMode) {
+        window.location.href = `${appRootPath()}/`
+      } else {
+        window.location.reload()
+      }
     }
   },
 

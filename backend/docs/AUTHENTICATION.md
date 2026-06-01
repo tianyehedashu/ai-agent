@@ -34,6 +34,7 @@
 2. **下发 Cookie**：`giikin-iam` 登录成功后由 `UserActionListener` 直接 `Set-Cookie: guard_token=...`（Nacos `spring.higress.session-cookie-*` 配置），实现跨应用会话桥接。
 3. **回跳**：登录后回到 ai-agent `/sso-callback`，前端刷新 `GET /auth/me` 并跳回原始页面。
 4. **每次请求**：HiGress 校验 Cookie 并注入身份 Header；ai-agent 信任并解析。
+5. **登出**：前端 SSO 模式须 `POST` 同域 IAM `/api/auth/logout`（携带 `guard_token` Cookie），由 `giikin-iam` 清除 Redis 会话并过期 Cookie；仅调 ai-agent `/auth/logout` 或清本地 JWT **无效**。
 
 ### 2.1 身份解析与防伪
 `domains/identity/infrastructure/auth/giikin_gateway.py::parse_gateway_identity`：
@@ -101,6 +102,7 @@ UPDATE users SET giikin_user_id = '<giikin_user_id>' WHERE email = '<real_email>
 | 后端 | `GIIKIN_INTERNAL_KEY` | sso 模式下与 `giikin-auth-bridge` internal key 对齐 |
 | 前端 | `VITE_AUTH_MODE` | `local` / `sso` |
 | 前端 | `VITE_SSO_LOGIN_URL` | sso 模式登录入口（完整 URL 或同域路径） |
+| 前端 | `VITE_SSO_LOGOUT_URL` | 可选；默认同域 `/api/auth/logout`（IAM 登出，清除 guard_token） |
 | giikin-iam | `spring.higress.session-cookie-*`（Nacos） | guard_token Cookie 下发开关与属性 |
 
 ---

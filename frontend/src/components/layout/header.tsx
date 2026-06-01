@@ -102,7 +102,13 @@ export default function Header(): React.JSX.Element {
               <DropdownMenuItem>个人资料</DropdownMenuItem>
               <DropdownMenuItem>API 密钥</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  void handleLogout()
+                }}
+              >
                 退出登录
               </DropdownMenuItem>
             </DropdownMenuContent>
