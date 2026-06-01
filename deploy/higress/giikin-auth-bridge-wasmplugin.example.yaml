@@ -19,6 +19,8 @@ spec:
   failStrategy: FAIL_OPEN
   url: oci://ttl.sh/giikin-auth-bridge:24h
   defaultConfigDisable: true
+  # 仅匹配 API Ingress（metadata.name=ai-agent-api，路径 /ai-agent/api/*）。
+  # 勿绑 ai-agent-spa：静态页 /ai-agent/* 不需要 WASM 鉴权；API 必须经本插件注入 X-Giikin-*。
   matchRules:
     - ingress:
         - ai-agent-api
