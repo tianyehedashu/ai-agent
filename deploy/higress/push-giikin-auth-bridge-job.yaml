@@ -3,10 +3,9 @@ kind: ConfigMap
 metadata:
   name: giikin-auth-bridge-dockerfile
   namespace: test
+# Push Job：默认 push 到 ttl.sh（匿名，24h）。ACR prod/giikin-auth-bridge:1.0.0 需具备 push
+# 权限的 docker 凭据（集群 acr-credential-secret-aggregation 为 pull-only）；见 push-wasm-docker.sh。
 data:
-  Dockerfile: |
-    FROM scratch
-    COPY plugin.wasm plugin.wasm
   assemble.sh: |
     #!/bin/sh
     set -e
@@ -15,8 +14,128 @@ data:
     for f in /parts/part00 /parts/part01 /parts/part02 /parts/part03 /parts/part04 /parts/part05 /parts/part06; do
       [ -f "$f" ] && cat "$f" >> plugin.wasm
     done
-    cp /scripts/Dockerfile .
     ls -lh plugin.wasm
+    [ -s plugin.wasm ] || { echo "plugin.wasm missing or empty"; exit 1; }
+  push.py: |
+    #!/usr/bin/env python3
+    """Push plugin.wasm as scratch OCI image to ttl.sh (anonymous, 24h)."""
+    from __future__ import annotations
+
+    import gzip
+    import hashlib
+    import io
+    import json
+    import os
+    import tarfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    import httpx
+
+    REGISTRY = os.environ.get("OCI_REGISTRY", "ttl.sh")
+    REPOSITORY = os.environ.get("OCI_REPOSITORY", "giikin-auth-bridge")
+    TAG = os.environ.get("OCI_TAG", "24h")
+    WASM_PATH = Path("/workspace/plugin.wasm")
+
+
+    def sha256(data: bytes) -> str:
+        return hashlib.sha256(data).hexdigest()
+
+
+    def make_layer_tar(wasm: Path) -> bytes:
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            tar.add(wasm, arcname="plugin.wasm")
+        return buf.getvalue()
+
+
+    def upload_blob(client: httpx.Client, repo: str, data: bytes, digest: str) -> None:
+        start = client.post(
+            f"https://{REGISTRY}/v2/{repo}/blobs/uploads/",
+            headers={"Content-Length": "0"},
+        )
+        start.raise_for_status()
+        location = start.headers["Location"]
+        if not location.startswith("http"):
+            location = f"https://{REGISTRY}{location}"
+        sep = "&" if "?" in location else "?"
+        finish = client.put(
+            f"{location}{sep}digest=sha256:{digest}",
+            content=data,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(data)),
+            },
+        )
+        finish.raise_for_status()
+
+
+    def main() -> None:
+        if not WASM_PATH.is_file() or WASM_PATH.stat().st_size == 0:
+            raise SystemExit(f"missing wasm: {WASM_PATH}")
+
+        layer_tar = make_layer_tar(WASM_PATH)
+        layer_diff_id = sha256(layer_tar)
+        layer_gzip = gzip.compress(layer_tar)
+        layer_digest = sha256(layer_gzip)
+
+        config_obj = {
+            "architecture": "amd64",
+            "os": "linux",
+            "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "rootfs": {"type": "layers", "diff_ids": [f"sha256:{layer_diff_id}"]},
+            "history": [{"created_by": "giikin-auth-bridge push job"}],
+        }
+        config_bytes = json.dumps(config_obj, separators=(",", ":")).encode()
+        config_digest = sha256(config_bytes)
+
+        manifest = {
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+            "config": {
+                "mediaType": "application/vnd.docker.container.image.v1+json",
+                "size": len(config_bytes),
+                "digest": f"sha256:{config_digest}",
+            },
+            "layers": [
+                {
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": len(layer_gzip),
+                    "digest": f"sha256:{layer_digest}",
+                }
+            ],
+        }
+        manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+
+        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+            ping = client.get(f"https://{REGISTRY}/v2/")
+            ping.raise_for_status()
+            print(f"registry ok: {ping.status_code}")
+
+            upload_blob(client, REPOSITORY, config_bytes, config_digest)
+            print(f"config uploaded sha256:{config_digest}")
+
+            upload_blob(client, REPOSITORY, layer_gzip, layer_digest)
+            print(f"layer uploaded sha256:{layer_digest} ({len(layer_gzip)} bytes gzip)")
+
+            put_manifest = client.put(
+                f"https://{REGISTRY}/v2/{REPOSITORY}/manifests/{TAG}",
+                content=manifest_bytes,
+                headers={
+                    "Content-Type": "application/vnd.docker.distribution.manifest.v2+json",
+                    "Accept": "application/vnd.docker.distribution.manifest.v2+json",
+                },
+            )
+            if put_manifest.is_error:
+                raise RuntimeError(
+                    f"manifest push failed {put_manifest.status_code}: {put_manifest.text[:500]}"
+                )
+            digest = put_manifest.headers.get("Docker-Content-Digest", "unknown")
+            print(f"pushed oci://{REGISTRY}/{REPOSITORY}:{TAG} digest={digest}")
+
+
+    if __name__ == "__main__":
+        main()
 ---
 apiVersion: batch/v1
 kind: Job
@@ -25,6 +144,7 @@ metadata:
   namespace: test
 spec:
   ttlSecondsAfterFinished: 600
+  backoffLimit: 2
   template:
     spec:
       restartPolicy: Never
@@ -32,7 +152,7 @@ spec:
         - name: acr-credential-secret-aggregation
       initContainers:
         - name: assemble-wasm
-          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:b97cee1
+          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:2d55875
           command: ["/bin/sh", "/scripts/assemble.sh"]
           volumeMounts:
             - name: workspace
@@ -61,31 +181,26 @@ spec:
               mountPath: /parts/part06
               subPath: part
       containers:
-        - name: kaniko
-          image: higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/kaniko-executor:v1.23.2
-          args:
-            - --dockerfile=/workspace/Dockerfile
-            - --context=dir:///workspace
-            - --destination=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/giikin-auth-bridge:1.0.0
-            - --cache=false
-            - --skip-tls-verify-registry=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com
+        - name: push-oci
+          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:2d55875
+          command: ["/app/.venv/bin/python3", "/scripts/push.py"]
           volumeMounts:
             - name: workspace
               mountPath: /workspace
-            - name: docker-config
-              mountPath: /kaniko/.docker
-              readOnly: true
+            - name: scripts
+              mountPath: /scripts
       volumes:
         - name: workspace
           emptyDir: {}
         - name: scripts
           configMap:
             name: giikin-auth-bridge-dockerfile
+            defaultMode: 0755
             items:
               - key: assemble.sh
                 path: assemble.sh
-              - key: Dockerfile
-                path: Dockerfile
+              - key: push.py
+                path: push.py
         - name: p00
           secret:
             secretName: giikin-auth-bridge-wasm-00
@@ -114,9 +229,3 @@ spec:
           secret:
             secretName: giikin-auth-bridge-wasm-06
             optional: true
-        - name: docker-config
-          secret:
-            secretName: acr-credential-secret-aggregation
-            items:
-              - key: .dockerconfigjson
-                path: config.json

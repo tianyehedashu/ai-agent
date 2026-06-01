@@ -1,5 +1,5 @@
 # giikin-auth-bridge — ai-agent API SSO Header 注入
-# 前置：McpBridge 已注册 iam-session-redis；镜像已 push 至 ACR prod/giikin-auth-bridge:1.0.0
+# 前置：McpBridge 已注册 iam-session-redis；wasm 已 push 至 ttl.sh（临时验证，24h 过期）
 # 匹配 HiGress 控制台创建的路由 Ingress 名称 ai-agent-api（namespace test）
 ---
 apiVersion: extensions.higress.io/v1alpha1
@@ -13,7 +13,7 @@ spec:
   priority: 200
   phase: AUTHN
   failStrategy: FAIL_OPEN
-  url: oci://giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/giikin-auth-bridge:1.0.0
+  url: oci://ttl.sh/giikin-auth-bridge:24h
   defaultConfigDisable: true
   matchRules:
     - ingress:

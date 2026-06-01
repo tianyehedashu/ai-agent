@@ -1,7 +1,8 @@
 # giikin-auth-bridge — HiGress WasmPlugin（ai-agent API 鉴权）
 #
 # 线上路由由 HiGress 控制台创建，Ingress 名为 ai-agent-api（namespace test）。
-# 一键部署见 apply-sso-fix.sh（构建 wasm → push ACR → apply 本文件 + McpBridge + Nacos）。
+# 镜像：正式目标 ACR prod/giikin-auth-bridge:1.0.0；集群 pull Secret 无 push 权限时
+# 可临时用 ttl.sh（见 push-wasm-docker.sh / 本地 docker push ttl.sh/giikin-auth-bridge:24h）。
 #
 # 手动应用前替换 REPLACE_WITH_IAM_REDIS_PASSWORD（IAM 会话 Redis，非 ai-agent 应用 Redis）。
 ---
@@ -16,7 +17,7 @@ spec:
   priority: 200
   phase: AUTHN
   failStrategy: FAIL_OPEN
-  url: oci://giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/giikin-auth-bridge:1.0.0
+  url: oci://ttl.sh/giikin-auth-bridge:24h
   defaultConfigDisable: true
   matchRules:
     - ingress:

@@ -33,10 +33,13 @@ export default function SsoCallbackPage(): React.JSX.Element {
 
   useEffect(() => {
     const ticket = searchParams.get('ticket')
-    // IAM 回调带 ticket 时：同域 plus-ui /sso-callback 完成 ticket→guard_token（IAM 登录接口需加密）
+    // IAM 回调带 ticket：同域 plus-ui /sso-callback 完成 ticket→guard_token（登录接口需加密）
     if (ticket) {
-      const qs = searchParams.toString()
-      window.location.replace(`${window.location.origin}/sso-callback?${qs}`)
+      const qs = new URLSearchParams(searchParams)
+      const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
+      const returnPath = stored?.startsWith('/') ? stored : `${APP_ROOT}/`
+      qs.set('redirect', `${window.location.origin}${returnPath}`)
+      window.location.replace(`${window.location.origin}/sso-callback?${qs.toString()}`)
       return
     }
 
