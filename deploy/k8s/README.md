@@ -127,6 +127,41 @@ kubectl -n test rollout status deployment/backend
 kubectl -n test rollout status deployment/frontend
 ```
 
+## SSO：禁用 Cookie 热修（生产必做）
+
+身份应由 **HiGress giikin-auth-bridge** 注入 `X-Giikin-*` Header；backend **勿**直连 IAM Redis 解析 `guard_token`。
+
+Secret 必须显式关闭热修，并**删除**热修遗留的 `REDIS_USERNAME`（IAM 会话库账号，仅 auth-bridge WasmPlugin 使用）：
+
+```bash
+# 1. 关闭 Cookie 回退 + 删除 REDIS_USERNAME
+kubectl -n test patch secret ai-agent-backend-env --type=merge \
+  -p '{"stringData":{"GIIKIN_SESSION_COOKIE_FALLBACK":"false"}}'
+kubectl -n test patch secret ai-agent-backend-env --type=json \
+  -p='[{"op":"remove","path":"/data/REDIS_USERNAME"}]'
+
+# 2. 滚动重启 backend（须使用含 giikin_session_cookie_fallback 开关的新镜像）
+kubectl -n test rollout restart deployment/backend
+kubectl -n test rollout status deployment/backend --timeout=180s
+```
+
+**验证未走热修**（在 wuhan-ali 上执行）：
+
+```bash
+# 环境变量：fallback 必须为 false；不应再有 REDIS_USERNAME
+kubectl -n test exec deploy/backend -- env | grep -E 'GIIKIN_SESSION|REDIS_USERNAME|AUTH_MODE'
+
+# 运行中代码：须含 cookie_fallback 开关（旧热修镜像无此判断）
+kubectl -n test exec deploy/backend -- grep -n cookie_fallback /app/domains/identity/infrastructure/auth/giikin_gateway.py
+
+# 带 guard_token 但无 Header：新镜像应 401，非 500
+curl -s -o /dev/null -w '%{http_code}\n' -b 'guard_token=invalid' \
+  http://gateway.giimallai.com/ai-agent/api/v1/auth/me
+# 期望 401
+```
+
+参考 [`deploy/higress/giikin-auth-bridge-wasmplugin.example.yaml`](../higress/giikin-auth-bridge-wasmplugin.example.yaml)、[docs/SSO.md](../../docs/SSO.md)。
+
 ## 配置变更（Secret）
 
 ```json
