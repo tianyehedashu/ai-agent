@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -38,6 +38,37 @@ function resolveReturnPath(raw: string | null): string {
   }
 }
 
+/** plus-ui 换票后 Cookie 可能尚未就绪，短暂重试 auth/me */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function fetchCurrentUserWithRetry(
+  queryClient: QueryClient,
+  maxAttempts = 10,
+  delayMs = 500
+): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] })
+      await queryClient.fetchQuery({
+        queryKey: ['auth', 'currentUser'],
+        queryFn: () => userApi.getCurrentUser(),
+      })
+      return
+    } catch (error) {
+      lastError = error
+      if (attempt < maxAttempts - 1) {
+        await sleep(delayMs)
+      }
+    }
+  }
+  throw lastError
+}
+
 export default function SsoCallbackPage(): React.JSX.Element {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -50,9 +81,8 @@ export default function SsoCallbackPage(): React.JSX.Element {
     if (ticket) {
       markSsoAttempt()
       const qs = new URLSearchParams(searchParams)
-      const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
-      const returnPath = stored?.startsWith('/') ? stored : '/'
-      qs.set('redirect', `${window.location.origin}${toPublicPath(returnPath)}`)
+      // 换票完成后须回到本页校验 auth/me，不可直跳业务页（Cookie 写入与 auth/me 存在竞态）
+      qs.set('redirect', `${window.location.origin}${toPublicPath('/sso-callback')}`)
       window.location.replace(`${window.location.origin}/sso-callback?${qs.toString()}`)
       return
     }
@@ -72,10 +102,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
     })()
     void (async () => {
       try {
-        await queryClient.fetchQuery({
-          queryKey: ['auth', 'currentUser'],
-          queryFn: () => userApi.getCurrentUser(),
-        })
+        await fetchCurrentUserWithRetry(queryClient)
         clearSsoAttempt()
         navigate(navigateTarget, { replace: true })
       } catch {
@@ -97,11 +124,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
             type="button"
             onClick={() => {
               setCallbackError(null)
-              void queryClient
-                .fetchQuery({
-                  queryKey: ['auth', 'currentUser'],
-                  queryFn: () => userApi.getCurrentUser(),
-                })
+              void fetchCurrentUserWithRetry(queryClient)
                 .then(() => {
                   clearSsoAttempt()
                   navigate('/', { replace: true })

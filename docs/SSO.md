@@ -59,7 +59,12 @@ frontend Pod（Nginx）─ 反代 /ai-agent/api/ ─► backend Pod（FastAPI）
 
 ### 2.3 登出
 
-前端 SSO 模式：`POST /api/auth/logout`（IAM，带 Cookie）→ 清除 `guard_token` → 跳回 `/ai-agent/`。
+前端 SSO 模式：`POST /api/auth/logout`（`credentials: include`，**仅**携带 HttpOnly `guard_token`，无 `Authorization` 头）→ IAM 须：
+
+1. 用 Cookie 中的 token 调用 `StpUtil.logoutByTokenValue` 注销 Redis 会话（Sa-Token 默认从 Header 读 token，无 Header 时 `StpUtil.logout()` 会抛 `NotLoginException`）
+2. **无论** Sa-Token 是否已登录，都通过 `Set-Cookie` 清除 `guard_token`
+
+完成后前端跳 `/ai-agent/login`（避免落首页触发 `auth/me` 401 后自动 SSO）。若 IAM 未清除 Cookie，刷新后 `auth/me` 仍可能 200，表现为「登出无效」。
 
 ---
 

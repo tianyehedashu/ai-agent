@@ -13,7 +13,7 @@
 import { create } from 'zustand'
 
 import { userApi, type CurrentUser, type LoginParams, type RegisterParams } from '@/api/user'
-import { isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
+import { clearSsoAttempt, isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
 import { clearAuth, setAuthToken } from '@/stores/auth'
 
 function appRootPath(): string {
@@ -95,21 +95,26 @@ export const useUserStore = create<UserState>((set) => ({
   logout: async () => {
     try {
       if (isSsoMode) {
-        await fetch(resolveSsoLogoutUrl(), {
+        const response = await fetch(resolveSsoLogoutUrl(), {
           method: 'POST',
           credentials: 'include',
         })
+        if (!response.ok) {
+          console.warn('[SSO logout] IAM logout failed:', response.status, response.statusText)
+        }
       } else {
         await userApi.logout()
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '退出登录失败'
+      console.warn('[logout]', errorMessage, error)
       set({ error: errorMessage })
     } finally {
+      clearSsoAttempt()
       set({ currentUser: null, error: null })
       clearAuth()
       if (isSsoMode) {
-        window.location.href = `${appRootPath()}/`
+        window.location.href = `${appRootPath()}/login`
       } else {
         window.location.reload()
       }

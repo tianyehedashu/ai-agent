@@ -35,7 +35,13 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   const { toast } = useToast()
   const location = useLocation()
   const ssoRedirectStarted = useRef(false)
+  const ssoPostLoginRetryDone = useRef(false)
   const [ssoRedirectFailed, setSsoRedirectFailed] = useState(false)
+  const [ssoPostLoginRetrying, setSsoPostLoginRetrying] = useState(false)
+
+  const isOnSsoCallback = location.pathname === '/sso-callback'
+  /** 回调页由 SsoCallbackPage 负责换票与 auth/me，避免抢先 401 触发冷却期 */
+  const deferAuthMe = isOnSsoCallback
 
   const {
     data: currentUser,
@@ -48,6 +54,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     queryFn: () => userApi.getCurrentUser(),
     retry: false,
     staleTime: 1000 * 60 * 5,
+    enabled: !deferAuthMe,
   })
 
   /** 仅 auth/me 的 401 表示会话无效；业务接口 403 不影响全局登录态 */
@@ -82,6 +89,33 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     }
   }, [sessionUser, isFetched, setCurrentUser])
 
+  // SSO 回调后 guard_token 写入存在短延迟，冷却期内先重试 auth/me 再报错
+  useEffect(() => {
+    if (!isSsoMode || !isWithinSsoCooldown() || ssoPostLoginRetryDone.current || deferAuthMe) {
+      return
+    }
+    if (!isSessionInvalid || sessionUser) {
+      return
+    }
+    ssoPostLoginRetryDone.current = true
+    setSsoPostLoginRetrying(true)
+    void (async () => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] })
+        const result = await refetch()
+        if (result.data) {
+          clearSsoAttempt()
+          setSsoPostLoginRetrying(false)
+          return
+        }
+        await new Promise((resolve) => {
+          setTimeout(resolve, 500)
+        })
+      }
+      setSsoPostLoginRetrying(false)
+    })()
+  }, [deferAuthMe, isSessionInvalid, queryClient, refetch, sessionUser])
+
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
   const ssoCooldownActive = isWithinSsoCooldown()
   /** guard_token 为 HttpOnly，401 后须用冷却期避免 SSO 死循环 */
@@ -110,7 +144,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     })
   }, [shouldStartSso, location.pathname, toast])
 
-  if (isLoading) {
+  if (isLoading && !deferAuthMe) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -149,6 +183,16 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   // 未认证 + 不在公开页面
   if (!sessionUser && isFetched && !isOnPublicPath) {
     if (isSsoMode && isSessionInvalid && ssoCooldownActive) {
+      if (ssoPostLoginRetrying) {
+        return (
+          <div className="flex h-screen items-center justify-center bg-background">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">正在确认登录态...</p>
+            </div>
+          </div>
+        )
+      }
       return (
         <div className="flex h-screen items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4 text-center">

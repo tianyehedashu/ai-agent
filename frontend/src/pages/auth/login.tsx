@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { initiateSsoLogin, isSsoMode } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
@@ -50,6 +51,20 @@ export default function LoginPage(): React.JSX.Element {
       password: '',
     },
   })
+
+  async function onSsoLogin(): Promise<void> {
+    setIsLoading(true)
+    try {
+      await initiateSsoLogin(from)
+    } catch (error) {
+      toast({
+        title: '无法跳转 SSO 登录',
+        description: error instanceof Error ? error.message : 'SSO 登录初始化失败',
+        variant: 'destructive',
+      })
+      setIsLoading(false)
+    }
+  }
 
   async function onSubmit(values: z.infer<typeof formSchema>): Promise<void> {
     setIsLoading(true)
@@ -87,84 +102,108 @@ export default function LoginPage(): React.JSX.Element {
             <Terminal className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">AI Agent</CardTitle>
-          <CardDescription>请输入您的凭证以继续访问</CardDescription>
+          <CardDescription>
+            {isSsoMode ? '使用 Giikin 企业账号登录' : '请输入您的凭证以继续访问'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>邮箱</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="name@example.com"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
-                          {...field}
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>密码</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          type="password"
-                          placeholder="••••••••"
-                          className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
-                          {...field}
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                type="submit"
-                className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    登录中...
-                  </>
-                ) : (
-                  '登录'
-                )}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2 text-center text-sm text-muted-foreground">
-          <p>
-            还没有账号？{' '}
+          {isSsoMode ? (
             <Button
-              variant="link"
-              className="px-0 font-semibold text-primary"
+              type="button"
+              className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+              disabled={isLoading}
               onClick={() => {
-                navigate('/register')
+                void onSsoLogin()
               }}
             >
-              立即注册
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  跳转中...
+                </>
+              ) : (
+                'Giikin SSO 登录'
+              )}
             </Button>
-          </p>
-          <p className="text-xs opacity-50">如果是开发环境，可以使用默认账号进行测试</p>
-        </CardFooter>
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>邮箱</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="name@example.com"
+                            className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>密码</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="password"
+                            placeholder="••••••••"
+                            className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      登录中...
+                    </>
+                  ) : (
+                    '登录'
+                  )}
+                </Button>
+              </form>
+            </Form>
+          )}
+        </CardContent>
+        {!isSsoMode && (
+          <CardFooter className="flex flex-col space-y-2 text-center text-sm text-muted-foreground">
+            <p>
+              还没有账号？{' '}
+              <Button
+                variant="link"
+                className="px-0 font-semibold text-primary"
+                onClick={() => {
+                  navigate('/register')
+                }}
+              >
+                立即注册
+              </Button>
+            </p>
+            <p className="text-xs opacity-50">如果是开发环境，可以使用默认账号进行测试</p>
+          </CardFooter>
+        )}
       </Card>
     </div>
   )
