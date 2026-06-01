@@ -3,6 +3,7 @@ import type React from 'react'
 
 import type { GatewayUsageStatsItem } from '@/api/gateway/stats'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { UsageStatsBreakdownCredentials } from '@/features/gateway-usage/usage-stats-breakdown-credentials'
 import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats-breakdown-primary'
@@ -133,7 +134,19 @@ const StatsRow = memo(function StatsRow({
           })}
         </td>
       ) : null}
-      <td className="px-4 py-3 text-right tabular-nums">{formatPercent(item.cache_hit_rate)}</td>
+      <td className="px-4 py-3 text-right tabular-nums">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help">{formatPercent(item.cache_hit_rate)}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <div className="space-y-0.5 text-xs">
+              <div>{item.cache_hit_count.toLocaleString()} 次命中</div>
+              <div>{item.cached_tokens.toLocaleString()} cached tokens</div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </td>
       <td className="px-4 py-3 text-right tabular-nums">
         {Math.round(item.avg_latency_ms).toLocaleString()}ms
       </td>

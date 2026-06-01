@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from decimal import Decimal
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -13,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_response_adapter import (
+    adapt_anthropic_response,
+    adapt_anthropic_stream,
     enrich_anthropic_response_cost,
 )
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
@@ -494,6 +497,160 @@ async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
 
     assert captured.get("context_management") == body["context_management"]
     assert captured.get("thinking") == body["thinking"]
+
+
+def test_adapt_anthropic_response_sets_cache_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic 非流式响应：usage 含 cache_read_input_tokens 时 metadata 应标记 gateway_cache_hit。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-cache-hit",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    metadata: dict[str, Any] = {}
+    response = {
+        "type": "message",
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_input_tokens": 2000,
+        },
+    }
+    adapt_anthropic_response(
+        response,
+        ctx,
+        _NoopBudget(),
+        metadata=metadata,
+        upstream_custom=None,
+        downstream_custom=None,
+    )
+    assert metadata.get("gateway_cache_hit") is True
+
+
+def test_adapt_anthropic_response_no_cache_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic 非流式响应：usage 不含缓存时 gateway_cache_hit 不应为 True。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-no-cache",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    metadata: dict[str, Any] = {}
+    response = {
+        "type": "message",
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+        },
+    }
+    adapt_anthropic_response(
+        response,
+        ctx,
+        _NoopBudget(),
+        metadata=metadata,
+        upstream_custom=None,
+        downstream_custom=None,
+    )
+    assert metadata.get("gateway_cache_hit") is not True
+
+
+@pytest.mark.asyncio
+async def test_adapt_anthropic_stream_sets_cache_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic 流式响应：message_delta 含 usage 时 metadata 应标记 gateway_cache_hit。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
+        lambda *args, **kwargs: Decimal("0"),
+    )
+
+    async def fake_stream() -> AsyncIterator[dict[str, Any]]:
+        yield {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"input_tokens": 2, "output_tokens": 1, "cache_read_input_tokens": 1000},
+        }
+        yield {"type": "message_stop"}
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-stream-cache",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    metadata: dict[str, Any] = {}
+    stream = adapt_anthropic_stream(
+        fake_stream(),
+        ctx,
+        _NoopBudget(),
+        metadata=metadata,
+        downstream_custom=None,
+    )
+    chunks = [chunk async for chunk in stream]
+    assert len(chunks) > 0
+    assert metadata.get("gateway_cache_hit") is True
 
 
 @pytest.mark.asyncio

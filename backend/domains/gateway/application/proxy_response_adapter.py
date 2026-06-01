@@ -75,7 +75,10 @@ def adapt_anthropic_response(
 ) -> dict[str, Any]:
     _ = upstream_custom
     data = anthropic_response_to_dict(response)
-    tokens = anthropic_usage_total_tokens(data.get("usage"))
+    usage = data.get("usage")
+    if isinstance(usage, dict):
+        apply_gateway_cache_hit_to_metadata(metadata, usage)
+    tokens = anthropic_usage_total_tokens(usage)
     upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
     from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
 
@@ -115,6 +118,7 @@ async def adapt_anthropic_stream(
             usage_patch = extract_usage_from_anthropic_stream_event(chunk)
             if usage_patch is not None:
                 last_usage = usage_patch
+                apply_gateway_cache_hit_to_metadata(metadata, usage_patch)
         out = anthropic_stream_chunk_to_bytes(chunk)
         if out is not None:
             yield out
@@ -218,6 +222,8 @@ async def adapt_stream(
                     model=ctx.budget_model,
                 )
         yield data
+    if last_usage:
+        apply_gateway_cache_hit_to_metadata(metadata, last_usage)
     await finalize_deferred_stream_settlement(
         ctx,
         budget,

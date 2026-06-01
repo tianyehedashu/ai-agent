@@ -40,15 +40,29 @@ def test_inbound_skips_when_metadata_disable() -> None:
     assert "extra_headers" not in out
 
 
-def test_parse_cache_hit_from_usage() -> None:
+def test_parse_cache_hit_from_usage_openai_format() -> None:
     assert parse_cache_hit_from_usage({"prompt_tokens_details": {"cached_tokens": 10}})
     assert not parse_cache_hit_from_usage({"prompt_tokens": 1})
 
 
-def test_apply_gateway_cache_hit_to_metadata() -> None:
+def test_parse_cache_hit_from_usage_anthropic_format() -> None:
+    assert parse_cache_hit_from_usage({"cache_read_input_tokens": 10})
+    assert not parse_cache_hit_from_usage({"input_tokens": 1, "output_tokens": 1})
+
+
+def test_apply_gateway_cache_hit_to_metadata_openai() -> None:
     meta: dict[str, object] = {}
     apply_gateway_cache_hit_to_metadata(
         meta,
         {"prompt_tokens_details": {"cached_tokens": 5}},
+    )
+    assert meta.get("gateway_cache_hit") is True
+
+
+def test_apply_gateway_cache_hit_to_metadata_anthropic() -> None:
+    meta: dict[str, object] = {}
+    apply_gateway_cache_hit_to_metadata(
+        meta,
+        {"cache_read_input_tokens": 5},
     )
     assert meta.get("gateway_cache_hit") is True

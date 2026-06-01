@@ -665,11 +665,12 @@ export default function GatewayStatsPage(): React.JSX.Element {
       </div>
 
       <div
-        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
+        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}
       >
         <MetricCard title="请求" value={formatCompact(totals?.requests ?? 0)} />
         <MetricCard title="成功率" value={formatPercent(totals?.success_rate ?? 0)} />
         <MetricCard title="Token" value={formatCompact(totals?.total_tokens ?? 0)} />
+        <MetricCard title="缓存命中" value={formatPercent(totals?.cache_hit_rate ?? 0)} />
         {isAdmin ? (
           <MetricCard
             title="成本"

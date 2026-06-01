@@ -89,6 +89,10 @@ def extract_usage_tokens(response_obj: Any) -> tuple[int, int, int]:
         cached_tokens = int(cache_details.get("cached_tokens", 0) or 0)
     elif cache_details is not None:
         cached_tokens = int(getattr(cache_details, "cached_tokens", 0) or 0)
+    # Anthropic 格式 fallback
+    if cached_tokens == 0:
+        cache_read = _usage_get("cache_read_input_tokens", 0)
+        cached_tokens = int(cache_read or 0)
     return input_tokens, output_tokens, cached_tokens
 
 
