@@ -1,0 +1,11 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/imagePullSecrets",
+    "value": [
+      {
+        "name": "acr-credential-secret-aggregation"
+      }
+    ]
+  }
+]

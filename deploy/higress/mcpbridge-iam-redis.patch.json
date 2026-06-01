@@ -1,0 +1,12 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/registries/-",
+    "value": {
+      "domain": "test-giimall-redis.redis.rds.aliyuncs.com",
+      "name": "iam-session-redis",
+      "port": 6379,
+      "type": "dns"
+    }
+  }
+]

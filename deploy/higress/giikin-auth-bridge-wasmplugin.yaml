@@ -1,9 +1,6 @@
-# giikin-auth-bridge — HiGress WasmPlugin（ai-agent API 鉴权）
-#
-# 线上路由由 HiGress 控制台创建，Ingress 名为 ai-agent-api（namespace test）。
-# 一键部署见 apply-sso-fix.sh（构建 wasm → push ACR → apply 本文件 + McpBridge + Nacos）。
-#
-# 手动应用前替换 REPLACE_WITH_IAM_REDIS_PASSWORD（IAM 会话 Redis，非 ai-agent 应用 Redis）。
+# giikin-auth-bridge — ai-agent API SSO Header 注入
+# 前置：McpBridge 已注册 iam-session-redis；镜像已 push 至 ACR prod/giikin-auth-bridge:1.0.0
+# 匹配 HiGress 控制台创建的路由 Ingress 名称 ai-agent-api（namespace test）
 ---
 apiVersion: extensions.higress.io/v1alpha1
 kind: WasmPlugin

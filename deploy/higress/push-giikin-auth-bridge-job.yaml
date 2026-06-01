@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: giikin-auth-bridge-dockerfile
+  namespace: test
+data:
+  Dockerfile: |
+    FROM scratch
+    COPY plugin.wasm plugin.wasm
+  assemble.sh: |
+    #!/bin/sh
+    set -e
+    cd /workspace
+    rm -f plugin.wasm
+    for f in /parts/part00 /parts/part01 /parts/part02 /parts/part03 /parts/part04 /parts/part05 /parts/part06; do
+      [ -f "$f" ] && cat "$f" >> plugin.wasm
+    done
+    cp /scripts/Dockerfile .
+    ls -lh plugin.wasm
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: push-giikin-auth-bridge-wasm
+  namespace: test
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: acr-credential-secret-aggregation
+      initContainers:
+        - name: assemble-wasm
+          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:b97cee1
+          command: ["/bin/sh", "/scripts/assemble.sh"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: scripts
+              mountPath: /scripts
+            - name: p00
+              mountPath: /parts/part00
+              subPath: part
+            - name: p01
+              mountPath: /parts/part01
+              subPath: part
+            - name: p02
+              mountPath: /parts/part02
+              subPath: part
+            - name: p03
+              mountPath: /parts/part03
+              subPath: part
+            - name: p04
+              mountPath: /parts/part04
+              subPath: part
+            - name: p05
+              mountPath: /parts/part05
+              subPath: part
+            - name: p06
+              mountPath: /parts/part06
+              subPath: part
+      containers:
+        - name: kaniko
+          image: higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/kaniko-executor:v1.23.2
+          args:
+            - --dockerfile=/workspace/Dockerfile
+            - --context=dir:///workspace
+            - --destination=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/giikin-auth-bridge:1.0.0
+            - --cache=false
+            - --skip-tls-verify-registry=giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: docker-config
+              mountPath: /kaniko/.docker
+              readOnly: true
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: giikin-auth-bridge-dockerfile
+            items:
+              - key: assemble.sh
+                path: assemble.sh
+              - key: Dockerfile
+                path: Dockerfile
+        - name: p00
+          secret:
+            secretName: giikin-auth-bridge-wasm-00
+            optional: true
+        - name: p01
+          secret:
+            secretName: giikin-auth-bridge-wasm-01
+            optional: true
+        - name: p02
+          secret:
+            secretName: giikin-auth-bridge-wasm-02
+            optional: true
+        - name: p03
+          secret:
+            secretName: giikin-auth-bridge-wasm-03
+            optional: true
+        - name: p04
+          secret:
+            secretName: giikin-auth-bridge-wasm-04
+            optional: true
+        - name: p05
+          secret:
+            secretName: giikin-auth-bridge-wasm-05
+            optional: true
+        - name: p06
+          secret:
+            secretName: giikin-auth-bridge-wasm-06
+            optional: true
+        - name: docker-config
+          secret:
+            secretName: acr-credential-secret-aggregation
+            items:
+              - key: .dockerconfigjson
+                path: config.json

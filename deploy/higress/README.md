@@ -41,11 +41,34 @@ gateway.giimallai.com/ai-agent/
 
 ### 2. giikin-auth-bridge WasmPlugin
 
-[`giikin-auth-bridge-wasmplugin.example.yaml`](giikin-auth-bridge-wasmplugin.example.yaml)
+[`giikin-auth-bridge-wasmplugin.example.yaml`](giikin-auth-bridge-wasmplugin.example.yaml)（线上 Ingress 名为 **`ai-agent-api`**，namespace `test`）
 
-- 匹配 ai-agent Ingress / API 路径
+- 匹配 **HiGress 控制台**创建的路由 `ai-agent-api`（`/ai-agent/api/*`）
 - `internal_key` = K8s Secret `GIIKIN_INTERNAL_KEY`
-- Redis = **IAM 会话 Redis**（插件读 guard_token 会话；与 ai-agent 应用 Redis **无关**）
+- Redis = **IAM 会话 Redis**（McpBridge 注册 `iam-session-redis.dns`）
+
+**一键部署**（在 wuhan-ali，`/tmp/plugin.wasm` 已存在时）：
+
+```bash
+# 1. IAM SSO 回调：清空 Nacos company.sso.redirect-uri（使 callbackOrigin 生效）
+/tmp/run-nacos-fix.sh
+
+# 2. 在 VPC 内 push 插件镜像（需 docker + ACR 登录）
+/tmp/push-wasm-docker.sh
+
+# 3. 注册 Redis + 应用 WasmPlugin + higress-gateway 拉 ACR 凭据
+/tmp/apply-wasmplugin.sh
+kubectl -n test patch deploy higress-gateway --type=json \
+  --patch-file=/tmp/patch-higress-gateway-acr-pull.json
+kubectl -n test rollout restart deploy/higress-gateway
+```
+
+验证 binding 回调：
+
+```bash
+curl -s 'http://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin&callbackOrigin=http://gateway.giimallai.com/ai-agent' \
+  | grep '/ai-agent/sso-callback'
+```
 
 ### 3. ai-agent Backend Secret
 
