@@ -15,11 +15,13 @@ spec:
   failStrategy: FAIL_OPEN
   url: oci://ttl.sh/giikin-auth-bridge:24h
   defaultConfigDisable: true
-  # 仅匹配 API Ingress（metadata.name=ai-agent-api，路径 /ai-agent/api/*）。
-  # 勿绑 ai-agent-spa：静态页 /ai-agent/* 不需要 WASM 鉴权；API 必须经本插件注入 X-Giikin-*。
+  # 当前线上 /ai-agent/api/* 实际命中 ai-agent-spa（frontend nginx 再反代 backend），
+  # 故 spa 与 api 均需绑定 auth-bridge；仅绑 api 在现有路由优先级下不会生效。
+  # 长期可修 HiGress 路由优先级让 API 直连 backend，再考虑只绑 ai-agent-api。
   matchRules:
     - ingress:
         - ai-agent-api
+        - ai-agent-spa
       configDisable: false
       config:
         internal_key: "mvp-test-internal-key-2026"

@@ -5,14 +5,15 @@
  * 经 HiGress 注入身份。这里刷新当前用户查询并跳回原始页面。
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { APP_ROOT } from '@/api/paths'
-import { SSO_RETURN_PATH_KEY } from '@/config/auth'
+import { userApi } from '@/api/user'
+import { clearSsoAttempt, markSsoAttempt, SSO_RETURN_PATH_KEY } from '@/config/auth'
 import { hrefToRouterPath } from '@/lib/ui-overlay/overlay-nav-bridge'
 
 /** React Router 路径（如 /chat）→ 浏览器 URL 路径（如 /ai-agent/chat） */
@@ -41,6 +42,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
+  const [callbackError, setCallbackError] = useState<string | null>(null)
 
   useEffect(() => {
     const ticket = searchParams.get('ticket')
@@ -67,10 +69,56 @@ export default function SsoCallbackPage(): React.JSX.Element {
         return hrefToRouterPath(pathname) + search
       }
     })()
-    void queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] }).then(() => {
-      navigate(navigateTarget, { replace: true })
-    })
+    void (async () => {
+      try {
+        await queryClient.fetchQuery({
+          queryKey: ['auth', 'currentUser'],
+          queryFn: () => userApi.getCurrentUser(),
+        })
+        clearSsoAttempt()
+        navigate(navigateTarget, { replace: true })
+      } catch {
+        markSsoAttempt()
+        setCallbackError(
+          '登录回调已完成，但 ai-agent 未能识别身份。请稍后重试或联系管理员检查网关配置。'
+        )
+      }
+    })()
   }, [navigate, queryClient, searchParams])
+
+  if (callbackError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <AlertCircle className="h-12 w-12 text-destructive" />
+          <p className="max-w-md text-sm text-muted-foreground">{callbackError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setCallbackError(null)
+              void queryClient
+                .fetchQuery({
+                  queryKey: ['auth', 'currentUser'],
+                  queryFn: () => userApi.getCurrentUser(),
+                })
+                .then(() => {
+                  clearSsoAttempt()
+                  navigate('/', { replace: true })
+                })
+                .catch(() => {
+                  setCallbackError(
+                    '仍无法识别登录态，请确认 HiGress giikin-auth-bridge 已正确配置。'
+                  )
+                })
+            }}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen items-center justify-center bg-background">

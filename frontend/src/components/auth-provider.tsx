@@ -19,7 +19,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/client'
 import { userApi } from '@/api/user'
-import { hasGuardTokenCookie, initiateSsoLogin, isSsoMode } from '@/config/auth'
+import { clearSsoAttempt, initiateSsoLogin, isSsoMode, isWithinSsoCooldown } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
@@ -76,14 +76,21 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   useEffect(() => {
     if (isFetched) {
       setCurrentUser(sessionUser)
+      if (sessionUser) {
+        clearSsoAttempt()
+      }
     }
   }, [sessionUser, isFetched, setCurrentUser])
 
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
-  const hasGuardToken = hasGuardTokenCookie()
-  /** 仅 auth/me 明确 401 且无 guard_token 时才发起 SSO；有 Cookie 但 401 说明后端未读到 IAM 会话 */
+  /** guard_token 为 HttpOnly，401 后须用冷却期避免 SSO 死循环 */
   const shouldStartSso =
-    isSsoMode && !sessionUser && isFetched && !isOnPublicPath && isSessionInvalid && !hasGuardToken
+    isSsoMode &&
+    !sessionUser &&
+    isFetched &&
+    !isOnPublicPath &&
+    isSessionInvalid &&
+    !isWithinSsoCooldown()
 
   useEffect(() => {
     if (!shouldStartSso || ssoRedirectStarted.current) {
@@ -140,7 +147,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
 
   // 未认证 + 不在公开页面
   if (!sessionUser && isFetched && !isOnPublicPath) {
-    if (isSsoMode && isSessionInvalid && hasGuardToken) {
+    if (isSsoMode && isSessionInvalid && isWithinSsoCooldown()) {
       return (
         <div className="flex h-screen items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4 text-center">
@@ -148,13 +155,16 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
             <div>
               <p className="font-medium text-foreground">无法识别 Giikin 登录态</p>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                浏览器已有 SSO Cookie，但 ai-agent 未收到 HiGress 注入的身份 Header。请确认
-                gateway.giimallai.com 上 /ai-agent/api 已启用 giikin-auth-bridge，且
-                GIIKIN_INTERNAL_KEY 与插件 internal_key 一致（见 docs/SSO.md）。
+                SSO 已完成但 ai-agent 仍未识别身份。请确认 gateway 上 giikin-auth-bridge 已绑定
+                ai-agent-spa/api，且 GIIKIN_INTERNAL_KEY 与插件 internal_key 一致（见
+                docs/SSO.md）。
               </p>
             </div>
             <button
-              onClick={() => refetch()}
+              onClick={() => {
+                clearSsoAttempt()
+                void refetch()
+              }}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               重试

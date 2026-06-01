@@ -32,7 +32,11 @@ frontend Pod（Nginx）─ 反代 /ai-agent/api/ ─► backend Pod（FastAPI）
 | **ai-agent backend** | 校验 `X-Giikin-Internal-Key`，解析 Header，JIT 本地用户 | **否** |
 | **ai-agent Redis** | 缓存、checkpoint 等应用数据 | **否**（与 IAM 分离） |
 
-静态资源 `/ai-agent/`、`/ai-agent/assets/` **不必**走 auth-bridge；**API** `/ai-agent/api/*` **必须**走。
+静态资源 `/ai-agent/`、`/ai-agent/assets/` 也会经过 auth-bridge（`failStrategy: FAIL_OPEN`，无 Cookie 时透传）；**API** `/ai-agent/api/*` **必须**注入 Header。
+
+> **路由说明**：当前 HiGress 上 `/ai-agent/api/*` 实际命中 Ingress `ai-agent-spa`（frontend nginx 再反代 backend），WasmPlugin 需同时绑定 `ai-agent-api` 与 `ai-agent-spa`；frontend `nginx.conf` 的 `/ai-agent/api/` 须显式 `proxy_set_header X-Giikin-*`，否则网关注入的 Header 在反代时被丢弃。
+
+> **前端 SSO 循环**：`guard_token` 为 **HttpOnly**，不可用 `document.cookie` 判断；auth/me 401 后应使用 SSO 冷却期，避免反复跳 manage.giikin.com。
 
 ---
 
@@ -70,7 +74,7 @@ frontend Pod（Nginx）─ 反代 /ai-agent/api/ ─► backend Pod（FastAPI）
 - `internal_key` 与 backend `GIIKIN_INTERNAL_KEY` **完全一致**
 - `session_cookie_name: guard_token`
 - Redis 指向 **IAM 会话 Redis**（非 ai-agent 应用 Redis）
-- `matchRules` 仅匹配 `/ai-agent/api`（或对应 Ingress 名）
+- `matchRules` 绑定 Ingress `ai-agent-api` 与 `ai-agent-spa`（当前 API 流量经 spa→nginx 反代）
 
 ### 3.2 HiGress：Ingress（运维）
 

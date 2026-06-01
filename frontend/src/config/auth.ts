@@ -23,12 +23,47 @@ const RAW_SSO_LOGOUT_URL = import.meta.env.VITE_SSO_LOGOUT_URL ?? ''
 /** sessionStorage：SSO 跳转 manage.giikin.com 前保存，回调后恢复路径 */
 export const SSO_RETURN_PATH_KEY = 'ai_agent_sso_return_path'
 
-/** 浏览器是否已有 giikin-iam 下发的 guard_token（同域 SSO 会话） */
-export function hasGuardTokenCookie(): boolean {
-  if (typeof document === 'undefined') {
+/** sessionStorage：最近一次发起 SSO 跳转的时间戳，用于防止 401 死循环 */
+export const SSO_ATTEMPT_AT_KEY = 'ai_agent_sso_attempt_at'
+
+/** SSO 冷却期：此时间内 auth/me 仍 401 则展示错误页，不再自动跳 SSO */
+export const SSO_COOLDOWN_MS = 120_000
+
+export function markSsoAttempt(): void {
+  if (typeof sessionStorage === 'undefined') {
+    return
+  }
+  sessionStorage.setItem(SSO_ATTEMPT_AT_KEY, String(Date.now()))
+}
+
+export function clearSsoAttempt(): void {
+  if (typeof sessionStorage === 'undefined') {
+    return
+  }
+  sessionStorage.removeItem(SSO_ATTEMPT_AT_KEY)
+}
+
+export function isWithinSsoCooldown(): boolean {
+  if (typeof sessionStorage === 'undefined') {
     return false
   }
-  return document.cookie.split(';').some((part) => part.trim().startsWith('guard_token='))
+  const raw = sessionStorage.getItem(SSO_ATTEMPT_AT_KEY)
+  if (!raw) {
+    return false
+  }
+  const ts = Number(raw)
+  if (!Number.isFinite(ts)) {
+    return false
+  }
+  return Date.now() - ts < SSO_COOLDOWN_MS
+}
+
+/**
+ * guard_token 为 HttpOnly，JS 无法读取；不可用于判断是否已登录。
+ * @deprecated 仅保留兼容；请用 auth/me + SSO 冷却期判断。
+ */
+export function hasGuardTokenCookie(): boolean {
+  return false
 }
 
 function normalizeAppRoot(): string {
@@ -74,6 +109,7 @@ export async function initiateSsoLogin(returnPath: string): Promise<void> {
   }
 
   sessionStorage.setItem(SSO_RETURN_PATH_KEY, returnPath)
+  markSsoAttempt()
 
   const response = await fetch(bindingUrl.toString(), { credentials: 'include' })
   const body = (await response.json()) as SsoBindingResponse
